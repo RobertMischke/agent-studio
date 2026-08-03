@@ -399,17 +399,18 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
             $"refs/agent-studio/results/{taskKey}/{acquired.AttemptId}",
             null,
             "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
-        var settled = authority.SettleRun(
-            new AttemptWriteReference(
+        var settled = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
                 acquired.AttemptId,
                 acquired.LastFence,
                 acquired.AuthorityEpoch,
                 $"completion:{taskKey}"),
-            "done",
-            resultSha,
-            reason: null,
-            resultEnvelope: envelope,
-            resultEnvelopeDigest: AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope));
+            Outcome = "done",
+            ResultSha = resultSha,
+            ResultEnvelope = envelope,
+            ResultEnvelopeDigest = AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope),
+        });
         Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
     }
 

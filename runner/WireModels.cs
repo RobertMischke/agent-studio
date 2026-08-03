@@ -178,7 +178,14 @@ public sealed record HostTelemetrySample(
     double? CpuStealPercent,
     double? IoWaitPercent,
     int CpuCores,
-    int ActiveSlots);
+    int ActiveSlots,
+    string TaskServerConnectionStatus = TaskServerConnectivityStates.Unknown,
+    DateTime? TaskServerConnectionObservedAt = null,
+    DateTime? TaskServerConnectionFailureStartedAt = null,
+    int TaskServerConnectionConsecutiveFailures = 0,
+    DateTime? TaskServerConnectionEscalatedAt = null,
+    string? TaskServerConnectionLastError = null,
+    DateTime? TaskServerConnectionLastRecoveredAt = null);
 
 public enum RunnerClaimStatus { Claimed, Empty, PreflightRequired, PreflightFailed, Invalid }
 
@@ -415,7 +422,12 @@ public sealed record ExternalCompletionRequest(
     List<ExternalDeliverable>? Deliverables = null,
     string? Source = null,
     string? TargetState = null,
-    List<string>? GateItems = null);
+    List<string>? GateItems = null,
+    // AGT-2220: the structured delivery claim. The runner's own ls-remote proof
+    // is no longer trusted as prose in Summary - the server re-verifies these two
+    // fields against the target repository before it stamps anything.
+    string? ResultSha = null,
+    string? ResultRef = null);
 
 public sealed record ExternalCompletionResponse(
     string? JobId = null,

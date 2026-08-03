@@ -51,6 +51,15 @@ ingest path with its own provenance, not a manual folder edit:
   retain the host worktree and report the cause, hostname, worktree path,
   branch, and recovery recipe instead of writing external-completion
   provenance.
+- **The server re-verifies the proof; it does not read it** (AGT-2220). The
+  runner's `ls-remote` check is a precondition, not the enforcement point. The
+  claim travels as data — `resultSha` + `resultRef` — and the endpoint proves it
+  again against the target repository via `GitService.VerifyDeliveredCommit`
+  before it writes anything. A completion whose commit cannot be proven never
+  becomes a stamp; it becomes an `unverified-delivery` record (see §3.1). This
+  closes the shape behind the AGT-2400 ghost badges, the 11.07. phantom wave,
+  and the "Delivered lies" series: all three stamped cards from a *sentence*
+  asserting verification that nothing ever re-checked.
 
 ## 3. The reconciliation endpoint — `POST /api/tasks/{id}/external-completion`
 
@@ -67,14 +76,24 @@ neighbor task endpoints.
 | `source` | no | Who / which channel did the work (operator name, agent id, `"chat"`, …). Defaults to `external`. |
 | `targetState` | no | Destination lane. Defaults to `5-human-review` (the card still gets a quick operator confirmation). Must be a valid lane. |
 | `gateItems[]` | no | Open operator checklist items written to `orchestrator-follow-up.md`, for example a remote `worktree-blocked` salvage failure. |
+| `resultSha` | for commit-producing modes | Full 40-character commit the completion claims was delivered. Re-verified against the target repository (AGT-2220). |
+| `resultRef` | no | Ref expected to carry `resultSha`. Without it the SHA is searched across all remote refs. |
 
 Attribution is split deliberately: the **caller** (`X-Client-Id`) is the operator
 who *relayed* the result and drives the `lane_changed` ledger row; the completion
 **source** (who actually *did* the work) is the `source` field on the body.
 
-**What it does, in order** (`ExternalCompletionService.CompleteAsync`). Every
-write targets the task's *current* folder first; the lane move is last so all the
-evidence lands together before the folder is renamed:
+**What it does, in order** (`ExternalCompletionService.CompleteAsync`). Step 0 is
+the gate; every later write targets the task's *current* folder first, and the
+lane move is last so all the evidence lands together before the folder is
+renamed:
+
+0. **Verification gate** (AGT-2220) — before *any* evidence is written, the
+   claimed `resultSha`/`resultRef` is proven against the target repository.
+   `OutOfBandStampPolicy.Decide` then rules: commit-producing modes (`coding`,
+   `concept`) need a proven commit; report-only modes (`planning`, `research`)
+   deliver a document rather than commits and carry no claim to prove. An
+   unproven claim short-circuits into §3.1 and none of the steps below run.
 
 1. **`results/deliverables.md`** — the canonical narrative: date, source, the
    summary, a bullet list of delivered artifacts (paths/URLs + notes), and a
@@ -113,10 +132,38 @@ evidence lands together before the folder is renamed:
 **Status → HTTP mapping**: `Success` → `200` with `{ jobId, targetState, source,
 evidenceCommitSha }`; `NotFound` → `404`; `InvalidRequest` (missing summary /
 unknown `targetState`) → `400`; `MoveConflict` (target folder exists / directory
-locked) → `409`; everything else → `500`. The canonical writes (status /
-deliverables / `task.json`) are treated as fatal on hard failure so the caller is
-never told a half-reconciled card is done; the ancillary writes (lifecycle,
-timeline, commit) are best-effort-logged.
+locked) → `409`; `UnverifiedDelivery` → `409` (see §3.1); everything else →
+`500`. The canonical writes (status / deliverables / `task.json`) are treated as
+fatal on hard failure so the caller is never told a half-reconciled card is done;
+the ancillary writes (lifecycle, timeline, commit) are best-effort-logged.
+
+### 3.1 The honest state — `unverified-delivery`
+
+A completion claim the target repository cannot confirm does **not** produce a
+weaker stamp, a warning-annotated stamp, or a silent skip. It produces a
+first-class record of the refusal:
+
+- **`results/unverified-delivery.md`** — what was claimed (SHA + ref), what the
+  repository actually holds at that ref, the verification verdict, the reported
+  (unconfirmed) summary, and the next step.
+- **`status.md`** — `- Result: Unverified delivery - completion stamp refused`
+  plus the reason. No "Completed out-of-band" line is ever written.
+- **`delivery:unverified` tag** — the refusal is visible on the board, not only
+  in a log line.
+- **`delivery_unverified` timeline row** — carries the verdict, the claimed
+  SHA/ref and the SHA the repository actually holds.
+- **Lane** — escalated under the `unverified-delivery` category.
+
+Nothing on this path writes `externalCompletion`, terminalizes `lifecycle.json`,
+or touches `commits[]`: an unproven delivery must leave no artifact that could
+later be mistaken for evidence.
+
+Three verdicts are distinguished, and the difference is load-bearing:
+`Verified` / `VerifiedContained` (proven — the commit is the ref tip, or is
+contained in its history because the branch moved on), the *disproved* verdicts
+`ShaMismatch` / `RefMissing` / `CommitMissing` (the repository contradicts the
+claim), and `NotVerifiable` (no origin, no claim, unreachable repo). The last one
+is never laundered into proof — but it is also never reported as disproof.
 
 **Partial results present.** The same "the work is more real than the card looks"
 insight applies to the *escalation* path this endpoint complements. When the

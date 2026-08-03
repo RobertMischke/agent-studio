@@ -1,6 +1,6 @@
 ---
 name: cli-claude
-description: Deep operational reference for the Anthropic Claude Code CLI driver in this project. Use when touching backend/Services/Cli/ClaudeCliService.cs, the stream-json frame parser, Claude session capture, the rate-limit pill, ClaudeQuotaProbe, or any code that consumes Claude's output. Covers invocation, frame catalogue, session-UUID capture, model normalisation, quirks (stdin EOF, npm shim), known incidents, and common tasks. Pair with cli-overview for cross-CLI context.
+description: Deep operational reference for the Anthropic Claude Code integration. Use when touching the Studio Claude behavior, the CAR host bridge, stream-json rendering, session capture, the rate-limit pill, ClaudeQuotaProbe, or any consumer of Claude output. Covers invocation, frames, session UUIDs, model normalization, npm-shim incidents, and common tasks. Pair with cli-overview for the cross-CLI CAR contract.
 sentinel: TASKBOARD-CLI-SKILL-CLAUDE-2026
 ---
 
@@ -10,7 +10,7 @@ sentinel: TASKBOARD-CLI-SKILL-CLAUDE-2026
 
 Anthropic's official Claude Code CLI. Distributed as the npm package `@anthropic-ai/claude-code`. The most feature-rich of our four CLIs and the one we lean on most.
 
-> **Source:** [`backend/Services/Cli/ClaudeCliService.cs`](../../../backend/Services/Cli/ClaudeCliService.cs) (extends `CliExecutionServiceBase`).
+> **Source:** [`BuiltInCliBehaviors.cs`](../../../../backend/Features/Cli/Execution/BuiltInCliBehaviors.cs) for Studio behavior and [`BackendCarExecution.cs`](../../../../backend/Features/Cli/Execution/BackendCarExecution.cs) for the CAR bridge.
 > **Tests:** [`backend.Tests/ClaudeQuotaProbeTests.cs`](../../../../backend.Tests/ClaudeQuotaProbeTests.cs) (probe). Driver-level `TransformReadLine` tests live alongside fixtures under `backend.Tests/Fixtures/cli/claude/` (see § "Fixtures").
 > **Contract:** [docs/system/cli/supported-clis.md §3.1](../supported-clis.md).
 
@@ -43,20 +43,20 @@ Claude Code is the most agentic of the four and *will* run `git status` / `git d
 ### Fresh run
 
 ```sh
-claude -p "<prompt>" \
+printf '%s' "<prompt>" | claude -p \
   --output-format stream-json --verbose --dangerously-skip-permissions \
   [--model <id>] \
   [--append-system-prompt-file <path>]
 ```
 
-`-p "<prompt>"` is the headless / "print" mode; output goes to stdout, the process exits when the model is done. `--verbose` is *required* alongside `stream-json` because Claude's CLI rejects the combo without it. `--dangerously-skip-permissions` auto-approves tool calls — required for unattended runs.
+`-p` is the headless / "print" mode; output goes to stdout, the process exits when the model is done. The CAR-backed default writes the one-shot prompt to stdin and closes it immediately. The legacy rollback passes the prompt as the final argv value. `--verbose` is *required* alongside `stream-json` because Claude's CLI rejects the combo without it. `--dangerously-skip-permissions` auto-approves tool calls, which is required for unattended runs.
 
 `--append-system-prompt-file <path>` injects [`agent-rules/core.md`](../../../../agent-rules/core.md) as a system-prompt overlay. It's a *file* flag (not the inline string flag) so the multi-line markdown stays out of the command-line argument and lets the Anthropic CLI cache the system-prompt portion across runs. We resolve the path via `ResolveAgentRulesPath` (looks at config + walks up from `AppContext.BaseDirectory`); files larger than 8 KB are skipped with a warning to avoid blowing the system-prompt cache.
 
 ### Resume
 
 ```sh
-claude -r <session-uuid> -p "<prompt>" \
+printf '%s' "<prompt>" | claude -r <session-uuid> -p \
   --output-format stream-json --verbose --dangerously-skip-permissions \
   [--model <id>] \
   [--append-system-prompt-file <path>]
@@ -75,8 +75,8 @@ The runner never pre-generates a session id for Claude. On a fresh run we pass n
 ## Stream-json frame catalogue
 
 Each line of stdout is a JSON object. The frame switch lives in the pure
-[`ClaudeOutputRenderer`](../../../src/AgentTaskboard.Runner/Cli/Rendering/ClaudeOutputRenderer.cs)
-(`ICliOutputRenderer`); `ClaudeCliService.TransformReadLine` is a thin delegate
+[`ClaudeOutputRenderer`](../../../../backend/Features/Cli/Execution/Rendering/ClaudeOutputRenderer.cs)
+(`ICliOutputRenderer`); the Claude behavior's `TransformReadLine` hook is a thin delegate
 to it (see `cli-overview` § "Unified renderer layer"). The shapes below are
 verified against the live CLI; when adding a new branch, capture a fixture under
 `backend.Tests/Fixtures/cli/claude/` and lock it with a test.
@@ -193,7 +193,7 @@ To add a new model, append it to the list in `GetModelCatalogAsync` and add a te
 
 ## Quirks (and what to do about them)
 
-1. **Claude reads stdin even with `-p`.** Without an early stdin EOF, the CLI prints a 3 s "no stdin data received" warning before continuing. The base class closes `process.StandardInput` immediately after `Process.Start()`. Don't remove this.
+1. **Claude prompt stdin is one-shot.** CAR writes the complete prompt, flushes it, and closes the stream before the turn begins. Keeping the pipe open can stall initialization; closing it early is load-bearing.
 2. **Windows npm shim quirk.** The npm-installed binary is `node_modules/@anthropic-ai/claude-code/bin/claude.exe`. An interrupted `npm i -g @anthropic-ai/claude-code` can leave a `claude.exe.old.<timestamp>` and *no* `claude.exe`, breaking `claude --version`. The fix is to reinstall: `npm i -g @anthropic-ai/claude-code`. This is documented in `supported-clis.md` and shows up as `Available=false` in the side-sheet.
 3. **`thinking` blocks are dropped.** Extended-thinking content (`type: "thinking"` parts of an assistant message) is filtered out of the visible buffer. They're noisy and not user-actionable; if a debug flag becomes useful, add a config-gated branch in `TransformReadLine`.
 4. **Long Bash commands get trimmed to 200 chars.** `TrimSingleLine` collapses newlines and truncates with `…`. Multi-line shell scripts won't render in full; this is intentional, the full command is in the persisted `tool_use` payload via `Read` of the JSONL.
@@ -204,7 +204,7 @@ To add a new model, append it to the list in `GetModelCatalogAsync` and add a te
 - **Sessions never resumed (Issue tracked in `TaskRunnerPlanTests`):** the captured UUID never made it back to `job.json` because the `system` frame's `session_id` was being read in `TransformReadLine` and discarded. Fix: capture in `OnOutputLine` against the transformed marker line; persist via `_sessions.AppendSessionToChain` in `OnCliFinishedAsync`.
 - **Restart of finished tasks: "I'll wait for your request":** when a job in `4-review` was re-started with the same session, the runner re-issued the `RunnerFreshStart` bootstrap as a new user turn. Claude saw a duplicate of turn 1, decided the task was already done, and replied with the generic English fallback. Fix: new `runner-resume-restart.md` template + planner branch for `ManualStart + resume + initialState ∈ {Review, Completed}`. Tests in `TaskRunnerPlanTests.Start_FromReviewOrCompletedWithSession_UsesRestartPrompt`.
 - **Activity log blank for 30+ s at start:** Claude's `-p` mode emits no output until the model produces its first text in the default text format. Switching to `stream-json` made every frame stream live; the synthetic `[taskboard] Started claude CLI ...` line additionally fills the gap between spawn and first frame.
-- **"Agent goes silent after `system/init` frame, watchdog kills at 124 s" (ADR-0011):** the runner spawned `claude.CMD` (the npm shim) instead of the underlying `claude.exe`. Windows wraps a `.CMD` invocation in `cmd.exe /c "..."` which adds a layer that has correlated with intermittent agent silence. Direct shell invocation with the same args reproduces fine. Fix: [`ClaudeCliService.ResolveCmdShimToExe`](../../../backend/Services/Cli/ClaudeCliService.cs) walks the npm-shim convention and rewrites `<prefix>\claude.CMD` → `<prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe` inside `BuildStartInfo`. The integration matrix at [`backend.Tests/CliSpawnIntegrationTests.cs`](../../../../backend.Tests/CliSpawnIntegrationTests.cs) pins both the working `.exe` path and the realistic-prompt `ClaudeCliService.StartAsync` path; isolated tests do NOT reproduce the original hang shape, suggesting the live-only trigger is interaction with concurrent claude processes / watchdog timing - the `.exe` direct path removes one structural variable regardless. Run the matrix with `RUN_CLI_INTEGRATION=1 dotnet test --filter CliSpawnIntegrationTests`.
+- **"Agent goes silent after `system/init` frame, watchdog kills at 124 s" (ADR-0011):** the legacy runner spawned `claude.CMD` instead of the underlying `claude.exe`. Windows wraps a `.CMD` invocation in `cmd.exe /c "..."`, which correlated with intermittent silence. The legacy behavior's [`ResolveCmdShimToExe`](../../../../backend/Features/Cli/Execution/BuiltInCliBehaviors.cs) retains the path probe for rollback. CAR owns npm-shim repair for the default CAR-backed path. The retained Studio healer is limited to the explicit rollback and `ClaudeOneShot`, must never run for a CAR-backed agent, and is removed with those paths in T4. The integration matrix at [`CliSpawnIntegrationTests.cs`](../../../../backend.Tests/CliSpawnIntegrationTests.cs) pins the launch contract.
 - **Claude Code quality regression after stale resumes (external, Anthropic April 23 2026):** an upstream Claude Code harness bug pruned older thinking repeatedly after a session crossed a one-hour idle threshold. Lesson for this project: do not equate accepted resume ids with healthy continuations; stale-session behavior needs its own probes and recovery tests.
 
 ### Operator playbook: claude run hangs after init
@@ -222,7 +222,7 @@ When you observe a job in `3-progress` with only `● Session init <uuid>` in th
 4. **Run the integration matrix.** `RUN_CLI_INTEGRATION=1 dotnet test --filter CliSpawnIntegrationTests`. Each probe maps to a diagnostic question (see ADR-0011's reasoning style). A failure narrows the search; all-green means the hang is environmental, not structural.
 5. **Inspect the persisted log.** `<job-folder>/logs/cli-output.log` carries the full stream-json + watchdog timeline. Look for the gap between `Session init` and the next non-system line; that gap's duration tells you whether claude was producing tokens that never reached the runner (Node-side buffering, addressed by ADR-0011's `.exe` rule) versus genuinely waiting on the API (rate-limit, network).
 6. **Check the per-job tool-call log** (added in ADR-0030). `<job-folder>/logs/tool-calls.jsonl` lists every `ToolStarted` / `ToolCompleted` the adapter observed, with `tool` name and the most relevant argument (`file_path` / `command` / `pattern`). If the tail of this file is a `started` with no matching `completed`, the agent was mid-tool when the watchdog killed it; combine with `cli-output.log` to decide whether the tool was legitimately long (Bash build) or whether claude's stdout pipe blocked.
-7. **Compare with the side-channel session file.** Claude maintains its own per-session log at `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl` (the `<encoded-cwd>` rule is documented in [`backend/Services/Cli/ClaudeSessionHeartbeat.cs`](../../../backend/Services/Cli/ClaudeSessionHeartbeat.cs)). If that file kept growing during a watchdog-killed silence, the agent was alive and the runner's stdout pipe was buffer-stuck — the side-channel heartbeat hypothesis. If the file also stopped at the same instant, claude itself was waiting on the Anthropic API.
+7. **Compare with the side-channel session file.** Claude maintains its own per-session log at `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl` (the path rule is implemented by [`ClaudeSessionHeartbeat.cs`](../../../../backend/Features/Cli/Execution/ClaudeSessionHeartbeat.cs)). If that file kept growing during a watchdog-killed silence, the agent was alive and the stdout path was stalled. If the file also stopped at the same instant, Claude itself was waiting on the Anthropic API.
 8. **Look at the rate-limit context.** `cli-output.log` includes Anthropic's `rate_limit_event` frames — under `allowed_warning` status the API can take 30-60 s longer to respond. Pattern analysis in May 2026 (see ADR-0030) found that warning state correlates with most hangs; the widened `SessionInitializing` budget (60 / 120 s) accommodates this without code changes per-incident.
 9. **If three same-job kills in a row already routed to `5-human-review`:** the Loud-Failure routing (ADR-0030) moved the job out of `3-progress` automatically and paused auto-mode. Read the chat-note before re-running. Common causes: a prompt that triggers extended thinking the watchdog interprets as silence, a tool that hangs (e.g. an interactive `git rebase -i`), or a session id that resumes into a corrupted state.
 
@@ -235,7 +235,7 @@ Three integration test classes pin three contract layers:
 | Test class | Pins |
 |---|---|
 | [`CliSpawnIntegrationTests`](../../../../backend.Tests/CliSpawnIntegrationTests.cs) | Spawn-path correctness for Claude / Codex / Gemini direct invocation, `.CMD` shim shape, sequential kill+restart |
-| [`CliKestrelHostingRepoTests`](../../../../backend.Tests/CliKestrelHostingRepoTests.cs) | Spawn produces frames past `Session init` under the real Kestrel-hosted DI graph (closes the dotnet-run-vs-dotnet-test gap that previously masked claude-code#771) — both the default `Process.Start` path and the flag-gated `WindowsHandleScrubSpawner` path |
+| [`CliKestrelHostingRepoTests`](../../../../backend.Tests/CliKestrelHostingRepoTests.cs) | CAR spawn produces frames past `Session init` under the real Kestrel-hosted DI graph, including the Windows-hosted CAR composition probe. |
 | [`CliResumeContractTests`](../../../../backend.Tests/CliResumeContractTests.cs) | Resume / continuation contract: fresh-then-resume produces init frames on both runs, dead-session-UUID fails cleanly within 30 s instead of hanging |
 
 The two `WebApplicationFactory<Program>`-using classes are tagged `[Collection("LiveCli")]` (defined in [`LiveCliCollection.cs`](../../../../backend.Tests/LiveCliCollection.cs)) which serializes them - xUnit's default parallelism would otherwise let two tests spawn the same CLI in the same per-cwd `~/.claude/projects/...` session DB simultaneously and re-create the lock contention the ADR-0011 / ADR-0014 investigation kept tripping over. Default-suite tests stay parallel.

@@ -45,7 +45,13 @@ internal sealed record DetachedJobResult(
     string StdOut,
     string StdErr,
     bool TimedOut,
-    DateTime CompletedAtUtc);
+    DateTime CompletedAtUtc,
+    bool LaunchFailed = false);
+
+internal sealed record DetachedJobProcessObservation(
+    bool IsLive,
+    DetachedJobResult? Result,
+    string Detail);
 
 internal sealed record DetachedWorkerIdentity(
     int ProcessId,
@@ -221,8 +227,42 @@ internal sealed class DurableAgentProcess
         return VerifyLive(recovered, out reason);
     }
 
-    public static bool HasCompleted(PersistedRunnerSlot slot)
-        => File.Exists(Path.Combine(slot.WorkerDirectory, "result.json"));
+    /// <summary>
+    /// Resolves the only two facts that make a persisted worker reattachable:
+    /// a live, positively identified process or its atomically persisted
+    /// terminal result. The second result read closes the worker-exit race
+    /// where the result appears after the first read but before PID liveness is
+    /// checked.
+    /// </summary>
+    public static DetachedJobProcessObservation InspectForReattach(PersistedRunnerSlot slot)
+    {
+        var process = Attach(slot);
+        return InspectForReattach(
+            process.ReadResult,
+            () =>
+            {
+                var isLive = VerifyLive(slot, out var detail);
+                return (isLive, detail);
+            });
+    }
+
+    internal static DetachedJobProcessObservation InspectForReattach(
+        Func<DetachedJobResult?> readResult,
+        Func<(bool IsLive, string Detail)> verifyLive)
+    {
+        var result = readResult();
+        if (result is not null)
+            return new DetachedJobProcessObservation(false, result, "durable result ready");
+
+        var (isLive, detail) = verifyLive();
+        if (isLive)
+            return new DetachedJobProcessObservation(true, null, detail);
+
+        result = readResult();
+        return result is not null
+            ? new DetachedJobProcessObservation(false, result, "durable result ready")
+            : new DetachedJobProcessObservation(false, null, detail);
+    }
 
     public static bool VerifyLive(PersistedRunnerSlot slot, out string reason)
     {
@@ -339,16 +379,18 @@ internal sealed class DurableAgentProcess
 
         ProcessResult processResult;
         var timedOut = false;
+        var launchFailed = false;
         if (string.Equals(spec.Engine, RunnerOptions.ExecEngineCar, StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                (processResult, timedOut) = await CarWorkerExecution.RunAsync(spec, directory, Append);
+                (processResult, timedOut, launchFailed) = await CarWorkerExecution.RunAsync(spec, directory, Append);
             }
             catch (Exception ex)
             {
                 Append("system", $"[runner] detached worker failed: {ex.Message}");
                 processResult = new ProcessResult(125, string.Empty, ex.ToString());
+                launchFailed = true;
             }
         }
         else
@@ -393,6 +435,8 @@ internal sealed class DurableAgentProcess
             {
                 Append("system", $"[runner] detached worker failed: {ex.Message}");
                 processResult = new ProcessResult(125, string.Empty, ex.ToString());
+                launchFailed = ex is System.ComponentModel.Win32Exception
+                               || ex.Message.Contains("Failed to start process", StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -401,7 +445,8 @@ internal sealed class DurableAgentProcess
             processResult.StdOut,
             processResult.StdErr,
             timedOut,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            launchFailed);
         await WriteAtomicAsync(resultPath, JsonSerializer.Serialize(result, Json));
         return processResult.ExitCode;
     }

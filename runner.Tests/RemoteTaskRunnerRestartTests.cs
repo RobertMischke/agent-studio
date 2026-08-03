@@ -11,6 +11,8 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "remote-runner-reattach", Guid.NewGuid().ToString("N"));
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     public async Task Restarted_runner_follows_fake_job_and_delivers_completion_without_a_zombie_lease()
     {
         var origin = Path.Combine(_root, "origin.git");
@@ -57,6 +59,8 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     public async Task Restarted_runner_completes_with_the_base_sha_recorded_before_the_restart()
     {
         // Only the process that prepared the worktree observes its start commit.

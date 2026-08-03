@@ -117,6 +117,31 @@ outbound to the authenticated HTTPS origin with its enrolled service identity.
 The tunnel procedure and health gate are documented in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
+### Own the Task Server route
+
+Do not run the tunnel as an unattended bare `ssh -N` process. For the current
+Windows-to-Linux reverse route, register the repository-owned functional keeper
+from the Studio checkout:
+
+```powershell
+.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -TaskServerPort 5031 `
+    -IntervalMinutes 5
+```
+
+The keeper probes `/healthz` from the Linux host, removes only the matching dead
+forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
+host can initiate the SSH connection, prefer the host-owned `autossh` plus
+systemd form in the linked tunnel runbook because it starts before an
+interactive Windows logon.
+
+Treat either tunnel form as an interim local-profile topology. Once an
+authenticated private Task Server URL is available to the host, point
+`RUNNER_SERVER_URL` at it and disable the tunnel keeper instead of carrying both
+routes forward.
+
 ## Product onboarding from Execution Hosts
 
 The primary setup path is **Workspace Settings -> Execution Hosts -> Set up agent
@@ -215,16 +240,26 @@ copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 
 ```bash
 git clone <origin> agent-taskboard && cd agent-taskboard
-sudo dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host
+release_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
+staging_root="$(mktemp -d)"
+release_root="/opt/agent-host/releases/$release_id"
+dotnet publish runner/AgentRunner.csproj -c Release -o "$staging_root"
+sudo install -d -m 0755 "$release_root"
+sudo cp -a "$staging_root/." "$release_root/"
+sudo ln -sfnT "$release_root" /opt/agent-host/current
 if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
   sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
 fi
 sudo ln -sfnT /opt/agent-host /opt/agent-runner
 ```
 
-The output binary is `/opt/agent-host/agent-host`. `/opt/agent-runner` is a
-transition symlink for existing automation; new deployments and units use only
-`/opt/agent-host`.
+The selected output binary is `/opt/agent-host/current/agent-host`.
+`/opt/agent-runner` is a transition symlink for existing automation; new
+deployments and units use only `/opt/agent-host`. Every publish must create a
+new release directory. Never publish into the active `current` target or over
+the files of a running daemon. The CLR can load metadata and method bodies
+lazily, so replacing only part of a live multi-file application can corrupt the
+running process even before systemd receives the planned restart.
 
 ## 3. Configure
 
@@ -249,7 +284,7 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
 | `RUNNER_ROLE` | `--role` | `coding` | `coding` or the separately registered `review` service. |
-| `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. |
+| `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. Settled attempt workspaces are removed after report acceptance; inactive attempt remnants older than 72 hours are swept hourly. The reusable `.baseline-cache` is preserved. |
 | `RUNNER_REVIEW_CREDENTIAL_ENV` | `--review-credential-env` | (none) | Comma-separated read-only credential variable names admitted into the cleared review environment. |
 | `RUNNER_STATE_DIR` | `--state-dir` | `$RUNNER_WORKDIR/.runner-state` | Durable slot, attempt, PID, worker result, and file-backed output state used for planned restart reattachment. Keep it on persistent local storage. |
 | `RUNNER_EXEC_ENGINE` | `--exec-engine` | `car` | CLI execution engine inside the detached worker. `car` (default since AGT-2370) drives the CLI through the CodingAgentRunner library: descriptor-built argv, `stream-json` output, permission-mode injection from the card's spec (absent = bypass/yolo), and an isolated per-run config home whose credential file is hard-linked so OAuth refreshes write through. `legacy` is the pre-AGT-2370 raw spawn and is removed in AGT-2373. |
@@ -498,7 +533,7 @@ Start the foreground daemon with no task argument or with `--poll`:
 export RUNNER_SERVER_URL=http://<studio-host>:5030
 export RUNNER_NAME=agent-runner-01
 export RUNNER_MAX_PARALLELISM=2
-/opt/agent-host/agent-host --poll
+/opt/agent-host/current/agent-host --poll
 ```
 
 The daemon registers once, polls `POST /api/runner/claim`, and fills free host
@@ -537,13 +572,15 @@ reached, it reaps and verifies every process whose cwd belongs to the worktree,
 records `authority-deadline-exhausted`, and retains the slot for honest server
 reconciliation. It never starts a replacement while death is unproven.
 
-A
-persisted attempt is adopted only when its worker PID still has the recorded
+A persisted coding attempt is adopted only when its worker PID still has the recorded
 start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
 and follows the worker's JSONL output file from the persisted sequence. A
 worker that finished during the short restart window is finalized from its
-atomically written result file. The slot enters `launching` before
+atomically written result file. The same inspection resolves both startup and
+the attached-process poll. If the PID exits while that inspection is running,
+the daemon re-reads the terminal result before it can classify the worker as
+missing. The slot enters `launching` before
 `Process.Start`, and the worker writes its own atomic `worker.json` identity
 before starting the CLI. Startup briefly waits for that identity, closing the
 child-start-to-slot-save handoff window without trusting an unverified PID. A
@@ -552,6 +589,26 @@ lease is actively released and the Task Server returns the Progress card to
 Ready with the next claim using a higher fence. This recovery preserves the
 bounded attempt/autonomy contract; it does not create a second attempt or an
 autonomous task store on the Runner.
+
+The Review service uses the same positive process-proof boundary under
+`RUNNER_STATE_DIR/reviews`. Before starting the ReviewPlan it persists the
+immutable ReviewAttempt, subject, original lease/fence, and exact review
+workspace. Its detached worker writes `review-worker.json`,
+`review-progress.json`, and `review-result.json`. On restart the replacement
+Review daemon verifies PID start time and `/proc/<pid>/cwd`, renews the persisted
+lease instance, and completes the same attempt and fence. Completed review
+commands and an in-flight command are not relaunched. Recovered slots resume
+before the daemon evaluates host load for a fresh claim, so load admission can
+close without discarding in-flight test time.
+
+If the Review worker is missing, its PID was reused, or its cwd differs, the
+replacement does not adopt or execute it. It submits a fenced
+`ReviewInfra / ExecutorRestarted` report containing the failed proof, completed
+step ids, completed-command duration, and retry reason. If the old lease already
+expired, the daemon reclaims that attempt under a fresh fence solely to deliver
+this loss report; it never runs from the unproven process. The deterministic
+`review-report:<attempt>:<fence>` key can replay the same terminal payload, but
+the authority rejects a conflicting payload.
 
 During a Task Server or transport outage, transient claim, heartbeat, event,
 artifact, result-handoff, and completion failures do not terminate the daemon.
@@ -613,22 +670,36 @@ recovery. Installing or changing the unit requires root, followed by
 
 ### Planned daemon restart and deploy
 
-A planned Runner deploy no longer waits for host idle. Replace the published
-files and restart the main service process:
+A planned Runner deploy no longer waits for host idle. Publish the complete
+application into a new immutable release directory as described in section 2,
+atomically switch `/opt/agent-host/current`, and only then restart the main
+service process. Record the previous `readlink -f /opt/agent-host/current`
+target before switching so rollback can select that complete release.
 
 ```bash
 sudo systemctl restart agent-host
 sudo journalctl -u agent-host --since '-2 minutes' \
   | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
+
+sudo systemctl restart agent-runner-review
+sudo journalctl -u agent-runner-review --since '-2 minutes' \
+  | grep -E 'planned shutdown|review daemon handoff|persisted review accepted|adopting persisted review|review adoption failed'
 ```
 
-On SIGTERM the old daemon stops making claims, leaves detached job workers
-running, flushes its already-atomic slot records, and exits. systemd starts the
-replacement, which verifies and reattaches those workers before opening any
-freed slot to claims. Confirm every previously occupied slot reports either
-`persisted attempt accepted` or `releasing dead persisted attempt`. The latter
-must be followed by a Ready card and a later higher-fence claim. Do not change
-the unit back to `KillMode=control-group`.
+On SIGTERM the old daemon stops making claims, leaves detached coding and review
+workers running, flushes its already-atomic slot records, and exits. systemd
+starts the replacement, which verifies and reattaches those workers before
+opening any freed slot to claims. For Coding, confirm every occupied slot reports
+either `persisted attempt accepted` or `releasing dead persisted attempt`; the
+latter must be followed by a Ready card and a later higher-fence claim. For
+Review, confirm `review daemon handoff` is followed by `persisted review
+accepted` and `adopting persisted review` under the same attempt and fence. A
+`review adoption failed` line must be followed by an accepted
+`ExecutorRestarted` infrastructure report with explicit loss extent and retry
+reason. Do not change either unit back to `KillMode=control-group`. Retain every release referenced by a
+daemon or detached worker; garbage collection is a separate, process-aware
+operation. Rollback switches `current` to the recorded previous release and
+restarts the daemon. It never copies old files over the active release.
 
 This procedure covers a planned daemon binary restart, not a machine reboot,
 power loss, Task Server authority restart, or forced `SIGKILL`. Those cases
@@ -645,7 +716,7 @@ contracts.
    export RUNNER_SERVER_URL=http://<studio-host>:5030
    export RUNNER_GIT_REMOTE=<origin>
    export RUNNER_BRANCH=task/<the-task-branch>     # optional; falls back to base
-   /opt/agent-host/agent-host <TASK-KEY>
+   /opt/agent-host/current/agent-host <TASK-KEY>
    ```
 
 The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
@@ -817,6 +888,15 @@ proof.
   tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
   The runner refuses at preflight by design, so no half-started lease or CLI is
   left behind.
+- **Execution Hosts shows `Task Server route unreachable`** - the
+  `task-server:connectivity` advertisement is stale or explicitly unavailable.
+  This is the board-visible transport alarm even when the host itself is still
+  running, because a broken route cannot carry a fresh failure report through
+  itself. For the Windows-to-Linux reverse-tunnel topology, inspect
+  `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\events.log`, then run the
+  functional host-side curl from
+  [Remote runner: persistent connection](./remote-runner-persistent-connection.md).
+  Repair the route instead of restarting the review daemon.
 - **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
   slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /
   lower `RUNNER_HEARTBEAT_SECONDS`, or check the tunnel.
@@ -840,7 +920,16 @@ proof.
   `RUNNER_SERVER_URL` straight at the Studio.
 ## Reading host telemetry
 
-The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, active runner slots, and the last locally observed Task Server connection state together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+
+Task Server reachability has two complementary signals. The telemetry snapshot
+contains the daemon's local observation, failure start, consecutive failure
+count, escalation time, last error, and last recovery. The
+`task-server:connectivity` capability carries a three-minute freshness deadline.
+Freshness is the load-bearing remote alarm: when the route is down, the Task
+Server cannot receive another telemetry sample, so the last sample must not be
+misread as proof that the route remains healthy. The host card marks the route
+unreachable as soon as the connectivity capability expires.
 
 Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
 

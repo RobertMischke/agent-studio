@@ -109,7 +109,6 @@ public static class TimelineEventKinds
     public const string AgentRunFinished = "agent_run_finished";
     /// <summary>A Progress requeue was replaced by forward recovery of a completed immutable result.</summary>
     public const string SettledRunRecovered = "settled_run_recovered";
-    public const string RemoteDeliveryBackfilled = "remote_delivery_backfilled";
     /// <summary>A pipeline pre-step started (ADR-0045).</summary>
     public const string PreStepStarted = "pre_step_started";
     /// <summary>A pipeline pre-step finished.</summary>
@@ -246,6 +245,12 @@ public static class TimelineEventKinds
     /// history shows the external hand-off rather than ending in a corpse.
     /// </summary>
     public const string ExternalCompletion = "external_completion";
+    /// <summary>
+    /// AGT-2220: a completion claim was refused because its commits could not be
+    /// proven against the target repository. Recorded so a refused phantom is
+    /// visible in the card's history rather than silently absent.
+    /// </summary>
+    public const string DeliveryUnverified = "delivery_unverified";
     /// <summary>
     /// AGT-2202 compatibility event for a non-transactional caller that observed
     /// accepted work outside the integration branch. Transactional acceptance

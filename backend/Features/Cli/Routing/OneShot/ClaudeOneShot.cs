@@ -63,34 +63,23 @@ public sealed class ClaudeOneShot : ICliOneShot
         var executable = GenericCliExecutionService.ResolveExecutable(cliPath);
         var timeout = request.Timeout ?? DefaultTimeout;
 
-        // Pre-spawn self-heal symmetric to ClaudeCliService.EnsureCliHealthyAsync.
-        // The ClaudeOneShot path used to throw Win32Exception 216 (ERROR_EXE_MACHINE_TYPE_MISMATCH)
-        // every time the racing claude-code auto-updater swapped the wrapper
-        // binary for the 500-byte stub mid-pickup. The exception is caught by
-        // the outer try/catch below and surfaced as SpawnFailure, but every
-        // failed Haiku call (review-decision, summary-generation, aspect prompts)
-        // is a wasted backend tick, and there is evidence (2026-05-15 backend
-        // disappearances after Win32Exception 216 storms) that the native
-        // CreateProcess failure leaves CLR heap state in a fragile shape that
-        // a later allocation or finalizer can turn into a silent process exit.
-        // Heal the binary in-process before the spawn so the Haiku call goes
-        // through and we never throw the Win32 exception in the first place.
+        // CAR owns npm-shim healing for CAR-backed agent runs. One-shot calls
+        // do not use CAR yet, so retain their existing best-effort repair until
+        // T4 removes this temporary non-agent invocation exception.
         if (!QuickProbe(executable))
         {
             _logger.LogWarning(
-                "claude --version failed pre-OneShot at '{Path}'; running NpmShimHealer", executable);
+                "claude --version failed pre-OneShot at '{Path}'; running rollback NpmShimHealer", executable);
             var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
             if (outcome.Actions.Count > 0)
             {
                 _logger.LogInformation(
-                    "NpmShimHealer (one-shot) actions for claude: {Actions}",
+                    "Rollback NpmShimHealer (one-shot) actions for claude: {Actions}",
                     string.Join("; ", outcome.Actions));
             }
-            // Best-effort: even if heal reports !Available the outer try/catch
-            // around Process.Start will still surface the Win32 exception
-            // exactly as today. We do not abort here because callers (aspects,
-            // review-decision) have their own fallback semantics for spawn
-            // failures and changing the return contract is out of scope.
+            // Preserve the established one-shot contract: a failed repair does
+            // not abort here. The spawn below returns the existing SpawnFailure
+            // result and its callers apply their own fallback policy.
         }
 
         var psi = new ProcessStartInfo

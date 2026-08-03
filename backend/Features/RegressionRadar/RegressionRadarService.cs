@@ -83,7 +83,7 @@ public sealed class RegressionRadarService
 
     private RegressionRadarResult AnalyzeProjectCore(string projectName)
     {
-        var jobs = _scanner.ScanAllJobs()
+        var jobs = _scanner.ScanAllAutomationJobs()
             .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(j => j.EnteredLaneAt)
             .ToList();

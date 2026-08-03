@@ -300,7 +300,11 @@ public static class LeaseEndpoints
                         // occupancy does not grow. Recording the unchanged count
                         // keeps the ledger free of the old "active + 1" drift.
                         var replayedActiveRuns = Math.Max(
-                            CountHostLeases(scanner.ScanAllJobs(), leases, clientId, req.RunnerId),
+                            CountHostLeases(
+                                scanner.ScanAllJobs().Where(task => !task.Fixture),
+                                leases,
+                                clientId,
+                                req.RunnerId),
                             activeSlots ?? 0);
                         // Without a ceiling there is nothing to derive from, so the
                         // daemon's own headroom minus the served lease stays the
@@ -356,7 +360,8 @@ public static class LeaseEndpoints
                 // enough to requeue: wait through the authority grace and require
                 // this assigned runner poll to answer that the task is absent
                 // from its active process set.
-                foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
+                foreach (var interrupted in scanner.ScanAllJobs()
+                             .Where(t => !t.Fixture && t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
                     if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
@@ -468,7 +473,7 @@ public static class LeaseEndpoints
                 }
 
                 var eligible = liveSnapshot
-                    .Where(t => t.State == TaskStates.Ready)
+                    .Where(t => !t.Fixture && t.State == TaskStates.Ready)
                     .Where(t =>
                     {
                         var project = settings.Get(t.ProjectName);
@@ -491,19 +496,8 @@ public static class LeaseEndpoints
                 RunnerProjectPreflight? failedProjectPreflight = null;
                 string? nonRemoteCapableProject = null;
                 string? capabilityMismatch = null;
-                var readOnlyCodingSkipped = false;
                 foreach (var task in eligible)
                 {
-                    if (client is not null
-                        && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
-                        && !TaskKinds.IsEpic(task.Kind))
-                    {
-                        readOnlyCodingSkipped = true;
-                        logger.LogWarning(
-                            "remote-runner-coding-claim-refused-read-only runner={Runner} clientId={ClientId} task={TaskKey} detail={Detail}",
-                            req.RunnerName, clientId, task.Key ?? task.Id, client.RunnerGitDetail);
-                        continue;
-                    }
                     var cliType = CliTypes.Normalize(task.CliType);
                     var requiredCapabilities = (req.RequiredCapabilities ?? [])
                         .Append(CapabilityProtocol.CodingExecutor)
@@ -603,11 +597,9 @@ public static class LeaseEndpoints
                 if (candidate is null || repository is null)
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
-                        Message: readOnlyCodingSkipped
-                            ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
-                            : nonRemoteCapableProject is not null
-                                ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
-                                : capabilityMismatch)));
+                        Message: nonRemoteCapableProject is not null
+                            ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
+                            : capabilityMismatch)));
 
                 if (string.IsNullOrWhiteSpace(clientId))
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
@@ -1031,17 +1023,23 @@ public static class LeaseEndpoints
                     !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest),
                     leasedRun is not null);
             }
-            var settled = authority.SettleRun(
-                new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
-                outcome,
-                resultSha,
-                req.Reason,
-                req.RunnerId,
-                req.LeaseId,
-                req.TaskKey,
-                requireResultSha: !isEpicPlanning && outcome is ("done" or "noop"),
-                resultEnvelope: resultEnvelope,
-                resultEnvelopeDigest: resultEnvelopeDigest);
+            var settled = authority.SettleRun(new SettleRunAttemptRequest
+            {
+                Write = new AttemptWriteReference(
+                    attemptId,
+                    req.FencingToken,
+                    epoch,
+                    completionKey),
+                Outcome = outcome,
+                ResultSha = resultSha,
+                Reason = req.Reason,
+                ExecutorId = req.RunnerId,
+                LeaseId = req.LeaseId,
+                ExpectedTaskKey = req.TaskKey,
+                RequireResultSha = !isEpicPlanning && outcome is ("done" or "noop"),
+                ResultEnvelope = resultEnvelope,
+                ResultEnvelopeDigest = resultEnvelopeDigest,
+            });
             if (!settled.Accepted)
             {
                 var response = new RemoteRunCompletionResponse(
@@ -1060,6 +1058,10 @@ public static class LeaseEndpoints
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
+            // AGT-2220: set when the target repository actively contradicts the
+            // claimed delivery; suppresses both the review attempt and the
+            // auto-review lane move.
+            string? unverifiedDelivery = null;
             if (!isEpicPlanning && outcome is ("done" or "noop"))
             {
                 var reportedIntegrationBranch =
@@ -1116,6 +1118,23 @@ public static class LeaseEndpoints
                         deliveryBranch,
                         attributionWarning);
                 }
+
+                // AGT-2220: a delivery the repository actively contradicts must
+                // not ride on into 4-auto-review as if it were clean. That is
+                // exactly what happened to AGT-2220 itself on 28.07.: origin held
+                // 744deb89 while the completion claimed f538f896, the mismatch
+                // was logged as a warning only, commits[] stayed empty - and the
+                // card was stamped Done anyway. A *disproved* delivery now routes
+                // to the honest escalated state. "Could not check" (no origin, no
+                // branch, no SHA) is deliberately NOT treated as disproof - it is
+                // recorded, never upgraded to proof.
+                if (deliveryRange is not null && deliveryRange.IsDisproved)
+                {
+                    unverifiedDelivery = attributionWarning;
+                    targetState = TaskStates.Escalated;
+                    mutations.AddJobTag(
+                        task.Id, OutOfBandStampPolicy.UnverifiedDeliveryTag, task.WatchPath);
+                }
             }
 
             ReviewAttemptDto? reviewAttempt = null;
@@ -1125,8 +1144,13 @@ public static class LeaseEndpoints
             // deterministically by the lightweight report pipeline
             // (ReviewDecisionOrchestrator.ProcessReportOnlyDoneAsync), so no
             // remote ReviewAttempt is minted for them.
+            // AGT-2220: no review subject is minted for a delivery the
+            // repository disproved - there is nothing materializable to review,
+            // and minting one is how AGT-2220 itself acquired a review subject
+            // pinned to a SHA that was never on its recorded ref.
             if (!isEpicPlanning
                 && outcome is ("done" or "noop")
+                && unverifiedDelivery is null
                 && !TaskModes.IsReportOnly(task.Mode))
             {
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
@@ -1460,7 +1484,14 @@ public static class LeaseEndpoints
 
             if (targetState == TaskStates.Escalated)
             {
-                var (category, reason) = RemoteEscalation(outcome, req.Reason);
+                // AGT-2220: a disproved delivery carries its own category and the
+                // git-level reason, so the card names what the repository holds
+                // instead of a generic agent-outcome text.
+                var (category, reason) = unverifiedDelivery is not null
+                    ? (HumanReviewEscalationCategories.UnverifiedDelivery,
+                        $"Delivery not verified against the target repository: {unverifiedDelivery} "
+                        + "No completion stamp was written (AGT-2220).")
+                    : RemoteEscalation(outcome, req.Reason);
                 var escalated = await humanReviewEscalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,
@@ -1608,6 +1639,7 @@ public static class LeaseEndpoints
         var count = 0;
         foreach (var task in snapshot)
         {
+            if (task.Fixture) continue;
             if (task.State != TaskStates.Progress) continue;
             var key = task.Key ?? task.TaskKey ?? task.Id;
             if (string.IsNullOrWhiteSpace(key)) continue;
@@ -1753,9 +1785,10 @@ public static class LeaseEndpoints
     {
         if (string.IsNullOrWhiteSpace(taskKey)) return null;
         return scanner.ScanAllJobs().FirstOrDefault(t =>
-            string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase));
+            !t.Fixture
+            && (string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase)));
     }
 
     private static bool RunnerMatches(HttpContext context, string runnerId, string? runnerName = null)

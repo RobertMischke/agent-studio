@@ -14,7 +14,7 @@ namespace AgentStudio.Cli;
 /// and are wired into a concrete engine instance via the
 /// <c>ForClaude</c> / <c>ForCodex</c> / <c>ForAntigravity</c> factory helpers.
 /// </summary>
-public class GenericCliExecutionService : ICliExecutionService
+public partial class GenericCliExecutionService : ICliExecutionService
 {
     protected readonly ILogger _logger;
     protected readonly IConfiguration _configuration;
@@ -80,6 +80,21 @@ public class GenericCliExecutionService : ICliExecutionService
     /// </summary>
     internal void RaiseRunEvent(string jobKey, CliRunEvent evt)
     {
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            if (evt is CliRunEvent.TurnFailed failed
+                && !string.IsNullOrWhiteSpace(failed.Reason))
+            {
+                info.LastTurnFailureReason = failed.Reason;
+            }
+            else if (evt is CliRunEvent.TurnCompleted)
+            {
+                // A later successful turn resolves an earlier turn failure in
+                // the same process. Do not reuse stale diagnostic evidence if
+                // the process subsequently fails for a different reason.
+                info.LastTurnFailureReason = null;
+            }
+        }
         try { OnRunEvent?.Invoke(jobKey, evt); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
@@ -311,6 +326,9 @@ public class GenericCliExecutionService : ICliExecutionService
     internal IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
         => _behavior.MapLineToRunEvents?.Invoke(this, jobKey, line) ?? Array.Empty<CliRunEvent>();
 
+    internal void CaptureRawLine(string jobKey, CliOutputLine line)
+        => _behavior.CaptureRawLine?.Invoke(this, jobKey, line);
+
     /// <summary>
     /// Arm a side-channel liveness watcher for a freshly spawned run. Default:
     /// no-op. Behaviors that have a stdout-independent activity signal (Claude
@@ -358,7 +376,7 @@ public class GenericCliExecutionService : ICliExecutionService
         });
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(
+    public Task<(CliExecution? Execution, string? Error)> StartAsync(
         string jobId,
         string jobKey,
         string prompt,
@@ -370,13 +388,52 @@ public class GenericCliExecutionService : ICliExecutionService
         string? jobFolderPath = null,
         string? permissionMode = null,
         string? contextMode = null,
+        string? executionEngine = null,
         CancellationToken ct = default)
+    {
+        var engine = CliExecutionEngines.Normalize(executionEngine);
+        if (engine == CliExecutionEngines.Car && SupportsCarExecution)
+        {
+            return StartCarAsync(
+                jobId, jobKey, prompt, workingDirectory, sessionName,
+                resumeSession, model, thinkingLevel, jobFolderPath,
+                permissionMode, contextMode, ct);
+        }
+
+        if (engine == CliExecutionEngines.Car)
+        {
+            _logger.LogInformation(
+                "CAR execution was requested for {Cli}, but its Studio protocol is not CAR-compatible; using the explicit legacy adapter",
+                CliType);
+        }
+
+        return StartLegacyAsync(
+            jobId, jobKey, prompt, workingDirectory, sessionName,
+            resumeSession, model, thinkingLevel, jobFolderPath,
+            permissionMode, contextMode, ct);
+    }
+
+    private async Task<(CliExecution? Execution, string? Error)> StartLegacyAsync(
+        string jobId,
+        string jobKey,
+        string prompt,
+        string workingDirectory,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        string? thinkingLevel,
+        string? jobFolderPath,
+        string? permissionMode,
+        string? contextMode,
+        CancellationToken ct)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {
             if (!existing.Process.HasExited)
                 return (null, $"{CliType} CLI process already running for job '{jobId}'");
-            _processes.TryRemove(jobKey, out _);
+            // Keep the finished attempt until the new process is adopted. Its
+            // retention timer remains the fallback owner of a reused clean
+            // context when this replacement fails before ProcInfo exists.
         }
 
         // Pre-spawn self-heal (infra-cli-broken category in
@@ -715,6 +772,13 @@ public class GenericCliExecutionService : ICliExecutionService
                 // crash - even if Kill races the natural exit by a tick, the
                 // marker is set and the classifier does the right thing.
                 info.StopReason = reason;
+                if (info.CarDriver != null)
+                {
+                    var stopped = info.CarDriver.Stop(jobKey, reason);
+                    if (stopped)
+                        _logger.LogInformation("Stopped {Cli} CAR run for job {JobId} (reason={Reason})", CliType, jobKey, reason);
+                    return stopped;
+                }
                 if (info.KillOverride != null)
                 {
                     try { info.KillOverride(reason); }
@@ -739,6 +803,7 @@ public class GenericCliExecutionService : ICliExecutionService
     {
         if (!_processes.TryGetValue(jobKey, out var info)) return false;
         if (info.Process.HasExited) return false;
+        if (info.CarDriver != null) return info.CarDriver.SendInput(jobKey, input);
         try
         {
             // Route through the ChildHandle's stdin stream when one was
@@ -1213,6 +1278,15 @@ public class GenericCliExecutionService : ICliExecutionService
                 // while the agent retries against the same wall.
                 CheckEnvironmentBlocker(jobKey, info, rawLine);
 
+                // Capture usage/session metadata before publishing the typed
+                // event for this frame. ProjectRunner reads that metadata
+                // synchronously from its TurnCompleted subscriber.
+                try { CaptureRawLine(jobKey, rawLine); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "CaptureRawLine threw for {JobId}; continuing without metadata from this frame", jobKey);
+                }
+
                 // ADR-0013: typed events. Map this raw line to zero or more
                 // CliRunEvent instances and raise them on OnRunEvent. The
                 // mapping runs alongside (not instead of) TransformReadLine
@@ -1356,12 +1430,16 @@ public class GenericCliExecutionService : ICliExecutionService
 
             // ADR-0013 typed terminal event: one RunEnded (3-valued outcome) so the
             // runner's phase tracker sees the terminal state on the typed channel.
-            var endOutcome = info.StopReason != RunStopReason.None
-                ? LibOutcome.Stopped
-                : string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? LibOutcome.Completed : LibOutcome.Failed;
-            var endReason = info.StopReason != RunStopReason.None
+            var endOutcome = string.Equals(status, RunStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+                ? LibOutcome.Completed
+                : string.Equals(status, RunStatuses.Stopped, StringComparison.OrdinalIgnoreCase)
+                    ? LibOutcome.Stopped
+                    : LibOutcome.Failed;
+            var endReason = endOutcome == LibOutcome.Stopped
                 ? info.StopReason.ToString()
-                : endOutcome == LibOutcome.Failed ? status : null;
+                : endOutcome == LibOutcome.Failed
+                    ? info.LastTurnFailureReason ?? terminalOutcome.Reason
+                    : null;
             RaiseRunEvent(jobKey, new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration) { RunId = jobKey });
 
             // Reap any helper the agent spawned and let detach (Playwright
@@ -1389,46 +1467,7 @@ public class GenericCliExecutionService : ICliExecutionService
             _logger.LogInformation("{Cli} finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s",
                 CliType, jobKey, exitCode, duration);
 
-            _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
-            {
-                // Identity-guarded eviction: remove the entry only when it is
-                // still THIS run's own ProcInfo. The old key-only TryRemove
-                // raced a follow-up attempt that had replaced the entry under
-                // the same jobKey — the stale timer then evicted the LIVE run's
-                // ProcInfo, disposed its open output log, and recursively
-                // deleted its clean-context home (CODEX_HOME/CLAUDE_CONFIG_DIR)
-                // while the CLI was still running. That mid-run home deletion
-                // is the "Codex rollout state loss during run" class (MKT-8):
-                // session state of a running run must stay stable; refresh
-                // happens only at run boundaries.
-                if (!_processes.TryRemove(new KeyValuePair<string, ProcInfo>(jobKey, info)))
-                    return;
-
-                info.OutputLog.Dispose();
-                try { info.SessionLiveness?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1009"); }
-                // T1b: tear down the task's isolated clean-context home. The
-                // guarded remove above proves no newer attempt replaced this
-                // entry, so this eviction IS the task's run boundary — the one
-                // place the per-task home may be refreshed/torn down. Tied to
-                // eviction (not OnFinished) because DescribeContextSources runs
-                // asynchronously after finish and must still see the temp paths
-                // intact (Exists=true) for the retention window, and because a
-                // same-run follow-up attempt must be able to reuse the home.
-                if (_cleanContextsByJob.TryRemove(jobKey, out var cleanAtBoundary))
-                {
-                    try { cleanAtBoundary.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
-                }
-                // Defensive: normally identical to the registry entry disposed
-                // above; Dispose is idempotent, so a stale reference is safe.
-                try { info.CleanContext?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
-                // Backstop: close the job handle (kill-on-close reaps any
-                // straggler Terminate() missed). Normally a no-op because
-                // the run-finish path already terminated it.
-                if (OperatingSystem.IsWindows())
-                {
-                    try { info.ProcessReaper?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper dispose"); }
-                }
-            });
+            ScheduleEviction(jobKey, info);
         }
         catch (Exception ex)
         {
@@ -1436,6 +1475,39 @@ public class GenericCliExecutionService : ICliExecutionService
             // handler — that's been crashing the host on subscriber exceptions.
             _logger.LogError(ex, "MonitorProcessAsync crashed for {JobId}", jobKey);
         }
+    }
+
+    /// <summary>
+    /// Retain a finished run for the UI/durable-log handoff, then evict it with
+    /// an identity guard. Both execution engines share this host-owned lifetime.
+    /// </summary>
+    private void ScheduleEviction(string jobKey, ProcInfo info)
+    {
+        _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
+        {
+            // Remove only this run. A later continuation can replace the same
+            // key before the timer fires and owns its own state and clean home.
+            if (!_processes.TryRemove(new KeyValuePair<string, ProcInfo>(jobKey, info)))
+                return;
+
+            info.OutputLog.Dispose();
+            try { info.SessionLiveness?.Dispose(); }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: retention watcher dispose"); }
+
+            if (_cleanContextsByJob.TryRemove(jobKey, out var cleanAtBoundary))
+            {
+                try { cleanAtBoundary.Dispose(); }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
+            }
+            try { info.CleanContext?.Dispose(); }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
+
+            if (OperatingSystem.IsWindows())
+            {
+                try { info.ProcessReaper?.Dispose(); }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper dispose"); }
+            }
+        });
     }
 
     // ── Output log persistence ───────────────────────────────────────────
@@ -1891,6 +1963,14 @@ public class GenericCliExecutionService : ICliExecutionService
         public ClaudeRateLimitSnapshot? LastRateLimit { get; set; }
 
         /// <summary>
+        /// Most recent unresolved typed turn-failure detail. A later
+        /// <see cref="CliRunEvent.TurnCompleted"/> clears it. Both execution
+        /// engines use it for the terminal event before falling back to the
+        /// host outcome classifier's coarser process-level diagnosis.
+        /// </summary>
+        public string? LastTurnFailureReason { get; set; }
+
+        /// <summary>
         /// Resolved platform permission mode the runner handed this run
         /// (<c>CliPermissionModes</c>). Captured at spawn so the read-only
         /// execution-context surface (ASS-1739 / T1a) can report the effective
@@ -1982,6 +2062,13 @@ public class GenericCliExecutionService : ICliExecutionService
         /// callers fall back to <c>Process.StandardInput</c> in that case.
         /// </summary>
         public Stream? ChildStdin { get; init; }
+
+        /// <summary>
+        /// CAR driver that owns this process, or null for the flag-gated legacy
+        /// engine. Stop and stdin must stay routed to the engine that spawned
+        /// the run even if an operator changes the rollout setting mid-flight.
+        /// </summary>
+        public CodingAgentRunner.Execution.ICliDriver? CarDriver { get; init; }
 
         /// <summary>
         /// Number of <see cref="AgentEnvironmentDetector"/> hits observed

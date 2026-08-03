@@ -39,6 +39,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, "job-a");
         var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, "job-a");
         Assert.True(cli.StartCalled, "the fake CLI should have reached the spawn boundary");
+        Assert.Equal(CliExecutionEngines.Car, cli.ExecutionEngineAtStart);
         Assert.True(cli.PickupLockExistedAtStart,
             "the pickup lock must be stamped on the actual 3-progress folder before StartAsync is called");
         Assert.True(Directory.Exists(readyFolder), "failed spawn must return the task to 2-ready immediately");
@@ -64,13 +65,14 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
     {
         WriteJob(TaskStates.Ready, "job-fault");
         var cli = new FailingCliService(throwOnStart: true);
-        var runner = BuildRunner(cli);
+        var runner = BuildRunner(cli, CliExecutionEngines.Legacy);
         runner.SetMode("auto-continuous");
 
         await runner.TickAsync(CancellationToken.None);
 
         var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, "job-fault");
         Assert.True(cli.StartCalled, "fault injection must reach the process-start boundary");
+        Assert.Equal(CliExecutionEngines.Legacy, cli.ExecutionEngineAtStart);
         Assert.True(Directory.Exists(readyFolder), "an admission exception must self-heal back to Ready");
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "job-fault")),
             "an admission exception must never leave Progress without an active run");
@@ -79,6 +81,39 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         Assert.Equal(0, runner.GetStatus().OccupiedSlots);
         Assert.False(File.Exists(Path.Combine(readyFolder, "logs", "session-events.jsonl")),
             "an admission fault must not create a historical run boundary");
+    }
+
+    [Fact]
+    public async Task ImmediateCliFinish_WaitsForDurableStartHandshakeBeforeFinalization()
+    {
+        WriteJob(TaskStates.Ready, "job-fast-finish");
+        var cli = new ImmediateFinishCliService();
+        var runner = BuildRunner(cli);
+        runner.SetMode("auto-continuous");
+
+        var tick = runner.TickAsync(CancellationToken.None);
+        await cli.FinishRaised.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Keep StartAsync suspended after it raised OnFinished. Without the
+        // handoff gate, the background finalizer releases the execution slot
+        // and writes post-processing state while admission is still waiting.
+        await Task.Delay(200);
+        Assert.Equal(1, runner.GetStatus().OccupiedSlots);
+        var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, "job-fast-finish");
+        Assert.True(Directory.Exists(progressFolder));
+        Assert.False(File.Exists(Path.Combine(progressFolder, "logs", "session-events.jsonl")));
+
+        cli.AllowStartReturn.TrySetResult();
+        await tick.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var sessionEvents = Path.Combine(progressFolder, "logs", "session-events.jsonl");
+        Assert.True(File.Exists(sessionEvents), "the confirmed start must be durable before finalization is released");
+        Assert.Contains("\"kind\"", File.ReadAllText(sessionEvents), StringComparison.OrdinalIgnoreCase);
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (runner.GetStatus().OccupiedSlots != 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+        Assert.Equal(0, runner.GetStatus().OccupiedSlots);
     }
 
     private void WriteJob(string state, string slug, int order = 1)
@@ -123,7 +158,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         Assert.True(string.IsNullOrWhiteSpace(stderr), stderr);
     }
 
-    private ProjectRunner BuildRunner(FailingCliService cli)
+    private ProjectRunner BuildRunner(ICliExecutionService cli, string? executionEngine = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -156,6 +191,8 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        if (executionEngine is not null)
+            settings.SetCliExecutionEngine(ProjectName, executionEngine);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
@@ -210,6 +247,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         public string CliType => CliTypes.Claude;
         public bool StartCalled { get; private set; }
         public bool PickupLockExistedAtStart { get; private set; }
+        public string? ExecutionEngineAtStart { get; private set; }
 
         public string GetCliPath() => "fake-claude";
         public bool IsAvailable() => true;
@@ -227,13 +265,88 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             string? jobFolderPath = null,
             string? permissionMode = null,
             string? contextMode = null,
+            string? executionEngine = null,
             CancellationToken ct = default)
         {
             StartCalled = true;
+            ExecutionEngineAtStart = executionEngine;
             PickupLockExistedAtStart = !string.IsNullOrWhiteSpace(jobFolderPath)
                 && File.Exists(Path.Combine(jobFolderPath, PickupLockFile.LockFileName));
             if (_throwOnStart) throw new InvalidOperationException("injected admission fault");
             return Task.FromResult<(CliExecution?, string?)>((null, "fake spawn failure"));
+        }
+
+        public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop) => false;
+        public bool SendInput(string jobKey, string input) => false;
+        public List<CliOutputLine> GetOutput(string jobKey) => [];
+        public void DiscardPersistedOutput(string jobKey) { }
+        public void ReleaseOutputResources(string jobKey) { }
+        public CliExecution? GetExecution(string jobKey) => null;
+        public SessionUsage? GetLastUsage(string jobKey) => null;
+        public bool IsRunningForProject(string rootPath) => false;
+        public DateTime? GetLastStreamedAt(string jobKey) => null;
+        public WatchdogState GetWatchdogState(string jobKey) => WatchdogState.Healthy;
+        public void SetWatchdogState(string jobKey, WatchdogState state) { }
+        public void ReattachOnStartup() { }
+        public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+            => Task.FromResult(new CliModelCatalog { Models = [], Source = "fake", FetchedAt = DateTime.UtcNow });
+        public bool IsCompatibleSessionName(string? sessionName) => true;
+
+        public event Action<string, CliOutputLine>? OnOutput;
+        public event Action<string, CliExecution>? OnStarted;
+        public event Action<string, CliExecution>? OnFinished;
+        public event Action<string, CliRunEvent>? OnRunEvent;
+    }
+
+    private sealed class ImmediateFinishCliService : ICliExecutionService
+    {
+        public string CliType => CliTypes.Claude;
+        public TaskCompletionSource FinishRaised { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource AllowStartReturn { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string GetCliPath() => "fake-claude";
+        public bool IsAvailable() => true;
+        public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+            => (true, "test", path ?? GetCliPath());
+
+        public async Task<(CliExecution? Execution, string? Error)> StartAsync(
+            string jobId,
+            string jobKey,
+            string prompt,
+            string workingDirectory,
+            string? sessionName = null,
+            bool resumeSession = false,
+            string? model = null,
+            string? thinkingLevel = null,
+            string? jobFolderPath = null,
+            string? permissionMode = null,
+            string? contextMode = null,
+            string? executionEngine = null,
+            CancellationToken ct = default)
+        {
+            var started = new CliExecution
+            {
+                JobId = jobId,
+                TaskKey = jobKey,
+                ProcessId = Environment.ProcessId,
+                StartedAt = DateTime.UtcNow,
+                Status = RunStatuses.Running,
+                Model = model,
+                ThinkingLevel = thinkingLevel,
+            };
+            OnStarted?.Invoke(jobKey, started);
+            OnFinished?.Invoke(jobKey, started with
+            {
+                Status = RunStatuses.Stopped,
+                ExitCode = -1,
+                DurationSeconds = 0.01,
+                RunOutcome = TerminalRunOutcomeKinds.Interrupted,
+            });
+            FinishRaised.TrySetResult();
+            await AllowStartReturn.Task.WaitAsync(ct);
+            return (started, null);
         }
 
         public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop) => false;

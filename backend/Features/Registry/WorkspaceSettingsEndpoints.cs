@@ -26,11 +26,17 @@ public static class WorkspaceSettingsEndpoints
             {
                 orchestratorModel = s.OrchestratorModel,
                 orchestratorThinkingLevel = s.OrchestratorThinkingLevel,
+                cliExecutionEngine = s.CliExecutionEngine,
+                effectiveCliExecutionEngine = OrchestratorSettingsResolver
+                    .ResolveCliExecutionEngine(null, s).ExecutionEngine,
+                cliExecutionEngineSource = OrchestratorSettingsResolver
+                    .ResolveCliExecutionEngine(null, s).Source,
                 autonomyLevel = s.AutonomyLevel,
                 // Platform fallbacks so the UI can render the effective "inherited"
                 // value without hardcoding it or a second round-trip.
                 defaultOrchestratorModel = OrchestratorRunner.DefaultModel,
                 defaultAutonomyLevel = 2,
+                defaultCliExecutionEngine = CliExecutionEngines.Default,
             });
         });
 
@@ -51,6 +57,54 @@ public static class WorkspaceSettingsEndpoints
             {
                 orchestratorModel = s.OrchestratorModel,
                 orchestratorThinkingLevel = s.OrchestratorThinkingLevel,
+            });
+        });
+
+        app.MapGet("/api/workspaces/{id}/cli-execution-engine", (
+            string id,
+            WorkspaceRegistry workspaces,
+            WorkspaceSettingsService settings) =>
+        {
+            if (workspaces.Find(id) is null)
+                return Results.NotFound(new { error = $"Unknown workspaceId '{id}'" });
+
+            var r = OrchestratorSettingsResolver.ResolveCliExecutionEngine(null, settings.Get(id));
+            return Results.Ok(new
+            {
+                executionEngine = r.ExecutionEngine,
+                source = r.Source,
+                workspaceDefault = r.WorkspaceDefault,
+                platformDefault = r.PlatformDefault,
+                available = CliExecutionEngines.All,
+            });
+        });
+
+        app.MapPut("/api/workspaces/{id}/cli-execution-engine", (
+            string id,
+            SetCliExecutionEngineRequest req,
+            WorkspaceRegistry workspaces,
+            WorkspaceSettingsService settings) =>
+        {
+            if (workspaces.Find(id) is null)
+                return Results.NotFound(new { error = $"Unknown workspaceId '{id}'" });
+            if (!string.IsNullOrWhiteSpace(req.ExecutionEngine)
+                && !CliExecutionEngines.IsValid(req.ExecutionEngine))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Unsupported CLI execution engine '{req.ExecutionEngine}'",
+                });
+            }
+
+            settings.SetCliExecutionEngine(id, req.ExecutionEngine);
+            var r = OrchestratorSettingsResolver.ResolveCliExecutionEngine(null, settings.Get(id));
+            return Results.Ok(new
+            {
+                executionEngine = r.ExecutionEngine,
+                source = r.Source,
+                workspaceDefault = r.WorkspaceDefault,
+                platformDefault = r.PlatformDefault,
+                available = CliExecutionEngines.All,
             });
         });
 

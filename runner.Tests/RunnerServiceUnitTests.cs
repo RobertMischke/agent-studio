@@ -22,12 +22,39 @@ public sealed class RunnerServiceUnitTests
     }
 
     [Fact]
-    public void Agent_host_unit_keeps_the_legacy_service_alias_and_publish_path()
+    public void Agent_host_unit_uses_the_atomic_current_release_path()
     {
         var content = File.ReadAllText(Path.Combine(RepoRoot(), "deploy", "systemd", "agent-host.service"));
 
-        Assert.Contains("ExecStart=/opt/agent-host/agent-host --poll", content);
+        Assert.Contains("ExecStart=/opt/agent-host/current/agent-host --poll", content);
+        Assert.DoesNotContain("ExecStart=/opt/agent-host/agent-host --poll", content);
         Assert.Contains("Alias=agent-runner.service", content);
+    }
+
+    [Fact]
+    public void Onboarding_installs_immutable_tool_releases_and_switches_current_atomically()
+    {
+        var content = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "remote-runner-onboard.sh"));
+
+        Assert.Contains("releases_root=\"$tool_root/releases\"", content);
+        Assert.Contains("dotnet tool install --tool-path \"$stage_root\"", content);
+        Assert.Contains("ln -sfnT \"$release_root\" \"$tool_root/current\"", content);
+        Assert.Contains("ExecStart=$agent_host_root/current/$runner_command --poll", content);
+        Assert.DoesNotContain("dotnet tool update --global", content);
+    }
+
+    [Fact]
+    public void Manual_runner_publish_stages_an_immutable_release_before_switching_current()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "docs", "operations", "setup", "linux-runner-host.md"));
+
+        Assert.Contains("release_root=\"/opt/agent-host/releases/$release_id\"", content);
+        Assert.Contains("dotnet publish runner/AgentRunner.csproj -c Release -o \"$staging_root\"", content);
+        Assert.Contains("ln -sfnT \"$release_root\" /opt/agent-host/current", content);
+        Assert.DoesNotContain(
+            "dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host",
+            content);
     }
 
     [Fact]

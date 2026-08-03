@@ -109,10 +109,10 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
         Assert.Contains("externalCompletion", taskJson);
         Assert.Contains("operator-chat", taskJson);
 
-        // lifecycle.json terminalized: awaiting-review + running check skipped.
+        // lifecycle.json terminalized: awaiting-review + running check failed.
         var lifecycle = File.ReadAllText(Path.Combine(moved, "lifecycle.json"));
         Assert.Contains("awaiting-review", lifecycle);
-        Assert.Contains("skipped", lifecycle);
+        Assert.Contains("failed", lifecycle);
         Assert.DoesNotContain("\"status\": \"running\"", lifecycle);
 
         // The external timeline entry lands (the card's history stops being a corpse).

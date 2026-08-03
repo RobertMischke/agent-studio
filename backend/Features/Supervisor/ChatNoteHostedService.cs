@@ -102,7 +102,7 @@ public sealed class ChatNoteHostedService : BackgroundService
         var status = _taskRunner.GetStatus();
         if (status?.Projects == null) return;
 
-        var allJobs = _scanner.ScanAllJobs();
+        var allJobs = _scanner.ScanAllAutomationJobs();
         var byProject = allJobs
             .GroupBy(j => j.ProjectName, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);

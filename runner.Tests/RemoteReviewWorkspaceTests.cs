@@ -7,6 +7,11 @@ namespace AgentRunner.Tests;
 
 public sealed class RemoteReviewWorkspaceTests : IDisposable
 {
+    [Trait("Category", "ReviewFlaky")]
+    private sealed class ReviewFlakyClassTraitFixture
+    {
+    }
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "remote-review-tests-" + Guid.NewGuid().ToString("N"));
     private readonly string _origin;
@@ -90,6 +95,69 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public void Review_flaky_trait_index_reads_xunit_class_and_method_traits()
+    {
+        var repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
+
+        var index = ReviewFlakyTestIndex.Discover(repositoryRoot);
+
+        Assert.True(index.Contains(
+            "AgentRunner.Tests.RemoteTaskRunnerRestartTests.Restarted_runner_follows_fake_job_and_delivers_completion_without_a_zombie_lease"));
+        Assert.True(index.Contains(
+            "AgentRunner.Tests.RemoteReviewWorkspaceTests.ReviewFlakyClassTraitFixture.Any_test_method"));
+        Assert.False(index.Contains(
+            "AgentRunner.Tests.RemoteTaskRunnerRestartTests.Persisted_slot_state_written_before_the_base_sha_field_still_loads"));
+    }
+
+    [Fact]
+    public void Review_failure_parser_quarantines_only_a_marked_failure_that_passes_its_retry()
+    {
+        const string marked = "Product.Tests.ProcessTiming";
+        const string ordinary = "Product.Tests.ProductRule";
+        var initial = BaselineComparison.Create(
+            new string('a', 40),
+            [],
+            [marked, ordinary],
+            cacheHit: false);
+        var index = new ReviewFlakyTestIndex(methods: [marked]);
+
+        var retried = initial.Reclassify([], index);
+        var verdict = RemoteReviewWorkspace.BaselineVerdict(
+            BaselineCommand("exit 0"),
+            retried);
+
+        Assert.Empty(retried.NewFailures);
+        Assert.Equal([marked], retried.FlakyQuarantinedFailures);
+        Assert.Equal("pass", verdict.Status);
+        Assert.Equal("FlakyQuarantine", verdict.Classification);
+        Assert.Contains(marked, verdict.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(ordinary, verdict.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_failure_parser_keeps_a_reproduced_marked_failure_blocking()
+    {
+        const string marked = "Product.Tests.ProcessTiming";
+        var initial = BaselineComparison.Create(
+            new string('a', 40),
+            [],
+            [marked],
+            cacheHit: false);
+
+        var retried = initial.Reclassify(
+            [marked],
+            new ReviewFlakyTestIndex(methods: [marked]));
+        var verdict = RemoteReviewWorkspace.BaselineVerdict(
+            BaselineCommand("exit 1"),
+            retried);
+
+        Assert.Equal([marked], retried.NewFailures);
+        Assert.Empty(retried.FlakyQuarantinedFailures);
+        Assert.Equal("block", verdict.Status);
+        Assert.Equal("NewTestFailures", verdict.Classification);
+    }
+
+    [Fact]
     public async Task Exact_sha_workspace_records_head_tree_commands_environment_and_clean_after()
     {
         var sha = await SeedOriginAsync();
@@ -115,6 +183,47 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal(workspace.BaselineCacheRoot, environment.Isolation["baselineResultCache"]);
         Assert.True(await workspace.CleanupAsync());
         Assert.False(Directory.Exists(workspace.AttemptRoot));
+    }
+
+    [Fact]
+    public void Retention_removes_only_expired_inactive_attempt_workspaces()
+    {
+        var now = new DateTime(2026, 8, 2, 18, 0, 0, DateTimeKind.Utc);
+        Directory.CreateDirectory(_reviewRoot);
+        var expired = CreateReviewDirectory("review-expired-f1", now.AddHours(-73));
+        var active = CreateReviewDirectory("review-active-f2", now.AddDays(-8));
+        var young = CreateReviewDirectory("review-young-f1", now.AddHours(-71));
+        var baseline = CreateReviewDirectory(".baseline-cache", now.AddDays(-30));
+        var unrelated = CreateReviewDirectory("operator-notes", now.AddDays(-30));
+
+        var result = ReviewWorkspaceRetention.Sweep(
+            _reviewRoot,
+            ["review-active-f2"],
+            now,
+            _ => { });
+
+        Assert.False(Directory.Exists(expired));
+        Assert.True(Directory.Exists(active));
+        Assert.True(Directory.Exists(young));
+        Assert.True(Directory.Exists(baseline));
+        Assert.True(Directory.Exists(unrelated));
+        Assert.Equal(new ReviewWorkspaceRetentionResult(3, 1, 1, 1, 1), result);
+    }
+
+    [Fact]
+    public void Retention_preserves_attempt_at_exact_72_hour_boundary()
+    {
+        var now = new DateTime(2026, 8, 2, 18, 0, 0, DateTimeKind.Utc);
+        Directory.CreateDirectory(_reviewRoot);
+        var boundary = CreateReviewDirectory(
+            "review-boundary-f1",
+            now - ReviewWorkspaceRetention.MaximumOrphanAge);
+
+        var result = ReviewWorkspaceRetention.Sweep(_reviewRoot, [], now, _ => { });
+
+        Assert.True(Directory.Exists(boundary));
+        Assert.Equal(0, result.Removed);
+        Assert.Equal(1, result.YoungSkipped);
     }
 
     [Fact]
@@ -336,13 +445,15 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
-    public async Task New_failure_gets_one_retry_and_a_disappearing_flake_does_not_block()
+    public async Task Review_flaky_new_failure_gets_one_retry_and_is_quarantined_when_it_disappears()
     {
+        const string failure =
+            "AgentRunner.Tests.RemoteTaskRunnerRestartTests.Restarted_runner_follows_fake_job_and_delivers_completion_without_a_zombie_lease";
         var (_, subjectSha) = await SeedSubjectBranchAsync();
         var command = BaselineCommand(
             "if grep -q subject product.txt; then " +
             "if test ! -f \"$TMPDIR/retry-seen\"; then touch \"$TMPDIR/retry-seen\"; " +
-            "printf '  Failed Product.FlakyFailure [1 ms]\\n'; exit 1; fi; fi; exit 0");
+            $"printf '  Failed {failure} [1 ms]\\n'; exit 1; fi; fi; exit 0");
         var (workspace, _) = Workspace(
             "attempt-flake",
             subjectSha,
@@ -351,6 +462,11 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             resultRef: "refs/heads/task/new-failure",
             integrationRef: "refs/heads/main");
         await workspace.PrepareAsync(null!, default);
+        var assemblyDirectory = Path.Combine(workspace.RepositoryPath, ".git", "bin");
+        Directory.CreateDirectory(assemblyDirectory);
+        File.Copy(
+            typeof(RemoteReviewWorkspaceTests).Assembly.Location,
+            Path.Combine(assemblyDirectory, "AgentRunner.Tests.dll"));
 
         var evidence = await workspace.ExecutePlanAsync(default);
 
@@ -358,7 +474,10 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var commandEvidence = Assert.Single(evidence.Commands);
         Assert.True(commandEvidence.RetryPerformed);
         Assert.Empty(commandEvidence.NewFailures!);
+        Assert.Equal([failure], commandEvidence.FlakyQuarantinedFailures);
         Assert.Equal(0, commandEvidence.ExitCode);
+        Assert.False(evidence.Workspace.DirtyAfter);
+        Assert.Equal("FlakyQuarantine", Assert.Single(evidence.Verdicts).Classification);
     }
 
     private static ReviewCommandDto BaselineCommand(string shell)
@@ -368,6 +487,14 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             PosixShell.RequirePath(),
             ["-c", shell],
             CompareToBaseline: true);
+
+    private string CreateReviewDirectory(string name, DateTime lastWriteTimeUtc)
+    {
+        var path = Path.Combine(_reviewRoot, name);
+        Directory.CreateDirectory(path);
+        Directory.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
+        return path;
+    }
 
     private (RemoteReviewWorkspace Workspace, ReviewSubjectDto Subject) Workspace(
         string attemptId,

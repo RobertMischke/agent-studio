@@ -52,6 +52,27 @@ public sealed class DurableAgentProcessTests : IDisposable
         Assert.Contains(attached.ReadAfter(0), line => line.Text == "[[TASK_DONE]]");
     }
 
+    [Fact]
+    public void Terminal_result_wins_when_worker_exits_between_discovery_checks()
+    {
+        var terminal = new DetachedJobResult(
+            0,
+            "before-restart\n[[TASK_DONE]]\n",
+            "",
+            false,
+            DateTime.UtcNow);
+        var resultReads = 0;
+
+        var observation = DurableAgentProcess.InspectForReattach(
+            () => ++resultReads == 1 ? null : terminal,
+            () => (false, "process has exited"));
+
+        Assert.False(observation.IsLive);
+        Assert.Same(terminal, observation.Result);
+        Assert.Equal("durable result ready", observation.Detail);
+        Assert.Equal(2, resultReads);
+    }
+
     // Linux-only 02.08. (AGT-2472): the worktree half of the adoption proof reads
     // /proc/<pid>/cwd. Windows exposes no equivalent for another process, so
     // DurableAgentProcess.VerifyLive deliberately skips that check there
@@ -89,7 +110,13 @@ public sealed class DurableAgentProcessTests : IDisposable
         await Task.Delay(50);
     }
 
+    // Wall-clock racer: polls 400x5ms against a real "sleep 1" process, so it
+    // fails under load on an otherwise untouched tree. It produced the false
+    // ProductFailure verdicts on AGT-2457 and AGT-2458, whose diffs do not touch
+    // this file. Marked per the AGT-2484 contract so a non-reproducing failure
+    // is quarantined instead of blocking; a reproduced failure still blocks.
     [Fact]
+    [Trait("Category", "ReviewFlaky")]
     public async Task Worker_identity_closes_the_process_start_to_slot_save_restart_window()
     {
         var worktree = Path.Combine(_root, "launch-window");

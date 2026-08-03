@@ -56,6 +56,21 @@ public record ExternalCompletionRequest
     /// remains on its host.
     /// </summary>
     public List<string>? GateItems { get; init; }
+
+    /// <summary>
+    /// AGT-2220: the full 40-character commit SHA this completion claims was
+    /// delivered into the target repository. The backend re-verifies it against
+    /// git; a coding-mode card without a provable SHA is never stamped
+    /// completed. Prose in <see cref="Summary"/> is not proof.
+    /// </summary>
+    public string? ResultSha { get; init; }
+
+    /// <summary>
+    /// AGT-2220: the ref in the target repository that is expected to carry
+    /// <see cref="ResultSha"/> (branch name or full ref). Optional - without it
+    /// the SHA is searched across all remote refs.
+    /// </summary>
+    public string? ResultRef { get; init; }
 }
 
 /// <summary>One delivered artifact recorded in <c>results/deliverables.md</c>.</summary>
@@ -76,7 +91,14 @@ public enum ExternalCompletionStatus
     NotFound,
     InvalidRequest,
     MoveConflict,
-    MoveFailed
+    MoveFailed,
+
+    /// <summary>
+    /// AGT-2220: the claimed delivery could not be proven against the target
+    /// repository. No completion stamp was written; the card was routed to an
+    /// honest <c>unverified-delivery</c> state instead.
+    /// </summary>
+    UnverifiedDelivery
 }
 
 /// <summary>
@@ -562,6 +584,16 @@ public record SetCliContextModeRequest
 {
     public string CliType { get; init; } = "";
     public string? Mode { get; init; }
+}
+
+/// <summary>
+/// Body for the project/workspace CLI execution-engine rollout endpoints.
+/// Null or blank clears the override; otherwise the value must be
+/// <c>car</c> or <c>legacy</c>.
+/// </summary>
+public record SetCliExecutionEngineRequest
+{
+    public string? ExecutionEngine { get; init; }
 }
 
 public record SetOrchestratorModelRequest

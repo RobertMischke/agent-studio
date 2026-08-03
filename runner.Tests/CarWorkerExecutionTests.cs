@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentRunner;
@@ -47,6 +48,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
         var run = await RunFixtureAsync(fixture);
 
         Assert.False(run.TimedOut);
+        Assert.False(run.LaunchFailed);
         Assert.Equal(fixture.ExitCode, run.Result.ExitCode);
         Assert.Equal(Normalize(fixture.StdOut), Normalize(run.Result.StdOut));
         Assert.Equal(Normalize(fixture.StdErr), Normalize(run.Result.StdErr));
@@ -144,6 +146,27 @@ public sealed class CarWorkerExecutionTests : IDisposable
     }
 
     [Fact]
+    public async Task Car_worker_starts_without_CultureNotFoundException_under_invariant_globalization()
+    {
+        if (NodeMissing()) return;
+        var modeProbe = Assert.Throws<CultureNotFoundException>(
+            () => CultureInfo.GetCultureInfo("en-US"));
+        Assert.Contains("invariant culture", modeProbe.Message, StringComparison.OrdinalIgnoreCase);
+
+        var exception = await Record.ExceptionAsync(async () =>
+        {
+            var fixture = Fixture.Load("p1-happy-done.codex.fixture");
+            var run = await RunFixtureAsync(fixture);
+            Assert.Equal(fixture.ExitCode, run.Result.ExitCode);
+        });
+
+        Assert.False(
+            exception is CultureNotFoundException,
+            $"CAR attempted to construct a named culture in invariant mode: {exception}");
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public async Task Timeout_produces_the_legacy_result_shape_and_no_surviving_cli_process()
     {
         if (NodeMissing()) return;
@@ -163,6 +186,45 @@ public sealed class CarWorkerExecutionTests : IDisposable
         Assert.True(
             run.SpawnedProcess!.WaitForExit(10_000),
             "the fake CLI process must be killed with the timeout, not orphaned");
+    }
+
+    [Fact]
+    public async Task Launch_failure_is_preserved_as_an_explicit_pre_agent_fact()
+    {
+        var workerDirectory = Path.Combine(_root, "launch-failure");
+        var workingDirectory = Path.Combine(workerDirectory, "worktree");
+        var resultsDirectory = Path.Combine(workerDirectory, "results");
+        Directory.CreateDirectory(workingDirectory);
+        Directory.CreateDirectory(resultsDirectory);
+        var shipped = new List<(string Stream, string Text)>();
+        var spec = new DetachedJobSpec(
+            FileName: "missing-cli",
+            Arguments: [],
+            WorkingDirectory: workingDirectory,
+            Prompt: "prompt",
+            ResultsDirectory: resultsDirectory,
+            TimeoutSeconds: 30,
+            CliType: "claude",
+            Engine: RunnerOptions.ExecEngineCar,
+            RunId: "car-launch-failure");
+
+        var (result, timedOut, launchFailed) = await CarWorkerExecution.RunAsync(
+            spec,
+            workerDirectory,
+            (stream, text) => shipped.Add((stream, text)),
+            options => options with
+            {
+                ClaudePath = Path.Combine(_root, "missing-cli"),
+            });
+
+        Assert.Equal(125, result.ExitCode);
+        Assert.False(timedOut);
+        Assert.True(
+            launchFailed,
+            $"Expected a launch failure. stdout={result.StdOut}; stderr={result.StdErr}; " +
+            $"events={string.Join(" | ", shipped.Select(line => $"{line.Stream}:{line.Text}"))}");
+        Assert.Contains(shipped, line =>
+            line.Text.Contains("failed to start claude", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -233,6 +295,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
     private sealed record FixtureRun(
         ProcessResult Result,
         bool TimedOut,
+        bool LaunchFailed,
         string WorkerDirectory,
         string ResultsDirectory,
         IReadOnlyList<(string Stream, string Text)> ShippedRaw,
@@ -278,7 +341,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
         if (extraEnvironment is not null)
             foreach (var kv in extraEnvironment) environment[kv.Key] = kv.Value;
 
-        var (result, timedOut) = await CarWorkerExecution.RunAsync(
+        var (result, timedOut, launchFailed) = await CarWorkerExecution.RunAsync(
             spec,
             workerDirectory,
             (stream, text) => { lock (shipped) shipped.Add((stream, text)); },
@@ -299,6 +362,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
         return new FixtureRun(
             result,
             timedOut,
+            launchFailed,
             workerDirectory,
             resultsDirectory,
             shipped,

@@ -101,9 +101,11 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
     internal static RecoverySummary RunRecoveryScan(
         TaskScannerService scanner,
         TaskTransitionService transitions,
-        ILogger logger)
+        ILogger logger,
+        DateTime? restartedAtUtc = null)
     {
-        var candidates = scanner.ScanAllJobs()
+        var recoveryStartedAt = (restartedAtUtc ?? DateTime.UtcNow).ToUniversalTime();
+        var candidates = scanner.ScanAllAutomationJobs()
             .Where(j => string.Equals(j.State, TaskStates.AutoReview, StringComparison.Ordinal))
             .ToList();
 
@@ -114,16 +116,26 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
         foreach (var job in candidates)
         {
             var outcomes = ReadOutcomes(job.FolderPath, logger);
-            if (!NeedsPostProcessingRecovery(job, outcomes))
+            var completedDecision = outcomes
+                .Where(record => IsPostProcessingDecision(record) && record.At >= job.EnteredLaneAt)
+                .OrderByDescending(record => record.At)
+                .FirstOrDefault();
+            if (completedDecision is not null)
             {
-                skipped++;
+                if (transitions.ReconcileCompletedAutoReviewPostProcessing(job, completedDecision))
+                    skipped++;
+                else
+                    failed++;
                 continue;
             }
 
             bool accepted;
             try
             {
-                accepted = transitions.RequeueAutoReviewPostProcessing(job, "startup-recovery");
+                accepted = transitions.RequeueAutoReviewPostProcessing(
+                    job,
+                    "startup-recovery",
+                    recoveryStartedAt);
             }
             catch (Exception ex)
             {
@@ -140,7 +152,7 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
 
         var summary = new RecoverySummary(candidates.Count, reEnqueued, skipped, failed);
         logger.LogInformation(
-            "post-processing startup-recovery: {ReEnqueued} Karten re-enqueued (scanned={Scanned} already-complete={Skipped} failed={Failed})",
+            "post-processing startup-recovery: {ReEnqueued} cards re-enqueued (scanned={Scanned} already-complete={Skipped} failed={Failed})",
             summary.ReEnqueued, summary.Scanned, summary.Skipped, summary.Failed);
         return summary;
     }
@@ -161,7 +173,8 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
         TaskInfo job,
         IReadOnlyList<PostProcessingOutcomeRecord> outcomes)
     {
-        if (!string.Equals(job.State, TaskStates.AutoReview, StringComparison.Ordinal))
+        if (job.Fixture
+            || !string.Equals(job.State, TaskStates.AutoReview, StringComparison.Ordinal))
             return false;
 
         var transitionAt = job.EnteredLaneAt;

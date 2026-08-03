@@ -55,7 +55,7 @@ internal static class CarWorkerExecution
     /// spawner - so the parity tests exercise exactly the production settings
     /// (stdin transport, delegation off, guard off) minus the real binary.
     /// </summary>
-    public static async Task<(ProcessResult Result, bool TimedOut)> RunAsync(
+    public static async Task<(ProcessResult Result, bool TimedOut, bool LaunchFailed)> RunAsync(
         DetachedJobSpec spec,
         string workerDirectory,
         Action<string, string> append,
@@ -79,6 +79,7 @@ internal static class CarWorkerExecution
         var stdout = new BoundedOutputBuffer(2 * 1024 * 1024);
         var stderr = new BoundedOutputBuffer(256 * 1024);
         var finished = new TaskCompletionSource<CliRunInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processStarted = 0;
 
         void OnOutput(string id, CarOutputLine line)
         {
@@ -90,7 +91,10 @@ internal static class CarWorkerExecution
 
         void OnRunEvent(string id, CliRunEvent evt)
         {
-            if (string.Equals(id, runId, StringComparison.Ordinal)) trace.Write(evt);
+            if (!string.Equals(id, runId, StringComparison.Ordinal)) return;
+            if (evt is CliRunEvent.RunStarted)
+                Volatile.Write(ref processStarted, 1);
+            trace.Write(evt);
         }
 
         void OnFinished(string id, CliRunInfo info)
@@ -127,7 +131,7 @@ internal static class CarWorkerExecution
             if (run is null)
             {
                 append("system", $"[runner] car engine failed to start {cliType}: {error}");
-                return (new ProcessResult(125, string.Empty, error ?? "CAR start failed"), false);
+                return (new ProcessResult(125, string.Empty, error ?? "CAR start failed"), false, true);
             }
 
             var timedOut = false;
@@ -147,12 +151,15 @@ internal static class CarWorkerExecution
             {
                 // Byte parity with the legacy timeout result: classification input
                 // stays "Runner timeout" / exit 124, not a partial transcript.
-                return (new ProcessResult(124, string.Empty, "Runner timeout"), true);
+                return (new ProcessResult(124, string.Empty, "Runner timeout"), true, false);
             }
 
             var info = await finished.Task;
             var exitCode = info.ExitCode ?? 125;
-            return (new ProcessResult(exitCode, stdout.ToString(), stderr.ToString()), false);
+            return (
+                new ProcessResult(exitCode, stdout.ToString(), stderr.ToString()),
+                false,
+                LaunchFailed: Volatile.Read(ref processStarted) == 0 || info.ProcessId <= 0);
         }
         finally
         {

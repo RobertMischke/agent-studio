@@ -83,6 +83,23 @@ public class RunOutcomeContractTests
         Assert.Contains("failed start", terminal.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void EmptyFastExit_DeliberatelyStopped_IsInterruptedNotFailedStart()
+    {
+        var terminal = TerminalRunOutcomeClassifier.Classify(
+            RunStatuses.Stopped,
+            new List<CliOutputLine>(),
+            durationSeconds: 0.1,
+            exitCode: -1);
+
+        Assert.Equal(TerminalRunOutcomeKinds.Interrupted, terminal.Kind);
+        Assert.False(terminal.ShouldMoveToReview);
+        Assert.False(terminal.ShouldShowFailureToast);
+        Assert.Equal(
+            RunStatuses.Stopped,
+            TerminalRunOutcomeClassifier.ExecutionStatusFor(terminal, RunStatuses.Stopped));
+    }
+
     // Regression for the bug "Codex exit=-1 trotz erfolgreichem Commit landet in
     // 4-auto-review verdict=reissue + ATP-manual": a run that committed real work
     // (commitCount > 0) but then exited -1 because its downstream test runs were

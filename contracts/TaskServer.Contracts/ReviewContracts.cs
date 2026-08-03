@@ -129,7 +129,8 @@ public sealed record ReviewCommandEvidenceDto(
     IReadOnlyList<string>? NewFailures = null,
     IReadOnlyList<string>? PreExistingFailures = null,
     bool BaselineCacheHit = false,
-    bool RetryPerformed = false);
+    bool RetryPerformed = false,
+    IReadOnlyList<string>? FlakyQuarantinedFailures = null);
 
 public sealed record ReviewWorkspaceProofDto(
     string RepositoryId,

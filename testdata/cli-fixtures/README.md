@@ -3,9 +3,9 @@
 Recorded coding-agent CLI transcripts plus a fake CLI that replays them. They
 are the deterministic half ("Ebene 1") of the parity suite described in
 `docs/operations/car-migration-plan.md` §3, tranche T3 (AGT-2372): no model call,
-no network, no token spend — the same bytes fed to the legacy execution layer
-today and to the CodingAgentRunner path after AGT-2370/2371, with the classified
-outcome compared.
+no network and no token spend. The paired harnesses feed the same bytes to the
+temporary legacy execution layer and to CodingAgentRunner, then compare the
+typed lifecycle and terminal result.
 
 ```
 testdata/cli-fixtures/
@@ -44,11 +44,11 @@ enforced by `runner.Tests/ParityFixtureTests.Every_recorded_fixture_is_well_form
 
 ### Why `form` matters
 
-The remote path today runs `claude -p` with **no** `--output-format`, so the
-runner classifies raw prose (`docs/operations/setup/linux-runner-host.md`). The
-CAR path emits `stream-json`. That is one of the five simultaneous behaviour
-jumps of T1, and it is the reason P1 and P5 exist in a plaintext form as well:
-the pair is what parity actually compares.
+The former remote path ran `claude -p` with **no** `--output-format`, so the
+runner classified raw prose. CAR emits `stream-json`. That was one of the five
+simultaneous behaviour changes in T1, and it is why P1 and P5 retain a plaintext
+form: the recordings pin the compatibility decision as well as the current
+structured protocol.
 
 ## Replaying a fixture
 
@@ -83,9 +83,9 @@ malformed fixture) and never comes from a fixture.
 | **P9** self-crash | `p9-self-crash.{claude,codex}.fixture` | Non-zero exit with a provider failure frame (`result subtype=error_during_execution` / `turn.failed`) → `CliCrash`. Worded deliberately free of quota/auth/model vocabulary so the diagnostic regexes cannot steal the case. |
 | **P22** rate limit | `p22-rate-limit-{camel,snake}.claude.fixture`, `p22-rate-limit.codex.fixture` | Claude's `rate_limit_event` in both casings (CAR-E tolerance), including an ISO-8601 `resets_at` and a stringified boolean. The frame is informational: the run still ends `[[TASK_DONE]]`. Codex has no such frame — its limit arrives as a terminal `turn.failed` that today classifies as `QuotaExceeded` → `WaitForCapabilityRecovery`; recorded so the CAR path cannot quietly downgrade it to a plain crash. |
 
-`runner.Tests/ParityFixtureTests` currently pins P1 and P5 end to end and checks
-that every fixture in the folder is well formed. P2, P3, P4, P9 and P22 are
-recorded but not yet pinned — see "Still missing" below.
+`runner.Tests/ParityFixtureTests` pins P1 through P5, P9 and P22 and checks that
+every fixture in the folder is well formed. `BackendLocalExecutionEngineParityTests`
+and `RemoteWorkerEngineParityTests` provide the paired executable harnesses.
 
 ## Guard fixtures
 
@@ -95,19 +95,23 @@ a `.txt` suffix so they are never compiled. They are fed to the scanner inside
 fires on a new raw CLI spawn and still stays silent on git plumbing and on a CLI
 name that appears only in a comment.
 
-## Still missing
+## Process and host coverage
 
-Recorded but not yet asserted: P2, P3, P4, P9, P22.
+The output recordings are only one layer. Current deterministic coverage and
+remaining acceptance gaps are:
 
-Not yet recorded, because they are process or host facts rather than output
-(they need a driver harness around `fake-cli.mjs`, not just a transcript):
-
-* **P6** wall-clock timeout — `FAKE_CLI_DELAY_MS` plus a short run timeout.
-* **P7** user stop / lease loss — kill the replay mid-stream.
-* **P8** silence watchdog — `@delay` beyond the phase budget.
-* **P10** provider auth failure, **P11** quota wait + resume, **P12** bounded
-  same-session resume — need a fixture *pair* (first run, resumed run) and the
-  capability-probe path.
-* **P13**–**P21** — daemon restart, salvage, envelope trio, config-home
-  isolation, token ledger, large prompt, kill path. These are level-2
-  (Betriebsnachweis) or need the worker harness.
+| Scenario | Deterministic coverage | Remaining acceptance gap |
+|---|---|---|
+| **P6** timeout | Remote legacy and CAR workers replay the same delayed fixture and both return exit 124 with no surviving CLI PID. | Local wall-clock timeout is covered on CAR only. |
+| **P7** user stop / lease loss | Local legacy and CAR executions compare `UserStop`; the runner also has an engine-neutral lease-loss process-group test. | No remote dual-engine user-stop injection exists at the detached-worker boundary. |
+| **P8** silence watchdog | Local legacy and CAR executions compare `Watchdog`, alongside the phase-budget policy tests. | No full remote dual-engine silence-watchdog composition. |
+| **P10** provider auth | Capability and typed-outcome policy tests pin authentication failures. | No paired executable worker replay through capability reporting. |
+| **P11** quota wait | Host quota policy tests pin admission decisions. | CAR `WaitOnQuota`, `QuotaWaitStarted` and `QuotaWaitEnded` are not wired end to end in the Studio execution hosts. |
+| **P12** bounded resume | Recovery policy and CAR continuation tests pin the single-resume bound and resume argv. | No paired remote first-turn/resumed-turn fixture. |
+| **P13** daemon restart | Both detached-worker engines are reattached by a replacement daemon handle with continuous sequence numbers and one result. | A real `systemctl restart agent-host` remains operational evidence. |
+| **P14** local restart | Orphan reaping and liveness demotion tests pin reap plus return to Ready. | A CAR-backed card interrupted by a real backend restart remains operational evidence. |
+| **P15-P17** delivery, envelope and read-only lifecycle | Git workspace, durable handoff and completion-protocol tests cover salvage, fenced refs, digests, push verification and acknowledgement. | These host-owned steps are not yet composed with both execution engines in one harness; read-only epic teardown also lacks a direct runner test. |
+| **P18** config isolation | Local legacy and CAR clean-home recipes are compared for excluded state, linked credential refresh and copied config. CAR worker launch tests pin the environment override. | Remote filesystem-level proof that the real home is never read is still missing. |
+| **P19** token and cost ledger | The same local card fixture runs through both engines and reaches identical token, cost and post-step gate assertions. | Remote CAR metrics are not persisted through the detached result and ledger path. |
+| **P20** large prompt | CAR launch replay proves a 200 KiB prompt travels on stdin rather than argv. | There is no old-versus-new paired transport comparison. |
+| **P21** kill and cleanup | Paired local and remote executable tests assert the CLI PID is gone; host worktree tests cover process reaping before removal. | Dual-engine execution plus Git worktree cleanup is not composed in one remote test. |

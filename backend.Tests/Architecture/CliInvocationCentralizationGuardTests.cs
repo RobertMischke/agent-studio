@@ -15,7 +15,8 @@ namespace AgentStudio.Tests;
 /// is a violation when it carries a CLI identity, in either of two flavours:</para>
 /// <list type="bullet">
 ///   <item>a quoted <c>claude</c> / <c>codex</c> / <c>agentapi</c> / <c>gemini</c>
-///   binary, or one of the <c>Cli*</c> option knobs that resolve to one, within
+///   binary, one of the <c>Cli*</c> option knobs that resolve to one, or an
+///   indirect <c>GetCliPath</c> / executable-resolver call, within
 ///   <see cref="ProximityLines"/> lines of the spawn;</item>
 ///   <item>anywhere in the same file, one of the runner types that exist solely
 ///   to describe a coding-agent invocation (<c>AgentCliProcess</c>,
@@ -76,9 +77,19 @@ public class CliInvocationCentralizationGuardTests
     /// </summary>
     private static readonly Regex NearbyCliIdentity = new(
         """
-        "[^"\r\n]*\b(?:claude|codex|agentapi|gemini)\b[^"\r\n]*"|\b(?:Claude|Codex|Gemini|AgentApi)?CliBin\b|\bCliArgs\b|\bCliResumeArgs\b
+        "[^"\r\n]*\b(?:claude|codex|agentapi|gemini)\b[^"\r\n]*"|\b(?:Claude|Codex|Gemini|AgentApi)?CliBin\b|\bCliArgs\b|\bCliResumeArgs\b|\b(?:GetCliPath|ResolveExecutable|ResolveCliPath|ResolveCliExecutable)\s*\(
         """,
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The legacy local availability check starts the configured binary with
+    /// exactly <c>--version</c>. It does not execute an agent request and stays
+    /// host-owned. Keep this exception tied to that method and argument so it
+    /// cannot hide another indirect CLI launch in the same file.
+    /// </summary>
+    private static readonly Regex VersionOnlyArgument = new(
+        @"\bArguments\s*=\s*""--version""",
+        RegexOptions.Compiled);
 
     /// <summary>
     /// Types that exist for no other purpose than describing a coding-agent
@@ -153,7 +164,8 @@ public class CliInvocationCentralizationGuardTests
 
         new("backend/Features/Cli/Execution/NpmShimHealer.cs",
             LegacyLayer
-            + "Repairs the npm claude.cmd shim. Literal clone of the CAR file; deleted in AGT-2373."),
+            + "Temporary repair helper for the explicit local rollback and non-agent ClaudeOneShot; "
+            + "CAR owns repair on CAR-backed runs and AGT-2373 deletes this exception."),
 
         new("backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs",
             LegacyLayer
@@ -163,6 +175,11 @@ public class CliInvocationCentralizationGuardTests
         new("backend/Features/Cli/Routing/OneShot/CodexOneShot.cs",
             LegacyLayer
             + "Same as ClaudeOneShot, for codex."),
+
+        new("backend/Features/Runner/OrchestratorRunner.cs",
+            LegacyLayer
+            + "Legacy-test-only inline Claude fallback resolves GetCliPath and starts the CLI directly; "
+            + "production uses ClaudeOneShot. AGT-2373 deletes the inline fallback."),
     ];
 
     [Fact]
@@ -234,11 +251,17 @@ public class CliInvocationCentralizationGuardTests
         Assert.Contains(
             violations,
             violation => violation.Evidence.Contains("ProcessRunner.RunAsync", StringComparison.Ordinal));
+        Assert.Contains(
+            violations,
+            violation => violation.Kind == "cli-spawn"
+                         && (violation.Evidence.Contains("GetCliPath", StringComparison.Ordinal)
+                             || violation.Evidence.Contains("ResolveExecutable", StringComparison.Ordinal)));
         Assert.True(
-            violations.Count >= 4,
-            "The sharpness fixture encodes four violations (ProcessStartInfo with a claude binary, "
-            + "Process.Start on it, a spec-driven ProcessRunner.RunAsync, and RUNNER_CLI_BIN from the "
-            + "environment) but the scanner reported " + violations.Count + ": "
+            violations.Count >= 6,
+            "The sharpness fixture encodes six violations (ProcessStartInfo with a claude binary, "
+            + "Process.Start on it, a spec-driven ProcessRunner.RunAsync, RUNNER_CLI_BIN from the "
+            + "environment, and an indirect GetCliPath launch through ProcessStartInfo and Process.Start) "
+            + "but the scanner reported " + violations.Count + ": "
             + string.Join(" | ", violations));
     }
 
@@ -306,15 +329,22 @@ public class CliInvocationCentralizationGuardTests
         var found = new List<CliInvocationViolation>();
         for (var i = 0; i < code.Length; i++)
         {
-            if (SpawnMarker.IsMatch(code[i]))
+            if (SpawnMarker.IsMatch(code[i])
+                && !IsVersionOnlyAvailabilityProbe(relativePath, code, i))
             {
                 string? evidence = null;
                 var from = Math.Max(0, i - ProximityLines);
                 var to = Math.Min(code.Length - 1, i + ProximityLines);
-                for (var j = from; j <= to && evidence is null; j++)
+                for (var distance = 0; distance <= ProximityLines && evidence is null; distance++)
                 {
-                    var identity = NearbyCliIdentity.Match(code[j]);
-                    if (identity.Success) evidence = $"CLI identity on line {j + 1}: {identity.Value.Trim()}";
+                    foreach (var j in distance == 0 ? new[] { i } : new[] { i - distance, i + distance })
+                    {
+                        if (j < from || j > to) continue;
+                        var identity = NearbyCliIdentity.Match(code[j]);
+                        if (!identity.Success) continue;
+                        evidence = $"CLI identity on line {j + 1}: {identity.Value.Trim()}";
+                        break;
+                    }
                 }
                 evidence ??= declaresInvocationSpec ? "the file declares a coding-agent invocation spec" : null;
 
@@ -329,6 +359,27 @@ public class CliInvocationCentralizationGuardTests
         }
 
         return found;
+    }
+
+    private static bool IsVersionOnlyAvailabilityProbe(
+        string relativePath,
+        IReadOnlyList<string> code,
+        int markerLine)
+    {
+        if (!string.Equals(
+                relativePath,
+                "backend/Features/Cli/Execution/CliExecutionServiceBase.cs",
+                StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var methodFrom = Math.Max(0, markerLine - 8);
+        var belongsToProbe = Enumerable.Range(methodFrom, markerLine - methodFrom + 1)
+            .Any(line => code[line].Contains("DefaultTestCliPath(", StringComparison.Ordinal));
+        if (!belongsToProbe) return false;
+
+        var argumentTo = Math.Min(code.Count - 1, markerLine + 8);
+        return Enumerable.Range(markerLine, argumentTo - markerLine + 1)
+            .Any(line => VersionOnlyArgument.IsMatch(code[line]));
     }
 
     private static IReadOnlyList<CliInvocationViolation> ScanRepository()

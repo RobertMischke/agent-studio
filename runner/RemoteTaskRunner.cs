@@ -722,8 +722,8 @@ public sealed class RemoteTaskRunner
                         slot = _state.Save(slot with { LastOutputSequence = sequence });
                 }
 
-                var result = process.ReadResult();
-                if (result is not null)
+                var observation = DurableAgentProcess.InspectForReattach(slot);
+                if (observation.Result is { } result)
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
@@ -760,6 +760,7 @@ public sealed class RemoteTaskRunner
                             slot.Lease,
                             workspace,
                             processResult,
+                            result.LaunchFailed,
                             sameSessionResumeAttempts);
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
@@ -818,7 +819,7 @@ public sealed class RemoteTaskRunner
 
                     shipper.Add(
                         "system",
-                        $"[runner] CLI exited {classified.Decision.RawFacts.ExitCode?.ToString() ?? "without an exit code"}; typedOutcome={classified.Decision.Outcome} recovery={classified.Decision.RecoveryAction} classifier={classified.Decision.ClassifierVersion} legacyOutcome={classified.Outcome.Kind}");
+                        $"[runner] CLI exited {classified.Decision.RawFacts.ExitCode?.ToString() ?? "without an exit code"}; launchFailed={classified.Decision.RawFacts.LaunchFailed} typedOutcome={classified.Decision.Outcome} recovery={classified.Decision.RecoveryAction} classifier={classified.Decision.ClassifierVersion} legacyOutcome={classified.Outcome.Kind}");
                     outbox?.Enqueue(
                         "terminal",
                         JsonSerializer.Serialize(
@@ -829,8 +830,9 @@ public sealed class RemoteTaskRunner
                     return classified;
                 }
 
-                if (!DurableAgentProcess.VerifyLive(slot, out var reason))
-                    throw new DetachedWorkerLostException($"Detached worker disappeared before recording a result: {reason}");
+                if (!observation.IsLive)
+                    throw new DetachedWorkerLostException(
+                        $"Detached worker disappeared before recording a result: {observation.Detail}");
                 await Task.Delay(TimeSpan.FromMilliseconds(250), stopRun);
             }
         }
@@ -869,6 +871,7 @@ public sealed class RemoteTaskRunner
         RunLeaseInfoDto lease,
         GitWorkspace workspace,
         ProcessResult result,
+        bool launchFailed,
         int sameSessionResumeAttempts)
     {
         var provider = ProviderOutputEvidenceExtractor.Extract(result.StdOut);
@@ -893,6 +896,7 @@ public sealed class RemoteTaskRunner
             StdErr: result.StdErr,
             ExitCode: result.ExitCode,
             Signal: SignalFromExitCode(result.ExitCode),
+            LaunchFailed: launchFailed,
             SessionState: sessionState,
             SessionId: provider.SessionId,
             SameSessionResumeAttempts: sameSessionResumeAttempts);
@@ -906,6 +910,10 @@ public sealed class RemoteTaskRunner
                 => new RunOutcome(RunOutcomeKind.Done, sentinelOutcome.Reason),
             ExecutionOutcomeKind.ExplicitAgentBlocker when sentinelOutcome.Kind is RunOutcomeKind.Blocked or RunOutcomeKind.NeedsInput
                 => sentinelOutcome,
+            ExecutionOutcomeKind.LaunchFailure
+                => new RunOutcome(
+                    RunOutcomeKind.EnvironmentFailure,
+                    DescribePreparationFailure(result.StdErr)),
             _ => new RunOutcome(RunOutcomeKind.Unknown, typed.Outcome.ToString()),
         };
         return new RemoteExecutionResult(
@@ -1184,7 +1192,13 @@ public sealed class RemoteTaskRunner
                     Note: "Verified by ls-remote against the project registration.")
             ],
             Source: source,
-            TargetState: "5-human-review");
+            TargetState: "5-human-review",
+            // AGT-2220: hand the proof over as data, not only as prose. The
+            // sentence above used to BE the evidence - the server stamped on a
+            // string it never re-checked. These two fields are what the server
+            // now independently verifies against the target repository.
+            ResultSha: proof.CommitSha,
+            ResultRef: proof.Ref);
     }
 
     /// <summary>
@@ -1311,9 +1325,12 @@ public sealed class RemoteTaskRunner
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static string DescribePreparationFailure(Exception exception)
+        => DescribePreparationFailure(exception.Message);
+
+    private static string DescribePreparationFailure(string diagnostic)
     {
         var message = CredentialedHttpUrl
-            .Replace(exception.Message, "${scheme}***@")
+            .Replace(diagnostic, "${scheme}***@")
             .Replace('\r', ' ')
             .Replace('\n', ' ')
             .Trim();

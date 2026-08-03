@@ -87,6 +87,7 @@ public class CliWatchdogIntegrationTests
 
     // MachineBound 19.07.: FakeCli-Prozess-Spawn + Stop/Finalize-Polling (DateTime.UtcNow-Deadlines) flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task FakeCli_PrintsInitThenStalls_RunnerStopsCleanly()
     {
@@ -157,6 +158,7 @@ setInterval(() => {}, 600000);
 
     // MachineBound 19.07.: FakeCli-Prozess-Spawn + Event-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task FakeCli_RunStartedAndProcessExited_EventsRaisedOnOnRunEvent()
     {
@@ -196,6 +198,7 @@ setInterval(() => {}, 600000);
 
     // MachineBound 19.07.: FakeCli-Prozess-Spawn + Stop/Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task FakeCli_NoNewlineButAlive_RunnerStillBuffersBytes()
     {
@@ -238,6 +241,7 @@ setInterval(() => {}, 600000);
 
     // MachineBound 19.07.: FakeCli-Prozess-Spawn + Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task FakeCli_StderrWritesWhileStdoutSilent_StderrLandsInBuffer()
     {
@@ -274,6 +278,7 @@ setTimeout(() => process.exit(0), 200);
 
     // MachineBound 19.07.: FakeCli-Burst-Spawn (500 Zeilen) + Finalize-Polling flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task FakeCli_FastOutput_NoneDropped()
     {
@@ -312,6 +317,7 @@ process.exit(0);
 
     // MachineBound 19.07.: FakeCli-Prozess-Spawn + Wall-Clock-Timing-Assertion (< 2s Fenster) flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task ResetSilenceClock_OnStalledRun_AdvancesLastStreamedToNow()
     {
@@ -379,6 +385,7 @@ setInterval(() => {}, 600000);
 
     // MachineBound 19.07.: FakeCli-Prozess-Spawn + Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
     [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
     [SkippableFact]
     public async Task FakeCli_StreamsManyFrames_RunnerCapturesAll()
     {

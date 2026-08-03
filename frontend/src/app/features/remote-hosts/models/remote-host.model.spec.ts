@@ -10,7 +10,10 @@ import {
   meterTone,
   ramUsedPct,
   relativeHeartbeat,
+  taskServerRouteDetail,
+  taskServerRouteStatus,
   type HostSystemStats,
+  type RemoteHost,
 } from './remote-host.model';
 
 const stats: HostSystemStats = {
@@ -81,5 +84,44 @@ describe('remote-host.model helpers', () => {
     expect(relativeHeartbeat('2026-07-10T09:00:00Z', now)).toBe('3h ago');
     expect(relativeHeartbeat('2026-07-08T12:00:00Z', now)).toBe('2d ago');
     expect(relativeHeartbeat('not-a-date', now)).toBe('never');
+  });
+
+  it('treats an expired connectivity capability as an unavailable route', () => {
+    const advertisedAt = '2026-08-01T15:30:00Z';
+    const host = {
+      id: 'runner', name: 'Runner', role: 'remote', address: null, clientId: 'runner',
+      status: 'offline', os: 'Linux', lastHeartbeatAt: advertisedAt, uptimeLabel: null,
+      capabilities: [], cliQuotas: [], stats: null,
+      capabilityHealth: [{
+        key: 'task-server:connectivity', category: 'foundation', advertisedStatus: 'ready',
+        healthState: 'healthy', reason: null, advertisedAt,
+        freshUntil: '2026-08-01T15:33:00Z', isFresh: false, consecutiveFailures: 0,
+        affectedClaims: [], recoveryHistory: [],
+      }],
+      taskServerConnection: {
+        status: 'reachable', observedAt: advertisedAt, failureStartedAt: null,
+        consecutiveFailures: 0, escalatedAt: null, lastError: null, lastRecoveredAt: null,
+      },
+    } satisfies RemoteHost;
+
+    expect(taskServerRouteStatus(host)).toBe('unreachable');
+    expect(taskServerRouteDetail(host)).toContain('No connectivity advertisement has arrived');
+    expect(taskServerRouteDetail(host)).toContain('Check the tunnel');
+  });
+
+  it('does not turn an intentionally retired host into a route outage', () => {
+    const host = {
+      id: 'runner', name: 'Runner', role: 'remote', address: null, clientId: 'runner',
+      status: 'retired', os: 'Linux', lastHeartbeatAt: '2026-08-01T15:30:00Z',
+      uptimeLabel: null, capabilities: [], cliQuotas: [], stats: null,
+      capabilityHealth: [{
+        key: 'task-server:connectivity', category: 'foundation', advertisedStatus: 'ready',
+        healthState: 'healthy', reason: null, advertisedAt: '2026-08-01T15:30:00Z',
+        freshUntil: '2026-08-01T15:33:00Z', isFresh: false, consecutiveFailures: 0,
+        affectedClaims: [], recoveryHistory: [],
+      }],
+    } satisfies RemoteHost;
+
+    expect(taskServerRouteStatus(host)).toBe('unknown');
   });
 });

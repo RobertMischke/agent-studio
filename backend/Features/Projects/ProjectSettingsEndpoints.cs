@@ -51,7 +51,11 @@ public static class ProjectSettingsEndpoints
         // Per-project preferences (auto-commit on/off today). Read-all returns a
         // flat map keyed by project name so the header can render every toggle
         // in one shot without N round-trips.
-        app.MapGet("/api/projects/settings", (HttpContext context, ProjectSettingsService settings, ProjectRegistry projects) =>
+        app.MapGet("/api/projects/settings", (
+            HttpContext context,
+            ProjectSettingsService settings,
+            ProjectRegistry projects,
+            OrchestratorDefaultsProvider defaults) =>
         {
             var all = settings.GetAll().AsEnumerable();
             if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
@@ -70,6 +74,9 @@ public static class ProjectSettingsEndpoints
                     remoteExecutionEnabled = kv.Value.RemoteExecutionEnabled,
                     orchestratorModel = kv.Value.OrchestratorModel,
                     orchestratorThinkingLevel = kv.Value.OrchestratorThinkingLevel,
+                    cliExecutionEngine = defaults.ResolveCliExecutionEngine(kv.Key).ExecutionEngine,
+                    cliExecutionEngineSource = defaults.ResolveCliExecutionEngine(kv.Key).Source,
+                    cliExecutionEngineOverride = kv.Value.CliExecutionEngine,
                     // Epic decomposition (planning) run knobs (way 3): null
                     // model means "use the epic card's own model"; subTasksToReady
                     // null/false lands generated sub-tasks in 0-backlog.
@@ -445,6 +452,60 @@ public static class ProjectSettingsEndpoints
             var normalized = AutoPushStrategies.Normalize(req.Strategy);
             settings.SetAutoPushStrategy(projectName, normalized);
             return Results.Ok(settings.Get(projectName));
+        });
+
+        // Flag-gated local CLI execution engine. The effective value resolves
+        // process environment -> project override -> workspace default -> CAR
+        // platform default.
+        app.MapGet("/api/projects/{projectName}/cli-execution-engine", (
+            string projectName,
+            OrchestratorDefaultsProvider defaults,
+            TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var r = defaults.ResolveCliExecutionEngine(projectName);
+            return Results.Ok(new
+            {
+                executionEngine = r.ExecutionEngine,
+                source = r.Source,
+                projectOverride = r.ProjectOverride,
+                workspaceDefault = r.WorkspaceDefault,
+                platformDefault = r.PlatformDefault,
+                available = CliExecutionEngines.All,
+            });
+        });
+
+        app.MapPut("/api/projects/{projectName}/cli-execution-engine", (
+            string projectName,
+            SetCliExecutionEngineRequest req,
+            ProjectSettingsService settings,
+            OrchestratorDefaultsProvider defaults,
+            TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            if (!string.IsNullOrWhiteSpace(req.ExecutionEngine)
+                && !CliExecutionEngines.IsValid(req.ExecutionEngine))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Unsupported CLI execution engine '{req.ExecutionEngine}'",
+                });
+            }
+
+            settings.SetCliExecutionEngine(projectName, req.ExecutionEngine);
+            var r = defaults.ResolveCliExecutionEngine(projectName);
+            return Results.Ok(new
+            {
+                executionEngine = r.ExecutionEngine,
+                source = r.Source,
+                projectOverride = r.ProjectOverride,
+                workspaceDefault = r.WorkspaceDefault,
+                platformDefault = r.PlatformDefault,
+                available = CliExecutionEngines.All,
+            });
         });
 
         // Per-project CLI permission modes. GET returns the resolved mode +

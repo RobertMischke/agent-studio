@@ -177,6 +177,7 @@ The application owns transitions between these states. Successful CLI runs move 
 |----------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `2-ready`      | `human-ready` (default), `intake-running`, `intake-blocked`                                                                          |
 | `3-progress`   | `execution-running`, `execution-stalled`, `post-processing-running`, `post-processing-blocked`, `awaiting-review`                    |
+| `4-auto-review`| `post-processing-running` (default), `post-processing-blocked`, `awaiting-review`                                                     |
 | other states   | none (the state already says enough; the field should be absent or `null`)                                                          |
 
 `phase` is **application-owned and optional**. Existing job folders that predate the field continue to render in the default lane of their state without any rewrite: `2-ready` falls back to `human-ready`, `3-progress` with a running CLI falls back to `execution-running`, `3-progress` with a generating summary falls back to `post-processing-running`, and stopped or failed runs in `3-progress` keep rendering as the execution lane. Unknown or out-of-state values are dropped on read with a warning. Boot-time scans never rewrite a phase-less `job.json` to add a default; lazy defaulting happens in code.
@@ -198,6 +199,17 @@ The application owns transitions between these states. Successful CLI runs move 
 ```
 
 Optional sidecar carrying the richer phase history that does not fit on the wire-level `phase` field: which intake or post-processing checks were scheduled, when the current phase was entered, and the last blocking reason. Absent on legacy job folders; the wire-level `phase` field is the source of truth. The follow-up tasks `ready-orchestrator-intake-lane` and `post-processing-orchestrator-lane` populate this file.
+
+Post Processing attempt boundaries actively rewrite this sidecar. A confirmed
+new coding process sets `execution-running` with the process start timestamp and
+clears checks from the preceding review attempt. Entering Post Processing, or a
+startup recovery sweep that re-enqueues it, sets `post-processing-running`,
+replaces older checks, and timestamps the new attempt. Leaving Auto Review or
+terminating the worker changes every active `pending` or `running` check to
+`completed` or `failed` and supplies `finishedAt`; an active check must never
+survive a terminal boundary. Automation scans exclude cards whose `task.json`
+has `fixture: true`, while explicit fixture management and test APIs may still
+read them.
 
 ### .metadata/review-attempt.json and results/history/ (optional)
 

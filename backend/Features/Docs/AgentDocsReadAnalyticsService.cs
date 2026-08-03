@@ -101,7 +101,7 @@ public sealed class AgentDocsReadAnalyticsService
 
         if (inventory.Count > 0 && !string.IsNullOrWhiteSpace(watchPath))
         {
-            foreach (var task in _scanner.ScanAllJobs())
+            foreach (var task in _scanner.ScanAllAutomationJobs())
             {
                 if (!string.Equals(task.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.IsNullOrWhiteSpace(task.FolderPath)) continue;
