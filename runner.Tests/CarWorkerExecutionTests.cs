@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentRunner;
@@ -141,6 +142,27 @@ public sealed class CarWorkerExecutionTests : IDisposable
         Assert.Contains("danger-full-access", run.SpawnedArgv!);
         Assert.Equal("-", run.SpawnedArgv![^1]); // prompt on stdin
         Assert.Equal(fixture.ExitCode, run.Result.ExitCode);
+    }
+
+    [Fact]
+    public async Task Car_worker_starts_without_CultureNotFoundException_under_invariant_globalization()
+    {
+        if (NodeMissing()) return;
+        var modeProbe = Assert.Throws<CultureNotFoundException>(
+            () => CultureInfo.GetCultureInfo("en-US"));
+        Assert.Contains("invariant culture", modeProbe.Message, StringComparison.OrdinalIgnoreCase);
+
+        var exception = await Record.ExceptionAsync(async () =>
+        {
+            var fixture = Fixture.Load("p1-happy-done.codex.fixture");
+            var run = await RunFixtureAsync(fixture);
+            Assert.Equal(fixture.ExitCode, run.Result.ExitCode);
+        });
+
+        Assert.False(
+            exception is CultureNotFoundException,
+            $"CAR attempted to construct a named culture in invariant mode: {exception}");
+        Assert.Null(exception);
     }
 
     [Fact]

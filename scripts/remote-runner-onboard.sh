@@ -197,17 +197,39 @@ runner_command="$2"
 minimum_version="$3"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
 
-current_version="$(dotnet tool list --global | awk -v id="$package_id" 'tolower($1) == tolower(id) { print $2; exit }')"
-if [[ -z "$current_version" ]]; then
-  dotnet tool install --global "$package_id"
-else
-  dotnet tool update --global "$package_id"
-fi
-installed_version="$(dotnet tool list --global | awk -v id="$package_id" 'tolower($1) == tolower(id) { print $2; exit }')"
-[[ -n "$installed_version" ]] || { printf '[remote] NuGet package %s did not register as a global tool.\n' "$package_id" >&2; exit 30; }
+tool_root="$HOME/.local/share/agent-host-tools"
+releases_root="$tool_root/releases"
+staging_root="$tool_root/.staging"
+mkdir -p "$releases_root" "$staging_root"
+stage_root="$(mktemp -d "$staging_root/release.XXXXXX")"
+cleanup_stage() {
+  [[ -z "${stage_root:-}" ]] || rm -rf -- "$stage_root"
+}
+trap cleanup_stage EXIT
+
+# Never update the files of a running multi-file .NET application in place.
+# Install the complete tool into a new directory, then expose that immutable
+# version through one atomic symlink switch. Existing daemons and detached
+# workers continue to resolve their already selected release directory.
+dotnet tool install --tool-path "$stage_root" "$package_id"
+installed_version="$(dotnet tool list --tool-path "$stage_root" | awk -v id="$package_id" 'tolower($1) == tolower(id) { print $2; exit }')"
+[[ -n "$installed_version" ]] || { printf '[remote] NuGet package %s did not register as a tool.\n' "$package_id" >&2; exit 30; }
 lowest="$(printf '%s\n%s\n' "$minimum_version" "$installed_version" | sort -V | head -n 1)"
 [[ "$lowest" == "$minimum_version" ]] || { printf '[remote] Runner tool %s is below required %s (found %s).\n' "$package_id" "$minimum_version" "$installed_version" >&2; exit 31; }
-command -v "$runner_command" >/dev/null || { printf '[remote] Tool package %s does not expose command %s.\n' "$package_id" "$runner_command" >&2; exit 32; }
+[[ -x "$stage_root/$runner_command" ]] || { printf '[remote] Tool package %s does not expose command %s.\n' "$package_id" "$runner_command" >&2; exit 32; }
+
+release_root="$releases_root/$installed_version"
+if [[ -e "$release_root" ]]; then
+  [[ -x "$release_root/$runner_command" ]] || {
+    printf '[remote] Existing runner release is incomplete: %s\n' "$release_root" >&2
+    exit 34
+  }
+  cleanup_stage
+else
+  mv "$stage_root" "$release_root"
+fi
+stage_root=""
+ln -sfnT "$release_root" "$tool_root/current"
 
 command -v npm >/dev/null || { echo '[remote] Node.js/npm is missing. Install Node 22, then retry.' >&2; exit 33; }
 if ! npm install --global @openai/codex @anthropic-ai/claude-code; then
@@ -270,12 +292,17 @@ runner_command="$8"
 auth_token_file="$9"
 service_auth="${10}"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
-runner_bin="$(command -v "$runner_command")"
 runner_user="$(id -un)"
 runner_group="$(id -gn)"
 runner_home="$HOME"
+tool_root="$runner_home/.local/share/agent-host-tools"
+runner_bin="$tool_root/current/$runner_command"
 agent_host_root="/opt/agent-host"
 legacy_root="/opt/agent-runner"
+[[ -x "$runner_bin" ]] || {
+  printf '[remote] Immutable runner release is missing command %s: %s\n' "$runner_command" "$runner_bin" >&2
+  exit 42
+}
 
 if [[ "$role" == "coding" ]]; then
   service_name="agent-runner"
@@ -328,7 +355,7 @@ WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$env_file
-ExecStart=$agent_host_root/agent-host --poll
+ExecStart=$agent_host_root/current/$runner_command --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
@@ -354,7 +381,10 @@ if [[ "$role" == "review" ]]; then
 fi
 sudo chown -R "$runner_user:$runner_group" "$service_root"
 sudo install -d -m 0755 "$agent_host_root"
-sudo ln -sfn "$runner_bin" "$agent_host_root/agent-host"
+# Preserve the release boundary below the stable /opt path. The compatibility
+# command links point through current, never into files that an update mutates.
+sudo ln -sfnT "$tool_root/current" "$agent_host_root/current"
+sudo ln -sfn "current/$runner_command" "$agent_host_root/agent-host"
 sudo ln -sfn agent-host "$agent_host_root/agent-runner"
 if [[ -e "$legacy_root" && ! -L "$legacy_root" ]]; then
   legacy_backup="${legacy_root}.pre-agent-host"
@@ -382,7 +412,7 @@ sleep 2
 sudo systemctl is-enabled "$service_name"
 sudo systemctl is-active "$service_name"
 RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
-  "$agent_host_root/agent-host" --health-check --server "$server_url"
+  "$agent_host_root/current/$runner_command" --health-check --server "$server_url"
 
 if [[ "$role" == "coding" ]]; then
   git_status=""
