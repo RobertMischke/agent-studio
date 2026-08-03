@@ -29,6 +29,7 @@ public class TaskMutationService
     // tests that construct TaskMutationService directly may pass null and
     // simply skip the timeline event.
     private readonly TimelineLog? _timeline;
+    private readonly GitService? _git;
     // Lane mutex: serialise the slug-uniqueness check + folder create in
     // CreateJob with the other lane writers (move/archive/delete) so two
     // concurrent creates cannot pick the same dedupe suffix and land two
@@ -36,7 +37,7 @@ public class TaskMutationService
     // service directly keep compiling; the NullSingleton still serialises.
     private readonly LaneMutexRegistry _laneMutex;
 
-    public TaskMutationService(TaskScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, TaskChangeNotifier notifier, ILogger<TaskMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null)
+    public TaskMutationService(TaskScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, TaskChangeNotifier notifier, ILogger<TaskMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null, GitService? git = null)
     {
         _scanner = scanner;
         _clients = clients;
@@ -45,6 +46,7 @@ public class TaskMutationService
         _logger = logger;
         _timeline = timeline;
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
+        _git = git;
     }
 
     /// <summary>
@@ -258,9 +260,7 @@ public class TaskMutationService
             if (existingIdx >= 0) chain[existingIdx] = commit;
             else chain.Add(commit);
 
-            TaskJsonFile.UpdateField(folderPath, "commit", chain[^1], _logger);
-            TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
-            return Updated();
+            return WriteCommitState(folderPath, chain);
         }
         catch (Exception ex)
         {
@@ -417,6 +417,8 @@ public class TaskMutationService
                     folderPath);
                 return false;
             }
+
+            chain = EnrichCommitMetadataFromGit(folderPath, chain, out _);
 
             TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
             TaskJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
@@ -697,6 +699,210 @@ public class TaskMutationService
             return null;
         }
     }
+
+    /// <summary>
+    /// One-time, idempotent repair for live cards whose persisted commit entries
+    /// pre-date Git-derived <c>filesChanged</c> and <c>files</c> metadata. Git is
+    /// read-only; the only writes go through the ordinary commit-state boundary.
+    /// Archived cards are deliberately excluded from the migration.
+    /// </summary>
+    public CommitMetadataBackfillResult BackfillMissingCommitMetadata()
+    {
+        if (_git is null) return new CommitMetadataBackfillResult(0, 0, 0);
+
+        var repairedTasks = 0;
+        var repairedCommits = 0;
+        var unresolvedTasks = 0;
+        foreach (var task in _scanner.ScanAllJobs()
+                     .Where(task => !string.Equals(
+                         task.State,
+                         TaskStates.Archive,
+                         StringComparison.OrdinalIgnoreCase)))
+        {
+            var missing = ReadMissingCommitMetadataShas(task.FolderPath);
+            if (missing.Count == 0) continue;
+
+            var persisted = ReadPersistedCommitChain(task.FolderPath);
+            if (persisted is null || persisted.Count == 0) continue;
+            var enriched = EnrichCommitMetadataFromGit(
+                task.FolderPath,
+                persisted,
+                out var resolved);
+            if (missing.Any(sha => !ShaSetContains(resolved, sha)))
+            {
+                unresolvedTasks++;
+                _logger.LogWarning(
+                    "commit-metadata-backfill unresolved project={Project} job={JobId} missing={Missing}",
+                    task.ProjectName,
+                    task.Id,
+                    string.Join(",", missing));
+                continue;
+            }
+
+            if (!WriteCommitState(task.FolderPath, enriched))
+            {
+                unresolvedTasks++;
+                continue;
+            }
+
+            repairedTasks++;
+            repairedCommits += missing.Count;
+        }
+
+        if (repairedTasks > 0)
+        {
+            _logger.LogInformation(
+                "commit-metadata-backfill repairedTasks={Tasks} repairedCommits={Commits}",
+                repairedTasks,
+                repairedCommits);
+        }
+        return new CommitMetadataBackfillResult(
+            repairedTasks,
+            repairedCommits,
+            unresolvedTasks);
+    }
+
+    /// <summary>
+    /// Normalizes every commit object at the persistence boundary from Git
+    /// truth. This keeps attribution, salvage, operator, recovery, and sweep
+    /// producers from drifting according to which metadata they happened to
+    /// supply. If the repository or object is unavailable, the supplied record
+    /// is preserved rather than inventing a zero-file result.
+    /// </summary>
+    private List<TaskCommitInfo> EnrichCommitMetadataFromGit(
+        string folderPath,
+        IReadOnlyList<TaskCommitInfo> commits,
+        out HashSet<string> resolvedShas)
+    {
+        resolvedShas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_git is null || commits.Count == 0) return commits.ToList();
+
+        try
+        {
+            var normalizedFolder = NormalizePath(folderPath);
+            var task = _scanner.ScanAllJobsWithArchive().FirstOrDefault(candidate =>
+                string.Equals(
+                    NormalizePath(candidate.FolderPath),
+                    normalizedFolder,
+                    StringComparison.OrdinalIgnoreCase));
+            if (task is null) return commits.ToList();
+
+            var metadata = _git.GetCommitMeta(
+                task.Id,
+                task.WatchPath,
+                commits.Select(commit => commit.Sha));
+            var enriched = new List<TaskCommitInfo>(commits.Count);
+            foreach (var commit in commits)
+            {
+                var resolvedSha = ResolveSha(metadata.Keys, commit.Sha);
+                if (resolvedSha is null)
+                {
+                    enriched.Add(commit);
+                    continue;
+                }
+
+                var files = _git.GetCommitFiles(task.Id, task.WatchPath, commit.Sha);
+                enriched.Add(commit with
+                {
+                    FilesChanged = files.Count,
+                    Files = files.Select(file => file.Path).ToList(),
+                });
+                resolvedShas.Add(resolvedSha);
+            }
+            return enriched;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "commit-metadata-enrichment failed folder={Folder}",
+                folderPath);
+            return commits.ToList();
+        }
+    }
+
+    private static HashSet<string> ReadMissingCommitMetadataShas(string folderPath)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var path = Path.Combine(folderPath, "task.json");
+            if (!File.Exists(path)) return result;
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            if (TryGetProperty(root, "commits", out var commits)
+                && commits.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var commit in commits.EnumerateArray())
+                    AddWhenMetadataMissing(commit, result);
+                return result;
+            }
+
+            if (TryGetProperty(root, "commit", out var legacy)
+                && legacy.ValueKind == JsonValueKind.Object)
+            {
+                AddWhenMetadataMissing(legacy, result);
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(
+                ex,
+                "TaskMutationService: best-effort missing commit metadata inspection.");
+        }
+        return result;
+    }
+
+    private static void AddWhenMetadataMissing(
+        JsonElement commit,
+        HashSet<string> result)
+    {
+        if (commit.ValueKind != JsonValueKind.Object
+            || !TryGetProperty(commit, "sha", out var shaElement))
+        {
+            return;
+        }
+        var sha = shaElement.GetString();
+        if (string.IsNullOrWhiteSpace(sha)) return;
+        if (!TryGetProperty(commit, "filesChanged", out var filesChanged)
+            || filesChanged.ValueKind != JsonValueKind.Number
+            || !TryGetProperty(commit, "files", out var files)
+            || files.ValueKind != JsonValueKind.Array)
+        {
+            result.Add(sha);
+        }
+    }
+
+    private static bool TryGetProperty(
+        JsonElement element,
+        string name,
+        out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            value = property.Value;
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    private static string? ResolveSha(IEnumerable<string> fullShas, string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha)) return null;
+        return fullShas.FirstOrDefault(candidate =>
+            string.Equals(candidate, sha, StringComparison.OrdinalIgnoreCase)
+            || candidate.StartsWith(sha, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ShaSetContains(IReadOnlySet<string> shas, string sha)
+        => ResolveSha(shas, sha) is not null;
+
+    private static string NormalizePath(string path)
+        => Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     /// <summary>
     /// Application-owned write of the append-only <c>provenance</c> object on a
@@ -1551,3 +1757,8 @@ public class TaskMutationService
         return System.Text.RegularExpressions.Regex.Replace(s, @"[^a-z0-9\-]", "");
     }
 }
+
+public sealed record CommitMetadataBackfillResult(
+    int RepairedTasks,
+    int RepairedCommits,
+    int UnresolvedTasks);

@@ -832,6 +832,18 @@ catch (Exception ex)
     crashRecorder.Record("WikiAgentReadBackfill", ex);
 }
 
+// One-time, idempotent repair of Git-derived commit file metadata on live
+// cards. The sweep reads Git and writes only task.json through the owning
+// mutation service; entries with complete metadata make later boots a no-op.
+try
+{
+    app.Services.GetRequiredService<TaskMutationService>().BackfillMissingCommitMetadata();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CommitMetadataBackfill", ex);
+}
+
 // One-time 2026-07-28 repair of the five reviewed remote deliveries. The
 // service writes only through TaskMutationService and leaves an idempotency
 // timeline fact, so later boots perform no remote fetch for repaired cards.
