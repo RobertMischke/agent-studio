@@ -1139,43 +1139,25 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         IReadOnlyList<string> args,
         CancellationToken ct)
     {
-        Process? process = null;
-        try
+        var psi = new ProcessStartInfo("git")
         {
-            var psi = new ProcessStartInfo("git")
-            {
-                WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            foreach (var arg in args) psi.ArgumentList.Add(arg);
-            process = Process.Start(psi);
-            if (process is null)
-                return new GitCommandResult(null, string.Empty, "Process.Start returned null");
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync(ct).ConfigureAwait(false);
-            return new GitCommandResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
-        }
-        catch (OperationCanceledException)
-        {
-            if (process is not null)
-            {
-                try { process.Kill(entireProcessTree: true); }
-                catch (Exception ex) { SilentCatch.Note(ex, "BuildTestGateRunner: bounded Git process kill"); }
-            }
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return new GitCommandResult(null, string.Empty, $"Process.Start failed: {ex.Message}");
-        }
-        finally
-        {
-            process?.Dispose();
-        }
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        var result = await GitNetworkProcessRunner.RunAsync(
+            psi,
+            stdin: null,
+            GitNetworkProcessRunner.DefaultTimeout,
+            ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return new GitCommandResult(
+            result.ExitCode,
+            result.StandardOutput,
+            result.StandardError);
     }
 
     private sealed record GitCommandResult(int? ExitCode, string StandardOutput, string StandardError);

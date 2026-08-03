@@ -36,8 +36,15 @@ public static class PublishEndpoints
         });
 
         app.MapPost("/api/projects/{project}/publish/package", (
-            string project, PublishPackageRequest request, PublishActionService actions) =>
-            ActionResult(() => Results.Ok(actions.PublishPackage(project, request.TargetId, request.Version))));
+            string project,
+            PublishPackageRequest request,
+            PublishActionService actions,
+            CancellationToken cancellationToken) =>
+            ActionResult(() => Results.Ok(actions.PublishPackage(
+                project,
+                request.TargetId,
+                request.Version,
+                cancellationToken))));
 
         app.MapPost("/api/projects/{project}/publish/website", (
             string project, DeployWebsiteRequest request, PublishActionService actions) =>

@@ -1470,6 +1470,28 @@
             proves both CLI PIDs are reaped. Lane, retry, and escalation policy are unchanged by this diagnostic alignment.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2482</code><br><span class="small">backend Git process stalled during DNS outage</span></td>
+          <td>
+            The backend process disappeared without a terminal diagnostic while a <code>git fetch</code> was hanging during
+            a DNS outage for <code>github.com</code>. Repeated network failures could leave Git children and inherited pipe
+            handles alive long enough to drive the backend toward process or handle exhaustion.
+          </td>
+          <td>
+            The central Git helper read stdout and stderr sequentially before reaching its nominal 30-second
+            <code>WaitForExit</code> timeout. A full pipe could therefore block before the timeout was observed. Separate
+            fetch and push paths also waited with caller cancellation but did not consistently kill and reap the process
+            tree when that cancellation fired.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> backend Git network operations now use one hard 30-second process
+            boundary with linked cancellation, concurrent pipe draining, whole-tree termination, and a bounded post-kill
+            reap. Regressions run an actual <code>git ls-remote</code> against a hanging fake SSH remote three times, verify
+            every remote helper and descendant PID exits, cover explicit cancellation, and classify simulated
+            file-handle exhaustion without crashing the backend.
+          </td>
+        </tr>
       </tbody>
     </table>
 

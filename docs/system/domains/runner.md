@@ -251,6 +251,12 @@ state.
 
 ## Invariants
 
+- Backend Git network processes (`fetch`, `push`, and `ls-remote`) have a hard
+  30-second per-process boundary in addition to caller cancellation. Timeout or
+  cancellation kills the full process tree, concurrently drains both output
+  pipes, and bounds the final reap so a DNS or remote outage cannot accumulate
+  Git children or inherited handles. Process-start resource exhaustion is a
+  typed command failure and must not terminate the backend.
 - Origin is a fenced side-effect channel. New Remote Run salvage refs include
   runner, task, attempt, fence, and SHA; immutable result refs include attempt,
   fence, and SHA. A newer generation never resumes or overwrites an older
