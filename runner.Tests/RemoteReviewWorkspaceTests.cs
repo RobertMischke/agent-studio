@@ -7,6 +7,11 @@ namespace AgentRunner.Tests;
 
 public sealed class RemoteReviewWorkspaceTests : IDisposable
 {
+    [Trait("Category", "ReviewFlaky")]
+    private sealed class ReviewFlakyClassTraitFixture
+    {
+    }
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "remote-review-tests-" + Guid.NewGuid().ToString("N"));
     private readonly string _origin;
@@ -87,6 +92,69 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal(
             ["src/example.spec.ts > suite > fails"],
             RemoteReviewWorkspace.ParsedTestFailures(result));
+    }
+
+    [Fact]
+    public void Review_flaky_trait_index_reads_xunit_class_and_method_traits()
+    {
+        var repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
+
+        var index = ReviewFlakyTestIndex.Discover(repositoryRoot);
+
+        Assert.True(index.Contains(
+            "AgentRunner.Tests.RemoteTaskRunnerRestartTests.Restarted_runner_follows_fake_job_and_delivers_completion_without_a_zombie_lease"));
+        Assert.True(index.Contains(
+            "AgentRunner.Tests.RemoteReviewWorkspaceTests.ReviewFlakyClassTraitFixture.Any_test_method"));
+        Assert.False(index.Contains(
+            "AgentRunner.Tests.RemoteTaskRunnerRestartTests.Persisted_slot_state_written_before_the_base_sha_field_still_loads"));
+    }
+
+    [Fact]
+    public void Review_failure_parser_quarantines_only_a_marked_failure_that_passes_its_retry()
+    {
+        const string marked = "Product.Tests.ProcessTiming";
+        const string ordinary = "Product.Tests.ProductRule";
+        var initial = BaselineComparison.Create(
+            new string('a', 40),
+            [],
+            [marked, ordinary],
+            cacheHit: false);
+        var index = new ReviewFlakyTestIndex(methods: [marked]);
+
+        var retried = initial.Reclassify([], index);
+        var verdict = RemoteReviewWorkspace.BaselineVerdict(
+            BaselineCommand("exit 0"),
+            retried);
+
+        Assert.Empty(retried.NewFailures);
+        Assert.Equal([marked], retried.FlakyQuarantinedFailures);
+        Assert.Equal("pass", verdict.Status);
+        Assert.Equal("FlakyQuarantine", verdict.Classification);
+        Assert.Contains(marked, verdict.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(ordinary, verdict.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Review_failure_parser_keeps_a_reproduced_marked_failure_blocking()
+    {
+        const string marked = "Product.Tests.ProcessTiming";
+        var initial = BaselineComparison.Create(
+            new string('a', 40),
+            [],
+            [marked],
+            cacheHit: false);
+
+        var retried = initial.Reclassify(
+            [marked],
+            new ReviewFlakyTestIndex(methods: [marked]));
+        var verdict = RemoteReviewWorkspace.BaselineVerdict(
+            BaselineCommand("exit 1"),
+            retried);
+
+        Assert.Equal([marked], retried.NewFailures);
+        Assert.Empty(retried.FlakyQuarantinedFailures);
+        Assert.Equal("block", verdict.Status);
+        Assert.Equal("NewTestFailures", verdict.Classification);
     }
 
     [Fact]
@@ -336,13 +404,15 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
-    public async Task New_failure_gets_one_retry_and_a_disappearing_flake_does_not_block()
+    public async Task Review_flaky_new_failure_gets_one_retry_and_is_quarantined_when_it_disappears()
     {
+        const string failure =
+            "AgentRunner.Tests.RemoteTaskRunnerRestartTests.Restarted_runner_follows_fake_job_and_delivers_completion_without_a_zombie_lease";
         var (_, subjectSha) = await SeedSubjectBranchAsync();
         var command = BaselineCommand(
             "if grep -q subject product.txt; then " +
             "if test ! -f \"$TMPDIR/retry-seen\"; then touch \"$TMPDIR/retry-seen\"; " +
-            "printf '  Failed Product.FlakyFailure [1 ms]\\n'; exit 1; fi; fi; exit 0");
+            $"printf '  Failed {failure} [1 ms]\\n'; exit 1; fi; fi; exit 0");
         var (workspace, _) = Workspace(
             "attempt-flake",
             subjectSha,
@@ -351,6 +421,11 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             resultRef: "refs/heads/task/new-failure",
             integrationRef: "refs/heads/main");
         await workspace.PrepareAsync(null!, default);
+        var assemblyDirectory = Path.Combine(workspace.RepositoryPath, ".git", "bin");
+        Directory.CreateDirectory(assemblyDirectory);
+        File.Copy(
+            typeof(RemoteReviewWorkspaceTests).Assembly.Location,
+            Path.Combine(assemblyDirectory, "AgentRunner.Tests.dll"));
 
         var evidence = await workspace.ExecutePlanAsync(default);
 
@@ -358,7 +433,10 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var commandEvidence = Assert.Single(evidence.Commands);
         Assert.True(commandEvidence.RetryPerformed);
         Assert.Empty(commandEvidence.NewFailures!);
+        Assert.Equal([failure], commandEvidence.FlakyQuarantinedFailures);
         Assert.Equal(0, commandEvidence.ExitCode);
+        Assert.False(evidence.Workspace.DirtyAfter);
+        Assert.Equal("FlakyQuarantine", Assert.Single(evidence.Verdicts).Classification);
     }
 
     private static ReviewCommandDto BaselineCommand(string shell)

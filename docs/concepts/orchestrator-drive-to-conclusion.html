@@ -1512,6 +1512,27 @@
             boundary and that fixtures remain untouched.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-02</td>
+          <td><code>AGT-2484</code><br><span class="small">review-only Runner test flakes observed on <code>AGT-2457</code> and <code>AGT-2458</code></span></td>
+          <td>
+            Exact-subject Remote Review reported process- and timing-dependent Runner tests as new product failures on cards
+            whose diffs did not touch <code>runner/</code>. Reattach, real grace-window, and fake-CLI timing cases could turn a
+            one-run host scheduling miss into a red Review grade.
+          </td>
+          <td>
+            Baseline comparison retried new failures once but discarded the first failing identity when the retry passed. The
+            review evidence therefore had no durable category for a confirmed one-run flake, and xUnit trait metadata was not
+            consulted by the failure parser.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> intentional cases now carry the additive
+            <code>Category=ReviewFlaky</code> trait alongside <code>MachineBound</code> where required. Remote Review reads that
+            trait from the exact subject's built test assemblies, retries once, and records a disappearing failure as
+            <code>FlakyQuarantine</code> with its test identity. The card reaches <code>Pass</code>; a reproduced failure remains
+            <code>NewTestFailures</code> and reaches <code>ProductFailure</code>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -180,7 +180,8 @@ public sealed class RemoteReviewExecutor
     private static string ExecutionSummary(ReviewExecutionEvidence evidence)
     {
         var baseline = evidence.Verdicts
-            .Where(verdict => verdict.Classification is "BaselineCompared" or "NewTestFailures")
+            .Where(verdict => verdict.Classification is
+                "BaselineCompared" or "NewTestFailures" or ReviewFlakyTestIndex.VerdictClassification)
             .Select(verdict => $"{verdict.Aspect}: {verdict.Summary}")
             .ToArray();
         if (baseline.Length > 0)
