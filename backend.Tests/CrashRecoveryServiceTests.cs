@@ -23,6 +23,7 @@ namespace AgentStudio.Tests;
 ///   <c>crash-recovery</c> author tag so it's findable in <c>git log</c>.</item>
 /// </list>
 /// </summary>
+[Trait("Category", "MachineBound")]
 public sealed class CrashRecoveryServiceTests : IDisposable
 {
     private readonly string _tempDir;
@@ -254,6 +255,41 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
         Assert.Contains("orphan-pending-confirmation", jsonl);
         Assert.Contains("operator dismissed pending orphan recovery", jsonl);
+    }
+
+    [Fact]
+    public async Task RecoverAsync_SamePendingFindingAcrossBackendBoots_KeepsIdentity()
+    {
+        WriteJob(TaskStates.Progress, "active-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-task");
+        var runStartedAt = new DateTime(2026, 8, 3, 1, 15, 0, DateTimeKind.Utc);
+        StampLastProgressAt(jobFolder, runStartedAt);
+        AppendSessionEvent(jobFolder, runStartedAt);
+        File.WriteAllText(Path.Combine(_repoRoot, "restart-roundtrip.txt"), "survives backend restart");
+        File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "restart-roundtrip.txt"), runStartedAt.AddMinutes(2));
+
+        var (beforeRestart, _) = BuildRecovery();
+        await beforeRestart.RecoverAsync();
+        var first = Assert.Single(beforeRestart.GetPendingOrphanRecoveries());
+
+        // A fresh service instance represents a new backend process. The
+        // underlying finding is unchanged, so both its public id and first
+        // observation timestamp must survive the boot boundary.
+        var (afterRestart, _) = BuildRecovery();
+        await afterRestart.RecoverAsync();
+        var second = Assert.Single(afterRestart.GetPendingOrphanRecoveries());
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(first.CreatedAt, second.CreatedAt);
+        Assert.Matches("^[0-9a-f]{32}$", second.Id);
+
+        File.WriteAllText(Path.Combine(_repoRoot, "restart-roundtrip.txt"), "a later finding");
+        File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "restart-roundtrip.txt"), runStartedAt.AddMinutes(3));
+        var (afterFindingChanged, _) = BuildRecovery();
+        await afterFindingChanged.RecoverAsync();
+        var changed = Assert.Single(afterFindingChanged.GetPendingOrphanRecoveries());
+
+        Assert.NotEqual(first.Id, changed.Id);
     }
 
     [Theory]

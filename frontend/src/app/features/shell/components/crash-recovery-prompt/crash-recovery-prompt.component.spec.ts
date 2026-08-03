@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { NotificationService } from '../../../../services/notification.service';
 import { TaskService } from '../../../../services/task.service';
@@ -116,5 +116,55 @@ describe('CrashRecoveryPromptComponent', () => {
     notification.actions?.[0]?.callback();
     expect(dismissed).toHaveBeenCalledWith('sidecar');
     expect(fixture.componentInstance.pending()).toEqual([]);
+  });
+
+  it('refreshes the list and informs the operator when dismiss uses a stale id', async () => {
+    const stale = {
+      id: 'stale-id', projectName: 'Before restart', jobId: null, reason: 'r', repoRoot: 'x',
+      message: 'm', files: ['old.txt'], createdAt: '2026-08-03T00:00:00Z',
+      classification: 'review-required' as const,
+    };
+    const current = {
+      ...stale,
+      id: 'current-id',
+      projectName: 'After restart',
+      files: ['current.txt'],
+    };
+    const getPending = vi.fn()
+      .mockReturnValueOnce(of({ pending: [stale] }))
+      .mockReturnValueOnce(of({ pending: [current] }));
+    const dismiss = vi.fn(() => throwError(() => ({
+      status: 404,
+      error: { error: 'Pending crash recovery item not found.' },
+    })));
+    await TestBed.configureTestingModule({
+      imports: [CrashRecoveryPromptComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        {
+          provide: TaskService,
+          useValue: {
+            getPendingCrashRecoveries: getPending,
+            commitCrashRecovery: () => of({ status: 'committed', pending: null, commitSha: 'abc123', error: null }),
+            dismissCrashRecovery: dismiss,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CrashRecoveryPromptComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.dismiss(stale);
+
+    expect(dismiss).toHaveBeenCalledWith('stale-id');
+    expect(getPending).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.pending()).toEqual([current]);
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(TestBed.inject(NotificationService).notifications().at(-1)).toMatchObject({
+      kind: 'info',
+      title: 'Crash recovery list refreshed',
+      message: 'The crash recovery list was stale and has been refreshed.',
+    });
   });
 });

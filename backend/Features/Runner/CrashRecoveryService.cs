@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -412,6 +413,9 @@ public sealed class CrashRecoveryService
         IReadOnlyList<string>? pathspecs)
     {
         var files = ReadPendingFiles(repoRoot, pathspecs);
+        var classification = CrashRecoveryClassifications.Classify(jobId, files);
+        var createdAt = ResolveFindingTimestamp(jobFolder, repoRoot, files);
+        var id = CreatePendingRecoveryId(entry.Name, repoRoot, jobId, classification, createdAt, files);
         lock (_pendingLock)
         {
             var existing = _pendingOrphanRecoveries.FirstOrDefault(p =>
@@ -424,8 +428,8 @@ public sealed class CrashRecoveryService
 
             var pending = new PendingCrashRecovery
             {
-                Id = Guid.NewGuid().ToString("N"),
-                CreatedAt = DateTime.UtcNow,
+                Id = id,
+                CreatedAt = createdAt,
                 ProjectName = entry.Name,
                 JobId = jobId,
                 RepoRoot = repoRoot,
@@ -440,6 +444,154 @@ public sealed class CrashRecoveryService
             _pendingOrphanRecoveries.Add(pending);
             return pending;
         }
+    }
+
+    private static string CreatePendingRecoveryId(
+        string projectName,
+        string repoRoot,
+        string? jobId,
+        string classification,
+        DateTime findingTimestamp,
+        IReadOnlyList<string> files)
+    {
+        var canonicalRoot = Path.GetFullPath(repoRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Replace('\\', '/');
+        var identity = new StringBuilder()
+            .AppendLine("crash-recovery-finding-v1")
+            .AppendLine(projectName.Trim())
+            .AppendLine(canonicalRoot)
+            .AppendLine(classification)
+            .AppendLine(jobId?.Trim() ?? "")
+            .AppendLine(findingTimestamp.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        foreach (var file in files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            identity.Append(file.Replace('\\', '/'))
+                .Append('|')
+                .AppendLine(ReadPathIdentity(repoRoot, file));
+        }
+
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(identity.ToString()));
+        return Convert.ToHexString(digest.AsSpan(0, 16)).ToLowerInvariant();
+    }
+
+    private static DateTime ResolveFindingTimestamp(
+        string? jobFolder,
+        string repoRoot,
+        IReadOnlyList<string> files)
+    {
+        var timestamps = new List<DateTime>();
+        if (!string.IsNullOrWhiteSpace(jobFolder))
+        {
+            var firstSessionAt = ReadFirstSessionEventAt(jobFolder);
+            if (firstSessionAt.HasValue) timestamps.Add(firstSessionAt.Value);
+        }
+
+        foreach (var file in files)
+        {
+            var timestamp = ReadPathTimestamp(repoRoot, file);
+            if (timestamp.HasValue) timestamps.Add(timestamp.Value);
+        }
+
+        if (timestamps.Count > 0) return timestamps.Min().ToUniversalTime();
+
+        try
+        {
+            return Directory.GetLastWriteTimeUtc(repoRoot);
+        }
+        catch
+        {
+            // The repository was resolved moments ago. UnixEpoch keeps the
+            // fallback deterministic if it disappears during the sweep.
+            return DateTime.UnixEpoch;
+        }
+    }
+
+    private static string ReadPathIdentity(string repoRoot, string relativePath)
+    {
+        try
+        {
+            var fullPath = ResolveRecoveryPath(repoRoot, relativePath);
+            if (fullPath == null) return "outside-repository";
+            if (File.Exists(fullPath))
+            {
+                var info = new FileInfo(fullPath);
+                return $"file:{info.LastWriteTimeUtc.Ticks}:{info.Length}";
+            }
+
+            if (Directory.Exists(fullPath))
+                return ReadDirectoryIdentity(fullPath);
+
+            var parent = Path.GetDirectoryName(fullPath);
+            var parentTimestamp = parent != null && Directory.Exists(parent)
+                ? Directory.GetLastWriteTimeUtc(parent).Ticks
+                : 0;
+            return $"missing:{parentTimestamp}";
+        }
+        catch
+        {
+            return "unreadable";
+        }
+    }
+
+    private static string ReadDirectoryIdentity(string directory)
+    {
+        var identity = new StringBuilder()
+            .Append("directory:")
+            .AppendLine(Directory.GetLastWriteTimeUtc(directory).Ticks.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+        };
+        foreach (var file in Directory.EnumerateFiles(directory, "*", options)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            var info = new FileInfo(file);
+            identity.Append(Path.GetRelativePath(directory, file).Replace('\\', '/'))
+                .Append('|')
+                .Append(info.LastWriteTimeUtc.Ticks)
+                .Append('|')
+                .AppendLine(info.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return identity.ToString();
+    }
+
+    private static DateTime? ReadPathTimestamp(string repoRoot, string relativePath)
+    {
+        try
+        {
+            var fullPath = ResolveRecoveryPath(repoRoot, relativePath);
+            if (fullPath == null) return null;
+            if (File.Exists(fullPath)) return File.GetLastWriteTimeUtc(fullPath);
+            if (Directory.Exists(fullPath)) return Directory.GetLastWriteTimeUtc(fullPath);
+            var parent = Path.GetDirectoryName(fullPath);
+            return parent != null && Directory.Exists(parent)
+                ? Directory.GetLastWriteTimeUtc(parent)
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ResolveRecoveryPath(string repoRoot, string relativePath)
+    {
+        var root = Path.GetFullPath(repoRoot);
+        var fullPath = Path.GetFullPath(Path.Combine(
+            root,
+            relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var relative = Path.GetRelativePath(root, fullPath);
+        return relative == ".."
+               || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+               || Path.IsPathRooted(relative)
+            ? null
+            : fullPath;
     }
 
     private PendingCrashRecovery? TakePendingOrphanRecovery(string id)

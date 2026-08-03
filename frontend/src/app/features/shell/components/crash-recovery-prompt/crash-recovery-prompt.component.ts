@@ -86,7 +86,9 @@ export class CrashRecoveryPromptComponent implements OnInit {
       },
       error: (err) => {
         this.busyId.set(null);
-        this.error.set(this.errorMessage(err, 'Could not commit crash recovery changes.'));
+        if (!this.refreshStaleList(err)) {
+          this.error.set(this.errorMessage(err, 'Could not commit crash recovery changes.'));
+        }
       },
     });
   }
@@ -112,7 +114,9 @@ export class CrashRecoveryPromptComponent implements OnInit {
         },
         error: (err) => {
           this.busyAll.set(false);
-          this.error.set(this.errorMessage(err, `Could not dismiss '${item.projectName}'.`));
+          if (!this.refreshStaleList(err)) {
+            this.error.set(this.errorMessage(err, `Could not dismiss '${item.projectName}'.`));
+          }
         },
       });
     };
@@ -130,7 +134,9 @@ export class CrashRecoveryPromptComponent implements OnInit {
       },
       error: (err) => {
         this.busyId.set(null);
-        this.error.set(this.errorMessage(err, 'Could not dismiss crash recovery item.'));
+        if (!this.refreshStaleList(err)) {
+          this.error.set(this.errorMessage(err, 'Could not dismiss crash recovery item.'));
+        }
       },
     });
   }
@@ -204,16 +210,45 @@ export class CrashRecoveryPromptComponent implements OnInit {
         },
         error: (err) => {
           this.busyAll.set(false);
-          this.trivialNotificationId = null;
-          this.syncTrivialNotification();
-          this.notifications.error(
-            this.errorMessage(err, `Could not leave '${item.projectName}' uncommitted.`),
-            'Crash recovery action failed',
-          );
+          if (!this.refreshStaleList(err)) {
+            this.trivialNotificationId = null;
+            this.syncTrivialNotification();
+            this.notifications.error(
+              this.errorMessage(err, `Could not leave '${item.projectName}' uncommitted.`),
+              'Crash recovery action failed',
+            );
+          }
         },
       });
     };
     next();
+  }
+
+  private refreshStaleList(err: unknown): boolean {
+    const status = (err as { status?: number })?.status;
+    if (status !== 404) return false;
+
+    this.loading.set(true);
+    this.error.set(null);
+    this.tasks.getPendingCrashRecoveries().subscribe({
+      next: (res) => {
+        this.pending.set(res.pending ?? []);
+        this.syncTrivialNotification();
+        this.loading.set(false);
+        this.notifications.info(
+          'The crash recovery list was stale and has been refreshed.',
+          'Crash recovery list refreshed',
+        );
+      },
+      error: (refreshError) => {
+        this.error.set(this.errorMessage(
+          refreshError,
+          'The crash recovery list was stale, but the current list could not be loaded.',
+        ));
+        this.loading.set(false);
+      },
+    });
+    return true;
   }
 
   private errorMessage(err: unknown, fallback: string): string {

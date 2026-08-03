@@ -122,8 +122,10 @@ state.
   circuit breaker.
 - `backend/Services/Runner/EvidenceGate.cs`: visual and acceptance evidence
   gates before auto-accept.
-- `backend/Services/Runner/CrashRecoveryService.cs`: recovery for orphaned run
-  state after process failure.
+- `backend/Features/Runner/CrashRecoveryService.cs`: boot-time recovery for
+  orphaned run state after process failure. Pending working-tree findings use
+  content-addressed identities that survive backend restarts; operator clients
+  reload the pending list when an action reveals a stale snapshot.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
 - `runner/*`: the standalone `agent-host` daemon. A dependency-free console

@@ -135,4 +135,60 @@ test.describe('Crash recovery prompt', () => {
     await expect(notification).toBeHidden();
     await expect.poll(() => dismissed.length).toBe(2);
   });
+
+  test('refreshes a stale list after dismiss returns not found', async ({ page, devBackend }) => {
+    await expect.poll(async () => (await page.request.get(`${devBackend.baseUrl}/healthz`)).ok()).toBe(true);
+    let pendingReads = 0;
+    await page.route('**/api/crash-recovery/pending', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      pendingReads += 1;
+      const current = pendingReads > 1;
+      await route.fulfill({
+        json: {
+          pending: [{
+            id: current ? 'current-id' : 'stale-id',
+            createdAt: '2026-08-03T01:15:00Z',
+            projectName: current ? 'Current project state' : 'Stale project state',
+            jobId: 'AGT-2497',
+            repoRoot: '/workspace/agent-taskboard',
+            files: [current ? 'current-change.txt' : 'stale-change.txt'],
+            message: 'chore(crash-recovery): rescue orphan changes for AGT-2497',
+            reason: 'Uncommitted changes were found at startup and attributed to AGT-2497.',
+            classification: 'review-required',
+          }],
+        },
+      });
+    });
+    await page.route('**/api/crash-recovery/pending/stale-id/dismiss', route => route.fulfill({
+      status: 404,
+      json: { status: 'not-found', pending: null, commitSha: null, error: 'Pending crash recovery item not found.' },
+    }));
+
+    await page.goto('/');
+    const dialog = page.getByTestId('crash-recovery-prompt');
+    await expect(dialog.getByText('Stale project state')).toBeVisible();
+    await dialog.getByTestId('crash-recovery-dismiss').click();
+
+    await expect(dialog.getByText('Current project state')).toBeVisible();
+    await expect(dialog.getByText('stale-change.txt')).toBeHidden();
+    const notification = page.getByTestId('notification-info')
+      .filter({ hasText: 'Crash recovery list refreshed' });
+    await expect(notification).toContainText('The crash recovery list was stale and has been refreshed.');
+    expect(pendingReads).toBe(2);
+
+    const evidenceDir = process.env['JOB_RESULTS_DIR'];
+    if (evidenceDir) {
+      await mkdir(evidenceDir, { recursive: true });
+      await setTheme(page, 'light');
+      await page.screenshot({
+        path: join(evidenceDir, 'crash-recovery-stale-refresh--mocked.png'),
+        fullPage: false,
+      });
+      await setTheme(page, 'dark');
+      await page.screenshot({
+        path: join(evidenceDir, 'crash-recovery-stale-refresh-dark--mocked.png'),
+        fullPage: false,
+      });
+    }
+  });
 });
