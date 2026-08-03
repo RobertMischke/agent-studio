@@ -25,6 +25,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [testing/](testing/) | Dedicated test workspace and probe contracts; Windows test baseline and platform gates. |
 | [doku-inventur-2026-07/](doku-inventur-2026-07/README.md) | Per-document July 2026 inventory, sampled code checks, archive decisions, and the Phase 2 structure sketch. |
 | [haertung-verteilte-ausfuehrung/](haertung-verteilte-ausfuehrung/index.html) | Distributed execution hardening, including runner incidents, invariants, and implementation history. |
+| [lagebild-2026-08/](lagebild-2026-08/index.html) | Dated snapshot (03.08.2026) of where the system stands: component topology and hosts, CAR execution-layer status, card distribution across lanes, and open themes with card references. |
 | [decision-surface/](decision-surface/README.md) | Ownership, artifact, action, and lifecycle contract for operator decisions on escalated tasks. |
 | [board-statusmodell-ist-soll/](board-statusmodell-ist-soll/index.html) | German decision Workbench mapping every board lane transition and proposing integration, acceptance, and archive guards (AGT-2424, with AGT-2301 field evidence). |
 | [research-deliverables/](research-deliverables/index.html) | Primary HTML report, companion-link, prompt-block, and lightweight-pipeline convention for Research tasks. |
