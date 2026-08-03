@@ -35,6 +35,9 @@ export class CrashRecoveryPromptComponent implements OnInit {
   private stackDispose: (() => void) | null = null;
   private trivialNotificationId: number | null = null;
   private trivialNotificationFingerprint = '';
+  /// Set while a bulk dismiss skips stale (404) entries; triggers one
+  /// authoritative refresh after the queue drains.
+  private staleNoticed = false;
 
   constructor() {
     effect(() => {
@@ -86,6 +89,10 @@ export class CrashRecoveryPromptComponent implements OnInit {
       },
       error: (err) => {
         this.busyId.set(null);
+        if (this.isStaleItem(err)) {
+          this.healStaleItem(item);
+          return;
+        }
         this.error.set(this.errorMessage(err, 'Could not commit crash recovery changes.'));
       },
     });
@@ -103,6 +110,16 @@ export class CrashRecoveryPromptComponent implements OnInit {
       const item = queue.shift();
       if (!item) {
         this.busyAll.set(false);
+        if (this.staleNoticed) {
+          this.staleNoticed = false;
+          this.notifications.notify({
+            kind: 'info',
+            title: 'Crash recovery list was outdated',
+            message: 'Some entries were already resolved elsewhere. The list has been reloaded.',
+            durationMs: 6000,
+          });
+          this.refresh();
+        }
         return;
       }
       this.tasks.dismissCrashRecovery(item.id).subscribe({
@@ -111,6 +128,15 @@ export class CrashRecoveryPromptComponent implements OnInit {
           next();
         },
         error: (err) => {
+          // A stale entry (already resolved elsewhere, e.g. after a backend
+          // restart renumbered the pending list) must not abort the queue:
+          // drop it locally and keep dismissing the rest.
+          if (this.isStaleItem(err)) {
+            this.remove(item.id);
+            this.staleNoticed = true;
+            next();
+            return;
+          }
           this.busyAll.set(false);
           this.error.set(this.errorMessage(err, `Could not dismiss '${item.projectName}'.`));
         },
@@ -130,6 +156,10 @@ export class CrashRecoveryPromptComponent implements OnInit {
       },
       error: (err) => {
         this.busyId.set(null);
+        if (this.isStaleItem(err)) {
+          this.healStaleItem(item);
+          return;
+        }
         this.error.set(this.errorMessage(err, 'Could not dismiss crash recovery item.'));
       },
     });
@@ -203,6 +233,11 @@ export class CrashRecoveryPromptComponent implements OnInit {
           next();
         },
         error: (err) => {
+          if (this.isStaleItem(err)) {
+            this.remove(item.id);
+            next();
+            return;
+          }
           this.busyAll.set(false);
           this.trivialNotificationId = null;
           this.syncTrivialNotification();
@@ -214,6 +249,26 @@ export class CrashRecoveryPromptComponent implements OnInit {
       });
     };
     next();
+  }
+
+  /// True when the backend answered 404: the entry no longer exists server-side
+  /// (resolved elsewhere, or the backend restarted and renumbered the list).
+  private isStaleItem(err: unknown): boolean {
+    return (err as { status?: number })?.status === 404;
+  }
+
+  /// Self-heal for a stale entry outside the bulk queues: drop it locally,
+  /// re-fetch the authoritative list, and tell the user what happened instead
+  /// of leaving a dead error banner over an outdated list.
+  private healStaleItem(item: CrashRecoveryPending): void {
+    this.remove(item.id);
+    this.notifications.notify({
+      kind: 'info',
+      title: 'Crash recovery list was outdated',
+      message: `'${item.projectName}' was already resolved elsewhere. The list has been reloaded.`,
+      durationMs: 6000,
+    });
+    this.refresh();
   }
 
   private errorMessage(err: unknown, fallback: string): string {
