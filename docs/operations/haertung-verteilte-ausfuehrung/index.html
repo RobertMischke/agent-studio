@@ -143,7 +143,8 @@
   <p class="lede">Ursachen von Arbeitsverlust und falschen Review-Scopes sowie die zugehörigen
   Maßnahmen: Result-SHA-Vertrag, Fencing und hermetische Verifikation.</p>
   <div class="meta">
-    <span><b>Stand:</b> 24.07.2026</span>
+    <span><b>Stand:</b> 03.08.2026 — Nachtrag in <a href="#stand-0308">§0</a>; die Abschnitte §1–§8 tragen ihren
+    eigenen Stand 24.07.</span>
     <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
     <span><b>Historie:</b> <a href="#historie">Zusammenfassung und Anker</a>; Langform mit
     identischen <code>#incident-*</code>-Ankern in <code>historie.html</code></span>
@@ -158,6 +159,7 @@
          docs/operations/haertung-verteilte-ausfuehrung/target-architecture/ -->
     <li><b>Zielbild:</b> Akteure und Verträge unter <code>target-architecture/</code> im Wiki-Baum</li>
     <li><a href="#tldr">Kernaussagen</a></li>
+    <li><a href="#stand-0308"><b>§0 Nachtrag 03.08.</b></a></li>
     <li><a href="#system">§1 Systembild</a></li>
     <li><a href="#git">§2 Git und Ergebniszuordnung</a></li>
     <li><a href="#zeit">§3 Vorfälle und Run-Ablauf</a></li>
@@ -174,6 +176,10 @@
   <p class="stx stx-part"><b>Stand 24.07.:</b> Drei Grundlagen sind aktiv: verifizierter Push vor
   Completion, persistente Attempt-Authority mit Fencing (AGT-2182) und Remote-Gates auf einer exakten
   Subjekt-SHA. Der unveränderliche Result-SHA-Handoff für alle Konsumenten bleibt mit AGT-2183/2184 offen.</p>
+  <p class="stx stx-part"><b>Nachtrag 03.08.:</b> Die Ausführungsschicht läuft inzwischen produktiv über
+  die CodingAgentRunner-Library (<code>engine=car</code>), und der Rollen-Dreiklang aus Task-Server,
+  Host-Orchestrator und Agent Studio ist als Zielbegriff gesetzt. Die Aussagen dieses Abschnitts zum
+  Ergebnisvertrag bleiben davon unberührt. Einzelheiten: <a href="#stand-0308">§0</a>.</p>
   <ul>
     <li><b>Ergebnisevidenz ist noch nicht durchgängig ein Vertrag.</b> Das Gate erhält bereits eine exakte
         Subjekt-SHA. Grade-Step, Merge und UI benötigen weiterhin den einheitlichen Attempt-Record mit
@@ -190,6 +196,162 @@
         verbindlicher Diff-Scope.</li>
   </ul>
 </section>
+
+<!-- ============================================================ -->
+<h2 id="stand-0308"><span class="no">§0</span>Nachtrag: Stand 03.08.</h2>
+<p class="stx stx-part"><b>Stand 03.08.:</b> Seit dem 24.07. hat sich vor allem die <i>Ausführungsschicht</i>
+verschoben: der Spawn läuft produktiv über die CodingAgentRunner-Library. Die Ergebnisverträge aus §2
+sind davon unberührt — dieser Nachtrag ersetzt die folgenden Abschnitte nicht, er datiert sie nach.</p>
+<p class="dim">Dieser Abschnitt nennt nur, was am 03.08. im Code, in der Board-Integration oder im
+laufenden Betrieb belegbar war. Was sich nicht belegen ließ, steht am Ende als offene Frage — nicht als
+Ergebnis.</p>
+
+<h3>§0.1 Ausführungsschicht: engine=car ist der Normalfall</h3>
+<p class="stx stx-ok"><b>Stand 03.08.:</b> Der CAR-Pfad ist Default. <code>RUNNER_EXEC_ENGINE</code> steht
+auf <code>car</code>, der Legacy-Pfad bleibt als bewusster Rückfall wählbar.</p>
+<p>Der Runner entscheidet den Spawn an einer Stelle: bei <code>engine=car</code> übernimmt
+<code>CarWorkerExecution</code> die Ausführung, sonst der alte Direktaufruf. Beide Projekte —
+Runner und Backend — hängen an derselben gepinnten Bibliotheksversion
+(<code>CodingAgentRunner 0.7.0</code>), damit Container-, Mount- und Token-Logik nur einmal existiert.</p>
+
+<table>
+  <thead><tr><th>Tranche</th><th>Inhalt</th><th>Karte</th><th>Stand 03.08.</th></tr></thead>
+  <tbody>
+    <tr><td><b>T1</b></td><td>Runner-Daemon spawnt über die Library</td><td>AGT-2370</td>
+        <td><span class="pill done">integriert</span> <code>60575ea</code>, auf <code>develop</code> und <code>main</code></td></tr>
+    <tr><td><b>T2</b></td><td>Lokale Ausführungsschicht des Backends auf dieselbe Library</td><td>AGT-2371</td>
+        <td><span class="pill done">integriert</span> <code>2136f31</code> auf <code>develop</code></td></tr>
+    <tr><td><b>T3</b></td><td>Parity-Suite für beide Ausführungspfade</td><td>AGT-2372</td>
+        <td><span class="pill done">auf <code>develop</code></span> <code>c9ce1342e</code> — <span class="pill part">Board-Badge steht auf <code>pending</code></span></td></tr>
+    <tr><td><b>T4</b></td><td>Legacy-Invocation-Pfade entfernen, ADR + Doku nachziehen</td><td>AGT-2373</td>
+        <td><span class="pill new">bewusst geparkt</span> im Backlog, nicht gequeued</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>T3 ist ein Beleg für §2.5 — in eigener Sache</h4>
+  <p>Die Parity-Suite <i>ist</i> nach <code>develop</code> integriert (Merge-Commit
+  <code>c9ce1342e</code>), aber die Karte zeigt <code>integration.status = pending</code>: der als
+  Lieferung hinterlegte Result-Ref ist kein Vorfahr des Integrationsstandes, weil die Integration
+  card-scoped von Hand erfolgte. Genau diese Lücke zwischen „im Branch" und „als Lieferung
+  nachweisbar" beschreibt §2.5. Verbindlich ist die Ancestry, nicht das Badge.</p>
+</div>
+
+<p>Der Legacy-Zweig trägt seinen eigenen Rückbauhinweis im Quelltext („behind
+<code>RUNNER_EXEC_ENGINE=legacy</code> since AGT-2370, deleted in AGT-2373"). Solange T4 geparkt ist,
+existieren beide Pfade nebeneinander — das ist der Zustand, den §5.4 („Hat die Übergangslösung ein
+Ende?") als begründungspflichtig markiert. Die Begründung ist hier ein bewusstes Freigabe-Protokoll,
+kein Vergessen.</p>
+
+<h3>§0.2 Rollen-Dreiklang als Zielbegriffe</h3>
+<p class="stx stx-part"><b>Stand 03.08.:</b> Die Begriffe sind gesetzt und serverseitig teilweise
+gebaut. Die Runner-Seite des Host-Orchestrators ist vorhanden, aber nicht verdrahtet.</p>
+<p>Das Systembild aus §1 kennt „Board", „Pipeline" und „Runner". Für die verteilte Zielarchitektur
+werden diese drei Rollen sauber benannt und getrennt — nicht als Umbenennung, sondern als
+Zuständigkeitsschnitt:</p>
+
+<figure>
+<svg viewBox="0 0 1040 420" role="img" aria-label="Rollen-Dreiklang: Task-Server als Wahrheit, Host-Orchestrator als Ausführung, Agent Studio als Konsole">
+  <!-- Task-Server -->
+  <rect class="s-node" x="30" y="40" width="300" height="170" rx="10"/>
+  <text class="s-label" x="52" y="70">Task-Server</text>
+  <text class="s-sub" x="52" y="92">Wahrheit und Permits</text>
+  <rect class="s-node2" x="52" y="106" width="256" height="28" rx="6"/>
+  <text class="s-tiny" x="64" y="125">Lanes · Attempt-Authority · Fences</text>
+  <rect class="s-node2" x="52" y="140" width="256" height="28" rx="6"/>
+  <text class="s-tiny" x="64" y="159">Work-Permits · Host-Reports · Post-Steps</text>
+  <rect class="badge-warn" x="52" y="174" width="256" height="26" rx="6" stroke-width="1.2"/>
+  <text class="t-warn" x="64" y="192">⚠ Registrierung in-memory — bekannte Schwäche</text>
+
+  <!-- Host-Orchestrator -->
+  <rect class="s-node" x="370" y="40" width="300" height="170" rx="10"/>
+  <text class="s-label" x="392" y="70">Host-Orchestrator</text>
+  <text class="s-sub" x="392" y="92">führt aus</text>
+  <rect class="s-node2" x="392" y="106" width="256" height="28" rx="6"/>
+  <text class="s-tiny" x="404" y="125">Runs: Claim · Lease · Spawn (engine=car)</text>
+  <rect class="badge-warn" x="392" y="140" width="256" height="28" rx="6" stroke-width="1.2"/>
+  <text class="t-warn" x="404" y="159">künftig auch Post-Steps (heute lokal)</text>
+  <rect class="badge-bad" x="392" y="174" width="256" height="26" rx="6" stroke-width="1.2"/>
+  <text class="t-bad" x="404" y="192">✗ Runner-Journal existiert, ist nicht verdrahtet</text>
+
+  <!-- Agent Studio -->
+  <rect class="s-node" x="710" y="40" width="300" height="170" rx="10"/>
+  <text class="s-label" x="732" y="70">Agent Studio</text>
+  <text class="s-sub" x="732" y="92">Konsole und Read-Model</text>
+  <rect class="s-node2" x="732" y="106" width="256" height="28" rx="6"/>
+  <text class="s-tiny" x="744" y="125">zeigt an, entscheidet, steuert an</text>
+  <rect class="s-node2" x="732" y="140" width="256" height="28" rx="6"/>
+  <text class="s-tiny" x="744" y="159">hält keine eigene Ausführungswahrheit</text>
+  <rect class="badge-ok" x="732" y="174" width="256" height="26" rx="6" stroke-width="1.2"/>
+  <text class="t-ok" x="744" y="192">✓ bleibt bewusst lokal, kein öffentlicher Listener</text>
+
+  <path class="s-flow" d="M330 110 H370" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="332" y="102">Permit</text>
+  <path class="s-flow" d="M370 160 H330" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="332" y="180">Fakten</text>
+  <path class="s-flow" d="M710 125 H670" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M330 75 C520 20 620 20 800 38" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="540" y="24">liest den Zustand</text>
+
+  <!-- Ist-Stand-Leiste -->
+  <rect class="s-node2" x="30" y="250" width="980" height="150" rx="10"/>
+  <text class="s-label" x="52" y="278">Was davon am 03.08. gebaut ist</text>
+  <text class="s-sub" x="52" y="304">Serverseitig steht die Ablage: Host-Reports, Work-Permits, Run-Reconcile und Post-Step-Claims</text>
+  <text class="s-sub" x="52" y="324">sind als Endpunkte des Task-Servers vorhanden und in der DI verdrahtet.</text>
+  <text class="s-sub" x="52" y="352">Runnerseitig existiert das Journal für Permits und Faktenmeldungen als Klasse, wird aber von</text>
+  <text class="s-sub" x="52" y="372">keinem Daemon instanziiert — nur von seinen eigenen Tests. Die Strecke ist also einseitig fertig.</text>
+</svg>
+<figcaption><b>Abb. 0: Rollen-Dreiklang.</b> Der Task-Server hält Wahrheit und vergibt Permits, der
+Host-Orchestrator führt Runs aus und soll künftig auch Post-Steps übernehmen, Agent Studio ist Konsole
+und Read-Model ohne eigene Ausführungswahrheit. Zwei Einschränkungen sind heute real: die
+Registrierung am Task-Server liegt im Speicher, und das runnerseitige Journal ist gebaut, aber
+unverdrahtet.</figcaption>
+</figure>
+
+<h3>§0.3 Post-Processing hängt heute am lokalen Backend</h3>
+<p class="stx stx-part"><b>Stand 03.08.:</b> Klassifikation läuft, Entscheidung steht aus.</p>
+<p>Solange die Post-Steps im lokalen Backend laufen, ist die Remote-Ausführung nicht vollständig:
+der Run kann auf dem Host enden, die Nachbearbeitung braucht aber weiterhin das Studio auf der
+Windows-Maschine. AGT-2470 („Post-Processing ohne lokales Studio") trennt die Schritte danach, ob sie
+<i>hostfähig</i> oder <i>backendgebunden</i> sind; die Karte liegt in <code>5-human-review</code>, die
+Lieferung ist noch nicht nach <code>develop</code> integriert. Bis diese Klassifikation entschieden
+ist, bleibt der lokale Backend-Prozess ein Teil der Ausführungsstrecke — nicht nur ihrer Anzeige.</p>
+
+<h3>§0.4 Review-Plane: Admission lastbewusst, Resilienz offen</h3>
+<p class="stx stx-part"><b>Stand 03.08.:</b> Die Slot-Admission ist integriert und im Betrieb
+beobachtbar. Zwei Resilienzthemen sind benannt und offen.</p>
+<p>AGT-2469 ersetzt die feste Review-Parallelität durch eine lastabhängige Zulassung; die Lieferung
+ist als <code>5107f5d</code> auf <code>develop</code>. Im Betrieb ist das direkt sichtbar: der
+Review-Daemon protokolliert das Öffnen und Schließen der Slots gegen eine Lastschwelle je Kern. Der
+Mechanismus tut also, was er soll — er begrenzt die Zulassung. Er schafft damit keine Kapazität: steht
+der Host dauerhaft über der Schwelle, ist die Folge korrekt gedrosselter, aber eben auch nicht
+stattfindender Review-Durchsatz. Das ist eine Kapazitäts-, keine Korrektheitsfrage.</p>
+<ul>
+  <li><b>AGT-2488 — Claim-Loop nach <code>detached-worker-lost</code>.</b> Der Coding-Daemon kann in
+      einen Zustand geraten, in dem der Claim-Loop nicht mehr weiterkommt. Die Karte ist am 03.08.
+      angelegt und beschreibt den beobachteten Stillstand.</li>
+  <li><b>AGT-2487 — Streckenzustand und In-Flight-Fortsetzung.</b> Ein Review, der mitten im Lauf die
+      Strecke verliert, wird heute nicht fortgesetzt. Die Karte liegt in <code>5-human-review</code>.</li>
+</ul>
+
+<h3>§0.5 Was dieser Nachtrag bewusst <i>nicht</i> behauptet</h3>
+<div class="box">
+  <ul>
+    <li><b>Kein Linux-Paritätsnachweis als Artefakt.</b> Die Parity-Suite ist eine Fixture-Baseline
+        („Ebene 1"): sie pinnt aufgezeichnete CLI-Ströme gegen die erwartete Klassifikation. Ein Lauf,
+        der beide Ausführungspfade gegeneinander diffed, und ein ausgewiesener Linux-Paritätsbeleg
+        existieren als eigenständiges Artefakt nicht. Dass die Suite auf Linux läuft, folgt aus der
+        CI-Plattform, nicht aus einem dafür angelegten Nachweis.</li>
+    <li><b>Keine Aussage zur Vollständigkeit der Paritätsfälle.</b> Der Fixture-Katalog ist angelegt,
+        aber erklärtermaßen nur teilweise gepinnt. Der im Migrationsplan geforderte Betriebsnachweis
+        über mehrere Karten lokal und remote ist im Repository nicht als Evidenz hinterlegt.</li>
+    <li><b>Keine Aussage über eine CLI-abhängige Claim-Störung.</b> Am 03.08. lag genau eine
+        <code>claude</code>-Karte in <code>2-ready</code> und wurde nicht geclaimt. Der Daemon-Log
+        belegt für denselben Zeitraum eine andere, projektgebundene Ursache (siehe Lagebild) und eine
+        ausgelastete Maschine. Beides erklärt eine wartende Karte hinreichend; ein CLI-abhängiger
+        Routing-Defekt ist damit weder gezeigt noch ausgeschlossen.</li>
+  </ul>
+</div>
 
 <!-- ============================================================ -->
 <h2 id="system"><span class="no">§1</span>Systembild</h2>
@@ -1207,6 +1369,11 @@ funktionieren. <code>historie.html</code> verwendet dieselben Anker für die aus
     <tr id="incident-remote-gates"><td>22./23.07.</td><td>Gate-Stau und falsche Eskalationen im lokalen Pfad</td><td>AGT-2222: SSH-Gate-Brücke, vier Slots, exakte Subjekt-SHA</td><td><span class="pill done">live</span> <span class="pill queued">AGT-2229 offen</span></td></tr>
     <tr id="incident-review-epochs"><td>23.07.</td><td>Ältere Verdikte konnten Operator-Requeues überholen</td><td>AGT-2260-Kern: Verdikte an Operator-Epoche binden</td><td><span class="pill done">aktiv</span></td></tr>
     <tr id="incident-attempt-authority"><td>24.07.</td><td>Fehlende persistente Autorität für Run- und Review-Versuche</td><td>AGT-2182: Attempt-Authority und Fencing</td><td><span class="pill done">geliefert, Grade B</span></td></tr>
+    <tr id="incident-car-spawn"><td>02.08.</td><td>Zwei getrennte Spawn-Pfade für CLI-Agenten (Drift-Risiko bei Container, Mount und Token)</td><td>AGT-2370/2371: Spawn über die CodingAgentRunner-Library, <code>engine=car</code> als Default; Legacy nur noch als Rückfall</td><td><span class="pill done">T1/T2 integriert</span> <span class="pill new">T4-Abriss geparkt</span></td></tr>
+    <tr id="incident-parity-suite"><td>02.08.</td><td>Kein Regressionsschutz beim Umstellen der Ausführungspfade</td><td>AGT-2372: Fixture-Baseline der Parity-Suite, nach <code>develop</code> integriert (<code>c9ce1342e</code>)</td><td><span class="pill done">auf develop</span> <span class="pill part">Badge <code>pending</code>, Fälle teilgepinnt</span></td></tr>
+    <tr id="incident-slot-admission"><td>02.08.</td><td>Feste Review-Parallelität ignorierte die Hostlast</td><td>AGT-2469: lastbewusste Slot-Admission gegen eine Lastschwelle je Kern (<code>5107f5d</code>)</td><td><span class="pill done">integriert, im Log beobachtbar</span></td></tr>
+    <tr id="incident-daemon-wedge"><td>03.08.</td><td>Coding-Daemon kommt nach <code>detached-worker-lost</code> im Claim-Loop nicht weiter</td><td>AGT-2488 angelegt; Review-seitig ergänzt AGT-2487 Streckenzustand und In-Flight-Fortsetzung</td><td><span class="pill open">offen</span></td></tr>
+    <tr id="incident-post-processing-local"><td>03.08.</td><td>Post-Processing hängt am lokalen Backend und bindet die Remote-Strecke an die Windows-Maschine</td><td>AGT-2470: Schritte nach hostfähig und backendgebunden klassifizieren</td><td><span class="pill queued">in Human-Review, nicht integriert</span></td></tr>
   </tbody>
 </table>
 
