@@ -19,6 +19,69 @@ namespace AgentStudio.Tests;
 public class TaskScannerWatchPathTests
 {
     [Fact]
+    public void GetWatchPaths_RelativeStore_JoinsRootBeforeCanonicalising()
+    {
+        var projectRoot = Path.Combine(Path.GetTempPath(), "atp-watch-root-" + Guid.NewGuid().ToString("N"));
+        var relativeStore = Path.Combine(".orchestrator", "jobs");
+        var expected = Path.GetFullPath(Path.Combine(projectRoot, relativeStore));
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "Quality Studio",
+                ["WatchPaths:0:Path"] = relativeStore,
+                ["WatchPaths:0:RootPath"] = projectRoot,
+            })
+            .Build();
+
+        var scanner = BuildScanner(config, NullLogger<TaskScannerService>.Instance);
+
+        var watchPath = Assert.Single(scanner.GetWatchPaths());
+        Assert.Equal(expected, watchPath.Path);
+        Assert.True(Path.IsPathFullyQualified(watchPath.Path));
+    }
+
+    [Fact]
+    public void GetWatchPaths_SeparatorStrippedRegistryStore_RecoversAbsoluteLegacyStore()
+    {
+        var testRoot = Path.Combine(Path.GetTempPath(), "atp-registry-store-" + Guid.NewGuid().ToString("N"));
+        var taskRepository = Path.Combine(testRoot, "task-repository");
+        var projectRoot = Path.Combine(testRoot, "quality-studio");
+        Directory.CreateDirectory(projectRoot);
+
+        try
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["TaskRepository"] = taskRepository,
+                })
+                .Build();
+            var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+            var project = registry.EnsureProjectForStorage(
+                "C:Projectsquality-studio.orchestratorjobs",
+                "Quality Studio",
+                "ws-default");
+            registry.SetRootPath(project.Id, projectRoot);
+            var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+            var scanner = new TaskScannerService(
+                config,
+                NullLogger<TaskScannerService>.Instance,
+                summary,
+                projectRegistry: registry);
+
+            var watchPath = Assert.Single(scanner.GetWatchPaths());
+            var expected = Path.GetFullPath(Path.Combine(projectRoot, ".orchestrator", "jobs"));
+            Assert.Equal(expected, watchPath.Path);
+            Assert.True(Path.IsPathFullyQualified(watchPath.Path));
+            Assert.DoesNotContain("Projectsquality-studio.orchestratorjobs", watchPath.Path);
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot)) Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ScanAllJobsRaw_MissingWatchPath_WarnsOnlyOnceAcrossManyScans()
     {
         var missing = Path.Combine(Path.GetTempPath(), "atp-missing-" + Guid.NewGuid().ToString("N"));
@@ -72,6 +135,11 @@ public class TaskScannerWatchPathTests
                 ["WatchPaths:0:Path"] = watchPath
             })
             .Build();
+        return BuildScanner(config, logger);
+    }
+
+    private static TaskScannerService BuildScanner(IConfiguration config, ILogger<TaskScannerService> logger)
+    {
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         return new TaskScannerService(config, logger, summary);
     }

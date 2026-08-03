@@ -104,7 +104,9 @@ public class TaskScannerService : ITaskScanner
         var resolved = new List<WatchPathEntry>(raw.Count);
         foreach (var entry in raw)
         {
-            resolved.Add(ResolveWatchPath(entry));
+            var resolvedEntry = ResolveWatchPath(entry);
+            if (!string.IsNullOrWhiteSpace(resolvedEntry.Path))
+                resolved.Add(resolvedEntry);
         }
 
         // WatchPaths is bootstrap compatibility only. API-created projects are
@@ -115,7 +117,7 @@ public class TaskScannerService : ITaskScanner
             for (var i = 0; i < resolved.Count; i++)
             {
                 var project = registryProjects.FirstOrDefault(p => string.Equals(
-                    NormalizeWatchPath(p.StorageLocation), NormalizeWatchPath(resolved[i].Path),
+                    NormalizeWatchPath(ResolveRegistryStorageLocation(p)), NormalizeWatchPath(resolved[i].Path),
                     StringComparison.OrdinalIgnoreCase));
                 if (project != null)
                 {
@@ -130,15 +132,24 @@ public class TaskScannerService : ITaskScanner
 
             foreach (var project in registryProjects)
             {
+                var storageLocation = ResolveRegistryStorageLocation(project);
+                if (storageLocation == null)
+                {
+                    _logger.LogWarning(
+                        "registry-project-storage-skipped projectId={ProjectId} storage={Storage} reason=path-not-absolute",
+                        project.Id, project.StorageLocation);
+                    continue;
+                }
+
                 if (resolved.Any(entry => string.Equals(
-                        NormalizeWatchPath(entry.Path), NormalizeWatchPath(project.StorageLocation),
+                        NormalizeWatchPath(entry.Path), NormalizeWatchPath(storageLocation),
                         StringComparison.OrdinalIgnoreCase)))
                     continue;
 
                 resolved.Add(new WatchPathEntry
                 {
                     Name = project.DisplayName,
-                    Path = project.StorageLocation,
+                    Path = storageLocation,
                     RootPath = project.RootPath ?? "",
                     RepositoryPath = project.RepositoryPath ?? "",
                 });
@@ -151,8 +162,32 @@ public class TaskScannerService : ITaskScanner
         string.IsNullOrWhiteSpace(path) ? "" : path.Replace('\\', '/').TrimEnd('/');
 
     /// <summary>
+    /// Registry storage is expected to be absolute. Older malformed records can
+    /// contain a separator-stripped relative value such as
+    /// <c>C:Projectsquality-studio.orchestratorjobs</c>. When the record still
+    /// has an absolute project root, recover the legacy store from that root;
+    /// otherwise reject the record so startup writers cannot materialise it in
+    /// the backend working directory.
+    /// </summary>
+    private static string? ResolveRegistryStorageLocation(ProjectRecord project)
+    {
+        if (TryResolveAbsolutePath(project.StorageLocation, basePath: null, out var absolute))
+            return absolute;
+
+        if (!string.IsNullOrWhiteSpace(project.RootPath)
+            && TryResolveAbsolutePath(
+                Path.Combine(project.RootPath, ".orchestrator", "jobs"),
+                basePath: null,
+                out var legacyStore))
+            return legacyStore;
+
+        return null;
+    }
+
+    /// <summary>
     /// Resolves a watch path entry's effective task folder. Resolution order:
-    /// 1. If <c>Path</c> is explicitly set in config, use it as-is (backward compatible).
+    /// 1. If <c>Path</c> is explicitly set in config, join a relative value to
+    ///    the absolute <c>RootPath</c>, then canonicalise the result.
     /// 2. Otherwise, if <c>RootPath</c> contains <c>.orchestrator.yml</c> with a <c>projectKey</c>,
     ///    resolve to <c>&lt;TaskRepository&gt;/projects/&lt;projectKey&gt;</c>.
     ///    The central <c>TaskRepository</c> path comes from app configuration.
@@ -160,7 +195,16 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private WatchPathEntry ResolveWatchPath(WatchPathEntry entry)
     {
-        if (!string.IsNullOrWhiteSpace(entry.Path)) return entry;
+        if (!string.IsNullOrWhiteSpace(entry.Path))
+        {
+            if (TryResolveAbsolutePath(entry.Path, entry.RootPath, out var absolutePath))
+                return entry with { Path = absolutePath };
+
+            _logger.LogWarning(
+                "watch-path-skipped name={Name} path={Path} rootPath={RootPath} reason=path-not-absolute",
+                entry.Name, entry.Path, entry.RootPath);
+            return entry with { Path = "" };
+        }
         if (string.IsNullOrWhiteSpace(entry.RootPath)) return entry;
 
         var pointerPath = Path.Combine(entry.RootPath, ".orchestrator.yml");
@@ -172,8 +216,9 @@ public class TaskScannerService : ITaskScanner
                 var taskRepository = _config["TaskRepository"];
                 if (!string.IsNullOrWhiteSpace(pointer.ProjectKey) && !string.IsNullOrWhiteSpace(taskRepository))
                 {
-                    var combined = Path.GetFullPath(Path.Combine(taskRepository, "projects", pointer.ProjectKey));
-                    return entry with { Path = combined };
+                    var combined = Path.Combine(taskRepository, "projects", pointer.ProjectKey);
+                    if (TryResolveAbsolutePath(combined, basePath: null, out var absolutePath))
+                        return entry with { Path = absolutePath };
                 }
             }
             catch (Exception ex)
@@ -183,7 +228,40 @@ public class TaskScannerService : ITaskScanner
         }
 
         var legacy = Path.Combine(entry.RootPath, ".orchestrator", "jobs");
-        return entry with { Path = legacy };
+        if (TryResolveAbsolutePath(legacy, basePath: null, out var absoluteLegacy))
+            return entry with { Path = absoluteLegacy };
+
+        _logger.LogWarning(
+            "watch-path-skipped name={Name} rootPath={RootPath} reason=legacy-path-not-absolute",
+            entry.Name, entry.RootPath);
+        return entry with { Path = "" };
+    }
+
+    private static bool TryResolveAbsolutePath(string? configuredPath, string? basePath, out string absolutePath)
+    {
+        absolutePath = "";
+        if (string.IsNullOrWhiteSpace(configuredPath)) return false;
+
+        try
+        {
+            var candidate = configuredPath.Trim();
+            if (!Path.IsPathFullyQualified(candidate))
+            {
+                if (string.IsNullOrWhiteSpace(basePath) || !Path.IsPathFullyQualified(basePath))
+                    return false;
+                candidate = Path.Combine(basePath, candidate);
+            }
+
+            // Join first, then canonicalise. Sanitising an unjoined path as a
+            // filename removes directory separators and turns the remainder
+            // into a backend-CWD-relative folder.
+            absolutePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+            return Path.IsPathFullyQualified(absolutePath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     private record OrchestratorPointer(string ProjectKey);
