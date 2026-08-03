@@ -44,7 +44,9 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 
     public int RunOnce()
     {
-        var acceptedJobs = _scanner.ScanAllJobsWithArchive()
+        // AGT-2480: Automation-Scanner schliesst Fixture-Karten aus;
+        // Variablenname acceptedJobs (AGT-2428) bleibt, damit der Rest der Methode traegt.
+        var acceptedJobs = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(job =>
                 job.State is TaskStates.Completed or TaskStates.Archive
                 || (job.State == TaskStates.HumanReview

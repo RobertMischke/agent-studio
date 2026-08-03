@@ -128,6 +128,8 @@ public sealed class SteerTimeoutMonitor
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
+                if (_scanner.FindJob(laneFolder.Slug, entry.Path)?.Fixture == true)
+                    continue;
                 // A real live execution wins the race. ActiveJobId alone is not
                 // enough: marker creation happens after Release, and a stale or
                 // leaked latch must not suppress the timeout forever. A resumed

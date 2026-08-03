@@ -63,7 +63,7 @@ public sealed class WorkspaceSummaryService
         var openHumanDecisions = new List<ExecutiveSummaryOpenDecision>();
         var allDecisions = new List<ExecutiveSummaryDecision>();
 
-        var allJobs = _scanner.ScanAllJobs();
+        var allJobs = _scanner.ScanAllAutomationJobs();
         var jobsByProject = allJobs
             .GroupBy(j => j.ProjectName, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
