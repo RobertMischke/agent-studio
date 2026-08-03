@@ -497,6 +497,19 @@ public sealed class CrashRecoveryService
         if (string.IsNullOrWhiteSpace(jobFolder) || !Directory.Exists(jobFolder))
             return;
 
+        // AGT-2220: commits[] is evidence, so nothing lands there unverified -
+        // not even a SHA this process believes it just created. If the commit is
+        // not in the repository, the attribution is dropped and said out loud
+        // rather than leaving a card pointing at a commit that does not exist.
+        if (!_git.CommitExistsInRepo(pending.RepoRoot, sha))
+        {
+            _logger.LogWarning(
+                "crash-recovery-attribution-refused job={JobId} repo={RepoRoot} sha={Sha} "
+                + "reason=commit-not-found-in-repository",
+                pending.JobId, pending.RepoRoot, sha);
+            return;
+        }
+
         _mutations.SetJobCommitOnFolder(jobFolder, new TaskCommitInfo
         {
             Sha = sha!,
