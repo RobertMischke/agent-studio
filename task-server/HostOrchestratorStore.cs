@@ -246,7 +246,7 @@ public sealed partial class TaskServerStore
                        run_id = $run
                  WHERE id = $permit AND status = 'available';
                 INSERT INTO post_step_executions(id, run_id, step_id, eligible_runner_id, status)
-                VALUES ($step, $run, 'post-run-host-evidence', $runner, 'available');
+                VALUES ($step, $run, 'post-worktree-containment', $runner, 'available');
                 """, ct, transaction,
                 ("$task", taskId),
                 ("$fence", fence),
@@ -292,7 +292,12 @@ public sealed partial class TaskServerStore
                 connection, transaction, request.RunnerId, request.InstanceId, request.ReportSequence, ct);
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                         ?? throw new KeyNotFoundException("Run lease was not found.");
-            ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.Fence);
+            ValidateLeaseReference(
+                lease,
+                request.RunnerId,
+                request.LeaseInstanceId ?? request.InstanceId,
+                request.LeaseId,
+                request.Fence);
             if (lease.ExpiresAt <= UtcNow)
             {
                 throw new TaskServerConflictException(
@@ -333,12 +338,29 @@ public sealed partial class TaskServerStore
                 connection, transaction, request.RunnerId, request.InstanceId, request.ReportSequence, ct);
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                         ?? throw new KeyNotFoundException("Run lease was not found.");
-            ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.RunFence);
+            ValidateLeaseReference(
+                lease,
+                request.RunnerId,
+                request.LeaseInstanceId ?? request.InstanceId,
+                request.LeaseId,
+                request.RunFence);
             await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
 
             var step = await ReadPostStepAsync(connection, transaction, runId, stepExecutionId, ct);
             if (!string.Equals(step.EligibleRunnerId, request.RunnerId, StringComparison.Ordinal))
                 throw new TaskServerConflictException("post-step-host-mismatch", "The post-step is bound to another host.");
+            if (step.Status == "completed")
+            {
+                var replayKey = Convert.ToString(await ScalarAsync(connection, """
+                    SELECT claim_idempotency_key FROM post_step_executions WHERE id = $step;
+                    """, ct, transaction, ("$step", stepExecutionId)), CultureInfo.InvariantCulture);
+                if (replayKey == request.IdempotencyKey)
+                {
+                    response = new PostStepClaimResponse("completed", step, request.RunFence);
+                    return;
+                }
+                throw new TaskServerConflictException("post-step-already-completed", "The post-step is already complete.");
+            }
             if (step.Status == "running")
             {
                 var replayKey = Convert.ToString(await ScalarAsync(connection, """
@@ -393,7 +415,12 @@ public sealed partial class TaskServerStore
             await ValidateRunnerHostAsync(connection, transaction, request.RunnerId, request.HostId, ct);
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                         ?? throw new KeyNotFoundException("Run lease was not found.");
-            ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.RunFence);
+            ValidateLeaseReference(
+                lease,
+                request.RunnerId,
+                request.LeaseInstanceId ?? request.InstanceId,
+                request.LeaseId,
+                request.RunFence);
             await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
             var step = await ReadPostStepAsync(connection, transaction, runId, stepExecutionId, ct);
 
@@ -455,6 +482,24 @@ public sealed partial class TaskServerStore
     {
         var expiresAt = Iso(UtcNow.Add(PermitLifetime));
         await ExecuteAsync(connection, """
+            UPDATE work_permits
+               SET id = 'prm_' || lower(hex(randomblob(16))),
+                   policy_version = $policy,
+                   expires_at = $expires,
+                   status = 'available',
+                   accepted_runner_id = NULL,
+                   accepted_instance_id = NULL,
+                   accepted_at = NULL,
+                   accept_idempotency_key = NULL,
+                   run_id = NULL
+             WHERE status IN ('completed', 'released', 'fenced')
+               AND EXISTS (
+                   SELECT 1 FROM tasks t
+                    WHERE t.id = work_permits.task_id AND t.state = '2-ready')
+               AND NOT EXISTS (
+                   SELECT 1 FROM leases l
+                    WHERE l.task_id = work_permits.task_id
+                      AND l.status IN ('active', 'process-unknown'));
             INSERT INTO work_permits(id, task_id, policy_version, expires_at, status)
             SELECT 'prm_' || lower(hex(randomblob(16))), t.id, $policy, $expires, 'available'
               FROM tasks t
@@ -464,7 +509,7 @@ public sealed partial class TaskServerStore
                     WHERE l.task_id = t.id AND l.status IN ('active', 'process-unknown'))
                AND NOT EXISTS (
                    SELECT 1 FROM work_permits p
-                    WHERE p.task_id = t.id AND p.status IN ('available', 'accepted'));
+                    WHERE p.task_id = t.id);
             UPDATE work_permits
                SET expires_at = $expires
              WHERE status = 'available' AND expires_at <= $now;
