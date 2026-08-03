@@ -23,7 +23,7 @@ public sealed class RemoteReviewDaemon
     {
         var state = new ReviewStateStore(_options.StateDir);
         var persistedAtStartup = state.LoadAll();
-        var active = new List<(Task<int> Run, string AttemptId)>();
+        var active = new List<(Task<int> Run, string AttemptId, string ResourceNamespace)>();
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var telemetry = new HostTelemetrySampler();
         HostTelemetrySample? latestTelemetry = null;
@@ -67,13 +67,17 @@ public sealed class RemoteReviewDaemon
                     $"persisted review accepted attempt={slot.AttemptId} " +
                     $"fence={slot.Claim.Lease!.Fence} " +
                     $"verification={(completed ? "durable result ready" : verification)}");
-                active.Add((executor.ReattachAsync(slot, shutdown), slot.AttemptId));
+                active.Add((
+                    executor.ReattachAsync(slot, shutdown),
+                    slot.AttemptId,
+                    slot.Claim.Lease!.ResourceNamespace));
             }
             else
             {
                 active.Add((
                     executor.ReportNonAdoptableAsync(slot, verification, shutdown),
-                    slot.AttemptId));
+                    slot.AttemptId,
+                    slot.Claim.Lease!.ResourceNamespace));
             }
         }
         if (active.Count > 0)
@@ -104,6 +108,7 @@ public sealed class RemoteReviewDaemon
 
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         var admissionClosed = false;
+        var nextRetentionSweep = DateTime.MinValue;
         var consecutiveFaults = 0;
         while (!shutdown.IsCancellationRequested)
         {
@@ -128,6 +133,24 @@ public sealed class RemoteReviewDaemon
 
             try
             {
+                if (DateTime.UtcNow >= nextRetentionSweep)
+                {
+                    try
+                    {
+                        ReviewWorkspaceRetention.Sweep(
+                            _options.ReviewWorkDir,
+                            active.Select(slot => slot.ResourceNamespace),
+                            DateTime.UtcNow,
+                            _log);
+                    }
+                    catch (Exception exception)
+                    {
+                        _log(
+                            "review workspace retention sweep failed; " +
+                            $"retrying next interval: {exception.Message}");
+                    }
+                    nextRetentionSweep = DateTime.UtcNow.AddHours(1);
+                }
                 var observedServer = false;
                 var admissionTelemetry = TakeTelemetry(force: true);
                 if (DateTime.UtcNow >= nextCapabilityAdvertisement)
@@ -220,13 +243,15 @@ public sealed class RemoteReviewDaemon
                                         stale,
                                         adoptionReason,
                                         shutdown),
-                                    claim.Attempt.AttemptId));
+                                    claim.Attempt.AttemptId,
+                                    claim.Lease!.ResourceNamespace));
                             }
                             else
                             {
                                 active.Add((
                                     executor.RunClaimedAsync(claim, shutdown),
-                                    claim.Attempt.AttemptId));
+                                    claim.Attempt.AttemptId,
+                                    claim.Lease!.ResourceNamespace));
                             }
                         }
                     }

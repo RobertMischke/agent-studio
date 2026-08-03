@@ -136,6 +136,12 @@ pipeline view.
   checkpoints, and terminal evidence. A replacement daemon adopts only a
   positively proven process generation and submits the same attempt through the
   deterministic `review-report:<attempt>:<fence>` key.
+- `runner/ReviewWorkspaceRetention.cs`: review workspace retention. The
+  executor removes an attempt workspace immediately only after the Task Server
+  accepts its terminal report. The daemon also sweeps inactive attempt
+  directories older than 72 hours once per hour. Active resource namespaces,
+  the reusable `.baseline-cache`, reparse points, and unrelated directories are
+  never deletion candidates.
 - `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
   and local deliveries after a backend restart when the durable Human Review
   `integrating` phase landed but the queued merge did not complete. The channel

@@ -186,6 +186,47 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public void Retention_removes_only_expired_inactive_attempt_workspaces()
+    {
+        var now = new DateTime(2026, 8, 2, 18, 0, 0, DateTimeKind.Utc);
+        Directory.CreateDirectory(_reviewRoot);
+        var expired = CreateReviewDirectory("review-expired-f1", now.AddHours(-73));
+        var active = CreateReviewDirectory("review-active-f2", now.AddDays(-8));
+        var young = CreateReviewDirectory("review-young-f1", now.AddHours(-71));
+        var baseline = CreateReviewDirectory(".baseline-cache", now.AddDays(-30));
+        var unrelated = CreateReviewDirectory("operator-notes", now.AddDays(-30));
+
+        var result = ReviewWorkspaceRetention.Sweep(
+            _reviewRoot,
+            ["review-active-f2"],
+            now,
+            _ => { });
+
+        Assert.False(Directory.Exists(expired));
+        Assert.True(Directory.Exists(active));
+        Assert.True(Directory.Exists(young));
+        Assert.True(Directory.Exists(baseline));
+        Assert.True(Directory.Exists(unrelated));
+        Assert.Equal(new ReviewWorkspaceRetentionResult(3, 1, 1, 1, 1), result);
+    }
+
+    [Fact]
+    public void Retention_preserves_attempt_at_exact_72_hour_boundary()
+    {
+        var now = new DateTime(2026, 8, 2, 18, 0, 0, DateTimeKind.Utc);
+        Directory.CreateDirectory(_reviewRoot);
+        var boundary = CreateReviewDirectory(
+            "review-boundary-f1",
+            now - ReviewWorkspaceRetention.MaximumOrphanAge);
+
+        var result = ReviewWorkspaceRetention.Sweep(_reviewRoot, [], now, _ => { });
+
+        Assert.True(Directory.Exists(boundary));
+        Assert.Equal(0, result.Removed);
+        Assert.Equal(1, result.YoungSkipped);
+    }
+
+    [Fact]
     public async Task Wrong_sha_fails_before_any_review_command()
     {
         await SeedOriginAsync();
@@ -446,6 +487,14 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             PosixShell.RequirePath(),
             ["-c", shell],
             CompareToBaseline: true);
+
+    private string CreateReviewDirectory(string name, DateTime lastWriteTimeUtc)
+    {
+        var path = Path.Combine(_reviewRoot, name);
+        Directory.CreateDirectory(path);
+        Directory.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
+        return path;
+    }
 
     private (RemoteReviewWorkspace Workspace, ReviewSubjectDto Subject) Workspace(
         string attemptId,
