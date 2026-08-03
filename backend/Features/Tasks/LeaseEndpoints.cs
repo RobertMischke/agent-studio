@@ -1058,6 +1058,10 @@ public static class LeaseEndpoints
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
+            // AGT-2220: set when the target repository actively contradicts the
+            // claimed delivery; suppresses both the review attempt and the
+            // auto-review lane move.
+            string? unverifiedDelivery = null;
             if (!isEpicPlanning && outcome is ("done" or "noop"))
             {
                 var reportedIntegrationBranch =
@@ -1114,6 +1118,23 @@ public static class LeaseEndpoints
                         deliveryBranch,
                         attributionWarning);
                 }
+
+                // AGT-2220: a delivery the repository actively contradicts must
+                // not ride on into 4-auto-review as if it were clean. That is
+                // exactly what happened to AGT-2220 itself on 28.07.: origin held
+                // 744deb89 while the completion claimed f538f896, the mismatch
+                // was logged as a warning only, commits[] stayed empty - and the
+                // card was stamped Done anyway. A *disproved* delivery now routes
+                // to the honest escalated state. "Could not check" (no origin, no
+                // branch, no SHA) is deliberately NOT treated as disproof - it is
+                // recorded, never upgraded to proof.
+                if (deliveryRange is not null && deliveryRange.IsDisproved)
+                {
+                    unverifiedDelivery = attributionWarning;
+                    targetState = TaskStates.Escalated;
+                    mutations.AddJobTag(
+                        task.Id, OutOfBandStampPolicy.UnverifiedDeliveryTag, task.WatchPath);
+                }
             }
 
             ReviewAttemptDto? reviewAttempt = null;
@@ -1123,8 +1144,13 @@ public static class LeaseEndpoints
             // deterministically by the lightweight report pipeline
             // (ReviewDecisionOrchestrator.ProcessReportOnlyDoneAsync), so no
             // remote ReviewAttempt is minted for them.
+            // AGT-2220: no review subject is minted for a delivery the
+            // repository disproved - there is nothing materializable to review,
+            // and minting one is how AGT-2220 itself acquired a review subject
+            // pinned to a SHA that was never on its recorded ref.
             if (!isEpicPlanning
                 && outcome is ("done" or "noop")
+                && unverifiedDelivery is null
                 && !TaskModes.IsReportOnly(task.Mode))
             {
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
@@ -1458,7 +1484,14 @@ public static class LeaseEndpoints
 
             if (targetState == TaskStates.Escalated)
             {
-                var (category, reason) = RemoteEscalation(outcome, req.Reason);
+                // AGT-2220: a disproved delivery carries its own category and the
+                // git-level reason, so the card names what the repository holds
+                // instead of a generic agent-outcome text.
+                var (category, reason) = unverifiedDelivery is not null
+                    ? (HumanReviewEscalationCategories.UnverifiedDelivery,
+                        $"Delivery not verified against the target repository: {unverifiedDelivery} "
+                        + "No completion stamp was written (AGT-2220).")
+                    : RemoteEscalation(outcome, req.Reason);
                 var escalated = await humanReviewEscalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,

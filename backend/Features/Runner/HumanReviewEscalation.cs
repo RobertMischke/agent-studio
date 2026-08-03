@@ -49,6 +49,11 @@ public static class HumanReviewEscalationCategories
     /// rather than submitting a finished delivery for acceptance.</summary>
     public const string ExternalCompletionBlocked = "external-completion-blocked";
 
+    /// <summary>AGT-2220: a completion claim whose commits could not be proven
+    /// to exist in the target repository. The card is parked honestly instead of
+    /// being stamped completed.</summary>
+    public const string UnverifiedDelivery = "unverified-delivery";
+
     public const string WatchdogKill = "watchdog-kill";
     public const string PermissionBlocked = "permission-blocked";
     public const string EnvironmentBlocker = "environment-blocker";

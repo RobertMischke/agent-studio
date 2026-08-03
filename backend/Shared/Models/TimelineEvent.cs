@@ -246,6 +246,12 @@ public static class TimelineEventKinds
     /// </summary>
     public const string ExternalCompletion = "external_completion";
     /// <summary>
+    /// AGT-2220: a completion claim was refused because its commits could not be
+    /// proven against the target repository. Recorded so a refused phantom is
+    /// visible in the card's history rather than silently absent.
+    /// </summary>
+    public const string DeliveryUnverified = "delivery_unverified";
+    /// <summary>
     /// AGT-2202 compatibility event for a non-transactional caller that observed
     /// accepted work outside the integration branch. Transactional acceptance
     /// instead emits <see cref="IntegrationStarted"/>,
