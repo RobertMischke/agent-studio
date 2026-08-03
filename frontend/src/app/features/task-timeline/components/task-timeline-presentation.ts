@@ -41,6 +41,7 @@ const KIND_LABELS: Readonly<Record<string, string>> = {
   [TIMELINE_KIND.executionContext]: 'Execution context',
   [TIMELINE_KIND.taskSpawned]: 'Follow-up task spawned',
   [TIMELINE_KIND.externalCompletion]: 'Completed externally',
+  [TIMELINE_KIND.deliveryUnverified]: 'Delivery unverified - stamp refused',
   [TIMELINE_KIND.integrationPendingWarning]: 'Delivery not integrated',
   [TIMELINE_KIND.integrationRecoveryQueued]: 'Integration recovery queued',
 };

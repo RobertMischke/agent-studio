@@ -56,6 +56,7 @@ export const TIMELINE_KIND = {
   executionContext: 'execution_context',
   taskSpawned: 'task_spawned',
   externalCompletion: 'external_completion',
+  deliveryUnverified: 'delivery_unverified',
   integrationPendingWarning: 'integration_pending_warning',
   integrationRecoveryQueued: 'integration_recovery_queued',
 } as const;

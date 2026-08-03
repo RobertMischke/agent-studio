@@ -157,6 +157,8 @@ export class TaskTimelinePaneComponent {
     switch (kind) {
       case TIMELINE_KIND.orchestratorVerdictAccepted:    return 'ok';
       case TIMELINE_KIND.externalCompletion:             return 'ok';
+      // AGT-2220: a refused stamp is a finding, not a success.
+      case TIMELINE_KIND.deliveryUnverified:             return 'danger';
       case TIMELINE_KIND.steerTimeoutResolved:           return 'neutral';
       case TIMELINE_KIND.qualityLoopReopened:            return 'warn';
       case TIMELINE_KIND.orchestratorEscalated:          return 'danger';
