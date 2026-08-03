@@ -61,6 +61,22 @@ public sealed class ReviewSlotAdmissionPolicyTests
         Assert.Contains("ceiling", decision.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void High_load_closes_only_fresh_admission_while_a_recovered_slot_remains_active()
+    {
+        const int recoveredSlots = 1;
+
+        var decision = ReviewSlotAdmissionPolicy.Decide(
+            Sample(load: 12, cores: 4, activeSlots: recoveredSlots),
+            activeSlots: recoveredSlots,
+            slotCeiling: 2,
+            maxLoadPerCore: 1.5);
+
+        Assert.False(decision.Admitted);
+        Assert.True(decision.ActiveSlotsContinue);
+        Assert.Contains("load/core", decision.Reason, StringComparison.Ordinal);
+    }
+
     private static HostTelemetrySample Sample(double? load, int cores, int activeSlots)
         => new(
             DateTime.UtcNow,

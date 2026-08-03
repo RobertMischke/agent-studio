@@ -74,7 +74,14 @@ public sealed record HostTelemetrySnapshotDto(
     int CpuCores,
     int ActiveSlots,
     long? DiskFreeBytes = null,
-    long? DiskTotalBytes = null);
+    long? DiskTotalBytes = null,
+    string TaskServerConnectionStatus = "unknown",
+    DateTime? TaskServerConnectionObservedAt = null,
+    DateTime? TaskServerConnectionFailureStartedAt = null,
+    int TaskServerConnectionConsecutiveFailures = 0,
+    DateTime? TaskServerConnectionEscalatedAt = null,
+    string? TaskServerConnectionLastError = null,
+    DateTime? TaskServerConnectionLastRecoveredAt = null);
 
 public sealed record CapabilityFailureRequest(
     string RunnerId,

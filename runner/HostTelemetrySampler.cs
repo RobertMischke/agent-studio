@@ -10,21 +10,32 @@ public sealed class HostTelemetrySampler
     private (long InPages, long OutPages, DateTime At)? _previousSwap;
     private DateTime _nextAt = DateTime.MinValue;
 
-    public HostTelemetrySample? SampleIfDue(int activeSlots)
+    public HostTelemetrySample? SampleIfDue(
+        int activeSlots,
+        TaskServerConnectivitySnapshot? connectivity = null,
+        bool force = false)
     {
         var now = DateTime.UtcNow;
-        if (now < _nextAt) return null;
-        return SampleNow(activeSlots, now);
+        if (!force && now < _nextAt) return null;
+        return SampleNow(activeSlots, connectivity, now);
     }
 
     /// <summary>Capture a fresh sample for a host-local admission decision.</summary>
-    public HostTelemetrySample SampleNow(int activeSlots)
-        => SampleNow(activeSlots, DateTime.UtcNow);
+    public HostTelemetrySample SampleNow(
+        int activeSlots,
+        TaskServerConnectivitySnapshot? connectivity = null)
+        => SampleNow(activeSlots, connectivity, DateTime.UtcNow);
 
-    private HostTelemetrySample SampleNow(int activeSlots, DateTime now)
+    private HostTelemetrySample SampleNow(
+        int activeSlots,
+        TaskServerConnectivitySnapshot? connectivity,
+        DateTime now)
     {
         _nextAt = now.AddSeconds(30);
-        return OperatingSystem.IsLinux() ? SampleLinux(now, activeSlots) : SampleWindows(now, activeSlots);
+        var sample = OperatingSystem.IsLinux()
+            ? SampleLinux(now, activeSlots)
+            : SampleWindows(now, activeSlots);
+        return WithConnectivity(sample, connectivity);
     }
 
     private HostTelemetrySample SampleLinux(DateTime now, int activeSlots)
@@ -102,6 +113,23 @@ public sealed class HostTelemetrySampler
 
     private static long ParseKb(string value) => long.Parse(value.Trim().Split(' ')[0], CultureInfo.InvariantCulture) * 1024;
     private static double ParseDouble(string value) => double.Parse(value, CultureInfo.InvariantCulture);
+
+    private static HostTelemetrySample WithConnectivity(
+        HostTelemetrySample sample,
+        TaskServerConnectivitySnapshot? connectivity)
+        => connectivity is null
+            ? sample
+            : sample with
+            {
+                TaskServerConnectionStatus = connectivity.Status,
+                TaskServerConnectionObservedAt = connectivity.ObservedAt,
+                TaskServerConnectionFailureStartedAt = connectivity.FailureStartedAt,
+                TaskServerConnectionConsecutiveFailures = connectivity.ConsecutiveFailures,
+                TaskServerConnectionEscalatedAt = connectivity.EscalatedAt,
+                TaskServerConnectionLastError = connectivity.LastError,
+                TaskServerConnectionLastRecoveredAt = connectivity.LastRecoveredAt,
+            };
+
     private sealed record CpuCounters(ulong Total, ulong Idle, ulong Steal, ulong IoWait);
 
     [StructLayout(LayoutKind.Sequential)] private struct FileTime { public uint Low, High; public ulong Value => ((ulong)High << 32) | Low; }

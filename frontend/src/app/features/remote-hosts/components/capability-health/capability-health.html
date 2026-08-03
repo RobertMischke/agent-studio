@@ -1,5 +1,21 @@
 @let h = host();
 
+@if (routeStatus() !== 'unknown') {
+  <section class="route" [attr.data-tone]="routeStatus()" data-testid="remote-host-task-server-route-state">
+    <strong>Task Server route {{ routeStatus() }}</strong>
+    <span>{{ routeDetail() }}</span>
+    @if (h.taskServerConnection?.failureStartedAt) {
+      <span>
+        Failure started {{ h.taskServerConnection?.failureStartedAt | date:'short' }}
+        · {{ h.taskServerConnection?.consecutiveFailures }} failed requests
+      </span>
+    }
+    @if (h.taskServerConnection?.lastRecoveredAt) {
+      <span>Last recovered {{ h.taskServerConnection?.lastRecoveredAt | date:'short' }}</span>
+    }
+  </section>
+}
+
 @if (h.hostAdmission?.automaticDrainAt || h.hostAdmission?.admissionState === 'automatic-draining') {
   <section class="admission" data-testid="remote-host-admission">
     <strong>Automatic whole-host drain</strong>

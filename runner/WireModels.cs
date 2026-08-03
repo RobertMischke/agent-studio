@@ -178,7 +178,14 @@ public sealed record HostTelemetrySample(
     double? CpuStealPercent,
     double? IoWaitPercent,
     int CpuCores,
-    int ActiveSlots);
+    int ActiveSlots,
+    string TaskServerConnectionStatus = TaskServerConnectivityStates.Unknown,
+    DateTime? TaskServerConnectionObservedAt = null,
+    DateTime? TaskServerConnectionFailureStartedAt = null,
+    int TaskServerConnectionConsecutiveFailures = 0,
+    DateTime? TaskServerConnectionEscalatedAt = null,
+    string? TaskServerConnectionLastError = null,
+    DateTime? TaskServerConnectionLastRecoveredAt = null);
 
 public enum RunnerClaimStatus { Claimed, Empty, PreflightRequired, PreflightFailed, Invalid }
 

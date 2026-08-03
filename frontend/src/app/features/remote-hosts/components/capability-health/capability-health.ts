@@ -1,9 +1,7 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import type {
-  RemoteHost,
-  RemoteHostCapabilityHealth,
-} from '../../models/remote-host.model';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { taskServerRouteDetail, taskServerRouteStatus } from '../../models/remote-host.model';
+import type { RemoteHost, RemoteHostCapabilityHealth } from '../../models/remote-host.model';
 
 @Component({
   selector: 'app-capability-health',
@@ -15,6 +13,8 @@ import type {
 })
 export class CapabilityHealthComponent {
   readonly host = input.required<RemoteHost>();
+  readonly routeStatus = computed(() => taskServerRouteStatus(this.host()));
+  readonly routeDetail = computed(() => taskServerRouteDetail(this.host()));
 
   tone(capability: RemoteHostCapabilityHealth): 'ok' | 'warn' | 'error' | 'idle' {
     if (!capability.isFresh) return 'error';

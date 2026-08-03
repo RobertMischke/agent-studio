@@ -55,6 +55,37 @@ public sealed class HostTelemetryStoreTests : IDisposable
     }
 
     [Fact]
+    public void Compact_preserves_the_latest_task_server_route_state_in_each_bucket()
+    {
+        var now = DateTime.UtcNow;
+        var fiveMinuteTicks = TimeSpan.FromMinutes(5).Ticks;
+        var bucket = new DateTime(
+            now.AddHours(-72).Ticks - now.AddHours(-72).Ticks % fiveMinuteTicks,
+            DateTimeKind.Utc);
+        var source = new List<HostTelemetrySample>
+        {
+            Sample(bucket.AddMinutes(1)) with
+            {
+                TaskServerConnectionStatus = "reachable",
+                TaskServerConnectionObservedAt = bucket.AddMinutes(1),
+            },
+            Sample(bucket.AddMinutes(2)) with
+            {
+                TaskServerConnectionStatus = "unreachable",
+                TaskServerConnectionObservedAt = bucket.AddMinutes(2),
+                TaskServerConnectionFailureStartedAt = bucket.AddMinutes(1.5),
+                TaskServerConnectionConsecutiveFailures = 3,
+            },
+        };
+
+        var compacted = Assert.Single(HostTelemetryStore.Compact(source, now));
+
+        Assert.Equal("unreachable", compacted.TaskServerConnectionStatus);
+        Assert.Equal(3, compacted.TaskServerConnectionConsecutiveFailures);
+        Assert.Equal(bucket.AddMinutes(2), compacted.TaskServerConnectionObservedAt);
+    }
+
+    [Fact]
     public void Findings_CoalescesFlappingLoadAcrossShortSampleGaps()
     {
         var start = DateTime.UtcNow.AddMinutes(-5);
