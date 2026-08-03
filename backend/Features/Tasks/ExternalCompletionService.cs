@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Git;
 using AgentStudio.Pipeline;
 using Microsoft.Extensions.Configuration;
 
@@ -31,6 +32,7 @@ public sealed class ExternalCompletionService
     private readonly TimelineLog _timeline;
     private readonly WorkspaceArtifactCommitService _artifactCommits;
     private readonly HumanReviewEscalation _escalation;
+    private readonly GitService _git;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ExternalCompletionService> _logger;
 
@@ -41,6 +43,7 @@ public sealed class ExternalCompletionService
         TimelineLog timeline,
         WorkspaceArtifactCommitService artifactCommits,
         HumanReviewEscalation escalation,
+        GitService git,
         IConfiguration configuration,
         ILogger<ExternalCompletionService> logger)
     {
@@ -50,6 +53,7 @@ public sealed class ExternalCompletionService
         _timeline = timeline;
         _artifactCommits = artifactCommits;
         _escalation = escalation;
+        _git = git;
         _configuration = configuration;
         _logger = logger;
     }
@@ -88,13 +92,34 @@ public sealed class ExternalCompletionService
         var now = DateTime.UtcNow;
         var beforeFolder = info.FolderPath;
 
+        // AGT-2220 - the invariant gate. Before ANY evidence is written, the
+        // claimed delivery is re-verified against the target repository. The
+        // caller's prose ("the repository was verified at <ref>") is not proof:
+        // that exact sentence is what stamped the 11.07. phantom wave. A claim
+        // that cannot be proven never becomes a completion stamp.
+        DeliveryVerificationResult? verification = null;
+        if (!string.IsNullOrWhiteSpace(request.ResultSha))
+        {
+            verification = _git.VerifyDeliveredCommit(
+                _git.ResolveRepoRootForWatchPath(info.WatchPath),
+                request.ResultRef,
+                request.ResultSha);
+        }
+
+        var (decision, decisionReason) = OutOfBandStampPolicy.Decide(info.Mode, verification);
+        if (decision == OutOfBandStampDecision.RefuseUnverified)
+        {
+            return await RefuseUnverifiedAsync(
+                jobId, watchPath, info, request, source, summary, decisionReason, verification, now, ct);
+        }
+
         // §3 order: write the reconciled evidence into the current folder, then
         // move the lane LAST, then commit the workspace snapshot. Every write
         // is best-effort-logged but the endpoint treats a hard failure of the
         // canonical writes (status / deliverables / task.json) as fatal so the
         // caller is not told a half-reconciled card is done.
-        WriteDeliverables(beforeFolder, summary, source, now, request.Deliverables);
-        WriteStatus(beforeFolder, summary, source, now);
+        WriteDeliverables(beforeFolder, summary, source, now, request.Deliverables, decisionReason);
+        WriteStatus(beforeFolder, summary, source, now, decisionReason);
         WriteGateItems(beforeFolder, request.GateItems);
         _mutations.SetExternalCompletionOnFolder(beforeFolder, new ExternalCompletionInfo
         {
@@ -102,6 +127,16 @@ public sealed class ExternalCompletionService
             Summary = summary,
             CompletedAt = now,
         });
+
+        // A proven delivery also earns its commits[]: the attribution runs
+        // through the same primitive as the live runner completion path
+        // (InspectRemoteDeliveryCommitRange + RemoteCommitAttributionGuard), so
+        // an out-of-band stamp and an in-process one record identical evidence.
+        if (verification?.IsVerified == true)
+        {
+            AttributeVerifiedDelivery(info, beforeFolder, request, verification, source);
+            _mutations.AddJobTag(jobId, OutOfBandStampPolicy.VerifiedDeliveryTag, watchPath);
+        }
         TerminalizeLifecycle(beforeFolder, targetState, source, now);
 
         // Append the external ingest entry to the unified timeline BEFORE the
@@ -117,6 +152,11 @@ public sealed class ExternalCompletionService
             {
                 ["source"] = source,
                 ["targetState"] = targetState,
+                ["verification"] = (verification?.Status ?? DeliveryVerificationStatus.NotVerifiable)
+                    .ToString(),
+                ["verificationNote"] = decisionReason,
+                ["verifiedSha"] = verification?.ClaimedSha ?? string.Empty,
+                ["verifiedRef"] = verification?.GitRef ?? string.Empty,
             });
 
         var moveCause = string.IsNullOrWhiteSpace(actor) ? TimelineActors.External : actor;
@@ -171,6 +211,186 @@ public sealed class ExternalCompletionService
             JobId: jobId,
             TargetState: targetState,
             EvidenceCommitSha: commit.DidCommit ? commit.Sha : null);
+    }
+
+    /// <summary>
+    /// AGT-2220 - the honest state. A completion claim without repository proof
+    /// does NOT become "Completed out-of-band". Instead the card keeps an
+    /// explicit, board-visible <c>unverified-delivery</c> record: what was
+    /// claimed, what the repository actually holds, and why the stamp was
+    /// refused. Nothing here writes <c>externalCompletion</c>, terminalizes the
+    /// lifecycle, or touches <c>commits[]</c> - an unproven delivery leaves no
+    /// trace that could later be mistaken for evidence.
+    /// </summary>
+    private async Task<ExternalCompletionOutcome> RefuseUnverifiedAsync(
+        string jobId,
+        string? watchPath,
+        TaskInfo info,
+        ExternalCompletionRequest request,
+        string source,
+        string summary,
+        string reason,
+        DeliveryVerificationResult? verification,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var folder = info.FolderPath;
+        WriteUnverifiedDeliveryReport(folder, summary, source, reason, request, verification, now);
+        WriteGateItems(folder, request.GateItems);
+        _mutations.AddJobTag(jobId, OutOfBandStampPolicy.UnverifiedDeliveryTag, watchPath);
+
+        _timeline.Append(
+            folder,
+            TimelineEventKinds.DeliveryUnverified,
+            TimelineActors.External,
+            summary: $"Completion stamp refused: delivery from {source} is unverified",
+            payloadRef: "results/unverified-delivery.md",
+            details: new Dictionary<string, string>
+            {
+                ["source"] = source,
+                ["reason"] = reason,
+                ["verification"] = (verification?.Status ?? DeliveryVerificationStatus.NotVerifiable)
+                    .ToString(),
+                ["claimedSha"] = verification?.ClaimedSha ?? request.ResultSha ?? string.Empty,
+                ["claimedRef"] = verification?.GitRef ?? request.ResultRef ?? string.Empty,
+                ["repositorySha"] = verification?.ResolvedRefSha ?? string.Empty,
+            });
+
+        _logger.LogWarning(
+            "external-completion-refused-unverified project={Project} job={JobId} source={Source} "
+            + "verification={Verification} claimedSha={ClaimedSha} claimedRef={ClaimedRef} repositorySha={RepositorySha}",
+            info.ProjectName, jobId, source,
+            verification?.Status ?? DeliveryVerificationStatus.NotVerifiable,
+            verification?.ClaimedSha ?? request.ResultSha ?? "",
+            verification?.GitRef ?? request.ResultRef ?? "",
+            verification?.ResolvedRefSha ?? "");
+
+        var escalated = await _escalation.EscalateAsync(
+            jobId,
+            watchPath ?? info.WatchPath,
+            info.ProjectName,
+            HumanReviewEscalationCategories.UnverifiedDelivery,
+            reason,
+            ct);
+        if (escalated.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "external-completion-refused-unverified-move-failed job={JobId} status={Status} message={Message}",
+                jobId, escalated.Status, escalated.Message);
+        }
+
+        return new ExternalCompletionOutcome(
+            ExternalCompletionStatus.UnverifiedDelivery,
+            reason,
+            jobId,
+            TargetState: escalated.Status == MoveJobStatus.Success ? TaskStates.Escalated : info.State);
+    }
+
+    /// <summary>
+    /// Records the proven delivery as <c>commits[]</c> using the same range
+    /// inspection and attribution guard the in-process runner completion uses,
+    /// so a verified out-of-band stamp is evidence-equivalent to a normal one.
+    /// Best-effort: the stamp itself already rests on
+    /// <see cref="GitService.VerifyDeliveredCommit"/>.
+    /// </summary>
+    private void AttributeVerifiedDelivery(
+        TaskInfo info,
+        string folderPath,
+        ExternalCompletionRequest request,
+        DeliveryVerificationResult verification,
+        string source)
+    {
+        try
+        {
+            var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath);
+            if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(verification.GitRef))
+                return;
+
+            var range = _git.InspectRemoteDeliveryCommitRange(
+                repoRoot, verification.GitRef!, verification.ClaimedSha!, info.IntegrationBranch);
+            if (!range.Success) return;
+
+            var attribution = RemoteCommitAttributionGuard.Attribute(
+                info.Key ?? info.Id, verification.GitRef!, range.Commits);
+            _mutations.SetRunIntegrationBranchOnFolder(folderPath, range.IntegrationBranch!);
+            _mutations.SetRemoteCommitAttributionOnFolder(
+                folderPath,
+                runAttemptId: $"external:{source}",
+                runnerId: source,
+                resultSha: verification.ClaimedSha!,
+                attributed: attribution.Commits);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "external-completion: verified delivery could not be attributed for {Folder}", folderPath);
+        }
+    }
+
+    /// <summary>
+    /// Writes <c>results/unverified-delivery.md</c> plus a matching
+    /// <c>status.md</c>: the refusal is documented as a first-class result, not
+    /// as an absence.
+    /// </summary>
+    private void WriteUnverifiedDeliveryReport(
+        string folderPath,
+        string summary,
+        string source,
+        string reason,
+        ExternalCompletionRequest request,
+        DeliveryVerificationResult? verification,
+        DateTime now)
+    {
+        try
+        {
+            var resultsDir = TaskPaths.ResultsDir(folderPath);
+            Directory.CreateDirectory(resultsDir);
+
+            var sb = new StringBuilder();
+            sb.Append("# Unverified delivery - completion stamp refused\n\n");
+            sb.Append("- Result: **Unverified delivery** (kein Completed-Stempel)\n");
+            sb.Append("- Gemeldet von: ").Append(source).Append('\n');
+            sb.Append("- Geprueft am: ")
+              .Append(now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))
+              .Append("\n\n");
+            sb.Append("## Warum kein Stempel\n\n").Append(reason).Append("\n\n");
+            sb.Append("## Anspruch\n\n");
+            sb.Append("- Behaupteter Commit: `")
+              .Append(string.IsNullOrWhiteSpace(request.ResultSha) ? "(keiner)" : request.ResultSha)
+              .Append("`\n");
+            sb.Append("- Behaupteter Ref: `")
+              .Append(string.IsNullOrWhiteSpace(request.ResultRef) ? "(keiner)" : request.ResultRef)
+              .Append("`\n");
+            sb.Append("- Zielrepo haelt dort: `")
+              .Append(string.IsNullOrWhiteSpace(verification?.ResolvedRefSha)
+                  ? "(nicht aufloesbar)"
+                  : verification!.ResolvedRefSha)
+              .Append("`\n");
+            sb.Append("- Verifikationsverdikt: `")
+              .Append(verification?.Status ?? DeliveryVerificationStatus.NotVerifiable)
+              .Append("`\n\n");
+            sb.Append("## Gemeldete Zusammenfassung (unbestaetigt)\n\n").Append(summary).Append("\n\n");
+            sb.Append("## Naechster Schritt\n\n");
+            sb.Append("Entweder die Arbeit wirklich ins Zielrepo pushen und die Completion mit dem ")
+              .Append("tatsaechlichen SHA erneut melden, oder die Karte bewusst neu schneiden. ")
+              .Append("Ein Stempel ohne Repo-Nachweis ist ausgeschlossen (AGT-2220).\n");
+
+            File.WriteAllText(
+                Path.Combine(resultsDir, "unverified-delivery.md"), sb.ToString(), Encoding.UTF8);
+
+            var status = new StringBuilder();
+            status.Append("# Status\n\n");
+            status.Append("- Result: Unverified delivery - completion stamp refused (")
+                  .Append(source).Append(")\n\n");
+            status.Append(reason).Append("\n\n");
+            status.Append("- Details in `results/unverified-delivery.md`.\n");
+            File.WriteAllText(Path.Combine(folderPath, "status.md"), status.ToString(), Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "external-completion: failed to write unverified-delivery report for {Folder}", folderPath);
+        }
     }
 
     private static string ExternalEscalationCategory(IReadOnlyList<string>? gateItems)
@@ -230,7 +450,8 @@ public sealed class ExternalCompletionService
         string summary,
         string source,
         DateTime now,
-        IReadOnlyList<ExternalDeliverable>? deliverables)
+        IReadOnlyList<ExternalDeliverable>? deliverables,
+        string verificationNote)
     {
         try
         {
@@ -270,6 +491,8 @@ public sealed class ExternalCompletionService
             sb.Append("- Recorded at ")
               .Append(now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))
               .Append('\n');
+            // AGT-2220: every stamp names how it was proven, not just that it happened.
+            sb.Append("- ").Append(verificationNote).Append('\n');
             sb.Append("- This reconciliation was written by the external-completion endpoint; ")
               .Append("files under `results/` that predate it are the dead run's drafts.\n");
 
@@ -288,7 +511,8 @@ public sealed class ExternalCompletionService
     /// whole point of the endpoint is to retire the "escalated / no summary"
     /// corpse.
     /// </summary>
-    private void WriteStatus(string folderPath, string summary, string source, DateTime now)
+    private void WriteStatus(
+        string folderPath, string summary, string source, DateTime now, string verificationNote)
     {
         try
         {
@@ -299,6 +523,7 @@ public sealed class ExternalCompletionService
             sb.Append("Executed out-of-band on ")
               .Append(now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
               .Append(" by ").Append(source).Append(".\n\n");
+            sb.Append("- ").Append(verificationNote).Append('\n');
             sb.Append("- See `results/deliverables.md` for what was delivered and where.\n");
             File.WriteAllText(Path.Combine(folderPath, "status.md"), sb.ToString(), Encoding.UTF8);
         }
