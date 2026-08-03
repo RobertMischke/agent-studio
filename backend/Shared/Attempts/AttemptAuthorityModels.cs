@@ -151,6 +151,25 @@ public sealed record RenewAttemptLeaseRequest(
     string ExecutorId,
     int? RequestedTtlSeconds = null);
 
+/// <summary>
+/// Named settlement contract for a fenced RunAttempt. Integration identity,
+/// executor ownership, and the immutable result envelope travel as one object
+/// so adding a field cannot shift a positional service call.
+/// </summary>
+public sealed record SettleRunAttemptRequest
+{
+    public required AttemptWriteReference Write { get; init; }
+    public required string Outcome { get; init; }
+    public string? ResultSha { get; init; }
+    public string? Reason { get; init; }
+    public string? ExecutorId { get; init; }
+    public string? LeaseId { get; init; }
+    public string? ExpectedTaskKey { get; init; }
+    public bool RequireResultSha { get; init; } = true;
+    public AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? ResultEnvelope { get; init; }
+    public string? ResultEnvelopeDigest { get; init; }
+}
+
 public sealed record SettleReviewAttemptRequest(
     AttemptWriteReference Write,
     string MaterializedResultSha,
