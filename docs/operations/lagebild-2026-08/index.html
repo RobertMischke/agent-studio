@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lagebild 03.08.2026 | Wo wir stehen</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  .s-count { fill: var(--ink-1); font: 700 22px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Lagebild · Agent Studio</p>
+  <h1>Wo wir stehen — 03.08.2026</h1>
+  <p class="lede">Ein Schnappschuss: welche Komponenten laufen und wo, wie weit die Umstellung der
+  Ausführungsschicht ist, wie die Karten heute früh durch die Strecke verteilt sind und welche
+  Großthemen offen stehen.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 03.08.2026, früher Morgen</span>
+    <span><b>Erhebung:</b> Board-Abfrage und Host-Inspektion gegen ca. 05:30 MESZ</span>
+    <span><b>Art:</b> Momentaufnahme, kein Zielbild</span>
+  </div>
+</header>
+
+<div class="box accent">
+  <h4>Wozu dieses Dokument — und wozu nicht</h4>
+  <p>Das Lagebild beantwortet „wo stehen wir gerade". Es ist bewusst ein <b>Schnappschuss mit Datum</b>
+  und veraltet planmäßig. Es ersetzt den Nordstern nicht: das Zielbild und der Weg dorthin stehen
+  weiterhin ausschließlich dort. Wo Zahlen genannt sind, stammen sie aus einer einzelnen Abfrage
+  dieses Morgens; sie sind Beobachtung, nicht Kennzahl.</p>
+</div>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#topologie">§1 Komponenten und wo sie laufen</a></li>
+    <li><a href="#ausfuehrung">§2 Ausführungs-Stand</a></li>
+    <li><a href="#fluss">§3 Kartenfluss heute früh</a></li>
+    <li><a href="#themen">§4 Offene Großthemen</a></li>
+    <li><a href="#weiter">§5 Weiterlesen</a></li>
+  </ul>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="topologie"><span class="no">§1</span>Komponenten und wo sie laufen</h2>
+<p class="stx stx-part"><b>Stand 03.08.:</b> Zwei Maschinen, eine Strecke. Der Task-Server ist heute
+Teil des lokalen Backends; die Auslagerung ist beschlossene Richtung, aber nicht gebaut.</p>
+<p>Der Betrieb verteilt sich auf die Windows-Arbeitsmaschine und einen Linux-Host. Beides hängt an
+einer einzigen Verbindung: einem SSH-Rückwärtstunnel, der auf dem Host einen Loopback-Port öffnet,
+hinter dem das lokale Backend steht. Es gibt keinen öffentlichen Listener — weder für das Backend noch
+für die Oberfläche.</p>
+
+<figure>
+<svg viewBox="0 0 1040 470" role="img" aria-label="Topologie: Windows-Maschine mit Backend und Angular, SSH-Rueckwaertstunnel, Linux-Host mit zwei Daemons">
+  <!-- Windows -->
+  <rect class="s-node" x="20" y="35" width="330" height="230" rx="10"/>
+  <text class="s-label" x="42" y="64">Windows-Arbeitsmaschine</text>
+  <text class="s-tiny" x="42" y="83">lokal, kein öffentlicher Listener</text>
+
+  <rect class="s-node2" x="42" y="98" width="286" height="56" rx="6"/>
+  <text class="s-label" x="56" y="120">Backend / Task-Server</text>
+  <text class="s-sub" x="56" y="141">127.0.0.1:5031 — Wahrheit, Lanes, Pipeline</text>
+
+  <rect class="s-node2" x="42" y="164" width="286" height="52" rx="6"/>
+  <text class="s-label" x="56" y="186">Agent Studio (Angular)</text>
+  <text class="s-sub" x="56" y="206">[::1]:4011 — Konsole und Read-Model</text>
+
+  <rect class="badge-warn" x="42" y="226" width="286" height="26" rx="6" stroke-width="1.2"/>
+  <text class="t-warn" x="56" y="244">Post-Steps laufen heute hier</text>
+
+  <!-- Tunnel -->
+  <rect class="s-node" x="390" y="90" width="260" height="120" rx="10"/>
+  <text class="s-label" x="410" y="118">SSH-Rückwärtstunnel</text>
+  <text class="s-sub" x="410" y="140">-R 15031 → 127.0.0.1:5031</text>
+  <text class="s-tiny" x="410" y="161">ServerAlive 30 s / 3 · ExitOnForwardFailure</text>
+  <text class="s-tiny" x="410" y="179">Keeper-Schleife wählt nach Abriss neu</text>
+  <text class="s-tiny" x="410" y="197">Probe prüft den Listener auf dem Host</text>
+
+  <path class="s-flow" d="M350 150 H390" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M650 150 H690" marker-end="url(#arr)"/>
+  <text class="t-bad" x="404" y="232">✗ einzige Strecke — reißt sie, steht die Remote-Ausführung</text>
+
+  <!-- Linux host -->
+  <rect class="s-node" x="690" y="35" width="330" height="230" rx="10"/>
+  <text class="s-label" x="712" y="64">agent-runner-01 (Linux)</text>
+  <text class="s-tiny" x="712" y="83">12 Kerne · codex und claude installiert</text>
+
+  <rect class="s-node2" x="712" y="98" width="286" height="52" rx="6"/>
+  <text class="s-label" x="726" y="120">Coding-Daemon</text>
+  <text class="s-sub" x="726" y="140">claimt Karten, spawnt Runs</text>
+
+  <rect class="s-node2" x="712" y="160" width="286" height="52" rx="6"/>
+  <text class="s-label" x="726" y="182">Review-Daemon</text>
+  <text class="s-sub" x="726" y="202">lastbewusste Slot-Admission</text>
+
+  <rect class="s-node2" x="712" y="222" width="286" height="30" rx="6"/>
+  <text class="s-tiny" x="726" y="242">erreicht den Task-Server nur über 127.0.0.1:15031</text>
+
+  <!-- Zielbild -->
+  <rect x="240" y="320" width="560" height="120" rx="10" fill="none" stroke="var(--develop)" stroke-dasharray="6 5" stroke-width="1.6"/>
+  <text class="s-label" x="264" y="348" fill="var(--develop)">Zielbild: eigenständiger Task-Server</text>
+  <text class="s-sub" x="264" y="372">Task-Server und Engine ziehen auf eine eigene Maschine;</text>
+  <text class="s-sub" x="264" y="392">Agent Studio bleibt bewusst lokal.</text>
+  <text class="s-sub" x="264" y="412">Der Host erreicht die Wahrheit dann ohne Tunnel —</text>
+  <text class="s-sub" x="264" y="432">Schlafen oder Neustart der Windows-Maschine unterbricht nichts mehr.</text>
+  <path class="s-flow" d="M185 265 C185 310 220 330 240 350" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Abb. 1: Topologie am 03.08.</b> Backend und Oberfläche laufen lokal auf Loopback-Adressen.
+Der Linux-Host erreicht den Task-Server ausschließlich durch den Rückwärtstunnel; dessen Keeper wählt
+nach einem Abriss selbsttätig neu. Das gestrichelte Feld ist die beschlossene, noch nicht gebaute
+Auslagerung — sie beseitigt genau diese Einzelstrecke.</figcaption>
+</figure>
+
+<div class="box warn">
+  <h4>Die Strecke ist der Engpass, nicht der Host</h4>
+  <p>Solange der Task-Server im lokalen Backend steckt, hängt die gesamte Remote-Ausführung an der
+  Verfügbarkeit der Windows-Maschine und an einer einzigen SSH-Verbindung. Der Keeper macht den Abriss
+  überlebbar, nicht folgenlos: während er neu wählt, findet kein Claim statt. Dieselbe Kopplung gilt
+  für das Post-Processing, das heute ebenfalls lokal läuft.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="ausfuehrung"><span class="no">§2</span>Ausführungs-Stand</h2>
+<p class="stx stx-ok"><b>Stand 03.08.:</b> Der Spawn läuft produktiv über die gemeinsame Library.
+Der alte Pfad ist noch da, aber nicht mehr der Normalfall.</p>
+<p>Die Umstellung der Ausführungsschicht war der eigentliche Fortschritt der letzten Tage. Runner und
+Backend rufen die CLI-Agenten nicht mehr jeweils selbst auf, sondern über eine gemeinsame,
+versionsgepinnte Bibliothek. Der Zweck ist Drift-Vermeidung: Container-, Mount- und Token-Logik soll
+genau einmal existieren, nicht zweimal ähnlich.</p>
+
+<table>
+  <thead><tr><th>Tranche</th><th>Inhalt</th><th>Karte</th><th>Stand</th></tr></thead>
+  <tbody>
+    <tr><td><b>T1</b></td><td>Runner-Daemon spawnt über die Library</td><td>AGT-2370</td>
+        <td><span class="pill done">integriert</span> auf <code>develop</code> und <code>main</code></td></tr>
+    <tr><td><b>T2</b></td><td>Lokale Ausführungsschicht des Backends nachgezogen</td><td>AGT-2371</td>
+        <td><span class="pill done">integriert</span> auf <code>develop</code></td></tr>
+    <tr><td><b>T3</b></td><td>Parity-Suite als Regressionsschutz</td><td>AGT-2372</td>
+        <td><span class="pill done">auf <code>develop</code></span> <span class="pill part">Badge <code>pending</code></span></td></tr>
+    <tr><td><b>T4</b></td><td>Legacy-Invocation-Pfade entfernen, ADR und Doku nachziehen</td><td>AGT-2373</td>
+        <td><span class="pill new">geparkt</span> im Backlog, hinter Freigabe</td></tr>
+  </tbody>
+</table>
+
+<p>Der Schalter ist eine Umgebungsvariable des Runners: <code>car</code> ist der Default, <code>legacy</code>
+bleibt als bewusster Rückfall wählbar. Der Legacy-Zweig trägt seinen Rückbauhinweis im Quelltext und
+verschwindet mit T4. Dass T4 geparkt ist, ist eine Entscheidung, kein Rückstand — der Abriss soll
+erst nach einem Freigabe-Protokoll erfolgen.</p>
+
+<div class="box">
+  <h4>Zwei Einschränkungen, die zum ehrlichen Bild gehören</h4>
+  <ul>
+    <li><b>T3 ist im Branch, aber nicht als Lieferung nachweisbar.</b> Die Parity-Suite liegt auf
+    <code>develop</code>; die Karte zeigt trotzdem <code>pending</code>, weil der hinterlegte Result-Ref
+    kein Vorfahr des Integrationsstandes ist. Verbindlich ist die Ancestry, nicht das Badge.</li>
+    <li><b>Die Parity-Suite ist eine Fixture-Baseline.</b> Sie pinnt aufgezeichnete CLI-Ströme gegen die
+    erwartete Klassifikation; sie lässt nicht beide Ausführungspfade gegeneinander laufen. Ein Teil der
+    vorgesehenen Fälle ist aufgezeichnet, aber noch nicht als Erwartung festgeschrieben.</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="fluss"><span class="no">§3</span>Kartenfluss heute früh</h2>
+<p class="stx stx-part"><b>Stand 03.08.:</b> 81 Karten über neun Projekte. Die Ausführung arbeitet;
+der Stau steht hinter der Ausführung, nicht davor.</p>
+<p>Die Verteilung über die Lanes ist die ehrlichste Einzelaussage über den Betrieb. Sie zeigt, dass
+weder Nachschub noch Ausführung das knappe Gut sind, sondern die menschliche Abnahme.</p>
+
+<figure>
+<svg viewBox="0 0 1040 400" role="img" aria-label="Kartenverteilung ueber die Lanes: Backlog 11, Vorbereitung 1, Bereit 8, Lauf 5, Auto-Review 4, Human-Review 19, Fertig 33">
+  <!-- Lanes -->
+  <g>
+    <rect class="s-node" x="20" y="70" width="122" height="110" rx="8"/>
+    <text class="s-count" x="52" y="118">11</text>
+    <text class="s-label" x="36" y="146">Backlog</text>
+    <text class="s-tiny" x="36" y="164">ungetaktet</text>
+  </g>
+  <g>
+    <rect class="s-node" x="152" y="70" width="100" height="110" rx="8"/>
+    <text class="s-count" x="192" y="118">1</text>
+    <text class="s-label" x="164" y="146">Vorberei-</text>
+    <text class="s-label" x="164" y="162">tung</text>
+  </g>
+  <g>
+    <rect class="badge-warn" x="262" y="70" width="110" height="110" rx="8" stroke-width="1.4"/>
+    <text class="s-count" x="304" y="118">8</text>
+    <text class="s-label" x="276" y="146">Bereit</text>
+    <text class="s-tiny" x="276" y="164">wartet auf Claim</text>
+  </g>
+  <g>
+    <rect class="badge-ok" x="382" y="70" width="110" height="110" rx="8" stroke-width="1.4"/>
+    <text class="s-count" x="424" y="118">5</text>
+    <text class="s-label" x="396" y="146">Lauf</text>
+    <text class="s-tiny" x="396" y="164">Agenten arbeiten</text>
+  </g>
+  <g>
+    <rect class="s-node" x="502" y="70" width="110" height="110" rx="8"/>
+    <text class="s-count" x="544" y="118">4</text>
+    <text class="s-label" x="516" y="146">Auto-</text>
+    <text class="s-label" x="516" y="162">Review</text>
+  </g>
+  <g>
+    <rect class="badge-bad" x="622" y="70" width="150" height="110" rx="8" stroke-width="1.6"/>
+    <text class="s-count" x="682" y="118">19</text>
+    <text class="s-label" x="638" y="146">Human-Review</text>
+    <text class="s-tiny" x="638" y="164">wartet auf Robert</text>
+  </g>
+  <g>
+    <rect class="s-node" x="782" y="70" width="150" height="110" rx="8"/>
+    <text class="s-count" x="842" y="118">33</text>
+    <text class="s-label" x="798" y="146">Fertig</text>
+    <text class="s-tiny" x="798" y="164">abgeschlossen</text>
+  </g>
+
+  <g class="s-flow">
+    <path d="M142 125 H152" marker-end="url(#arr2)"/>
+    <path d="M252 125 H262" marker-end="url(#arr2)"/>
+    <path d="M372 125 H382" marker-end="url(#arr2)"/>
+    <path d="M492 125 H502" marker-end="url(#arr2)"/>
+    <path d="M612 125 H622" marker-end="url(#arr2)"/>
+    <path d="M772 125 H782" marker-end="url(#arr2)"/>
+  </g>
+
+  <!-- Annotationen -->
+  <rect class="badge-warn" x="262" y="215" width="230" height="76" rx="8" stroke-width="1.2"/>
+  <text class="t-warn" x="278" y="238">⚠ 3 der 8 bereiten Karten sind</text>
+  <text class="s-sub" x="278" y="257">projektgebunden blockiert: die</text>
+  <text class="s-sub" x="278" y="275">Lieferprobe des Hosts scheitert.</text>
+  <path class="s-lane" d="M317 180 V215"/>
+
+  <rect class="badge-bad" x="560" y="215" width="280" height="76" rx="8" stroke-width="1.2"/>
+  <text class="t-bad" x="576" y="238">✗ Größter Einzelposten der Strecke.</text>
+  <text class="s-sub" x="576" y="257">Die Abnahme ist der Engpass, nicht</text>
+  <text class="s-sub" x="576" y="275">die Ausführung.</text>
+  <path class="s-lane" d="M697 180 V215"/>
+
+  <rect class="s-node2" x="20" y="320" width="912" height="58" rx="8"/>
+  <text class="s-sub" x="40" y="345">81 Karten über neun Projekte. Von den 48 noch nicht abgeschlossenen Karten warten 19 auf eine</text>
+  <text class="s-sub" x="40" y="365">menschliche Entscheidung — mehr als in Bereitschaft, Lauf und Auto-Review zusammen (17).</text>
+
+  <defs>
+    <marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Abb. 2: Lane-Verteilung am Morgen des 03.08.</b> Der Coding-Daemon hatte kurz zuvor fünf
+Karten übernommen — die Ausführung läuft. Der Rückstau liegt dahinter: 19 Karten stehen in der
+menschlichen Abnahme. Zahlen aus einer einzelnen Board-Abfrage; sie bewegen sich im Tagesverlauf.</figcaption>
+</figure>
+
+<h3>§3.1 Was der Host-Log dazu sagt</h3>
+<p>Zwei Beobachtungen aus den Daemon-Protokollen desselben Zeitraums ergänzen das Bild:</p>
+<ul>
+  <li><b>Der Coding-Daemon arbeitet, verweigert aber ein Projekt.</b> Er hat am Morgen mehrere Karten
+  übernommen. Für <i>ein</i> Projekt lehnt er den Claim seither fortlaufend ab: die Lieferprobe
+  scheitert, weil auf dem Host die Zugangsdaten für das Zielrepository fehlen. Die Ablehnung ist laut
+  und wiederholt sich im Sekundentakt — sie ist sichtbar, aber sie räumt sich nicht selbst weg. Die
+  betroffenen Karten dieses Projekts kommen nicht an die Reihe.</li>
+  <li><b>Die Review-Zulassung schwingt an der Lastschwelle.</b> Der Review-Daemon öffnet und schließt
+  seine Slots im Sekundenabstand, weil die Hostlast um die konfigurierte Schwelle pendelt — bei
+  gleichzeitig null aktiven Review-Slots. Die Drosselung ist korrekt; ihr Ergebnis ist, dass unter
+  Volllast durch Coding-Runs kaum Review stattfindet.</li>
+</ul>
+
+<div class="box">
+  <h4>Was hier bewusst offenbleibt</h4>
+  <p>Genau eine Karte mit dem <code>claude</code>-CLI lag am Morgen bereit und wurde nicht übernommen.
+  Naheliegend wäre der Schluss auf ein CLI-abhängiges Routing-Problem — belegen lässt er sich nicht:
+  <code>claude</code> ist auf dem Host installiert, die Maschine war zum fraglichen Zeitpunkt voll
+  ausgelastet, und die dokumentierte Claim-Ablehnung betraf ein anderes Projekt. Kapazität erklärt die
+  wartende Karte hinreichend. Die Frage bleibt offen, nicht beantwortet.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="themen"><span class="no">§4</span>Offene Großthemen</h2>
+<p class="stx stx-part"><b>Stand 03.08.:</b> Fünf Themen bestimmen die nächste Strecke. Vier haben eine
+Karte, eines ist eine Kapazitätsfrage ohne eigene Karte.</p>
+
+<table>
+  <thead><tr><th>Thema</th><th>Worum es geht</th><th>Bezug</th><th>Stand</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Task-Server auslagern</b></td>
+      <td>Task-Server und Engine auf eine eigene Maschine, Agent Studio bleibt lokal. Beseitigt die
+      Einzelstrecke aus §1 und entkoppelt die Remote-Ausführung vom Zustand der Windows-Maschine.
+      Das Konzept schneidet die Arbeit in sechs Lieferscheiben mit ausformulierten Freigabe-Gates.</td>
+      <td>Phase B des Konzepts <i>Remote Task Server with local Agent Studio</i></td>
+      <td><span class="pill queued">Konzept steht, Umsetzung nicht getaktet</span></td>
+    </tr>
+    <tr>
+      <td><b>Post-Processing vom lokalen Backend lösen</b></td>
+      <td>Die Nachbearbeitungsschritte laufen heute lokal. Sie müssen danach unterschieden werden, ob
+      sie auf dem Host laufen können oder ans Backend gebunden bleiben — sonst bleibt die
+      Remote-Ausführung auf halber Strecke stehen.</td>
+      <td>AGT-2470</td>
+      <td><span class="pill queued">in Human-Review, nicht integriert</span></td>
+    </tr>
+    <tr>
+      <td><b>Claim-Loop des Coding-Daemons</b></td>
+      <td>Nach dem Verlust eines abgelösten Workers kommt der Claim-Loop nicht mehr weiter. Der
+      Stillstand wurde heute früh beobachtet und als Karte festgehalten.</td>
+      <td>AGT-2488</td>
+      <td><span class="pill open">offen</span></td>
+    </tr>
+    <tr>
+      <td><b>Review-Resilienz</b></td>
+      <td>Ein Review, der mitten im Lauf die Strecke verliert, wird nicht fortgesetzt; der
+      Streckenzustand ist nicht durchgehend festgehalten.</td>
+      <td>AGT-2487</td>
+      <td><span class="pill queued">in Human-Review</span></td>
+    </tr>
+    <tr>
+      <td><b>Review-Durchsatz</b></td>
+      <td>Die lastbewusste Zulassung ist gebaut und wirkt. Sie schafft aber keine Kapazität: läuft der
+      Host durch Coding-Runs an der Schwelle, findet kaum Review statt. Das ist eine Frage von
+      Maschinenausstattung und Priorisierung, nicht von Logik.</td>
+      <td>Folge von AGT-2469, keine eigene Karte</td>
+      <td><span class="pill part">Mechanik erledigt, Kapazität offen</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>Ein wiederkehrendes Muster</h4>
+  <p>Drei der fünf Themen haben dieselbe Form: etwas ist <i>gebaut</i>, aber noch nicht
+  <i>durchgängig angeschlossen</i>. Die Slot-Admission drosselt, ohne Durchsatz zu schaffen. Die
+  serverseitige Host-Orchestrator-Ablage steht, das runnerseitige Gegenstück ist nicht verdrahtet. Die
+  Parity-Suite existiert, ist aber nur teilweise scharfgestellt. Das ist kein Vorwurf an die einzelnen
+  Lieferungen — es ist der Hinweis, dass die nächsten Schritte eher Anschlussarbeiten als Neubauten
+  sind.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="weiter"><span class="no">§5</span>Weiterlesen</h2>
+<p class="dim">Dieses Lagebild ist absichtlich flach. Die Tiefe steht woanders:</p>
+<table>
+  <thead><tr><th>Dokument</th><th>Pfad im Wiki-Baum</th><th>Wofür</th></tr></thead>
+  <tbody>
+    <tr><td><b>★ Nordstern</b></td><td><code>docs/operations/nordstern/</code></td>
+        <td>Der einzige Einstieg ins Zielbild: großer Bogen, die vier Phasen, die entschiedenen
+        Leitplanken und die Landkarte in alle Tiefen-Dokumente.</td></tr>
+    <tr><td><b>Verteilte Ausführung</b></td><td><code>docs/operations/haertung-verteilte-ausfuehrung/</code></td>
+        <td>Die Zielbild-Workbench zur Ausführungshärtung: Ergebnisverträge, Fencing, hermetische
+        Gates, Vorfallshistorie. Der Nachtrag §0 datiert den Ausführungs-Stand auf den 03.08. nach.</td></tr>
+    <tr><td><b>Brechpunkt-Glossar</b></td><td><code>docs/research/status-modell-brechpunkte-glossar.md</code></td>
+        <td>Die Begriffe dieses Dokuments — Lease, Fence, Attempt, Envelope, Salvage, Attribution —
+        mit Definition, Eigentümer und Codeanker, dazu der Brechpunkt-Katalog.</td></tr>
+  </tbody>
+</table>
+
+<p class="dim">Wird dieses Lagebild durch ein neueres abgelöst, ist es Historie und darf so gelesen
+werden: als das, was am 03.08.2026 belegbar war.</p>
+
+</main>
+</body>
+</html>
