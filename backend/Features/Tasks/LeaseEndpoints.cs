@@ -284,6 +284,67 @@ public static class LeaseEndpoints
                                 RunnerClaimStatus.Empty,
                                 Message: "The original claim task is no longer available.")));
                         }
+
+                        var replayLane = RemoteClaimReplayLanePolicy.Decide(replayedTask.State);
+                        if (replayLane.Action == RemoteClaimReplayLaneAction.Refuse)
+                        {
+                            return Results.Ok(WithCapacity(new RunnerClaimResponse(
+                                RunnerClaimStatus.Empty,
+                                Message: replayLane.Message)));
+                        }
+                        if (replayLane.Action == RemoteClaimReplayLaneAction.RepairToProgress)
+                        {
+                            var replayMove = await transitions.MoveAsync(
+                                replayedTask.Id,
+                                TaskStates.Progress,
+                                replayedTask.WatchPath,
+                                ct,
+                                cause: $"remote-runner-replay:{req.RunnerName.Trim()}",
+                                authorityWrite: new AttemptWriteReference(
+                                    replay.Lease.AttemptId!,
+                                    replay.Lease.FencingToken,
+                                    replay.Lease.AuthorityEpoch,
+                                    $"lane-claim:{requestedClaimKey}"),
+                                expectedSourceState: TaskStates.Ready);
+                            if (replayMove.Status != MoveJobStatus.Success)
+                            {
+                                // Do not release replayed authority here. The
+                                // original process may already be running, and
+                                // its live lease is the remaining admission
+                                // guard until a later replay converges the lane.
+                                logger.LogWarning(
+                                    "remote-runner-claim-replay-move-failed task={TaskKey} runner={Runner} status={Status} message={Message}",
+                                    replay.Lease.TaskKey,
+                                    req.RunnerName,
+                                    replayMove.Status,
+                                    replayMove.Message);
+                                return Results.Ok(WithCapacity(new RunnerClaimResponse(
+                                    RunnerClaimStatus.Empty,
+                                    Message: $"claim replay move refused: {replayMove.Status} {replayMove.Message}")));
+                            }
+
+                            logger.LogInformation(
+                                "remote-runner-claim-replay-lane-repaired task={TaskKey} runner={Runner} attempt={AttemptId} from={FromState} to={ToState}",
+                                replay.Lease.TaskKey,
+                                req.RunnerName,
+                                replay.Lease.AttemptId,
+                                TaskStates.Ready,
+                                TaskStates.Progress);
+                        }
+
+                        // Read back task truth after the convergence write. Do
+                        // not return Claimed while folder/task.json still expose
+                        // the card as claimable, even when acquire authority is
+                        // already durable.
+                        replayedTask = FindTask(scanner, replay.Lease.TaskKey);
+                        if (replayedTask is null
+                            || !string.Equals(replayedTask.State, TaskStates.Progress, StringComparison.Ordinal))
+                        {
+                            return Results.Ok(WithCapacity(new RunnerClaimResponse(
+                                RunnerClaimStatus.Empty,
+                                Message: "The original claim lane did not converge to Progress.")));
+                        }
+
                         var replayedProject = projects.FindByStorageLocation(replayedTask.WatchPath)
                                               ?? projects.FindByIdOrDisplayName(replayedTask.ProjectName);
                         var replayedRepository = RemoteProjectRepositoryResolver.Resolve(

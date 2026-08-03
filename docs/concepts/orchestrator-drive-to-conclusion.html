@@ -1623,6 +1623,27 @@
             diagnostic. Generic exit 125 behavior is unchanged.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-03</td>
+          <td><code>AGT-2459</code><br><span class="small">claim replay returned a Ready card with a live lease</span></td>
+          <td>
+            A daemon claim could persist its fenced RunAttempt and then lose the Ready-to-Progress lane move or HTTP
+            response. Retrying the same acquire delivery returned <code>Claimed</code> while folder and
+            <code>task.json</code> still exposed the card in Ready, reopening local or later remote pickup.
+          </td>
+          <td>
+            The replay path reconstructed the lease and run specification directly from acquire authority but did not
+            execute the lane side of the claim convergence unit. Only the first-delivery path moved the task and checked
+            the transition result.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> replay now accepts only Progress as converged, repairs Ready to
+            Progress with the original attempt, fence, authority epoch, and deterministic lane delivery key, then reads
+            task truth back before returning <code>Claimed</code>. Other lanes and failed repairs return no claim while
+            retaining the live lease guard. A crash-window endpoint regression proves folder and <code>task.json</code>
+            convergence and exactly one RunAttempt after a contender poll.
+          </td>
+        </tr>
       </tbody>
     </table>
 

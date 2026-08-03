@@ -306,6 +306,14 @@ checkout.**
    lease admission one predicate everywhere — local pickup must treat "current live lease
    exists" as claimed regardless of folder lane.
 
+   **Status (fixed by AGT-2459):** daemon acquire replay now classifies the current lane before
+   rebuilding the response. Ready is moved to Progress under the claim gate with the original
+   AttemptId, fence, authority epoch, and deterministic `lane-claim:<claim-key>` transition
+   key. Progress is accepted as already converged; every other lane or failed transition returns
+   no claim. The endpoint reads task truth back after the transition and cannot return `Claimed`
+   while the card remains Ready. Endpoint coverage reproduces the persisted-acquire/lost-move
+   crash boundary and proves that a contender cannot open a second RunAttempt after replay.
+
 **BP-09 · Settled run + lost lane move → requeue → second execution supersedes a good result.**
 1. Remote completion: `SettleRun` persists (attempt Completed, envelope stored), review attempt
    created — then the backend dies before the `AutoReview` lane move; card remains `Progress`.
@@ -562,8 +570,9 @@ peek to know the state has found a BP-04-class gap and should fail for that reas
    loss on the file that is supposed to be *the* truth.
 5. **BP-07** `integrationBranch` is trusted from the runner report — line contamination and
    salvage subjects on the `main` first-parent line (AGT-2423 shape).
-6. **BP-08** Claim replay answers `Claimed` without re-driving the lane: Ready+leased split
-   state, the opening move of every double-claim.
+6. **BP-08 (fixed by AGT-2459)** Claim replay now re-drives and verifies Ready to Progress with
+   the original authority tuple before answering `Claimed`; the Ready+leased split is closed on
+   replay.
 7. **BP-09** Settled-but-unmoved card gets requeued: a completed, enveloped result is superseded
    by a redundant second run.
 8. **BP-06** Gate-failure `ResetHard` on the shared checkout erases out-of-band commits made
