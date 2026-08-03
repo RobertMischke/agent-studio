@@ -217,6 +217,7 @@ builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
 builder.Services.AddSingleton<AgentStudio.Shared.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
+builder.Services.AddSingleton<CliOutputLogMaintenanceService>();
 // F45a: workspace / project registries + jobKey resolver. Additive layer;
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<AgentStudio.Registry.WorkspaceRegistry>();
@@ -830,6 +831,19 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("WikiAgentReadBackfill", ex);
+}
+
+// Cap legacy durable CLI logs after the one-time full-history wiki read
+// backfill but before CLI reattachment can append new output. The sweep also
+// ensures the sole rotation file stays outside workspace evidence commits.
+// It is idempotent and cheap once every active/rotated file is bounded.
+try
+{
+    app.Services.GetRequiredService<CliOutputLogMaintenanceService>().Run();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CliOutputLogMaintenance", ex);
 }
 
 // One-time 2026-07-28 repair of the five reviewed remote deliveries. The

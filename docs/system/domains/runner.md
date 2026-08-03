@@ -72,6 +72,11 @@ state.
   those values independently of optional CLI init frames or token summaries.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
+- `backend/Features/Tasks/CliOutputLogFile.cs` and
+  `CliOutputLogMaintenanceService.cs`: the single bounded write boundary for
+  local, remote, recovery, and orchestrator CLI-log output. The active log and
+  one ignored rotation are capped at 10 MiB each; startup migrates oversized
+  legacy logs before CLI reattachment and history readers run.
 - `backend/Features/Runner/OrchestratorChat.cs` and `OrchestratorRunner.cs`:
   side-sheet chat dispatch. This operating mode accepts the effective model and
   reasoning choice from the live Codex catalogue, executes through the Codex

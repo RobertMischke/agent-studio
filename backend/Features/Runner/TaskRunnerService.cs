@@ -1104,10 +1104,7 @@ public class TaskRunnerService : BackgroundService
             var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff");
             var oneLine = prompt.Replace("\r", " ").Replace("\n", " ").TrimEnd();
             var line = $"[{ts}] [user] {oneLine}";
-            var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
-                ? Environment.NewLine
-                : string.Empty;
-            File.AppendAllText(logPath, prefix + line + Environment.NewLine, System.Text.Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, line);
         }
         catch (Exception ex)
         {

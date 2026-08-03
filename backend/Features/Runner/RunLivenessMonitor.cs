@@ -500,10 +500,7 @@ public sealed class RunLivenessMonitor
                 $"run process lost in 3-progress ({silenceSeconds:F0}s no heartbeat)",
                 $"requeued to {TaskStates.Ready}",
                 sessionResumed: false);
-            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
-                File.AppendAllText(logPath, Environment.NewLine + line, Encoding.UTF8);
-            else
-                File.WriteAllText(logPath, line, Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, line);
         }
         catch (Exception ex)
         {

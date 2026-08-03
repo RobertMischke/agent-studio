@@ -261,11 +261,14 @@ Recommended `.gitignore` for the central `TaskRepository` evidence checkout:
 # Canonical projects/<PROJ-NNN>/tasks/<lane>/<task>/ layout.
 projects/*/tasks/*/*/attachments/
 projects/*/tasks/*/*/results/
+**/logs/cli-output.log.1
 ```
 
 Logs (`logs/`) are intentionally **not** ignored in the evidence repository;
-they are the audit trail. Product-repository `.gitignore` files do not need
-Agent Studio task-folder rules because onboarding never creates task data there.
+the active `cli-output.log` is the audit trail. Its bounded `.1` predecessor is
+ignored because the active file already carries the rotation marker and newest
+tail. Product-repository `.gitignore` files do not need Agent Studio task-folder
+rules because onboarding never creates task data there.
 
 Already-committed images are not retroactively untracked by adding these rules. If a workspace has historical images in git, run `git rm --cached <path>` once to stop tracking them; the files stay on disk.
 

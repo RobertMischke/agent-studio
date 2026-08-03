@@ -183,6 +183,39 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
         Assert.Contains(".orchestrator/chat-attachments/a.png", status);
     }
 
+    [Fact]
+    public void FlushDue_ExcludesTrackedCliOutputRotation_NotJustUntracked()
+    {
+        var time = new FakeTimeProvider(new DateTime(2026, 8, 2, 12, 0, 0, DateTimeKind.Utc));
+        var batcher = BuildBatcher(time, debounce: 5, maxDelay: 60);
+        var taskDir = Path.Combine(_watchPath, TaskStates.Progress, "ASS-10");
+        var logsDir = Path.Combine(taskDir, "logs");
+        Directory.CreateDirectory(logsDir);
+        var active = Path.Combine(logsDir, "cli-output.log");
+        var rotation = active + CliOutputLogFile.RotationSuffix;
+        File.WriteAllText(active, "active-original\n");
+        File.WriteAllText(rotation, "rotation-original\n");
+        RunGit(_root, "add", "-A");
+        RunGit(_root, "commit", "-q", "-m", "seed cli logs");
+
+        File.WriteAllText(active, "active-current\n");
+        File.WriteAllText(rotation, "rotation-current\n");
+        File.WriteAllText(Path.Combine(taskDir, "code-review.md"), "review\n");
+        batcher.Ingest(Request("ASS-10", TaskStates.Ready, TaskStates.Progress));
+        time.Advance(TimeSpan.FromSeconds(6));
+
+        Assert.True(Assert.Single(batcher.FlushDue()).Result.DidCommit);
+        var committed = CommittedFiles();
+        Assert.Contains("projects/demo/3-progress/ASS-10/logs/cli-output.log", committed);
+        Assert.DoesNotContain(
+            "projects/demo/3-progress/ASS-10/logs/cli-output.log.1",
+            committed);
+        Assert.Contains(
+            "cli-output.log.1",
+            RunGitCapture(_root, "status", "--porcelain=v1"),
+            StringComparison.Ordinal);
+    }
+
     // ---- Foreign-repo guard ------------------------------------------------
 
     [Fact]

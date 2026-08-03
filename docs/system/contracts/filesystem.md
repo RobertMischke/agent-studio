@@ -139,8 +139,18 @@ Each job folder uses this structure:
                     # Exact labelled context appended to the launch prompt
   results/          # Output evidence such as screenshots
                     # Optional: results/review-evidence.jsonl (audit / review findings)
-  logs/             # CLI output, including logs/cli-output.log
+  logs/             # CLI output, including the capped logs/cli-output.log
+    cli-output.log.1
+                    # Optional previous 10 MiB tail; ignored by workspace Git
 ```
+
+All backend writers route durable CLI text through `CliOutputLogFile`. The
+active `cli-output.log` and its single `.1` rotation are each limited to 10 MiB.
+Rotation is line-aware and leaves a visible `[cli-output-rotated]` marker in the
+active file. At startup, `CliOutputLogMaintenanceService` applies the same cap
+to oversized legacy logs and adds `**/logs/cli-output.log.1` to the central task
+repository's `.gitignore`. The workspace evidence committer independently
+excludes that rotation path, including when a legacy rotation was once tracked.
 
 ## Template Files
 
