@@ -2061,7 +2061,7 @@ describe('TaskCardComponent — waits-on dependency chip (AGT-2029)', () => {
     expect(chip).toBeTruthy();
     expect(chip!.tagName).toBe('BUTTON');
     expect(chip!.getAttribute('data-tone')).toBe('open');
-    expect(chip!.textContent).toContain('waits: CAR-3');
+    expect(chip!.textContent).toContain('waits for completion: CAR-3');
   });
 
   it('renders a cycle chip when the dependency graph is cyclic', async () => {

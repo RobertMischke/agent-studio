@@ -13,6 +13,9 @@ function item(overrides: Partial<WaitsOnItem> = {}): WaitsOnItem {
     key: 'DEP-1',
     resolved: true,
     fulfilled: false,
+    releaseGate: false,
+    targetReleased: false,
+    waitingForRelease: false,
     targetJobId: 'dep-1',
     targetTitle: 'A dependency',
     targetState: '2-ready',
@@ -37,7 +40,7 @@ describe('buildDependencyChip', () => {
     expect(chip).not.toBeNull();
     expect(chip!.tone).toBe('open');
     expect(chip!.glyph).toBe('⏳');
-    expect(chip!.label).toBe('waits: DEP-1');
+    expect(chip!.label).toBe('waits for completion: DEP-1');
     // navigation target comes from the backend-resolved fields
     expect(chip!.targetJobId).toBe('dep-1');
     expect(chip!.targetWatchPath).toBe('/ws/lib');
@@ -54,7 +57,7 @@ describe('buildDependencyChip', () => {
       }),
     );
     expect(chip!.tone).toBe('open');
-    expect(chip!.label).toBe('waits: DEP-2 +1');
+    expect(chip!.label).toBe('waits for completion: DEP-2 +1');
     expect(chip!.targetJobId).toBe('dep-2');
   });
 
@@ -68,6 +71,22 @@ describe('buildDependencyChip', () => {
     expect(chip!.tone).toBe('ready');
     expect(chip!.glyph).toBe('✓');
     expect(chip!.label).toBe('DEP-1');
+  });
+
+  it('distinguishes a terminal dependency that still waits for explicit release', () => {
+    const chip = buildDependencyChip(
+      status({
+        items: [item({
+          targetState: '6-completed',
+          releaseGate: true,
+          waitingForRelease: true,
+        })],
+      }),
+    );
+
+    expect(chip!.tone).toBe('open');
+    expect(chip!.label).toBe('waits for release: DEP-1');
+    expect(chip!.tooltip).toContain('completed, release pending');
   });
 
   it('renders a cycle chip (config error) regardless of item states', () => {
@@ -95,7 +114,7 @@ describe('buildDependencyChip', () => {
       }),
     );
     expect(chip!.tone).toBe('open');
-    expect(chip!.label).toBe('waits: GHOST-9');
+    expect(chip!.label).toBe('waits for completion: GHOST-9');
     expect(chip!.targetJobId).toBeNull();
     expect(chip!.tooltip).toContain('not created yet');
   });

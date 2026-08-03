@@ -654,6 +654,22 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Sets the explicit content-release approval consumed by release-gated
+    /// dependsOn edges. Terminal lane movement intentionally does not call this
+    /// method: approval must come from an operator or a dedicated release step.
+    /// </summary>
+    public bool SetJobReleased(string jobId, bool released, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        TaskJsonFile.UpdateField(info.FolderPath, "released", released, _logger);
+        _logger.LogInformation(
+            "task-release-set job={JobId} released={Released}",
+            jobId, released);
+        return Updated();
+    }
+
     private static List<TaskCommitInfo>? ReadPersistedCommitChain(string folderPath)
     {
         try

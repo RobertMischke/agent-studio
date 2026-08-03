@@ -338,6 +338,11 @@ cannot erase an operator decision.
   ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
   [runner.md](./runner.md) and the `references` field in
   [../contracts/filesystem.md](../contracts/filesystem.md).
+  An edge may use `{ "key": "AGT-2050", "releaseGate": true }` to require an
+  explicit target-card release after terminal completion. Operators and
+  dedicated release steps set that independent flag through
+  `PUT /api/tasks/{id}/release`; ordinary string edges keep their existing
+  terminal-state-only semantics.
 - Rendered task references resolve through `POST /api/tasks/reference-status`.
   Send `{ "keys": ["AGT-2050", "CAR-2"] }`; keys are trimmed, uppercased,
   deduplicated, and capped at 200. The response is `{ "items": [...] }`, where

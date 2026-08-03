@@ -111,6 +111,26 @@ public sealed class WaitsOnEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task List_ReleaseGateDistinguishesTerminalAwaitingRelease()
+    {
+        WriteJob(_libWatch, TaskStates.Completed, "dep", "LIB-1");
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1",
+            dependsOn: new[] { "LIB-1" }, releaseGate: true);
+
+        using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        using var doc = JsonDocument.Parse(await client.GetStringAsync("/api/tasks"));
+
+        var waitsOn = FindCard(doc.RootElement, "consumer").GetProperty("waitsOn");
+        var item = Assert.Single(waitsOn.GetProperty("items").EnumerateArray());
+        Assert.True(item.GetProperty("releaseGate").GetBoolean());
+        Assert.True(item.GetProperty("waitingForRelease").GetBoolean());
+        Assert.False(item.GetProperty("targetReleased").GetBoolean());
+        Assert.False(item.GetProperty("fulfilled").GetBoolean());
+        Assert.True(waitsOn.GetProperty("blocked").GetBoolean());
+    }
+
+    [Fact]
     public async Task Detail_ArchivedCrossProjectTarget_ResolvesFulfilled()
     {
         // Fulfilled includes the terminal 7-archive lane, which the board scan
@@ -251,6 +271,35 @@ public sealed class WaitsOnEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task PutReferences_ReleaseGateObject_PersistsAndEchoesObjectShape()
+    {
+        WriteJob(_libWatch, TaskStates.Completed, "dep", "LIB-1");
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1");
+
+        using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        var watchPath = Uri.EscapeDataString(_appWatch);
+
+        using var response = await client.PutAsJsonAsync(
+            $"/api/tasks/consumer/references?watchPath={watchPath}",
+            new { dependsOn = new[] { new { key = "LIB-1", releaseGate = true } } });
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        var edge = Assert.Single(document.RootElement.GetProperty("references")
+            .GetProperty("dependsOn").EnumerateArray());
+        Assert.Equal("LIB-1", edge.GetProperty("key").GetString());
+        Assert.True(edge.GetProperty("releaseGate").GetBoolean());
+
+        using var read = JsonDocument.Parse(await client.GetStringAsync(
+            $"/api/tasks/consumer?watchPath={watchPath}"));
+        var item = Assert.Single(read.RootElement.GetProperty("info")
+            .GetProperty("waitsOn").GetProperty("items").EnumerateArray());
+        Assert.True(item.GetProperty("waitingForRelease").GetBoolean());
+    }
+
+    [Fact]
     public async Task PutReferences_SelfReference_Returns400_WithErrorShape()
     {
         WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1");
@@ -294,6 +343,34 @@ public sealed class WaitsOnEndpointsTests : IDisposable
         Assert.Equal("DependsOnCycle", err.GetProperty("code").GetString());
     }
 
+    [Fact]
+    public async Task PutRelease_ExplicitFlagUnblocksReleaseGatedDependency()
+    {
+        WriteJob(_libWatch, TaskStates.Completed, "dep", "LIB-1");
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1",
+            dependsOn: new[] { "LIB-1" }, releaseGate: true);
+
+        using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        var libWatchPath = Uri.EscapeDataString(_libWatch);
+        var appWatchPath = Uri.EscapeDataString(_appWatch);
+
+        using var release = await client.PutAsJsonAsync(
+            $"/api/tasks/dep/release?watchPath={libWatchPath}",
+            new { released = true });
+        release.EnsureSuccessStatusCode();
+
+        using var detail = JsonDocument.Parse(await client.GetStringAsync(
+            $"/api/tasks/consumer?watchPath={appWatchPath}"));
+        var waitsOn = detail.RootElement.GetProperty("info").GetProperty("waitsOn");
+        var item = Assert.Single(waitsOn.GetProperty("items").EnumerateArray());
+        Assert.True(item.GetProperty("targetReleased").GetBoolean());
+        Assert.False(item.GetProperty("waitingForRelease").GetBoolean());
+        Assert.True(item.GetProperty("fulfilled").GetBoolean());
+        Assert.False(waitsOn.GetProperty("blocked").GetBoolean());
+    }
+
     // ---- helpers --------------------------------------------------------
 
     private static JsonElement FindCard(JsonElement lane, string id)
@@ -305,16 +382,24 @@ public sealed class WaitsOnEndpointsTests : IDisposable
         return default; // unreachable
     }
 
-    private static void WriteJob(string watchPath, string state, string slug, string key, string[]? dependsOn = null)
+    private static void WriteJob(
+        string watchPath,
+        string state,
+        string slug,
+        string key,
+        string[]? dependsOn = null,
+        bool releaseGate = false,
+        bool released = false)
     {
         var dir = Path.Combine(watchPath, state, slug);
         Directory.CreateDirectory(dir);
         var refs = dependsOn is { Length: > 0 }
-            ? $",\"references\":{{\"dependsOn\":[{string.Join(",", dependsOn.Select(k => $"\"{k}\""))}]}}"
+            ? $",\"references\":{{\"dependsOn\":[{string.Join(",", dependsOn.Select(k => releaseGate ? $"{{\"key\":\"{k}\",\"releaseGate\":true}}" : $"\"{k}\""))}]}}"
             : "";
+        var release = released ? ",\"released\":true" : "";
         var json =
             $"{{\"id\":\"{slug}\",\"key\":\"{key}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
-            $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{refs}}}";
+            $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{release}{refs}}}";
         File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 

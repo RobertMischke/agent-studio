@@ -16,6 +16,12 @@ public record TaskInfo
     public string? Key { get; init; }
     public string Title { get; init; } = "";
     public string State { get; init; } = "draft";
+    /// <summary>
+    /// Explicit content-release approval. This is deliberately independent of
+    /// terminal lane state: completion alone must not release dependents whose
+    /// edge opts into <c>releaseGate</c>.
+    /// </summary>
+    public bool Released { get; init; }
     public int Order { get; init; } = 999;
     public string Agent { get; init; } = "";
     public DateTime CreatedAt { get; init; }
