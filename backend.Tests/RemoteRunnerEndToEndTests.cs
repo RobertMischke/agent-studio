@@ -1024,6 +1024,76 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Daemon_claim_replay_repairs_ready_task_to_progress_before_returning_claimed()
+    {
+        const string claimKey = "daemon-claim-ready-replay";
+        const string repositoryUrl = "https://github.com/agent-orc/agent-studio.git";
+        SeedTask(TaskStates.Ready, TaskKey, "Interrupted claim", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(
+            http,
+            RunnerId,
+            options: RunnerOptions("claude", hostMaxParallelism: 20));
+        await RegisterCodingRunnerAsync(client, http);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true });
+        assignment.EnsureSuccessStatusCode();
+        await AddRepositoryUrlAsync(http, repositoryUrl);
+
+        // Reproduce the crash boundary: acquire authority is durable, but the
+        // endpoint has not yet moved the card out of Ready or returned a body.
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var acquired = authority.AcquireRun(
+            TaskKey,
+            Contract.RepositoryIdentityContract.FromUrl(repositoryUrl)!,
+            null,
+            RunnerId,
+            "hetzner-test",
+            120,
+            claimKey,
+            ProjectName,
+            "remote-runner",
+            4242,
+            client.ClientId);
+        Assert.Equal(AttemptWriteStatus.Accepted, acquired.Status);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+
+        var request = new RClaim(
+            RunnerId,
+            ProjectName,
+            "hetzner-test",
+            4242,
+            "remote-runner",
+            AvailableSlots: 20,
+            ActiveSlots: 0,
+            IdempotencyKey: claimKey);
+        var replay = await client.ClaimAsync(request, CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Claimed, replay.Status);
+        Assert.Equal(acquired.RunAttempt!.AttemptId, replay.Lease!.AttemptId);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+        var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, TaskKey);
+        Assert.True(Directory.Exists(progressFolder));
+        using (var taskJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(progressFolder, "task.json"))))
+            Assert.Equal(TaskStates.Progress, taskJson.RootElement.GetProperty("state").GetString());
+        var laneTimeline = File.ReadAllText(Path.Combine(progressFolder, "logs", "timeline.jsonl"));
+        Assert.Contains($"\"attemptId\":\"{acquired.RunAttempt.AttemptId}\"", laneTimeline, StringComparison.Ordinal);
+        Assert.Contains($"\"idempotencyKey\":\"lane-claim:{claimKey}\"", laneTimeline, StringComparison.Ordinal);
+
+        var contender = await client.ClaimAsync(
+            request with { IdempotencyKey = "daemon-claim-ready-contender" },
+            CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, contender.Status);
+        var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{TaskKey}", ApiJson, CancellationToken.None);
+        Assert.Single(projection!.RunAttempts);
+    }
+
+    [Fact]
     public async Task Codex_only_runner_leaves_claude_card_ready_until_claude_is_advertised()
     {
         SeedTask(
