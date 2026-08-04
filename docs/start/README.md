@@ -95,6 +95,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |
 | UI task iteration pipeline and Human Gate hand-off | [contracts/ui-task-pipeline.md](../system/contracts/ui-task-pipeline.md) |
 | Operator decision surface for escalated tasks | [operations/decision-surface/README.md](../operations/decision-surface/README.md) |
+| Parked-card recall (machine-readable blocker, Wiedervorlage sweep, lane aging; AGT-2492) | [concepts/parked-card-recall.md](../concepts/parked-card-recall.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](../concepts/publishing-workflows.md) |
 | Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](../system/reports/git-info-performance-agt-2007.md) |

@@ -272,6 +272,15 @@ public static class TimelineEventKinds
     /// integration branch.
     /// </summary>
     public const string IntegrationRecoveryQueued = "integration_recovery_queued";
+    /// <summary>
+    /// AGT-2492: the recall sweep found that a parked card's recorded
+    /// precondition no longer holds. <see cref="TimelineEvent.Summary"/> carries
+    /// how long the card has been parked and why the blocker is considered gone;
+    /// <see cref="TimelineEvent.Details"/> carries the lane, blocker type,
+    /// condition kind, and age in seconds. Reporting only - the card is NOT
+    /// re-queued, because "no auto rerun" remains the parker's decision.
+    /// </summary>
+    public const string ParkedBlockerResolved = "parked_blocker_resolved";
 }
 
 /// <summary>

@@ -37,6 +37,7 @@ public static class EndpointMapping
 
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();
+        app.MapParkedCardEndpoints();
         app.MapRunnerEndpoints();
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();

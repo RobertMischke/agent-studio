@@ -267,6 +267,16 @@ public record TaskInfo
     public DateTime? SteerPendingSince { get; init; }
 
     /// <summary>
+    /// AGT-2492: for a card parked in <c>5-human-review</c> or
+    /// <c>5e-escalated</c>, what it is waiting for, whether that is still true,
+    /// and how long it has been sitting there. Read from the durable
+    /// <c>parked-blocker.json</c> marker; null in every other lane. A
+    /// <c>recallable</c> status is a "look at this again" signal for a person,
+    /// never an automatic requeue.
+    /// </summary>
+    public ParkedBlockerStatus? ParkedBlocker { get; init; }
+
+    /// <summary>
     /// Structural classification of the task. One of <see cref="TaskTypes.Bug"/>,
     /// <see cref="TaskTypes.Feature"/>, or <see cref="TaskTypes.Chore"/>
     /// (default for legacy and technical work). Stored in <c>job.json</c> as

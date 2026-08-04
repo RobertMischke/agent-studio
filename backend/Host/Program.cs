@@ -622,6 +622,14 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // escalation) within timeout + one interval, so a steered card never hangs for
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
+// AGT-2492 Wiedervorlage sweep. Parked cards carry a machine-readable blocker;
+// this re-checks those conditions so a card whose infrastructure precondition
+// was cleared is reported instead of sitting unnoticed (AGT-2220 lost four days
+// exactly that way). Report-only: it never re-queues a card.
+builder.Services.AddSingleton<AgentStudio.Tasks.IParkedBlockerProbe>(sp =>
+    new AgentStudio.Tasks.ParkedBlockerProbe(sp.GetService<AgentStudio.Git.GitService>()));
+builder.Services.AddSingleton<AgentStudio.Tasks.ParkedCardRecallSweep>();
+builder.Services.AddHostedService<AgentStudio.Tasks.ParkedCardRecallSweepHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<WikiContentCache>();
 // Warms the central wiki cache off the startup path and logs the periodic

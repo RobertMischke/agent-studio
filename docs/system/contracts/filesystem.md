@@ -250,6 +250,29 @@ current epoch plus the operator-requeue timeline boundaries as
 `reviewAttemptEpoch` and newest-first `reviewAttemptCycles`; the Task Detail Runs
 modal renders that projection beside the CLI run history.
 
+### parked-blocker.json (optional)
+
+Written whenever a task enters `5-human-review` or `5e-escalated`, and deleted when it leaves. It records what the parked card is waiting for in a form a sweep can re-check, next to the freetext park reason it preserves verbatim.
+
+```json
+{
+  "version": 1,
+  "blockerType": "review-subject-unmaterialisierbar",
+  "condition": {
+    "kind": "git-ancestor",
+    "parameters": {},
+    "description": "The card branch carries the current integration branch, so a review baseline can be materialized again."
+  },
+  "lane": "5-human-review",
+  "parkedAt": "2026-07-29T22:07:00Z",
+  "reason": "4x ReviewInfra/BaselineUnavailable - parked for an operator decision, no auto rerun",
+  "lastEvaluation": { "status": "blocked", "at": "2026-08-03T12:00:00Z", "detail": "'task/agt-2220' still does not contain 'develop'." },
+  "reportedRecallableAt": null
+}
+```
+
+`blockerType` is the escalation category, or `operator-decision` for a manual park. `condition.kind` is one of `manual` or `git-ancestor`; `lastEvaluation.status` is one of `blocked`, `recallable`, or `undeterminable`. The recall sweep owns `lastEvaluation` and `reportedRecallableAt`; `TaskInfo.ParkedBlocker` projects the file at read time and adds the lane age. Legacy parks without the file are backfilled from `enteredLaneAt`. A `recallable` blocker is reported, never auto-requeued. See [parked-card recall](../../concepts/parked-card-recall.md).
+
 ### post-processing-outcomes.jsonl (optional)
 
 Append-only JSON-Lines file holding orchestrator-owned Post Processing outcomes. This file records what happened between the coding CLI finishing and the task reaching Human Review; it does not authorize source edits or lane moves by the supporting identity.

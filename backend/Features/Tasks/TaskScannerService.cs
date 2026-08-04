@@ -625,6 +625,7 @@ public class TaskScannerService : ITaskScanner
                         : null,
                 PostProcessingChecks = ReadPostProcessingChecks(jobDir, resolvedState),
                 SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
+                ParkedBlocker = ReadParkedBlocker(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
@@ -1155,6 +1156,16 @@ public class TaskScannerService : ITaskScanner
         }
         return null;
     }
+
+    /// <summary>
+    /// AGT-2492: projects the durable park marker onto the card. Only the two
+    /// human-decision lanes carry it, so a card that has moved on never shows a
+    /// stale blocker even if its marker file outlives the park.
+    /// </summary>
+    private ParkedBlockerStatus? ReadParkedBlocker(string jobFolder, string state)
+        => ParkedBlockerCatalog.IsParkedLane(state)
+            ? ParkedBlockerMarker.ToStatus(ParkedBlockerMarker.TryRead(jobFolder, _logger), DateTime.UtcNow)
+            : null;
 
     private const int OutcomeIssueTailBytes = 16 * 1024;
 
