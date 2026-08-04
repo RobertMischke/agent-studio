@@ -227,7 +227,8 @@ public sealed class DeliveryVerificationTests
         var verified = new DeliveryVerificationResult(
             DeliveryVerificationStatus.Verified, null, FabricatedSha, "runner/x/AGT-1", FabricatedSha);
 
-        var (decision, reason) = OutOfBandStampPolicy.Decide(TaskModes.Coding, verified);
+        var (decision, reason) = OutOfBandStampPolicy.Decide(
+            TaskModes.Coding, TaskStates.Completed, verified);
 
         Assert.Equal(OutOfBandStampDecision.Stamp, decision);
         Assert.Contains("Repository-Verifikation:", reason, StringComparison.Ordinal);
@@ -239,22 +240,28 @@ public sealed class DeliveryVerificationTests
         var contained = new DeliveryVerificationResult(
             DeliveryVerificationStatus.VerifiedContained, null, FabricatedSha, "runner/x/AGT-1", "deadbeef");
 
-        var (decision, _) = OutOfBandStampPolicy.Decide(TaskModes.Coding, contained);
+        var (decision, _) = OutOfBandStampPolicy.Decide(
+            TaskModes.Coding, TaskStates.Completed, contained);
 
         Assert.Equal(OutOfBandStampDecision.Stamp, decision);
     }
 
+    /// <summary>
+    /// A claim the repository contradicts is refused in EVERY lane - a false
+    /// delivery claim is worse than no claim at all.
+    /// </summary>
     [Theory]
-    [InlineData(DeliveryVerificationStatus.ShaMismatch)]
-    [InlineData(DeliveryVerificationStatus.RefMissing)]
-    [InlineData(DeliveryVerificationStatus.CommitMissing)]
-    [InlineData(DeliveryVerificationStatus.NotVerifiable)]
-    public void Policy_UnprovenDelivery_RefusesTheStamp(DeliveryVerificationStatus status)
+    [InlineData(DeliveryVerificationStatus.ShaMismatch, TaskStates.Completed)]
+    [InlineData(DeliveryVerificationStatus.ShaMismatch, TaskStates.HumanReview)]
+    [InlineData(DeliveryVerificationStatus.RefMissing, TaskStates.HumanReview)]
+    [InlineData(DeliveryVerificationStatus.CommitMissing, TaskStates.HumanReview)]
+    public void Policy_DisprovedDelivery_IsRefusedInEveryLane(
+        DeliveryVerificationStatus status, string targetState)
     {
-        var unproven = new DeliveryVerificationResult(
+        var disproved = new DeliveryVerificationResult(
             status, "no", FabricatedSha, "runner/x/AGT-1", null);
 
-        var (decision, _) = OutOfBandStampPolicy.Decide(TaskModes.Coding, unproven);
+        var (decision, _) = OutOfBandStampPolicy.Decide(TaskModes.Coding, targetState, disproved);
 
         Assert.Equal(OutOfBandStampDecision.RefuseUnverified, decision);
     }
@@ -262,16 +269,49 @@ public sealed class DeliveryVerificationTests
     /// <summary>
     /// REGRESSION - the 11.07. phantom wave. A whole remote wave was stamped
     /// "completed" while nothing had been pushed: the completions carried no
-    /// commit claim at all, and the system happily terminalized the cards.
-    /// A coding card with no claim must now be refused.
+    /// commit claim at all, and the system terminalized the cards anyway.
+    /// A terminal lane without proof is now refused.
     /// </summary>
-    [Fact]
-    public void Policy_Regression_CodingCardWithoutAnyCommitClaim_IsRefused()
+    [Theory]
+    [InlineData(TaskStates.Completed)]
+    [InlineData(TaskStates.Archive)]
+    public void Policy_Regression_TerminalLaneWithoutProof_IsRefused(string terminalLane)
     {
-        var (decision, reason) = OutOfBandStampPolicy.Decide(TaskModes.Coding, verification: null);
+        var (decision, reason) = OutOfBandStampPolicy.Decide(
+            TaskModes.Coding, terminalLane, verification: null);
 
         Assert.Equal(OutOfBandStampDecision.RefuseUnverified, decision);
         Assert.Contains("Phantom-Muster", reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The counter-case that keeps the invariant usable: an operator rescuing a
+    /// stuck card into a non-terminal lane rarely has a SHA, and the
+    /// worktree-blocked escalation by definition has none. Those still get
+    /// reconciled - but as an unproven delivery, without commits[].
+    /// </summary>
+    [Theory]
+    [InlineData(TaskStates.HumanReview)]
+    [InlineData(TaskStates.Escalated)]
+    [InlineData(null)]
+    public void Policy_NoClaimIntoNonTerminalLane_ReconcilesAsUnproven(string? targetState)
+    {
+        var (decision, reason) = OutOfBandStampPolicy.Decide(
+            TaskModes.Coding, targetState, verification: null);
+
+        Assert.Equal(OutOfBandStampDecision.StampUnproven, decision);
+        Assert.Contains("unbestaetigte Lieferung", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Policy_UnverifiableClaimIntoTerminalLane_IsRefused()
+    {
+        var unverifiable = DeliveryVerificationResult.NotVerifiable("no origin", FabricatedSha);
+
+        var (decision, _) = OutOfBandStampPolicy.Decide(
+            TaskModes.Coding, TaskStates.Completed, unverifiable);
+
+        Assert.Equal(OutOfBandStampDecision.RefuseUnverified, decision);
     }
 
     /// <summary>
@@ -296,9 +336,11 @@ public sealed class DeliveryVerificationTests
             // The target repository is empty - nothing was ever pushed.
             var verification = NewGitService(repo)
                 .VerifyDeliveredCommit(repo, DeliveryBranch, FabricatedSha);
-            var (decision, _) = OutOfBandStampPolicy.Decide(TaskModes.Coding, verification);
+            var (decision, _) = OutOfBandStampPolicy.Decide(
+                TaskModes.Coding, TaskStates.HumanReview, verification);
 
             Assert.True(verification.IsDisproved);
+            // Even the lenient non-terminal lane refuses a contradicted claim.
             Assert.Equal(OutOfBandStampDecision.RefuseUnverified, decision);
         }
         finally
@@ -319,7 +361,8 @@ public sealed class DeliveryVerificationTests
     {
         Assert.False(OutOfBandStampPolicy.RequiresRepositoryProof(mode));
 
-        var (decision, _) = OutOfBandStampPolicy.Decide(mode, verification: null);
+        var (decision, _) = OutOfBandStampPolicy.Decide(
+            mode, TaskStates.Completed, verification: null);
 
         Assert.Equal(OutOfBandStampDecision.Stamp, decision);
     }
