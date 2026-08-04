@@ -2138,7 +2138,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Contract.ReviewClaimResponse claim,
         string runnerId,
         string instanceId,
-        string idempotencyKey)
+        string idempotencyKey,
+        string classification = "SnapshotUnavailable",
+        string summary = "The immutable snapshot was unavailable.")
     {
         return new Contract.ReviewReportRequest(
             runnerId,
@@ -2147,8 +2149,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             claim.Lease.Fence,
             idempotencyKey,
             "ReviewInfra",
-            "SnapshotUnavailable",
-            "The immutable snapshot was unavailable.",
+            classification,
+            summary,
             new Contract.ReviewWorkspaceProofDto(
                 claim.Subject!.RepositoryId,
                 claim.Subject.ExpectedResultSha,
@@ -3125,6 +3127,125 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(AttemptLifecycleState.Leased, survivor.State);
         Assert.NotNull(survivor.Lease);
         Assert.Null(survivor.TerminalAt);
+    }
+
+    [Fact]
+    public async Task Monolith_v1_review_claim_replaces_a_stale_card_integration_branch()
+    {
+        const string reviewRunnerId = "review-runner-stale-branch";
+        const string reviewInstance = "review-stale-branch-host:4243";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Stale integration branch", "Build and verify.");
+        // AGT-2220 shape: the card still records the pre-30.07. integration line
+        // while develop is the project's working branch. A merge-base against
+        // main is an ancient commit the baseline commands no longer run on.
+        SetCardIntegrationBranch(TaskStates.AutoReview, "refs/heads/main");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        var claim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            CancellationToken.None);
+
+        Assert.Equal("claimed", claim.Status);
+        Assert.Equal("refs/heads/develop", claim.Subject!.Plan.IntegrationRef);
+        Assert.Equal("refs/heads/develop", ReadCardIntegrationBranch(TaskStates.AutoReview));
+        var corrected = Assert.Single(
+            ReadTimeline(TaskStates.AutoReview),
+            entry => entry.GetProperty("kind").GetString() == "integration_branch_corrected");
+        var details = corrected.GetProperty("details");
+        Assert.Equal("main", details.GetProperty("previousBranch").GetString());
+        Assert.Equal("refs/heads/develop", details.GetProperty("integrationRef").GetString());
+    }
+
+    [Fact]
+    public async Task Monolith_v1_review_plane_names_a_repeated_baseline_failure_on_the_card()
+    {
+        const string reviewRunnerId = "review-runner-repeat-diagnosis";
+        const string reviewInstance = "review-repeat-host:4243";
+        const string baselineSha = "b649ff8dab649ff8dab649ff8dab649ff8dab649f";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Repeated baseline failure", "Build and verify.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        // Two attempts, one identical infrastructure cause - the AGT-2220 loop
+        // that previously left only a classification behind.
+        for (var attemptNumber = 1; attemptNumber <= 2; attemptNumber++)
+        {
+            var claim = await reviewClient.ClaimReviewAsync(
+                new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+                CancellationToken.None);
+            Assert.Equal("claimed", claim.Status);
+            var report = await reviewClient.ReportReviewAsync(
+                claim.Attempt!.AttemptId,
+                InfrastructureReport(
+                    claim,
+                    reviewRunnerId,
+                    reviewInstance,
+                    $"review-baseline-{attemptNumber}",
+                    "BaselineUnavailable",
+                    Contract.ReviewInfrastructureDiagnosis.Append(
+                        "Baseline command 'verify-2' did not complete normally.",
+                        [
+                            new(Contract.ReviewInfrastructureDiagnosis.BaseKey, baselineSha),
+                            new(Contract.ReviewInfrastructureDiagnosis.RefKey, "refs/heads/develop"),
+                            new(Contract.ReviewInfrastructureDiagnosis.StepKey, "verify-2"),
+                            new(Contract.ReviewInfrastructureDiagnosis.CommandKey, "sh -lc dotnet test"),
+                        ])),
+                CancellationToken.None);
+            Assert.True(report.RetryScheduled);
+        }
+
+        var diagnosed = Assert.Single(
+            ReadTimeline(TaskStates.AutoReview),
+            entry => entry.GetProperty("kind").GetString()
+                     == "review_infrastructure_repeat_diagnosed");
+        var details = diagnosed.GetProperty("details");
+        Assert.Equal("BaselineUnavailable", details.GetProperty("classification").GetString());
+        Assert.Equal("2", details.GetProperty("repeatCount").GetString());
+        Assert.Equal(baselineSha, details.GetProperty("baselineSha").GetString());
+        Assert.Equal("refs/heads/develop", details.GetProperty("integrationRef").GetString());
+        Assert.Equal("verify-2", details.GetProperty("step").GetString());
+        Assert.Equal("sh -lc dotnet test", details.GetProperty("command").GetString());
+        Assert.Contains(
+            baselineSha,
+            diagnosed.GetProperty("summary").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    private void SetCardIntegrationBranch(string state, string integrationBranch)
+    {
+        var path = Path.Combine(_watchPath, state, TaskKey, "task.json");
+        var fields = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+            File.ReadAllText(path))!;
+        fields["integrationBranch"] = JsonSerializer.SerializeToElement(integrationBranch);
+        File.WriteAllText(path, JsonSerializer.Serialize(fields));
+    }
+
+    private string? ReadCardIntegrationBranch(string state)
+    {
+        var path = Path.Combine(_watchPath, state, TaskKey, "task.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return document.RootElement.TryGetProperty("integrationBranch", out var value)
+            ? value.GetString()
+            : null;
+    }
+
+    private List<JsonElement> ReadTimeline(string state)
+    {
+        var path = Path.Combine(_watchPath, state, TaskKey, "logs", "timeline.jsonl");
+        if (!File.Exists(path)) return [];
+        return File.ReadAllLines(path)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => JsonDocument.Parse(line).RootElement.Clone())
+            .ToList();
     }
 
     [Fact]

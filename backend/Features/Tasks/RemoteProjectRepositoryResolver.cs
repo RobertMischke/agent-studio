@@ -46,6 +46,14 @@ public static class RemoteProjectRepositoryResolver
             "registry-url");
     }
 
+    /// <summary>
+    /// The registered checkout's own default branch (<c>origin/HEAD</c>, then
+    /// local <c>HEAD</c>). Repo truth for callers that need to rank it against
+    /// other sources themselves instead of taking the merged result above.
+    /// </summary>
+    public static string? ReadRepositoryDefaultBranch(ProjectRecord? project)
+        => project is null ? null : ReadDefaultBranch(ResolveGitDirectory(project.RepositoryPath));
+
     private static string? ResolveGitDirectory(string? repositoryPath)
     {
         if (string.IsNullOrWhiteSpace(repositoryPath) || !Directory.Exists(repositoryPath))
