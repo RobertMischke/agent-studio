@@ -9,6 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
+using Contract = AgentStudio.TaskServer.Contracts;
+
 namespace AgentStudio.Tests;
 
 public sealed class ManagementApiTests : IDisposable
@@ -52,6 +54,81 @@ public sealed class ManagementApiTests : IDisposable
         Assert.Equal(2, audit.Length);
         Assert.Contains("\"outcome\":\"started\"", audit[0]);
         Assert.Contains("\"outcome\":\"completed\"", audit[1]);
+    }
+
+    [Fact]
+    public async Task RemoteHosts_ReturnsTheLatestRunnerCapabilitySnapshot()
+    {
+        await using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var registry = factory.Services.GetRequiredService<V1ReviewExecutorRegistry>();
+        const string runnerId = "agent-runner-capability-snapshot";
+        const string instanceId = "agent-runner-host:2498";
+        registry.Register(
+            runnerId,
+            new Contract.RegisterRunnerRequest(
+                "Agent Runner Snapshot",
+                "agent-runner-host",
+                instanceId,
+                "1.2.3",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.CodingExecutor]));
+        registry.AdvertiseCapabilities(
+            runnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                runnerId,
+                instanceId,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                1,
+                [
+                    new Contract.AdvertisedCapabilityDto(
+                        Contract.CapabilityProtocol.CliExecution("claude"),
+                        "cli-execution",
+                        "ready",
+                        "available",
+                        "/usr/bin/claude"),
+                    new Contract.AdvertisedCapabilityDto(
+                        Contract.CapabilityProtocol.ProviderAuthentication("claude"),
+                        "provider-auth",
+                        "ready",
+                        Identity: "claude"),
+                ]));
+        registry.ReportCapabilityFailure(
+            runnerId,
+            new Contract.CapabilityFailureRequest(
+                runnerId,
+                instanceId,
+                Contract.CapabilityProtocol.ProviderAuthentication("claude"),
+                "ProviderUnauthorized",
+                "Claude login is unavailable for the coding service user.",
+                DateTime.UtcNow,
+                "snapshot-provider-auth-failure"));
+
+        using var response = await client.GetAsync("/api/v1/management/remote-hosts");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? string.Empty);
+        var snapshots = await response.Content.ReadFromJsonAsync<
+            IReadOnlyList<Contract.RunnerCapabilitySnapshotDto>>();
+        var snapshot = Assert.Single(snapshots!);
+        Assert.Equal(runnerId, snapshot.RunnerId);
+        Assert.Equal(instanceId, snapshot.InstanceId);
+        Assert.Contains(
+            snapshot.Capabilities,
+            capability => capability.Key == "cli-execution:claude"
+                          && capability.AdvertisedStatus == "ready"
+                          && capability.IsFresh
+                          && capability.Identity == "/usr/bin/claude");
+        Assert.Contains(
+            snapshot.Capabilities,
+            capability => capability.Key == "provider-auth:claude"
+                          && capability.AdvertisedStatus == "ready"
+                          && capability.HealthState == Contract.CapabilityHealthStates.Suspect
+                          && capability.ConsecutiveFailures == 1
+                          && capability.FirstFailureAt is not null);
     }
 
     [Fact]

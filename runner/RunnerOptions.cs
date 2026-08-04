@@ -119,6 +119,9 @@ public sealed class RunnerOptions
     /// <summary>Codex binary used by the GPT-only project chat work path.</summary>
     public string CodexCliBin { get; init; } = "codex";
 
+    /// <summary>Claude binary used when a Claude-pinned card runs on a host whose primary CLI is Codex.</summary>
+    public string ClaudeCliBin { get; init; } = "claude";
+
     /// <summary>Extra CLI arguments inserted before the prompt is streamed on stdin (space-split, shell-unaware).</summary>
     public required string CliArgs { get; init; }
 
@@ -278,6 +281,7 @@ public sealed class RunnerOptions
             ExecEngine = Val("exec-engine", "RUNNER_EXEC_ENGINE", ExecEngineCar).Trim().ToLowerInvariant(),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),
             CodexCliBin = Val("codex-cli", "RUNNER_CODEX_CLI_BIN", "codex"),
+            ClaudeCliBin = Val("claude-cli", "RUNNER_CLAUDE_CLI_BIN", "claude"),
             CliArgs = Val("cli-args", "RUNNER_CLI_ARGS", "-p"),
             CliResumeArgs = Val("cli-resume-args", "RUNNER_CLI_RESUME_ARGS").Trim() is { Length: > 0 } resumeArgs
                 ? resumeArgs

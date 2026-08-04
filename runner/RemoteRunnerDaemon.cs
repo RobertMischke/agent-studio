@@ -256,6 +256,20 @@ public sealed class RemoteRunnerDaemon
         _log($"runner-git-capability status={gitCapability.Status} detail={gitCapability.Detail}");
         if (!gitCapability.CanPush)
             _log("Configured fallback Git remote is read-only; project claims remain eligible and are gated by their own delivery preflight.");
+        var providerAuthChecks = await Task.WhenAll(
+            RunnerCapabilityProbe.CodingCliBinaries(_options)
+                .GroupBy(item => item.Binary, StringComparer.Ordinal)
+                .Select(async group =>
+                {
+                    var status = await ProviderAuthProbe.Shared.RefreshAsync(group.Key, shutdown);
+                    return (Binary: group.Key, Status: status);
+                }));
+        foreach (var check in providerAuthChecks)
+        {
+            _log(
+                $"runner-provider-auth binary={check.Binary} status={check.Status.Status} " +
+                $"detail={check.Status.Detail}");
+        }
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         var telemetry = new HostTelemetrySampler();
         HostTelemetrySample? latestTelemetry = telemetry.SampleIfDue(

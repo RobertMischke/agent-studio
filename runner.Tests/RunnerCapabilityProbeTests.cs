@@ -105,7 +105,8 @@ public sealed class RunnerCapabilityProbeTests
             GitRemote = "https://github.com/example/repo.git",
             WorkDir = temp.Path,
             BaseBranch = "main",
-            CliBin = claude,
+            CliBin = codex,
+            ClaudeCliBin = claude,
             CodexCliBin = codex,
             CliArgs = "",
         };

@@ -26,6 +26,12 @@ if (args is ["--detached-review-worker", var detachedReviewSpec])
 
 var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 
+// Capability advertisements distinguish binary presence from provider login.
+// Keep the process boundary in the composition root and let the cached probe
+// decide when each bounded status command needs to run.
+ProviderAuthProbe.Shared.UseLauncher((fileName, arguments, ct) =>
+    ProcessRunner.RunAsync(fileName, arguments, ct: ct));
+
 if (help)
 {
     PrintUsage();
@@ -160,6 +166,8 @@ static void PrintUsage()
           RUNNER_CLAIM_MAX_LOAD_PER_CORE                      Load/core threshold (default 1.5)
           RUNNER_LOAD_GATE_SUSTAINED_SECONDS                  High-load window (default 120)
           --cli <bin>             Agent CLI binary            (RUNNER_CLI_BIN)
+          --claude-cli <bin>      Claude card binary           (RUNNER_CLAUDE_CLI_BIN)
+          --codex-cli <bin>       Codex card/chat binary       (RUNNER_CODEX_CLI_BIN)
           --cli-args "<args>"     Headless CLI args, legacy engine only
                                                             (RUNNER_CLI_ARGS)
           --exec-engine <car|legacy>

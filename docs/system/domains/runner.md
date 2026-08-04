@@ -96,8 +96,11 @@ state.
   and HEAD revision.
 - Coding hosts advertise fresh `cli-execution:<cliType>` and
   `provider-auth:<cliType>` capabilities for every card CLI binary they can
-  invoke. `LeaseEndpoints` adds the candidate card's normalized CLI keys to the
-  existing required-capability set before repository preflight or lease
+  invoke. The primary `RUNNER_CLI_BIN` and the provider-specific
+  `RUNNER_CLAUDE_CLI_BIN` / `RUNNER_CODEX_CLI_BIN` paths form that inventory;
+  setup preserves both discovered paths even when Codex is selected as the
+  primary. `LeaseEndpoints` adds the candidate card's normalized CLI keys to
+  the existing required-capability set before repository preflight or lease
   acquisition. An incompatible card stays Ready. Fenced idempotent claim replay
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
@@ -361,7 +364,10 @@ state.
   Server. It validates the registered Review runner and instance, schema,
   freshness, and generation before retaining the latest snapshot. The separate
   `review-executor` identity therefore remains on the V1 Review plane after
-  registration instead of failing startup on a missing capability route.
+  registration instead of failing startup on a missing capability route. The
+  authenticated `GET /api/v1/management/remote-hosts` route exposes the latest
+  retained coding and review snapshots in both the monolith compatibility
+  profile and the standalone Task Server profile.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps

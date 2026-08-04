@@ -39,6 +39,7 @@ using RDeliverable = Runner::AgentRunner.ExternalDeliverable;
 using RRemoteComplete = Runner::AgentRunner.RemoteRunCompletionRequest;
 using ROptions = Runner::AgentRunner.RunnerOptions;
 using RTaskRunner = Runner::AgentRunner.RemoteTaskRunner;
+using RDurableAgentProcess = Runner::AgentRunner.DurableAgentProcess;
 using RRemoteCompletionResponse = Runner::AgentRunner.RemoteRunCompletionResponse;
 using RReviewDaemon = Runner::AgentRunner.RemoteReviewDaemon;
 using RReviewStateStore = Runner::AgentRunner.ReviewStateStore;
@@ -1011,10 +1012,20 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             order: 2);
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
+        var claudeBinary = await StubCli.WriteAsync(
+            _workspace,
+            "claude",
+            "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"5b1c9f70-2f4a-4c31-9f0e-2f0c9c4a1e77\"}",
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Claude fixture completed.\"}]}}",
+            "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"[[TASK_DONE]]\",\"session_id\":\"5b1c9f70-2f4a-4c31-9f0e-2f0c9c4a1e77\"}");
+        var runnerOptions = RunnerOptions(
+            "codex",
+            hostMaxParallelism: 2,
+            claudeCliBin: claudeBinary);
         using var client = new RClient(
             http,
             RunnerId,
-            options: RunnerOptions("claude", hostMaxParallelism: 2));
+            options: runnerOptions);
         await RegisterCodingRunnerAsync(client, http);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
@@ -1040,6 +1051,42 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         Assert.Equal("claude", claude.RunSpec!.CliType);
         Assert.Equal("codex", codex.RunSpec!.CliType);
+        var claimedClaudeSpec = claude.RunSpec with { ContextMode = "shared" };
+
+        var invocation = Runner::AgentRunner.AgentCliProcess.Resolve(
+            runnerOptions,
+            claimedClaudeSpec);
+        Assert.Equal(claudeBinary, invocation.FileName);
+        Assert.Equal("claude", invocation.CliType);
+
+        var workerDirectory = Path.Combine(_workspace, "mixed-cli-claude-worker");
+        var worktree = Path.Combine(_workspace, "mixed-cli-claude-worktree");
+        var results = Path.Combine(_workspace, "mixed-cli-claude-results");
+        Directory.CreateDirectory(workerDirectory);
+        Directory.CreateDirectory(worktree);
+        Directory.CreateDirectory(results);
+        var persistedSpec = RDurableAgentProcess.BuildSpec(
+            runnerOptions,
+            worktree,
+            "Run the claimed Claude fixture.",
+            results,
+            runSpec: claimedClaudeSpec,
+            runId: claude.RunId);
+        Assert.Equal(ROptions.ExecEngineCar, persistedSpec.Engine);
+        Assert.Equal("claude", persistedSpec.CliType);
+        Assert.Equal(claudeBinary, persistedSpec.FileName);
+
+        var carRun = await Runner::AgentRunner.CarWorkerExecution.RunAsync(
+            persistedSpec,
+            workerDirectory,
+            (_, _) => { });
+        Assert.True(
+            carRun.Result.ExitCode == 0,
+            $"CAR Claude fixture failed with exit {carRun.Result.ExitCode}: " +
+            $"stdout={carRun.Result.StdOut}; stderr={carRun.Result.StdErr}");
+        Assert.False(carRun.TimedOut);
+        Assert.False(carRun.LaunchFailed);
+        Assert.Contains("[[TASK_DONE]]", carRun.Result.StdOut, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -2095,7 +2142,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         assignment.EnsureSuccessStatusCode();
     }
 
-    private ROptions RunnerOptions(string cliBin, int hostMaxParallelism = 1) => new()
+    private ROptions RunnerOptions(
+        string cliBin,
+        int hostMaxParallelism = 1,
+        string? claudeCliBin = null) => new()
     {
         ServerUrl = "http://in-process",
         RunnerId = RunnerId,
@@ -2106,6 +2156,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         StateDir = Path.Combine(_workspace, "remote-runner-work", ".runner-state"),
         BaseBranch = "main",
         CliBin = cliBin,
+        ClaudeCliBin = claudeCliBin ?? "claude",
         CliArgs = "",
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
