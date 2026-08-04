@@ -115,6 +115,17 @@ pipeline view.
   step's `PipelineSteps` override. The origin push primitive is
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
+  An `AlreadyMerged` replay is not gate evidence. When the pre-develop build
+  gate applies, recovery requires a durable
+  `post-steps/pre-develop-build-gate-N.log` receipt whose expected and tested
+  SHA both equal the exact integration tip being released. A missing, partial,
+  or SHA-mismatched receipt reruns the gate against that tip. Until the gate
+  returns green, the merge step stays pending and no push request is released;
+  a red recovery gate records `GateFailed` and leaves the existing branch graph
+  unchanged for manual repair. If the gate applies but its runtime component is
+  unavailable, recovery also fails closed without releasing a push. This closes
+  the BP-02 merge-commit-before-gate crash window without treating Git ancestry
+  as a verdict.
 - `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
   read model fed by the SSH gate start/completion events. The Execution Hosts view
   uses it to show GATE work separately from daemon RUN slots; the store is
@@ -464,7 +475,11 @@ operator changes cause the step to fail before its writer runs.
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
 - A fenced remote completion persists `review-subject.json` with its exact
-  `ResultSha`, delivery ref, and actual integration branch ref. Both
+  `RunAttemptId`, `ResultSha`, delivery ref, and actual integration branch ref.
+  A reissue or transition into a new local or remote run invalidates the
+  canonical sidecar. Before any already-integrated shortcut, acceptance trusts
+  it only when its task key, attempt, and result SHA match the authority store's
+  current settled RunAttempt. Both
   `post-build-test-gate` and `post-code-review-grade` use that SHA as their
   authoritative subject. The build gate's selected subject is carried through
   the later aspect and grade steps. The grade reviews the full

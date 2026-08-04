@@ -22,8 +22,8 @@ public static class AttemptAuthorityEndpoints
         group.MapPost("/reviews/{attemptId}/claim", (
             string attemptId,
             ClaimReviewAttemptRequest request,
-            AttemptAuthorityService authority) =>
-            ToHttp(authority.ClaimReview(
+            ReviewAttemptTaskLifecycleService reviewAttemptLifecycle) =>
+            ToHttp(reviewAttemptLifecycle.ClaimReview(
                 attemptId,
                 request.ExecutorId,
                 request.HostId,

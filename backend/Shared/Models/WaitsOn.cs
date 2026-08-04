@@ -67,8 +67,23 @@ public record WaitsOnItem
     /// </summary>
     public bool Resolved { get; init; }
 
-    /// <summary>True when the target is resolved AND in <c>6-completed</c> or <c>7-archive</c>.</summary>
+    /// <summary>
+    /// True when the target is terminal and, for a release-gated edge, also
+    /// carries its explicit release flag.
+    /// </summary>
     public bool Fulfilled { get; init; }
+
+    /// <summary>True when this edge requires explicit release after terminal completion.</summary>
+    public bool ReleaseGate { get; init; }
+
+    /// <summary>The target's explicit release flag; false for legacy targets.</summary>
+    public bool TargetReleased { get; init; }
+
+    /// <summary>
+    /// True only for the distinct terminal-but-not-released state. The board
+    /// uses this to say "waiting for release" instead of "waiting for completion".
+    /// </summary>
+    public bool WaitingForRelease { get; init; }
 
     /// <summary>Target task's folder id (for navigation); null when unresolved.</summary>
     public string? TargetJobId { get; init; }
@@ -106,7 +121,7 @@ public static class WaitsOnEvaluator
 {
     private static readonly StringComparer KeyComparer = StringComparer.OrdinalIgnoreCase;
 
-    /// <summary>A dependency is fulfilled once its target reaches completed or archive.</summary>
+    /// <summary>True when a target has reached the completed or archive lane.</summary>
     public static bool IsFulfilledState(string? state) =>
         string.Equals(state, TaskStates.Completed, StringComparison.Ordinal)
         || string.Equals(state, TaskStates.Archive, StringComparison.Ordinal);
@@ -137,9 +152,9 @@ public static class WaitsOnEvaluator
         var seen = new HashSet<string>(KeyComparer);
         var blocked = false;
 
-        foreach (var raw in deps)
+        foreach (var dependency in deps)
         {
-            var key = (raw ?? "").Trim();
+            var key = (dependency?.Key ?? "").Trim();
             if (key.Length == 0) continue;
             // A self-edge can never gate the task and is rejected on write; skip
             // defensively so a stale self-edge on disk cannot self-block.
@@ -148,7 +163,9 @@ public static class WaitsOnEvaluator
 
             byKey.TryGetValue(key, out var target);
             var resolved = target != null;
-            var fulfilled = resolved && IsFulfilledState(target!.State);
+            var terminal = resolved && IsFulfilledState(target!.State);
+            var waitingForRelease = terminal && dependency!.ReleaseGate && !target!.Released;
+            var fulfilled = terminal && (!dependency.ReleaseGate || target!.Released);
             if (!fulfilled) blocked = true;
 
             items.Add(new WaitsOnItem
@@ -156,6 +173,9 @@ public static class WaitsOnEvaluator
                 Key = key,
                 Resolved = resolved,
                 Fulfilled = fulfilled,
+                ReleaseGate = dependency!.ReleaseGate,
+                TargetReleased = target?.Released == true,
+                WaitingForRelease = waitingForRelease,
                 TargetJobId = target?.Id,
                 TargetTitle = target?.Title,
                 TargetState = target?.State,

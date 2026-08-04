@@ -269,11 +269,11 @@ internal static class TaskEndpointHelpers
     }
 
     /// <summary>
-    /// AGT-2046 — folds the batched board merge signal onto each job. The lookup
-    /// is built ONCE per request by <see cref="BoardMergeStatusService"/> (O(repos)
-    /// git spawns, never per card), so this stays an O(1) dictionary hit per job,
-    /// preserving the <c>JobsEndpointPerfTests</c> contract. Jobs without a signal
-    /// (no committed/merged anchor) are passed through untouched.
+    /// AGT-2046: folds the batched board merge signal onto each job. List routes
+    /// read the lookup from <see cref="TaskListGitProjectionCache"/> while detail
+    /// routes may build a bounded lookup directly. The fold itself stays an O(1)
+    /// dictionary hit per job. Jobs without a committed or merged anchor are
+    /// passed through untouched.
     /// </summary>
     internal static IEnumerable<TaskInfo> WithMergeSignal(
         this IEnumerable<TaskInfo> jobs,
@@ -297,11 +297,10 @@ internal static class TaskEndpointHelpers
                 : job);
 
     /// <summary>
-    /// AGT-2202 — folds the batched per-task integration verdict onto each accepted
-    /// card. The lookup is built ONCE per request by
-    /// <see cref="TaskIntegrationStatusService"/> (O(repos) git spawns, never per
-    /// card), so this stays an O(1) dictionary hit per job. Jobs without a verdict
-    /// (not in an accepted lane) pass through untouched.
+    /// AGT-2202: folds the batched per-task integration verdict onto each accepted
+    /// card. List routes use the cache-only task-list Git projection, so this is
+    /// an O(1) dictionary hit per job with no request-thread Git work. Jobs without
+    /// a verdict because they are outside an accepted lane pass through untouched.
     /// </summary>
     internal static IEnumerable<TaskInfo> WithIntegrationStatus(
         this IEnumerable<TaskInfo> jobs,
@@ -312,11 +311,10 @@ internal static class TaskEndpointHelpers
                 : job);
 
     /// <summary>
-    /// PUB-1 — folds the batched per-task publish signal onto each accepted card.
-    /// The lookup is built ONCE per request by <see cref="TaskPublishableService"/>
-    /// (O(projects), never per card), so this stays an O(1) dictionary hit per job.
-    /// Jobs without a signal (not accepted, or touching no derived target) pass
-    /// through untouched.
+    /// PUB-1: folds the batched per-task publish signal onto each accepted card.
+    /// List routes use the cache-only task-list Git projection, so this stays an
+    /// O(1) dictionary hit per job. Jobs without a signal because they are not
+    /// accepted or touch no derived target pass through untouched.
     /// </summary>
     internal static IEnumerable<TaskInfo> WithPublishSignal(
         this IEnumerable<TaskInfo> jobs,

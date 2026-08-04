@@ -33,6 +33,7 @@ public sealed class MergeIntoDevelopRunner
     private readonly ProjectSettingsService? _projectSettings;
     private readonly PreMainTestGate? _preMainTestGate;
     private readonly PreDevelopBuildGate? _preDevelopBuildGate;
+    private readonly AttemptAuthorityService? _attemptAuthority;
     private readonly TimeSpan _preMainTimeout;
     private readonly TimeSpan _preDevelopTimeout;
     private readonly Func<int, TimeSpan> _environmentalBackoff;
@@ -50,7 +51,8 @@ public sealed class MergeIntoDevelopRunner
         TimeSpan? preMainTimeout = null,
         Func<int, TimeSpan>? environmentalBackoff = null,
         PreDevelopBuildGate? preDevelopBuildGate = null,
-        TimeSpan? preDevelopTimeout = null)
+        TimeSpan? preDevelopTimeout = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _git = git;
         _pipelineLog = pipelineLog;
@@ -59,6 +61,7 @@ public sealed class MergeIntoDevelopRunner
         _projectSettings = projectSettings;
         _preMainTestGate = preMainTestGate;
         _preDevelopBuildGate = preDevelopBuildGate;
+        _attemptAuthority = attemptAuthority;
         _preMainTimeout = preMainTimeout is { } configured && configured > TimeSpan.Zero
             ? configured
             : TimeSpan.FromHours(1);
@@ -175,6 +178,28 @@ public sealed class MergeIntoDevelopRunner
             }
 
             var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
+            if (reviewSubject is not null
+                && _attemptAuthority is not null
+                && !ReviewSubjectStore.TryValidateCurrentAttempt(
+                    jobFolderPath,
+                    reviewSubject,
+                    _attemptAuthority,
+                    out var subjectError))
+            {
+                var stale = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: subjectError);
+                Record(
+                    jobFolderPath,
+                    project,
+                    jobId,
+                    integrationBranch,
+                    stale,
+                    preMainResult: null,
+                    preDevelopResult: null,
+                    startedAt);
+                return stale;
+            }
             var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
             var branch = reviewSubject is not null
                 ? TaskIntegrationBranch.Name(
@@ -186,7 +211,7 @@ public sealed class MergeIntoDevelopRunner
             BuildTestGateResult? preMainResult = null;
             BuildTestGateResult? preDevelopResult = null;
             MergeIntoIntegrationResult result;
-            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch);
+            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch, ct);
             if (!synchronized.Success)
             {
                 result = MergeIntoIntegrationResult.Of(
@@ -222,7 +247,8 @@ public sealed class MergeIntoDevelopRunner
                         repoRoot,
                         delivery.Ref,
                         delivery.ExpectedResultSha ?? string.Empty,
-                        branch)).ConfigureAwait(false);
+                        branch,
+                        ct)).ConfigureAwait(false);
             }
             else
             {
@@ -232,7 +258,7 @@ public sealed class MergeIntoDevelopRunner
                     jobFolderPath,
                     repoRoot,
                     branch,
-                    () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch)).ConfigureAwait(false);
+                    () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch, ct)).ConfigureAwait(false);
             }
             _logger.LogInformation(
                 "merge-into-develop project={Project} job={JobId} delivery={Delivery} integration={Integration} strategy={Strategy} outcome={Outcome}",
@@ -247,12 +273,12 @@ public sealed class MergeIntoDevelopRunner
             if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
             {
                 // Pin the object the push may publish: the merge result this card's
-                // gate released, or - for AlreadyMerged, where this run produced no
-                // commit - the branch tip as it stands at release time. Reading it
-                // here and not in the worker is what closes the gate window: by the
-                // time the queued push runs, the tip may already carry a merge no
-                // gate has approved yet.
-                var approvedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
+                // gate released, or, for AlreadyMerged, the exact SHA recovered
+                // from the gate receipt. A project without an applicable gate uses
+                // the branch tip as it stands at release time. Reading it here and
+                // not in the worker closes the gate window: by the time the queued
+                // push runs, the tip may carry a merge no gate approved.
+                var approvedSha = !string.IsNullOrWhiteSpace(result.MergedSha)
                     ? result.MergedSha
                     : _git.GetBranchTip(repoRoot, branch);
                 MaybeEnqueueIntegrationPush(
@@ -315,11 +341,10 @@ public sealed class MergeIntoDevelopRunner
         Func<MergeIntoIntegrationResult> merge)
     {
         var profile = BuildProfileFor(project);
-        var skipReason = _preDevelopBuildGate is null
-            ? "no build gate is wired"
-            : PreDevelopBuildGate.AppliesTo(profile)
-                ? null
-                : "the project declares no build-profile build commands";
+        var gateApplies = PreDevelopBuildGate.AppliesTo(profile);
+        var skipReason = gateApplies
+            ? null
+            : "the project declares no build-profile build commands";
         var result = merge();
         if (skipReason is not null)
         {
@@ -328,17 +353,31 @@ public sealed class MergeIntoDevelopRunner
                 project, jobId, integrationBranch, skipReason);
             return (result, null);
         }
-        if (result.Outcome != MergeIntoIntegrationOutcome.Merged) return (result, null);
+        if (result.Outcome is not (MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged))
+            return (result, null);
+
+        var gatedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
+            ? result.MergedSha
+            : _git.GetBranchTip(repoRoot, integrationBranch);
+        if (string.IsNullOrWhiteSpace(gatedSha))
+        {
+            return (
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: $"The build gate could not resolve the exact {integrationBranch} SHA."),
+                null);
+        }
 
         // The remote-delivery merge may create the configured local integration
         // branch from origin. In that case there was no local tip to capture
         // before the merge. The first parent of the new --no-ff merge commit is
         // the exact synchronized integration tip and therefore the authoritative
         // rollback anchor.
-        var preMergeTip = string.IsNullOrWhiteSpace(result.MergedSha)
-            ? null
-            : _git.GetFirstParent(repoRoot, result.MergedSha);
-        if (string.IsNullOrWhiteSpace(preMergeTip))
+        var preMergeTip = result.Outcome == MergeIntoIntegrationOutcome.Merged
+            ? _git.GetFirstParent(repoRoot, gatedSha)
+            : null;
+        if (result.Outcome == MergeIntoIntegrationOutcome.Merged
+            && string.IsNullOrWhiteSpace(preMergeTip))
         {
             var missingAnchorReason =
                 $"The build gate could not determine the pre-merge tip of {integrationBranch}; " +
@@ -352,51 +391,104 @@ public sealed class MergeIntoDevelopRunner
                 false,
                 false)
             {
-                ExpectedSha = result.MergedSha,
+                ExpectedSha = gatedSha,
                 FailureKind = BuildTestGateFailureKind.MissingSource,
             };
             RecordGateEvidence(jobFolderPath, "pre-develop-build-gate", missingAnchor);
             return (
                 MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
-                    mergedSha: result.MergedSha,
+                    mergedSha: gatedSha,
                     error: missingAnchor.Reason),
                 missingAnchor);
         }
 
-        var gate = await _preDevelopBuildGate!.RunAsync(
-            new BuildTestGateRequest(repoRoot, result.MergedSha, "merge-into-develop-build-gate")
+        // BP-02: ancestry proves only that the delivery is present. It does not
+        // prove that the merge result passed its gate before a process died.
+        // Recovery may reuse only a durable verdict whose expected and tested
+        // SHA match the exact branch object it is about to release.
+        var gate = result.Outcome == MergeIntoIntegrationOutcome.AlreadyMerged
+            ? ReadExactGateVerdict(jobFolderPath, "pre-develop-build-gate", gatedSha)
+            : null;
+        if (gate is null)
+        {
+            if (_preDevelopBuildGate is null)
             {
-                Project = project,
-                JobId = jobId,
-                Lane = TaskStates.Completed,
-                TestExecution = TestExecutionFor(project),
-                JobFolderPath = jobFolderPath,
-                SubjectRef = integrationBranch,
-            },
-            profile,
-            _preDevelopTimeout,
-            // Deliberately NOT the caller's token: once the background worker
-            // starts a merge, its gate and possible rollback must reach a
-            // consistent terminal state. The gate stays bounded by its timeout.
-            CancellationToken.None).ConfigureAwait(false);
-        RecordGateEvidence(jobFolderPath, "pre-develop-build-gate", gate);
+                gate = new BuildTestGateResult(
+                    BuildTestGateVerdict.Fail,
+                    null,
+                    0,
+                    string.Empty,
+                    "The applicable pre-develop build gate is not available.",
+                    false,
+                    false)
+                {
+                    ExpectedSha = gatedSha,
+                    FailureKind = BuildTestGateFailureKind.MissingSource,
+                };
+            }
+            else
+            {
+                gate = await _preDevelopBuildGate.RunAsync(
+                    new BuildTestGateRequest(repoRoot, gatedSha, "merge-into-develop-build-gate")
+                    {
+                        Project = project,
+                        JobId = jobId,
+                        Lane = TaskStates.Completed,
+                        TestExecution = TestExecutionFor(project),
+                        JobFolderPath = jobFolderPath,
+                        SubjectRef = integrationBranch,
+                    },
+                    profile,
+                    _preDevelopTimeout,
+                    // Deliberately NOT the caller's token: once the background worker
+                    // starts a merge, its gate and possible rollback must reach a
+                    // consistent terminal state. The gate stays bounded by its timeout.
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            RecordGateEvidence(jobFolderPath, "pre-develop-build-gate", gate);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "merge-into-develop recovered exact build-gate verdict for project={Project} job={JobId} integration={Integration} sha={Sha} verdict={Verdict}",
+                project, jobId, integrationBranch, gatedSha, gate.Verdict);
+        }
 
         if (PreDevelopBuildGate.IsGreen(gate))
         {
             _logger.LogInformation(
                 "merge-into-develop build gate passed for project={Project} job={JobId} integration={Integration} merged={MergedSha} verdict={Verdict}",
-                project, jobId, integrationBranch, result.MergedSha, gate.Verdict);
+                project, jobId, integrationBranch, gatedSha, gate.Verdict);
+            if (result.Outcome == MergeIntoIntegrationOutcome.AlreadyMerged)
+            {
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.AlreadyMerged,
+                    mergedSha: gatedSha);
+            }
             return (result, gate);
         }
 
-        var reset = _git.ResetHard(repoRoot, preMergeTip!);
+        // A merge created by this invocation owns an exact rollback anchor. An
+        // AlreadyMerged recovery does not know who created the existing graph,
+        // so it fails closed without rewriting that branch. In both cases the
+        // failed outcome prevents Passed and prevents a push.
+        var reset = result.Outcome == MergeIntoIntegrationOutcome.Merged
+            ? _git.ResetHard(repoRoot, preMergeTip!)
+            : null;
         _logger.LogWarning(
             "merge-into-develop build gate FAILED for project={Project} job={JobId} integration={Integration} merged={MergedSha} verdict={Verdict} reason={Reason} rollback={Rollback}",
-            project, jobId, integrationBranch, result.MergedSha, gate.Verdict, gate.Reason,
-            reset.Success ? "reset-to-pre-merge-tip" : "FAILED: " + (reset.Error ?? "unknown"));
+            project, jobId, integrationBranch, gatedSha, gate.Verdict, gate.Reason,
+            reset is null
+                ? "not-attempted-existing-history"
+                : reset.Success
+                    ? "reset-to-pre-merge-tip"
+                    : "FAILED: " + (reset.Error ?? "unknown"));
 
-        var error = reset.Success
+        var error = result.Outcome == MergeIntoIntegrationOutcome.AlreadyMerged
+            ? $"The build gate blocked recovery of the existing {integrationBranch} commit {Short(gatedSha)}: {gate.Reason}. " +
+              "The integration history was left unchanged, no push was released, and the delivery needs manual repair."
+            : reset!.Success
             ? $"The build gate blocked the merge into {integrationBranch}: {gate.Reason}. " +
               $"{integrationBranch} was rolled back to {Short(preMergeTip!)} and nothing was pushed; " +
               "start a steer round so the delivery builds on top of the current integration branch."
@@ -456,7 +548,8 @@ public sealed class MergeIntoDevelopRunner
                 repoRoot,
                 taskBranch,
                 delivery.ExpectedResultSha!,
-                releaseBranch);
+                releaseBranch,
+                ct);
             if (!inspected.Success)
             {
                 return (
@@ -539,8 +632,9 @@ public sealed class MergeIntoDevelopRunner
                     repoRoot,
                     delivery.Ref,
                     delivery.ExpectedResultSha ?? string.Empty,
-                    releaseBranch)
-                : _git.MergeBranchIntoIntegration(repoRoot, taskBranch, releaseBranch);
+                    releaseBranch,
+                    ct)
+                : _git.MergeBranchIntoIntegration(repoRoot, taskBranch, releaseBranch, ct);
             return (docsMerge, lightGate);
         }
 
@@ -871,6 +965,88 @@ public sealed class MergeIntoDevelopRunner
     }
 
     /// <summary>
+    /// Reads the newest durable gate receipt for one exact subject. A receipt is
+    /// applicable only when both the expected and tested SHAs match; malformed
+    /// or partial crash debris is ignored and forces a fresh gate.
+    /// </summary>
+    private static BuildTestGateResult? ReadExactGateVerdict(
+        string jobFolderPath,
+        string prefix,
+        string expectedSha)
+    {
+        var dir = Path.Combine(jobFolderPath, "post-steps");
+        if (!Directory.Exists(dir)) return null;
+
+        foreach (var path in Directory.GetFiles(dir, $"{prefix}-*.log")
+                     .OrderByDescending(GateEvidenceIndex))
+        {
+            try
+            {
+                using var reader = new StreamReader(path);
+                var verdictLine = reader.ReadLine();
+                var shaLine = reader.ReadLine();
+                var reasonLine = reader.ReadLine();
+                if (verdictLine is null || shaLine is null || reasonLine is null) continue;
+
+                var verdictValue = HeaderValue(verdictLine, "verdict=");
+                var recordedExpected = HeaderValue(shaLine, "expectedSha=");
+                var recordedTested = HeaderValue(shaLine, "testedSha=");
+                if (!Enum.TryParse<BuildTestGateVerdict>(verdictValue, ignoreCase: true, out var verdict)
+                    || !string.Equals(recordedExpected, expectedSha, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(recordedTested, expectedSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var exitValue = HeaderValue(verdictLine, "exit=");
+                int? exitCode = int.TryParse(exitValue, out var parsedExitCode)
+                    ? parsedExitCode
+                    : null;
+                _ = long.TryParse(HeaderValue(verdictLine, "durationMs="), out var durationMs);
+                var reason = reasonLine.StartsWith("reason=", StringComparison.Ordinal)
+                    ? reasonLine["reason=".Length..]
+                    : "Recovered durable gate verdict.";
+                return new BuildTestGateResult(
+                    verdict,
+                    exitCode,
+                    durationMs,
+                    string.Empty,
+                    reason,
+                    false,
+                    false)
+                {
+                    ExpectedSha = recordedExpected,
+                    TestedSha = recordedTested == "n/a" ? null : recordedTested,
+                };
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "MergeIntoDevelopRunner: corrupt gate evidence is ignored");
+            }
+        }
+
+        return null;
+    }
+
+    private static int GateEvidenceIndex(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        var separator = name.LastIndexOf('-');
+        return separator >= 0 && int.TryParse(name[(separator + 1)..], out var index)
+            ? index
+            : 0;
+    }
+
+    private static string? HeaderValue(string line, string key)
+    {
+        var start = line.IndexOf(key, StringComparison.Ordinal);
+        if (start < 0) return null;
+        start += key.Length;
+        var end = line.IndexOf(' ', start);
+        return end < 0 ? line[start..] : line[start..end];
+    }
+
+    /// <summary>
     /// Writes one numbered gate-evidence log into the job's <c>post-steps</c>
     /// folder (<c>&lt;prefix&gt;-N.log</c>): verdict, exact expected / tested SHA,
     /// the test-selection audit, and the tail of the command output. Same shape
@@ -931,11 +1107,14 @@ public sealed class MergeIntoDevelopRunner
                     result.Error ?? $"The build gate blocked the merge into {integrationBranch}.",
                     preDevelopResult?.Reason);
             case MergeIntoIntegrationOutcome.AlreadyMerged:
+                var exactGate = preDevelopResult is null
+                    ? string.Empty
+                    : $" Exact build-gate verdict {preDevelopResult.Verdict} exists for {Short(result.MergedSha!)}.";
                 return (
                     PipelineStepStatus.Passed,
                     "already-merged",
-                    $"Task branch already contained in {integrationBranch}; no merge needed.",
-                    null);
+                    $"Task branch already contained in {integrationBranch}; no merge needed.{exactGate}",
+                    preDevelopResult?.Reason);
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
             case MergeIntoIntegrationOutcome.PushedForReview:

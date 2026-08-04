@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-03
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -107,7 +107,16 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   Zero-file lifecycle entries whose subjects start with
   `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
   visible attribution metadata but are not delivery expectations. A matching
-  subject with changed files remains a real integration expectation.
+  subject with changed files remains a real integration expectation. Target
+  branch ancestry is stronger evidence than stale file metadata: a commit that
+  is already reachable from the integration branch is never discarded by the
+  zero-file marker heuristic.
+- Every `commits[]` write re-derives `filesChanged` and `files` from the Git
+  object when it is reachable, regardless of whether the producer is local
+  attribution, remote salvage, a delivery backfill, or an operator/recovery
+  path. Startup performs an idempotent, Git-read-only repair of missing commit
+  metadata on non-archived cards and writes only the affected `task.json` files
+  through `TaskMutationService`.
 - Remote commit attribution is evaluated independently for every fenced run
   attempt. Each attempt's verified delivery range passes through the
   foreign-task guard before persistence. Card-level `commits[]` is the
@@ -338,6 +347,11 @@ cannot erase an operator decision.
   ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
   [runner.md](./runner.md) and the `references` field in
   [../contracts/filesystem.md](../contracts/filesystem.md).
+  An edge may use `{ "key": "AGT-2050", "releaseGate": true }` to require an
+  explicit target-card release after terminal completion. Operators and
+  dedicated release steps set that independent flag through
+  `PUT /api/tasks/{id}/release`; ordinary string edges keep their existing
+  terminal-state-only semantics.
 - Rendered task references resolve through `POST /api/tasks/reference-status`.
   Send `{ "keys": ["AGT-2050", "CAR-2"] }`; keys are trimmed, uppercased,
   deduplicated, and capped at 200. The response is `{ "items": [...] }`, where
@@ -364,6 +378,15 @@ cannot erase an operator decision.
   Missing commit timestamps disable this fallback rather than reusing historical
   key-only evidence. Planned and running matches are pending evidence; an older
   green run remains visible as `diff not included` and never turns the card green.
+- `GET /api/tasks` and `GET /api/tasks/grouped` never run a Git process on the
+  request path. Merge, integration, publish, and test-evidence fields come from
+  the latest completed in-memory `TaskListGitProjectionCache` snapshot. A cold
+  read may omit those additive fields while it queues one background refresh;
+  later reads fold in the completed snapshot. Input changes and a two-second
+  refresh interval queue a new single-flight refresh without making the request
+  wait. `GitProcessTelemetry` records `tasks/list` and `tasks/grouped` separately
+  from `tasks/list-refresh`, so request rollups must remain at zero spawns even
+  when HEAD churn causes the background refresh to recompute Git projections.
 
 ## Execution location on task reads
 

@@ -15,6 +15,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { validateManifest } from './core.mjs';
+import { copyReportEvidenceTree } from './report-capture.mjs';
 import { renderReport, validateRunResult } from './report.mjs';
 
 const execFile = promisify(execFileCallback);
@@ -80,7 +81,9 @@ const componentVersions = {
 await writeJson(path.join(reportRoot, 'component-versions.json'), componentVersions);
 
 await Promise.all([
-  cp(composeEvidenceRoot, path.join(rawRoot, 'compose-machine-bound'), { recursive: true }),
+  copyReportEvidenceTree(
+    composeEvidenceRoot,
+    path.join(rawRoot, 'compose-machine-bound')),
   cp(parallelEvidenceRoot, path.join(rawRoot, 'parallel-delivery'), { recursive: true }),
   copyIfPresent(
     path.join(repoRoot, '.tmp', 'remote-test-suite', 'compose', composeRunId, 'evidence',

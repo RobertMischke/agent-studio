@@ -120,7 +120,8 @@ public sealed record RunReconcileRequest(
     string LeaseId,
     long Fence,
     long ReportSequence,
-    int RequestedTtlSeconds = 120);
+    int RequestedTtlSeconds = 120,
+    string? LeaseInstanceId = null);
 
 public sealed record RunReconcileResponse(
     string Status,
@@ -135,7 +136,8 @@ public sealed record PostStepClaimRequest(
     string LeaseId,
     long RunFence,
     long ReportSequence,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    string? LeaseInstanceId = null);
 
 public sealed record PostStepClaimResponse(
     string Status,
@@ -152,7 +154,8 @@ public sealed record PostStepCompleteRequest(
     long ClaimFence,
     string Outcome,
     IReadOnlyList<string> ArtifactHashes,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    string? LeaseInstanceId = null);
 
 public sealed record PostStepCompleteResponse(
     string Status,

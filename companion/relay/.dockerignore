@@ -1,0 +1,15 @@
+.git
+# Never include local credentials or environment configuration. Checked-in
+# templates and examples remain available to image builds.
+**/*.env
+**/*.token
+**/.git-credentials
+!**/*.env.template
+!**/*.env.example
+!**/*.token.template
+!**/*.token.example
+!**/.git-credentials.template
+!**/.git-credentials.example
+**/bin
+**/obj
+**/*.log

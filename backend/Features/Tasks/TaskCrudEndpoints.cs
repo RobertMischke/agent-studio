@@ -71,8 +71,12 @@ public static class TaskCrudEndpoints
             return Results.Ok(new TaskReferenceStatusResponse(items!));
         });
 
-        group.MapGet("/", (string? project, bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/", (string? project, bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, TaskListGitProjectionCache gitProjection, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
+            using var gitTelemetry = GitProcessTelemetry.BeginRequest(
+                "tasks/list",
+                loggerFactory.CreateLogger("TaskListProjection"),
+                includeNested: true);
             var projectRequested = !string.IsNullOrWhiteSpace(project);
             var projectWatchPath = ResolveWatchPath(projects, project, watchPath: null);
             if (projectRequested && string.IsNullOrWhiteSpace(projectWatchPath))
@@ -85,17 +89,14 @@ public static class TaskCrudEndpoints
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
-            var mergeLookup = mergeStatus.BuildLookup(raw);
-            var integrationLookup = integrationStatus.BuildLookup(raw);
-            var publishLookup = publishStatus.BuildLookup(raw);
-            var testRunLookup = testRuns.BuildLookup(raw);
+            var gitLookup = gitProjection.ReadCacheOnly(raw);
             var liveLookup = liveStatus.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
                           .WithLiveStatus(liveLookup)
-                          .WithMergeSignal(mergeLookup)
-                          .WithIntegrationStatus(integrationLookup)
-                          .WithPublishSignal(publishLookup)
-                          .WithTestRunEvidence(testRunLookup)
+                          .WithMergeSignal(gitLookup.Merge)
+                          .WithIntegrationStatus(gitLookup.Integration)
+                          .WithPublishSignal(gitLookup.Publish)
+                          .WithTestRunEvidence(gitLookup.TestRuns)
                           .ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
@@ -111,24 +112,25 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskIntegrationStatusService integrationStatus, TaskPublishableService publishStatus, TestRunService testRuns, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, TaskListGitProjectionCache gitProjection, TaskLiveStatusProjection liveStatus, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
+            using var gitTelemetry = GitProcessTelemetry.BeginRequest(
+                "tasks/grouped",
+                loggerFactory.CreateLogger("TaskListProjection"),
+                includeNested: true);
             var raw = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
-            var mergeLookup = mergeStatus.BuildLookup(raw);
-            var integrationLookup = integrationStatus.BuildLookup(raw);
-            var publishLookup = publishStatus.BuildLookup(raw);
-            var testRunLookup = testRuns.BuildLookup(raw);
+            var gitLookup = gitProjection.ReadCacheOnly(raw);
             var liveLookup = liveStatus.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
                           .WithLiveStatus(liveLookup)
-                          .WithMergeSignal(mergeLookup)
-                          .WithIntegrationStatus(integrationLookup)
-                          .WithPublishSignal(publishLookup)
-                          .WithTestRunEvidence(testRunLookup)
+                          .WithMergeSignal(gitLookup.Merge)
+                          .WithIntegrationStatus(gitLookup.Integration)
+                          .WithPublishSignal(gitLookup.Publish)
+                          .WithTestRunEvidence(gitLookup.TestRuns)
                           .ToList();
             // F35: each lane is sorted using a per-project strategy. The kanban
             // mixes projects inside one lane, so the sort groups by project,
@@ -866,6 +868,16 @@ public static class TaskCrudEndpoints
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = mutations.SetJobTaskType(jobId, req.TaskType, watchPath);
             return success ? Results.Ok() : Results.NotFound();
+        });
+
+        // Explicit content release for references.dependsOn edges with
+        // releaseGate=true. Completion never sets this implicitly: the endpoint
+        // is the operator/release-step seam that records the additional approval.
+        group.MapPut("/{jobId}/release", (string jobId, string? project, string? watchPath, SetJobReleasedRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var success = mutations.SetJobReleased(jobId, req?.Released == true, watchPath);
+            return success ? Results.Ok(new { released = req?.Released == true }) : Results.NotFound();
         });
 
         // Replace-all: the request's Tags array becomes the new full set on

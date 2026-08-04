@@ -9,8 +9,20 @@ public enum OutOfBandStampDecision
     Stamp,
 
     /// <summary>
-    /// No proof (missing, unverifiable, or actively contradicted). The card gets
-    /// an honest <c>unverified-delivery</c> state instead of a completion stamp.
+    /// No delivery was claimed at all, and the target lane is not terminal. The
+    /// card is still reconciled - refusing here would resurrect the abandoned
+    /// "escalated / no summary" corpse this endpoint exists to retire (AGT-1917),
+    /// and it would break the worktree-blocked escalation, whose whole point is
+    /// that nothing could be secured. But the card is marked
+    /// <c>delivery:unverified</c> and says so, and it gets no <c>commits[]</c>:
+    /// reconciled is not the same as delivered.
+    /// </summary>
+    StampUnproven,
+
+    /// <summary>
+    /// Either the repository actively contradicts the claim, or a terminal lane
+    /// was requested without proof. The card gets an honest
+    /// <c>unverified-delivery</c> state instead of a completion stamp.
     /// </summary>
     RefuseUnverified,
 }
@@ -47,15 +59,38 @@ public static class OutOfBandStampPolicy
     public static bool RequiresRepositoryProof(string? mode) => !TaskModes.IsReportOnly(mode);
 
     /// <summary>
-    /// Decides whether a claimed out-of-band completion may stamp the card.
-    /// <paramref name="verification"/> is <c>null</c> when the request carried no
-    /// commit claim at all - which for a proof-requiring mode is exactly the
-    /// 11.07. phantom shape and therefore refused.
+    /// Lanes from which a card reads as finished. Reaching one of these
+    /// out-of-band is what the 11.07. phantom wave did, so they are the lanes
+    /// that require repository proof.
+    /// </summary>
+    public static bool IsTerminalLane(string? targetState) =>
+        string.Equals(targetState, TaskStates.Completed, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(targetState, TaskStates.Archive, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Decides what a claimed out-of-band completion may do to the card.
+    ///
+    /// <para>The rule is deliberately asymmetric, because the two failure shapes
+    /// in the history are different. A claim the repository <em>contradicts</em>
+    /// ("Delivered lies") is always refused - a false claim is worse than none.
+    /// <em>No</em> claim is not a lie, so it still reconciles the card into a
+    /// non-terminal lane (an operator rescuing a stuck card rarely has a SHA at
+    /// hand, and the worktree-blocked escalation by definition has none) - but it
+    /// never reaches a terminal lane and never writes <c>commits[]</c>.</para>
+    ///
+    /// <para><paramref name="verification"/> is <c>null</c> when the request
+    /// carried no commit claim at all.</para>
     /// </summary>
     public static (OutOfBandStampDecision Decision, string Reason) Decide(
         string? mode,
+        string? targetState,
         DeliveryVerificationResult? verification)
     {
+        // A claim the repository contradicts is refused everywhere - there is no
+        // lane in which a false delivery claim is acceptable.
+        if (verification is not null && verification.IsDisproved)
+            return (OutOfBandStampDecision.RefuseUnverified, verification.Note);
+
         if (!RequiresRepositoryProof(mode))
         {
             return (OutOfBandStampDecision.Stamp,
@@ -63,15 +98,23 @@ public static class OutOfBandStampPolicy
                 + "es gibt keinen Repository-Anspruch zu pruefen.");
         }
 
-        if (verification is null)
+        if (verification is { IsVerified: true })
+            return (OutOfBandStampDecision.Stamp, verification.Note);
+
+        // From here on: no claim, or a claim that could not be checked.
+        var why = verification is null
+            ? "Kein Commit-Anspruch mitgeliefert."
+            : verification.Note;
+
+        if (IsTerminalLane(targetState))
         {
             return (OutOfBandStampDecision.RefuseUnverified,
-                "Kein Commit-Anspruch mitgeliefert: eine Coding-Karte kann ohne verifizierbaren "
-                + "Commit im Zielrepo nicht terminal gestempelt werden (Phantom-Muster 11.07.).");
+                why + " Eine Coding-Karte ohne verifizierbaren Commit im Zielrepo darf nicht "
+                    + $"terminal nach '{targetState}' gestempelt werden (Phantom-Muster 11.07.).");
         }
 
-        return verification.IsVerified
-            ? (OutOfBandStampDecision.Stamp, verification.Note)
-            : (OutOfBandStampDecision.RefuseUnverified, verification.Note);
+        return (OutOfBandStampDecision.StampUnproven,
+            why + " Die Karte wird versorgt, aber als unbestaetigte Lieferung gefuehrt: "
+                + "kein commits[]-Eintrag, kein terminaler Stempel.");
     }
 }

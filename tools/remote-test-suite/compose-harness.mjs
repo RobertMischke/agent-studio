@@ -23,6 +23,7 @@ import {
   redact,
   unitOperationPlan
 } from './compose-core.mjs';
+import { sanitizeEnvironmentValues } from './report-capture.mjs';
 
 const suiteRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(suiteRoot, '..', '..');
@@ -595,7 +596,9 @@ async function collectEvidence(label) {
     const id = (await composeAllowFailure(['ps', '--all', '--quiet', service], 15_000)).stdout.trim();
     if (id) {
       const inspected = await executeAllowFailure(['docker', 'inspect', id], { timeoutMs: 30_000 });
-      await writeTextEvidence(`inspect/${service}.json`, redact(inspected.stdout + inspected.stderr, [authToken]));
+      await writeTextEvidence(
+        `inspect/${service}.json`,
+        sanitizeEnvironmentValues(inspected.stdout + inspected.stderr, [authToken]));
     }
   }
   for (const [file, route] of Object.entries({

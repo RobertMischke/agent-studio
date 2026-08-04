@@ -117,6 +117,39 @@ public class TaskStateMachineOutcomeTests : IDisposable
         Assert.Contains("\"phase\": \"\"", taskJson);
     }
 
+    [Theory]
+    [InlineData(TaskStates.AutoReview, TaskStates.Ready)]
+    [InlineData(TaskStates.Ready, TaskStates.Progress)]
+    public void MoveJob_NewAttemptState_InvalidatesRemoteReviewSubject(
+        string sourceState,
+        string targetState)
+    {
+        const string slug = "new-attempt";
+        SeedJob(sourceState, slug);
+        var sourceFolder = Path.Combine(_watchPath, sourceState, slug);
+        ReviewSubjectStore.Write(sourceFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-NEW-ATTEMPT",
+            RunAttemptId = "run-old",
+            Project = Project,
+            Repository = "fixture",
+            ResultSha = new string('a', 40),
+            AttemptChainId = "lease-old",
+            Executor = "remote-runner",
+            LeaseId = "lease-old",
+            FencingToken = 1,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var (machine, _) = BuildMachine();
+        var outcome = machine.MoveJob(slug, targetState, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.NotNull(outcome.NewFolderPath);
+        Assert.Null(ReviewSubjectStore.Read(outcome.NewFolderPath!));
+        Assert.True(File.Exists(ReviewSubjectStore.PathFor(outcome.NewFolderPath!) + ".invalidated"));
+    }
+
     private void SeedJob(string state, string slug, string? phase = null)
     {
         var dir = Path.Combine(_watchPath, state, slug);

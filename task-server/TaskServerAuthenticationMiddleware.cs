@@ -79,7 +79,8 @@ public sealed class TaskServerAuthenticationMiddleware(
     private static bool IsRunnerMutation(HttpRequest request)
         => !HttpMethods.IsGet(request.Method)
            && (request.Path.StartsWithSegments("/api/v1/runners")
-               || request.Path.StartsWithSegments("/api/v1/runs"));
+               || request.Path.StartsWithSegments("/api/v1/runs")
+               || request.Path.StartsWithSegments("/api/v1/work-permits"));
 
     private static bool Matches(string? presented, string? expected)
     {

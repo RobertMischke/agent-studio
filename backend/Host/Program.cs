@@ -217,6 +217,7 @@ builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
 builder.Services.AddSingleton<AgentStudio.Shared.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
+builder.Services.AddSingleton<CliOutputLogMaintenanceService>();
 // F45a: workspace / project registries + jobKey resolver. Additive layer;
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<AgentStudio.Registry.WorkspaceRegistry>();
@@ -310,6 +311,7 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<TaskListGitProjectionCache>();
 builder.Services.AddSingleton<OperatorReviewRequeueService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
 // chips). PublishTargetService derives + caches per project; TaskPublishableService
@@ -391,6 +393,7 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 // back the productive /api/runner/lease API (§8.2C), the prepared successor to
 // the disk-backed .pickup-lock.json guard.
 builder.Services.AddSingleton<AttemptAuthorityService>();
+builder.Services.AddSingleton<ReviewAttemptTaskLifecycleService>();
 builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
@@ -818,6 +821,26 @@ catch (Exception ex)
             .LogWarning("Resolved duplicate task keys by re-keying {Count} task(s)", dedupCount);
 }
 
+// ReviewAttempts are claimable only while their owning task remains in Auto
+// Review. Repair stale authority left behind by older terminal lane moves
+// before any Remote Review Executor can poll this process.
+try
+{
+    var repaired = app.Services.GetRequiredService<ReviewAttemptTaskLifecycleService>()
+        .SweepUnclaimableAttempts();
+    if (repaired > 0)
+    {
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogWarning(
+                "review-attempt-boot-sweep superseded={Superseded}",
+                repaired);
+    }
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("ReviewAttemptTaskLifecycle.BootSweep", ex);
+}
+
 // One-time initialization of durable per-page agent read counters from the
 // historical cli-output.log inventory. The marker makes subsequent boots a
 // cheap no-op; this runs before CLI reattachment and before the listener starts
@@ -829,6 +852,31 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("WikiAgentReadBackfill", ex);
+}
+
+// One-time, idempotent repair of Git-derived commit file metadata on live
+// cards. The sweep reads Git and writes only task.json through the owning
+// mutation service; entries with complete metadata make later boots a no-op.
+try
+{
+    app.Services.GetRequiredService<TaskMutationService>().BackfillMissingCommitMetadata();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CommitMetadataBackfill", ex);
+}
+
+// Cap legacy durable CLI logs after the one-time full-history wiki read
+// backfill but before CLI reattachment can append new output. The sweep also
+// ensures the sole rotation file stays outside workspace evidence commits.
+// It is idempotent and cheap once every active/rotated file is bounded.
+try
+{
+    app.Services.GetRequiredService<CliOutputLogMaintenanceService>().Run();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CliOutputLogMaintenance", ex);
 }
 
 // AGT-2438: one-time, idempotent repair for accepted legacy cards whose

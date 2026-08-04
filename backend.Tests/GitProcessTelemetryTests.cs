@@ -58,6 +58,27 @@ public class GitProcessTelemetryTests
     }
 
     [Fact]
+    public void BeginRequest_WithNestedAggregation_IncludesChildSpawns()
+    {
+        using (GitProcessTelemetry.BeginRequest(
+                   "outer",
+                   NullLogger.Instance,
+                   includeNested: true))
+        {
+            GitProcessTelemetry.Record("a", 1, 0);
+            using (GitProcessTelemetry.BeginRequest("inner", NullLogger.Instance))
+            {
+                GitProcessTelemetry.Record("b", 2, 0);
+            }
+
+            var tally = GitProcessTelemetry.CurrentTally();
+            Assert.NotNull(tally);
+            Assert.Equal(2, tally!.Value.Spawns);
+            Assert.Equal(3, tally.Value.GitMs);
+        }
+    }
+
+    [Fact]
     public async Task BeginRequest_CountsSpawnsRecordedFromParallelTasks()
     {
         using (GitProcessTelemetry.BeginRequest("test/parallel", NullLogger.Instance))

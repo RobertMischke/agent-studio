@@ -152,6 +152,11 @@ server, proves there is no unresolved authority, and removes only containers,
 volumes, networks, and images under the run's harness identity. Add `--keep`
 only for interactive diagnosis.
 
+Container inspection evidence is sanitized before it reaches disk. Values of
+environment variables whose names match `TOKEN`, `SECRET`, `KEY`, or `PAT` are
+replaced with `[REDACTED]`. Report publication applies the same filter again
+before copying Compose evidence into the checked-in raw report tree.
+
 The unit controls are available after `up`:
 
 ```bash

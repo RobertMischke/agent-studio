@@ -81,6 +81,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-2400",
+            RunAttemptId = "run-main",
             Project = "Fixture",
             Repository = repo,
             ResultSha = resultSha,
@@ -100,6 +101,72 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Contains("Pre-main test gate", outcome.Error, StringComparison.Ordinal);
         Assert.NotEqual(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
         Assert.NotEqual(resultSha, RunGit(repo, "rev-parse develop").Out.Trim());
+    }
+
+    [Fact]
+    public void Run_StaleRemoteSubject_DoesNotRetargetAcceptedDelivery()
+    {
+        var repo = SeedRepo("runner-stale-subject");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b runner/agent-runner-01/AGT-STALE");
+        File.WriteAllText(Path.Combine(repo, "stale.txt"), "superseded work");
+        Commit(repo, "feat: superseded remote work");
+        var staleSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var authority = new AttemptAuthorityService(
+            new ConfigurationBuilder().Build(),
+            NullLogger<AttemptAuthorityService>.Instance);
+        var staleRun = authority.AcquireRun(
+            "AGT-STALE", "PROJ-FIXTURE", null,
+            "agent-runner-01", "host-a", 60, "claim-stale").RunAttempt!;
+        var settled = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                staleRun.AttemptId,
+                staleRun.LastFence,
+                staleRun.AuthorityEpoch,
+                "settle-stale"),
+            Outcome = "done",
+            ResultSha = staleSha,
+        });
+        Assert.True(settled.Accepted);
+        var currentRun = authority.AcquireRun(
+            "AGT-STALE", "PROJ-FIXTURE", staleRun.AttemptId,
+            "local", "host-local", 60, "claim-current").RunAttempt!;
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "AGT-STALE");
+        File.WriteAllText(
+            Path.Combine(jobFolder, "task.json"),
+            """{"id":"AGT-STALE","key":"AGT-STALE"}""");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-STALE",
+            RunAttemptId = staleRun.AttemptId,
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = staleSha,
+            AttemptChainId = staleRun.Lease!.LeaseId,
+            Executor = "agent-runner-01",
+            LeaseId = staleRun.Lease.LeaseId,
+            FencingToken = staleRun.LastFence,
+            ResultRef = "runner/agent-runner-01/AGT-STALE",
+            IntegrationBranch = "develop",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            attemptAuthority: authority);
+
+        var outcome = runner.Run("Fixture", "AGT-STALE", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains(staleRun.AttemptId, outcome.Error);
+        Assert.Contains(currentRun.AttemptId, outcome.Error);
+        Assert.NotEqual(0, RunGit(repo, $"merge-base --is-ancestor {staleSha} develop").Code);
     }
 
     [Fact]
@@ -303,6 +370,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-REMOTE-MAIN",
+            RunAttemptId = "run-remote-main",
             Project = "Fixture",
             Repository = repo,
             ResultSha = resultSha,
@@ -370,6 +438,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-STALE-MAIN",
+            RunAttemptId = "run-stale-main",
             Project = "Fixture",
             Repository = repo,
             ResultSha = resultSha,
@@ -779,6 +848,205 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, outcome.Outcome);
         Assert.True(queue.Reader.TryRead(out var queued));
         Assert.Equal(tip, queued!.ApprovedSha);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RunAsync_DevelopTarget_AlreadyMergedWithExactGreenGateReceipt_ReusesReceipt()
+    {
+        var repo = SeedRepo("run-already-merged-gated");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/45");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"chore: pre-merged\" task/45");
+        var tip = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile { BuildCmds = ["cd ."] });
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail,
+            1,
+            20,
+            string.Empty,
+            "a matching durable receipt must prevent this rerun",
+            true,
+            false));
+        var queue = new IntegrationPushQueue();
+        var jobFolder = BeginRun(log, repo, jobId: "45");
+        var evidenceDir = Path.Combine(jobFolder, "post-steps");
+        Directory.CreateDirectory(evidenceDir);
+        File.WriteAllText(
+            Path.Combine(evidenceDir, "pre-develop-build-gate-1.log"),
+            $"verdict=Ok exit=0 durationMs=20\n" +
+            $"expectedSha={tip} testedSha={tip}\n" +
+            "reason=original exact gate passed\n");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: queue,
+            projectSettings: settings,
+            preDevelopBuildGate: new PreDevelopBuildGate(gateRunner));
+
+        var outcome = await runner.RunAsync(
+            "Fixture", "45", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, outcome.Outcome);
+        Assert.Equal(tip, outcome.MergedSha);
+        Assert.Equal(0, gateRunner.Invocations);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.Equal(tip, queued!.ApprovedSha);
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Passed, step!.Status);
+        Assert.Equal("already-merged", step.Verdict);
+        Assert.Contains("Exact build-gate verdict Ok", step.Reason);
+        Assert.Equal("original exact gate passed", step.VerdictSummary);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RunAsync_DevelopTarget_AlreadyMergedWithoutReceipt_RedGateNeverPassesOrEnqueues()
+    {
+        var repo = SeedRepo("run-already-merged-red-gate");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/46");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"chore: merge before crash\" task/46");
+        var tip = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile { BuildCmds = ["cd ."] });
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail,
+            1,
+            20,
+            "compile error",
+            "recovery gate failed",
+            true,
+            false));
+        var queue = new IntegrationPushQueue();
+        var jobFolder = BeginRun(log, repo, jobId: "46");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: queue,
+            projectSettings: settings,
+            preDevelopBuildGate: new PreDevelopBuildGate(gateRunner));
+
+        var outcome = await runner.RunAsync(
+            "Fixture", "46", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(1, gateRunner.Invocations);
+        Assert.Equal(tip, gateRunner.Request!.ExpectedSha);
+        Assert.Equal(MergeIntoIntegrationOutcome.GateFailed, outcome.Outcome);
+        Assert.Equal(tip, RunGit(repo, "rev-parse refs/heads/develop").Out.Trim());
+        Assert.False(queue.Reader.TryRead(out _));
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+        Assert.Equal("gate-failed", step.Verdict);
+        Assert.Contains("no push was released", step.Reason);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RunAsync_DevelopTarget_AlreadyMergedWithDifferentShaReceipt_RerunsExactGate()
+    {
+        var repo = SeedRepo("run-already-merged-wrong-receipt");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/47");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        var deliveryTip = RunGit(repo, "rev-parse refs/heads/task/47").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"chore: merge before crash\" task/47");
+        var integrationTip = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile { BuildCmds = ["cd ."] });
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok,
+            0,
+            20,
+            string.Empty,
+            "exact recovery gate passed",
+            true,
+            false));
+        var queue = new IntegrationPushQueue();
+        var jobFolder = BeginRun(log, repo, jobId: "47");
+        var evidenceDir = Path.Combine(jobFolder, "post-steps");
+        Directory.CreateDirectory(evidenceDir);
+        File.WriteAllText(
+            Path.Combine(evidenceDir, "pre-develop-build-gate-1.log"),
+            $"verdict=Ok exit=0 durationMs=20\n" +
+            $"expectedSha={deliveryTip} testedSha={deliveryTip}\n" +
+            "reason=gate covered only the delivery, not the merge result\n");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: queue,
+            projectSettings: settings,
+            preDevelopBuildGate: new PreDevelopBuildGate(gateRunner));
+
+        var outcome = await runner.RunAsync(
+            "Fixture", "47", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, outcome.Outcome);
+        Assert.Equal(1, gateRunner.Invocations);
+        Assert.Equal(integrationTip, gateRunner.Request!.ExpectedSha);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.Equal(integrationTip, queued!.ApprovedSha);
+        Assert.Equal(
+            2,
+            Directory.GetFiles(evidenceDir, "pre-develop-build-gate-*.log").Length);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RunAsync_DevelopTarget_AlreadyMergedWithApplicableButUnwiredGate_FailsClosed()
+    {
+        var repo = SeedRepo("run-already-merged-unwired-gate");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/48");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"chore: merge before crash\" task/48");
+        var tip = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile { BuildCmds = ["cd ."] });
+        var queue = new IntegrationPushQueue();
+        var jobFolder = BeginRun(log, repo, jobId: "48");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            pushQueue: queue,
+            projectSettings: settings,
+            preDevelopBuildGate: null);
+
+        var outcome = await runner.RunAsync(
+            "Fixture", "48", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.GateFailed, outcome.Outcome);
+        Assert.Equal(tip, RunGit(repo, "rev-parse refs/heads/develop").Out.Trim());
+        Assert.False(queue.Reader.TryRead(out _));
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+        Assert.Equal("gate-failed", step.Verdict);
+        Assert.Contains("not available", step.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

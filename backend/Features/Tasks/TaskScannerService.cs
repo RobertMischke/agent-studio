@@ -628,6 +628,8 @@ public class TaskScannerService : ITaskScanner
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
+                Released = raw.TryGetProperty("released", out var released)
+                    && released.ValueKind == JsonValueKind.True,
                 RelatedWikiPages = ReadRelatedWikiPages(raw, entry),
                 Provenance = ReadProvenance(raw),
                 ExternalCompletion = ReadExternalCompletion(raw)

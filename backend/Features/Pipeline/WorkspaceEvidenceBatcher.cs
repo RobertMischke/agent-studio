@@ -51,6 +51,7 @@ public sealed class WorkspaceEvidenceBatcher
         "*/attachments/*",
         "*/results/*",
         "*/.runtime/*",
+        "*/logs/cli-output.log.1",
     };
 
     private readonly WorkspaceArtifactCommitService _commit;

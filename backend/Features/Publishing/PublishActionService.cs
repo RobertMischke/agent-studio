@@ -140,7 +140,11 @@ public sealed class PublishActionService
         });
     }
 
-    public PublishWorkflowRun PublishPackage(string project, string targetId, string version)
+    public PublishWorkflowRun PublishPackage(
+        string project,
+        string targetId,
+        string version,
+        CancellationToken cancellationToken = default)
     {
         var panel = GetPanel(project, targetId);
         var target = panel.Target!;
@@ -153,7 +157,7 @@ public sealed class PublishActionService
         var root = RequireRepo(project);
         var workflow = FindWorkflow(root, package: true)
             ?? throw new InvalidOperationException("No existing version-tag-triggered package workflow was found.");
-        PublishPackageTagPath(root, target.Ecosystem!, version);
+        PublishPackageTagPath(root, target.Ecosystem!, version, cancellationToken);
 
         _targets.InvalidateCache();
         var run = StoreRun(new PublishWorkflowRun
@@ -252,14 +256,26 @@ public sealed class PublishActionService
     }
 
     /// <summary>Fixture-testable mutation path used after all product guards pass.</summary>
-    internal static void PublishPackageTagPath(string root, string ecosystem, string version)
+    internal static void PublishPackageTagPath(
+        string root,
+        string ecosystem,
+        string version,
+        CancellationToken cancellationToken = default)
     {
         RequireClean(root);
         var manifest = BumpManifest(root, ecosystem, version);
         RunRequired(root, "git add failed", "add", "--", manifest);
         RunRequired(root, "release commit failed", "commit", "-m", $"Release v{version}");
         RunRequired(root, "release tag failed", "tag", $"v{version}");
-        RunRequired(root, "atomic release push failed", "push", "--atomic", "origin", "HEAD", $"refs/tags/v{version}");
+        RunRequired(
+            root,
+            "atomic release push failed",
+            cancellationToken,
+            "push",
+            "--atomic",
+            "origin",
+            "HEAD",
+            $"refs/tags/v{version}");
     }
 
     private static string BumpManifest(string root, string ecosystem, string version)
@@ -319,7 +335,7 @@ public sealed class PublishActionService
 
     private static void RequireClean(string root)
     {
-        var status = Run(root, "git", "status", "--porcelain").Output;
+        var status = Run(root, "git", CancellationToken.None, "status", "--porcelain").Output;
         if (!string.IsNullOrWhiteSpace(status))
             throw new InvalidOperationException("Package publish requires a clean working tree.");
     }
@@ -362,31 +378,42 @@ public sealed class PublishActionService
 
     private static string RunRequired(string root, string error, params string[] args)
     {
-        var result = Run(root, "git", args);
+        var result = Run(root, "git", CancellationToken.None, args);
+        if (result.Code != 0) throw new InvalidOperationException($"{error}: {result.Error.Trim()}");
+        return result.Output;
+    }
+
+    private static string RunRequired(
+        string root,
+        string error,
+        CancellationToken cancellationToken,
+        params string[] args)
+    {
+        var result = Run(root, "git", cancellationToken, args);
         if (result.Code != 0) throw new InvalidOperationException($"{error}: {result.Error.Trim()}");
         return result.Output;
     }
 
     private static string RunGhRequired(string root, string error, params string[] args)
     {
-        var result = Run(root, "gh", args);
+        var result = Run(root, "gh", CancellationToken.None, args);
         if (result.Code != 0) throw new InvalidOperationException($"{error}: {result.Error.Trim()}");
         return result.Output;
     }
 
-    private static (string Output, string Error, int Code) Run(string root, string file, params string[] args)
+    private static (string Output, string Error, int Code) Run(
+        string root,
+        string file,
+        CancellationToken cancellationToken,
+        params string[] args)
     {
-        try
-        {
-            var psi = new ProcessStartInfo(file) { WorkingDirectory = root, RedirectStandardOutput = true,
-                RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-            foreach (var arg in args) psi.ArgumentList.Add(arg);
-            using var process = Process.Start(psi)!;
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-            if (!process.WaitForExit(60_000)) { process.Kill(true); return (output, "command timed out", -1); }
-            return (output, error, process.ExitCode);
-        }
-        catch (Exception ex) { return ("", ex.Message, -1); }
+        var psi = new ProcessStartInfo(file) { WorkingDirectory = root, RedirectStandardOutput = true,
+            RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        var result = GitNetworkProcessRunner.Run(
+            psi,
+            timeout: GitNetworkProcessRunner.DefaultTimeout,
+            cancellationToken: cancellationToken);
+        return (result.StandardOutput, result.StandardError, result.ExitCode);
     }
 }

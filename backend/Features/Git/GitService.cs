@@ -2704,7 +2704,9 @@ public class GitService
         if (existsCode != 0)
             return Task.FromResult(new GitPushResult(false, sha, "missing-sha", existsErr.Trim()));
 
-        RunGitArgs(root, "fetch", "origin", targetBranch);
+        var (_, fetchErr, fetchCode) = RunGitArgs(root, ct, "fetch", "origin", targetBranch);
+        if (fetchCode != 0 && ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, sha, "cancelled", fetchErr.Trim()));
 
         var (_, remoteErr, remoteCode) = RunGitArgs(root, "rev-parse", "--verify", $"origin/{targetBranch}");
         if (remoteCode == 0)
@@ -2720,9 +2722,12 @@ public class GitService
             _logger.LogInformation("Auto-push did not find origin/{Branch} before pushing {Sha}: {Error}", targetBranch, sha, remoteErr.Trim());
         }
 
-        var (pushOut, pushErr, pushCode) = RunGitArgs(root, "push", "origin", $"{sha}:refs/heads/{targetBranch}");
+        var (pushOut, pushErr, pushCode) = RunGitArgs(
+            root, ct, "push", "origin", $"{sha}:refs/heads/{targetBranch}");
         if (pushCode == 0)
             return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
+        if (ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, sha, "cancelled", pushErr.Trim()));
 
         var err = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
         var status = err.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
@@ -2856,7 +2861,9 @@ public class GitService
         if (!HasRemote(repoRoot, "origin"))
             return Task.FromResult(new GitPushResult(true, sha, "no-remote", null));
 
-        RunGitArgs(repoRoot, "fetch", "origin", branch);
+        var (_, fetchErr, fetchCode) = RunGitArgs(repoRoot, ct, "fetch", "origin", branch);
+        if (fetchCode != 0 && ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, sha, "cancelled", fetchErr.Trim()));
 
         var (_, remoteErr, remoteCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", $"origin/{branch}");
         if (remoteCode == 0)
@@ -2875,9 +2882,12 @@ public class GitService
         // Non-force push of the exact object resolved above (the gate-approved
         // merge result, or the branch tip when no approval SHA was handed in). A
         // non-fast-forward (diverged remote) is reported, never overwritten.
-        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"{sha}:refs/heads/{branch}");
+        var (pushOut, pushErr, pushCode) = RunGitArgs(
+            repoRoot, ct, "push", "origin", $"{sha}:refs/heads/{branch}");
         if (pushCode == 0)
             return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
+        if (ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, sha, "cancelled", pushErr.Trim()));
 
         var err = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
         var status = err.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
@@ -2888,7 +2898,11 @@ public class GitService
         return Task.FromResult(new GitPushResult(false, sha, status, err));
     }
 
-    public GitWorktreeResult DeleteRemoteBranch(string repoRoot, string branch, string remote = "origin")
+    public GitWorktreeResult DeleteRemoteBranch(
+        string repoRoot,
+        string branch,
+        string remote = "origin",
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return new GitWorktreeResult(false, null, "Repo root does not exist.");
@@ -2900,7 +2914,8 @@ public class GitService
         if (!HasRemote(repoRoot, remote))
             return new GitWorktreeResult(true, repoRoot, null);
 
-        var (lsOut, lsErr, lsCode) = RunGitArgs(repoRoot, "ls-remote", "--exit-code", "--heads", remote, branch);
+        var (lsOut, lsErr, lsCode) = RunGitArgs(
+            repoRoot, cancellationToken, "ls-remote", "--exit-code", "--heads", remote, branch);
         if (lsCode == 2)
             return new GitWorktreeResult(true, repoRoot, null);
         if (lsCode != 0)
@@ -2912,7 +2927,8 @@ public class GitService
         if (string.IsNullOrWhiteSpace(lsOut))
             return new GitWorktreeResult(true, repoRoot, null);
 
-        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", remote, "--delete", branch);
+        var (pushOut, pushErr, pushCode) = RunGitArgs(
+            repoRoot, cancellationToken, "push", remote, "--delete", branch);
         if (pushCode == 0)
         {
             _logger.LogInformation("Deleted remote branch {Remote}/{Branch} at {Path}", remote, branch, repoRoot);
@@ -3564,7 +3580,8 @@ public class GitService
         string repoRoot,
         string deliveryBranch,
         string expectedResultSha,
-        string? recordedIntegrationBranch)
+        string? recordedIntegrationBranch,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return Failed("Repository root does not exist.");
@@ -3579,7 +3596,7 @@ public class GitService
         var deliveryRef = $"refs/remotes/origin/{branch}";
         var fetchDelivery = $"+refs/heads/{branch}:{deliveryRef}";
         var (_, deliveryError, deliveryCode) = RunGitArgs(
-            repoRoot, "fetch", "--no-tags", "origin", fetchDelivery);
+            repoRoot, cancellationToken, "fetch", "--no-tags", "origin", fetchDelivery);
         if (deliveryCode != 0)
             return Failed(
                 $"Delivery branch '{branch}' could not be fetched from origin: {deliveryError.Trim()}",
@@ -3609,7 +3626,7 @@ public class GitService
             var integrationRef = $"refs/remotes/origin/{candidate}";
             var fetchIntegration = $"+refs/heads/{candidate}:{integrationRef}";
             var (_, _, fetchCode) = RunGitArgs(
-                repoRoot, "fetch", "--no-tags", "origin", fetchIntegration);
+                repoRoot, cancellationToken, "fetch", "--no-tags", "origin", fetchIntegration);
             if (fetchCode != 0) continue;
             var mergeBase = GetMergeBase(repoRoot, integrationRef, deliveryRef);
             if (string.IsNullOrWhiteSpace(mergeBase)) continue;
@@ -3781,7 +3798,11 @@ public class GitService
     /// integration branch is checked out there first when it is not already HEAD
     /// (only when the tree is clean).</para>
     /// </summary>
-    public MergeIntoIntegrationResult MergeBranchIntoIntegration(string repoRoot, string taskBranch, string integrationBranch)
+    public MergeIntoIntegrationResult MergeBranchIntoIntegration(
+        string repoRoot,
+        string taskBranch,
+        string integrationBranch,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
@@ -3792,7 +3813,7 @@ public class GitService
 
         if (!BranchExists(repoRoot, taskBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
-        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch);
+        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
         if (!synchronized.Success)
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
@@ -3809,9 +3830,10 @@ public class GitService
     /// </summary>
     public IntegrationBranchSyncResult RefreshIntegrationBranch(
         string repoRoot,
-        string integrationBranch)
+        string integrationBranch,
+        CancellationToken cancellationToken = default)
     {
-        var fetched = FetchIntegrationBranch(repoRoot, integrationBranch);
+        var fetched = FetchIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
         if (!fetched.Success) return fetched;
         if (fetched.Outcome == IntegrationBranchSyncOutcome.NoRemote)
             return fetched;
@@ -3856,9 +3878,10 @@ public class GitService
     /// </summary>
     public IntegrationBranchSyncResult SynchronizeIntegrationBranch(
         string repoRoot,
-        string integrationBranch)
+        string integrationBranch,
+        CancellationToken cancellationToken = default)
     {
-        var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch);
+        var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
         if (!refreshed.Success
             || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
             return refreshed;
@@ -3918,7 +3941,8 @@ public class GitService
 
     private IntegrationBranchSyncResult FetchIntegrationBranch(
         string repoRoot,
-        string integrationBranch)
+        string integrationBranch,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return new(
@@ -3933,7 +3957,8 @@ public class GitService
 
         var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
         var fetchTarget = $"+refs/heads/{integrationBranch}:{remoteIntegrationRef}";
-        var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
+        var (_, fetchError, fetchCode) = RunGitArgs(
+            repoRoot, cancellationToken, "fetch", "--no-tags", "origin", fetchTarget);
         if (fetchCode != 0)
         {
             var detail =
@@ -3959,7 +3984,8 @@ public class GitService
         string repoRoot,
         string deliveryBranch,
         string expectedResultSha,
-        string integrationBranch)
+        string integrationBranch,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
@@ -3972,7 +3998,7 @@ public class GitService
         if (!HasRemote(repoRoot, "origin"))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Remote delivery cannot be fetched because origin is not configured.");
 
-        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch);
+        var synchronized = SynchronizeIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
         if (!synchronized.Success)
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
@@ -3981,7 +4007,8 @@ public class GitService
         var remoteRef = $"refs/remotes/origin/{deliveryBranch}";
         var fetchSource = $"refs/heads/{deliveryBranch}";
         var fetchTarget = $"+{fetchSource}:{remoteRef}";
-        var (_, fetchError, fetchCode) = RunGitArgs(repoRoot, "fetch", "--no-tags", "origin", fetchTarget);
+        var (_, fetchError, fetchCode) = RunGitArgs(
+            repoRoot, cancellationToken, "fetch", "--no-tags", "origin", fetchTarget);
         if (fetchCode != 0)
         {
             return MergeIntoIntegrationResult.Of(
@@ -4190,7 +4217,10 @@ public class GitService
     /// success-with-no-op. Pass an explicit <paramref name="remote"/> (default
     /// <c>origin</c>); when the remote is absent the call is skipped.
     /// </summary>
-    public GitWorktreeResult Fetch(string root, string remote = "origin")
+    public GitWorktreeResult Fetch(
+        string root,
+        string remote = "origin",
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return new GitWorktreeResult(false, null, "Path does not exist.");
@@ -4203,7 +4233,7 @@ public class GitService
         if (!hasRemote)
             return new GitWorktreeResult(true, root, null); // no remote -> nothing to fetch
 
-        var (_, err, code) = RunGitArgs(root, "fetch", "--prune", remote);
+        var (_, err, code) = RunGitArgs(root, cancellationToken, "fetch", "--prune", remote);
         if (code != 0)
         {
             // Offline / transient: do not wedge the run, but surface the reason.
@@ -5680,6 +5710,12 @@ public class GitService
     private static (string Out, string Err, int Code) RunGitArgs(string cwd, params string[] args)
         => RunGitArgs(cwd, args, stdin: null);
 
+    private static (string Out, string Err, int Code) RunGitArgs(
+        string cwd,
+        CancellationToken cancellationToken,
+        params string[] args)
+        => RunGitArgs(cwd, args, stdin: null, environment: null, cancellationToken);
+
     private static (string Out, string Err, int Code) RunGitArgs(string cwd, string[] args, string? stdin)
         => RunGitArgs(cwd, args, stdin, environment: null);
 
@@ -5687,7 +5723,8 @@ public class GitService
         string cwd,
         string[] args,
         string? stdin,
-        IReadOnlyDictionary<string, string?>? environment)
+        IReadOnlyDictionary<string, string?>? environment,
+        CancellationToken cancellationToken = default)
     {
         var psi = new ProcessStartInfo
         {
@@ -5709,45 +5746,36 @@ public class GitService
             }
         }
 
-        return RunGitProcess(psi, stdin);
+        return RunGitProcess(psi, stdin, cancellationToken);
     }
 
-    private static (string Out, string Err, int Code) RunGitProcess(ProcessStartInfo psi, string? stdin)
+    private static (string Out, string Err, int Code) RunGitProcess(
+        ProcessStartInfo psi,
+        string? stdin,
+        CancellationToken cancellationToken = default)
     {
         // Time every spawn and record it against the ambient git-info request
         // scope (if any). This is the per-subprocess half of the AGT-2007
         // instrumentation; the scope rollup turns it into "N spawns, X ms".
         var command = CommandLabel(psi);
         var sw = Stopwatch.StartNew();
-        var result = RunGitProcessCore(psi, stdin);
+        var result = RunGitProcessCore(psi, stdin, cancellationToken);
         sw.Stop();
         GitProcessTelemetry.Record(command, sw.ElapsedMilliseconds, result.Code);
         return result;
     }
 
-    private static (string Out, string Err, int Code) RunGitProcessCore(ProcessStartInfo psi, string? stdin)
+    private static (string Out, string Err, int Code) RunGitProcessCore(
+        ProcessStartInfo psi,
+        string? stdin,
+        CancellationToken cancellationToken)
     {
-        try
-        {
-            using var p = Process.Start(psi)!;
-            if (stdin != null)
-            {
-                p.StandardInput.Write(stdin);
-                p.StandardInput.Close();
-            }
-            var so = p.StandardOutput.ReadToEnd();
-            var se = p.StandardError.ReadToEnd();
-            if (!p.WaitForExit(30_000))
-            {
-                try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "GitService:2736"); }
-                return ("", "git timed out", -1);
-            }
-            return (so, se, p.ExitCode);
-        }
-        catch (Exception ex)
-        {
-            return ("", ex.Message, -1);
-        }
+        var result = GitNetworkProcessRunner.Run(
+            psi,
+            stdin,
+            GitNetworkProcessRunner.DefaultTimeout,
+            cancellationToken);
+        return (result.StandardOutput, result.StandardError, result.ExitCode);
     }
 
     /// <summary>

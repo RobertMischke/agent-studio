@@ -107,8 +107,12 @@ function findOne(tasks, m, role) {
   return found[0];
 }
 
+function dependencyKey(edge) {
+  return (typeof edge === 'string' ? edge : edge?.key ?? '').trim();
+}
+
 function sameSet(a, b) {
-  const norm = (xs) => [...new Set(xs.map((x) => x.toUpperCase()))].sort();
+  const norm = (xs) => [...new Set(xs.map(dependencyKey).filter(Boolean).map((x) => x.toUpperCase()))].sort();
   const na = norm(a);
   const nb = norm(b);
   return na.length === nb.length && na.every((x, i) => x === nb[i]);
@@ -141,17 +145,25 @@ async function main() {
 
     const current = source.references ?? { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] };
     const existing = current.dependsOn ?? [];
-    // Union so we never drop a dependency the operator already set by hand.
-    const merged = [...new Set([...existing, ...targetKeys].map((k) => k.trim()).filter(Boolean))];
+    // Union by key so we never drop or weaken a release-gated dependency the
+    // operator already set by hand. New migration edges retain the legacy
+    // string shape.
+    const merged = [...existing];
+    const known = new Set(existing.map(dependencyKey).filter(Boolean).map((key) => key.toUpperCase()));
+    for (const key of targetKeys.map((value) => value.trim()).filter(Boolean)) {
+      if (known.has(key.toUpperCase())) continue;
+      merged.push(key);
+      known.add(key.toUpperCase());
+    }
 
     const label = `${source.key ?? source.id} "${source.title}"`;
     if (sameSet(existing, merged)) {
-      console.log(`= ${label} already waits on ${merged.join(', ')} - skip`);
+      console.log(`= ${label} already waits on ${merged.map(dependencyKey).join(', ')} - skip`);
       skipped++;
       continue;
     }
 
-    console.log(`~ ${label}: dependsOn ${existing.join(', ') || '(none)'}  ->  ${merged.join(', ')}`);
+    console.log(`~ ${label}: dependsOn ${existing.map(dependencyKey).join(', ') || '(none)'}  ->  ${merged.map(dependencyKey).join(', ')}`);
     planned++;
 
     if (APPLY) {

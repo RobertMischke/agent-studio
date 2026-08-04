@@ -130,6 +130,32 @@ public class TaskStateMachine
         }
         if (recheck.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
 
+        // BP-03: Ready opens a reissue generation and Progress opens an
+        // execution generation. A folder-scoped remote review subject belongs
+        // to the delivery that preceded either transition and must stop being
+        // canonical before the new attempt can start. The store retains one
+        // invalidated copy for diagnosis; review and integration only read the
+        // canonical filename.
+        if (targetState is TaskStates.Ready or TaskStates.Progress)
+        {
+            try
+            {
+                AgentStudio.Pipeline.ReviewSubjectStore.InvalidateForNewAttempt(recheck.FolderPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "review-subject-invalidation-failed job={JobId} from={From} to={To}",
+                    jobId,
+                    recheck.State,
+                    targetState);
+                return new MoveJobOutcome(
+                    MoveJobStatus.Failure,
+                    "The previous review subject could not be invalidated before starting a new attempt.");
+            }
+        }
+
         if (IsFlatLayoutJobDir(recheck.FolderPath))
         {
             try
@@ -888,7 +914,7 @@ public class TaskStateMachine
                     string.Equals(edge.Target, oldKey, StringComparison.OrdinalIgnoreCase))) continue;
             var rewritten = new TaskReferences
             {
-                DependsOn = Replace(refs.DependsOn, oldKey, newKey),
+                DependsOn = ReplaceDependencies(refs.DependsOn, oldKey, newKey),
                 RelatedTo = Replace(refs.RelatedTo, oldKey, newKey),
                 BlockedBy = Replace(refs.BlockedBy, oldKey, newKey),
                 Supersedes = Replace(refs.Supersedes, oldKey, newKey),
@@ -903,6 +929,14 @@ public class TaskStateMachine
 
     private static List<string> Replace(IEnumerable<string> values, string oldKey, string newKey)
         => values.Select(value => string.Equals(value, oldKey, StringComparison.OrdinalIgnoreCase) ? newKey : value).ToList();
+
+    private static List<TaskDependencyReference> ReplaceDependencies(
+        IEnumerable<TaskDependencyReference> values,
+        string oldKey,
+        string newKey)
+        => values.Select(value => string.Equals(value.Key, oldKey, StringComparison.OrdinalIgnoreCase)
+            ? value with { Key = newKey }
+            : value).ToList();
 
     private sealed record TaskReferenceUpdate(
         string FolderPath,

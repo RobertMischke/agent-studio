@@ -78,6 +78,11 @@ state.
   those values independently of optional CLI init frames or token summaries.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
+- `backend/Features/Tasks/CliOutputLogFile.cs` and
+  `CliOutputLogMaintenanceService.cs`: the single bounded write boundary for
+  local, remote, recovery, and orchestrator CLI-log output. The active log and
+  one ignored rotation are capped at 10 MiB each; startup migrates oversized
+  legacy logs before CLI reattachment and history readers run.
 - `backend/Features/Runner/OrchestratorChat.cs` and `OrchestratorRunner.cs`:
   side-sheet chat dispatch. This operating mode accepts the effective model and
   reasoning choice from the live Codex catalogue, executes through the Codex
@@ -248,6 +253,15 @@ state.
   boundary: the Task Server never substitutes its checkout or local
   `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
   authority continue through the established local compatibility path.
+- ReviewAttempt claimability is also bound to the current task lane. A
+  successful transition into `6-completed` or `7-archive` supersedes every open
+  ReviewAttempt for that task before another claim can cross the lifecycle
+  boundary. Each claim poll fails closed for attempts whose card is absent or
+  no longer in `4-auto-review`, and writes a durable supersession journal fact.
+  The compatibility store uses `review_attempt_superseded` in the task
+  timeline; the canonical Task Server uses `review.superseded` in its audit
+  journal. The startup sweep applies the same idempotent repair to authority
+  records left by older binaries.
 - `task-server.Tests/TopologyTests.cs`: release-blocking sibling-process
   harness for Studio detach, canonical history replay, renewal safety stop,
   Task Server restart quarantine, Runner replacement after positive
@@ -271,6 +285,12 @@ state.
   terminal Post Processing path closes active checks as `completed` or `failed`
   with `finishedAt`. Cards marked `fixture: true` are excluded from automated
   recovery, liveness, cron, health, and orchestration scans.
+- Backend Git network processes (`fetch`, `push`, and `ls-remote`) have a hard
+  30-second per-process boundary in addition to caller cancellation. Timeout or
+  cancellation kills the full process tree, concurrently drains both output
+  pipes, and bounds the final reap so a DNS or remote outage cannot accumulate
+  Git children or inherited handles. Process-start resource exhaustion is a
+  typed command failure and must not terminate the backend.
 - Origin is a fenced side-effect channel. New Remote Run salvage refs include
   runner, task, attempt, fence, and SHA; immutable result refs include attempt,
   fence, and SHA. A newer generation never resumes or overwrites an older
@@ -481,11 +501,16 @@ state.
 - Waits-on gate (AGT-2029): the ready-lane pickup gate
   (`ProjectRunner.IsReadyPickupCandidate`) skips a `2-ready` card whose
   `references.dependsOn` targets have not all reached `6-completed`/`7-archive`.
+  A dependency object with `releaseGate: true` additionally requires the
+  terminal target card to carry its explicit `released: true` flag. Completion
+  does not infer release, and legacy string dependencies retain the existing
+  terminal-state-only behavior.
   Fulfillment is resolved cross-project and archive-inclusive
   (`TaskReferenceIndex` built from `ScanAllJobsWithArchive()`, shared with the
   read-time card overlay via `WaitsOnEvaluator`). A skipped card falls out of the
   candidate list and the tick picks the next eligible card - blocking is visible
-  (the card's waits-on chip), never a silent deadlock. A `dependsOn` cycle is a
+  (the card's waits-on chip, which distinguishes completion from release),
+  never a silent deadlock. A `dependsOn` cycle is a
   configuration error: it is reported once per card (`waits-on-cycle` warning)
   and skipped, never deadlocked.
 - A re-open starts a new run. It must rerun pre steps, core, post steps, and

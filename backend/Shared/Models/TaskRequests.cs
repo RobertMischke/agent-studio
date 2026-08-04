@@ -432,6 +432,15 @@ public record SetJobTaskTypeRequest
     public string TaskType { get; init; } = TaskTypes.Chore;
 }
 
+/// <summary>
+/// Body for <c>PUT /api/tasks/{id}/release</c>. The flag is an explicit content
+/// approval and is never inferred from the task's lane.
+/// </summary>
+public record SetJobReleasedRequest
+{
+    public bool Released { get; init; }
+}
+
 public record ReorderRequest
 {
     public List<string> JobIds { get; init; } = [];

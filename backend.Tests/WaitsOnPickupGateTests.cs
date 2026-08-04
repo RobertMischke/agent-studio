@@ -74,6 +74,26 @@ public sealed class WaitsOnPickupGateTests : IDisposable
     }
 
     [Fact]
+    public void ReleaseGate_TerminalDependencyWithoutReleasedFlag_BlocksPickup()
+    {
+        WriteJob(_libWatch, TaskStates.Completed, "dep", "LIB-1", order: 1);
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1", order: 1,
+            dependsOn: new[] { "LIB-1" }, releaseGate: true);
+
+        Assert.Null(BuildAppRunner().GetNextReadyJob());
+    }
+
+    [Fact]
+    public void ReleaseGate_ExplicitReleasedFlag_AllowsPickup()
+    {
+        WriteJob(_libWatch, TaskStates.Completed, "dep", "LIB-1", order: 1, released: true);
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1", order: 1,
+            dependsOn: new[] { "LIB-1" }, releaseGate: true);
+
+        Assert.Equal("consumer", BuildAppRunner().GetNextReadyJob()!.Id);
+    }
+
+    [Fact]
     public void ArchivedDependency_CrossProject_AllowsPickup()
     {
         // Fulfilled includes the terminal 7-archive lane, which ScanAllJobs
@@ -102,16 +122,25 @@ public sealed class WaitsOnPickupGateTests : IDisposable
         Assert.Equal("free", BuildAppRunner().GetNextReadyJob()!.Id);
     }
 
-    private void WriteJob(string watchPath, string state, string slug, string key, int order, string[]? dependsOn = null)
+    private void WriteJob(
+        string watchPath,
+        string state,
+        string slug,
+        string key,
+        int order,
+        string[]? dependsOn = null,
+        bool releaseGate = false,
+        bool released = false)
     {
         var dir = Path.Combine(watchPath, state, slug);
         Directory.CreateDirectory(dir);
         var refs = dependsOn is { Length: > 0 }
-            ? $",\"references\":{{\"dependsOn\":[{string.Join(",", dependsOn.Select(k => $"\"{k}\""))}]}}"
+            ? $",\"references\":{{\"dependsOn\":[{string.Join(",", dependsOn.Select(k => releaseGate ? $"{{\"key\":\"{k}\",\"releaseGate\":true}}" : $"\"{k}\""))}]}}"
             : "";
+        var release = released ? ",\"released\":true" : "";
         var json =
             $"{{\"id\":\"{slug}\",\"key\":\"{key}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
-            $"\"order\":{order},\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{refs}}}";
+            $"\"order\":{order},\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{release}{refs}}}";
         File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 

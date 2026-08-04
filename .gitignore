@@ -70,6 +70,10 @@ backend/appsettings.Local.json
 # repo root at runtime. Runtime artefacts never belong in source.
 logs/
 
+# A task's active cli-output.log remains durable evidence. Its bounded previous
+# segment is runtime-only and must never become a second tracked log blob.
+**/logs/cli-output.log.1
+
 # ng serve runtime logs (frontend dev server). Per-port files like
 # .ng-serve-4021.out.log / .err.log are runtime artefacts; never commit.
 frontend/.ng-serve-*.log

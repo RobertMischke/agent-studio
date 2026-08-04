@@ -129,6 +129,17 @@ public sealed partial class TaskServerStore
                        SET status = 'server-restarted'
                      WHERE status = 'active';
                     """, cancellationToken);
+
+                await using var transaction =
+                    (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+                await SupersedeUnclaimableReviewAttemptsAsync(
+                    connection,
+                    transaction,
+                    "task-server-boot",
+                    "boot-sweep",
+                    taskId: null,
+                    cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
 
             var integrity = Convert.ToString(await ScalarAsync(connection, "PRAGMA integrity_check;", cancellationToken), CultureInfo.InvariantCulture);
@@ -160,7 +171,7 @@ public sealed partial class TaskServerStore
                 version,
                 _serverId,
                 ["studio", "runner", "review-runner", TaskServerProtocol.EngineClientKind, "management"],
-                ["coding-plane", "review-plane", "orchestration-plane", "management-plane"]),
+                ["coding-plane", "review-plane", "orchestration-plane", "host-orchestrator", "management-plane"]),
             _startedAt,
             _outboxBacklog,
             _oldestUnacknowledgedSequence,
@@ -450,6 +461,13 @@ public sealed partial class TaskServerStore
                 ("$version", updated.Version), ("$updated", Iso(now)), ("$id", updated.TaskId), ("$expected", request.ExpectedVersion));
             if (updated.State is "6-completed" or "7-archive")
             {
+                await SupersedeUnclaimableReviewAttemptsAsync(
+                    connection,
+                    transaction,
+                    actorId,
+                    "lane-transition",
+                    updated.TaskId,
+                    ct);
                 var retainedThrough = now.AddDays(Math.Max(1, _options.ResultRetentionDays));
                 await ExecuteAsync(connection, """
                     UPDATE result_handoffs
@@ -810,6 +828,8 @@ public sealed partial class TaskServerStore
                 UPDATE runs SET status = $outcome, finished_at = $now WHERE id = $run;
                 UPDATE tasks SET state = '2-ready', version = version + 1, updated_at = $now
                  WHERE id = $task AND state = '3-progress';
+                UPDATE work_permits SET status = 'released'
+                 WHERE run_id = $run AND status = 'accepted';
                 """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome),
                 ("$now", Iso(UtcNow)), ("$task", lease.TaskId));
             released = lease with { Status = "released" };
@@ -1116,6 +1136,8 @@ public sealed partial class TaskServerStore
                        source_bundle_sha256 = $bundleSha
                  WHERE id = $run;
                 UPDATE tasks SET state = '4-auto-review', version = version + 1, updated_at = $now WHERE id = $task;
+                UPDATE work_permits SET status = 'completed'
+                 WHERE run_id = $run AND status = 'accepted';
                 INSERT INTO run_completions(
                     run_id, outcome, summary, envelope_digest, sequence,
                     idempotency_key, completed_at)
@@ -1170,7 +1192,7 @@ public sealed partial class TaskServerStore
                 new
                 {
                     artifacts = "canonical-store",
-                    reviewAuthority = "deployed-backend",
+                    reviewAuthority = "task-server",
                 },
                 ct);
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
@@ -1529,6 +1551,8 @@ public sealed partial class TaskServerStore
                 UPDATE leases SET status = 'fenced' WHERE run_id = $run;
                 UPDATE runs SET status = 'interrupted', finished_at = $now WHERE id = $run;
                 UPDATE tasks SET state = $state, version = version + 1, updated_at = $now WHERE id = $task;
+                UPDATE work_permits SET status = 'fenced'
+                 WHERE run_id = $run AND status = 'accepted';
                 """, ct, transaction, ("$run", runId), ("$now", Iso(UtcNow)), ("$state", targetState), ("$task", lease.TaskId));
             await AppendLifecycleEventAsync(
                 connection,

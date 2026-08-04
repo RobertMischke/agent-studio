@@ -106,7 +106,8 @@ public sealed class ExternalCompletionService
                 request.ResultSha);
         }
 
-        var (decision, decisionReason) = OutOfBandStampPolicy.Decide(info.Mode, verification);
+        var (decision, decisionReason) =
+            OutOfBandStampPolicy.Decide(info.Mode, targetState, verification);
         if (decision == OutOfBandStampDecision.RefuseUnverified)
         {
             return await RefuseUnverifiedAsync(
@@ -132,10 +133,16 @@ public sealed class ExternalCompletionService
         // through the same primitive as the live runner completion path
         // (InspectRemoteDeliveryCommitRange + RemoteCommitAttributionGuard), so
         // an out-of-band stamp and an in-process one record identical evidence.
-        if (verification?.IsVerified == true)
+        if (decision == OutOfBandStampDecision.Stamp && verification?.IsVerified == true)
         {
             AttributeVerifiedDelivery(info, beforeFolder, request, verification, source);
             _mutations.AddJobTag(jobId, OutOfBandStampPolicy.VerifiedDeliveryTag, watchPath);
+        }
+        else if (decision == OutOfBandStampDecision.StampUnproven)
+        {
+            // Reconciled, not delivered: the card is cared for, but nothing here
+            // may read as proven work. No commits[], and the board says so.
+            _mutations.AddJobTag(jobId, OutOfBandStampPolicy.UnverifiedDeliveryTag, watchPath);
         }
         TerminalizeLifecycle(beforeFolder, targetState, source, now);
 

@@ -13,6 +13,7 @@ public sealed class HostOrchestratorStoreTests
         using var temp = new TempDirectory();
         var first = Store(temp.Path);
         await first.InitializeAsync();
+        Assert.Contains("host-orchestrator", first.Status().Protocol.Capabilities ?? []);
         var workspace = await first.CreateWorkspaceAsync(new CreateWorkspaceRequest("Workspace"), "test", default);
         var project = await first.CreateProjectAsync(
             new CreateProjectRequest(workspace.WorkspaceId, "Project", "TS"),
@@ -46,6 +47,7 @@ public sealed class HostOrchestratorStoreTests
         Assert.Equal("accepted", acceptance.Status);
         var postStep = Assert.Single(acceptance.PostProcessingPlan);
         Assert.Equal("runner-a", postStep.EligibleRunnerId);
+        Assert.Equal("post-worktree-containment", postStep.StepId);
 
         var queuedWork = Work(acceptance, "queued", queuePosition: 0);
         var report2 = Report(
@@ -73,22 +75,29 @@ public sealed class HostOrchestratorStoreTests
         // Simulate a central process restart while the host process continues.
         var restarted = Store(temp.Path);
         await restarted.InitializeAsync();
+        await restarted.RegisterRunnerAsync(
+            "runner-a",
+            Runner("instance-replacement"),
+            "runner-a",
+            default);
         var runningWork = Work(acceptance, "running", processId: 4242);
         var report3 = Report(
             sequence: 3,
             capacity: new HostCapacityDto(2, 2, 1, 0, 1),
-            work: [runningWork]);
+            work: [runningWork],
+            instanceId: "instance-replacement");
         await restarted.AcceptHostReportAsync("runner-a", report3, "runner-a", default);
         var reconciled = await restarted.ReconcileRunAsync(
             acceptance.Run.RunId,
             new RunReconcileRequest(
                 HostOrchestratorContract.Current,
                 "host-a",
-                "instance-a",
+                "instance-replacement",
                 "runner-a",
                 acceptance.Lease.LeaseId,
                 acceptance.Lease.Fence,
-                3),
+                3,
+                LeaseInstanceId: "instance-a"),
             "runner-a",
             default);
         Assert.Equal("reconciled", reconciled.Status);
@@ -104,12 +113,13 @@ public sealed class HostOrchestratorStoreTests
             new PostStepClaimRequest(
                 HostOrchestratorContract.Current,
                 "host-a",
-                "instance-a",
+                "instance-replacement",
                 "runner-a",
                 acceptance.Lease.LeaseId,
                 acceptance.Lease.Fence,
                 3,
-                "post-claim-once"),
+                "post-claim-once",
+                LeaseInstanceId: "instance-a"),
             "runner-a",
             default);
         var completion = await restarted.CompletePostStepAsync(
@@ -118,18 +128,35 @@ public sealed class HostOrchestratorStoreTests
             new PostStepCompleteRequest(
                 HostOrchestratorContract.Current,
                 "host-a",
-                "instance-a",
+                "instance-replacement",
                 "runner-a",
                 acceptance.Lease.LeaseId,
                 acceptance.Lease.Fence,
                 claim.ClaimFence,
                 "passed",
                 ["sha256:host-evidence"],
-                "post-complete-once"),
+                "post-complete-once",
+                LeaseInstanceId: "instance-a"),
             "runner-a",
             default);
         Assert.Equal("completed", completion.Status);
         Assert.Equal("runner-a", completion.Step.EligibleRunnerId);
+        var completedClaimReplay = await restarted.ClaimPostStepAsync(
+            acceptance.Run.RunId,
+            postStep.StepExecutionId,
+            new PostStepClaimRequest(
+                HostOrchestratorContract.Current,
+                "host-a",
+                "instance-replacement",
+                "runner-a",
+                acceptance.Lease.LeaseId,
+                acceptance.Lease.Fence,
+                3,
+                "post-claim-once",
+                LeaseInstanceId: "instance-a"),
+            "runner-a",
+            default);
+        Assert.Equal("completed", completedClaimReplay.Status);
 
         var envelope = new ImmutableResultEnvelope(
             "project",
@@ -171,6 +198,26 @@ public sealed class HostOrchestratorStoreTests
             default);
         var completedTask = await restarted.GetTaskAsync(project.ProjectId, task.TaskKey, default);
         Assert.Equal("4-auto-review", completedTask!.State);
+        _ = await restarted.UpdateTaskAsync(
+            project.ProjectId,
+            task.TaskKey,
+            new UpdateTaskRequest(null, null, "2-ready", completedTask.Version),
+            "review-reissue",
+            default);
+        var nextReport = await restarted.AcceptHostReportAsync(
+            "runner-a",
+            Report(
+                sequence: 4,
+                capacity: new HostCapacityDto(2, 2, 0, 0, 2),
+                instanceId: "instance-replacement"),
+            "runner-a",
+            default);
+        Assert.NotEqual(permit.PermitId, Assert.Single(nextReport.AvailableWork).PermitId);
+        var history = await restarted.GetTaskHistoryAsync(project.ProjectId, task.TaskKey, 0, default);
+        var postProcessingEvent = Assert.Single(
+            history!.Events,
+            item => item.Kind == LifecycleEventKinds.PostProcessingCompleted);
+        Assert.Contains("\"reviewAuthority\":\"task-server\"", postProcessingEvent.PayloadJson);
 
         var audit = await restarted.ListAuditAsync(0, default);
         Assert.Contains(audit, item => item.Action == "host.report.accepted");
@@ -304,11 +351,12 @@ public sealed class HostOrchestratorStoreTests
     private static HostReportRequest Report(
         long sequence,
         HostCapacityDto capacity,
-        IReadOnlyList<HostWorkStatusDto>? work = null)
+        IReadOnlyList<HostWorkStatusDto>? work = null,
+        string instanceId = "instance-a")
         => new(
             HostOrchestratorContract.Current,
             "host-a",
-            "instance-a",
+            instanceId,
             sequence,
             DateTime.UtcNow,
             capacity,

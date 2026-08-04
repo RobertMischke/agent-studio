@@ -143,7 +143,7 @@ public sealed class TaskReferenceIndex
             var refs = t.References ?? new TaskReferences();
             var sourceKey = t.Key?.Trim() ?? "";
             if (!string.IsNullOrEmpty(sourceKey))
-                dependsOn[sourceKey] = refs.DependsOn;
+                dependsOn[sourceKey] = refs.DependsOn.Select(edge => edge.Key).ToList();
 
             foreach (var (kind, target) in refs.Enumerate())
             {

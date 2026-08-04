@@ -1086,7 +1086,8 @@ public static class LeaseEndpoints
                         repoRoot,
                         deliveryBranch,
                         resultSha,
-                        req.IntegrationBranch);
+                        req.IntegrationBranch,
+                        ct);
                     if (!deliveryRange.Success)
                     {
                         attributionWarning = deliveryRange.Warning;
@@ -1179,6 +1180,7 @@ public static class LeaseEndpoints
                 ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
                 {
                     TaskKey = req.TaskKey,
+                    RunAttemptId = run.AttemptId,
                     Project = task.ProjectName,
                     Repository = req.Repository
                                  ?? git.ResolveRepoRootForWatchPath(task.WatchPath)

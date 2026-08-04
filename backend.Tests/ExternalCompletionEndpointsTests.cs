@@ -176,11 +176,41 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
             {
                 Summary = "done elsewhere",
                 Source = "remote-arm",
-                TargetState = TaskStates.Completed,
+                TargetState = TaskStates.CodeNotComplete,
             });
 
         response.EnsureSuccessStatusCode();
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "explicit-target")));
+        Assert.True(Directory.Exists(
+            Path.Combine(_watchPath, TaskStates.CodeNotComplete, "explicit-target")));
+    }
+
+    /// <summary>
+    /// AGT-2220: the same call aimed at a TERMINAL lane is refused. Stamping a
+    /// coding card "completed" out-of-band without a commit anyone can find in
+    /// the target repository is exactly the 11.07. phantom shape, so it now
+    /// returns 409 and the card never reaches <c>6-completed</c>.
+    /// </summary>
+    [Fact]
+    public async Task ExternalCompletion_RefusesTerminalTargetWithoutRepositoryProof()
+    {
+        WriteJob(TaskStates.Progress, "no-proof", "No Proof", "Prompt.", commitSha: null);
+
+        using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        var watchPath = Uri.EscapeDataString(_watchPath);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/tasks/no-proof/external-completion?watchPath={watchPath}",
+            new ExternalCompletionRequest
+            {
+                Summary = "trust me, it is done",
+                Source = "remote-arm",
+                TargetState = TaskStates.Completed,
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "no-proof")));
     }
 
     private WebApplicationFactory<Program> BuildFactory() =>
