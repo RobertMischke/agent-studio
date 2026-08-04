@@ -412,33 +412,105 @@ public sealed class CrashRecoveryService
         IReadOnlyList<string>? pathspecs)
     {
         var files = ReadPendingFiles(repoRoot, pathspecs);
+        var classification = CrashRecoveryClassifications.Classify(jobId, files);
+        var firstObservedAt = ResolveFirstObservedAt(jobFolder, repoRoot, files);
+        var id = CrashRecoveryPendingId.Create(entry.Name, repoRoot, classification, firstObservedAt);
+        var pending = new PendingCrashRecovery
+        {
+            Id = id,
+            CreatedAt = firstObservedAt,
+            ProjectName = entry.Name,
+            JobId = jobId,
+            RepoRoot = repoRoot,
+            Files = files,
+            Message = message,
+            Reason = jobId == null
+                ? "Uncommitted changes were found at startup with no active job attribution."
+                : $"Uncommitted changes were found at startup and attributed to {jobId}.",
+            JobFolder = jobFolder,
+            Pathspecs = pathspecs?.ToArray()
+        };
+
         lock (_pendingLock)
         {
-            var existing = _pendingOrphanRecoveries.FirstOrDefault(p =>
-                string.Equals(p.ProjectName, entry.Name, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(p.RepoRoot, repoRoot, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(p.JobId, jobId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(p.Message, message, StringComparison.Ordinal)
-                && SamePaths(p.Pathspecs, pathspecs));
-            if (existing != null) return existing;
-
-            var pending = new PendingCrashRecovery
+            var existingIndex = _pendingOrphanRecoveries.FindIndex(p =>
+                string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (existingIndex >= 0)
             {
-                Id = Guid.NewGuid().ToString("N"),
-                CreatedAt = DateTime.UtcNow,
-                ProjectName = entry.Name,
-                JobId = jobId,
-                RepoRoot = repoRoot,
-                Files = files,
-                Message = message,
-                Reason = jobId == null
-                    ? "Uncommitted changes were found at startup with no active job attribution."
-                    : $"Uncommitted changes were found at startup and attributed to {jobId}.",
-                JobFolder = jobFolder,
-                Pathspecs = pathspecs?.ToArray()
-            };
+                _pendingOrphanRecoveries[existingIndex] = pending;
+                return pending;
+            }
+
             _pendingOrphanRecoveries.Add(pending);
             return pending;
+        }
+    }
+
+    private static DateTime ResolveFirstObservedAt(
+        string? jobFolder,
+        string repoRoot,
+        IReadOnlyList<string> files)
+    {
+        DateTime? earliestFileWriteAt = null;
+        foreach (var file in files)
+        {
+            try
+            {
+                var fullPath = Path.Combine(repoRoot, file.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(fullPath)) continue;
+                var writtenAt = File.GetLastWriteTimeUtc(fullPath);
+                if (earliestFileWriteAt == null || writtenAt < earliestFileWriteAt.Value)
+                    earliestFileWriteAt = writtenAt;
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "CrashRecoveryService: Ignore unreadable dirty-file timestamps when building a pending recovery ID.");
+            }
+        }
+
+        if (earliestFileWriteAt != null) return earliestFileWriteAt.Value;
+
+        if (!string.IsNullOrWhiteSpace(jobFolder))
+        {
+            var firstSessionEventAt = ReadFirstSessionEventAt(jobFolder);
+            if (firstSessionEventAt != null) return firstSessionEventAt.Value;
+
+            var taskCreatedAt = ReadTaskCreatedAt(jobFolder);
+            if (taskCreatedAt != null) return taskCreatedAt.Value;
+        }
+
+        // A deletion-only legacy finding has no surviving file timestamp. The
+        // worktree directory predates the finding and remains stable across a
+        // backend restart, so it is a deterministic final fallback.
+        return Directory.GetCreationTimeUtc(repoRoot);
+    }
+
+    private static DateTime? ReadTaskCreatedAt(string jobFolder)
+    {
+        var taskJsonPath = Path.Combine(jobFolder, "task.json");
+        if (!File.Exists(taskJsonPath)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(taskJsonPath));
+            if (doc.RootElement.TryGetProperty("createdAt", out var createdAt)
+                && createdAt.ValueKind == JsonValueKind.String
+                && DateTime.TryParse(
+                    createdAt.GetString(),
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                        | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var parsed))
+            {
+                return parsed;
+            }
+
+            return File.GetCreationTimeUtc(taskJsonPath);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "CrashRecoveryService: Ignore unreadable task timestamps when building a pending recovery ID.");
+            return null;
         }
     }
 
@@ -477,15 +549,6 @@ public sealed class CrashRecoveryService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
-
-    private static bool SamePaths(IReadOnlyList<string>? left, IReadOnlyList<string>? right)
-    {
-        var l = left ?? [];
-        var r = right ?? [];
-        if (l.Count != r.Count) return false;
-        return l.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .SequenceEqual(r.OrderBy(p => p, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
     }
 
     private void AttachCommitToJob(PendingCrashRecovery pending, string? sha)
