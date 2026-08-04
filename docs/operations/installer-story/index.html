@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installer-Story: Guided Steps, Linux all-Docker und Windows | Konzept-Workbench</title>
+<style>
+  :root { color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f2f1ee; --surface-3:#e9e8e3;
+    --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8983; --line:#d8d6cf;
+    --develop:#2a78d6; --exec:#0f8f86; --salvage:#eb6834;
+    --ok:#008300; --bad:#c93736; --warn:#9a6b00;
+    --accent-soft:#eaf1fb; --exec-soft:#e4f3f1; --bad-soft:#fbecec; --ok-soft:#eaf4ea; --warn-soft:#f8f0dd; }
+  @media (prefers-color-scheme: dark) { :root { color-scheme: dark;
+    --surface-1:#1a1a19; --surface-2:#232322; --surface-3:#2c2c2a;
+    --ink-1:#fff; --ink-2:#c3c2b7; --ink-3:#8a8983; --line:#3d3d3a;
+    --develop:#3987e5; --exec:#3fb3a8; --salvage:#e5723f;
+    --ok:#4eae4e; --bad:#e66767; --warn:#d9a63f;
+    --accent-soft:#1e2a3a; --exec-soft:#17302e; --bad-soft:#382222; --ok-soft:#1f2f1f; --warn-soft:#33301e; } }
+  *{box-sizing:border-box;} body{margin:0;padding:0 0 80px;background:var(--surface-1);color:var(--ink-1);font:16px/1.6 system-ui,"Segoe UI",sans-serif;}
+  main{max-width:1080px;margin:0 auto;padding:0 28px;}
+  header.page{border-bottom:1px solid var(--line);padding:44px 0 26px;margin-bottom:8px;}
+  .kicker{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;}
+  h1{font-size:34px;line-height:1.2;margin:0 0 12px;} .lede{font-size:18px;color:var(--ink-2);max-width:66ch;margin:0;}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;font-size:13px;color:var(--ink-3);} .meta b{color:var(--ink-2);font-weight:600;}
+  h2{font-size:24px;margin:56px 0 6px;scroll-margin-top:20px;} h2 .no{color:var(--ink-3);font-weight:600;margin-right:10px;}
+  h3{font-size:18px;margin:30px 0 4px;} p{max-width:80ch;} p.dim{color:var(--ink-2);}
+  .box{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:18px 22px;margin:18px 0;}
+  .box.accent{background:var(--accent-soft);border-color:color-mix(in srgb,var(--develop) 30%,var(--line));}
+  .box.ok{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line));}
+  .box.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,var(--line));}
+  .box.bad{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 30%,var(--line));}
+  .box h4{margin:0 0 8px;font-size:15px;} .box p:last-child,.box ul:last-child{margin-bottom:0;}
+  figure{margin:26px 0;} figure svg{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:10px;background:var(--surface-1);}
+  figcaption{font-size:13.5px;color:var(--ink-2);margin-top:10px;max-width:88ch;}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;} th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);} td b{font-weight:600;}
+  code,.mono{font:12.5px/1.5 ui-monospace,Consolas,monospace;background:var(--surface-3);border-radius:4px;padding:1px 5px;}
+  pre{background:var(--surface-3);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;font:12.5px/1.6 ui-monospace,Consolas,monospace;}
+  pre code{background:none;padding:0;}
+  ul{padding-left:22px;} li{margin:5px 0;max-width:80ch;} ol{padding-left:22px;} ol li{margin:6px 0;}
+  .toc{columns:2;gap:40px;font-size:14.5px;list-style:none;padding:0;} .toc a{color:var(--ink-2);text-decoration:none;} .toc a:hover{color:var(--ink-1);} .toc li{break-inside:avoid;margin:4px 0;}
+  .pill{display:inline-block;font-size:11px;font-weight:600;border-radius:5px;padding:1px 7px;}
+  .pill.da{background:var(--ok-soft);color:var(--ok);} .pill.teil{background:var(--warn-soft);color:var(--warn);} .pill.fehlt{background:var(--bad-soft);color:var(--bad);}
+  .s-node{fill:var(--surface-2);stroke:var(--line);} .s-node2{fill:var(--surface-3);stroke:var(--line);}
+  .s-cont{fill:var(--accent-soft);stroke:var(--develop);} .s-exec{fill:var(--exec-soft);stroke:var(--exec);}
+  .s-opt{fill:var(--surface-2);stroke:var(--ink-3);stroke-dasharray:5 4;}
+  .s-band{fill:none;stroke:var(--line);stroke-dasharray:6 5;}
+  .s-label{fill:var(--ink-1);font:600 13px system-ui,sans-serif;} .s-sub{fill:var(--ink-2);font:11.5px system-ui,sans-serif;}
+  .s-tiny{fill:var(--ink-3);font:11px system-ui,sans-serif;} .s-head{fill:var(--ink-3);font:600 11px system-ui,sans-serif;letter-spacing:.09em;}
+  .s-flow{stroke:var(--ink-3);stroke-width:1.6;fill:none;}
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Installation</p>
+  <h1>Installer-Story: Guided Steps, Linux all-Docker und Windows</h1>
+  <p class="lede">Robert will zwei Szenarien als Abnahmekriterium: eine frische Linux-Kiste, komplett in Containern, gefuehrt eingerichtet, und dasselbe auf Windows. Dieses Dokument haelt den Konzeptstand: was schon existiert, wo genau die Luecke sitzt, wie der gefuehrte Fluss je Plattform aussieht, und in welche drei Karten das zerfaellt.</p>
+  <div class="meta">
+    <span><b>Stand</b> 04.08.2026</span>
+    <span><b>Karte</b> AGT-2503</span>
+    <span><b>Rahmen</b> EPIC AGT-2132 (Release &amp; Deployment First-Class)</span>
+    <span><b>Status</b> Konzept, entscheidungsreif</span>
+  </div>
+</header>
+
+<div class="box accent">
+  <h4>Die Kurzfassung</h4>
+  <p>Der Studio-Teil des Szenarios ist gebaut und auf einer frischen VM bewiesen. Was fehlt, ist genau der Teil, der die Kiste vom leeren Board zur arbeitenden Instanz macht: die Agent-Hosts im Container, ihre Provider-Auth, und ein Abschlussbeweis, der eine echte Karte durchlaufen laesst. Der vorhandene Installer kann das nicht, denn sein Docker-Pfad ist ausdruecklich <i>Demo only</i> und startet keinen Agent-Host. Fuer Windows existiert heute gar kein Installer.</p>
+  <p>Diese Karte liefert das Konzept, macht das <code>runner</code>-Profil erstmals lokal validierbar, und schneidet die drei Folgekarten. Die echten Durchlaeufe auf realen Maschinen sind bewusst nicht Teil dieser Karte.</p>
+</div>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#lage">§1 Ausgangslage: was schon existiert</a></li>
+    <li><a href="#matrix">§2 Komponenten-Matrix</a></li>
+    <li><a href="#linux">§3 Guided Steps: Linux, alles Docker</a></li>
+    <li><a href="#windows">§4 Guided Steps: Windows</a></li>
+    <li><a href="#compose">§5 Compose und Secrets</a></li>
+    <li><a href="#alternativen">§6 Alternativen fuer die Umsetzung</a></li>
+    <li><a href="#empfehlung">§7 Empfehlung</a></li>
+    <li><a href="#protokoll">§8 Testprotokoll-Vorlage</a></li>
+    <li><a href="#karten">§9 Folgekarten-Schnitt</a></li>
+    <li><a href="#offen">§10 Offene Entscheidungen</a></li>
+  </ul>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="lage" data-concept-section="evidence"><span class="no">§1</span>Ausgangslage: was schon existiert</h2>
+<p>Der Auftrag sagt ausdruecklich: erst sichten, nichts doppeln. Die Sichtung ergibt ein klares Bild. Das Fundament ist besser als erwartet, die Luecke ist schmaler und praeziser als die Kartenbeschreibung vermuten laesst.</p>
+
+<table>
+  <tr><th>Baustein</th><th>Stand</th><th>Beleg</th></tr>
+  <tr>
+    <td><b>Compose-Stack</b>, alle Komponenten</td>
+    <td><span class="pill da">da</span> Drei Profile: Default (API + Frontend), <code>runner</code> (zwei Agent-Hosts), <code>distributed</code> (Task-Server, Engine, BFF).</td>
+    <td><code>docker-compose.yml</code></td>
+  </tr>
+  <tr>
+    <td><b>Sieben Dockerfiles</b></td>
+    <td><span class="pill da">da</span> Bauen. Das Runner-Image hat <code>@anthropic-ai/claude-code</code> und <code>@openai/codex</code> bereits eingebacken.</td>
+    <td><code>runner/Dockerfile:17</code></td>
+  </tr>
+  <tr>
+    <td><b>Build-Kontext-Haertung</b></td>
+    <td><span class="pill da">da</span> <code>**/*.env</code> und <code>**/*.token</code> sind aus jedem Build-Kontext ausgeschlossen, Templates bleiben erlaubt.</td>
+    <td><code>.dockerignore</code> (AGT-2486)</td>
+  </tr>
+  <tr>
+    <td><b>Smoke-Test in CI</b></td>
+    <td><span class="pill da">da</span> Baut, startet, prueft Health, Browser-Shell und eine echte API-Antwort.</td>
+    <td><code>scripts/compose-smoke-test.sh</code>, <code>.github/workflows/compose-smoke.yml</code></td>
+  </tr>
+  <tr>
+    <td><b>Frische-VM-Harness Linux</b></td>
+    <td><span class="pill teil">teilweise</span> Existiert und ist bewiesen: gepinntes Ubuntu-24.04-Cloud-Image, KVM, cloud-init installiert nur Docker. Deckt aber nur das Default-Profil ab und laeuft nicht in CI.</td>
+    <td><code>scripts/compose-smoke-vm-test.sh</code></td>
+  </tr>
+  <tr>
+    <td><b>Gefuehrter Installer</b></td>
+    <td><span class="pill teil">teilweise</span> Vier Pfade mit Prereq-Check, signatur-gepruefte Artefakte, Join-Token, Registrierungs-Warten. Aber: nur Linux x64, und der Docker-Pfad ist <i>Demo only</i>.</td>
+    <td><code>setup/SetupApplication.cs</code>, <code>setup/DemoInstaller.cs:16-19</code></td>
+  </tr>
+  <tr>
+    <td><b>Release-Konzept</b></td>
+    <td><span class="pill da">da</span> Tag-gebundene Assets, guided setup, drain-first update, health-gated rollback.</td>
+    <td><a href="../releases.md">releases.md</a></td>
+  </tr>
+  <tr>
+    <td><b>Windows</b></td>
+    <td><span class="pill fehlt">fehlt</span> Nur ein SSH-Tunnel-Keeper als Scheduled Task. Kein Installer, kein Setup-Pfad, keine Testautomation.</td>
+    <td><code>deploy/windows/agent-runner-tunnel/</code></td>
+  </tr>
+</table>
+
+<div class="box bad">
+  <h4>Die eigentliche Luecke, in einem Satz</h4>
+  <p>Es gibt heute keinen gefuehrten Pfad, der eine frische Maschine bis zu einer <i>arbeitenden</i> Instanz bringt. Jeder existierende Pfad endet entweder am leeren Board (Compose-Default, Demo-Installer) oder verlaesst Docker komplett (systemd-Agent-Host).</p>
+</div>
+
+<h3>Warum das kein Zufall ist</h3>
+<p>Die Grenze ist eine bewusste, dokumentierte Entscheidung. Die <a href="../haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md">OSS-Setup-Pfad-Entscheidung</a> definiert als <i>first-success boundary</i> genau das gruene, leere Board und begruendet das damit, dass Repository- und CLI-Anmeldung nicht zu versteckten Voraussetzungen fuers erste Produkterlebnis werden duerfen.</p>
+<p>Robert verschiebt diese Grenze jetzt. Das Konzept behandelt das deshalb nicht als Bugfix, sondern als bewusste Erweiterung: die alte Grenze bleibt als eigene, frueh erreichte Stufe erhalten, und der gefuehrte Fluss laeuft danach weiter.</p>
+
+<h3>Vier konkrete Befunde aus der Sichtung</h3>
+<p class="dim">Alle vier sind an der laufenden Umgebung dieser Karte nachgestellt, nicht aus dem Code abgeleitet.</p>
+<table>
+  <tr><th>Befund</th><th>Wirkung</th></tr>
+  <tr>
+    <td><b>Das <code>runner</code>-Profil validierte auf einem frischen Klon nicht.</b> <code>docker compose --profile runner config</code> endete mit Exit 1, weil <code>runner.env</code> als <code>required: true</code> deklariert ist und keine Vorlage existierte.</td>
+    <td>Das Kernszenario war nicht einmal syntaktisch pruefbar. In dieser Karte behoben, siehe §5.</td>
+  </tr>
+  <tr>
+    <td><b><code>runner.token</code> war nicht in <code>.gitignore</code>.</b> Nur <code>/runner.env</code> stand dort. Der Build-Kontext war durch <code>.dockerignore</code> geschuetzt, das Repository nicht.</td>
+    <td>Ein Operator, der der Compose-Datei folgt, legt eine Geheimnisdatei an, die committet werden kann. In dieser Karte behoben.</td>
+  </tr>
+  <tr>
+    <td><b>Fehlt die Token-Datei, legt Docker ein Verzeichnis an.</b> Nachgestellt: der Bind-Mount erzeugt im Container ein Verzeichnis an der Zielstelle. <code>File.Exists</code> ist fuer ein Verzeichnis false, der Runner meldet also <i>does not exist</i>, obwohl der Pfad sichtbar existiert.</td>
+    <td>Irrefuehrendes Fehlerbild direkt im ersten Startversuch. Gehoert in die Fehlertabelle, §3 Schritt 5.</td>
+  </tr>
+  <tr>
+    <td><b>Provider-Auth erreicht den Container auf keinem Weg.</b> <code>CLAUDE_CODE_OAUTH_TOKEN</code> kommt im gesamten Repository nicht vor, <code>ANTHROPIC_API_KEY</code> nur in Kommentaren. Kein Dockerfile, keine Compose-Datei, kein Template reicht es durch.</td>
+    <td>Das Runner-Image hat die CLIs, aber keine Anmeldung. Ohne diesen Kanal kann das Szenario per Konstruktion keine Karte abarbeiten.</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="matrix"><span class="no">§2</span>Komponenten-Matrix</h2>
+<p>Im Szenario "alles Docker" laeuft jede Produktkomponente als Container. Host bleibt nur, was Container per Definition nicht sein kann: die Docker-Engine selbst, der Kernel, die benannten Volumes und die Netzwerk-Bindung. Die Container-Ebene ist auf beiden Plattformen identisch, weil auf Windows dieselben Linux-Images unter WSL2 laufen.</p>
+
+<figure>
+<svg viewBox="0 0 1040 500" role="img" aria-label="Komponenten-Matrix: identische Container-Ebene auf Linux und Windows, unterschiedliche Host-Ebene">
+  <rect class="s-band" x="20" y="34" width="1000" height="212" rx="12"/>
+  <text class="s-head" x="38" y="54">CONTAINER-EBENE, IDENTISCH AUF BEIDEN PLATTFORMEN</text>
+
+  <rect class="s-cont" x="38" y="66" width="188" height="66" rx="9"/>
+  <text class="s-label" x="132" y="92" text-anchor="middle">frontend</text>
+  <text class="s-sub" x="132" y="110" text-anchor="middle">Caddy, Port 80</text>
+  <text class="s-tiny" x="132" y="125" text-anchor="middle">Default-Profil</text>
+
+  <rect class="s-cont" x="240" y="66" width="188" height="66" rx="9"/>
+  <text class="s-label" x="334" y="92" text-anchor="middle">orchestrator-api</text>
+  <text class="s-sub" x="334" y="110" text-anchor="middle">5031, /healthz</text>
+  <text class="s-tiny" x="334" y="125" text-anchor="middle">Default-Profil</text>
+
+  <rect class="s-exec" x="442" y="66" width="188" height="66" rx="9"/>
+  <text class="s-label" x="536" y="92" text-anchor="middle">agent-host-coding</text>
+  <text class="s-sub" x="536" y="110" text-anchor="middle">CLI laeuft im Container</text>
+  <text class="s-tiny" x="536" y="125" text-anchor="middle">Profil runner</text>
+
+  <rect class="s-exec" x="644" y="66" width="188" height="66" rx="9"/>
+  <text class="s-label" x="738" y="92" text-anchor="middle">agent-host-review</text>
+  <text class="s-sub" x="738" y="110" text-anchor="middle">Review-Rolle</text>
+  <text class="s-tiny" x="738" y="125" text-anchor="middle">Profil runner</text>
+
+  <rect class="s-opt" x="846" y="66" width="156" height="66" rx="9"/>
+  <text class="s-label" x="924" y="88" text-anchor="middle">task-server</text>
+  <text class="s-sub" x="924" y="105" text-anchor="middle">engine, studio-bff</text>
+  <text class="s-tiny" x="924" y="122" text-anchor="middle">Profil distributed</text>
+
+  <text class="s-head" x="38" y="164">BENANNTE VOLUMES, VON DOCKER VERWALTET</text>
+  <rect class="s-node2" x="38" y="176" width="188" height="52" rx="8"/>
+  <text class="s-sub" x="132" y="199" text-anchor="middle">workspace</text>
+  <text class="s-tiny" x="132" y="216" text-anchor="middle">Karten und Lanes</text>
+
+  <rect class="s-node2" x="240" y="176" width="188" height="52" rx="8"/>
+  <text class="s-sub" x="334" y="199" text-anchor="middle">projects</text>
+  <text class="s-tiny" x="334" y="216" text-anchor="middle">Checkouts</text>
+
+  <rect class="s-node2" x="442" y="176" width="188" height="52" rx="8"/>
+  <text class="s-sub" x="536" y="199" text-anchor="middle">runner-coding</text>
+  <text class="s-tiny" x="536" y="216" text-anchor="middle">Worktrees, State</text>
+
+  <rect class="s-node2" x="644" y="176" width="188" height="52" rx="8"/>
+  <text class="s-sub" x="738" y="199" text-anchor="middle">runner-review</text>
+  <text class="s-tiny" x="738" y="216" text-anchor="middle">Worktrees, State</text>
+
+  <path class="s-flow" d="M132 246 V286" marker-end="url(#arrHost)"/>
+  <path class="s-flow" d="M738 246 V286" marker-end="url(#arrHost)"/>
+
+  <text class="s-head" x="38" y="276">HOST-EBENE, PLATTFORMSPEZIFISCH</text>
+
+  <rect class="s-node" x="38" y="292" width="470" height="176" rx="10"/>
+  <text class="s-label" x="60" y="318">Linux</text>
+  <text class="s-sub" x="60" y="340">Docker Engine plus Compose v2 aus der Distribution</text>
+  <text class="s-sub" x="60" y="360">Kernel liefert cgroups und Namespaces direkt</text>
+  <text class="s-sub" x="60" y="380">Volumes unter /var/lib/docker</text>
+  <text class="s-sub" x="60" y="400">Benutzer braucht Zugriff auf den Docker-Socket</text>
+  <text class="s-tiny" x="60" y="424">UI auf 0.0.0.0:4011, API nur auf 127.0.0.1:5031</text>
+  <text class="s-tiny" x="60" y="444">Keine weitere Host-Software noetig</text>
+
+  <rect class="s-node" x="532" y="292" width="470" height="176" rx="10"/>
+  <text class="s-label" x="554" y="318">Windows</text>
+  <text class="s-sub" x="554" y="340">Docker Desktop mit WSL2-Backend, kein Hyper-V-Backend</text>
+  <text class="s-sub" x="554" y="360">Linux-Kernel kommt aus der WSL2-Utility-VM</text>
+  <text class="s-sub" x="554" y="380">Volumes im WSL2-Dateisystem, nicht unter C:\</text>
+  <text class="s-sub" x="554" y="400">Repository liegt im WSL2-Dateisystem</text>
+  <text class="s-tiny" x="554" y="424">localhost:4011 wird von Docker Desktop weitergereicht</text>
+  <text class="s-tiny" x="554" y="444">Git for Windows nur fuer das Klonen, nicht zur Laufzeit</text>
+
+  <defs><marker id="arrHost" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto">
+    <path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/>
+  </marker></defs>
+</svg>
+<figcaption><b>Identisch oben, verschieden unten.</b> Blau ist die Steuerebene, Tuerkis die Ausfuehrung, gestrichelt das optionale <code>distributed</code>-Profil. Weil die Container-Ebene plattformunabhaengig ist, unterscheiden sich die beiden Guided-Fluesse nur in Voraussetzungs-Check und Pfad-Konventionen, nicht in der Topologie.</figcaption>
+</figure>
+
+<table>
+  <tr><th>Ebene</th><th>Linux</th><th>Windows</th></tr>
+  <tr><td>Produktkomponenten</td><td colspan="2">Alle als Container. Identische Images, identisches Compose-File.</td></tr>
+  <tr><td>Container-Laufzeit</td><td>Docker Engine, Compose v2</td><td>Docker Desktop, WSL2-Backend</td></tr>
+  <tr><td>Kernel</td><td>Host-Kernel</td><td>WSL2-Utility-VM</td></tr>
+  <tr><td>Persistenz</td><td colspan="2">Benannte Docker-Volumes. Keine Bind-Mounts auf Projektquellen.</td></tr>
+  <tr><td>Geheimnisse</td><td colspan="2"><code>runner.env</code> und <code>runner.token</code> im Arbeitsverzeichnis, Modus 0600, nie im Image.</td></tr>
+  <tr><td>Coding-CLI</td><td colspan="2">Im Runner-Image. Kein Host-Node, kein Host-npm, keine Host-Anmeldung.</td></tr>
+</table>
+
+<div class="box ok">
+  <h4>Ein angenehmer Nebeneffekt der Windows-Variante</h4>
+  <p>Die bekannten Windows-Eigenheiten der CLIs entfallen in diesem Szenario vollstaendig, weil die CLIs unter Linux laufen. Die Codex-Sandbox-Einstellung, die argv-Laengenbegrenzung bei mehrere Kilobyte grossen Prompts und die npm-Shim-Reparatur nach abgebrochenen Updates sind alle host-nativ. Im all-Docker-Szenario tauchen sie nicht auf. Windows wird damit nicht zur schwierigeren, sondern zur einfacheren Plattform, sofern WSL2 steht.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="linux"><span class="no">§3</span>Guided Steps: Linux, alles Docker</h2>
+<p>Sieben Schritte, in drei Stufen gruppiert. Stufe A endet an der heute schon bewiesenen Grenze, Stufe B fuegt Ausfuehrungskapazitaet hinzu, Stufe C beweist das Ganze an einer echten Karte. Jeder Schritt hat ein pruefbares Soll und mindestens ein reales Fehlerbild.</p>
+
+<h3>Stufe A: Studio steht</h3>
+<table>
+  <tr><th>Schritt</th><th>Aktion und Soll</th><th>Fehlerbild und Abhilfe</th></tr>
+  <tr>
+    <td><b>1</b><br>Voraussetzungen</td>
+    <td><code>docker version</code> und <code>docker compose version</code> zeigen Client und Server. Mindestens 8 GB freier Plattenplatz.</td>
+    <td><i>docker compose ist kein Kommando.</i> Compose v2 fehlt, das alte <code>docker-compose</code> wird nicht unterstuetzt. Paket <code>docker-compose-v2</code> installieren.<br><i>permission denied auf dem Socket.</i> Benutzer ist nicht in der Gruppe <code>docker</code>. Aufnehmen und neu anmelden.</td>
+  </tr>
+  <tr>
+    <td><b>2</b><br>Quelle holen</td>
+    <td><code>git clone</code>, dann in das Verzeichnis wechseln. Kein .NET, kein Node auf dem Host.</td>
+    <td><i>Klon bricht ab.</i> Proxy oder Zertifikatsprobleme. Fehlerbild ist git-eigen und liegt vor dem Produkt.</td>
+  </tr>
+  <tr>
+    <td><b>3</b><br>Studio starten</td>
+    <td><code>docker compose up --build --wait</code>. Kehrt erst zurueck, wenn API und Frontend gesund sind.</td>
+    <td><i>--wait endet mit unhealthy.</i> <code>docker compose ps</code> und <code>logs</code> zeigen die Komponente, die Healthchecks halten sie am Leben.<br><i>Port bereits belegt.</i> <code>STUDIO_UI_PORT</code> und <code>STUDIO_API_PORT</code> setzen.</td>
+  </tr>
+  <tr>
+    <td><b>4</b><br>Erste Selbstverifikation</td>
+    <td><code>curl --fail http://localhost:4011/healthz</code> liefert <code>"ok"</code>. Board laedt im Browser.</td>
+    <td><i>Antwortet, aber Board bleibt leer.</i> Erwartet. Das leere Board ist an dieser Stelle das korrekte Ergebnis.<br><i>Remote nicht erreichbar.</i> UI-Port in der Host-Firewall freigeben. Die API bleibt absichtlich auf Loopback.</td>
+  </tr>
+</table>
+
+<div class="box accent">
+  <h4>Warum <code>/healthz</code> als Beweis allein zu schwach ist</h4>
+  <p>Der Endpunkt liefert ein statisches <code>"ok"</code>, setzt aber zusaetzlich die Header <code>X-Agent-Studio-Tag</code> und <code>X-Agent-Studio-Commit</code>. Der gefuehrte Fluss sollte diese Header anzeigen, nicht nur den Statuscode pruefen. Sonst beweist der Schritt, dass irgendetwas antwortet, nicht dass die erwartete Version laeuft. Der Compose-Healthcheck des Frontends trifft ausserdem <code>/healthz</code> durch den Caddy-Proxy hindurch, laeuft also bereits gegen die API. "Frontend gesund" heisst hier "API erreichbar", nicht "Bundle ausgeliefert".</p>
+</div>
+
+<h3>Stufe B: Ausfuehrungskapazitaet</h3>
+<table>
+  <tr><th>Schritt</th><th>Aktion und Soll</th><th>Fehlerbild und Abhilfe</th></tr>
+  <tr>
+    <td><b>5</b><br>Geheimnisse anlegen</td>
+    <td><code>scripts/compose-runner-bootstrap.sh</code> erzeugt <code>runner.env</code> und <code>runner.token</code> mit Modus 0600 und validiert das Profil. Danach Git-Remotes und Provider-Auth in <code>runner.env</code> eintragen.</td>
+    <td><i>RUNNER_AUTH_TOKEN_FILE does not exist, obwohl die Datei zu sehen ist.</i> Die Datei fehlte beim ersten Start, Docker hat an ihrer Stelle ein Verzeichnis angelegt. Verzeichnis loeschen, Bootstrap erneut laufen lassen.<br><i>must not be accessible to other users.</i> Der Runner lehnt weltlesbare Tokens ab. <code>chmod 600 runner.token</code>.<br><i>env file not found.</i> Bootstrap wurde nicht ausgefuehrt.</td>
+  </tr>
+  <tr>
+    <td><b>6</b><br>Agent-Hosts starten</td>
+    <td><code>docker compose --profile runner up --build --wait</code>. Beide Hosts erscheinen im Studio als registriert.</td>
+    <td><i>Beide Hosts streiten um dieselbe Identitaet.</i> In <code>runner.env</code> wurde <code>RUNNER_ID</code> gesetzt. Zeile entfernen, dann leitet jeder Container seine Id aus dem eigenen Hostnamen ab.<br><i>Host registriert, aber claimt nichts.</i> Meist Provider-Auth oder fehlende Git-Remotes.</td>
+  </tr>
+</table>
+
+<h3>Stufe C: Abschlussbeweis</h3>
+<table>
+  <tr><th>Schritt</th><th>Aktion und Soll</th><th>Fehlerbild und Abhilfe</th></tr>
+  <tr>
+    <td><b>7</b><br>Dummy-Karte E2E</td>
+    <td>Eine triviale Karte anlegen, etwa eine Zeile in einer Datei aendern. Sie muss durchlaufen: claim, Lauf, Ergebnis-Envelope, Review, Abschluss. Der gefuehrte Fluss zeigt Lane-Wechsel und Envelope sichtbar an.</td>
+    <td><i>Karte bleibt im Backlog.</i> Kein Host mit passender Capability. Registrierung und Rolle pruefen.<br><i>Lauf startet und endet sofort.</i> Typisch fuer fehlende Provider-Auth: die CLI bricht ohne Anmeldung ab.<br><i>Lauf gruen, aber kein Envelope.</i> Ergebnis wurde nicht persistiert, der Lauf gilt zu Recht nicht als fertig.</td>
+  </tr>
+</table>
+
+<div class="box warn">
+  <h4>Schritt 7 ist der eigentliche Abnahmepunkt</h4>
+  <p>Er ist heute nirgends automatisiert. Weder der Installer noch die Smoke-Tests legen jemals eine Karte an. Die gesamte bestehende Beweiskette endet an Stufe A. Ein gefuehrter Installer ohne Schritt 7 wuerde erneut nur beweisen, dass ein leeres Board laedt, und genau das ist nicht, was Robert gefragt hat.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="windows"><span class="no">§4</span>Guided Steps: Windows</h2>
+<p>Die Schritte 2 bis 7 sind identisch, weil sie ausschliesslich gegen Docker und das Produkt laufen. Ersetzt wird Schritt 1, und zwei Pfad-Konventionen kommen hinzu. Alles Weitere ist bewusst dieselbe Strecke.</p>
+
+<h3>Annahmen, explizit</h3>
+<ul>
+  <li>Windows 10 21H2 oder neuer, beziehungsweise Windows 11, mit aktivierter Virtualisierung.</li>
+  <li>Docker Desktop mit <b>WSL2-Backend</b>. Das Hyper-V-Backend ist nicht Ziel und wird nicht getestet.</li>
+  <li>Das Repository liegt <b>im WSL2-Dateisystem</b>, nicht unter <code>C:\</code>. Der Grund ist Dateisystem-Durchsatz und Berechtigungsverhalten, siehe unten.</li>
+  <li>Git for Windows oder das Git in der WSL2-Distribution genuegt zum Klonen. Zur Laufzeit wird kein Host-Git gebraucht.</li>
+  <li>Der gefuehrte Fluss laeuft in der WSL2-Shell, nicht in PowerShell. Das deckt sich mit der Shell-Politik des Repositories.</li>
+</ul>
+
+<table>
+  <tr><th>Schritt</th><th>Aktion und Soll</th><th>Fehlerbild und Abhilfe</th></tr>
+  <tr>
+    <td><b>1w</b><br>Voraussetzungen</td>
+    <td>Docker Desktop laeuft, im Einstellungsdialog ist "Use the WSL 2 based engine" aktiv und die Ziel-Distribution unter Resources, WSL Integration eingeschaltet. In der WSL2-Shell antworten <code>docker version</code> und <code>docker compose version</code>.</td>
+    <td><i>docker in WSL2 nicht gefunden.</i> WSL-Integration fuer diese Distribution nicht aktiviert.<br><i>Docker Desktop startet nicht.</i> Virtualisierung im BIOS aus, oder WSL2 nicht installiert. <code>wsl --install</code>, danach Neustart.<br><i>Hyper-V-Backend aktiv.</i> Auf WSL2 umstellen. Bind-Mount- und Berechtigungsverhalten unterscheiden sich sonst.</td>
+  </tr>
+  <tr>
+    <td><b>5w</b><br>Geheimnisse</td>
+    <td>Wie Schritt 5, aber zwingend im WSL2-Dateisystem.</td>
+    <td><i>Der Runner lehnt das Token trotz chmod ab.</i> Die Dateien liegen unter <code>/mnt/c/...</code>. Das Windows-Dateisystem bildet Unix-Modi nicht zuverlaessig ab, <code>chmod 600</code> bleibt wirkungslos, und die Pruefung auf Fremdlesbarkeit schlaegt fehl. Repository nach <code>~</code> in WSL2 verschieben.</td>
+  </tr>
+  <tr>
+    <td><b>3w</b><br>Ressourcen</td>
+    <td>Docker Desktop hat genug Speicher fuer die Builds.</td>
+    <td><i>Build wird ohne klare Meldung abgebrochen.</i> Typisch fuer WSL2-Speicherdeckel. In <code>.wslconfig</code> Speicher erhoehen und <code>wsl --shutdown</code>.</td>
+  </tr>
+</table>
+
+<div class="box warn">
+  <h4>Diese Fehlerbilder sind hergeleitet, nicht gemessen</h4>
+  <p>Die Windows-Spalte beruht auf den dokumentierten Eigenschaften von WSL2 und Docker Desktop sowie auf der im Code nachgewiesenen Berechtigungspruefung des Runners. Auf einer echten Windows-Maschine wurde davon in dieser Karte nichts ausgefuehrt. Die Verifikation ist ausdruecklich Folgekarte (b). Der <code>/mnt/c</code>-Punkt ist die wahrscheinlichste echte Stolperstelle und sollte dort zuerst geprueft werden.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="compose"><span class="no">§5</span>Compose und Secrets</h2>
+<p>Der Auftrag nennt eine Compose-Definition mit allen Komponenten, Volumes, Netzwerk und Secrets als <code>env_file</code> oder <code>secret</code>, nie ins Image gebacken. Die Sichtung zeigt: diese Datei existiert bereits und erfuellt die Anforderung in ihrer Form. Eine zweite Compose-Datei waere genau die Doppelung, die der Auftrag untersagt. Es gibt ohnehin schon zwei: die Produkt-Datei im Repository-Wurzelverzeichnis und die vom Demo-Installer generierte.</p>
+<p>Statt einer neuen Datei behebt diese Karte das, was das bestehende <code>runner</code>-Profil unbenutzbar machte.</p>
+
+<table>
+  <tr><th>Aenderung</th><th>Begruendung</th></tr>
+  <tr><td><code>runner.env.template</code> im Wurzelverzeichnis</td><td>Compose-geformt, mit den Feldern fuer Git-Remotes und Provider-Auth. Bewusst ohne <code>RUNNER_ID</code>, weil beide Agent-Hosts dieselbe Datei lesen. Das vorhandene <code>deploy/release/agent-host/runner.env.template</code> ist systemd-geformt, setzt <code>RUNNER_ID</code> und traegt Host-Pfade, taugt hier also nicht.</td></tr>
+  <tr><td><code>scripts/compose-runner-bootstrap.sh</code></td><td>Erzeugt beide Dateien unter <code>umask 077</code>, generiert ein Zufallstoken, ueberschreibt nie etwas Vorhandenes und validiert am Ende das Profil. Das ist der Baustein, den ein spaeterer Installer aufruft, statt ihn nachzubauen.</td></tr>
+  <tr><td><code>/runner.token</code> in <code>.gitignore</code></td><td>Schliesst die Luecke zwischen Build-Kontext-Haertung und Repository-Haertung.</td></tr>
+</table>
+
+<p>Ergebnis, an dieser Umgebung geprueft: <code>docker compose --profile runner config</code> endet mit Exit 0, das Default-Profil listet unveraendert genau <code>orchestrator-api</code> und <code>frontend</code>, und der Gleichheits-Check des Smoke-Tests bleibt damit gruen.</p>
+
+<h3>Bewusst nicht geaendert</h3>
+<div class="box">
+  <p><b>Der Token-Bind-Mount bleibt vorerst.</b> Sauberer waere ein Compose-<code>secrets</code>-Block: er meldet eine fehlende Datei als klaren Fehler, statt ein Verzeichnis anzulegen. Dagegen steht eine offene Frage, die in dieser Umgebung nicht messbar war, weil der Docker-Daemon hier in einem eigenen Mount-Namensraum laeuft: welchen Dateimodus bekommt ein Secret im Container. Ist er weltlesbar, laeuft er direkt in die Fremdlesbarkeits-Pruefung des Runners und tauscht ein Fehlerbild gegen ein schlechteres. Die Umstellung gehoert deshalb in Folgekarte (a), wo der Runner tatsaechlich startet. Siehe §10.</p>
+  <p><b>Kein Provider-Auth-Durchreichen in <code>docker-compose.yml</code>.</b> <code>env_file</code> reicht ohnehin jede Variable durch, der Kanal existiert also. Ein zusaetzliches <code>environment:</code> mit Vorgabewert wuerde bei nicht gesetzter Variable eine leere Zeichenkette in den Container schreiben, und eine leere Anmeldevariable ist fuer die CLIs schlechter als gar keine.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="alternativen" data-concept-section="alternatives"><span class="no">§6</span>Alternativen fuer die Umsetzung</h2>
+<p>Die Konzeptfrage ist nicht, welche Container laufen, sondern wer den Operator durch die Schritte fuehrt.</p>
+
+<table>
+  <tr><th>Variante</th><th>Dafuer</th><th>Dagegen</th></tr>
+  <tr>
+    <td><b>A. Dokumentation plus Skripte</b><br>Schrittliste in der Anleitung, Bootstrap- und Verifikationsskripte daneben.</td>
+    <td>Billigste Variante, sofort lieferbar. Skripte sind in CI testbar. Der Anfang steht bereits.</td>
+    <td>"Guided" nur im schwachen Sinn. Der Operator haelt den Faden selbst, Fehlerbilder muss er in der Tabelle nachschlagen.</td>
+  </tr>
+  <tr>
+    <td><b>B. Der vorhandene Installer bekommt einen Compose-Pfad</b><br>Fuenfter Modus neben Demo, Single, Control Plane, Join.</td>
+    <td>Nutzt Prereq-Check, Prompts, Artefaktpruefung und Registrierungs-Warten, die alle schon existieren. Ein Einstiegspunkt fuer alle Topologien.</td>
+    <td>Das Binary ist Linux x64 und hat eine harte Plattform-Sperre, die auch den Demo-Pfad trifft. Fuer Windows braeuchte es einen zweiten RID und einen zweiten Prereq-Zweig. Der Installer ist heute zudem von keinem Test durchlaufen.</td>
+  </tr>
+  <tr>
+    <td><b>C. Eigener plattformuebergreifender Guided-Runner</b><br>Neues Werkzeug, das nur Compose steuert.</td>
+    <td>Freie Hand bei Plattformen und Ablauf.</td>
+    <td>Dritte Lebenszyklus-Implementierung neben Compose und Release-Archiven. Genau das wurde in der Setup-Pfad-Entscheidung bereits abgelehnt.</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="empfehlung" data-concept-section="recommendation"><span class="no">§7</span>Empfehlung</h2>
+<div class="box ok">
+  <h4>A zuerst, dann B. C nicht.</h4>
+  <p><b>Zuerst A</b>, weil der gefuehrte Fluss nur so gut ist wie die Schritte, die er ausfuehrt, und diese Schritte fuer Stufe B und C heute weder skriptbar noch bewiesen sind. Wer den Installer vor dem Beweis baut, automatisiert eine Strecke, die niemand je gelaufen ist. Die zwei realen Testlaeufe sind ohnehin Roberts Abnahmekriterium, nicht der Installer selbst.</p>
+  <p><b>Dann B</b>, sobald beide Laeufe protokolliert sind. Der Installer ruft dann Skripte auf, die auf echten Maschinen gruen waren, statt sie neu zu erfinden. Fuer Windows entfaellt die Plattform-Sperre nur fuer den Compose-Modus, die nativen systemd-Pfade bleiben Linux.</p>
+  <p><b>C nicht</b>, weil die Setup-Pfad-Entscheidung eine dritte Lebenszyklus-Implementierung bereits verworfen hat und dieses Konzept sie nicht neu aufmacht.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="protokoll"><span class="no">§8</span>Testprotokoll-Vorlage</h2>
+<p>Fuer beide Szenarien dieselbe Vorlage. Pro Schritt wird Soll und Ist getrennt festgehalten, damit ein Abweichen sichtbar bleibt, statt in einer Gesamtbewertung unterzugehen. Ausfuellen waehrend des Laufs, nicht danach.</p>
+
+<pre><code>Szenario:        [ ] Linux, frische VM     [ ] Windows, frische Maschine
+Datum, Pruefer:
+Maschine:        OS-Version, CPU, RAM, freier Plattenplatz
+Docker:          docker version / docker compose version
+Repository:      Commit-SHA
+Pfad:            (Windows) WSL2-Distribution und Repository-Pfad
+
+Schritt | Soll                                  | Ist | Dauer | Beleg
+--------+---------------------------------------+-----+-------+---------------
+1       | Prereq-Check gruen                    |     |       | Konsolenausgabe
+2       | Klon vollstaendig                     |     |       | SHA
+3       | up --wait kehrt gruen zurueck         |     |       | compose ps
+4       | /healthz = "ok", Tag-Header sichtbar  |     |       | curl -i
+5       | runner.env + runner.token, Modus 0600 |     |       | ls -l
+6       | Beide Hosts registriert               |     |       | Screenshot
+7       | Dummy-Karte erreicht done mit Envelope|     |       | Screenshot, Envelope
+
+Gesamt:  [ ] bestanden   [ ] bestanden mit Abweichung   [ ] nicht bestanden
+Abweichungen: Schritt, Beobachtung, Ursache, Behoben ja/nein
+Aufgetretene Fehlerbilder: welche aus §3 bzw. §4 trafen zu, welche fehlten
+Neue Fehlerbilder: gehoeren zurueck in dieses Dokument
+</code></pre>
+
+<p class="dim">Die letzten beiden Zeilen sind der Rueckkanal. Ein Testlauf, der neue Fehlerbilder findet, hat seinen Zweck erfuellt, auch wenn er nicht besteht. Die Ergaenzung gehoert in §3 und §4, damit die Schrittlisten mit jedem Lauf besser werden.</p>
+
+<!-- ============================================================ -->
+<h2 id="karten"><span class="no">§9</span>Folgekarten-Schnitt</h2>
+<p>Drei Karten, in dieser Reihenfolge abhaengig. (a) liefert die Belege, auf denen (c) aufbaut, (b) laeuft unabhaengig von (a).</p>
+
+<table>
+  <tr><th>Karte</th><th>Inhalt</th><th>Definition of done</th></tr>
+  <tr>
+    <td><b>(a) Linux-VM-Testlauf</b><br>all-Docker inklusive Runner<br><span class="pill teil">Fundament vorhanden</span></td>
+    <td>Nicht bei null anfangen: <code>scripts/compose-smoke-vm-test.sh</code> bootet bereits eine frische Ubuntu-24.04-VM und installiert nur Docker. Erweitern auf Stufe B und C, das heisst Bootstrap, <code>--profile runner</code>, Provider-Auth aus der Umgebung, Dummy-Karte. Dabei die Frage aus §5 klaeren, welchen Modus ein Compose-Secret im Container bekommt, und den Bind-Mount danach entscheiden.</td>
+    <td>Ausgefuelltes Protokoll aus §8, Schritte 1 bis 7 mit Belegen. Fehlerbilder bestaetigt oder korrigiert. Entscheidung zum Secret-Mechanismus mit Messwert.</td>
+  </tr>
+  <tr>
+    <td><b>(b) Windows-Testlauf</b><br><span class="pill fehlt">kein Fundament</span></td>
+    <td>Frische Windows-Maschine, Docker Desktop mit WSL2. Dieselben Schritte, Schritt 1w statt 1. Die hergeleiteten Fehlerbilder aus §4 pruefen, insbesondere die <code>/mnt/c</code>-Berechtigungsfrage, die ueber die Pfad-Empfehlung entscheidet.</td>
+    <td>Ausgefuelltes Protokoll. §4 auf gemessene statt hergeleitete Fehlerbilder umgestellt. Aussage, ob das Repository zwingend im WSL2-Dateisystem liegen muss.</td>
+  </tr>
+  <tr>
+    <td><b>(c) Installer-Implementierung</b><br>Compose-Modus<br><span class="pill teil">setzt (a) und (b) voraus</span></td>
+    <td>Variante B aus §6: fuenfter Modus im vorhandenen Installer, der die in (a) und (b) bewiesenen Schritte ausfuehrt. Plattform-Sperre nur fuer diesen Modus oeffnen. Selbstverifikation zeigt Probe-Ergebnisse sichtbar an, inklusive Versions-Header. Schritt 7 als Abschlussbeweis integrieren.</td>
+    <td>Installer fuehrt auf beiden Plattformen von der frischen Maschine bis zur durchgelaufenen Dummy-Karte. Erster Test, der den Kontrollfluss des Installers ueberhaupt durchlaeuft.</td>
+  </tr>
+</table>
+
+<div class="box">
+  <p><b>Kandidat fuer eine vierte Karte.</b> <code>scripts/compose-smoke-vm-test.sh</code> ist committet, aber nicht in CI. Nach (a) waere die erweiterte Fassung der natuerliche Ort, um den Clean-Machine-Beweis pro Release-Kandidat automatisch zu wiederholen, statt ihn von Hand anzustossen. Nicht Teil von (a), weil Laufzeit und KVM-Anforderung eine eigene Entscheidung zur CI-Topologie brauchen.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="offen" data-concept-section="open-decisions"><span class="no">§10</span>Offene Entscheidungen</h2>
+<table>
+  <tr><th>Frage</th><th>Warum sie offen ist</th><th>Wer entscheidet, wann</th></tr>
+  <tr>
+    <td><b>Secret-Mechanismus fuer das Runner-Token</b></td>
+    <td>Compose-<code>secrets</code> beseitigt das Verzeichnis-Fehlerbild, koennte aber am Dateimodus in die Fremdlesbarkeits-Pruefung des Runners laufen. In dieser Umgebung nicht messbar.</td>
+    <td>Folgekarte (a), am laufenden Runner.</td>
+  </tr>
+  <tr>
+    <td><b>Provider-Auth: Token oder API-Key als empfohlener Weg</b></td>
+    <td><code>claude setup-token</code> passt zum dokumentierten Verbot, Anmeldedateien zu kopieren. Offen bleibt die Auffrischung: der dokumentierte Host-Weg setzt darauf, dass die CLI ihre Anmeldedatei an Ort und Stelle erneuern kann. Ein Wert in <code>runner.env</code> kann das nicht.</td>
+    <td>Gehoert zur laufenden Karte "Provider-Auth first-class". Dieses Konzept legt sich bewusst nicht fest.</td>
+  </tr>
+  <tr>
+    <td><b>Windows: Repository zwingend in WSL2</b></td>
+    <td>Haengt am Berechtigungsverhalten unter <code>/mnt/c</code>. Ist die Empfehlung zwingend, muss der Prereq-Check sie pruefen und nicht nur empfehlen.</td>
+    <td>Folgekarte (b).</td>
+  </tr>
+  <tr>
+    <td><b>Umfang von Schritt 7</b></td>
+    <td>Die Dummy-Karte braucht ein Ziel-Repository. Ein Wegwerf-Repository ist sauber, aber zusaetzliche Einrichtung. Das Produkt-Repository selbst waere bequemer und zugleich der schlechtere Beweis.</td>
+    <td>Folgekarte (a), aus dem realen Ablauf heraus.</td>
+  </tr>
+  <tr>
+    <td><b>Root im Container</b></td>
+    <td>Keines der sieben Images setzt <code>USER</code>. Fuer die Installer-Story nicht blockierend, fuer die Sicherheitsleitplanken relevant.</td>
+    <td>Nicht hier. Steht bereits im <a href="../container-tranche-plan.md">Container-Tranche-Plan</a>.</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="weiter"><span class="no">§11</span>Weiterlesen</h2>
+<table>
+  <tr><th>Dokument</th><th>Warum</th></tr>
+  <tr><td><a href="../nordstern/index.html">Nordstern</a></td><td>Der grosse Bogen. Diese Karte konkretisiert Phase "Release und Deployment" und ersetzt sie nicht.</td></tr>
+  <tr><td><a href="../entscheidungsvorlagen-2230-2132.md">Entscheidungsvorlagen AGT-2230 und AGT-2132</a></td><td>Epic-Buchhaltung zu "Release &amp; Deployment First-Class", dem Rahmen dieser Karte.</td></tr>
+  <tr><td><a href="../releases.md">releases.md</a></td><td>Release-Assets, guided setup, drain-first update, health-gated rollback.</td></tr>
+  <tr><td><a href="../haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md">OSS-Setup-Pfad-Entscheidung</a></td><td>Begruendet, warum Compose der einzige neue Nutzerpfad ist, und definiert die Grenze, die diese Karte verschiebt.</td></tr>
+  <tr><td><a href="../setup/getting-started.md">Getting started</a></td><td>Die heutige Anleitung. Endet bewusst am leeren Board.</td></tr>
+  <tr><td><a href="../container-tranche-plan.md">Container-Tranche-Plan</a></td><td>Container pro Karte. Angrenzend, teilt die Ist-Soll-Liste zum Runner-Image.</td></tr>
+</table>
+
+</main>
+</body>
+</html>
