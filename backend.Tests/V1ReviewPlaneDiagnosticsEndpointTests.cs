@@ -146,6 +146,43 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task Concurrent_registration_and_advertisement_never_hold_the_registry_gate()
+    {
+        var registry = new V1ReviewExecutorRegistry();
+        var registration = new Contract.RegisterRunnerRequest(
+            RunnerId,
+            "review-host",
+            Instance,
+            "1.0.0",
+            Contract.TaskServerProtocol.Current,
+            [Contract.ReviewCapabilities.ReviewExecutor]);
+        registry.Register(RunnerId, registration);
+
+        var operations = Enumerable.Range(0, 100).Select(_ => Task.Run(() =>
+        {
+            registry.Register(RunnerId, registration);
+            return registry.AdvertiseCapabilities(
+                RunnerId,
+                new Contract.CapabilityAdvertisementRequest(
+                    RunnerId,
+                    Instance,
+                    Contract.CapabilityProtocol.CurrentSchemaVersion,
+                    DateTime.UtcNow,
+                    180,
+                    1,
+                    [new Contract.AdvertisedCapabilityDto(
+                        Contract.CapabilityProtocol.DotNet,
+                        "toolchain")]));
+        }));
+
+        var snapshots = await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(100, snapshots.Length);
+        Assert.All(snapshots, snapshot => Assert.Equal(RunnerId, snapshot.RunnerId));
+    }
+
+    [Fact]
     public async Task Capability_failure_of_a_whole_host_capability_drains_on_the_first_report()
     {
         using var factory = BuildFactory();

@@ -152,6 +152,15 @@ public sealed class RunnerOptions
     /// <summary>Delay between empty daemon pickup polls.</summary>
     public int PollSeconds { get; init; }
 
+    /// <summary>Hard deadline for one Task Server HTTP exchange.</summary>
+    public int ServerRequestTimeoutSeconds { get; init; } = 60;
+
+    /// <summary>
+    /// Maximum time a slot-free daemon may go without starting a claim poll.
+    /// The daemon exits after this deadline so the service manager can replace it.
+    /// </summary>
+    public int IdleWatchdogMinutes { get; init; } = 5;
+
     /// <summary>New claims stop when the one-minute load average divided by CPU cores exceeds this value.</summary>
     public double ClaimMaxLoadPerCore { get; init; } = 1.5;
 
@@ -289,6 +298,16 @@ public sealed class RunnerOptions
                 ? maxV : EnvInt("RUNNER_MAX_PARALLELISM", 2),
             PollSeconds = overrides.TryGetValue("poll-seconds", out var poll) && int.TryParse(poll, out var pollV) && pollV > 0
                 ? pollV : EnvInt("RUNNER_POLL_SECONDS", 5),
+            ServerRequestTimeoutSeconds = overrides.TryGetValue("server-request-timeout-seconds", out var requestTimeout)
+                                                  && int.TryParse(requestTimeout, out var requestTimeoutValue)
+                                                  && requestTimeoutValue > 0
+                ? requestTimeoutValue
+                : EnvInt("RUNNER_SERVER_REQUEST_TIMEOUT_SECONDS", 60),
+            IdleWatchdogMinutes = overrides.TryGetValue("idle-watchdog-minutes", out var idleWatchdog)
+                                      && int.TryParse(idleWatchdog, out var idleWatchdogValue)
+                                      && idleWatchdogValue > 0
+                ? idleWatchdogValue
+                : EnvInt("RUNNER_IDLE_WATCHDOG_MINUTES", 5),
             ClaimMaxLoadPerCore = overrides.TryGetValue("claim-max-load-per-core", out var maxLoad)
                                       && double.TryParse(
                                           maxLoad,

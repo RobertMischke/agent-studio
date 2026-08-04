@@ -36,12 +36,15 @@ state.
 
 - `backend/Services/TaskRunnerService.cs`: project runner ownership and public
   start, stop, continue, and mode surface.
-- `runner/TaskServerConnectivityMonitor.cs`, `RemoteRunnerDaemon.cs`, and
-  `RemoteReviewDaemon.cs`: host-side Task Server route state. Poll failures use
-  bounded backoff and transition logging, escalate after five continuous
-  minutes, and recover without restarting the daemon. The connectivity
-  capability's three-minute freshness deadline is the remote alarm because a
-  broken route cannot deliver its own failure telemetry.
+- `runner/TaskServerConnectivityMonitor.cs`, `DaemonIdleWatchdog.cs`,
+  `RemoteRunnerDaemon.cs`, and `RemoteReviewDaemon.cs`: host-side Task Server
+  route and loop liveness. Poll failures use bounded backoff and transition
+  logging, while a slot-free process that stops starting polls for five minutes
+  logs a fatal invariant and exits for service-manager replacement. Capability
+  advertisement re-registers after the backend forgets its in-memory runner
+  identity. The connectivity capability's three-minute freshness deadline is
+  the remote alarm because a broken route cannot deliver its own failure
+  telemetry.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `backend/Features/Runner/PromptEnrichmentService.cs`,

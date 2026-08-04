@@ -77,6 +77,13 @@ public sealed class RemoteRunnerDaemon
 
     public async Task RunAsync(CancellationToken shutdown)
     {
+        await using var idleWatchdog = new DaemonIdleWatchdog(
+            _log,
+            TimeSpan.FromMinutes(_options.IdleWatchdogMinutes));
+        using var daemonStop = CancellationTokenSource.CreateLinkedTokenSource(
+            shutdown,
+            idleWatchdog.AbortToken);
+        shutdown = daemonStop.Token;
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var state = new RunnerStateStore(_options.StateDir);
         var hostJournal = new HostOrchestratorJournal(
@@ -170,6 +177,7 @@ public sealed class RemoteRunnerDaemon
         }
         if (active.Count > 0)
             _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
+        idleWatchdog.RecordActiveSlots(active.Count);
         recoveredHostWork = _client.UsesHostOrchestrator
             ? hostJournal.RecoverAcceptedWork()
             : [];
@@ -261,9 +269,9 @@ public sealed class RemoteRunnerDaemon
         HostTelemetrySample? latestTelemetry = telemetry.SampleIfDue(
             active.Count,
             connectivity.Snapshot);
-        await WithServerRetryAsync<object?>(
+        await CapabilityAdvertisementRecovery.ExecuteAsync(
             "capability advertisement",
-            async () =>
+            async ct =>
             {
                 await _client.AdvertiseCapabilitiesAsync(
                     RunnerCapabilityProbe.Advertise(
@@ -274,11 +282,17 @@ public sealed class RemoteRunnerDaemon
                         connectivity: connectivity.Snapshot),
                     RunnerCapabilityProbe.Telemetry(latestTelemetry),
                     capabilityGeneration,
-                    shutdown);
-                return null;
+                    ct);
+            },
+            async ct =>
+            {
+                _ = await _client.RegisterAsync(_options.RunnerName, "service", ct);
             },
             connectivity,
             () => active.Count,
+            _options.PollSeconds,
+            TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
+            _log,
             shutdown);
         if (!gitCapability.CanPush)
         {
@@ -321,6 +335,7 @@ public sealed class RemoteRunnerDaemon
         var consecutiveFaults = 0;
         while (!shutdown.IsCancellationRequested)
         {
+            idleWatchdog.RecordActiveSlots(active.Count);
             for (var i = active.Count - 1; i >= 0; i--)
             {
                 if (!active[i].Execution.IsCompleted) continue;
@@ -329,6 +344,7 @@ public sealed class RemoteRunnerDaemon
                 catch (Exception ex) { _log($"slot failed: {ex}"); }
                 active.RemoveAt(i);
             }
+            idleWatchdog.RecordActiveSlots(active.Count);
 
             try
             {
@@ -336,18 +352,35 @@ public sealed class RemoteRunnerDaemon
                 if (DateTime.UtcNow >= nextCapabilityAdvertisement)
                 {
                     var capabilityTelemetry = TakeTelemetry();
-                    await _client.AdvertiseCapabilitiesAsync(
-                        RunnerCapabilityProbe.Advertise(
-                            _options,
-                            gitCapability.CanPush,
-                            gitCapability.CanPushWorkflows,
-                            gitCapability.Detail,
-                            connectivity: connectivity.Snapshot),
-                        RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
-                        ++capabilityGeneration,
+                    var generation = ++capabilityGeneration;
+                    await CapabilityAdvertisementRecovery.ExecuteAsync(
+                        "capability advertisement",
+                        ct => _client.AdvertiseCapabilitiesAsync(
+                            RunnerCapabilityProbe.Advertise(
+                                _options,
+                                gitCapability.CanPush,
+                                gitCapability.CanPushWorkflows,
+                                gitCapability.Detail,
+                                connectivity: connectivity.Snapshot),
+                            RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
+                            generation,
+                            ct),
+                        async ct =>
+                        {
+                            _ = await _client.RegisterAsync(_options.RunnerName, "service", ct);
+                        },
+                        connectivity,
+                        () => active.Count,
+                        _options.PollSeconds,
+                        TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
+                        _log,
                         shutdown);
                     nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
                 }
+                // Record the attempt before entering any claim-path HTTP call.
+                // A request which never returns must still count as the last
+                // observed poll for the independent stall deadline.
+                idleWatchdog.RecordPollStarted();
                 var claimedAny = false;
                 var inventorySnapshot = inventory.Snapshot();
                 var activeTaskKeys = inventorySnapshot.Processes
@@ -505,6 +538,7 @@ public sealed class RemoteRunnerDaemon
                             null,
                             new RemoteProjectChatRunner(_options, _client, _log)
                                 .RunAsync(chatClaim.Work, shutdown)));
+                        idleWatchdog.RecordActiveSlots(active.Count);
                         continue;
                     }
 
@@ -548,6 +582,7 @@ public sealed class RemoteRunnerDaemon
                                     permitClaim.RunId,
                                     permitClaim.LeaseInstanceId,
                                     permitClaim.RunSpec))));
+                        idleWatchdog.RecordActiveSlots(active.Count);
                         continue;
                     }
 
@@ -626,6 +661,7 @@ public sealed class RemoteRunnerDaemon
                             // that predates it - the runner then falls back to
                             // its RUNNER_CLI_* configuration as before.
                             claim.RunSpec)));
+                    idleWatchdog.RecordActiveSlots(active.Count);
                 }
 
                 if (!claimedAny)
@@ -670,6 +706,9 @@ public sealed class RemoteRunnerDaemon
         // workers are intentionally left alive for the replacement daemon.
         state.Flush();
         _log($"daemon drain complete; leaving {active.Count} detached job(s) for startup reattach");
+        if (idleWatchdog.Tripped)
+            throw new InvalidOperationException(
+                "The slot-free daemon stopped polling and was terminated by its idle watchdog.");
     }
 
     private static async Task<int> RunAcceptedPermitAsync(

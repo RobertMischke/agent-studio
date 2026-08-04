@@ -1533,6 +1533,32 @@
             <code>NewTestFailures</code> and reaches <code>ProductFailure</code>.
           </td>
         </tr>
+        <tr id="case-agt-2488">
+          <td>2026-08-02 to 2026-08-03</td>
+          <td><code>AGT-2488</code><br><span class="small">slot-free claim loop silence after worker loss and backend restart</span></td>
+          <td>
+            A coding daemon logged a detached worker loss and then produced no poll, claim, or error for six hours while
+            four cards remained Ready and the unit stayed active. After the backend restarted, coding and review daemons
+            also stopped before their first claim while capability advertisement waited or returned
+            <code>409 Register this runner identity before advertising capabilities</code>.
+          </td>
+          <td>
+            A hard worker kill alone did not terminate the current claim loop, but its release cleanup used an uncancelled
+            token and only one delivery attempt. Capability advertisement had no 409 recovery even though the monolith
+            intentionally stores runner registrations in process memory. The daemon had no independent invariant able to
+            detect a blocked startup or claim-path await from outside the loop. The backend registry lock itself contains
+            only bounded in-memory validation and dictionary mutation; it performs no asynchronous work or external I/O.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> every Task Server request now has a configurable hard deadline;
+            worker-loss release makes three bounded attempts; capability publication repeats idempotent registration on
+            409 and retries transient faults with the normal backoff. A separate slot-free watchdog logs a fatal error and
+            cancels the daemon after five minutes without a started claim poll so <code>Restart=always</code> replaces it.
+            A fake-server regression hard-kills the detached worker and proves that the same daemon releases the lease and
+            polls again. Additional tests cover a hanging advertisement, backend registration loss, concurrent registry
+            register/advertise calls, and the watchdog terminal.
+          </td>
+        </tr>
         <tr>
           <td>2026-07-31</td>
           <td><code>AGT-2463</code><br><span class="small">four local restart orphans</span></td>

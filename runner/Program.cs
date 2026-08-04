@@ -176,6 +176,11 @@ static void PrintUsage()
           --ttl <seconds>         Requested lease TTL         (RUNNER_TTL_SECONDS)
           --max-parallelism <n>   Bootstrap/fallback host slots (RUNNER_MAX_PARALLELISM, default 2)
           --poll-seconds <n>      Empty-queue poll delay       (RUNNER_POLL_SECONDS, default 5)
+          --server-request-timeout-seconds <n>
+                                  Per-request Task Server cap  (RUNNER_SERVER_REQUEST_TIMEOUT_SECONDS, default 60)
+          --idle-watchdog-minutes <n>
+                                  Exit after a slot-free poll stall
+                                                               (RUNNER_IDLE_WATCHDOG_MINUTES, default 5)
           --poll                  Run continuously (also the default without a task key)
           -h, --help              Show this help
 
