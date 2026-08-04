@@ -162,6 +162,85 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoverAsync_SameFindingAfterBackendRestart_KeepsPendingId()
+    {
+        WriteJob(TaskStates.Progress, "restart-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "restart-task");
+        var firstSessionAt = new DateTime(2026, 8, 3, 21, 15, 0, DateTimeKind.Utc);
+        var firstFindingAt = firstSessionAt.AddMinutes(1);
+        StampLastProgressAt(jobFolder, firstSessionAt.AddMinutes(5));
+        AppendSessionEvent(jobFolder, firstSessionAt);
+
+        var dirtyPath = Path.Combine(_repoRoot, "restart-recovery.txt");
+        File.WriteAllText(dirtyPath, "survived backend restart\n");
+        File.SetLastWriteTimeUtc(dirtyPath, firstFindingAt);
+
+        var (beforeRestart, _) = BuildRecovery();
+        await beforeRestart.RecoverAsync();
+        var original = Assert.Single(beforeRestart.GetPendingOrphanRecoveries());
+
+        // A new service instance represents a fresh backend boot. The pending
+        // list itself is in memory, so stable identity must come from the
+        // finding rather than from service-instance state.
+        var (afterRestart, _) = BuildRecovery();
+        await afterRestart.RecoverAsync();
+        var recovered = Assert.Single(afterRestart.GetPendingOrphanRecoveries());
+
+        Assert.Equal(firstFindingAt, original.CreatedAt);
+        Assert.Equal(original.CreatedAt, recovered.CreatedAt);
+        Assert.Equal(original.Id, recovered.Id);
+        Assert.Equal(64, recovered.Id.Length);
+        Assert.All(recovered.Id, c => Assert.True(char.IsAsciiHexDigitLower(c)));
+    }
+
+    [Fact]
+    public async Task DismissPendingOrphanRecovery_StaleId_RemainsNotFound()
+    {
+        File.WriteAllText(Path.Combine(_repoRoot, "stale-id.txt"), "pending\n");
+        var (recovery, _) = BuildRecovery();
+        await recovery.RecoverAsync();
+        var current = Assert.Single(recovery.GetPendingOrphanRecoveries());
+
+        var result = recovery.DismissPendingOrphanRecovery("stale-" + current.Id);
+
+        Assert.Equal(CrashRecoveryActionStatuses.NotFound, result.Status);
+        Assert.Equal("Pending crash recovery item not found.", result.Error);
+        Assert.Equal(current.Id, Assert.Single(recovery.GetPendingOrphanRecoveries()).Id);
+    }
+
+    [Fact]
+    public void PendingId_UsesProjectWorktreeClassificationAndFirstTimestamp()
+    {
+        var firstObservedAt = new DateTime(2026, 8, 3, 21, 15, 0, DateTimeKind.Utc);
+        var baseline = CrashRecoveryPendingId.Create(
+            ProjectName, _repoRoot, CrashRecoveryClassifications.ReviewRequired, firstObservedAt);
+
+        Assert.Equal(
+            baseline,
+            CrashRecoveryPendingId.Create(
+                " DEMO ",
+                _repoRoot + Path.DirectorySeparatorChar,
+                "REVIEW-REQUIRED",
+                firstObservedAt));
+        Assert.NotEqual(
+            baseline,
+            CrashRecoveryPendingId.Create(
+                "another-project", _repoRoot, CrashRecoveryClassifications.ReviewRequired, firstObservedAt));
+        Assert.NotEqual(
+            baseline,
+            CrashRecoveryPendingId.Create(
+                ProjectName, _watchPath, CrashRecoveryClassifications.ReviewRequired, firstObservedAt));
+        Assert.NotEqual(
+            baseline,
+            CrashRecoveryPendingId.Create(
+                ProjectName, _repoRoot, CrashRecoveryClassifications.Trivial, firstObservedAt));
+        Assert.NotEqual(
+            baseline,
+            CrashRecoveryPendingId.Create(
+                ProjectName, _repoRoot, CrashRecoveryClassifications.ReviewRequired, firstObservedAt.AddTicks(1)));
+    }
+
+    [Fact]
     public async Task RecoverAsync_OrphanWorkingTreeChanges_ScopesCommitToActiveTaskFiles()
     {
         WriteJob(TaskStates.Progress, "active-task");
