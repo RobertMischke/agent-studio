@@ -1,10 +1,16 @@
 .git
 .tmp
-# Never let runner identity/tokens enter any build context or layer.
-runner.env
-**/runner.env
-runner.token
-**/runner.token
+# Never let credentials or local environment files enter repository-root
+# Docker build contexts. Templates remain available to image builds.
+**/*.env
+**/*.token
+**/.git-credentials
+!**/*.env.template
+!**/*.env.example
+!**/*.token.template
+!**/*.token.example
+!**/.git-credentials.template
+!**/.git-credentials.example
 # Machine-local configuration must never override the container's env-based config.
 **/appsettings.Local.json
 **/appsettings.Development.json
