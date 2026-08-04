@@ -658,10 +658,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// lock-protected; a failure is isolated to the one card. The workspace-wide
     /// <see cref="TickOnceAsync"/> remains the boot/backstop/recovery safety net.
     /// </summary>
-    public async Task ProcessCardAsync(string workspace, string projectName, string jobId, string watchPath, CancellationToken ct)
+    public async Task<PostProcessingCardResult> ProcessCardAsync(string workspace, string projectName, string jobId, string watchPath, CancellationToken ct)
     {
         if (!_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
-            return;
+            return PostProcessingCardResult.Blocked("review-decision-orchestrator-disabled");
 
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
@@ -675,11 +675,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             (string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase)
              || string.Equals(e.Name, projectName, StringComparison.Ordinal)));
         if (entry == null || string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path))
-            return;
+            return PostProcessingCardResult.Blocked("watch-path-unresolved");
 
-        foreach (var pending in EnumeratePending(workspace, entry))
+        // Why the classifier passed this card over, if it did. Without it the
+        // caller can only observe "nothing happened" and has to guess whether
+        // the card is broken or simply owned by someone else.
+        string? skipReason = null;
+        void NoteSkip(string skippedJobId, string reason)
         {
-            if (ct.IsCancellationRequested) return;
+            if (string.Equals(skippedJobId, jobId, StringComparison.Ordinal))
+                skipReason = reason;
+        }
+
+        foreach (var pending in EnumeratePending(workspace, entry, NoteSkip))
+        {
+            if (ct.IsCancellationRequested)
+                return PostProcessingCardResult.Deferred("cancelled");
             if (!string.Equals(pending.Job.Id, jobId, StringComparison.Ordinal)) continue;
 
             // In-flight guard: never post-process the same card concurrently (another
@@ -687,12 +698,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // are independent and proceed in parallel.
             var inflightKey = pending.Job.FolderPath;
             if (!_cardsInFlight.TryAdd(inflightKey, 0))
-                return;
+                return PostProcessingCardResult.Deferred("card-already-in-flight");
 
             _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
+            PostProcessingCardResult result;
             try
             {
-                await DispatchPendingCardAsync(
+                result = await DispatchPendingCardAsync(
                     workspace, entry, pending, cliBinary, model, aspectModel,
                     TimeSpan.FromSeconds(aspectTimeoutSeconds), maxPerHour, maxReissues, ct);
             }
@@ -706,15 +718,38 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 _logger.LogWarning(ex,
                     "ReviewDecisionOrchestrator failed to post-process {Project}/{JobId}",
                     entry.Name, pending.Job.Id);
+                result = PostProcessingCardResult.Blocked("dispatch-threw:" + ex.GetType().Name);
             }
             finally
             {
                 _cardsInFlight.TryRemove(inflightKey, out _);
                 _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
             }
-            return; // handled the target card
+            return result; // handled the target card
         }
+
+        // The card was never yielded as pending. Either the classifier skipped
+        // it for a known reason (then say which), or it is not an actionable
+        // 4-auto-review card at all - a lane move that already took it out, or
+        // a sentinel that a previous tick resolved. Both are "nothing to do
+        // here", not a fault of this card.
+        return skipReason is null
+            ? PostProcessingCardResult.Deferred("card-not-pending-in-auto-review")
+            : ClassifySkip(skipReason);
     }
+
+    /// <summary>
+    /// Maps a classifier skip reason onto a card status. Skips that another
+    /// actor resolves (the canonical review executor, a later run) are
+    /// deferrals; only a genuinely unusable card is blocked.
+    /// </summary>
+    private static PostProcessingCardResult ClassifySkip(string skipReason) => skipReason switch
+    {
+        PostProcessingCardResult.AwaitingCanonicalReviewExecutor or
+        "no-unresolved-terminal-sentinel" or
+        "fixture-card" => PostProcessingCardResult.Deferred(skipReason),
+        _ => PostProcessingCardResult.Blocked(skipReason),
+    };
 
     /// <summary>
     /// Dispatches one card's post-processing by signal kind. This mirrors the
@@ -723,7 +758,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// DONE aspect review - inline for its single card, since the cross-card
     /// parallelism now lives in the worker rather than the in-tick DONE pool.
     /// </summary>
-    private async Task DispatchPendingCardAsync(
+    private async Task<PostProcessingCardResult> DispatchPendingCardAsync(
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
@@ -739,65 +774,69 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             case ReviewSignalKind.StaleWithVerdict:
                 await ProcessStaleVerdictAsync(workspace, entry, pending, ct);
-                return;
+                return PostProcessingCardResult.Decided("stale-with-verdict");
 
             case ReviewSignalKind.UnworkedNoCoreRun:
                 ProcessUnworkedCard(workspace, entry, pending);
                 _statusSnapshot.RecordReissue();
-                return;
+                return PostProcessingCardResult.Decided("unworked-no-core-run");
 
             case ReviewSignalKind.NoOp:
                 await ProcessNoOpAsync(workspace, entry, pending, maxReissues, ct);
                 _statusSnapshot.RecordReissue();
-                return;
+                return PostProcessingCardResult.Decided("noop");
 
             case ReviewSignalKind.NoCompletionSignal:
                 await ProcessNoCompletionSignalAsync(
                     workspace, entry, pending, cliBinary, model, maxPerHour, maxReissues, ct);
                 _statusSnapshot.RecordReissue();
-                return;
+                return PostProcessingCardResult.Decided("no-completion-signal");
 
             case ReviewSignalKind.Blocked:
                 await ProcessBlockedAsync(workspace, entry, pending, ct);
                 _statusSnapshot.RecordEscalate();
-                return;
+                return PostProcessingCardResult.Decided("blocked-sentinel");
 
             case ReviewSignalKind.Done:
                 if (TaskModes.IsConcept(pending.Job.Mode))
                 {
                     await ProcessConceptAsync(workspace, entry, pending, ct);
-                    return;
+                    return PostProcessingCardResult.Decided("concept");
                 }
                 if (TaskModes.IsReportOnly(pending.Job.Mode))
                 {
                     await ProcessReportOnlyDoneAsync(workspace, entry, pending, cliBinary, ct);
-                    return;
+                    return PostProcessingCardResult.Decided("report-only");
                 }
+                if (!_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
+                    return PostProcessingCardResult.Blocked("aspect-reviews-disabled");
                 var aspects = ResolveAspectRunners();
-                if (aspects.Count == 0 ||
-                    !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
-                    return;
+                if (aspects.Count == 0)
+                    return PostProcessingCardResult.Blocked("no-aspect-runners-resolved");
                 await ProcessDoneAsync(
                     workspace, entry, pending, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
                 _statusSnapshot.RecordAspectsRun(aspects.Count);
-                return;
+                return PostProcessingCardResult.Decided("done-aspects");
 
             case ReviewSignalKind.NeedsInput:
                 if (TaskModes.IsConcept(pending.Job.Mode))
                 {
                     await ProcessConceptAsync(workspace, entry, pending, ct);
-                    return;
+                    return PostProcessingCardResult.Decided("concept");
                 }
                 if (!RateLimitOk(maxPerHour))
                 {
                     _logger.LogInformation(
                         "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {JobId} to next tick",
                         maxPerHour, pending.Job.Id);
-                    return;
+                    // Budget exhaustion is a clock problem, not a card problem.
+                    return PostProcessingCardResult.Deferred("rate-limit-reached");
                 }
                 await ProcessNeedsInputAsync(workspace, entry, pending, cliBinary, model, ct);
-                return;
+                return PostProcessingCardResult.Decided("needs-input");
         }
+
+        return PostProcessingCardResult.Blocked("unhandled-signal-kind:" + pending.Kind);
     }
 
     /// <summary>
@@ -6504,7 +6543,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return string.Join('\n', records.Select(r => $"- {r.CreatedAt:u} [{r.Kind}] {r.Reason}"));
     }
 
-    private IEnumerable<PendingDecision> EnumeratePending(string workspace, WatchPathEntry entry)
+    /// <param name="onSkipped">
+    /// Optional probe invoked as <c>(jobId, reason)</c> whenever a card in the
+    /// lane is passed over. The workspace sweep ignores it; the per-card path
+    /// uses it so a card that produced no decision can name why.
+    /// </param>
+    private IEnumerable<PendingDecision> EnumeratePending(
+        string workspace,
+        WatchPathEntry entry,
+        Action<string, string>? onSkipped = null)
     {
         // ADR-0024: list 4-auto-review through the typed layer
         // instead of walking the lane directory by hand. The cache
@@ -6512,7 +6559,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // faster than the original folder-walk + ScanAllJobs FirstOrDefault.
         foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, TaskStates.AutoReview))
         {
-            if (info.Fixture) continue;
+            if (info.Fixture)
+            {
+                onSkipped?.Invoke(info.Id, "fixture-card");
+                continue;
+            }
 
             // Canonical ReviewAttempts belong to the remote review data plane.
             // Until that executor claims the attempt, leaving the card in Auto
@@ -6537,6 +6588,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 _logger.LogDebug(
                     "ReviewDecisionOrchestrator skipped canonical remote review {TaskKey}; awaiting fenced ReviewAttempt executor.",
                     authorityKey);
+                onSkipped?.Invoke(info.Id, PostProcessingCardResult.AwaitingCanonicalReviewExecutor);
                 continue;
             }
 
@@ -6586,7 +6638,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
             string log;
             try { log = File.ReadAllText(logPath); }
-            catch { continue; }
+            catch
+            {
+                onSkipped?.Invoke(info.Id, "cli-log-unreadable");
+                continue;
+            }
 
             // The agent contract guarantees only one terminal sentinel per
             // run, but a job folder may have been continued and accumulated
@@ -6639,6 +6695,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     // Backfill the due move; idempotent and re-bill-safe because
                     // a successful move takes the card out of this lane.
                     yield return new PendingDecision(info, ReviewSignalKind.StaleWithVerdict, LineNumber: -1, Reason: "stale-with-verdict", NeedsInput: null, StaleVerdict: dueVerdict);
+                }
+                else
+                {
+                    // A sentinel that an earlier tick already resolved, with a
+                    // verdict on record: nothing left to decide here.
+                    onSkipped?.Invoke(info.Id, "no-unresolved-terminal-sentinel");
                 }
                 continue;
             }
