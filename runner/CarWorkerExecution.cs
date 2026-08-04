@@ -107,6 +107,16 @@ internal static class CarWorkerExecution
         driver.OnFinished += OnFinished;
         try
         {
+            var extraEnvironment = new Dictionary<string, string>
+            {
+                ["JOB_RESULTS_DIR"] = spec.ResultsDirectory,
+            };
+            // Clean context redirects the provider's config home. Keep the
+            // service-provisioned headless credential independent of that home
+            // by explicitly admitting only Claude's supported environment token.
+            if (ProviderAuthEnvironment.TryGetForCli(cliType, out var authName, out var authValue))
+                extraEnvironment[authName] = authValue;
+
             var request = new CliRunRequest
             {
                 RunId = runId,
@@ -121,10 +131,7 @@ internal static class CarWorkerExecution
                 // Null normalizes to clean — the second documented jump; safe
                 // since CAR-B links the credential seed instead of copying it.
                 ContextMode = CliContextModes.Normalize(spec.ContextMode),
-                ExtraEnvironment = new Dictionary<string, string>
-                {
-                    ["JOB_RESULTS_DIR"] = spec.ResultsDirectory,
-                },
+                ExtraEnvironment = extraEnvironment,
             };
 
             var (run, error) = await driver.StartAsync(request, CancellationToken.None);
