@@ -888,7 +888,7 @@ public class TaskStateMachine
                     string.Equals(edge.Target, oldKey, StringComparison.OrdinalIgnoreCase))) continue;
             var rewritten = new TaskReferences
             {
-                DependsOn = Replace(refs.DependsOn, oldKey, newKey),
+                DependsOn = ReplaceDependencies(refs.DependsOn, oldKey, newKey),
                 RelatedTo = Replace(refs.RelatedTo, oldKey, newKey),
                 BlockedBy = Replace(refs.BlockedBy, oldKey, newKey),
                 Supersedes = Replace(refs.Supersedes, oldKey, newKey),
@@ -903,6 +903,14 @@ public class TaskStateMachine
 
     private static List<string> Replace(IEnumerable<string> values, string oldKey, string newKey)
         => values.Select(value => string.Equals(value, oldKey, StringComparison.OrdinalIgnoreCase) ? newKey : value).ToList();
+
+    private static List<TaskDependencyReference> ReplaceDependencies(
+        IEnumerable<TaskDependencyReference> values,
+        string oldKey,
+        string newKey)
+        => values.Select(value => string.Equals(value.Key, oldKey, StringComparison.OrdinalIgnoreCase)
+            ? value with { Key = newKey }
+            : value).ToList();
 
     private sealed record TaskReferenceUpdate(
         string FolderPath,

@@ -16,6 +16,8 @@ import {
   TaskReferences,
   TASK_REFERENCE_KINDS,
   TaskState,
+  taskDependencyKey,
+  taskDependencyRequiresRelease,
 } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
@@ -175,7 +177,10 @@ export class ReferencesSectionComponent {
   readonly datalistId = computed(() => `task-ref-keys-${this.info().id}`);
 
   refsFor(kind: TaskReferenceKind): string[] {
-    return this.localRefs()[kind];
+    const refs = this.localRefs()[kind];
+    return kind === 'dependsOn'
+      ? this.localRefs().dependsOn.map(taskDependencyKey)
+      : refs as string[];
   }
 
   draftFor(kind: TaskReferenceKind): string {
@@ -198,7 +203,8 @@ export class ReferencesSectionComponent {
 
   chipTooltip(key: string): string {
     const title = this.titleFor(key);
-    return title ? `${key}: ${title}` : `${key} (not loaded in this workspace view)`;
+    const releaseGate = this.releaseGateFor(key) ? ' · explicit release required' : '';
+    return title ? `${key}: ${title}${releaseGate}` : `${key} (not loaded in this workspace view)${releaseGate}`;
   }
 
   /** A dependsOn target is satisfied once it reaches completed/archive. */
@@ -206,7 +212,7 @@ export class ReferencesSectionComponent {
     if (kind !== 'dependsOn') return false;
     const target = this.keyIndex().get(key.trim().toUpperCase());
     if (!target) return false;
-    return !isTerminalState(target.state);
+    return !isTerminalState(target.state) || (this.releaseGateFor(key) && target.released !== true);
   }
 
   navigate(key: string): void {
@@ -232,13 +238,16 @@ export class ReferencesSectionComponent {
       this.notifications.warning('A task cannot reference itself.');
       return;
     }
-    const current = this.localRefs()[kind];
+    const current = this.refsFor(kind);
     if (current.some((k) => k.toUpperCase() === upper)) {
       this.setDraft(kind, '');
       return;
     }
     const snapshot = this.localRefs();
-    const next = { ...cloneRefs(snapshot), [kind]: [...current, key] };
+    const next = {
+      ...cloneRefs(snapshot),
+      [kind]: [...this.localRefs()[kind], key],
+    } as TaskReferences;
     this.setDraft(kind, '');
     this.persist(kind, next, snapshot);
   }
@@ -248,9 +257,19 @@ export class ReferencesSectionComponent {
     const upper = key.toUpperCase();
     const next = {
       ...cloneRefs(snapshot),
-      [kind]: snapshot[kind].filter((k) => k.toUpperCase() !== upper),
+      [kind]: kind === 'dependsOn'
+        ? snapshot.dependsOn.filter((dependency) => taskDependencyKey(dependency).toUpperCase() !== upper)
+        : (snapshot[kind] as string[]).filter((value) => value.toUpperCase() !== upper),
     };
-    this.persist(kind, next, snapshot);
+    this.persist(kind, next as TaskReferences, snapshot);
+  }
+
+  private releaseGateFor(key: string): boolean {
+    const upper = key.trim().toUpperCase();
+    const dependency = this.localRefs().dependsOn.find(
+      (edge) => taskDependencyKey(edge).trim().toUpperCase() === upper,
+    );
+    return dependency ? taskDependencyRequiresRelease(dependency) : false;
   }
 
   private persist(kind: TaskReferenceKind, next: TaskReferences, snapshot: TaskReferences): void {

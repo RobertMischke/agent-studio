@@ -68,12 +68,29 @@ export type TaskMode = 'coding' | 'planning' | 'research' | 'concept';
 /**
  * F34 — structured cross-references between tasks, keyed by F33 stable keys
  * (e.g. `ATP-19`). Mirrors backend `TaskReferences`. Four relation kinds:
- * `dependsOn` (target must be complete before this is workable — a DAG edge),
+ * `dependsOn` (target must be complete before this is workable; an object edge
+ * can additionally require explicit release),
  * `relatedTo` (thematic, non-blocking), `blockedBy` (currently blocked),
  * `supersedes` (this task replaces an obsolete target).
  */
+export interface TaskDependencyReference {
+  key: string;
+  releaseGate?: boolean;
+}
+
+/** Legacy edges stay strings; only release-gated edges need the object shape. */
+export type TaskDependency = string | TaskDependencyReference;
+
+export function taskDependencyKey(dependency: TaskDependency): string {
+  return typeof dependency === 'string' ? dependency : dependency.key;
+}
+
+export function taskDependencyRequiresRelease(dependency: TaskDependency): boolean {
+  return typeof dependency !== 'string' && dependency.releaseGate === true;
+}
+
 export interface TaskReferences {
-  dependsOn: string[];
+  dependsOn: TaskDependency[];
   relatedTo: string[];
   blockedBy: string[];
   supersedes: string[];
@@ -121,6 +138,9 @@ export interface WaitsOnItem {
   key: string;
   resolved: boolean;
   fulfilled: boolean;
+  releaseGate?: boolean;
+  targetReleased?: boolean;
+  waitingForRelease?: boolean;
   targetJobId?: string | null;
   targetTitle?: string | null;
   targetState?: string | null;
@@ -194,6 +214,8 @@ export interface TaskInfo {
   displayKey?: string | null;
   title: string;
   state: string;
+  /** Explicit content approval used only by dependsOn edges with releaseGate=true. */
+  released?: boolean;
   order: number;
   agent: string;
   createdAt: string;

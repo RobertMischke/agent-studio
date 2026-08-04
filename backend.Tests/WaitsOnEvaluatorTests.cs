@@ -58,6 +58,36 @@ public class WaitsOnEvaluatorTests
     }
 
     [Fact]
+    public void ReleaseGate_TerminalTargetWithoutFlag_RemainsBlockedForRelease()
+    {
+        var target = Task("lib", "LIB-1", TaskStates.Completed, released: false);
+        var subject = Task("app", "APP-1", TaskStates.Ready, deps: new[] { "LIB-1" }, releaseGate: true);
+        var status = TaskReferenceIndex.Build(new[] { subject, target }).EvaluateWaitsOn(subject);
+
+        var item = Assert.Single(status.Items);
+        Assert.True(item.ReleaseGate);
+        Assert.True(item.WaitingForRelease);
+        Assert.False(item.TargetReleased);
+        Assert.False(item.Fulfilled);
+        Assert.True(status.Blocked);
+    }
+
+    [Fact]
+    public void ReleaseGate_TerminalReleasedTarget_IsFulfilled()
+    {
+        var target = Task("lib", "LIB-1", TaskStates.Completed, released: true);
+        var subject = Task("app", "APP-1", TaskStates.Ready, deps: new[] { "LIB-1" }, releaseGate: true);
+        var status = TaskReferenceIndex.Build(new[] { subject, target }).EvaluateWaitsOn(subject);
+
+        var item = Assert.Single(status.Items);
+        Assert.True(item.ReleaseGate);
+        Assert.True(item.TargetReleased);
+        Assert.False(item.WaitingForRelease);
+        Assert.True(item.Fulfilled);
+        Assert.False(status.Blocked);
+    }
+
+    [Fact]
     public void OpenTarget_IsBlocked()
     {
         var target = Task("lib", "LIB-1", TaskStates.Ready, watchPath: "/ws/lib");
@@ -153,16 +183,26 @@ public class WaitsOnEvaluatorTests
         Assert.False(index.EvaluateWaitsOn(a).CycleDetected);
     }
 
-    private static TaskInfo Task(string id, string? key, string state, string[]? deps = null, string watchPath = "/ws/demo") => new()
+    private static TaskInfo Task(
+        string id,
+        string? key,
+        string state,
+        string[]? deps = null,
+        string watchPath = "/ws/demo",
+        bool releaseGate = false,
+        bool released = false) => new()
     {
         Id = id,
         Key = key,
         Title = id.ToUpperInvariant(),
         State = state,
+        Released = released,
         WatchPath = watchPath,
         References = new TaskReferences
         {
-            DependsOn = (deps ?? Array.Empty<string>()).ToList(),
+            DependsOn = (deps ?? Array.Empty<string>())
+                .Select(key => new TaskDependencyReference(key, releaseGate))
+                .ToList(),
         },
     };
 }

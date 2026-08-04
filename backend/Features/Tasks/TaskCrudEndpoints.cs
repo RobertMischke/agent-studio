@@ -870,6 +870,16 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
+        // Explicit content release for references.dependsOn edges with
+        // releaseGate=true. Completion never sets this implicitly: the endpoint
+        // is the operator/release-step seam that records the additional approval.
+        group.MapPut("/{jobId}/release", (string jobId, string? project, string? watchPath, SetJobReleasedRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var success = mutations.SetJobReleased(jobId, req?.Released == true, watchPath);
+            return success ? Results.Ok(new { released = req?.Released == true }) : Results.NotFound();
+        });
+
         // Replace-all: the request's Tags array becomes the new full set on
         // the job. Empty list clears tags. Unknown ids are accepted (the
         // registry may evolve out from under a job); ghost rendering is the

@@ -1521,8 +1521,8 @@ export function buildOutcomeIssueBadge(job: TaskInfo): OutcomeIssueBadge | null 
  * target - matching the scheduler's own decision (the runner uses the same
  * evaluation to gate auto-pickup). Null when the task has no dependencies.
  *
- * States: `open` (⏳, at least one dependency not yet complete - the card is
- * held back from auto-pickup), `ready` (✓, all complete - the card is
+ * States: `open` (⏳, at least one dependency is awaiting completion or an
+ * explicit release - the card is held back from auto-pickup), `ready` (✓, all complete - the card is
  * workable), `cycle` (⚠, a dependsOn cycle that can never be fulfilled -
  * a configuration error).
  */
@@ -1560,9 +1560,10 @@ export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChi
   if (open.length > 0) {
     const primary = open[0];
     const extra = open.length - 1;
+    const waitReason = primary.waitingForRelease ? 'release' : 'completion';
     return {
       glyph: '⏳',
-      label: `waits: ${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+      label: `waits for ${waitReason}: ${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
       tone: 'open',
       tooltip,
       targetKey: primary.key,
@@ -1614,7 +1615,13 @@ function dependencyTooltip(
 ): string {
   const lines = items.map((i) => {
     const mark = i.fulfilled ? '✓' : '◦';
-    const state = i.fulfilled ? 'done' : i.resolved ? 'open' : 'not created yet';
+    const state = i.fulfilled
+      ? 'done'
+      : i.waitingForRelease
+        ? 'completed, release pending'
+        : i.resolved
+          ? 'completion pending'
+          : 'not created yet';
     const title = i.targetTitle ? ` — ${i.targetTitle.slice(0, 40)}` : '';
     return `${mark} ${i.key} (${state})${title}`;
   });
@@ -1622,7 +1629,7 @@ function dependencyTooltip(
     ? 'Dependency cycle: this task can never be auto-picked until the chain is fixed via its references.'
     : items.every((i) => i.fulfilled)
       ? 'All dependencies complete — this task is workable.'
-      : 'Waiting on these to reach completed/archive before pickup:';
+      : 'Waiting for dependency completion or explicit release before pickup:';
   return `${head}\n${lines.join('\n')}`;
 }
 

@@ -41,7 +41,7 @@ public class TaskReferencesTests : IDisposable
             RelatedTo = new() { "ATP-3" },
         });
 
-        Assert.Equal(new[] { "ATP-1", "ATP-2" }, norm.DependsOn.ToArray());
+        Assert.Equal(new[] { "ATP-1", "ATP-2" }, norm.DependsOn.Select(edge => edge.Key).ToArray());
         Assert.Equal(new[] { "ATP-3" }, norm.RelatedTo.ToArray());
         Assert.Empty(norm.BlockedBy);
         Assert.Empty(norm.Supersedes);
@@ -168,6 +168,23 @@ public class TaskReferencesTests : IDisposable
         Assert.True(result.IsValid);
     }
 
+    [Fact]
+    public void Normalize_DuplicateDependency_PreservesStrongestReleaseGate()
+    {
+        var norm = TaskReferenceValidator.Normalize(new TaskReferences
+        {
+            DependsOn =
+            [
+                new TaskDependencyReference(" ATP-2 "),
+                new TaskDependencyReference("atp-2", releaseGate: true),
+            ],
+        });
+
+        var edge = Assert.Single(norm.DependsOn);
+        Assert.Equal("ATP-2", edge.Key);
+        Assert.True(edge.ReleaseGate);
+    }
+
     // ---- reverse index --------------------------------------------------
 
     [Fact]
@@ -269,7 +286,7 @@ public class TaskReferencesTests : IDisposable
         Assert.True(ok);
 
         var infoA = scanner.FindJob("a", _watchPath)!;
-        Assert.Equal(new[] { infoB.Key }, infoA.References.DependsOn.ToArray());
+        Assert.Equal(new[] { infoB.Key }, infoA.References.DependsOn.Select(edge => edge.Key).ToArray());
         Assert.Equal(new[] { infoC.Key }, infoA.References.RelatedTo.ToArray());
         Assert.Empty(infoA.References.BlockedBy);
     }
@@ -305,6 +322,35 @@ public class TaskReferencesTests : IDisposable
         Assert.DoesNotContain("\"DependsOn\"", disk);
     }
 
+    [Fact]
+    public void SetTaskReferences_RoundTripsReleaseGateObject_AndLegacyString()
+    {
+        var (machine, scanner, mutations) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+        CreateJob(mutations, "a");
+        CreateJob(mutations, "b");
+        CreateJob(mutations, "c");
+        var keyB = scanner.FindJob("b", _watchPath)!.Key!;
+        var keyC = scanner.FindJob("c", _watchPath)!.Key!;
+
+        mutations.SetTaskReferences("a", new TaskReferences
+        {
+            DependsOn =
+            [
+                new TaskDependencyReference(keyB, releaseGate: true),
+                new TaskDependencyReference(keyC),
+            ],
+        }, _watchPath);
+
+        var info = scanner.FindJob("a", _watchPath)!;
+        Assert.True(info.References.DependsOn.Single(edge => edge.Key == keyB).ReleaseGate);
+        Assert.False(info.References.DependsOn.Single(edge => edge.Key == keyC).ReleaseGate);
+
+        var disk = File.ReadAllText(Path.Combine(info.FolderPath, "task.json"));
+        Assert.Contains("\"releaseGate\": true", disk);
+        Assert.Contains($"\"{keyC}\"", disk);
+    }
+
     // ---- helpers --------------------------------------------------------
 
     private static IReadOnlySet<string> Keys(params string[] keys) =>
@@ -332,7 +378,7 @@ public class TaskReferencesTests : IDisposable
         WatchPath = "/ws/demo",
         References = new TaskReferences
         {
-            DependsOn = (deps ?? Array.Empty<string>()).ToList(),
+            DependsOn = (deps ?? Array.Empty<string>()).Select(key => new TaskDependencyReference(key)).ToList(),
             RelatedTo = (related ?? Array.Empty<string>()).ToList(),
         },
     };

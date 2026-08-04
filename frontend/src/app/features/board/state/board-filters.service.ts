@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { GroupedJobs, TaskInfo } from '../../../models/task.model';
+import { GroupedJobs, TaskInfo, taskDependencyKey } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { ClientService } from '../../../services/client.service';
 import { TagRegistryStore } from '../../../services/tag-registry.store';
@@ -137,7 +137,7 @@ export class BoardFiltersService {
       if (ownerId && j.ownerClientId !== ownerId) return false;
       if (dependsOnKey) {
         const deps = j.references?.dependsOn ?? [];
-        if (!deps.some(d => d.trim().toUpperCase() === dependsOnKey)) return false;
+        if (!deps.some(d => taskDependencyKey(d).trim().toUpperCase() === dependsOnKey)) return false;
       }
       if (types.size > 0) {
         const t = j.taskType || 'chore';

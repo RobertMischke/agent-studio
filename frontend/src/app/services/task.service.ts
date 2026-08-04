@@ -982,6 +982,15 @@ export class TaskService {
     );
   }
 
+  /** Explicit content approval for release-gated dependents; never inferred from lane state. */
+  setTaskReleased(jobId: string, released: boolean, watchPath?: string) {
+    return this.http.put<{ released: boolean }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/release`,
+      { released },
+      this.withWatchPath(watchPath),
+    );
+  }
+
   /**
    * F34 reverse-index: tasks that reference this one. Optional `kind` narrows
    * to a single relation (e.g. `dependsOn` for the "who depends on X" filter).

@@ -1,9 +1,69 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace AgentStudio.Shared;
+
+/// <summary>
+/// One scheduler-load-bearing <c>dependsOn</c> edge. Legacy edges are stored as
+/// plain strings. An edge that also requires an explicit content release is
+/// stored as <c>{ "key": "ATP-19", "releaseGate": true }</c>.
+/// </summary>
+[JsonConverter(typeof(TaskDependencyReferenceJsonConverter))]
+public sealed record TaskDependencyReference
+{
+    public TaskDependencyReference(string key, bool releaseGate = false)
+    {
+        Key = key;
+        ReleaseGate = releaseGate;
+    }
+
+    public string Key { get; init; }
+    public bool ReleaseGate { get; init; }
+
+    public static implicit operator TaskDependencyReference(string key) => new(key);
+}
+
+/// <summary>
+/// Preserves the legacy string wire shape while allowing release-gated edges
+/// to opt into the richer object shape.
+/// </summary>
+public sealed class TaskDependencyReferenceJsonConverter : JsonConverter<TaskDependencyReference>
+{
+    public override TaskDependencyReference Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return new TaskDependencyReference(reader.GetString() ?? "");
+
+        if (reader.TokenType != JsonTokenType.StartObject)
+            throw new JsonException("A dependsOn entry must be a task key or an object.");
+
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var root = doc.RootElement;
+        var key = root.TryGetProperty("key", out var keyElement) && keyElement.ValueKind == JsonValueKind.String
+            ? keyElement.GetString() ?? ""
+            : "";
+        var releaseGate = root.TryGetProperty("releaseGate", out var gateElement)
+            && gateElement.ValueKind == JsonValueKind.True;
+        return new TaskDependencyReference(key, releaseGate);
+    }
+
+    public override void Write(Utf8JsonWriter writer, TaskDependencyReference value, JsonSerializerOptions options)
+    {
+        if (!value.ReleaseGate)
+        {
+            writer.WriteStringValue(value.Key);
+            return;
+        }
+
+        writer.WriteStartObject();
+        writer.WriteString("key", value.Key);
+        writer.WriteBoolean("releaseGate", true);
+        writer.WriteEndObject();
+    }
+}
 
 /// <summary>
 /// F34 — structured cross-references between tasks, keyed by F33 stable keys
@@ -15,7 +75,9 @@ namespace AgentStudio.Shared;
 /// <para>Four relation kinds (see <see cref="TaskReferenceKinds"/>):</para>
 /// <list type="bullet">
 /// <item><b>dependsOn</b>: the target must reach <c>6-completed</c> before this
-/// task is workable. These edges form a DAG — cycles are rejected on write.</item>
+/// task is workable. An edge with <c>releaseGate=true</c> additionally requires
+/// the target's explicit <c>released</c> flag. These edges form a DAG; cycles
+/// are rejected on write.</item>
 /// <item><b>relatedTo</b>: thematic link, non-blocking.</item>
 /// <item><b>blockedBy</b>: this task is currently blocked by the target.</item>
 /// <item><b>supersedes</b>: this task replaces an obsolete target.</item>
@@ -24,7 +86,7 @@ namespace AgentStudio.Shared;
 public record TaskReferences
 {
     [JsonPropertyName("dependsOn")]
-    public List<string> DependsOn { get; init; } = [];
+    public List<TaskDependencyReference> DependsOn { get; init; } = [];
     [JsonPropertyName("relatedTo")]
     public List<string> RelatedTo { get; init; } = [];
     [JsonPropertyName("blockedBy")]
@@ -40,7 +102,7 @@ public record TaskReferences
     /// <summary>Flattens the four lists into (kind, target) pairs, in kind order.</summary>
     public IEnumerable<(string Kind, string Target)> Enumerate()
     {
-        foreach (var t in DependsOn) yield return (TaskReferenceKinds.DependsOn, t);
+        foreach (var t in DependsOn) yield return (TaskReferenceKinds.DependsOn, t.Key);
         foreach (var t in RelatedTo) yield return (TaskReferenceKinds.RelatedTo, t);
         foreach (var t in BlockedBy) yield return (TaskReferenceKinds.BlockedBy, t);
         foreach (var t in Supersedes) yield return (TaskReferenceKinds.Supersedes, t);
@@ -70,7 +132,7 @@ public static class TaskReferenceKinds
 /// </summary>
 public record SetTaskReferencesRequest
 {
-    public List<string>? DependsOn { get; init; }
+    public List<TaskDependencyReference>? DependsOn { get; init; }
     public List<string>? RelatedTo { get; init; }
     public List<string>? BlockedBy { get; init; }
     public List<string>? Supersedes { get; init; }
@@ -161,10 +223,39 @@ public static class TaskReferenceValidator
         return result;
     }
 
+    /// <summary>
+    /// Normalises dependency keys and de-duplicates case-insensitively. If the
+    /// same key appears more than once, <c>releaseGate=true</c> wins so
+    /// normalisation can never silently weaken a gate.
+    /// </summary>
+    public static List<TaskDependencyReference> NormalizeDependencies(
+        IEnumerable<TaskDependencyReference>? dependencies)
+    {
+        var result = new List<TaskDependencyReference>();
+        if (dependencies == null) return result;
+        var indexes = new Dictionary<string, int>(KeyComparer);
+        foreach (var dependency in dependencies)
+        {
+            if (dependency == null) continue;
+            var key = NormalizeKey(dependency.Key);
+            if (key.Length == 0) continue;
+            if (!indexes.TryGetValue(key, out var index))
+            {
+                indexes[key] = result.Count;
+                result.Add(new TaskDependencyReference(key, dependency.ReleaseGate));
+            }
+            else if (dependency.ReleaseGate && !result[index].ReleaseGate)
+            {
+                result[index] = result[index] with { ReleaseGate = true };
+            }
+        }
+        return result;
+    }
+
     /// <summary>Returns a copy with every list normalised.</summary>
     public static TaskReferences Normalize(TaskReferences refs) => new()
     {
-        DependsOn = NormalizeList(refs.DependsOn),
+        DependsOn = NormalizeDependencies(refs.DependsOn),
         RelatedTo = NormalizeList(refs.RelatedTo),
         BlockedBy = NormalizeList(refs.BlockedBy),
         Supersedes = NormalizeList(refs.Supersedes),
@@ -213,6 +304,7 @@ public static class TaskReferenceValidator
         // self-edges are already reported above and would produce a noisy
         // self->self "cycle".
         var dependsForCycle = norm.DependsOn
+            .Select(t => t.Key)
             .Where(t => !KeyComparer.Equals(t, self))
             .ToList();
         var cycle = FindDependsOnCycle(self, dependsForCycle, dependsOnGraph);
