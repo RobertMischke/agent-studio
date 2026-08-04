@@ -1238,8 +1238,9 @@ public sealed class RemoteTaskRunner
     /// The server materialises a result envelope only from a complete trio
     /// (BaseSha + ImmutableResultRef + ArtifactManifestDigest) and rejects
     /// fields that fail ResultEnvelopeDigest.Validate. A partial or malformed
-    /// set must therefore degrade to the pre-envelope completion (all three
-    /// null) instead of risking the whole completion call.
+    /// set must therefore be omitted as a unit. The compatibility completion
+    /// boundary then routes a reported coding success to unverified rather than
+    /// accepting a review subject that cannot be materialized.
     /// </summary>
     internal static (string? BaseSha, string? ImmutableResultRef, string? ArtifactManifestDigest)
         BuildEnvelopeCompletionFields(

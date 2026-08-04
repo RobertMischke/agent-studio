@@ -637,6 +637,17 @@ state.
   A process restart replays the original outbox before new claims and never
   starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
   worktree, and consumes no coding or completion budget.
+- The compatibility Remote completion boundary also fails closed when an older
+  Runner reports `Done` or `NoOp` without the complete `BaseSha`,
+  `ImmutableResultRef`, and `ArtifactManifestDigest` trio. The RunAttempt settles
+  as `Failed` with terminal outcome `unverified`, no ReviewAttempt or
+  ReviewSubject is created, and the card reaches Escalated with category
+  `unverified-delivery`. This closes the legacy path where an immutable-ref push
+  failure intentionally omitted the trio but the server still persisted `Done`
+  and waited for Review to discover the impossible subject. Epic planning and
+  report-only modes remain exempt because they do not produce a coding review
+  subject. The canonical protocol 2 Task Server continues to reject successful
+  coding completion until the matching envelope handoff is acknowledged.
 - The Task Server stores one result envelope per RunAttempt with repository ID
   and URL, base and result SHA, immutable ref or source-bundle digest,
   artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion

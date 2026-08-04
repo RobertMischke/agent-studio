@@ -1691,6 +1691,32 @@
             file-handle exhaustion without crashing the backend.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-04</td>
+          <td><code>AGT-2499</code><br><span class="small">AGT-2458 completed without a persisted result envelope</span></td>
+          <td>
+            The 31 July AGT-2458 attempt persisted both its Result-SHA and immutable ResultEnvelope. The 4 August
+            attempt reported <code>Done</code> and persisted its Result-SHA, but its ResultEnvelope remained null. The
+            server created a ReviewAttempt anyway. Fifteen minutes later, Review escalated the card because the
+            immutable ReviewSubject could never be materialized.
+          </td>
+          <td>
+            The protocol 1 Runner deliberately omitted the whole envelope trio when the base SHA, immutable result ref,
+            or artifact-manifest digest was missing. In particular, the legacy Git handoff tolerated an immutable-ref
+            push failure after salvage and completed without the envelope. The compatibility completion endpoint logged
+            the omission but still settled the coding RunAttempt as Completed and minted its ReviewSubject. The envelope
+            was therefore not lost during persistence; it was absent from the completion request and incorrectly treated
+            as optional at the server boundary.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> one pure completion-envelope policy now runs before settlement. A coding
+            <code>Done</code> or <code>NoOp</code> without the complete trio settles as <code>Failed/unverified</code>,
+            creates no ReviewAttempt, and reaches Escalated immediately with category
+            <code>unverified-delivery</code> and a requeue action. Full-envelope completion remains reviewable, while
+            epic planning and report-only modes remain exempt. The endpoint regression proves the delayed
+            unmaterializable-ReviewSubject escalation is structurally unreachable for new completions.
+          </td>
+        </tr>
       </tbody>
     </table>
 
