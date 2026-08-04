@@ -110,7 +110,8 @@ checkout fallback.
 
 ## Test host
 
-`agent-runner` (Hetzner, `88.99.136.78`). SSH key-auth, one sudo-capable user.
+`agent-runner` (a Hetzner cloud VM at `<runner-host-ip>`; substitute the address
+of your own host). SSH key-auth, one sudo-capable user.
 For the local profile, expose no inbound Task Server port and reach it through a
 supervised `ssh -R`/`-L` tunnel. For the networked profile, the runner connects
 outbound to the authenticated HTTPS origin with its enrolled service identity.
