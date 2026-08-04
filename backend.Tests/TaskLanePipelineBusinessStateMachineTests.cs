@@ -504,6 +504,164 @@ public sealed class TaskLanePipelineEdgeCaseTests : IDisposable
             expectedPhase: null);
     }
 
+    [Theory]
+    [InlineData(TaskStates.Completed)]
+    [InlineData(TaskStates.Archive)]
+    public async Task AutoReview_TerminalTransition_OpenReviewAttemptIsSuperseded(
+        string terminalState)
+    {
+        const string id = "terminal-review-cleanup";
+        const string key = "AGT-TERMINAL-REVIEW";
+        _fixture.SeedTask(TaskStates.AutoReview, id, LifecyclePhases.AwaitingReview, key: key);
+        var now = new DateTime(2026, 7, 30, 1, 0, 0, DateTimeKind.Utc);
+        var authority = _fixture.CreateAttemptAuthority(() => now);
+        var run = authority.AcquireRun(
+            key, "PROJ-002", null, "runner-a", "host-a", 60, "run-claim").RunAttempt!;
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "run-complete"),
+            Outcome = "done",
+            ResultSha = "sha-terminal",
+        });
+        var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            key,
+            "PROJ-002",
+            "sha-terminal",
+            run.AttemptId,
+            "requirements",
+            "policy",
+            [],
+            "review-create")).ReviewAttempt!;
+        var lifecycle = _fixture.CreateReviewAttemptLifecycle(authority);
+        var transitions = _fixture.CreateTransitions(reviewAttemptLifecycle: lifecycle);
+
+        var moved = await transitions.MoveAsync(
+            id,
+            terminalState,
+            _fixture.WatchPath,
+            cause: "business-contract-test");
+
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        var superseded = authority.GetReview(review.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Superseded, superseded.State);
+        Assert.Equal(ReviewTerminalOutcome.Superseded, superseded.Outcome);
+        Assert.Contains(terminalState, superseded.TerminalReason);
+        Assert.Equal(
+            AttemptWriteStatus.Superseded,
+            authority.ClaimReview(
+                review.AttemptId,
+                "reviewer",
+                "review-host",
+                60,
+                "claim-after-terminal").Status);
+        var cleanupEvent = Assert.Single(
+            _fixture.Timeline.ReadAll(moved.NewFolderPath!),
+            item =>
+                item.Kind == TimelineEventKinds.ReviewAttemptSuperseded
+                && item.RunId == review.AttemptId);
+        Assert.Equal("Superseded", cleanupEvent.Details!["authority"]);
+        Assert.Equal(terminalState, cleanupEvent.Details["lane"]);
+        Assert.Equal("lane-transition", cleanupEvent.Details["source"]);
+    }
+
+    [Fact]
+    public void CompletedTask_ClaimGuard_SupersedesOpenReviewAttempt()
+    {
+        const string id = "terminal-review-claim-guard";
+        const string key = "AGT-TERMINAL-CLAIM-GUARD";
+        _fixture.SeedTask(TaskStates.Completed, id, key: key);
+        var now = new DateTime(2026, 7, 30, 2, 0, 0, DateTimeKind.Utc);
+        var authority = _fixture.CreateAttemptAuthority(() => now);
+        var review = CreateOpenReviewAttempt(authority, key, "claim-guard");
+        var lifecycle = _fixture.CreateReviewAttemptLifecycle(authority);
+
+        var claim = lifecycle.ClaimNextReview(
+            "reviewer",
+            "review-host",
+            "review-instance",
+            60);
+
+        Assert.Equal(AttemptWriteStatus.NotFound, claim.Status);
+        var superseded = authority.GetReview(review.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Superseded, superseded.State);
+        Assert.Equal(ReviewTerminalOutcome.Superseded, superseded.Outcome);
+        Assert.Contains(TaskStates.Completed, superseded.TerminalReason);
+        var task = _fixture.Scanner.FindJob(id, _fixture.WatchPath)!;
+        var cleanupEvent = Assert.Single(
+            _fixture.Timeline.ReadAll(task.FolderPath),
+            item =>
+                item.Kind == TimelineEventKinds.ReviewAttemptSuperseded
+                && item.RunId == review.AttemptId);
+        Assert.Equal("claim-guard", cleanupEvent.Details!["source"]);
+    }
+
+    [Fact]
+    public void ArchivedTask_BootSweep_SupersedesPersistedOpenReviewAttempt()
+    {
+        const string id = "terminal-review-boot-sweep";
+        const string key = "AGT-TERMINAL-BOOT-SWEEP";
+        _fixture.SeedTask(TaskStates.Archive, id, key: key);
+        var now = new DateTime(2026, 7, 30, 3, 0, 0, DateTimeKind.Utc);
+        var firstProcess = _fixture.CreateAttemptAuthority(() => now);
+        var review = CreateOpenReviewAttempt(firstProcess, key, "boot-sweep");
+        var restartedAuthority = _fixture.CreateAttemptAuthority(() => now.AddMinutes(1));
+        var lifecycle = _fixture.CreateReviewAttemptLifecycle(restartedAuthority);
+
+        var repaired = lifecycle.SweepUnclaimableAttempts();
+
+        Assert.Equal(1, repaired);
+        var superseded = restartedAuthority.GetReview(review.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Superseded, superseded.State);
+        Assert.Equal(ReviewTerminalOutcome.Superseded, superseded.Outcome);
+        Assert.Contains(TaskStates.Archive, superseded.TerminalReason);
+        Assert.Equal(0, lifecycle.SweepUnclaimableAttempts());
+        var task = _fixture.Scanner.FindJob(id, _fixture.WatchPath)!;
+        var cleanupEvent = Assert.Single(
+            _fixture.Timeline.ReadAll(task.FolderPath),
+            item =>
+                item.Kind == TimelineEventKinds.ReviewAttemptSuperseded
+                && item.RunId == review.AttemptId);
+        Assert.Equal("boot-sweep", cleanupEvent.Details!["source"]);
+    }
+
+    private static ReviewAttemptDto CreateOpenReviewAttempt(
+        AttemptAuthorityService authority,
+        string taskKey,
+        string suffix)
+    {
+        var run = authority.AcquireRun(
+            taskKey,
+            "PROJ-002",
+            null,
+            "runner-a",
+            "host-a",
+            60,
+            $"run-claim-{suffix}").RunAttempt!;
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                $"run-complete-{suffix}"),
+            Outcome = "done",
+            ResultSha = $"sha-{suffix}",
+        });
+        return authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            taskKey,
+            "PROJ-002",
+            $"sha-{suffix}",
+            run.AttemptId,
+            "requirements",
+            "policy",
+            [],
+            $"review-create-{suffix}")).ReviewAttempt!;
+    }
+
     [Fact]
     public void Progress_LeaseTakeoverByOtherHost_TaskKeepsCommitChain()
     {
@@ -833,7 +991,8 @@ internal sealed class TaskLanePipelineFixture : IDisposable
     public TaskTransitionService CreateTransitions(
         TaskScannerService? scanner = null,
         IAutoReviewPostProcessingQueue? autoReviewQueue = null,
-        TaskIntegrationStatusService? integrationStatus = null)
+        TaskIntegrationStatusService? integrationStatus = null,
+        ReviewAttemptTaskLifecycleService? reviewAttemptLifecycle = null)
     {
         var selectedScanner = scanner ?? Scanner;
         var selectedStates = ReferenceEquals(selectedScanner, Scanner)
@@ -861,8 +1020,17 @@ internal sealed class TaskLanePipelineFixture : IDisposable
             NullLogger<TaskTransitionService>.Instance,
             autoReviewQueue: autoReviewQueue,
             integrationStatus: integrationStatus,
-            timeline: Timeline);
+            timeline: Timeline,
+            reviewAttemptLifecycle: reviewAttemptLifecycle);
     }
+
+    public ReviewAttemptTaskLifecycleService CreateReviewAttemptLifecycle(
+        AttemptAuthorityService authority)
+        => new(
+            authority,
+            Scanner,
+            Timeline,
+            NullLogger<ReviewAttemptTaskLifecycleService>.Instance);
 
     public HumanReviewEscalation CreateEscalation()
         => new(

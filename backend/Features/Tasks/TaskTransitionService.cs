@@ -39,6 +39,7 @@ public sealed class TaskTransitionService
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
     private readonly AttemptAuthorityService? _attemptAuthority;
+    private readonly ReviewAttemptTaskLifecycleService? _reviewAttemptLifecycle;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -72,7 +73,8 @@ public sealed class TaskTransitionService
         OperatorReviewRequeueService? operatorReviewRequeue = null,
         AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
         AgentStudio.Pipeline.AcceptedIntegrationQueue? acceptedIntegrationQueue = null,
-        AttemptAuthorityService? attemptAuthority = null)
+        AttemptAuthorityService? attemptAuthority = null,
+        ReviewAttemptTaskLifecycleService? reviewAttemptLifecycle = null)
     {
         _scanner = scanner;
         _states = states;
@@ -94,6 +96,7 @@ public sealed class TaskTransitionService
         _pipelineLog = pipelineLog;
         _acceptedIntegrationQueue = acceptedIntegrationQueue;
         _attemptAuthority = attemptAuthority;
+        _reviewAttemptLifecycle = reviewAttemptLifecycle;
     }
 
     /// <summary>
@@ -226,14 +229,18 @@ public sealed class TaskTransitionService
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
-        var outcome = _states.MoveJob(
-            jobId,
-            targetState,
-            watchPath,
-            cause,
-            authorityWrite,
-            expectedSourceState,
-            reason);
+        MoveJobOutcome MoveCore() => _states.MoveJob(
+                jobId,
+                targetState,
+                watchPath,
+                cause,
+                authorityWrite,
+                expectedSourceState,
+                reason);
+        var outcome = _reviewAttemptLifecycle is not null
+                      && targetState is TaskStates.Completed or TaskStates.Archive
+            ? _reviewAttemptLifecycle.ExecuteTerminalTransition(info, targetState, MoveCore)
+            : MoveCore();
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
         if (operatorRequeue && _operatorReviewRequeue != null)

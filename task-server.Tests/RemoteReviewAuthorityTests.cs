@@ -472,6 +472,91 @@ public sealed class RemoteReviewAuthorityTests
         Assert.Equal("2-ready", (await TaskAsync(store, subject.TaskId)).State);
     }
 
+    [Theory]
+    [InlineData("6-completed")]
+    [InlineData("7-archive")]
+    public async Task Terminal_task_transition_supersedes_open_review_authority(string terminalLane)
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var task = await TaskAsync(store, subject.TaskId);
+
+        await store.UpdateTaskAsync(
+            task.ProjectId,
+            task.TaskId,
+            new UpdateTaskRequest(null, null, terminalLane, task.Version),
+            "operator",
+            default);
+
+        var attempt = await store.GetReviewAttemptAsync(claim.Attempt!.AttemptId, default);
+        Assert.Equal("superseded", attempt!.Status);
+        Assert.Equal("Superseded", attempt.Outcome);
+        var next = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        Assert.Equal("empty", next.Status);
+        Assert.Contains(
+            await store.ListAuditAsync(0, default),
+            record => record.Action == "review.superseded"
+                      && record.TargetId == claim.Attempt.AttemptId
+                      && record.DetailJson.Contains("\"authority\":\"Superseded\"", StringComparison.Ordinal)
+                      && record.DetailJson.Contains("\"source\":\"lane-transition\"", StringComparison.Ordinal)
+                      && record.DetailJson.Contains(terminalLane, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Claim_guard_supersedes_a_stale_terminal_attempt_instead_of_returning_it()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+        var attemptId = await ReviewAttemptIdAsync(store, subject.TaskId);
+        await SetTaskStateOutsideAuthorityAsync(store, subject.TaskId, "6-completed");
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+
+        Assert.Equal("empty", claim.Status);
+        var attempt = await store.GetReviewAttemptAsync(attemptId, default);
+        Assert.Equal("superseded", attempt!.Status);
+        Assert.Equal("Superseded", attempt.Outcome);
+        Assert.Contains(
+            await store.ListAuditAsync(0, default),
+            record => record.Action == "review.superseded"
+                      && record.TargetId == attemptId
+                      && record.DetailJson.Contains("\"source\":\"claim-guard\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Boot_sweep_supersedes_terminal_attempts_left_by_an_older_server()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+        var attemptId = await ReviewAttemptIdAsync(store, subject.TaskId);
+        await SetTaskStateOutsideAuthorityAsync(store, subject.TaskId, "7-archive");
+
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+
+        var attempt = await restarted.GetReviewAttemptAsync(attemptId, default);
+        Assert.Equal("superseded", attempt!.Status);
+        Assert.Equal("Superseded", attempt.Outcome);
+        Assert.Contains(
+            await restarted.ListAuditAsync(0, default),
+            record => record.Action == "review.superseded"
+                      && record.TargetId == attemptId
+                      && record.DetailJson.Contains("\"source\":\"boot-sweep\"", StringComparison.Ordinal)
+                      && record.DetailJson.Contains("\"lane\":\"7-archive\"", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Source_bundle_subject_requires_its_content_digest()
     {
@@ -876,6 +961,40 @@ public sealed class RemoteReviewAuthorityTests
 
     private static string Hash(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static async Task<string> ReviewAttemptIdAsync(TaskServerStore store, string taskId)
+    {
+        await using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = store.DatabasePath,
+                Mode = SqliteOpenMode.ReadWrite,
+            }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id FROM review_attempts WHERE task_id = $task ORDER BY attempt_number LIMIT 1;";
+        command.Parameters.AddWithValue("$task", taskId);
+        return Assert.IsType<string>(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task SetTaskStateOutsideAuthorityAsync(
+        TaskServerStore store,
+        string taskId,
+        string state)
+    {
+        await using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = store.DatabasePath,
+                Mode = SqliteOpenMode.ReadWrite,
+            }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE tasks SET state = $state WHERE id = $task;";
+        command.Parameters.AddWithValue("$state", state);
+        command.Parameters.AddWithValue("$task", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
 
     private static async Task<TaskDto> TaskAsync(TaskServerStore store, string taskId)
     {

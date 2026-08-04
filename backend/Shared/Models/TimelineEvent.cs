@@ -183,6 +183,12 @@ public static class TimelineEventKinds
     /// reopen the terminal lane.
     /// </summary>
     public const string PostAcceptanceReviewReportRecorded = "post_acceptance_review_report_recorded";
+    /// <summary>
+    /// An open Remote ReviewAttempt lost authority because its owning task left
+    /// Auto Review. Details identify the terminal lane and whether the cleanup
+    /// came from the live transition, claim guard, or boot sweep.
+    /// </summary>
+    public const string ReviewAttemptSuperseded = "review_attempt_superseded";
     /// <summary>The task's lane changed (any move).</summary>
     public const string LaneChanged = "lane_changed";
     /// <summary>

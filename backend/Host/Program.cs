@@ -393,6 +393,7 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 // back the productive /api/runner/lease API (§8.2C), the prepared successor to
 // the disk-backed .pickup-lock.json guard.
 builder.Services.AddSingleton<AttemptAuthorityService>();
+builder.Services.AddSingleton<ReviewAttemptTaskLifecycleService>();
 builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
@@ -818,6 +819,26 @@ catch (Exception ex)
     if (dedupCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogWarning("Resolved duplicate task keys by re-keying {Count} task(s)", dedupCount);
+}
+
+// ReviewAttempts are claimable only while their owning task remains in Auto
+// Review. Repair stale authority left behind by older terminal lane moves
+// before any Remote Review Executor can poll this process.
+try
+{
+    var repaired = app.Services.GetRequiredService<ReviewAttemptTaskLifecycleService>()
+        .SweepUnclaimableAttempts();
+    if (repaired > 0)
+    {
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogWarning(
+                "review-attempt-boot-sweep superseded={Superseded}",
+                repaired);
+    }
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("ReviewAttemptTaskLifecycle.BootSweep", ex);
 }
 
 // One-time initialization of durable per-page agent read counters from the
