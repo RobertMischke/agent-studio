@@ -300,6 +300,8 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
 | `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Bootstrap value for first host registration and fallback for an older server. The live ceiling is managed centrally in Execution Hosts. |
 | `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
+| `RUNNER_SERVER_REQUEST_TIMEOUT_SECONDS` | `--server-request-timeout-seconds` | `60` | Hard deadline for every Task Server HTTP request, including capability advertisement and worker-loss release. |
+| `RUNNER_IDLE_WATCHDOG_MINUTES` | `--idle-watchdog-minutes` | `5` | A daemon with no active slots exits after this long without starting a claim poll. The fatal journal line is followed by a service-manager restart. |
 | `RUNNER_CLAIM_MAX_LOAD_PER_CORE` | `--claim-max-load-per-core` | `1.5` | Load-per-core ceiling for new work. Coding uses the sustained gate below; Review checks it immediately before each single-slot claim. |
 | `RUNNER_LOAD_GATE_SUSTAINED_SECONDS` | none | `120` | Continuous high-load duration before Coding claim admission closes. Review admission does not use this delay. |
 
@@ -925,6 +927,15 @@ proof.
   registers itself automatically, so this almost always means a reverse proxy or
   tunnel is dropping the `X-Client-Id` request header; forward it, or point
   `RUNNER_SERVER_URL` straight at the Studio.
+- **`capability-advertisement registration=lost` after a backend restart** -
+  the backend's compatibility registry was reset. The daemon now repeats its
+  idempotent runner registration and retries the same capability generation.
+  Repeated transport failures remain bounded by the request timeout and normal
+  connectivity backoff.
+- **`daemon-idle-watchdog status=fatal`** - a slot-free daemon did not start a
+  claim poll within `RUNNER_IDLE_WATCHDOG_MINUTES`. It exits deliberately so
+  `Restart=always` can replace a process whose main loop is no longer making
+  progress.
 ## Reading host telemetry
 
 The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Execution Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, active runner slots, and the last locally observed Task Server connection state together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.

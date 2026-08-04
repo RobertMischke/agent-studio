@@ -21,6 +21,13 @@ public sealed class RemoteReviewDaemon
 
     public async Task RunAsync(CancellationToken shutdown)
     {
+        await using var idleWatchdog = new DaemonIdleWatchdog(
+            _log,
+            TimeSpan.FromMinutes(_options.IdleWatchdogMinutes));
+        using var daemonStop = CancellationTokenSource.CreateLinkedTokenSource(
+            shutdown,
+            idleWatchdog.AbortToken);
+        shutdown = daemonStop.Token;
         var state = new ReviewStateStore(_options.StateDir);
         var persistedAtStartup = state.LoadAll();
         var active = new List<(Task<int> Run, string AttemptId, string ResourceNamespace)>();
@@ -86,11 +93,12 @@ public sealed class RemoteReviewDaemon
                 $"recovering {active.Count} persisted review slot(s) before replacement claims; " +
                 "load admission applies only to fresh slots");
         }
+        idleWatchdog.RecordActiveSlots(active.Count);
 
         var capabilityGeneration = DateTime.UtcNow.Ticks;
-        await WithServerRetryAsync<object?>(
+        await CapabilityAdvertisementRecovery.ExecuteAsync(
             "review capability advertisement",
-            async () =>
+            async ct =>
             {
                 await _client.AdvertiseCapabilitiesAsync(
                     RunnerCapabilityProbe.Advertise(
@@ -99,11 +107,17 @@ public sealed class RemoteReviewDaemon
                         connectivity: connectivity.Snapshot),
                     RunnerCapabilityProbe.Telemetry(TakeTelemetry(force: true)),
                     capabilityGeneration,
-                    shutdown);
-                return null;
+                    ct);
+            },
+            async ct =>
+            {
+                _ = await _client.RegisterAsync(_options.RunnerName, "review-executor", ct);
             },
             connectivity,
             () => active.Count,
+            _options.PollSeconds,
+            TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
+            _log,
             shutdown);
 
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
@@ -112,6 +126,7 @@ public sealed class RemoteReviewDaemon
         var consecutiveFaults = 0;
         while (!shutdown.IsCancellationRequested)
         {
+            idleWatchdog.RecordActiveSlots(active.Count);
             for (var index = active.Count - 1; index >= 0; index--)
             {
                 if (!active[index].Run.IsCompleted) continue;
@@ -130,6 +145,7 @@ public sealed class RemoteReviewDaemon
                 }
                 active.RemoveAt(index);
             }
+            idleWatchdog.RecordActiveSlots(active.Count);
 
             try
             {
@@ -155,17 +171,35 @@ public sealed class RemoteReviewDaemon
                 var admissionTelemetry = TakeTelemetry(force: true);
                 if (DateTime.UtcNow >= nextCapabilityAdvertisement)
                 {
-                    await _client.AdvertiseCapabilitiesAsync(
-                        RunnerCapabilityProbe.Advertise(
-                            _options,
-                            gitPushReady: false,
-                            connectivity: connectivity.Snapshot),
-                        RunnerCapabilityProbe.Telemetry(admissionTelemetry),
-                        ++capabilityGeneration,
+                    var generation = ++capabilityGeneration;
+                    await CapabilityAdvertisementRecovery.ExecuteAsync(
+                        "review capability advertisement",
+                        ct => _client.AdvertiseCapabilitiesAsync(
+                            RunnerCapabilityProbe.Advertise(
+                                _options,
+                                gitPushReady: false,
+                                connectivity: connectivity.Snapshot),
+                            RunnerCapabilityProbe.Telemetry(admissionTelemetry),
+                            generation,
+                            ct),
+                        async ct =>
+                        {
+                            _ = await _client.RegisterAsync(
+                                _options.RunnerName,
+                                "review-executor",
+                                ct);
+                        },
+                        connectivity,
+                        () => active.Count,
+                        _options.PollSeconds,
+                        TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
+                        _log,
                         shutdown);
                     observedServer = true;
                     nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
                 }
+
+                idleWatchdog.RecordPollStarted();
 
                 var admission = ReviewSlotAdmissionPolicy.Decide(
                     admissionTelemetry,
@@ -245,6 +279,7 @@ public sealed class RemoteReviewDaemon
                                         shutdown),
                                     claim.Attempt.AttemptId,
                                     claim.Lease!.ResourceNamespace));
+                                idleWatchdog.RecordActiveSlots(active.Count);
                             }
                             else
                             {
@@ -252,6 +287,7 @@ public sealed class RemoteReviewDaemon
                                     executor.RunClaimedAsync(claim, shutdown),
                                     claim.Attempt.AttemptId,
                                     claim.Lease!.ResourceNamespace));
+                                idleWatchdog.RecordActiveSlots(active.Count);
                             }
                         }
                     }
@@ -316,6 +352,9 @@ public sealed class RemoteReviewDaemon
         _log(
             "review daemon drain complete; durable review workers are ready " +
             "for replacement adoption");
+        if (idleWatchdog.Tripped)
+            throw new InvalidOperationException(
+                "The slot-free review daemon stopped polling and was terminated by its idle watchdog.");
     }
 
     private async Task<T> WithServerRetryAsync<T>(

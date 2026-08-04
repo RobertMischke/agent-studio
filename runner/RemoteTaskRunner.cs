@@ -146,7 +146,7 @@ public sealed class RemoteTaskRunner
             StringComparison.Ordinal)
             ? "authority-deadline-exhausted"
             : "runner-process-missing";
-        if (await ReleaseAsync(slot.Lease, CancellationToken.None, outcome))
+        if (await ReleaseWithRetryAsync(slot.Lease, outcome))
         {
             _state.Delete(slot);
             return true;
@@ -553,9 +553,14 @@ public sealed class RemoteTaskRunner
 
             // Completion is fenced by the live lease, so release only after the
             // normal or fail-closed handoff has finished.
-            if ((outbox is null || handedBack)
-                && await ReleaseAsync(lease, CancellationToken.None))
-                _state.Delete(slot);
+            if (outbox is null || handedBack)
+            {
+                var released = releaseOnly
+                    ? await ReleaseWithRetryAsync(lease, "runner-process-missing")
+                    : await ReleaseAsync(lease, CancellationToken.None);
+                if (released)
+                    _state.Delete(slot);
+            }
         }
     }
 
@@ -1343,6 +1348,32 @@ public sealed class RemoteTaskRunner
             _log($"lease release failed (server TTL will reclaim it): {ex.Message}");
             return false;
         }
+    }
+
+    private async Task<bool> ReleaseWithRetryAsync(
+        RunLeaseInfoDto lease,
+        string outcome)
+    {
+        const int maximumAttempts = 3;
+        for (var attempt = 1; attempt <= maximumAttempts; attempt++)
+        {
+            using var requestDeadline = new CancellationTokenSource(
+                TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds));
+            if (await ReleaseAsync(lease, requestDeadline.Token, outcome))
+                return true;
+            if (attempt == maximumAttempts)
+                break;
+
+            var delay = TaskServerConnectivityMonitor.RetryDelay(
+                _options.PollSeconds,
+                attempt);
+            _log(
+                $"lease release retry scheduled task={lease.TaskKey} " +
+                $"attempt={attempt + 1}/{maximumAttempts} retrySeconds={delay.TotalSeconds:0}");
+            await Task.Delay(delay);
+        }
+
+        return false;
     }
 
     private string ResultsDir(string taskKey)

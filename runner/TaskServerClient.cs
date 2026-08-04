@@ -62,7 +62,11 @@ public sealed class TaskServerClient : IDisposable
                         StringComparison.OrdinalIgnoreCase),
             };
         }
-        _http = new HttpClient(handler) { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
+        _http = new HttpClient(handler)
+        {
+            BaseAddress = new Uri(options.ServerUrl),
+            Timeout = TimeSpan.FromSeconds(options.ServerRequestTimeoutSeconds),
+        };
         _configuredClientId = options.ClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(options.AuthToken);
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
@@ -94,6 +98,12 @@ public sealed class TaskServerClient : IDisposable
     {
         _http = http;
         _options = options;
+        if (options is not null)
+        {
+            var configuredTimeout = TimeSpan.FromSeconds(options.ServerRequestTimeoutSeconds);
+            if (_http.Timeout == Timeout.InfiniteTimeSpan || _http.Timeout > configuredTimeout)
+                _http.Timeout = configuredTimeout;
+        }
         _configuredClientId = configuredClientId;
         _runnerInstanceIdOverride = runnerInstanceId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);

@@ -44,9 +44,17 @@ public class RunnerOptionsTests
     public void Daemon_slot_flags_are_parsed()
     {
         var (options, _, _, _) = RunnerOptions.Parse(
-            ["--poll", "--max-parallelism", "4", "--poll-seconds", "9"]);
+            [
+                "--poll",
+                "--max-parallelism", "4",
+                "--poll-seconds", "9",
+                "--server-request-timeout-seconds", "17",
+                "--idle-watchdog-minutes", "3",
+            ]);
         Assert.Equal(4, options.HostMaxParallelism);
         Assert.Equal(9, options.PollSeconds);
+        Assert.Equal(17, options.ServerRequestTimeoutSeconds);
+        Assert.Equal(3, options.IdleWatchdogMinutes);
     }
 
     [Fact]
