@@ -55,7 +55,7 @@ tunnel and a Windows Scheduled Task keeps it alive.
 
 ```sshconfig
 Host agent-runner
-    HostName 88.99.136.78
+    HostName <runner-host-ip>
     User runner
     IdentityFile ~/.ssh/agent-runner
     ServerAliveInterval 30

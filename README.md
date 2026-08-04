@@ -1,4 +1,4 @@
-# agent-orchestrator
+# Agent Studio
 
 [![License](https://img.shields.io/github/license/agent-orc/agent-studio)](LICENSE)
 

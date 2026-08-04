@@ -213,7 +213,7 @@ When you observe a job in `3-progress` with only `● Session init <uuid>` in th
 
 1. **Confirm direct invocation works.** From a shell, run:
    ```sh
-   echo "say hi" | "C:\Users\rmisc\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe" \
+   echo "say hi" | "%APPDATA%\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe" \
      -p --model claude-haiku-4-5 --output-format stream-json --verbose --dangerously-skip-permissions
    ```
    If this is silent, the issue is upstream of the runner (CLI install, auth, network). If it streams, the runner is the suspect.
