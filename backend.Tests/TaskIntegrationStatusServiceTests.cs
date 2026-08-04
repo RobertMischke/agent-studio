@@ -266,6 +266,54 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void AttributedCommits_SalvageMarkerWithChangedFiles_RemainsWork()
+    {
+        const string sha = "3333333333333333333333333333333333333333";
+        var job = new TaskInfo
+        {
+            Commits =
+            [
+                Commit(sha) with
+                {
+                    Message = "wip(runner): salvage before teardown - outcome Done",
+                    FilesChanged = 2,
+                    Files = ["backend/a.cs", "backend/b.cs"],
+                },
+            ],
+        };
+
+        Assert.Equal([sha], TaskIntegrationStatusService.AttributedCommits(job));
+    }
+
+    [Fact]
+    public void BuildLookup_AncestorProofDominatesStaleZeroFileMarkerMetadata()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "salvaged.txt"), "delivered");
+        Commit(repo, "wip(runner): salvage before teardown - outcome Done");
+        var salvage = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("salvage-ancestor", "AGT-2489", project, repo, log,
+            commits:
+            [
+                Commit(salvage) with
+                {
+                    Message = "wip(runner): salvage before teardown - outcome Done",
+                    FilesChanged = 0,
+                    Files = [],
+                },
+            ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(salvage[..7], status.Sha);
+        Assert.Equal("anchor-ancestor", status.Detail);
+    }
+
+    [Fact]
     public void BuildLookup_MissingSnapshotCommitWithChangedFiles_RemainsPartial()
     {
         var repo = SeedDevelopMainRepo();

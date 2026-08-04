@@ -256,7 +256,7 @@ public sealed class TaskIntegrationStatusService
 
         // Anchor = integrable entries in the attributed commits[] list. Zero-file
         // runner lifecycle markers are metadata, not delivery expectations.
-        var attributed = AttributedCommits(job);
+        var attributed = AttributedCommits(job, reach.DevelopAncestors);
         if (attributed.Count == 0)
             return ClassifyNotIntegrated(job, branchName, deliveryRef, repoResolved: true);
 
@@ -467,16 +467,31 @@ public sealed class TaskIntegrationStatusService
     /// when the card committed nothing.
     /// </summary>
     internal static IReadOnlyList<string> AttributedCommits(TaskInfo job)
+        => AttributedCommits(job, null);
+
+    /// <summary>
+    /// Target-aware attribution filter. A reachable SHA is delivery truth even
+    /// when stale persisted metadata makes it look like an empty lifecycle
+    /// marker. The ancestry proof therefore outranks the marker heuristic.
+    /// </summary>
+    internal static IReadOnlyList<string> AttributedCommits(
+        TaskInfo job,
+        IReadOnlySet<string>? integrationAncestors)
     {
         var result = new List<string>(job.Commits.Count);
         if (job.Commits.Count > 0)
         {
             foreach (var c in job.Commits)
-                if (!string.IsNullOrWhiteSpace(c.Sha) && !IsZeroFileLifecycleMarker(c))
+                if (!string.IsNullOrWhiteSpace(c.Sha)
+                    && (!IsZeroFileLifecycleMarker(c)
+                        || integrationAncestors is not null
+                        && AncestorSetContains(integrationAncestors, c.Sha)))
                     result.Add(c.Sha);
         }
         else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha)
-                 && !IsZeroFileLifecycleMarker(job.Commit!))
+                 && (!IsZeroFileLifecycleMarker(job.Commit!)
+                     || integrationAncestors is not null
+                     && AncestorSetContains(integrationAncestors, job.Commit!.Sha)))
         {
             result.Add(job.Commit!.Sha);
         }

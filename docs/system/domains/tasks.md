@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-30
+Version: 2026-08-03
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -107,7 +107,16 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   Zero-file lifecycle entries whose subjects start with
   `wip(runner): salvage before teardown` or `chore: snapshot for review` remain
   visible attribution metadata but are not delivery expectations. A matching
-  subject with changed files remains a real integration expectation.
+  subject with changed files remains a real integration expectation. Target
+  branch ancestry is stronger evidence than stale file metadata: a commit that
+  is already reachable from the integration branch is never discarded by the
+  zero-file marker heuristic.
+- Every `commits[]` write re-derives `filesChanged` and `files` from the Git
+  object when it is reachable, regardless of whether the producer is local
+  attribution, remote salvage, a delivery backfill, or an operator/recovery
+  path. Startup performs an idempotent, Git-read-only repair of missing commit
+  metadata on non-archived cards and writes only the affected `task.json` files
+  through `TaskMutationService`.
 - Remote commit attribution is evaluated independently for every fenced run
   attempt. Each attempt's verified delivery range passes through the
   foreign-task guard before persistence. Card-level `commits[]` is the

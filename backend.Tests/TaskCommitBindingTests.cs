@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using AgentStudio.Git;
@@ -64,6 +66,99 @@ public class TaskCommitBindingTests : IDisposable
         Assert.Equal("aaaaaaa", info.Commits[0].ShortSha);
         Assert.NotNull(info.Commit);
         Assert.Equal("aaaaaaa", info.Commit!.ShortSha);
+    }
+
+    [Fact]
+    public void AppendCommit_PersistenceBoundaryRoundTripsGitDerivedFileMetadata()
+    {
+        var sha = SeedGitCommit("delivered.txt", "delivered");
+        var (scanner, mutations) = Build(withGit: true);
+        var jobDir = SeedJobFolder("git-roundtrip", "3-progress", legacyCommit: null);
+
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, new TaskCommitInfo
+        {
+            Sha = sha,
+            ShortSha = sha[..7],
+            Message = "wip(runner): salvage before teardown - outcome Done",
+            FilesChanged = 0,
+            Files = [],
+            At = DateTime.UtcNow,
+        }));
+
+        var persisted = scanner.FindJob("git-roundtrip", _watchPath);
+        Assert.NotNull(persisted);
+        var commit = Assert.Single(persisted!.Commits);
+        Assert.Equal(1, commit.FilesChanged);
+        Assert.Equal(["delivered.txt"], commit.Files);
+
+        using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(jobDir, "task.json")));
+        var rawCommit = Property(json.RootElement, "commits").EnumerateArray().Single();
+        Assert.Equal(1, Property(rawCommit, "filesChanged").GetInt32());
+        Assert.Equal("delivered.txt", Property(rawCommit, "files").EnumerateArray().Single().GetString());
+    }
+
+    [Fact]
+    public void BackfillMissingCommitMetadata_RepairsLiveCardOnceFromGit()
+    {
+        var sha = SeedGitCommit("backfilled.txt", "backfilled");
+        var (_, mutations) = Build(withGit: true);
+        var jobDir = SeedJobFolder("metadata-backfill", "5-human-review", legacyCommit: null);
+        var archivedJobDir = SeedJobFolder("archived-metadata", "7-archive", legacyCommit: null);
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), $$"""
+            {
+              "id": "metadata-backfill",
+              "title": "Fixture",
+              "state": "5-human-review",
+              "agent": "claude",
+              "createdAt": "2026-05-09T08:00:00Z",
+              "commits": [
+                {
+                  "sha": "{{sha}}",
+                  "shortSha": "{{sha[..7]}}",
+                  "message": "wip(runner): salvage before teardown - outcome Done",
+                  "at": "2026-08-03T08:00:00Z"
+                }
+              ]
+            }
+            """);
+        File.WriteAllText(Path.Combine(archivedJobDir, "task.json"), $$"""
+            {
+              "id": "archived-metadata",
+              "title": "Archived fixture",
+              "state": "7-archive",
+              "agent": "claude",
+              "createdAt": "2026-05-09T08:00:00Z",
+              "commits": [
+                {
+                  "sha": "{{sha}}",
+                  "shortSha": "{{sha[..7]}}",
+                  "message": "wip(runner): salvage before teardown - outcome Done",
+                  "at": "2026-08-03T08:00:00Z"
+                }
+              ]
+            }
+            """);
+
+        var first = mutations.BackfillMissingCommitMetadata();
+        var second = mutations.BackfillMissingCommitMetadata();
+
+        Assert.Equal(1, first.RepairedTasks);
+        Assert.Equal(1, first.RepairedCommits);
+        Assert.Equal(0, first.UnresolvedTasks);
+        Assert.Equal(0, second.RepairedTasks);
+        using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(jobDir, "task.json")));
+        var rawCommit = Property(json.RootElement, "commits").EnumerateArray().Single();
+        Assert.Equal(1, Property(rawCommit, "filesChanged").GetInt32());
+        Assert.Equal("backfilled.txt", Property(rawCommit, "files").EnumerateArray().Single().GetString());
+        using var archivedJson = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(archivedJobDir, "task.json")));
+        var archivedCommit = Property(archivedJson.RootElement, "commits").EnumerateArray().Single();
+        Assert.DoesNotContain(
+            archivedCommit.EnumerateObject(),
+            property => string.Equals(
+                property.Name,
+                "filesChanged",
+                StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -457,14 +552,53 @@ public class TaskCommitBindingTests : IDisposable
 
     private static string Pad(string s) => s.Length >= 40 ? s : s + new string('0', 40 - s.Length);
 
-    private (TaskScannerService scanner, TaskMutationService mutations) Build()
+    private (TaskScannerService scanner, TaskMutationService mutations) Build(bool withGit = false)
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
-        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
+        var git = withGit ? new GitService(NullLogger<GitService>.Instance, scanner, config) : null;
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance, git: git);
         return (scanner, mutations);
     }
+
+    private string SeedGitCommit(string path, string contents)
+    {
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.com");
+        RunGit("config", "user.name", "test");
+        File.WriteAllText(Path.Combine(_watchPath, path), contents);
+        RunGit("add", "--", path);
+        RunGit("commit", "-q", "-m", "fixture commit");
+        return RunGit("rev-parse", "HEAD").Trim();
+    }
+
+    private string RunGit(params string[] args)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = _watchPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {error}");
+        return output;
+    }
+
+    private static JsonElement Property(JsonElement element, string name)
+        => element.EnumerateObject()
+            .Single(property => string.Equals(
+                property.Name,
+                name,
+                StringComparison.OrdinalIgnoreCase))
+            .Value;
 
     private IConfiguration BuildConfig() =>
         new ConfigurationBuilder()

@@ -833,6 +833,18 @@ catch (Exception ex)
     crashRecorder.Record("WikiAgentReadBackfill", ex);
 }
 
+// One-time, idempotent repair of Git-derived commit file metadata on live
+// cards. The sweep reads Git and writes only task.json through the owning
+// mutation service; entries with complete metadata make later boots a no-op.
+try
+{
+    app.Services.GetRequiredService<TaskMutationService>().BackfillMissingCommitMetadata();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CommitMetadataBackfill", ex);
+}
+
 // Cap legacy durable CLI logs after the one-time full-history wiki read
 // backfill but before CLI reattachment can append new output. The sweep also
 // ensures the sole rotation file stays outside workspace evidence commits.
