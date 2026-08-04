@@ -224,6 +224,30 @@ read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
 or controlled network integration belong to the Workbench viewer described in
 [Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
+## Parked-card blocker and recall
+
+Every move into `5-human-review` or `5e-escalated` writes a machine-readable
+`parked-blocker.json` next to `task.json`: the blocker type (the escalation
+category, or `operator-decision` for a manual park), a condition a sweep can
+re-check, the park timestamp, and the original freetext reason verbatim. The
+write happens in `TaskStateMachine.RecordParkedBlocker`, at the same lane-change
+choke point that appends the `lane_changed` ledger row, so every park path gets a
+marker; leaving a parked lane clears it.
+
+`ParkedCardRecallSweep` re-evaluates those conditions on a timer and through
+`GET /api/parked-cards`. A card whose precondition is provably gone is REPORTED -
+one `parked_blocker_resolved` timeline row plus a `recallable` status on
+`TaskInfo.ParkedBlocker` - and is never re-queued: "no auto rerun" stays the
+decision of whoever parked the card, and re-queueing remains the operator lane
+move that opens a fresh review-attempt epoch. A condition no probe can decide is
+reported as `undeterminable` rather than optimistically as resolved.
+
+`TaskInfo.ParkedBlocker` is a read-time projection of that marker, never
+persisted on `task.json`. It carries the lane age (`parkedForSeconds`), so a card
+that has sat unlooked-at for days is visible as such. Cards parked before the
+marker existed are backfilled from `enteredLaneAt` by the sweep. Full rationale
+and the AGT-2220 incident: [parked-card recall](../../concepts/parked-card-recall.md).
+
 ## Result transition invariant
 
 `TaskTransitionService` is the single enforcement point for Result availability.
