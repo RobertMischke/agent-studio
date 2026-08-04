@@ -233,13 +233,16 @@ public static class V1ReviewPlaneEndpoints
                 if (task is null
                     || !string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                     continue;
+                var legacyChain = BuildAttemptChainSummary(authority, legacy.TaskKey);
                 var moved = await escalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,
                     task.ProjectName,
                     HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
-                    "The immutable ReviewSubject has no persisted Result-Envelope and cannot be materialized.",
-                    ct);
+                    "The immutable ReviewSubject has no persisted Result-Envelope and cannot be materialized. "
+                    + legacyChain.Headline,
+                    ct,
+                    statusDetail: legacyChain.Detail);
                 if (moved.Status != MoveJobStatus.Success)
                 {
                     return Results.Json(
@@ -489,7 +492,8 @@ public static class V1ReviewPlaneEndpoints
                             task.Id,
                             moved.NewFolderPath ?? task.FolderPath,
                             request.Outcome,
-                            request.Summary ?? string.Empty);
+                            request.Summary ?? string.Empty,
+                            BuildAttemptChainSummary(authority, settled.ReviewAttempt.TaskKey));
                     }
                 }
                 else if (string.Equals(task.State, TaskStates.HumanReview, StringComparison.OrdinalIgnoreCase))
@@ -507,13 +511,21 @@ public static class V1ReviewPlaneEndpoints
                 var review = settled.ReviewAttempt;
                 if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
+                    // The budget constant alone described the chain by its size.
+                    // The chain summary describes it by its NEWEST cause and by
+                    // every distinct classification it produced, so a late,
+                    // harder failure cannot be hidden behind the majority class
+                    // (AGT-2220).
+                    var chain = BuildAttemptChainSummary(authority, review.TaskKey);
                     var moved = await escalation.EscalateAsync(
                         task.Id,
                         task.WatchPath,
                         task.ProjectName,
                         HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
-                        $"The immutable ReviewSubject exhausted its budget of {AttemptAuthorityService.ReviewInfrastructureRetryBudget} infrastructure retries and cannot be materialized.",
-                        ct);
+                        $"The immutable ReviewSubject exhausted its budget of {AttemptAuthorityService.ReviewInfrastructureRetryBudget} infrastructure retries and cannot be materialized. "
+                        + chain.Headline,
+                        ct,
+                        statusDetail: chain.Detail);
                     if (moved.Status != MoveJobStatus.Success)
                     {
                         return Results.Json(
@@ -833,6 +845,19 @@ public static class V1ReviewPlaneEndpoints
         error = null;
         return true;
     }
+
+    /// <summary>
+    /// Collects the task's full ReviewAttempt history (archived epochs included,
+    /// so a chain that outlived a compaction is still described completely) and
+    /// reduces it to the operator summary. Park and escalation are rare, so the
+    /// archive read is affordable here; completeness is the point.
+    /// </summary>
+    private static ReviewAttemptChainSummary BuildAttemptChainSummary(
+        AttemptAuthorityService authority, string taskKey)
+        => ReviewAttemptChainSummary.Build(authority
+            .GetTaskProjection(taskKey, includeArchived: true)
+            .ReviewAttempts
+            .Select(ReviewAttemptChainEntry.From));
 
     private static bool TryOutcome(string value, out ReviewTerminalOutcome outcome)
     {

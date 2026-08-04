@@ -229,14 +229,15 @@ public sealed class HumanReviewEscalation
     public async Task<MoveJobOutcome> EscalateAsync(
         string jobId, string watchPath, string project,
         string category, string reason, CancellationToken ct = default,
-        AttemptWriteReference? authorityWrite = null)
+        AttemptWriteReference? authorityWrite = null,
+        string? statusDetail = null)
     {
         var beforeFolder = ResolveSourceFolder(jobId, watchPath);
         // Write the Result scaffold before the lane mutation. The folder moves
         // with status.md on success, and a refused/interrupted move still leaves
         // reviewable evidence at the source instead of a verdict-less card.
         if (!string.IsNullOrWhiteSpace(beforeFolder))
-            WriteStatusStubIfMissing(beforeFolder, category, reason);
+            WriteStatusStubIfMissing(beforeFolder, category, reason, statusDetail);
         var outcome = await _transitions.MoveAsync(
             jobId,
             TaskStates.Escalated,
@@ -248,7 +249,7 @@ public sealed class HumanReviewEscalation
             suppressProductExecution: authorityWrite is not null);
         if (outcome.Status == MoveJobStatus.Success)
         {
-            RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
+            RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason, statusDetail);
             TryCommitArtifacts(project, jobId, beforeFolder, outcome.NewFolderPath);
         }
         else
@@ -299,9 +300,15 @@ public sealed class HumanReviewEscalation
     /// cards bounced to 5e on restart). Pass maps to AcceptAsDone; a
     /// ProductFailure/Inconclusive park maps to Escalate - both make the
     /// endpoint-derived OrchestratorVerdict non-null.
+    ///
+    /// <para><paramref name="attemptChain"/> appends the attempt-chain headline
+    /// to the reason so the park is described by the NEWEST attempt and every
+    /// distinct failure classification, not by whichever classification happens
+    /// to be the most frequent (AGT-2220).</para>
     /// </summary>
     public void RecordRemoteReviewParkVerdict(
-        string project, string jobId, string? folderPath, string outcome, string summary)
+        string project, string jobId, string? folderPath, string outcome, string summary,
+        ReviewAttemptChainSummary? attemptChain = null)
     {
         if (string.IsNullOrWhiteSpace(_workspaceRoot) || string.IsNullOrWhiteSpace(project))
         {
@@ -313,12 +320,13 @@ public sealed class HumanReviewEscalation
         try
         {
             var pass = string.Equals(outcome, "Pass", StringComparison.OrdinalIgnoreCase);
+            var chain = attemptChain is null ? string.Empty : " " + attemptChain.Headline;
             ReviewDecisionLog.Append(_workspaceRoot!, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: jobId,
                 Project: project,
                 Kind: pass ? ReviewDecisionKind.AcceptAsDone : ReviewDecisionKind.Escalate,
-                Reason: $"Remote v1 review parked the card in human review with outcome {outcome}.",
+                Reason: $"Remote v1 review parked the card in human review with outcome {outcome}.{chain}",
                 Prompt: "(remote v1 review plane)",
                 Response: string.IsNullOrWhiteSpace(summary) ? $"outcome={outcome}" : summary,
                 FollowUp: string.Empty)
@@ -342,7 +350,8 @@ public sealed class HumanReviewEscalation
     /// caller must gate on "no existing verdict" before calling.
     /// </summary>
     public void RecordVerdictAndStatus(
-        string project, string jobId, string? folderPath, string category, string reason)
+        string project, string jobId, string? folderPath, string category, string reason,
+        string? statusDetail = null)
     {
         if (!string.IsNullOrWhiteSpace(_workspaceRoot) && !string.IsNullOrWhiteSpace(project))
         {
@@ -376,7 +385,7 @@ public sealed class HumanReviewEscalation
         }
 
         if (!string.IsNullOrWhiteSpace(folderPath))
-            WriteStatusStubIfMissing(folderPath!, category, reason);
+            WriteStatusStubIfMissing(folderPath!, category, reason, statusDetail);
     }
 
     /// <summary>Encodes the category into the verdict reason so the decision
@@ -416,8 +425,17 @@ public sealed class HumanReviewEscalation
     /// <summary>Builds the minimal status.md the board renders for an
     /// escalated-without-review card: a <c>- Result:</c> line (same shape the
     /// generated summaries use), the category, the reason, and a pointer to the
-    /// logs and the decision journal.</summary>
-    public static string BuildStatusStub(string category, string reason, bool partialResultsPresent = false)
+    /// logs and the decision journal.
+    ///
+    /// <para><paramref name="detail"/> carries an optional pre-rendered markdown
+    /// block (today: the review attempt-chain summary of
+    /// <see cref="ReviewAttemptChainSummary.Detail"/>) that a one-line reason
+    /// cannot hold. It is appended AFTER the <c>- Category:</c> / <c>- Reason:</c>
+    /// pair and must never introduce a second line of either shape: the board's
+    /// <c>parseStatusStubEscalation</c> lifts exactly those two lines back
+    /// out.</para></summary>
+    public static string BuildStatusStub(
+        string category, string reason, bool partialResultsPresent = false, string? detail = null)
     {
         var c = string.IsNullOrWhiteSpace(category) ? HumanReviewEscalationCategories.UnknownLegacy : category.Trim();
         var r = (reason ?? string.Empty).Trim();
@@ -438,12 +456,16 @@ public sealed class HumanReviewEscalation
         sb.Append("- Category: ").Append(c).Append(nl);
         if (r.Length > 0)
             sb.Append("- Reason: ").Append(r).Append(nl);
+        var d = (detail ?? string.Empty).Trim();
+        if (d.Length > 0)
+            sb.Append(d).Append(nl);
         sb.Append("- See `logs/` in this folder for the run output, and the project decision journal (`logs/decisions/<project>.jsonl`) for the escalation record.")
           .Append(nl);
         return sb.ToString();
     }
 
-    private void WriteStatusStubIfMissing(string folderPath, string category, string reason)
+    private void WriteStatusStubIfMissing(
+        string folderPath, string category, string reason, string? detail = null)
     {
         var path = Path.Combine(folderPath, "status.md");
         try
@@ -456,7 +478,7 @@ public sealed class HumanReviewEscalation
                     return; // never clobber a real summary
             }
             Directory.CreateDirectory(folderPath);
-            File.WriteAllText(path, BuildStatusStub(category, reason, HasPartialResults(folderPath)));
+            File.WriteAllText(path, BuildStatusStub(category, reason, HasPartialResults(folderPath), detail));
         }
         catch (Exception ex)
         {

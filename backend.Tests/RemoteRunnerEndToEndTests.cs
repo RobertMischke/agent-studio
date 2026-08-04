@@ -2138,7 +2138,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Contract.ReviewClaimResponse claim,
         string runnerId,
         string instanceId,
-        string idempotencyKey)
+        string idempotencyKey,
+        string failureClassification = "SnapshotUnavailable",
+        string summary = "The immutable snapshot was unavailable.")
     {
         return new Contract.ReviewReportRequest(
             runnerId,
@@ -2147,8 +2149,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             claim.Lease.Fence,
             idempotencyKey,
             "ReviewInfra",
-            "SnapshotUnavailable",
-            "The immutable snapshot was unavailable.",
+            failureClassification,
+            summary,
             new Contract.ReviewWorkspaceProofDto(
                 claim.Subject!.RepositoryId,
                 claim.Subject.ExpectedResultSha,
@@ -3189,6 +3191,78 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             projection.ReviewAttempts,
             attempt => attempt.State is AttemptLifecycleState.Pending or AttemptLifecycleState.Leased);
     }
+
+    /// <summary>
+    /// AGT-2220 acceptance: when the last, youngest attempt of an exhausted
+    /// chain carries a HARDER classification than the ones before it, the park
+    /// summary must be built from that youngest cause. The frequency reading
+    /// ("all attempts were SnapshotUnavailable, so it is a baseline infra
+    /// problem") would send the operator after a remedy that cannot work.
+    /// </summary>
+    [Fact]
+    public async Task Monolith_v1_review_escalation_summary_names_the_youngest_failure_class()
+    {
+        const string reviewRunnerId = "review-runner-divergent";
+        const string reviewInstance = "review-divergent-host:4243";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Remote review divergent chain", "Build and verify.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        var last = AttemptAuthorityService.ReviewInfrastructureRetryBudget + 1;
+        for (var attemptNumber = 1; attemptNumber <= last; attemptNumber++)
+        {
+            var claim = await reviewClient.ClaimReviewAsync(
+                new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+                CancellationToken.None);
+            Assert.Equal("claimed", claim.Status);
+
+            // The youngest attempt fails differently and harder than its
+            // predecessors: an immutable Result-SHA that was never materializable.
+            var report = attemptNumber == last
+                ? InfrastructureReport(
+                    claim, reviewRunnerId, reviewInstance, $"review-infra-{attemptNumber}",
+                    "ShaMismatch",
+                    "Materialized HEAD '744deb892' does not match expected Result-SHA 'f538f896'.")
+                : InfrastructureReport(claim, reviewRunnerId, reviewInstance, $"review-infra-{attemptNumber}");
+            await reviewClient.ReportReviewAsync(claim.Attempt!.AttemptId, report, CancellationToken.None);
+        }
+
+        var status = await File.ReadAllTextAsync(
+            Path.Combine(_watchPath, TaskStates.Escalated, TaskKey, "status.md"));
+
+        // 1. The youngest attempt owns the situation report.
+        Assert.Contains("ReviewInfra/ShaMismatch", status);
+        Assert.Contains("Materialized HEAD", status);
+        Assert.Contains("- Newest attempt: ", status);
+        // 2. Every distinct class is enumerated, dated, and none is dropped.
+        Assert.Contains("- Failure classifications (2 distinct, complete, newest first):", status);
+        Assert.Contains("ReviewInfra/ShaMismatch: 1 attempt, ", status);
+        Assert.Contains(
+            $"ReviewInfra/SnapshotUnavailable: {AttemptAuthorityService.ReviewInfrastructureRetryBudget} attempts, ",
+            status);
+        Assert.Contains("- Divergent attempts: 3 of 4 attempts are classified differently", status);
+        // 3. The options match the youngest cause, not the majority one.
+        Assert.Contains("- Operator options for the newest cause ReviewInfra/ShaMismatch:", status);
+        Assert.Contains("Re-run the source coding attempt", status);
+        Assert.DoesNotContain("Restore the baseline ref", status);
+        // The board's status-stub contract stays intact: exactly one Category
+        // line and one Reason line, and the Reason names the youngest cause.
+        Assert.Equal(1, CountLines(status, "- Category: "));
+        Assert.Equal(1, CountLines(status, "- Reason: "));
+        var reason = status
+            .Split('\n')
+            .First(line => line.StartsWith("- Reason: ", StringComparison.Ordinal));
+        Assert.Contains("ReviewInfra/ShaMismatch", reason);
+        Assert.Contains("Divergent chain", reason);
+    }
+
+    private static int CountLines(string text, string prefix) => text
+        .Split('\n')
+        .Count(line => line.StartsWith(prefix, StringComparison.Ordinal));
 
         }
 
