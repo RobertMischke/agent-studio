@@ -9,7 +9,14 @@ public sealed record AutoReviewPostProcessingRequest(
     string JobId,
     string WatchPath,
     DateTime EnqueuedAtUtc,
-    string Source);
+    string Source,
+    /// <summary>
+    /// How many times this card has already been re-driven after a deferral
+    /// (see <see cref="PostProcessingCardStatus.Deferred"/>). Zero for every
+    /// request produced by a real run boundary, recovery sweep or operator
+    /// requeue; only the retry path increments it.
+    /// </summary>
+    int Attempt = 0);
 
 public interface IAutoReviewPostProcessingQueue
 {
@@ -120,6 +127,13 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
     /// without a full orchestrator run. Null in production.
     /// </summary>
     internal Func<AutoReviewPostProcessingRequest, CancellationToken, Task>? ProcessOverride { get; set; }
+
+    /// <summary>
+    /// Test seam: replaces the deferral backoff, so the re-drive path can be
+    /// exercised without waiting out the real 30s-and-doubling schedule. Null
+    /// in production.
+    /// </summary>
+    internal Func<int, TimeSpan>? DeferralDelayOverride { get; set; }
 
     public AutoReviewPostProcessingWorker(
         AutoReviewPostProcessingQueue queue,
@@ -262,18 +276,17 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
 
         try
         {
-            await _reviewDecisionOrchestrator.ProcessCardAsync(
+            var outcome = await _reviewDecisionOrchestrator.ProcessCardAsync(
                 workspace, request.ProjectName, request.JobId, request.WatchPath, ct);
             sw.Stop();
             // completion latency = run finished (enqueue) -> post-processing done;
             // the queue-wait share separates "stau" from "step cost" in the metric.
             _logger.LogInformation(
-                "auto-review-postprocessing-finished project={Project} job={JobId} elapsedMs={ElapsedMs} queueWaitMs={QueueWaitMs} completionLatencyMs={CompletionLatencyMs}",
-                request.ProjectName, request.JobId, sw.ElapsedMilliseconds, queueWaitMs, queueWaitMs + sw.ElapsedMilliseconds);
+                "auto-review-postprocessing-finished project={Project} job={JobId} elapsedMs={ElapsedMs} queueWaitMs={QueueWaitMs} completionLatencyMs={CompletionLatencyMs} status={Status} reason={Reason}",
+                request.ProjectName, request.JobId, sw.ElapsedMilliseconds, queueWaitMs,
+                queueWaitMs + sw.ElapsedMilliseconds, outcome.Status, outcome.Reason);
 
-            TerminalizeActiveLifecycle(
-                request,
-                "Post Processing returned without a terminal decision.");
+            ApplyOutcome(request, outcome, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -287,11 +300,149 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
             sw.Stop();
             TerminalizeActiveLifecycle(
                 request,
-                "Post Processing failed before reaching a terminal decision.");
+                "Post Processing failed before reaching a terminal decision: " + ex.GetType().Name + ".");
             _logger.LogWarning(
                 ex,
                 "auto-review-postprocessing-failed project={Project} job={JobId} elapsedMs={ElapsedMs}",
                 request.ProjectName, request.JobId, sw.ElapsedMilliseconds);
+        }
+    }
+
+    /// <summary>
+    /// Turns the engine's verdict about the pass into lifecycle state.
+    /// <list type="bullet">
+    /// <item><b>Decided</b> - a decision path owned the card. If its lifecycle
+    /// is nevertheless still active the verdict never landed, so the old
+    /// safety net still terminalizes it, now naming the path that ran.</item>
+    /// <item><b>Deferred</b> - a legitimate hand-off (the canonical review
+    /// executor owns the card) or a transient limit. The card is parked in
+    /// <c>awaiting-review</c> without a blocking reason and re-driven with
+    /// backoff. This is the case that used to be blocked terminally.</item>
+    /// <item><b>Blocked</b> - a real precondition failure, terminalized with
+    /// the concrete reason rather than the generic sentence.</item>
+    /// </list>
+    /// </summary>
+    internal void ApplyOutcome(
+        AutoReviewPostProcessingRequest request,
+        PostProcessingCardResult outcome,
+        CancellationToken ct)
+    {
+        switch (outcome.Status)
+        {
+            case PostProcessingCardStatus.Deferred:
+                ParkActiveLifecycle(request, outcome.Reason);
+                ScheduleDeferralRetry(request, outcome.Reason, ct);
+                return;
+
+            case PostProcessingCardStatus.Blocked:
+                TerminalizeActiveLifecycle(
+                    request,
+                    "Post Processing stopped before a terminal decision: " + outcome.Reason + ".");
+                return;
+
+            default:
+                TerminalizeActiveLifecycle(
+                    request,
+                    "Post Processing returned without a terminal decision (" + outcome.Reason + ").");
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Highest number of automatic re-drives for a deferred card. The card is
+    /// durable in <c>4-auto-review</c> and the boot/backstop sweep re-drives it
+    /// anyway, so this only shortens the wait; exhausting it leaves the card
+    /// resting in <c>awaiting-review</c> and never blocks it.
+    /// </summary>
+    internal const int MaxDeferralRetries = 5;
+
+    /// <summary>First deferral re-drive delay; doubles per attempt.</summary>
+    internal static readonly TimeSpan DeferralRetryBaseDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>Cap for the doubling, so a long wait still re-checks regularly.</summary>
+    internal static readonly TimeSpan DeferralRetryMaxDelay = TimeSpan.FromMinutes(10);
+
+    internal static TimeSpan DeferralRetryDelay(int attempt)
+    {
+        var factor = Math.Pow(2, Math.Max(0, attempt));
+        var seconds = DeferralRetryBaseDelay.TotalSeconds * factor;
+        return seconds >= DeferralRetryMaxDelay.TotalSeconds
+            ? DeferralRetryMaxDelay
+            : TimeSpan.FromSeconds(seconds);
+    }
+
+    private void ScheduleDeferralRetry(
+        AutoReviewPostProcessingRequest request,
+        string reason,
+        CancellationToken ct)
+    {
+        if (request.Attempt >= MaxDeferralRetries)
+        {
+            _logger.LogInformation(
+                "auto-review-postprocessing-deferral-exhausted project={Project} job={JobId} reason={Reason} attempts={Attempts}",
+                request.ProjectName, request.JobId, reason, request.Attempt);
+            return;
+        }
+
+        var delay = DeferralDelayOverride?.Invoke(request.Attempt) ?? DeferralRetryDelay(request.Attempt);
+        _logger.LogInformation(
+            "auto-review-postprocessing-deferred project={Project} job={JobId} reason={Reason} attempt={Attempt} retryInMs={RetryInMs}",
+            request.ProjectName, request.JobId, reason, request.Attempt, (long)delay.TotalMilliseconds);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay, ct);
+                _queue.Enqueue(request with
+                {
+                    Attempt = request.Attempt + 1,
+                    EnqueuedAtUtc = DateTime.UtcNow,
+                    Source = "deferral-retry",
+                });
+            }
+            catch (OperationCanceledException __ex)
+            {
+                SilentCatch.Note(__ex, "AutoReviewPostProcessingWorker: deferral retry dropped on shutdown.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "auto-review-postprocessing-retry-enqueue-failed project={Project} job={JobId}",
+                    request.ProjectName, request.JobId);
+            }
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Closes an active post-processing lifecycle without a failure: the pass
+    /// legitimately produced no verdict, so the card rests in
+    /// <c>awaiting-review</c> with no blocking reason and stays pickable.
+    /// </summary>
+    private void ParkActiveLifecycle(AutoReviewPostProcessingRequest request, string reason)
+    {
+        try
+        {
+            var info = _scanner.FindJob(request.JobId, request.WatchPath);
+            if (info == null) return;
+            var updated = PostProcessingLifecycleStore.Terminalize(
+                info.FolderPath,
+                DateTime.UtcNow,
+                failed: false,
+                "Post Processing deferred: " + reason + ".",
+                _logger,
+                onlyWhenActive: true);
+            if (updated && string.Equals(info.State, TaskStates.AutoReview, StringComparison.Ordinal))
+                _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.AwaitingReview);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "auto-review-postprocessing-lifecycle-park-failed project={Project} job={JobId}",
+                request.ProjectName,
+                request.JobId);
         }
     }
 
