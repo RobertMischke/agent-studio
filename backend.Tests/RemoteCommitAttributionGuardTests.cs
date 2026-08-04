@@ -63,6 +63,65 @@ public sealed class RemoteCommitAttributionGuardTests
         Assert.Contains("AGT-9999", result.Warning, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// AGT-2494 - a divergent salvage parks the run's result on
+    /// <c>&lt;card-branch&gt;-collision-&lt;local&gt;-&lt;remote&gt;</c>. Rejecting
+    /// that branch as "another task's" is why the reviewed AGT-2220 delivery
+    /// arrived with an empty <c>commits[]</c>.
+    /// </summary>
+    [Fact]
+    public void Attribute_DivergentCollisionBranchOfTheSameCard_IsAttributed()
+    {
+        const string collision =
+            "runner/agent-runner-01/AGT-2220"
+            + "-collision-f538f896f538f896f538f896f538f896f538f896"
+            + "-744deb892744deb892744deb892744deb892744d";
+
+        var result = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2220",
+            collision,
+            [Commit("f538f896f538f896f538f896f538f896f538f896", "feat(AGT-2220): salvaged work")]);
+
+        Assert.True(result.Accepted, result.Warning);
+        Assert.Single(result.Commits);
+        // The commit is recorded on the branch that actually holds it.
+        Assert.Equal(collision, result.Commits[0].Branch);
+    }
+
+    [Fact]
+    public void Attribute_CollisionBranchOfAnotherCard_IsStillRejected()
+    {
+        var result = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2220",
+            "runner/agent-runner-01/AGT-2387"
+            + "-collision-f538f896f538f896f538f896f538f896f538f896"
+            + "-744deb892744deb892744deb892744deb892744d",
+            [Commit("1111111111111111111111111111111111111111", "feat: change")]);
+
+        Assert.False(result.Accepted);
+        Assert.Empty(result.Commits);
+    }
+
+    /// <summary>
+    /// Only the reconciliation's own <c>-collision-&lt;sha&gt;-&lt;sha&gt;</c> shape
+    /// is stripped. A hand-made branch that merely mentions the card key must not
+    /// inherit the card's attribution.
+    /// </summary>
+    [Theory]
+    [InlineData("runner/agent-runner-01/AGT-2220-collision")]
+    [InlineData("runner/agent-runner-01/AGT-2220-collision-f538f896")]
+    [InlineData("runner/agent-runner-01/AGT-2220-experiment")]
+    public void Attribute_BranchThatOnlyLooksLikeACollisionBranch_IsRejected(string branch)
+    {
+        var result = RemoteCommitAttributionGuard.Attribute(
+            "AGT-2220",
+            branch,
+            [Commit("1111111111111111111111111111111111111111", "feat: change")]);
+
+        Assert.False(result.Accepted);
+        Assert.Empty(result.Commits);
+    }
+
     [Fact]
     public void Attribute_ForeignTaskKeyInAnySubject_RejectsTheWholeRange()
     {

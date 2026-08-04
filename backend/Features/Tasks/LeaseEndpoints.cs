@@ -1120,8 +1120,19 @@ public static class LeaseEndpoints
 
             // The immutable ResultEnvelope ref is the reviewed delivery. A
             // salvage branch is recovery evidence only and must never outrank
-            // the immutable result when both are present.
-            var deliveryBranch = req.ImmutableResultRef ?? req.SalvageBranch;
+            // the immutable result when both are present. AGT-2494: a divergent
+            // salvage parks the run's result on its collision branch, so the
+            // canonical branch is ranked behind that recovery branch.
+            var deliveryCandidates = RemoteDeliveryRefPolicy.Candidates(
+                req.ImmutableResultRef,
+                req.SalvageResolution,
+                req.SalvageBranch,
+                req.SalvageRecoveryBranch,
+                req.SalvageRecoveryCommitSha,
+                resultSha);
+            var deliveryBranch = deliveryCandidates.Count > 0
+                ? deliveryCandidates[0].Ref
+                : null;
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
@@ -1154,6 +1165,35 @@ public static class LeaseEndpoints
                         resultSha,
                         req.IntegrationBranch,
                         ct);
+                    // AGT-2494: the top-ranked claim is contradicted by the
+                    // repository, so let the repository name the ref instead of
+                    // the ranking. A divergent salvage published this run's
+                    // result to its collision branch; reviewing it there beats
+                    // escalating a delivery that demonstrably exists.
+                    if (deliveryRange.IsDisproved && deliveryCandidates.Count > 1)
+                    {
+                        var reselected = RemoteDeliveryRefPolicy.Select(
+                            deliveryCandidates,
+                            candidate => git.VerifyDeliveredCommit(repoRoot, candidate, resultSha));
+                        if (reselected.CarriesResult
+                            && !string.Equals(reselected.Ref, deliveryBranch, StringComparison.Ordinal))
+                        {
+                            loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                                "remote-delivery-ref-reselected task={TaskKey} claimed={Claimed} selected={Selected} origin={Origin} verification={Verification}",
+                                req.TaskKey,
+                                deliveryBranch,
+                                reselected.Ref,
+                                reselected.Origin,
+                                reselected.Verification);
+                            deliveryBranch = reselected.Ref!;
+                            deliveryRange = git.InspectRemoteDeliveryCommitRange(
+                                repoRoot,
+                                deliveryBranch,
+                                resultSha,
+                                req.IntegrationBranch,
+                                ct);
+                        }
+                    }
                     if (!deliveryRange.Success)
                     {
                         attributionWarning = deliveryRange.Warning;

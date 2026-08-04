@@ -1738,6 +1738,36 @@
             convergence and exactly one RunAttempt after a contender poll.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-04</td>
+          <td><code>AGT-2494</code><br><span class="small">divergent salvage reported a ref that never held its result<br>(follow-up to <code>AGT-2220</code>)</span></td>
+          <td>
+            A divergent salvage publishes the run's own result to
+            <code>&lt;card-branch&gt;-collision-&lt;local&gt;-&lt;remote&gt;</code> while the canonical branch keeps the
+            foreign tip it collided with. The completion still named the canonical branch next to that result SHA. On
+            28.07. AGT-2220 completed with <code>resultSha=f538f896</code> on a ref holding <code>744deb89</code>: the
+            review subject was unresolvable by construction, the review attempt ended as
+            <code>immutable-result-mismatch</code>, and <code>commits[]</code> stayed empty.
+          </td>
+          <td>
+            The delivery ref was picked by rank alone (immutable result ref, then salvage branch) and never checked
+            against the repository, so a contradicted claim had no alternative. The reconciliation already knew the
+            collision branch carried the result. Commit attribution compounded it by rejecting that branch as another
+            card's, because its last segment is <code>&lt;KEY&gt;-collision-&lt;sha&gt;-&lt;sha&gt;</code> rather than the
+            bare card key.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the completion boundary now ranks every reported ref
+            (<code>RemoteDeliveryRefPolicy</code>) and, when the repository contradicts the top claim, walks the ranked
+            candidates with <code>GitService.VerifyDeliveredCommit</code> and reviews the ref that provably carries the
+            fenced SHA. A divergent recovery branch outranks the canonical branch; a claim that cannot merely be checked
+            keeps its rank, and an all-disproved set keeps the best-ranked claim so the AGT-2220 disproof gate still
+            escalates. Attribution accepts a collision branch of the card's own branch, so the reviewed delivery arrives
+            with commits instead of an empty range. An end-to-end regression against a real origin proves the divergent
+            delivery reaches <span class="lane">4-auto-review</span> on the collision branch rather than
+            <span class="lane">5e-escalated</span>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -869,6 +869,186 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains($"`{canonical}` at `{canonicalSha}` was the authoritative pickup base", deliverables);
     }
 
+    /// <summary>
+    /// AGT-2494 - the canonical branch of a divergent salvage keeps the remote
+    /// tip it collided with, so naming it as the review ref pins the subject to
+    /// a SHA that ref never held. That is what happened to AGT-2220 on 28.07.
+    /// (<c>resultSha=f538f896</c> on a ref holding <c>744deb89</c>) and it ended
+    /// as <c>immutable-result-mismatch</c> with an empty <c>commits[]</c>. The
+    /// review subject must name a ref that carries the fenced result.
+    /// </summary>
+    [Fact]
+    public async Task Divergent_completion_reviews_a_ref_that_carries_the_result_sha()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote salvage collision", "Continue safely.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        const string canonical = "runner/agent-runner-e2e/AGT-RUNNER-E2E";
+        const string canonicalSha = "09faf1b709faf1b709faf1b709faf1b709faf1b7";
+        const string localSha = "b6f23a3fb6f23a3fb6f23a3fb6f23a3fb6f23a3f";
+        const string recovery = canonical + "-collision-" + localSha + "-" + canonicalSha;
+        var immutableRef = Contract.FencedGitRefs.ImmutableResult(
+            lease.Lease.AttemptId!, lease.Lease.FencingToken, localSha);
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            SalvageBranch: canonical,
+            SalvageCommitSha: canonicalSha,
+            ResultSha: localSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            SalvageResolution: "divergent",
+            SalvageLocalCommitSha: localSha,
+            SalvageRecoveryBranch: recovery,
+            SalvageRecoveryCommitSha: localSha,
+            SalvageAuthoritativeBaseBranch: canonical,
+            SalvageAuthoritativeBaseSha: canonicalSha,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "salvage-collision-review-ref",
+            BaseSha: "4136f00d4136f00d4136f00d4136f00d4136f00d",
+            ImmutableResultRef: immutableRef,
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), ct);
+
+        Assert.NotNull(completion);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        var subject = ReviewSubjectStore.Read(moved);
+        Assert.NotNull(subject);
+        Assert.Equal(localSha, subject!.ResultSha);
+        // The reviewed ref carries the result: the fenced immutable ref is named
+        // for this exact SHA. The canonical branch, which holds canonicalSha, is
+        // never claimed as the subject.
+        Assert.Equal(immutableRef, subject.ResultRef);
+        Assert.Contains(localSha, subject.ResultRef!, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(canonical, subject.ResultRef);
+    }
+
+    /// <summary>
+    /// AGT-2494, against a real origin - the completion still reports its
+    /// immutable result ref, but that ref is gone from the repository (retention
+    /// GC), and the canonical branch holds the foreign tip the salvage collided
+    /// with. The collision branch is the only ref that carries the fenced result,
+    /// so the completion must review it there: no ShaMismatch, an attributed
+    /// <c>commits[]</c>, and no escalation of a delivery that demonstrably exists.
+    /// </summary>
+    [Fact]
+    public async Task Divergent_completion_reviews_the_collision_branch_when_the_immutable_ref_is_gone()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote salvage collision", "Continue safely.");
+
+        const string canonical = "runner/agent-runner-e2e/AGT-RUNNER-E2E";
+        var origin = Path.Combine(_workspace, "collision-origin.git");
+        var seed = Path.Combine(_workspace, "collision-seed");
+        await GitAsync(_workspace, "init", "--bare", origin);
+        await GitAsync(_workspace, "init", seed);
+        await GitAsync(seed, "config", "user.name", "Test");
+        await GitAsync(seed, "config", "user.email", "test@example.invalid");
+        await File.WriteAllTextAsync(Path.Combine(seed, "base.txt"), "base");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "commit", "-m", "chore: base");
+        await GitAsync(seed, "branch", "-M", "main");
+        await GitAsync(seed, "remote", "add", "origin", origin);
+        await GitAsync(seed, "push", "-u", "origin", "main");
+        var baseSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+
+        // The canonical branch as origin holds it: a foreign tip the salvage
+        // refused to overwrite.
+        await GitAsync(seed, "checkout", "-b", canonical, baseSha);
+        await File.WriteAllTextAsync(Path.Combine(seed, "foreign.txt"), "foreign");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "commit", "-m", "feat: foreign tip that won the canonical ref");
+        var canonicalSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+        await GitAsync(seed, "push", "origin", canonical);
+
+        // This run's own result, parked on the collision branch.
+        await GitAsync(seed, "checkout", "-b", "salvage-work", baseSha);
+        await File.WriteAllTextAsync(Path.Combine(seed, "result.txt"), "result");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "commit", "-m", "feat: the delivered result");
+        var localSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+        var recovery = $"{canonical}-collision-{localSha}-{canonicalSha}";
+        await GitAsync(seed, "push", "origin", $"HEAD:refs/heads/{recovery}");
+
+        // The project checkout the server inspects the delivery from.
+        await GitAsync(_watchPath, "init");
+        await GitAsync(_watchPath, "remote", "add", "origin", origin);
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        // Reported, but no longer on origin - exactly what retention GC leaves
+        // behind, and what made the canonical branch the only remaining claim.
+        var goneImmutableRef = Contract.FencedGitRefs.ImmutableResult(
+            lease.Lease.AttemptId!, lease.Lease.FencingToken, localSha);
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            SalvageBranch: canonical,
+            SalvageCommitSha: canonicalSha,
+            ResultSha: localSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            SalvageResolution: "divergent",
+            SalvageLocalCommitSha: localSha,
+            SalvageRecoveryBranch: recovery,
+            SalvageRecoveryCommitSha: localSha,
+            SalvageAuthoritativeBaseBranch: canonical,
+            SalvageAuthoritativeBaseSha: canonicalSha,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "salvage-collision-gc-completion",
+            BaseSha: baseSha,
+            ImmutableResultRef: goneImmutableRef,
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            IntegrationBranch: "refs/heads/main"), ct);
+
+        Assert.NotNull(completion);
+        // Not escalated: the delivery exists, it just lives on the collision branch.
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        var subject = ReviewSubjectStore.Read(moved);
+        Assert.NotNull(subject);
+        Assert.Equal(localSha, subject!.ResultSha);
+        Assert.Equal(recovery, subject.ResultRef);
+        Assert.NotEqual(canonical, subject.ResultRef);
+
+        // The reviewed ref really carries the result, and the range is attributed
+        // instead of leaving commits[] empty as it did for AGT-2220.
+        var cardJson = File.ReadAllText(Path.Combine(moved, "task.json"));
+        var card = JsonDocument.Parse(cardJson);
+        Assert.True(card.RootElement.TryGetProperty("commits", out var commitsElement), cardJson);
+        var commits = commitsElement.EnumerateArray().ToArray();
+        Assert.NotEmpty(commits);
+        Assert.Equal(localSha, CommitField(commits[^1], "sha", cardJson));
+        Assert.Equal(recovery, CommitField(commits[^1], "branch", cardJson));
+    }
+
     [Fact]
     public async Task Second_runner_is_refused_while_the_lease_is_held()
     {
@@ -2813,6 +2993,22 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             [],
             [new Contract.ReviewVerdictDto("build-tests", "pass", "Verified", "Build and tests passed.")],
             lease.AuthorityEpoch);
+    }
+
+    /// <summary>
+    /// task.json is written without a naming policy, so persisted commit entries
+    /// keep their CLR casing while the HTTP projection is camelCase. Reading the
+    /// card directly has to tolerate both.
+    /// </summary>
+    private static string? CommitField(JsonElement commit, string name, string cardJson)
+    {
+        foreach (var property in commit.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                return property.Value.GetString();
+        }
+        Assert.Fail($"Persisted commit has no '{name}' field: {cardJson}");
+        return null;
     }
 
     private static async Task<LocalGitResult> GitAsync(
