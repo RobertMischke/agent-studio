@@ -61,9 +61,10 @@ The Review Executor advertises Git/source-bundle, semantic, and vision
 capabilities. Each claimed ReviewAttempt receives a fresh workspace, cache,
 temporary directory, eight-port block, Compose namespace, database namespace,
 and fenced cleanup lifecycle. Child processes start from a cleared environment.
-Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted; the corresponding
-service credentials must be read-only. Coding deploy keys and write-enabled
-provider credentials must not be present in the review unit.
+Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted to review child
+processes. Both service units load the shared provider authentication
+EnvironmentFile so the daemon can probe and advertise provider availability;
+coding deploy keys remain absent from the review unit.
 
 The executor fetches the immutable result ref or verified Git bundle, proves
 repository identity, HEAD, tree, and clean state, then proves HEAD again before
@@ -83,9 +84,10 @@ The Review Executor advertises Git/source-bundle, semantic, and vision
 capabilities. Each claimed ReviewAttempt receives a fresh workspace, cache,
 temporary directory, eight-port block, Compose namespace, database namespace,
 and fenced cleanup lifecycle. Child processes start from a cleared environment.
-Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted; the corresponding
-service credentials must be read-only. Coding deploy keys and write-enabled
-provider credentials must not be present in the review unit.
+Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted to review child
+processes. Both service units load the shared provider authentication
+EnvironmentFile so the daemon can probe and advertise provider availability;
+coding deploy keys remain absent from the review unit.
 
 The executor fetches the immutable result ref or verified Git bundle, proves
 repository identity, HEAD, tree, and clean state, then proves HEAD again before
@@ -154,10 +156,10 @@ every provisioning command in that controller is executed through SSH on the
 selected host.
 
 Before the task can start, the dialog requires an SSH target, a credential-free
-fallback git origin, and one of these Task Server topologies. The local profile
-also needs a registered attribution id. The networked profile instead needs the
-owner-enrolled `runner_<id>` and a protected `rnr.*` credential file already on
-the host:
+fallback git origin, provider authentication, and one of these Task Server
+topologies. The local profile also needs a registered attribution id. The
+networked profile instead needs the owner-enrolled `runner_<id>` and a protected
+`rnr.*` credential file already on the host:
 
 | Topology | URL entered in setup | Required proof |
 |---|---|---|
@@ -177,17 +179,20 @@ The controller is intentionally repeatable after a host wipe:
    from the host.
 2. Install or update the `CodingAgentRunner` NuGet global tool and require
    version `0.5.0` or newer, then install the Codex and Claude CLIs.
-3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
-   and one-time code stay visible in the task conversation. Claude uses
-   `claude auth login --claudeai`. The operator completes browser steps locally,
-   then `codex login status` and `claude auth status --text` report the active
-   account. Credential files are never copied as the normal path.
+3. Before the visible setup task starts, provision Claude authentication from
+   the Studio dialog. Studio sends `CLAUDE_CODE_OAUTH_TOKEN` or
+   `ANTHROPIC_API_KEY` only through SSH stdin. The host atomically writes
+   `/etc/agent-runner/provider-auth.env` as `root:agent` mode `640`. The value is
+   never persisted in Studio, a task, or the repository.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
    stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
    and fallback git origin. Install and start `agent-host.service` through
-   systemd. The SSH session never owns the daemon process.
-5. Prove `systemctl is-enabled`, `systemctl is-active`, agent-host health, and an
-   authenticated claim or empty-queue response before setup completes.
+   systemd. Both Coding and Review units load the shared provider-auth file
+   after their existing runner EnvironmentFile. The SSH session never owns the
+   daemon process.
+5. Prove `systemctl is-enabled`, `systemctl is-active`, agent-host health, the
+   variable name in `/proc/<MainPID>/environ`, a fresh provider-auth probe, and
+   an authenticated claim or empty-queue response before setup completes.
 
 The NuGet package must be published with package type `DotnetTool` and expose
 the `agent-host` command. A library-only `CodingAgentRunner` package cannot be
@@ -207,35 +212,38 @@ npm i -g @anthropic-ai/claude-code @openai/codex
 npx playwright install --with-deps chromium
 ```
 
-### Per-host CLI credentials (D5, permanent)
+### Per-host provider authentication
 
-Authenticate every CLI **on the host itself** so the host owns its own
-credentials. Do **not** copy the operator's `~/.claude/.credentials.json` /
-`~/.codex/auth.json` over from the studio. A seeded credential shares a
-refresh-token lineage with the operator's account, so when the operator side
-re-logs-in or rotates its token, the host's copy is invalidated and the host
-drops out logged-out mid-batch. This drift was live on 2026-07-09 (host-claude
-logged out after an operator-side token rotation, needing a manual re-seed); a
-host that logged in independently is immune to it. Per-host login is the
-permanent replacement for the earlier shared-credential seeding.
+Use exactly one shared host file for environment-backed provider credentials:
 
-- **Claude.** Log in directly on the host, once, over an `ssh -L` port-forward so
-  the OAuth browser step can complete (`claude`, finish onboarding), **or** mint a
-  long-lived headless token on the host with `claude setup-token`. Either way the
-  host holds its **own** refresh token, independent of the operator's. Verify with
-  `claude --version` and one throwaway `claude -p "say hi"` before wiring the runner.
-- **Codex.** Same rule: run `codex login` on the host so it writes the host's own
-  `~/.codex/auth.json`; do not copy the operator's. Verify with `codex --version`.
-- **Rotation is now per host.** If a host's own token is ever revoked, re-run that
-  host's login / `setup-token` **on that host**. No other host and no operator-side
-  action is involved, so there is no cross-host drift to chase.
+```text
+/etc/agent-runner/provider-auth.env    root:agent    640
+```
 
-The host's `~/.claude/.credentials.json` must stay a plain file the runner user
-can read and write in place, so Claude's own token refresh persists for the next
-launch. (The studio's clean-context mechanism keeps the same in-place invariant
-for parallel runs by sharing the one credential file *by link* rather than
-copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
-[`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
+The current Claude entries are `CLAUDE_CODE_OAUTH_TOKEN` and
+`ANTHROPIC_API_KEY`; future provider tokens join this file. Provision through
+the Execution Hosts dialog. Its backend passes the secret only through SSH
+stdin, atomically updates the file, restarts both installed units, and verifies
+the variable name in the daemon's `/proc/<MainPID>/environ`. Never pass a token
+on the remote command line or write it to a task, database, repository, log, or
+evidence artifact.
+
+Both Coding and Review units declare this file after their existing
+EnvironmentFile because systemd applies later `EnvironmentFile` values last.
+Verify the effective process environment after every unit change. The runner's
+provider probe intentionally knows only its process environment and CLI status;
+it never reads credential file paths.
+
+Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
+**OK**, **Unavailable**, or **Unknown** per CLI, with the probe detail in the
+tooltip. `OK -> Unavailable` creates an operator notification and updates Ready
+card wait reasons. A recognized auth failure from a run reports the capability
+failure immediately. When a capability advertises a known expiry, Studio warns
+during the final 14 days. Follow
+[cli-relogin-runbook.md](./cli-relogin-runbook.md) for renewal.
+
+Do not create provider-specific files such as `claude.env`. Do not copy the
+operator's `~/.claude/.credentials.json` or `~/.codex/auth.json` to a host.
 
 ## 2. Build agent-host
 
@@ -672,6 +680,11 @@ requests graceful SIGTERM drain, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
 
+The Coding and Review units also load
+`/etc/agent-runner/provider-auth.env` after their role-specific runner
+EnvironmentFile. Keep the provider file separate from `runner.env` so ordinary
+configuration updates cannot expose or overwrite provider credentials.
+
 The managed units deliberately use `KillMode=process`. This is required:
 `control-group` kills detached job workers and makes safe reattachment
 impossible. `StartLimitIntervalSec=300`, `StartLimitBurst=5`, and
@@ -867,8 +880,8 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
   workspace evidence commit.
 
 For the full Execution Hosts acceptance, also record the setup task id, the exact
-Task Server URL/topology, `systemctl is-enabled` and `is-active`, both CLI auth
-status outputs, and the runner client id from `GET /api/clients`. Its
+Task Server URL/topology, `systemctl is-enabled` and `is-active`, provider-auth
+badge states and probe details, and the runner client id from `GET /api/clients`. Its
 `lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
 Ready probe task through the normal project execution setting and verify that
 the remote host badge, fenced lease timeline, CLI log upload, result upload,

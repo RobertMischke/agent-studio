@@ -1,5 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -55,9 +55,38 @@ describe('RunnerSetupDialogComponent', () => {
     component.setConnectionMode('tunnel');
     fixture.detectChanges();
     expect(component.taskServerUrl()).toBe('http://127.0.0.1:15031');
+    expect(component.ready()).toBe(false);
+    expect(el.querySelector('[data-testid="visible-cli-task-card"]')).toBeNull();
+
+    const secret = 'sk-ant-oat01-provider-auth-fixture';
+    component.providerAuthSecret.set(secret);
+    component.provisionProviderAuth();
+    const request = TestBed.inject(HttpTestingController).expectOne(
+      '/api/v1/management/remote-hosts/provider-auth',
+    );
+    expect(request.request.body).toEqual({
+      sshTarget: 'agent-runner',
+      runnerId: 'agent-runner-01',
+      environmentVariable: 'CLAUDE_CODE_OAUTH_TOKEN',
+      secret,
+    });
+    request.flush({
+      provider: 'claude',
+      environmentVariable: 'CLAUDE_CODE_OAUTH_TOKEN',
+      host: 'agent-runner',
+      state: 'installed-awaiting-runner',
+      detail: 'The protected EnvironmentFile was installed.',
+      requestedAt: '2026-08-04T12:00:00Z',
+      restartedServices: [],
+      processEnvironmentVerified: false,
+    });
+    fixture.detectChanges();
+
+    expect(component.providerAuthSecret()).toBe('');
     expect(component.ready()).toBe(true);
     expect(el.querySelector('[data-testid="runner-setup-loopback-block"]')).toBeNull();
     expect(el.querySelector('[data-testid="visible-cli-task-card"]')).toBeTruthy();
-    expect(component.request().prompt).toContain('codex login --device-auth');
+    expect(component.request().prompt).toContain('/etc/agent-runner/provider-auth.env');
+    expect(component.request().prompt).not.toContain(secret);
   });
 });

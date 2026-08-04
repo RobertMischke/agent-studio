@@ -30,6 +30,7 @@ import {
   type RemoteHost,
 } from '../../models/remote-host.model';
 import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
+import { providerAuthBadgesForHost, type ProviderAuthBadge } from '../../models/provider-auth.model';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
 interface Meter {
@@ -181,6 +182,11 @@ export class RemoteHostCardComponent {
   readonly failedProjectPreflights = computed(() =>
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
+  readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
+
+  latestAuthTransition(badge: ProviderAuthBadge) {
+    return badge.history.at(-1) ?? null;
+  }
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }

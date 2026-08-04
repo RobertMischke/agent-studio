@@ -27,6 +27,40 @@
 
   <app-git-token-capability mode="warning" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
 
+  @if (providerAuthBadges().length) {
+    <section class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
+      <div class="provider-auth__head">
+        <strong>Provider authentication</strong>
+        <span>Runner probe · process environment</span>
+      </div>
+      <div class="provider-auth__badges">
+        @for (auth of providerAuthBadges(); track auth.id) {
+          <span class="provider-auth__badge"
+                [attr.data-state]="auth.state"
+                [attr.data-testid]="'remote-host-provider-auth-' + auth.provider"
+                [appTooltip]="auth.detail">
+            <span class="provider-auth__dot" aria-hidden="true"></span>
+            <strong>{{ auth.providerLabel }}</strong>
+            <span>{{ auth.state }}</span>
+          </span>
+          @if (auth.expiresSoon && auth.expiryLabel) {
+            <span class="provider-auth__expiry"
+                  [attr.data-testid]="'remote-host-provider-auth-expiry-' + auth.provider">
+              {{ auth.expiryLabel }}
+            </span>
+          }
+        }
+      </div>
+      @for (auth of providerAuthBadges(); track auth.id) {
+        @if (latestAuthTransition(auth); as transition) {
+          <p class="provider-auth__history" [attr.data-testid]="'remote-host-provider-auth-history-' + auth.provider">
+            Last change {{ transition.occurredAt | date:'short' }} · {{ transition.fromState }} → {{ transition.toState }}
+          </p>
+        }
+      }
+    </section>
+  }
+
   <section class="activity" data-testid="remote-host-activity" [class.activity--stale]="stale()">
     <div><span>Task inflow</span><strong>{{ taskInflowLabel() }}</strong></div>
     <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>

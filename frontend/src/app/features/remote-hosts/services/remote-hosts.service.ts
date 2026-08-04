@@ -6,10 +6,11 @@ import type {
   HostRampStrategy,
   HostTelemetrySeries,
   RemoteHost,
-  RemoteHostAdmission,
-  RemoteHostCapabilityHealth,
+  TaskServerTelemetrySnapshot,
+  TaskServerRunnerCapabilitySnapshot,
 } from '../models/remote-host.model';
 import { seedRemoteHosts } from './remote-hosts.seed';
+import { ProviderAuthStatusService } from './provider-auth-status.service';
 
 /**
  * Registry + action service for the Remote-Hosts page (AGT-1921).
@@ -33,6 +34,7 @@ export class RemoteHostsService {
   private static readonly DEGRADED_CLIENT_MS = 5 * 60_000;
   /** Optional keeps direct-constructor pure tests and non-HTTP previews viable. */
   private readonly http = tryInjectHttpClient();
+  private readonly providerAuth = tryInjectProviderAuthStatus();
 
   /** Every mount revalidates live state; cached cards are never authoritative. */
   ensureLoaded(): void {
@@ -153,6 +155,7 @@ export class RemoteHostsService {
     if (!this.http) return;
     this.http.get<TaskServerRunnerCapabilitySnapshot[]>('/api/v1/management/remote-hosts').subscribe({
       next: snapshots => {
+        this.providerAuth?.ingest(snapshots ?? []);
         const now = Date.now();
         this.hosts.update(hosts => {
           const projected = [...hosts];
@@ -463,41 +466,6 @@ export class RemoteHostsService {
   }
 }
 
-interface TaskServerTelemetrySnapshot {
-  observedAt: string;
-  cpuPercent: number | null;
-  memoryUsedBytes: number | null;
-  memoryTotalBytes: number | null;
-  cpuCores: number;
-  diskFreeBytes?: number | null;
-  diskTotalBytes?: number | null;
-  taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';
-  taskServerConnectionObservedAt?: string | null;
-  taskServerConnectionFailureStartedAt?: string | null;
-  taskServerConnectionConsecutiveFailures?: number;
-  taskServerConnectionEscalatedAt?: string | null;
-  taskServerConnectionLastError?: string | null;
-  taskServerConnectionLastRecoveredAt?: string | null;
-}
-
-interface TaskServerRunnerCapabilitySnapshot {
-  runnerId: string;
-  name: string;
-  hostId: string;
-  instanceId: string;
-  runnerVersion: string;
-  protocolVersion: number;
-  status: string;
-  registeredAt: string;
-  lastSeenAt: string;
-  hostAdmission: RemoteHostAdmission;
-  capabilities: RemoteHostCapabilityHealth[];
-  telemetry?: TaskServerTelemetrySnapshot | null;
-  runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
-  effectiveMaxParallelism?: number | null;
-  runtimeCapacityAppliedAt?: string | null;
-}
-
 function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<RemoteHost['stats']> {
   return {
     ramTotalMb: (telemetry.memoryTotalBytes ?? 0) / 1024 / 1024,
@@ -618,6 +586,14 @@ function mergeRecentTelemetry(
 function tryInjectHttpClient(): HttpClient | null {
   try {
     return inject(HttpClient, { optional: true });
+  } catch {
+    return null;
+  }
+}
+
+function tryInjectProviderAuthStatus(): ProviderAuthStatusService | null {
+  try {
+    return inject(ProviderAuthStatusService, { optional: true });
   } catch {
     return null;
   }

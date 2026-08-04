@@ -59,6 +59,23 @@ public sealed partial class TaskServerStore
                 var key = NormalizeCapability(capability.Key);
                 if (key.Length == 0 || string.IsNullOrWhiteSpace(capability.Category))
                     throw new ArgumentException("Capability key and category are required.");
+                var advertisedStatus = capability.Status.Trim().ToLowerInvariant();
+                var tracksProbeHistory = key.StartsWith("provider-auth:", StringComparison.Ordinal);
+                var previous = tracksProbeHistory
+                    ? await ReadCapabilityRowAsync(connection, transaction, request.RunnerId, key, ct)
+                    : null;
+                var probeHistory = previous?.RecoveryHistory ?? [];
+                if (previous is not null
+                    && !string.Equals(previous.AdvertisedStatus, advertisedStatus, StringComparison.Ordinal))
+                {
+                    probeHistory = AppendHistory(
+                        probeHistory,
+                        new CapabilityRecoveryEventDto(
+                            advertisedAt,
+                            previous.AdvertisedStatus,
+                            advertisedStatus,
+                            $"Provider authentication probe changed from {previous.AdvertisedStatus} to {advertisedStatus}."));
+                }
                 await ExecuteAsync(connection, """
                     INSERT INTO runner_capabilities(
                         runner_id, capability_key, category, schema_version,
@@ -68,7 +85,7 @@ public sealed partial class TaskServerStore
                     VALUES (
                         $runner, $key, $category, $schema, $status, 'healthy',
                         NULL, $version, $identity, $detail, $advertised,
-                        $fresh, $generation, '[]', $updated)
+                        $fresh, $generation, $history, $updated)
                     ON CONFLICT(runner_id, capability_key) DO UPDATE SET
                         category = excluded.category,
                         schema_version = excluded.schema_version,
@@ -79,19 +96,25 @@ public sealed partial class TaskServerStore
                         advertised_at = excluded.advertised_at,
                         fresh_until = excluded.fresh_until,
                         generation = excluded.generation,
+                        recovery_history_json = CASE
+                            WHEN $tracks_history = 1 THEN excluded.recovery_history_json
+                            ELSE runner_capabilities.recovery_history_json
+                        END,
                         updated_at = excluded.updated_at;
                     """, ct, transaction,
                     ("$runner", request.RunnerId),
                     ("$key", key),
                     ("$category", capability.Category.Trim().ToLowerInvariant()),
                     ("$schema", request.SchemaVersion),
-                    ("$status", capability.Status.Trim().ToLowerInvariant()),
+                    ("$status", advertisedStatus),
                     ("$version", capability.Version),
                     ("$identity", capability.Identity),
                     ("$detail", capability.Detail),
                     ("$advertised", Iso(advertisedAt)),
                     ("$fresh", Iso(freshUntil)),
                     ("$generation", request.Generation),
+                    ("$history", JsonSerializer.Serialize(probeHistory)),
+                    ("$tracks_history", tracksProbeHistory ? 1 : 0),
                     ("$updated", now));
             }
             if (request.Telemetry is not null)

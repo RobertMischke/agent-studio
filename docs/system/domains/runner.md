@@ -108,6 +108,13 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- Remote provider credentials use one protected host file,
+  `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
+  `root:agent` mode `640`, loaded by both Coding and Review units after their
+  existing EnvironmentFile, and provisioned only through SSH stdin. Studio
+  never stores the value. Provider probes inspect only the process environment
+  and CLI status. Provider-specific files, including `claude.env`, are outside
+  the contract.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -371,6 +378,12 @@ state.
   authenticated `GET /api/v1/management/remote-hosts` route exposes the latest
   retained coding and review snapshots in both the monolith compatibility
   profile and the standalone Task Server profile.
+- Provider-auth advertisement changes are appended to the same bounded recovery
+  history exposed by the management snapshot. Execution Hosts turns that data
+  into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition
+  notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
+  A recognized provider-auth run failure reports unavailability immediately so
+  revocation between periodic probes is visible.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
