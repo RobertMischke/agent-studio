@@ -364,6 +364,15 @@ cannot erase an operator decision.
   Missing commit timestamps disable this fallback rather than reusing historical
   key-only evidence. Planned and running matches are pending evidence; an older
   green run remains visible as `diff not included` and never turns the card green.
+- `GET /api/tasks` and `GET /api/tasks/grouped` never run a Git process on the
+  request path. Merge, integration, publish, and test-evidence fields come from
+  the latest completed in-memory `TaskListGitProjectionCache` snapshot. A cold
+  read may omit those additive fields while it queues one background refresh;
+  later reads fold in the completed snapshot. Input changes and a two-second
+  refresh interval queue a new single-flight refresh without making the request
+  wait. `GitProcessTelemetry` records `tasks/list` and `tasks/grouped` separately
+  from `tasks/list-refresh`, so request rollups must remain at zero spawns even
+  when HEAD churn causes the background refresh to recompute Git projections.
 
 ## Execution location on task reads
 

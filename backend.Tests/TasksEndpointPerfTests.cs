@@ -221,6 +221,124 @@ public class JobsEndpointPerfTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskListEndpoints_ColdAndHeadChurn_StartNoGitProcessAndReturnUnderOneSecond()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "task-list-git-perf-" + Guid.NewGuid().ToString("N"));
+        var repo = Path.Combine(root, "repo");
+        var jobs = Path.Combine(root, "jobs");
+        var workspace = Path.Combine(root, "workspace");
+        Directory.CreateDirectory(repo);
+        Directory.CreateDirectory(jobs);
+        Directory.CreateDirectory(workspace);
+
+        try
+        {
+            RunGit(repo, "init", "-q", "-b", "main");
+            RunGit(repo, "config", "user.email", "test@example.com");
+            RunGit(repo, "config", "user.name", "Task List Test");
+            File.WriteAllText(Path.Combine(repo, "README.md"), "seed\n");
+            RunGit(repo, "add", "README.md");
+            RunGit(repo, "commit", "-q", "-m", "seed");
+            RunGit(repo, "branch", "develop");
+            var anchor = RunGit(repo, "rev-parse", "HEAD").Trim();
+
+            var taskFolder = Path.Combine(jobs, TaskStates.Completed, "task-1");
+            Directory.CreateDirectory(taskFolder);
+            File.WriteAllText(
+                Path.Combine(taskFolder, "task.json"),
+                JsonSerializer.Serialize(new
+                {
+                    id = "task-1",
+                    key = "PERF-1",
+                    title = "Task list Git projection performance",
+                    state = TaskStates.Completed,
+                    order = 1,
+                    commits = new[]
+                    {
+                        new
+                        {
+                            sha = anchor,
+                            shortSha = anchor[..7],
+                            message = "seed",
+                            filesChanged = 1,
+                            files = new[] { "README.md" },
+                        },
+                    },
+                }));
+
+            var telemetry = new StructuredTelemetryLoggerProvider();
+            using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(builder =>
+                {
+                    builder.UseEnvironment("Test");
+                    builder.ConfigureLogging(logging => logging.AddProvider(telemetry));
+                    builder.ConfigureAppConfiguration((_, config) =>
+                    {
+                        config.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["TaskRepository"] = workspace,
+                            ["WatchPaths:0:Name"] = "task-list-perf",
+                            ["WatchPaths:0:Path"] = jobs,
+                            ["WatchPaths:0:RootPath"] = repo,
+                            ["WatchPaths:0:RepositoryPath"] = repo,
+                        });
+                    });
+                });
+
+            using var client = factory.CreateClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var readiness = await client.GetAsync("/healthz", timeout.Token);
+            readiness.EnsureSuccessStatusCode();
+            var stopwatch = Stopwatch.StartNew();
+            using var response = await client.GetAsync("/api/tasks", timeout.Token);
+            stopwatch.Stop();
+
+            response.EnsureSuccessStatusCode();
+            var rollup = Assert.Single(telemetry.Rollups("tasks/list"));
+            Assert.Equal(0, rollup.Spawns);
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(1),
+                $"GET /api/tasks took {stopwatch.ElapsedMilliseconds}ms; the list budget is under 1000ms.");
+
+            var initialRefresh = await telemetry.WaitForRollupAsync(
+                "tasks/list-refresh",
+                expectedCount: 1,
+                timeout.Token);
+            Assert.True(initialRefresh[0].Spawns > 0);
+
+            File.WriteAllText(Path.Combine(repo, "head-churn.txt"), "new HEAD\n");
+            RunGit(repo, "add", "head-churn.txt");
+            RunGit(repo, "commit", "-q", "-m", "test: move HEAD");
+            await Task.Delay(TaskListGitProjectionCache.RefreshInterval + TimeSpan.FromMilliseconds(250), timeout.Token);
+
+            stopwatch.Restart();
+            using var churnResponse = await client.GetAsync("/api/tasks", timeout.Token);
+            stopwatch.Stop();
+            churnResponse.EnsureSuccessStatusCode();
+            var listRollups = telemetry.Rollups("tasks/list");
+            Assert.Equal(2, listRollups.Count);
+            Assert.All(listRollups, item => Assert.Equal(0, item.Spawns));
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(1),
+                $"GET /api/tasks after HEAD churn took {stopwatch.ElapsedMilliseconds}ms; the list budget is under 1000ms.");
+
+            using var groupedResponse = await client.GetAsync("/api/tasks/grouped", timeout.Token);
+            groupedResponse.EnsureSuccessStatusCode();
+            Assert.Equal(0, Assert.Single(telemetry.Rollups("tasks/grouped")).Spawns);
+
+            var refreshes = await telemetry.WaitForRollupAsync(
+                "tasks/list-refresh",
+                expectedCount: 2,
+                timeout.Token);
+            Assert.True(refreshes[1].Spawns > 0);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+
+    [Fact]
     public void WithRuntime_OutsideProgress_ClearsExecutionOverlay()
     {
         // Single-source-of-truth contract (Lane > Execution-Status >
@@ -332,6 +450,27 @@ public class JobsEndpointPerfTests : IDisposable
         }
     }
 
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(15_000), "git did not exit within 15 seconds.");
+        Assert.Equal(0, process.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(error), error);
+        return output;
+    }
+
     private static ITokenAggregator BuildRealTokenAggregator(string workspace, AgentMessageBusStore store)
     {
         var config = new ConfigurationBuilder()
@@ -438,6 +577,67 @@ public class JobsEndpointPerfTests : IDisposable
                 ["WatchPaths:0:Path"] = _watchPath
             })
             .Build();
+    }
+}
+
+internal sealed record StructuredTelemetryRollup(string Label, int Spawns, long GitMs, long WallMs);
+
+internal sealed class StructuredTelemetryLoggerProvider : ILoggerProvider
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<StructuredTelemetryRollup> _rollups = new();
+
+    public ILogger CreateLogger(string categoryName) => new Logger(_rollups);
+
+    public IReadOnlyList<StructuredTelemetryRollup> Rollups(string label)
+        => _rollups.Where(rollup => string.Equals(rollup.Label, label, StringComparison.Ordinal)).ToList();
+
+    public async Task<IReadOnlyList<StructuredTelemetryRollup>> WaitForRollupAsync(
+        string label,
+        int expectedCount,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var matches = Rollups(label);
+            if (matches.Count >= expectedCount) return matches;
+            await Task.Delay(20, cancellationToken);
+        }
+    }
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class Logger(
+        System.Collections.Concurrent.ConcurrentQueue<StructuredTelemetryRollup> rollups) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state is not IReadOnlyList<KeyValuePair<string, object?>> fields) return;
+            var label = Field(fields, "Label")?.ToString();
+            if (string.IsNullOrWhiteSpace(label)) return;
+            rollups.Enqueue(new StructuredTelemetryRollup(
+                label,
+                Convert.ToInt32(Field(fields, "Spawns")),
+                Convert.ToInt64(Field(fields, "GitMs")),
+                Convert.ToInt64(Field(fields, "WallMs"))));
+        }
+
+        private static object? Field(IReadOnlyList<KeyValuePair<string, object?>> fields, string name)
+        {
+            foreach (var field in fields)
+                if (field.Key == name) return field.Value;
+            return null;
+        }
     }
 }
 

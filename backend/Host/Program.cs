@@ -310,6 +310,7 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<TaskListGitProjectionCache>();
 builder.Services.AddSingleton<OperatorReviewRequeueService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
 // chips). PublishTargetService derives + caches per project; TaskPublishableService

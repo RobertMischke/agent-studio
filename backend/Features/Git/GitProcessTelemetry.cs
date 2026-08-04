@@ -46,11 +46,15 @@ public static class GitProcessTelemetry
     /// Opens a per-request git measurement scope. Dispose logs the rollup:
     /// total spawn count, summed git wall-time, request wall-time, and a
     /// per-subcommand breakdown. Nestable - the inner scope restores the outer
-    /// on dispose - though the git-info entry points do not nest in practice.
+    /// on dispose. Set <paramref name="includeNested"/> on a boundary scope when
+    /// its rollup must include Git work recorded by nested feature scopes.
     /// </summary>
-    public static IDisposable BeginRequest(string label, ILogger logger)
+    public static IDisposable BeginRequest(
+        string label,
+        ILogger logger,
+        bool includeNested = false)
     {
-        var scope = new GitRequestScope(label, logger, _current.Value);
+        var scope = new GitRequestScope(label, logger, _current.Value, includeNested);
         _current.Value = scope;
         return scope;
     }
@@ -96,6 +100,7 @@ public static class GitProcessTelemetry
         private readonly string _label;
         private readonly ILogger _logger;
         private readonly GitRequestScope? _parent;
+        private readonly bool _includeNested;
         private readonly Stopwatch _wall = Stopwatch.StartNew();
         private readonly object _gate = new();
         private readonly Dictionary<string, (int Count, long Ms)> _byCommand = new(StringComparer.Ordinal);
@@ -104,14 +109,28 @@ public static class GitProcessTelemetry
         public long GitMs { get; private set; }
         public int FileReads { get; private set; }
 
-        public GitRequestScope(string label, ILogger logger, GitRequestScope? parent)
+        public GitRequestScope(
+            string label,
+            ILogger logger,
+            GitRequestScope? parent,
+            bool includeNested)
         {
             _label = label;
             _logger = logger;
             _parent = parent;
+            _includeNested = includeNested;
         }
 
         public void Add(string command, long elapsedMs)
+        {
+            AddLocal(command, elapsedMs);
+            for (var ancestor = _parent; ancestor != null; ancestor = ancestor._parent)
+            {
+                if (ancestor._includeNested) ancestor.AddLocal(command, elapsedMs);
+            }
+        }
+
+        private void AddLocal(string command, long elapsedMs)
         {
             lock (_gate)
             {
@@ -123,6 +142,15 @@ public static class GitProcessTelemetry
         }
 
         public void AddFileReads(int count)
+        {
+            AddFileReadsLocal(count);
+            for (var ancestor = _parent; ancestor != null; ancestor = ancestor._parent)
+            {
+                if (ancestor._includeNested) ancestor.AddFileReadsLocal(count);
+            }
+        }
+
+        private void AddFileReadsLocal(int count)
         {
             lock (_gate) FileReads += count;
         }
