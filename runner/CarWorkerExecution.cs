@@ -43,6 +43,8 @@ namespace AgentRunner;
 /// </summary>
 internal static class CarWorkerExecution
 {
+    internal const string ClaudeOAuthTokenEnvironmentVariable = "CLAUDE_CODE_OAUTH_TOKEN";
+
     /// <summary>Grace the worker allows CAR to classify and report after a stop request.</summary>
     private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(30);
 
@@ -59,7 +61,8 @@ internal static class CarWorkerExecution
         DetachedJobSpec spec,
         string workerDirectory,
         Action<string, string> append,
-        Func<CliOptions, CliOptions>? optionsCustomizer = null)
+        Func<CliOptions, CliOptions>? optionsCustomizer = null,
+        Func<string, string?>? environmentVariable = null)
     {
         var runId = string.IsNullOrWhiteSpace(spec.RunId)
             ? Path.GetFileName(Path.TrimEndingDirectorySeparator(workerDirectory))
@@ -107,6 +110,21 @@ internal static class CarWorkerExecution
         driver.OnFinished += OnFinished;
         try
         {
+            var extraEnvironment = new Dictionary<string, string>
+            {
+                ["JOB_RESULTS_DIR"] = spec.ResultsDirectory,
+            };
+            if (cliType == AgentCliProcess.ClaudeCli
+                && (environmentVariable ?? Environment.GetEnvironmentVariable)(
+                    ClaudeOAuthTokenEnvironmentVariable) is { Length: > 0 } oauthToken)
+            {
+                // CAR hardens the child environment and relocates Claude's config
+                // home for clean-context runs. Admit the independently provisioned
+                // headless token after that boundary without persisting it in the
+                // detached job spec or writing it to runner diagnostics.
+                extraEnvironment[ClaudeOAuthTokenEnvironmentVariable] = oauthToken;
+            }
+
             var request = new CliRunRequest
             {
                 RunId = runId,
@@ -121,10 +139,7 @@ internal static class CarWorkerExecution
                 // Null normalizes to clean — the second documented jump; safe
                 // since CAR-B links the credential seed instead of copying it.
                 ContextMode = CliContextModes.Normalize(spec.ContextMode),
-                ExtraEnvironment = new Dictionary<string, string>
-                {
-                    ["JOB_RESULTS_DIR"] = spec.ResultsDirectory,
-                },
+                ExtraEnvironment = extraEnvironment,
             };
 
             var (run, error) = await driver.StartAsync(request, CancellationToken.None);

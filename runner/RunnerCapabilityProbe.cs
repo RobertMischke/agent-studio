@@ -306,10 +306,13 @@ public sealed record ProviderAuthStatus(string Status, string Detail, DateTimeOf
 /// This is the seam that keeps the actual child process out of the capability
 /// layer: the composition root supplies it (see <see cref="ProviderAuthProbe"/>),
 /// tests supply a fake, and this file never starts a coding-agent CLI itself.
+/// The environment argument contains only provider credentials explicitly
+/// admitted for the status command; callers must never log its values.
 /// </summary>
 public delegate Task<ProcessResult> ProviderAuthLauncher(
     string fileName,
     IReadOnlyList<string> arguments,
+    IReadOnlyDictionary<string, string?> environment,
     CancellationToken ct);
 
 /// <summary>
@@ -366,6 +369,7 @@ public sealed class ProviderAuthProbe
 
     private readonly object _sync = new();
     private readonly Func<string, bool> _executableExists;
+    private readonly Func<string, string?> _environmentVariable;
     private readonly Func<DateTimeOffset> _clock;
     private readonly TimeSpan _ttl;
     private readonly TimeSpan _timeout;
@@ -378,12 +382,14 @@ public sealed class ProviderAuthProbe
     public ProviderAuthProbe(
         ProviderAuthLauncher? launcher = null,
         Func<string, bool>? executableExists = null,
+        Func<string, string?>? environmentVariable = null,
         Func<DateTimeOffset>? clock = null,
         TimeSpan? ttl = null,
         TimeSpan? timeout = null)
     {
         _launcher = launcher;
         _executableExists = executableExists ?? ExecutableExists;
+        _environmentVariable = environmentVariable ?? Environment.GetEnvironmentVariable;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _ttl = ttl ?? DefaultTtl;
         _timeout = timeout ?? DefaultTimeout;
@@ -492,7 +498,11 @@ public sealed class ProviderAuthProbe
         bounded.CancelAfter(_timeout);
         try
         {
-            result = await launcher(cliBinary, arguments, bounded.Token);
+            result = await launcher(
+                cliBinary,
+                arguments,
+                ProviderEnvironment(provider),
+                bounded.Token);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -511,6 +521,19 @@ public sealed class ProviderAuthProbe
         }
 
         return Interpret(command, result);
+    }
+
+    private IReadOnlyDictionary<string, string?> ProviderEnvironment(string provider)
+    {
+        if (provider != AgentCliProcess.ClaudeCli) return new Dictionary<string, string?>();
+
+        var oauthToken = _environmentVariable(CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(oauthToken)
+            ? new Dictionary<string, string?>()
+            : new Dictionary<string, string?>
+            {
+                [CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable] = oauthToken,
+            };
     }
 
     private ProviderAuthStatus Interpret(string command, ProcessResult result)

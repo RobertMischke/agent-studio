@@ -29,8 +29,8 @@ var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 // Capability advertisements distinguish binary presence from provider login.
 // Keep the process boundary in the composition root and let the cached probe
 // decide when each bounded status command needs to run.
-ProviderAuthProbe.Shared.UseLauncher((fileName, arguments, ct) =>
-    ProcessRunner.RunAsync(fileName, arguments, ct: ct));
+ProviderAuthProbe.Shared.UseLauncher((fileName, arguments, environment, ct) =>
+    ProcessRunner.RunAsync(fileName, arguments, environment: environment, ct: ct));
 
 if (help)
 {

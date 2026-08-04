@@ -31,6 +31,17 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("Alias=agent-runner.service", content);
     }
 
+    [Theory]
+    [InlineData("deploy/systemd/agent-host.service")]
+    [InlineData("scripts/remote-runner-onboard.sh")]
+    public void Coding_service_loads_the_separate_optional_Claude_token_environment(string relativePath)
+    {
+        var content = File.ReadAllText(Path.Combine(RepoRoot(), relativePath));
+
+        Assert.Contains("EnvironmentFile=-/etc/agent-runner/claude.env", content);
+        Assert.DoesNotContain("CLAUDE_CODE_OAUTH_TOKEN=", content);
+    }
+
     [Fact]
     public void Onboarding_installs_immutable_tool_releases_and_switches_current_atomically()
     {

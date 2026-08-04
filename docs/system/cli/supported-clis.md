@@ -164,13 +164,18 @@ Clean context is implemented with a relocated config home, not a CLI flag. The h
 
 | CLI | Support | Host environment | Seed policy |
 |---|---|---|---|
-| Claude | clean or shared | `CLAUDE_CONFIG_DIR` | Link `.credentials.json`; copy `settings.json`; exclude user memory and project history. |
+| Claude | clean or shared | `CLAUDE_CONFIG_DIR` | Link `.credentials.json`; explicitly admit a provisioned `CLAUDE_CODE_OAUTH_TOKEN`; copy `settings.json`; exclude user memory and project history. |
 | Codex | clean or shared | `CODEX_HOME` | Link `auth.json`; copy `config.toml`; exclude history and prior rollouts. |
 | Antigravity, persisted as `gemini` | shared only | none documented for `agentapi` | No isolated-home claim is made. |
 
 **CAR bridge.** CodingAgentRunner 0.7.0 owns a clean home for one process, while Studio must keep the same isolated home stable across attempts and resumes of one task. Studio therefore acquires or reuses its own task-stable home, asks CAR to run in `shared` mode, and passes `CLAUDE_CONFIG_DIR` or `CODEX_HOME` in `CliRunRequest.ExtraEnvironment`. CAR still owns the launch, but does not create a second process-scoped home. This temporary public-API boundary is tracked in PROJ-011 as `public-clean-context-lease`.
 
 Credential files are linked back to the operator home so a refresh writes through to the authoritative token. Base configuration remains an isolated copy. Link creation falls back to copying when the filesystem cannot support the link, with a warning that concurrent refresh protection is reduced for that run.
+
+On a remote coding host, `CLAUDE_CODE_OAUTH_TOKEN` is an alternative to the
+linked credential file. The daemon passes it explicitly to Claude's active auth
+probe and the CAR launch after process hardening, including clean-context runs.
+It is never serialized into the detached job specification or runner logs.
 
 Context mode resolution remains task override, then project setting, then the `clean` default, narrowed to `shared` for Antigravity. The task-stable home is retained with the task's in-memory execution state and disposed at the task boundary. Teardown is best-effort and idempotent.
 

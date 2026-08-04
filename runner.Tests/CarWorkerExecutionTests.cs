@@ -115,6 +115,25 @@ public sealed class CarWorkerExecutionTests : IDisposable
     }
 
     [Fact]
+    public async Task Clean_context_forwards_the_provisioned_Claude_setup_token_without_persisting_it()
+    {
+        if (NodeMissing()) return;
+        const string dummyToken = "dummy-setup-token-for-unit-test";
+        var fixture = Fixture.Load("p1-happy-done.claude.fixture");
+
+        var run = await RunFixtureAsync(
+            fixture,
+            inheritedEnvironment: name =>
+                name == CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable ? dummyToken : null);
+
+        Assert.False(string.IsNullOrWhiteSpace(run.SpawnedEnvironment!["CLAUDE_CONFIG_DIR"]));
+        Assert.Equal(
+            dummyToken,
+            run.SpawnedEnvironment[CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable]);
+        Assert.DoesNotContain(dummyToken, string.Join('\n', run.Shipped.Select(line => line.Text)));
+    }
+
+    [Fact]
     public async Task Read_only_permission_and_shared_context_from_the_spec_reach_the_argv_and_environment()
     {
         if (NodeMissing()) return;
@@ -313,7 +332,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
         string? permissionMode = null,
         string? contextMode = null,
         int timeoutSeconds = 120,
-        IReadOnlyDictionary<string, string>? extraEnvironment = null)
+        IReadOnlyDictionary<string, string>? extraEnvironment = null,
+        Func<string, string?>? inheritedEnvironment = null)
     {
         var workerDirectory = Path.Combine(_root, Guid.NewGuid().ToString("N"));
         var workingDirectory = Path.Combine(workerDirectory, "worktree");
@@ -353,7 +373,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
                 CodexPath = "node",
                 Spawner = spawner,
                 EnvironmentOverrides = environment,
-            });
+            },
+            inheritedEnvironment);
 
         JsonDocument? capture = null;
         if (File.Exists(capturePath))

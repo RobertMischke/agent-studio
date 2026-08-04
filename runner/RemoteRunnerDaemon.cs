@@ -44,6 +44,10 @@ public sealed class RemoteRunnerDaemon
         _ => false,
     };
 
+    internal static string ProviderAuthLogLine(string binary, ProviderAuthStatus status)
+        => $"runner-provider-auth status={(status.IsReady ? "ok" : status.Status)} "
+           + $"binary={binary} detail={status.Detail}";
+
     /// <summary>
     /// Run a Task Server call, absorbing transient connectivity faults with a
     /// bounded backoff until it succeeds or shutdown is requested. Used for the
@@ -274,9 +278,7 @@ public sealed class RemoteRunnerDaemon
                 }));
         foreach (var check in providerAuthChecks)
         {
-            _log(
-                $"runner-provider-auth binary={check.Binary} status={check.Status.Status} " +
-                $"detail={check.Status.Detail}");
+            _log(ProviderAuthLogLine(check.Binary, check.Status));
         }
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         var telemetry = new HostTelemetrySampler();

@@ -13,15 +13,22 @@ namespace AgentRunner.Tests;
 public sealed class ProviderAuthProbeTests
 {
     private static ProviderAuthLauncher Answers(int exitCode, string stdout = "", string stderr = "")
-        => (_, _, _) => Task.FromResult(new ProcessResult(exitCode, stdout, stderr));
+        => (_, _, _, _) => Task.FromResult(new ProcessResult(exitCode, stdout, stderr));
 
     private static ProviderAuthProbe Probe(
         ProviderAuthLauncher launcher,
         bool binaryExists = true,
+        Func<string, string?>? environmentVariable = null,
         Func<DateTimeOffset>? clock = null,
         TimeSpan? ttl = null,
         TimeSpan? timeout = null)
-        => new(launcher, _ => binaryExists, clock, ttl, timeout);
+        => new(
+            launcher,
+            _ => binaryExists,
+            environmentVariable,
+            clock,
+            ttl,
+            timeout);
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
@@ -54,7 +61,7 @@ public sealed class ProviderAuthProbeTests
     {
         var launched = false;
         var probe = Probe(
-            (_, _, _) => { launched = true; return Task.FromResult(new ProcessResult(0, "", "")); },
+            (_, _, _, _) => { launched = true; return Task.FromResult(new ProcessResult(0, "", "")); },
             binaryExists: false);
 
         var status = await probe.RefreshAsync("claude", CancellationToken.None);
@@ -68,7 +75,7 @@ public sealed class ProviderAuthProbeTests
     public async Task A_probe_that_hangs_is_unavailable_rather_than_a_stuck_advertisement()
     {
         var probe = Probe(
-            async (_, _, ct) =>
+            async (_, _, _, ct) =>
             {
                 await Task.Delay(TimeSpan.FromMinutes(5), ct);
                 return new ProcessResult(0, "", "");
@@ -84,7 +91,7 @@ public sealed class ProviderAuthProbeTests
     [Fact]
     public async Task A_launcher_that_throws_is_unavailable_with_the_reason()
     {
-        var probe = Probe((_, _, _) => throw new InvalidOperationException("spawn refused by the host"));
+        var probe = Probe((_, _, _, _) => throw new InvalidOperationException("spawn refused by the host"));
 
         var status = await probe.RefreshAsync("claude", CancellationToken.None);
 
@@ -110,7 +117,7 @@ public sealed class ProviderAuthProbeTests
     public async Task An_unknown_provider_keeps_the_presence_check_instead_of_guessing_a_command()
     {
         var launched = false;
-        var probe = Probe((_, _, _) => { launched = true; return Task.FromResult(new ProcessResult(0, "", "")); });
+        var probe = Probe((_, _, _, _) => { launched = true; return Task.FromResult(new ProcessResult(0, "", "")); });
 
         var status = await probe.RefreshAsync("agent-wrapper.sh", CancellationToken.None);
 
@@ -138,7 +145,7 @@ public sealed class ProviderAuthProbeTests
         var calls = 0;
         var now = new DateTimeOffset(2026, 7, 28, 8, 0, 0, TimeSpan.Zero);
         var probe = Probe(
-            (_, _, _) =>
+            (_, _, _, _) =>
             {
                 Interlocked.Increment(ref calls);
                 return Task.FromResult(new ProcessResult(0, "Logged in", ""));
@@ -180,6 +187,42 @@ public sealed class ProviderAuthProbeTests
         Assert.Contains(
             CapabilityProtocol.ProviderAuthentication("claude"),
             RunnerCapabilityProbe.CodingRequirements(options));
+    }
+
+    [Fact]
+    public async Task A_provisioned_Claude_setup_token_is_passed_to_the_probe_and_advertised()
+    {
+        const string dummyToken = "dummy-setup-token-for-unit-test";
+        IReadOnlyDictionary<string, string?>? launchedEnvironment = null;
+        var probe = Probe(
+            (_, _, environment, _) =>
+            {
+                launchedEnvironment = environment;
+                return Task.FromResult(environment.TryGetValue(
+                    CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable,
+                    out var token) && token == dummyToken
+                        ? new ProcessResult(0, "Auth token: CLAUDE_CODE_OAUTH_TOKEN", "")
+                        : new ProcessResult(1, "", "Not logged in"));
+            },
+            environmentVariable: name =>
+                name == CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable ? dummyToken : null);
+        var options = CodingOptions();
+
+        var observed = await probe.RefreshAsync("claude", CancellationToken.None);
+        var advertised = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            providerAuth: probe);
+        var auth = Assert.Single(
+            advertised,
+            item => item.Key == CapabilityProtocol.ProviderAuthentication("claude"));
+        var logLine = RemoteRunnerDaemon.ProviderAuthLogLine("claude", observed);
+
+        Assert.Equal(dummyToken, launchedEnvironment![CarWorkerExecution.ClaudeOAuthTokenEnvironmentVariable]);
+        Assert.Equal(ProviderAuthProbe.Ready, auth.Status);
+        Assert.StartsWith("runner-provider-auth status=ok binary=claude", logLine, StringComparison.Ordinal);
+        Assert.DoesNotContain(dummyToken, observed.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(dummyToken, logLine, StringComparison.Ordinal);
     }
 
     [Fact]

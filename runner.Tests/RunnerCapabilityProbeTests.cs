@@ -111,7 +111,7 @@ public sealed class RunnerCapabilityProbeTests
             CliArgs = "",
         };
         var probe = new ProviderAuthProbe(
-            (binary, _, _) => Task.FromResult(
+            (binary, _, _, _) => Task.FromResult(
                 Path.GetFileName(binary) == "claude"
                     ? new ProcessResult(1, "", "Not logged in")
                     : new ProcessResult(0, "Logged in", "")),

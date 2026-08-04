@@ -176,11 +176,12 @@ The controller is intentionally repeatable after a host wipe:
    from the host.
 2. Install or update the `CodingAgentRunner` NuGet global tool and require
    version `0.5.0` or newer, then install the Codex and Claude CLIs.
-3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
-   and one-time code stay visible in the task conversation. Claude uses
-   `claude auth login --claudeai`. The operator completes browser steps locally,
-   then `codex login status` and `claude auth status --text` report the active
-   account. Credential files are never copied as the normal path.
+3. Provision provider authentication. Codex uses `codex login --device-auth`;
+   the URL and one-time code stay visible in the task conversation. For Claude,
+   provision the operator-minted setup token through
+   `/etc/agent-runner/claude.env` as described below. Then `codex login status`
+   and `claude auth status --text` report the active account or token source.
+   Credential files are never copied as the normal path.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
    stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
    and fallback git origin. Install and start `agent-host.service` through
@@ -208,9 +209,9 @@ npx playwright install --with-deps chromium
 
 ### Per-host CLI credentials (D5, permanent)
 
-Authenticate every CLI **on the host itself** so the host owns its own
-credentials. Do **not** copy the operator's `~/.claude/.credentials.json` /
-`~/.codex/auth.json` over from the studio. A seeded credential shares a
+Give every host its own provisioned authentication. Do **not** copy the
+operator's `~/.claude/.credentials.json` / `~/.codex/auth.json` over from the
+studio. A seeded credential shares a
 refresh-token lineage with the operator's account, so when the operator side
 re-logs-in or rotates its token, the host's copy is invalidated and the host
 drops out logged-out mid-batch. This drift was live on 2026-07-09 (host-claude
@@ -218,16 +219,15 @@ logged out after an operator-side token rotation, needing a manual re-seed); a
 host that logged in independently is immune to it. Per-host login is the
 permanent replacement for the earlier shared-credential seeding.
 
-- **Claude.** Log in directly on the host, once, over an `ssh -L` port-forward so
-  the OAuth browser step can complete (`claude`, finish onboarding), **or** mint a
-  long-lived headless token on the host with `claude setup-token`. Either way the
-  host holds its **own** refresh token, independent of the operator's. Verify with
-  `claude --version` and one throwaway `claude -p "say hi"` before wiring the runner.
+- **Claude.** Use the headless setup-token procedure below. The operator mints
+  the token locally, and the host receives only that token through a protected
+  systemd environment file. No browser callback or copied credential file is
+  required on the host.
 - **Codex.** Same rule: run `codex login` on the host so it writes the host's own
   `~/.codex/auth.json`; do not copy the operator's. Verify with `codex --version`.
-- **Rotation is now per host.** If a host's own token is ever revoked, re-run that
-  host's login / `setup-token` **on that host**. No other host and no operator-side
-  action is involved, so there is no cross-host drift to chase.
+- **Rotation is per provisioned host token.** Replace one host's protected
+  environment file and restart that host. Do not reuse one setup token across
+  the fleet.
 
 The host's `~/.claude/.credentials.json` must stay a plain file the runner user
 can read and write in place, so Claude's own token refresh persists for the next
@@ -235,6 +235,65 @@ launch. (The studio's clean-context mechanism keeps the same in-place invariant
 for parallel runs by sharing the one credential file *by link* rather than
 copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 [`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
+
+### Headless Claude authentication
+
+Run `claude setup-token` once on the operator workstation and complete the
+interactive provider flow there. Treat the resulting long-lived token as a
+host credential. Mint a distinct token for each coding host so one rotation or
+revocation does not remove Claude from every host.
+
+Provision the token without placing it in shell history or an SSH command
+argument. The managed coding unit loads the optional
+`/etc/agent-runner/claude.env` file in addition to `runner.env`; managed deploys
+do not overwrite this separate credential file.
+
+```bash
+read -rsp 'Claude setup token for agent-runner-01: ' claude_setup_token
+printf '\n'
+printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$claude_setup_token" |
+  ssh agent-runner-01 '
+    set -eu
+    claude_env_tmp=$(mktemp)
+    trap '\''rm -f "$claude_env_tmp"'\'' EXIT
+    cat >"$claude_env_tmp"
+    chmod 0600 "$claude_env_tmp"
+    sudo install -d -m 0750 /etc/agent-runner
+    sudo install -m 0640 -o root -g "$(id -gn)" \
+      "$claude_env_tmp" /etc/agent-runner/claude.env
+  '
+unset claude_setup_token
+```
+
+Never put the token in the repository, a container image, a task card or
+prompt, a runner CLI flag, or any log. Do not use `systemctl show` to inspect
+the service environment because that can print credential values. The file must
+remain mode `0640`, owned by `root` and the runner service group. Review units
+must not load it.
+
+Restart the coding daemon and verify both the CLI-level probe and Runner
+advertisement:
+
+```bash
+sudo systemctl restart agent-host
+sudo journalctl -u agent-host --since '-2 minutes' --no-pager |
+  grep -F 'runner-provider-auth status=ok binary=claude'
+```
+
+`claude auth status --text` runs under the service environment during daemon
+startup. Claude Code 2.1.202 reports `Auth token: CLAUDE_CODE_OAUTH_TOKEN` and
+exits successfully for this authentication source. The Runner then advertises
+both `cli-execution:claude` and `provider-auth:claude` as ready, which makes
+Claude-pinned cards eligible. After provisioning `agent-runner-01`, use one
+probe card first, then use AGT-2490 through AGT-2494 as the live batch proof.
+An auth-status success proves that the CLI recognized the configured source;
+the probe card proves that the token is accepted by the provider.
+
+For rotation, mint a replacement locally, repeat the atomic installation above,
+restart `agent-host`, and require the same `runner-provider-auth` log line plus a
+successful probe card. Revoke the old token only after the replacement works.
+If verification fails, restore the previous protected file while it remains
+valid, restart the service, and investigate without printing either token.
 
 ## 2. Build agent-host
 
@@ -291,6 +350,7 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). Under the `car` engine only the binary path and the CLI family derived from it are used. |
 | `RUNNER_CLAUDE_CLI_BIN` | `--claude-cli` | `claude` | Claude binary used for Claude-pinned cards when the primary CLI is Codex. The native setup flow writes the discovered path. |
 | `RUNNER_CODEX_CLI_BIN` | `--codex-cli` | `codex` | Codex binary used for Codex-pinned cards and the GPT-only project chat path when the primary CLI is Claude. The native setup flow writes the discovered path. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | none | (none) | Long-lived Claude setup token for headless coding hosts. Provision it only through `/etc/agent-runner/claude.env`; the Runner explicitly admits it to Claude's auth probe and coding process, including clean-context runs. |
 | `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. **Legacy engine only** — the `car` engine ignores this value (the descriptor owns the argv) and says so at spawn time via the `engine=car` journal line. |
 | `RUNNER_CLI_RESUME_ARGS` | `--cli-resume-args` | (none) | Optional provider-specific same-session arguments containing the literal `{sessionId}` placeholder. A supported infrastructure failure resumes at most once; an invalid session falls back to durable salvage once and then escalates. |
 | `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |

@@ -248,6 +248,12 @@ remote_login_status() {
   "${ssh_base[@]}" -T "$host" bash -s <<'REMOTE_AUTH_STATUS'
 set -uo pipefail
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
+if [[ -r /etc/agent-runner/claude.env ]]; then
+  set -a
+  # Root-owned provisioning input. Do not print or copy its value.
+  . /etc/agent-runner/claude.env
+  set +a
+fi
 codex_ok=0
 claude_ok=0
 echo '[remote] Codex authentication status:'
@@ -338,6 +344,10 @@ resource_policy="$(sudo /usr/local/libexec/agent-host-resource-governance \
   --profile /etc/agent-host/profile.conf \
   --drop-in-dir "/etc/systemd/system/${service_name}.service.d" \
   --migrate-drop-ins)"
+provider_environment_file=""
+if [[ "$role" == "coding" ]]; then
+  provider_environment_file="EnvironmentFile=-/etc/agent-runner/claude.env"
+fi
 
 cat >"$unit_tmp" <<EOF
 [Unit]
@@ -355,6 +365,7 @@ WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$env_file
+$provider_environment_file
 ExecStart=$agent_host_root/current/$runner_command --poll
 Restart=always
 RestartSec=10s
