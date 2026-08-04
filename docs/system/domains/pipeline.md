@@ -475,7 +475,11 @@ operator changes cause the step to fail before its writer runs.
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
 - A fenced remote completion persists `review-subject.json` with its exact
-  `ResultSha`, delivery ref, and actual integration branch ref. Both
+  `RunAttemptId`, `ResultSha`, delivery ref, and actual integration branch ref.
+  A reissue or transition into a new local or remote run invalidates the
+  canonical sidecar. Before any already-integrated shortcut, acceptance trusts
+  it only when its task key, attempt, and result SHA match the authority store's
+  current settled RunAttempt. Both
   `post-build-test-gate` and `post-code-review-grade` use that SHA as their
   authoritative subject. The build gate's selected subject is carried through
   the later aspect and grade steps. The grade reviews the full

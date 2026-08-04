@@ -33,6 +33,7 @@ public sealed class MergeIntoDevelopRunner
     private readonly ProjectSettingsService? _projectSettings;
     private readonly PreMainTestGate? _preMainTestGate;
     private readonly PreDevelopBuildGate? _preDevelopBuildGate;
+    private readonly AttemptAuthorityService? _attemptAuthority;
     private readonly TimeSpan _preMainTimeout;
     private readonly TimeSpan _preDevelopTimeout;
     private readonly Func<int, TimeSpan> _environmentalBackoff;
@@ -50,7 +51,8 @@ public sealed class MergeIntoDevelopRunner
         TimeSpan? preMainTimeout = null,
         Func<int, TimeSpan>? environmentalBackoff = null,
         PreDevelopBuildGate? preDevelopBuildGate = null,
-        TimeSpan? preDevelopTimeout = null)
+        TimeSpan? preDevelopTimeout = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _git = git;
         _pipelineLog = pipelineLog;
@@ -59,6 +61,7 @@ public sealed class MergeIntoDevelopRunner
         _projectSettings = projectSettings;
         _preMainTestGate = preMainTestGate;
         _preDevelopBuildGate = preDevelopBuildGate;
+        _attemptAuthority = attemptAuthority;
         _preMainTimeout = preMainTimeout is { } configured && configured > TimeSpan.Zero
             ? configured
             : TimeSpan.FromHours(1);
@@ -175,6 +178,28 @@ public sealed class MergeIntoDevelopRunner
             }
 
             var reviewSubject = ReviewSubjectStore.Read(jobFolderPath);
+            if (reviewSubject is not null
+                && _attemptAuthority is not null
+                && !ReviewSubjectStore.TryValidateCurrentAttempt(
+                    jobFolderPath,
+                    reviewSubject,
+                    _attemptAuthority,
+                    out var subjectError))
+            {
+                var stale = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: subjectError);
+                Record(
+                    jobFolderPath,
+                    project,
+                    jobId,
+                    integrationBranch,
+                    stale,
+                    preMainResult: null,
+                    preDevelopResult: null,
+                    startedAt);
+                return stale;
+            }
             var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
             var branch = reviewSubject is not null
                 ? TaskIntegrationBranch.Name(

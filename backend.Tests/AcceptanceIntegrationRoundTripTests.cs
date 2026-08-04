@@ -92,6 +92,39 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public async Task Accept_StaleSubjectCannotBypassAttemptCheckWhenOldDeliveryIsAlreadyIntegrated()
+    {
+        var deliverySha = PublishDelivery("stale.txt", "superseded remote work\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(_repo, "merge", "-q", "--no-ff", "-m", "integrate stale delivery", deliverySha);
+        RunGit(_repo, "checkout", "-q", "main");
+        var deps = Build(deliverySha);
+        var staleSubject = ReviewSubjectStore.Read(
+            Path.Combine(_watchPath, TaskStates.HumanReview, Slug));
+        Assert.NotNull(staleSubject);
+
+        var currentRun = deps.Authority.AcquireRun(
+            TaskKey,
+            "PROJ-FIXTURE",
+            staleSubject!.RunAttemptId,
+            "local",
+            "host-local",
+            60,
+            "claim-current").RunAttempt;
+        Assert.NotNull(currentRun);
+
+        var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Failure, outcome.Status);
+        Assert.Contains(staleSubject.RunAttemptId, outcome.Message);
+        Assert.Contains(currentRun!.AttemptId, outcome.Message);
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(reviewed);
+        Assert.Equal(TaskStates.HumanReview, reviewed!.State);
+        Assert.Null(reviewed.Phase);
+    }
+
+    [Fact]
     public async Task AcceptHttp_ReturnsWhileColdGateIsBlocked_AndFinishesAsGateFailed()
     {
         var deliverySha = PublishDelivery("cold-gate.txt", "remote work\n");
@@ -1056,11 +1089,34 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             settings.SetBuildProfile(Project, new BuildProfile { BuildCmds = ["cd ."] });
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var pipeline = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
+        var authority = new AttemptAuthorityService(
+            config,
+            NullLogger<AttemptAuthorityService>.Instance);
+        var sourceRun = authority.AcquireRun(
+            TaskKey,
+            "PROJ-FIXTURE",
+            null,
+            "agent-runner-01",
+            "host-fixture",
+            60,
+            "claim-fixture").RunAttempt!;
+        var settled = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                sourceRun.AttemptId,
+                sourceRun.LastFence,
+                sourceRun.AuthorityEpoch,
+                "settle-fixture"),
+            Outcome = "done",
+            ResultSha = deliverySha,
+        });
+        Assert.True(settled.Accepted);
         var merge = new MergeIntoDevelopRunner(
             git,
             pipeline,
             NullLogger<MergeIntoDevelopRunner>.Instance,
             pushQueue: pushQueue,
+            attemptAuthority: authority,
             projectSettings: settings,
             preDevelopBuildGate: gateRunner == null ? null : new PreDevelopBuildGate(gateRunner),
             preDevelopTimeout: TimeSpan.FromSeconds(30));
@@ -1100,14 +1156,15 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
             {
                 TaskKey = TaskKey,
+                RunAttemptId = sourceRun.AttemptId,
                 Project = Project,
                 Repository = _origin,
                 ResultSha = deliverySha,
                 ResultRef = DeliveryRef,
-                AttemptChainId = "fixture-attempt",
+                AttemptChainId = sourceRun.Lease!.LeaseId,
                 Executor = "agent-runner-01",
-                LeaseId = "fixture-attempt",
-                FencingToken = 1,
+                LeaseId = sourceRun.Lease.LeaseId,
+                FencingToken = sourceRun.LastFence,
                 ImmutableResultRef = DeliveryRef,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
             });
@@ -1127,7 +1184,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             integrationStatus: integration,
             timeline: timeline,
             pipelineLog: pipeline,
-            acceptedIntegrationQueue: acceptedQueue);
+            acceptedIntegrationQueue: acceptedQueue,
+            attemptAuthority: authority);
         return new Deps(
             scanner,
             states,
@@ -1140,7 +1198,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             config,
             timeline,
             provenance,
-            acceptedQueue);
+            acceptedQueue,
+            authority);
     }
 
     private static object Commit(string sha) => new
@@ -1205,7 +1264,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         IConfiguration Configuration,
         TimelineLog Timeline,
         TaskProvenanceService Provenance,
-        AcceptedIntegrationQueue? AcceptedQueue);
+        AcceptedIntegrationQueue? AcceptedQueue,
+        AttemptAuthorityService Authority);
 
     private sealed class BlockingBuildTestGateRunner(BuildTestGateResult result)
         : IBuildTestGateRunner

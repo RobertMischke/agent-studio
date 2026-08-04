@@ -438,6 +438,7 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         ReviewSubjectStore.Write(Path.Combine(_watchPath, TaskStates.AutoReview, slug), new ReviewSubjectRecord
         {
             TaskKey = slug,
+            RunAttemptId = $"run-{attemptChainId}",
             Project = Project,
             Repository = "https://example.invalid/repo.git",
             ResultSha = sha,
