@@ -130,6 +130,14 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 
 **Authentication.** Most CLIs auth out-of-band (browser login, env var, gh-cli token). The task processor does **not** drive login flows — if `TestCliPath` succeeds but the CLI is logged out, the failure surfaces when the first quota probe or job starts. New CLIs should make the failure mode obvious in their error message.
 
+**Remote coding hosts.** The standalone host keeps one primary
+`RUNNER_CLI_BIN` plus `RUNNER_CLAUDE_CLI_BIN` and `RUNNER_CODEX_CLI_BIN`.
+Capability probing tests binary presence and provider authentication for each
+configured provider before the first advertisement. A card requires the
+matching `cli-execution:<cliType>` and `provider-auth:<cliType>` keys. The CAR
+worker receives the matching provider path, so a Claude pin on a Codex-primary
+host cannot fall through to `codex -m <claude-model>`.
+
 ### 2.8 Execution context (read-only observability)
 
 **Contract.** Every CLI loads context beyond the prompt the runner hands it — a memory / instruction-file chain walked up from the working directory, a session/transcript store, a global config directory, and (Claude) wired-in MCP servers. `DescribeContextSources(string jobKey)` returns a `CliExecutionContext` describing those sources for the live (or just-finished, still-tracked) run, plus the scalar header (model, effective permission mode, cwd). This is a **read-only** surface (ASS-1739 / T1a): producing it must never change what the CLI loads — policy changes are a separate task (T1b). The base implementation derives everything from the adapter invocation plus each CLI's documented config-path conventions and sets `Source = "convention"`; a driver with a richer self-report (Claude's stream-json `init` frame) overrides `DescribeContextSources`, merges the init-frame model / permission mode / cwd / MCP list on top, and sets `Source = "init-frame"`. Returns `null` for an unknown run; the interface default is a no-op so test stubs and not-yet-wired drivers stay compilable.

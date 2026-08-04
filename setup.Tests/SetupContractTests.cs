@@ -106,6 +106,36 @@ public sealed class SetupContractTests
             NativeInstaller.ClassifyGitStatus(push, workflow));
     }
 
+    [Fact]
+    public void AgentHostEnvironment_PreservesBothDiscoveredCardCliPaths()
+    {
+        var environment = NativeInstaller.BuildRunnerEnvironment(
+            new HostConfiguration(
+                "https://tasks.example.test",
+                "credential",
+                "0.4.0",
+                "agent-runner-01",
+                "agent-runner-01",
+                "coding",
+                "agent",
+                "agent",
+                "/home/agent",
+                "/usr/bin/codex",
+                "/usr/bin/claude",
+                "/usr/bin/codex",
+                "exec -",
+                null,
+                null,
+                4),
+            "/etc/agent-runner/runner.token",
+            "/var/lib/agent-runner/work",
+            "/var/lib/agent-runner/state");
+
+        Assert.Contains("RUNNER_CLI_BIN=/usr/bin/codex", environment, StringComparison.Ordinal);
+        Assert.Contains("RUNNER_CLAUDE_CLI_BIN=/usr/bin/claude", environment, StringComparison.Ordinal);
+        Assert.Contains("RUNNER_CODEX_CLI_BIN=/usr/bin/codex", environment, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("https://github.com/agent-orc/agent-studio.git")]
     [InlineData("ssh://git@github.com/agent-orc/agent-studio.git")]

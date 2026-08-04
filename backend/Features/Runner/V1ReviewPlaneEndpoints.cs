@@ -1168,6 +1168,7 @@ public sealed class V1ReviewExecutorRegistry
                 state,
                 request.Classification,
                 request.Reason,
+                previous?.FirstFailureAt ?? occurredAt,
                 occurredAt,
                 cooldownUntil,
                 consecutive,
@@ -1281,6 +1282,71 @@ public sealed class V1ReviewExecutorRegistry
             return _outboxStatuses.TryGetValue(DiagnosticKey(runnerId, runId), out var entry)
                 ? entry.Status
                 : null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the latest in-memory capability advertisement for every local-v1
+    /// runner identity. The standalone Task Server exposes the same wire shape
+    /// from its durable store at GET /api/v1/management/remote-hosts.
+    /// </summary>
+    public IReadOnlyList<Contract.RunnerCapabilitySnapshotDto> ListCapabilitySnapshots()
+    {
+        var now = DateTime.UtcNow;
+        lock (_gate)
+        {
+            return _registrations
+                .OrderBy(entry => entry.Value.HostId, StringComparer.Ordinal)
+                .ThenBy(entry => entry.Value.Name, StringComparer.Ordinal)
+                .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+                .Select(entry =>
+                {
+                    var runnerId = entry.Key;
+                    var registration = entry.Value;
+                    _capabilityStates.TryGetValue(runnerId, out var state);
+                    _capabilityFailures.TryGetValue(runnerId, out var failures);
+                    var capabilities = (state?.Capabilities ?? [])
+                        .Select(capability =>
+                        {
+                            var failure = failures?.GetValueOrDefault(capability.Key);
+                            return capability with
+                            {
+                                HealthState = failure?.HealthState
+                                              ?? Contract.CapabilityHealthStates.Healthy,
+                                Reason = failure?.Reason,
+                                IsFresh = capability.FreshUntil > now,
+                                FirstFailureAt = failure?.FirstFailureAt,
+                                LastFailureAt = failure?.LastFailureAt,
+                                CooldownUntil = failure?.CooldownUntil,
+                                ConsecutiveFailures = failure?.ConsecutiveFailures ?? 0,
+                            };
+                        })
+                        .ToArray();
+                    var automaticDrain = failures?.Values
+                        .Where(failure => failure.WholeHost && failure.CooldownUntil > now)
+                        .OrderByDescending(failure => failure.CooldownUntil)
+                        .FirstOrDefault();
+                    return new Contract.RunnerCapabilitySnapshotDto(
+                        runnerId,
+                        registration.Name,
+                        registration.HostId,
+                        registration.InstanceId,
+                        registration.RunnerVersion,
+                        registration.ProtocolVersion,
+                        "active",
+                        registration.RegisteredAt,
+                        registration.LastSeenAt,
+                        new Contract.RemoteHostAdmissionDto(
+                            registration.HostId,
+                            automaticDrain is null ? "open" : "automatic-drain",
+                            automaticDrain?.Reason,
+                            automaticDrain?.LastFailureAt,
+                            null,
+                            null),
+                        capabilities,
+                        state?.Telemetry);
+                })
+                .ToArray();
         }
     }
 
@@ -1466,6 +1532,7 @@ public sealed class V1ReviewExecutorRegistry
         string HealthState,
         string Classification,
         string Reason,
+        DateTime FirstFailureAt,
         DateTime LastFailureAt,
         DateTime? CooldownUntil,
         int ConsecutiveFailures,

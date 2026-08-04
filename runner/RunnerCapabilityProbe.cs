@@ -240,6 +240,11 @@ internal static class RunnerCapabilityProbe
         {
             (configuredType, options.CliBin),
         };
+        if (configuredType != AgentCliProcess.ClaudeCli
+            && !string.IsNullOrWhiteSpace(options.ClaudeCliBin))
+        {
+            binaries.Add((AgentCliProcess.ClaudeCli, options.ClaudeCliBin));
+        }
         if (configuredType != AgentCliProcess.CodexCli
             && !string.IsNullOrWhiteSpace(options.CodexCliBin))
         {

@@ -91,6 +91,20 @@ public class RunnerOptionsTests
     }
 
     [Fact]
+    public void Provider_specific_card_binaries_are_configurable_in_both_directions()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--cli", "/opt/bin/codex",
+            "--claude-cli", "/opt/bin/claude",
+            "--codex-cli", "/opt/bin/codex-card",
+        ]);
+
+        Assert.Equal("/opt/bin/codex", options.CliBin);
+        Assert.Equal("/opt/bin/claude", options.ClaudeCliBin);
+        Assert.Equal("/opt/bin/codex-card", options.CodexCliBin);
+    }
+
+    [Fact]
     public void Durable_state_defaults_below_the_configured_work_directory()
     {
         var work = Path.Combine("runner", "persistent-work");
