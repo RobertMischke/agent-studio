@@ -484,7 +484,10 @@ state.
   coding work item. The server renders `epic-decomposition.md`, and the remote
   host runs it in a detached disposable checkout. No task branch, salvage
   commit, or push is created. Only the children produced by the plan enter the
-  coding pipeline. An interrupted assigned card whose lease is free is requeued
+  coding pipeline. A valid plan completes the Epic into `5-human-review`, never
+  `4-auto-review`: the run carries no Result-SHA, so the code-review lane would
+  hold it against a ReviewAttempt that can never be minted.
+  An interrupted assigned card whose lease is free is requeued
   to Ready inside the next atomic claim before a higher fence is issued. Before
   any `3-progress` to `2-ready` requeue, `TaskTransitionService` queries attempt
   authority. If the current RunAttempt is Completed and its immutable

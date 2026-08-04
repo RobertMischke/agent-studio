@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -208,6 +209,41 @@ public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
         Assert.Contains("awaiting-review", lifecycle);
         // The reason is named, not swallowed.
         Assert.Contains(PostProcessingCardResult.AwaitingCanonicalReviewExecutor, lifecycle);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenTheCardIsSkipped_ClosesTheDecisionCheckAsSkippedNotRunning()
+    {
+        // The pass opens post-orchestrator-decision as "running" before it asks
+        // the engine for a verdict. When the engine passes the card over, the
+        // check must reach a terminal status: left "running" it is re-armed by
+        // every backend restart and nothing ever terminalizes it (TE-8's
+        // lifecycle.json), and "completed" would claim a decision that never
+        // happened.
+        SeedNoOpReviewJob("skipped-task");
+        var deps = BuildDeps(canonicalReviewTaskKeys: ["skipped-task"]);
+        var worker = new AutoReviewPostProcessingWorker(
+            deps.Queue,
+            deps.Orchestrator,
+            deps.Scanner,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AutoReviewPostProcessingWorker>.Instance);
+        worker.DeferralDelayOverride = _ => TimeSpan.FromHours(1);
+
+        await worker.ProcessAsync(Request("skipped-task"), CancellationToken.None);
+
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, "skipped-task");
+        var snapshot = JsonSerializer.Deserialize<LifecycleSnapshot>(
+            File.ReadAllText(Path.Combine(dir, "lifecycle.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var decision = Assert.Single(
+            snapshot.PostProcessingChecks,
+            check => check.Name == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.Equal("skipped", decision.Status);
+        Assert.NotNull(decision.FinishedAt);
+        Assert.DoesNotContain(snapshot.PostProcessingChecks, check => check.Status == "running");
+        Assert.Null(snapshot.BlockingReason);
     }
 
     [Fact]

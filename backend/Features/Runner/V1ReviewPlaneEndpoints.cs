@@ -196,6 +196,9 @@ public static class V1ReviewPlaneEndpoints
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
             HumanReviewEscalation escalation,
+            TaskMutationService mutations,
+            TimelineLog timeline,
+            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             if (!RunnerMatches(context, runnerId)
@@ -233,13 +236,16 @@ public static class V1ReviewPlaneEndpoints
                 if (task is null
                     || !string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                     continue;
+                var legacyChain = BuildAttemptChainSummary(authority, legacy.TaskKey);
                 var moved = await escalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,
                     task.ProjectName,
                     HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
-                    "The immutable ReviewSubject has no persisted Result-Envelope and cannot be materialized.",
-                    ct);
+                    "The immutable ReviewSubject has no persisted Result-Envelope and cannot be materialized. "
+                    + legacyChain.Headline,
+                    ct,
+                    statusDetail: legacyChain.Detail);
                 if (moved.Status != MoveJobStatus.Success)
                 {
                     return Results.Json(
@@ -262,7 +268,14 @@ public static class V1ReviewPlaneEndpoints
                 return AttemptError(claimed);
 
             var review = claimed.ReviewAttempt;
-            var subject = ToSubject(review, scanner, projects, settings);
+            var subject = ToSubject(review, scanner, projects, settings, out var subjectTask, out var baseline);
+            CorrectOutdatedIntegrationBranch(
+                subjectTask,
+                baseline,
+                review.AttemptId,
+                mutations,
+                timeline,
+                loggerFactory.CreateLogger(LoggerName));
             var lease = ToLease(review);
             return Results.Ok(new Contract.ReviewClaimResponse(
                 "claimed",
@@ -416,6 +429,9 @@ public static class V1ReviewPlaneEndpoints
                 StringComparison.OrdinalIgnoreCase);
             var retry = infrastructureFailure
                         && authority.HasReviewInfrastructureRetryBudget(settled.ReviewAttempt.AttemptId);
+            var repeatDiagnosis = infrastructureFailure
+                ? RecordInfrastructureRepeatDiagnosis(authority, timeline, task, settled.ReviewAttempt)
+                : null;
             var taskState = TaskStates.AutoReview;
             if (retry)
             {
@@ -489,7 +505,8 @@ public static class V1ReviewPlaneEndpoints
                             task.Id,
                             moved.NewFolderPath ?? task.FolderPath,
                             request.Outcome,
-                            request.Summary ?? string.Empty);
+                            request.Summary ?? string.Empty,
+                            BuildAttemptChainSummary(authority, settled.ReviewAttempt.TaskKey));
                     }
                 }
                 else if (string.Equals(task.State, TaskStates.HumanReview, StringComparison.OrdinalIgnoreCase))
@@ -507,13 +524,21 @@ public static class V1ReviewPlaneEndpoints
                 var review = settled.ReviewAttempt;
                 if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
+                    // The budget constant alone described the chain by its size.
+                    // The chain summary describes it by its NEWEST cause and by
+                    // every distinct classification it produced, so a late,
+                    // harder failure cannot be hidden behind the majority class
+                    // (AGT-2220).
+                    var chain = BuildAttemptChainSummary(authority, review.TaskKey);
                     var moved = await escalation.EscalateAsync(
                         task.Id,
                         task.WatchPath,
                         task.ProjectName,
                         HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
-                        $"The immutable ReviewSubject exhausted its budget of {AttemptAuthorityService.ReviewInfrastructureRetryBudget} infrastructure retries and cannot be materialized.",
-                        ct);
+                        $"The immutable ReviewSubject exhausted its budget of {AttemptAuthorityService.ReviewInfrastructureRetryBudget} infrastructure retries and cannot be materialized. "
+                        + chain.Headline,
+                        ct,
+                        statusDetail: chain.Detail);
                     if (moved.Status != MoveJobStatus.Success)
                     {
                         return Results.Json(
@@ -636,7 +661,9 @@ public static class V1ReviewPlaneEndpoints
         ReviewAttemptDto review,
         TaskScannerService scanner,
         AgentStudio.Registry.ProjectRegistry projects,
-        AgentStudio.Projects.ProjectSettingsService settings)
+        AgentStudio.Projects.ProjectSettingsService settings,
+        out TaskInfo? subjectTask,
+        out ReviewBaselineBranchDecision? baseline)
     {
         var materializableRepository = MaterializableRepository(
             review, scanner, projects, settings);
@@ -645,15 +672,21 @@ public static class V1ReviewPlaneEndpoints
             ? null
             : projects.FindByStorageLocation(task.WatchPath)
               ?? projects.FindByIdOrDisplayName(task.ProjectName);
-        var integrationRef = task is null
-            ? null
-            : IntegrationRef(TaskIntegrationBranch.Resolve(
-                task,
-                settings.Get(task.ProjectName).IntegrationBranch));
+        subjectTask = task;
+        baseline = task is null ? null : ResolveBaselineBranch(task, project, settings);
+        var integrationRef = baseline?.IntegrationRef;
         var plan = review.Subject.Plan
                    ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
-        if (string.IsNullOrWhiteSpace(plan.IntegrationRef) && integrationRef is not null)
+        // The plan is frozen with the subject, so a retry inherits whatever ref
+        // the first attempt was handed. AGT-2220 replayed a stale
+        // refs/heads/main through four attempts that way. Re-stamping the ref at
+        // hand-out time is what lets a corrected integration line reach the
+        // runner instead of the snapshot taken when the card was created.
+        if (integrationRef is not null
+            && !string.Equals(plan.IntegrationRef, integrationRef, StringComparison.Ordinal))
+        {
             plan = plan with { IntegrationRef = integrationRef };
+        }
         plan = Contract.ReviewPlanResourcePolicy.Apply(plan);
         return new Contract.ReviewSubjectDto(
             review.Subject.SubjectId,
@@ -686,14 +719,26 @@ public static class V1ReviewPlaneEndpoints
             ? null
             : RemoteProjectRepositoryResolver.Resolve(
                 project,
-                TaskIntegrationBranch.Resolve(
-                    task,
-                    settings.Get(task.ProjectName).IntegrationBranch));
+                ResolveBaselineBranch(task, project, settings).Branch);
         var repositoryUrl = review.Subject.RepositoryUrl ?? repository?.RepositoryUrl;
         var repositoryId = Contract.RepositoryIdentityContract.FromUrl(repositoryUrl)
                            ?? review.RepositoryId;
         return (repositoryId, repositoryUrl);
     }
+
+    /// <summary>
+    /// The integration line this review's baseline is computed against. Project
+    /// and repository truth outrank the card's recorded branch, which is only a
+    /// snapshot from worktree preparation and goes stale.
+    /// </summary>
+    private static ReviewBaselineBranchDecision ResolveBaselineBranch(
+        TaskInfo task,
+        AgentStudio.Shared.ProjectRecord? project,
+        AgentStudio.Projects.ProjectSettingsService settings)
+        => ReviewBaselineBranchPolicy.Decide(
+            task.IntegrationBranch,
+            settings.Get(task.ProjectName).IntegrationBranch,
+            RemoteProjectRepositoryResolver.ReadRepositoryDefaultBranch(project));
 
     private static Contract.ReviewPlanDto FallbackPlan(
         string? repositoryPath,
@@ -740,14 +785,90 @@ public static class V1ReviewPlaneEndpoints
             IntegrationRef: integrationRef);
     }
 
-    private static string? IntegrationRef(string? branch)
+    /// <summary>
+    /// Writes the resolved integration line back onto a card whose recorded
+    /// <c>integrationBranch</c> no longer matches project truth, so every later
+    /// consumer (delivery, merge backstops, the next review) reads the same
+    /// branch the baseline just used.
+    /// </summary>
+    private static void CorrectOutdatedIntegrationBranch(
+        TaskInfo? task,
+        ReviewBaselineBranchDecision? baseline,
+        string attemptId,
+        TaskMutationService mutations,
+        TimelineLog timeline,
+        ILogger logger)
     {
-        if (string.IsNullOrWhiteSpace(branch)) return null;
-        var value = branch.Trim();
-        if (value.StartsWith("refs/", StringComparison.Ordinal)) return value;
-        if (value.StartsWith("origin/", StringComparison.OrdinalIgnoreCase))
-            value = value["origin/".Length..];
-        return $"refs/heads/{value}";
+        if (task is null || baseline is not { CardOutdated: true }) return;
+        if (!mutations.SetRunIntegrationBranchOnFolder(task.FolderPath, baseline.Branch))
+        {
+            logger.LogWarning(
+                "Review baseline: could not correct outdated integrationBranch on {TaskId} ({Rationale}).",
+                task.Id,
+                baseline.Rationale);
+            return;
+        }
+
+        logger.LogInformation(
+            "Review baseline: corrected integrationBranch on {TaskId} to {Branch} ({Rationale}).",
+            task.Id,
+            baseline.IntegrationRef,
+            baseline.Rationale);
+        timeline.Append(
+            task.FolderPath,
+            TimelineEventKinds.IntegrationBranchCorrected,
+            TimelineActors.System,
+            $"Integration branch corrected to {baseline.IntegrationRef} before review: {baseline.Rationale}.",
+            runId: attemptId,
+            details: new Dictionary<string, string>
+            {
+                ["attemptId"] = attemptId,
+                ["previousBranch"] = baseline.CardBranch ?? string.Empty,
+                ["integrationRef"] = baseline.IntegrationRef,
+                ["source"] = baseline.Source.ToString(),
+            });
+    }
+
+    /// <summary>
+    /// Names a repeating infrastructure cause on the card. Without it a drained
+    /// retry budget leaves only N identical classifications and no statement of
+    /// which base or command kept failing (AGT-2220).
+    /// </summary>
+    private static ReviewInfrastructureRepeatDiagnosis? RecordInfrastructureRepeatDiagnosis(
+        AttemptAuthorityService authority,
+        TimelineLog timeline,
+        TaskInfo task,
+        ReviewAttemptDto review)
+    {
+        var diagnosis = ReviewInfrastructureRepeatPolicy.Diagnose(
+            authority.ReviewInfrastructureChain(review.AttemptId),
+            review.Subject.Plan?.IntegrationRef);
+        if (diagnosis is null) return null;
+        if (timeline.ReadAll(task.FolderPath).Any(item =>
+                item.Kind == TimelineEventKinds.ReviewInfrastructureRepeatDiagnosed
+                && string.Equals(item.RunId, review.AttemptId, StringComparison.Ordinal)))
+        {
+            return diagnosis;
+        }
+
+        timeline.Append(
+            task.FolderPath,
+            TimelineEventKinds.ReviewInfrastructureRepeatDiagnosed,
+            TimelineActors.System,
+            diagnosis.Summary,
+            runId: review.AttemptId,
+            details: new Dictionary<string, string>
+            {
+                ["classification"] = diagnosis.Classification,
+                ["repeatCount"] = diagnosis.RepeatCount.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                ["attemptIds"] = string.Join(",", diagnosis.AttemptIds),
+                ["integrationRef"] = diagnosis.IntegrationRef ?? string.Empty,
+                ["baselineSha"] = diagnosis.BaselineSha ?? string.Empty,
+                ["step"] = diagnosis.Step ?? string.Empty,
+                ["command"] = diagnosis.Command ?? string.Empty,
+            });
+        return diagnosis;
     }
 
     private static Contract.ReviewAttemptDto ToAttempt(ReviewAttemptDto review)
@@ -833,6 +954,19 @@ public static class V1ReviewPlaneEndpoints
         error = null;
         return true;
     }
+
+    /// <summary>
+    /// Collects the task's full ReviewAttempt history (archived epochs included,
+    /// so a chain that outlived a compaction is still described completely) and
+    /// reduces it to the operator summary. Park and escalation are rare, so the
+    /// archive read is affordable here; completeness is the point.
+    /// </summary>
+    private static ReviewAttemptChainSummary BuildAttemptChainSummary(
+        AttemptAuthorityService authority, string taskKey)
+        => ReviewAttemptChainSummary.Build(authority
+            .GetTaskProjection(taskKey, includeArchived: true)
+            .ReviewAttempts
+            .Select(ReviewAttemptChainEntry.From));
 
     private static bool TryOutcome(string value, out ReviewTerminalOutcome outcome)
     {

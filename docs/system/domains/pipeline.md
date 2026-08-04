@@ -140,6 +140,26 @@ pipeline view.
   Baseline results are single-flight cached by repository, baseline SHA, and
   command hash. Only failures still new after one subject retry block the
   review.
+- `backend/Features/Runner/ReviewBaselineBranchPolicy.cs`: which integration
+  line the baseline merge-base is taken from. Project truth outranks the card:
+  configured project integration branch, then the registered checkout's
+  `origin/HEAD`, then the card's recorded `integrationBranch`, then `develop`.
+  The card field is only a snapshot from worktree preparation and goes stale -
+  AGT-2220 still carried `refs/heads/main` after develop became the working
+  branch (30.07.), so every baseline resolved to an ancient merge-base the
+  verify commands could not run on. The claim endpoint re-stamps the plan's
+  `IntegrationRef` on every hand-out (a frozen plan otherwise replays the stale
+  ref through each retry) and rewrites an outdated card field, emitting
+  `integration_branch_corrected`.
+- `backend/Features/Runner/ReviewInfrastructureRepeatPolicy.cs` and
+  `contracts/TaskServer.Contracts/ReviewInfrastructureDiagnosis.cs`: a repeating
+  infrastructure cause must name itself. Every runner-side `BaselineUnavailable`
+  carries the base commit, integration ref, step, and command line in its reason;
+  from the second identical classification in one retry chain the monolith writes
+  a `review_infrastructure_repeat_diagnosed` timeline entry with those facts and
+  folds them into the escalation reason once the retry budget is spent. Without
+  it a drained budget leaves only N identical classifications and no statement of
+  what actually failed.
 - `runner/ReviewStateStore.cs`, `runner/DurableReviewProcess.cs`, and
   `runner/RemoteReviewExecutor.cs`: durable Remote Review execution. Workspace
   preparation persists the immutable subject and lease/fence before the review

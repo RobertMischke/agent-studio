@@ -118,10 +118,10 @@ A project with no architecture model produces drift reports with `architectureMo
 ```markdown
 ---
 modelId: agent-taskboard-core
-title: agent-orchestrator - Core Architecture
+title: Agent Studio - Core Architecture
 project: agent-taskboard
 updatedAt: 2026-05-05T12:00:00Z
-owner: rmisc
+owner: <github-handle>
 summary: High-level shape of the local task processor. Ten elements covering backend, frontend, runtime, and observation surfaces.
 diagramHint: two rows; runtime elements grouped on the right
 elements:

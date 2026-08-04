@@ -74,6 +74,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
 | Board status model, lane-transition map, and integration/archive guard decisions (AGT-2424) | [interactive Workbench](../operations/board-statusmodell-ist-soll/index.html) |
 | Deck icon alternatives for a multi-faceted project console (AGT-2355, Round 2) | [interactive Workbench](../operations/deck-icon-exploration/index.html) · [standalone SVG proof](../operations/deck-icon-exploration/results/deck-icon-options-round-2.svg) |
+| Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Workbench](../operations/installer-story/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |
@@ -95,6 +96,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |
 | UI task iteration pipeline and Human Gate hand-off | [contracts/ui-task-pipeline.md](../system/contracts/ui-task-pipeline.md) |
 | Operator decision surface for escalated tasks | [operations/decision-surface/README.md](../operations/decision-surface/README.md) |
+| Parked-card recall (machine-readable blocker, Wiedervorlage sweep, lane aging; AGT-2492) | [concepts/parked-card-recall.md](../concepts/parked-card-recall.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](../concepts/publishing-workflows.md) |
 | Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](../system/reports/git-info-performance-agt-2007.md) |

@@ -1110,6 +1110,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             if (ct.IsCancellationRequested) return;
             if (job.State is TaskStates.Completed or TaskStates.Archive) continue;
             if (job.State != TaskStates.HumanReview) continue;
+            // An Epic planning completion is verdict-less by construction, not
+            // by legacy: it owns no Result-SHA, so no automated review can ever
+            // run for it and it will never gain a ReviewDecisionLog record.
+            // Escalating it would move the dead end one lane over instead of
+            // letting the operator accept or park the plan.
+            if (TaskKinds.IsEpic(job.Kind)) continue;
             if (HasLatestOperatorLaneVerdict(job)) continue;
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
             if (DateTime.UtcNow - job.CreatedAt < VerdictlessBackfillMinimumAge) continue;

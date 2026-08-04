@@ -20,9 +20,10 @@ public static class EpicDecompositionLifecycle
         ILogger? logger,
         string? invalidationReason = null)
     {
-        // Local ProjectRunner finalizes after its successful Progress ->
-        // AutoReview move and therefore holds a pre-move TaskInfo snapshot.
-        // Rebind before writing evidence so the shared local/remote path never
+        // Callers hand in whatever TaskInfo snapshot they held when the run
+        // ended, which may pre-date a lane move (the remote path finalizes
+        // after moving the Epic into its planning-completion lane). Rebind
+        // before writing evidence so the shared local/remote path never
         // recreates the stale lane folder as a planning-spawn ghost.
         epic = scanner.FindJob(epic.Id, epic.WatchPath) ?? epic;
 

@@ -869,6 +869,186 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains($"`{canonical}` at `{canonicalSha}` was the authoritative pickup base", deliverables);
     }
 
+    /// <summary>
+    /// AGT-2494 - the canonical branch of a divergent salvage keeps the remote
+    /// tip it collided with, so naming it as the review ref pins the subject to
+    /// a SHA that ref never held. That is what happened to AGT-2220 on 28.07.
+    /// (<c>resultSha=f538f896</c> on a ref holding <c>744deb89</c>) and it ended
+    /// as <c>immutable-result-mismatch</c> with an empty <c>commits[]</c>. The
+    /// review subject must name a ref that carries the fenced result.
+    /// </summary>
+    [Fact]
+    public async Task Divergent_completion_reviews_a_ref_that_carries_the_result_sha()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote salvage collision", "Continue safely.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        const string canonical = "runner/agent-runner-e2e/AGT-RUNNER-E2E";
+        const string canonicalSha = "09faf1b709faf1b709faf1b709faf1b709faf1b7";
+        const string localSha = "b6f23a3fb6f23a3fb6f23a3fb6f23a3fb6f23a3f";
+        const string recovery = canonical + "-collision-" + localSha + "-" + canonicalSha;
+        var immutableRef = Contract.FencedGitRefs.ImmutableResult(
+            lease.Lease.AttemptId!, lease.Lease.FencingToken, localSha);
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            SalvageBranch: canonical,
+            SalvageCommitSha: canonicalSha,
+            ResultSha: localSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            SalvageResolution: "divergent",
+            SalvageLocalCommitSha: localSha,
+            SalvageRecoveryBranch: recovery,
+            SalvageRecoveryCommitSha: localSha,
+            SalvageAuthoritativeBaseBranch: canonical,
+            SalvageAuthoritativeBaseSha: canonicalSha,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "salvage-collision-review-ref",
+            BaseSha: "4136f00d4136f00d4136f00d4136f00d4136f00d",
+            ImmutableResultRef: immutableRef,
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), ct);
+
+        Assert.NotNull(completion);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        var subject = ReviewSubjectStore.Read(moved);
+        Assert.NotNull(subject);
+        Assert.Equal(localSha, subject!.ResultSha);
+        // The reviewed ref carries the result: the fenced immutable ref is named
+        // for this exact SHA. The canonical branch, which holds canonicalSha, is
+        // never claimed as the subject.
+        Assert.Equal(immutableRef, subject.ResultRef);
+        Assert.Contains(localSha, subject.ResultRef!, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(canonical, subject.ResultRef);
+    }
+
+    /// <summary>
+    /// AGT-2494, against a real origin - the completion still reports its
+    /// immutable result ref, but that ref is gone from the repository (retention
+    /// GC), and the canonical branch holds the foreign tip the salvage collided
+    /// with. The collision branch is the only ref that carries the fenced result,
+    /// so the completion must review it there: no ShaMismatch, an attributed
+    /// <c>commits[]</c>, and no escalation of a delivery that demonstrably exists.
+    /// </summary>
+    [Fact]
+    public async Task Divergent_completion_reviews_the_collision_branch_when_the_immutable_ref_is_gone()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote salvage collision", "Continue safely.");
+
+        const string canonical = "runner/agent-runner-e2e/AGT-RUNNER-E2E";
+        var origin = Path.Combine(_workspace, "collision-origin.git");
+        var seed = Path.Combine(_workspace, "collision-seed");
+        await GitAsync(_workspace, "init", "--bare", origin);
+        await GitAsync(_workspace, "init", seed);
+        await GitAsync(seed, "config", "user.name", "Test");
+        await GitAsync(seed, "config", "user.email", "test@example.invalid");
+        await File.WriteAllTextAsync(Path.Combine(seed, "base.txt"), "base");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "commit", "-m", "chore: base");
+        await GitAsync(seed, "branch", "-M", "main");
+        await GitAsync(seed, "remote", "add", "origin", origin);
+        await GitAsync(seed, "push", "-u", "origin", "main");
+        var baseSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+
+        // The canonical branch as origin holds it: a foreign tip the salvage
+        // refused to overwrite.
+        await GitAsync(seed, "checkout", "-b", canonical, baseSha);
+        await File.WriteAllTextAsync(Path.Combine(seed, "foreign.txt"), "foreign");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "commit", "-m", "feat: foreign tip that won the canonical ref");
+        var canonicalSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+        await GitAsync(seed, "push", "origin", canonical);
+
+        // This run's own result, parked on the collision branch.
+        await GitAsync(seed, "checkout", "-b", "salvage-work", baseSha);
+        await File.WriteAllTextAsync(Path.Combine(seed, "result.txt"), "result");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "commit", "-m", "feat: the delivered result");
+        var localSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+        var recovery = $"{canonical}-collision-{localSha}-{canonicalSha}";
+        await GitAsync(seed, "push", "origin", $"HEAD:refs/heads/{recovery}");
+
+        // The project checkout the server inspects the delivery from.
+        await GitAsync(_watchPath, "init");
+        await GitAsync(_watchPath, "remote", "add", "origin", origin);
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        // Reported, but no longer on origin - exactly what retention GC leaves
+        // behind, and what made the canonical branch the only remaining claim.
+        var goneImmutableRef = Contract.FencedGitRefs.ImmutableResult(
+            lease.Lease.AttemptId!, lease.Lease.FencingToken, localSha);
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            SalvageBranch: canonical,
+            SalvageCommitSha: canonicalSha,
+            ResultSha: localSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            SalvageResolution: "divergent",
+            SalvageLocalCommitSha: localSha,
+            SalvageRecoveryBranch: recovery,
+            SalvageRecoveryCommitSha: localSha,
+            SalvageAuthoritativeBaseBranch: canonical,
+            SalvageAuthoritativeBaseSha: canonicalSha,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "salvage-collision-gc-completion",
+            BaseSha: baseSha,
+            ImmutableResultRef: goneImmutableRef,
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            IntegrationBranch: "refs/heads/main"), ct);
+
+        Assert.NotNull(completion);
+        // Not escalated: the delivery exists, it just lives on the collision branch.
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        var subject = ReviewSubjectStore.Read(moved);
+        Assert.NotNull(subject);
+        Assert.Equal(localSha, subject!.ResultSha);
+        Assert.Equal(recovery, subject.ResultRef);
+        Assert.NotEqual(canonical, subject.ResultRef);
+
+        // The reviewed ref really carries the result, and the range is attributed
+        // instead of leaving commits[] empty as it did for AGT-2220.
+        var cardJson = File.ReadAllText(Path.Combine(moved, "task.json"));
+        var card = JsonDocument.Parse(cardJson);
+        Assert.True(card.RootElement.TryGetProperty("commits", out var commitsElement), cardJson);
+        var commits = commitsElement.EnumerateArray().ToArray();
+        Assert.NotEmpty(commits);
+        Assert.Equal(localSha, CommitField(commits[^1], "sha", cardJson));
+        Assert.Equal(recovery, CommitField(commits[^1], "branch", cardJson));
+    }
+
     [Fact]
     public async Task Second_runner_is_refused_while_the_lease_is_held()
     {
@@ -1432,8 +1612,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             claim.RunId, claim.LeaseInstanceId, claim.RunSpec);
 
         Assert.Equal(0, exit);
-        var epicFolder = Path.Combine(_watchPath, TaskStates.AutoReview, epicKey);
+        // A planning run owns no Result-SHA, so it must never land in the
+        // code-review lane; its delivery is the validated child set.
+        var epicFolder = Path.Combine(_watchPath, TaskStates.HumanReview, epicKey);
         Assert.True(Directory.Exists(epicFolder));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.AutoReview)));
         var children = Directory.EnumerateFiles(_workspace, "task.json", SearchOption.AllDirectories)
             .Where(path =>
             {
@@ -1458,6 +1641,58 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             allowFailure: true);
         Assert.NotEqual(0, runnerBranch.ExitCode);
         Assert.False(Directory.Exists(Path.Combine(runnerWork, "PROJ-001", "worktrees", epicKey)));
+    }
+
+    [Fact]
+    public async Task Remote_epic_planning_completion_without_result_sha_never_enters_auto_review()
+    {
+        // TE-8's dead end, reproduced as a regression: a planning run settles
+        // Completed with terminalOutcome=done, resultSha=null, on a mode=coding
+        // card. CreateReviewAttempt demands a non-empty ExpectedResultSha, and
+        // the report-only exception in the decision engine does not apply to a
+        // coding card, so 4-auto-review would wait forever on a ReviewAttempt
+        // that can never be minted.
+        const string epicKey = "AGT-EPIC-NO-SHA";
+        SeedTask(TaskStates.Ready, epicKey, "Planning Epic", "Split this goal into coding cards.",
+            kind: TaskKinds.Epic);
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+        var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
+            RunnerId, ProjectName, "host", 1, "remote-runner"));
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            claim.TaskKey!, claim.Lease!.LeaseId, claim.Lease.FencingToken, RunnerId,
+            "Done", Source: ProjectName,
+            ExitCode: 0,
+            // A read-only planning teardown reports no Result-SHA, by design.
+            ResultSha: null,
+            OutputLines: ["{\"subTasks\":[{\"title\":\"Implement API\",\"prompt\":\"Build and test the API.\"}]}"],
+            AttemptId: claim.Lease.AttemptId,
+            AuthorityEpoch: claim.Lease.AuthorityEpoch,
+            IdempotencyKey: $"epic-no-sha:{epicKey}"), ct);
+
+        Assert.Equal(TaskStates.HumanReview, completion!.TargetState);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, epicKey)));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.AutoReview)));
+
+        // The card really is the constellation from the report: coding mode,
+        // done, no Result-SHA - and therefore no ReviewAttempt to wait for.
+        using var task = JsonDocument.Parse(await File.ReadAllTextAsync(
+            Path.Combine(_watchPath, TaskStates.HumanReview, epicKey, "task.json")));
+        Assert.Equal(
+            TaskModes.Coding,
+            TaskModes.Normalize(task.RootElement.TryGetProperty("mode", out var mode) ? mode.GetString() : null));
+        var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{claim.TaskKey}", ApiJson, ct);
+        Assert.Equal(AttemptLifecycleState.Completed, projection!.CurrentRunAttempt!.State);
+        Assert.Equal("done", projection.CurrentRunAttempt.TerminalOutcome);
+        Assert.Null(projection.CurrentRunAttempt.ResultSha);
+        Assert.Null(projection.CurrentReviewAttempt);
     }
 
     [Theory]
@@ -2138,7 +2373,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Contract.ReviewClaimResponse claim,
         string runnerId,
         string instanceId,
-        string idempotencyKey)
+        string idempotencyKey,
+        string failureClassification = "SnapshotUnavailable",
+        string summary = "The immutable snapshot was unavailable.")
     {
         return new Contract.ReviewReportRequest(
             runnerId,
@@ -2147,8 +2384,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             claim.Lease.Fence,
             idempotencyKey,
             "ReviewInfra",
-            "SnapshotUnavailable",
-            "The immutable snapshot was unavailable.",
+            failureClassification,
+            summary,
             new Contract.ReviewWorkspaceProofDto(
                 claim.Subject!.RepositoryId,
                 claim.Subject.ExpectedResultSha,
@@ -2815,6 +3052,22 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             lease.AuthorityEpoch);
     }
 
+    /// <summary>
+    /// task.json is written without a naming policy, so persisted commit entries
+    /// keep their CLR casing while the HTTP projection is camelCase. Reading the
+    /// card directly has to tolerate both.
+    /// </summary>
+    private static string? CommitField(JsonElement commit, string name, string cardJson)
+    {
+        foreach (var property in commit.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                return property.Value.GetString();
+        }
+        Assert.Fail($"Persisted commit has no '{name}' field: {cardJson}");
+        return null;
+    }
+
     private static async Task<LocalGitResult> GitAsync(
         string cwd, params string[] args)
         => await GitAsync(cwd, args, allowFailure: false);
@@ -3128,6 +3381,125 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Monolith_v1_review_claim_replaces_a_stale_card_integration_branch()
+    {
+        const string reviewRunnerId = "review-runner-stale-branch";
+        const string reviewInstance = "review-stale-branch-host:4243";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Stale integration branch", "Build and verify.");
+        // AGT-2220 shape: the card still records the pre-30.07. integration line
+        // while develop is the project's working branch. A merge-base against
+        // main is an ancient commit the baseline commands no longer run on.
+        SetCardIntegrationBranch(TaskStates.AutoReview, "refs/heads/main");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        var claim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            CancellationToken.None);
+
+        Assert.Equal("claimed", claim.Status);
+        Assert.Equal("refs/heads/develop", claim.Subject!.Plan.IntegrationRef);
+        Assert.Equal("refs/heads/develop", ReadCardIntegrationBranch(TaskStates.AutoReview));
+        var corrected = Assert.Single(
+            ReadTimeline(TaskStates.AutoReview),
+            entry => entry.GetProperty("kind").GetString() == "integration_branch_corrected");
+        var details = corrected.GetProperty("details");
+        Assert.Equal("main", details.GetProperty("previousBranch").GetString());
+        Assert.Equal("refs/heads/develop", details.GetProperty("integrationRef").GetString());
+    }
+
+    [Fact]
+    public async Task Monolith_v1_review_plane_names_a_repeated_baseline_failure_on_the_card()
+    {
+        const string reviewRunnerId = "review-runner-repeat-diagnosis";
+        const string reviewInstance = "review-repeat-host:4243";
+        const string baselineSha = "b649ff8dab649ff8dab649ff8dab649ff8dab649f";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Repeated baseline failure", "Build and verify.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        // Two attempts, one identical infrastructure cause - the AGT-2220 loop
+        // that previously left only a classification behind.
+        for (var attemptNumber = 1; attemptNumber <= 2; attemptNumber++)
+        {
+            var claim = await reviewClient.ClaimReviewAsync(
+                new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+                CancellationToken.None);
+            Assert.Equal("claimed", claim.Status);
+            var report = await reviewClient.ReportReviewAsync(
+                claim.Attempt!.AttemptId,
+                InfrastructureReport(
+                    claim,
+                    reviewRunnerId,
+                    reviewInstance,
+                    $"review-baseline-{attemptNumber}",
+                    "BaselineUnavailable",
+                    Contract.ReviewInfrastructureDiagnosis.Append(
+                        "Baseline command 'verify-2' did not complete normally.",
+                        [
+                            new(Contract.ReviewInfrastructureDiagnosis.BaseKey, baselineSha),
+                            new(Contract.ReviewInfrastructureDiagnosis.RefKey, "refs/heads/develop"),
+                            new(Contract.ReviewInfrastructureDiagnosis.StepKey, "verify-2"),
+                            new(Contract.ReviewInfrastructureDiagnosis.CommandKey, "sh -lc dotnet test"),
+                        ])),
+                CancellationToken.None);
+            Assert.True(report.RetryScheduled);
+        }
+
+        var diagnosed = Assert.Single(
+            ReadTimeline(TaskStates.AutoReview),
+            entry => entry.GetProperty("kind").GetString()
+                     == "review_infrastructure_repeat_diagnosed");
+        var details = diagnosed.GetProperty("details");
+        Assert.Equal("BaselineUnavailable", details.GetProperty("classification").GetString());
+        Assert.Equal("2", details.GetProperty("repeatCount").GetString());
+        Assert.Equal(baselineSha, details.GetProperty("baselineSha").GetString());
+        Assert.Equal("refs/heads/develop", details.GetProperty("integrationRef").GetString());
+        Assert.Equal("verify-2", details.GetProperty("step").GetString());
+        Assert.Equal("sh -lc dotnet test", details.GetProperty("command").GetString());
+        Assert.Contains(
+            baselineSha,
+            diagnosed.GetProperty("summary").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    private void SetCardIntegrationBranch(string state, string integrationBranch)
+    {
+        var path = Path.Combine(_watchPath, state, TaskKey, "task.json");
+        var fields = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+            File.ReadAllText(path))!;
+        fields["integrationBranch"] = JsonSerializer.SerializeToElement(integrationBranch);
+        File.WriteAllText(path, JsonSerializer.Serialize(fields));
+    }
+
+    private string? ReadCardIntegrationBranch(string state)
+    {
+        var path = Path.Combine(_watchPath, state, TaskKey, "task.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return document.RootElement.TryGetProperty("integrationBranch", out var value)
+            ? value.GetString()
+            : null;
+    }
+
+    private List<JsonElement> ReadTimeline(string state)
+    {
+        var path = Path.Combine(_watchPath, state, TaskKey, "logs", "timeline.jsonl");
+        if (!File.Exists(path)) return [];
+        return File.ReadAllLines(path)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => JsonDocument.Parse(line).RootElement.Clone())
+            .ToList();
+    }
+
+    [Fact]
     public async Task Monolith_v1_review_plane_exhausts_three_infrastructure_retries_to_escalated()
     {
         const string reviewRunnerId = "review-runner-budget";
@@ -3189,6 +3561,78 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             projection.ReviewAttempts,
             attempt => attempt.State is AttemptLifecycleState.Pending or AttemptLifecycleState.Leased);
     }
+
+    /// <summary>
+    /// AGT-2220 acceptance: when the last, youngest attempt of an exhausted
+    /// chain carries a HARDER classification than the ones before it, the park
+    /// summary must be built from that youngest cause. The frequency reading
+    /// ("all attempts were SnapshotUnavailable, so it is a baseline infra
+    /// problem") would send the operator after a remedy that cannot work.
+    /// </summary>
+    [Fact]
+    public async Task Monolith_v1_review_escalation_summary_names_the_youngest_failure_class()
+    {
+        const string reviewRunnerId = "review-runner-divergent";
+        const string reviewInstance = "review-divergent-host:4243";
+        SeedTask(TaskStates.AutoReview, TaskKey, "Remote review divergent chain", "Build and verify.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
+
+        var last = AttemptAuthorityService.ReviewInfrastructureRetryBudget + 1;
+        for (var attemptNumber = 1; attemptNumber <= last; attemptNumber++)
+        {
+            var claim = await reviewClient.ClaimReviewAsync(
+                new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+                CancellationToken.None);
+            Assert.Equal("claimed", claim.Status);
+
+            // The youngest attempt fails differently and harder than its
+            // predecessors: an immutable Result-SHA that was never materializable.
+            var report = attemptNumber == last
+                ? InfrastructureReport(
+                    claim, reviewRunnerId, reviewInstance, $"review-infra-{attemptNumber}",
+                    "ShaMismatch",
+                    "Materialized HEAD '744deb892' does not match expected Result-SHA 'f538f896'.")
+                : InfrastructureReport(claim, reviewRunnerId, reviewInstance, $"review-infra-{attemptNumber}");
+            await reviewClient.ReportReviewAsync(claim.Attempt!.AttemptId, report, CancellationToken.None);
+        }
+
+        var status = await File.ReadAllTextAsync(
+            Path.Combine(_watchPath, TaskStates.Escalated, TaskKey, "status.md"));
+
+        // 1. The youngest attempt owns the situation report.
+        Assert.Contains("ReviewInfra/ShaMismatch", status);
+        Assert.Contains("Materialized HEAD", status);
+        Assert.Contains("- Newest attempt: ", status);
+        // 2. Every distinct class is enumerated, dated, and none is dropped.
+        Assert.Contains("- Failure classifications (2 distinct, complete, newest first):", status);
+        Assert.Contains("ReviewInfra/ShaMismatch: 1 attempt, ", status);
+        Assert.Contains(
+            $"ReviewInfra/SnapshotUnavailable: {AttemptAuthorityService.ReviewInfrastructureRetryBudget} attempts, ",
+            status);
+        Assert.Contains("- Divergent attempts: 3 of 4 attempts are classified differently", status);
+        // 3. The options match the youngest cause, not the majority one.
+        Assert.Contains("- Operator options for the newest cause ReviewInfra/ShaMismatch:", status);
+        Assert.Contains("Re-run the source coding attempt", status);
+        Assert.DoesNotContain("Restore the baseline ref", status);
+        // The board's status-stub contract stays intact: exactly one Category
+        // line and one Reason line, and the Reason names the youngest cause.
+        Assert.Equal(1, CountLines(status, "- Category: "));
+        Assert.Equal(1, CountLines(status, "- Reason: "));
+        var reason = status
+            .Split('\n')
+            .First(line => line.StartsWith("- Reason: ", StringComparison.Ordinal));
+        Assert.Contains("ReviewInfra/ShaMismatch", reason);
+        Assert.Contains("Divergent chain", reason);
+    }
+
+    private static int CountLines(string text, string prefix) => text
+        .Split('\n')
+        .Count(line => line.StartsWith(prefix, StringComparison.Ordinal));
 
         }
 

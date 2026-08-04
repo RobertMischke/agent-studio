@@ -9,9 +9,12 @@ public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown, Environme
 public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
 {
     /// <summary>
-    /// Lane expected from the server's normal remote-run completion policy.
-    /// Environment failures return to Ready while the server-owned retry budget
-    /// remains; the exhausted attempt is promoted to Escalated by the server.
+    /// Lane expected from the server's normal remote-run completion policy for
+    /// a coding run. Environment failures return to Ready while the
+    /// server-owned retry budget remains; the exhausted attempt is promoted to
+    /// Escalated by the server. An Epic planning run is not a coding run and
+    /// does not follow this mapping: it carries no Result-SHA and the server
+    /// completes it into 5-human-review.
     /// </summary>
     public string TargetState => Kind switch
     {

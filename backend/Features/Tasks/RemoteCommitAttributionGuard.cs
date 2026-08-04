@@ -31,6 +31,15 @@ public static partial class RemoteCommitAttributionGuard
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex ImmutableResultRefPattern();
 
+    // A divergent salvage publishes the run's own result to
+    // <card-branch>-collision-<local-sha>-<remote-sha> because the canonical
+    // branch kept a foreign tip. That branch still belongs to this card, so its
+    // range must be attributable - otherwise the reviewed delivery arrives with
+    // an empty commits[], which is half of what AGT-2220 showed on 28.07.
+    [GeneratedRegex(@"-collision-[0-9a-f]{7,64}-[0-9a-f]{7,64}$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex DivergentCollisionSuffixPattern();
+
     public static RemoteCommitAttributionResult Attribute(
         string taskKey,
         string deliveryBranch,
@@ -38,9 +47,12 @@ public static partial class RemoteCommitAttributionGuard
     {
         var expected = taskKey.Trim();
         var normalizedBranch = TaskIntegrationBranch.Name(deliveryBranch);
-        var branchTaskKey = normalizedBranch
+        var lastSegment = normalizedBranch
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .LastOrDefault();
+        var branchTaskKey = lastSegment is null
+            ? null
+            : DivergentCollisionSuffixPattern().Replace(lastSegment, string.Empty);
         if (!string.Equals(branchTaskKey, expected, StringComparison.OrdinalIgnoreCase)
             && !ImmutableResultRefPattern().IsMatch(normalizedBranch))
         {

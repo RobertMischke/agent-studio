@@ -1,0 +1,51 @@
+name: Documentation truth
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'scripts/check-public-docs.mjs'
+      - '.github/workflows/documentation-truth.yml'
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'scripts/check-public-docs.mjs'
+      - '.github/workflows/documentation-truth.yml'
+  # The registry claims can go stale without anyone touching a doc, so they are
+  # re-checked weekly rather than only when documentation changes.
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: documentation-truth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check public documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check public documentation
+        run: node scripts/check-public-docs.mjs
+
+      - name: Verify recorded release claims against the registries
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: node scripts/check-public-docs.mjs --verify-registry

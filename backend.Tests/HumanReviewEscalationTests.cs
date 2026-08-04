@@ -146,6 +146,44 @@ public sealed class HumanReviewEscalationTests : IDisposable
         Assert.DoesNotContain("partial results present", stub);
     }
 
+    /// <summary>
+    /// AGT-2220: a park summary that only fits on one line drops the attempt
+    /// history. The stub therefore carries an optional detail block, and it must
+    /// keep the board's parse contract intact: <c>parseStatusStubEscalation</c>
+    /// lifts exactly one <c>- Category:</c> and one <c>- Reason:</c> line back
+    /// out, so the block must not introduce a second line of either shape.
+    /// </summary>
+    [Fact]
+    public void BuildStatusStub_WithDetail_KeepsTheSingleCategoryAndReasonContract()
+    {
+        var chain = ReviewAttemptChainSummary.Build(
+        [
+            new(
+                "review_old", new DateTime(2026, 7, 28, 18, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 7, 28, 18, 20, 0, DateTimeKind.Utc),
+                ReviewTerminalOutcome.InfrastructureFailure, "BaselineUnavailable", "Baseline ref missing."),
+            new(
+                "review_new", new DateTime(2026, 7, 28, 21, 45, 0, DateTimeKind.Utc),
+                new DateTime(2026, 7, 28, 22, 8, 0, DateTimeKind.Utc),
+                ReviewTerminalOutcome.InfrastructureFailure, "ShaMismatch", "Materialized HEAD differs."),
+        ]);
+
+        var stub = HumanReviewEscalation.BuildStatusStub(
+            HumanReviewEscalationCategories.ReviewSubjectUnmaterializable,
+            chain.Headline,
+            partialResultsPresent: false,
+            detail: chain.Detail);
+
+        var lines = stub.Split('\n').Select(line => line.TrimEnd('\r')).ToList();
+        Assert.Single(lines.Where(line => line.StartsWith("- Category: ", StringComparison.Ordinal)));
+        Assert.Single(lines.Where(line => line.StartsWith("- Reason: ", StringComparison.Ordinal)));
+        Assert.Contains(lines, line => line.StartsWith("- Newest attempt: ", StringComparison.Ordinal));
+        Assert.Contains("ReviewInfra/ShaMismatch", stub);
+        Assert.Contains("- Operator options for the newest cause ReviewInfra/ShaMismatch:", stub);
+        // The logs pointer stays the last line, so the detail cannot bury it.
+        Assert.StartsWith("- See `logs/`", lines.Last(line => line.Length > 0));
+    }
+
     [Fact]
     public void Escalate_Sync_PickupZombie_MovesAndRecordsVerdictAndStatus()
     {

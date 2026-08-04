@@ -217,8 +217,12 @@ clears checks from the preceding review attempt. Entering Post Processing, or a
 startup recovery sweep that re-enqueues it, sets `post-processing-running`,
 replaces older checks, and timestamps the new attempt. Leaving Auto Review or
 terminating the worker changes every active `pending` or `running` check to
-`completed` or `failed` and supplies `finishedAt`; an active check must never
-survive a terminal boundary. Automation scans exclude cards whose `task.json`
+`completed`, `failed`, or `skipped` and supplies `finishedAt`; an active check
+must never survive a terminal boundary. `skipped` is the honest terminal for a
+pass that closed without running its check, for example when the decision
+engine passed the card over because another actor owns it: `completed` would
+claim a decision that never happened, and a check left `running` is re-armed as
+a phantom in-flight step by every backend restart and never terminalizes. Automation scans exclude cards whose `task.json`
 has `fixture: true`, while explicit fixture management and test APIs may still
 read them.
 
@@ -249,6 +253,29 @@ review prompt inventories. `GET /api/tasks/{id}/runs` projects the authoritative
 current epoch plus the operator-requeue timeline boundaries as
 `reviewAttemptEpoch` and newest-first `reviewAttemptCycles`; the Task Detail Runs
 modal renders that projection beside the CLI run history.
+
+### parked-blocker.json (optional)
+
+Written whenever a task enters `5-human-review` or `5e-escalated`, and deleted when it leaves. It records what the parked card is waiting for in a form a sweep can re-check, next to the freetext park reason it preserves verbatim.
+
+```json
+{
+  "version": 1,
+  "blockerType": "review-subject-unmaterialisierbar",
+  "condition": {
+    "kind": "git-ancestor",
+    "parameters": {},
+    "description": "The card branch carries the current integration branch, so a review baseline can be materialized again."
+  },
+  "lane": "5-human-review",
+  "parkedAt": "2026-07-29T22:07:00Z",
+  "reason": "4x ReviewInfra/BaselineUnavailable - parked for an operator decision, no auto rerun",
+  "lastEvaluation": { "status": "blocked", "at": "2026-08-03T12:00:00Z", "detail": "'task/agt-2220' still does not contain 'develop'." },
+  "reportedRecallableAt": null
+}
+```
+
+`blockerType` is the escalation category, or `operator-decision` for a manual park. `condition.kind` is one of `manual` or `git-ancestor`; `lastEvaluation.status` is one of `blocked`, `recallable`, or `undeterminable`. The recall sweep owns `lastEvaluation` and `reportedRecallableAt`; `TaskInfo.ParkedBlocker` projects the file at read time and adds the lane age. Legacy parks without the file are backfilled from `enteredLaneAt`. A `recallable` blocker is reported, never auto-requeued. See [parked-card recall](../../concepts/parked-card-recall.md).
 
 ### post-processing-outcomes.jsonl (optional)
 

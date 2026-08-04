@@ -202,6 +202,23 @@ public class EpicDecompositionTests : IDisposable
         Assert.False(EpicRunPolicy.IsPlanningRun(kind, RunIntent.UserContinue));
     }
 
+    // ---- Planning completion lane ------------------------------------------
+
+    [Theory]
+    [InlineData(true, TaskStates.HumanReview)]
+    [InlineData(false, TaskStates.Backlog)]
+    public void PlanningCompletionLane_NeverRoutesToAutoReview(bool valid, string expected)
+    {
+        // A planning run is source-read-only and carries no Result-SHA, so
+        // CreateReviewAttempt can never mint a ReviewAttempt for it. Routing it
+        // into the code-review lane parks it forever in the canonical-attempt
+        // wait (the TE-8 dead end).
+        var lane = EpicRunPolicy.PlanningCompletionLane(valid);
+
+        Assert.Equal(expected, lane);
+        Assert.NotEqual(TaskStates.AutoReview, lane);
+    }
+
     // ---- Sub-task creation with epicId -------------------------------------
 
     [Fact]
@@ -342,7 +359,7 @@ public class EpicDecompositionTests : IDisposable
             machine.MoveJob(ready.Id, TaskStates.Progress, _watchPath).Status);
         var staleProgressSnapshot = scanner.FindJob(ready.Id, _watchPath)!;
         Assert.Equal(MoveJobStatus.Success,
-            machine.MoveJob(ready.Id, TaskStates.AutoReview, _watchPath).Status);
+            machine.MoveJob(ready.Id, TaskStates.HumanReview, _watchPath).Status);
 
         var finalized = EpicDecompositionLifecycle.Finalize(
             staleProgressSnapshot,
@@ -360,7 +377,7 @@ public class EpicDecompositionTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(
             _watchPath, TaskStates.Progress, staleProgressSnapshot.Id)));
         var current = scanner.FindJob(ready.Id, _watchPath)!;
-        Assert.Equal(TaskStates.AutoReview, current.State);
+        Assert.Equal(TaskStates.HumanReview, current.State);
         Assert.Single(File.ReadAllLines(Path.Combine(
             current.FolderPath, ".metadata", "spawned-tasks.jsonl")));
     }

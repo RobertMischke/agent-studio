@@ -187,6 +187,7 @@ public class TaskStateMachine
                     TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
                     ClearIncompatiblePhase(recheck.FolderPath, targetState);
                     RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause, authorityWrite, reason);
+                    RecordParkedBlocker(recheck.FolderPath, targetState, reason);
                     _scanner.InvalidateCache();
                     EnqueueEvidence(recheck.WatchPath, recheck.ProjectName, recheck.Id, recheck.State, targetState);
                 }
@@ -249,6 +250,7 @@ public class TaskStateMachine
             // T2b: write the lane-change ledger row to the *new* folder (the
             // source folder is gone after the move above).
             RecordLaneChange(targetDir, recheck.State, targetState, cause, authorityWrite, reason);
+            RecordParkedBlocker(targetDir, targetState, reason);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
             // without waiting for the scanner's self-heal pass.
@@ -744,6 +746,32 @@ public class TaskStateMachine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to record lane-change ledger row for {Folder}", jobFolderPath);
+        }
+    }
+
+    /// <summary>
+    /// AGT-2492: keep the machine-readable park marker in step with the lane.
+    /// Entering a human-decision lane records WHAT the card waits for (blocker
+    /// type plus a condition a sweep can re-check); leaving one clears the
+    /// marker. Doing it here, at the single lane-change choke point, means every
+    /// park path gets the marker - the escalation funnel, the remote review
+    /// park, the UI-iteration gate, an operator drag - without each of the
+    /// ~15 call sites having to remember.
+    ///
+    /// <para>Best-effort by design: the move has already landed when this runs,
+    /// so a marker write must never undo it.</para>
+    /// </summary>
+    private void RecordParkedBlocker(string jobFolderPath, string toState, string? reason)
+    {
+        try
+        {
+            var record = ParkedBlockerCatalog.Build(toState, reason, DateTime.UtcNow);
+            if (record is null) ParkedBlockerMarker.Clear(jobFolderPath, _logger);
+            else ParkedBlockerMarker.Write(jobFolderPath, record, _logger);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record parked-blocker marker for {Folder}", jobFolderPath);
         }
     }
 

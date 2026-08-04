@@ -1120,8 +1120,19 @@ public static class LeaseEndpoints
 
             // The immutable ResultEnvelope ref is the reviewed delivery. A
             // salvage branch is recovery evidence only and must never outrank
-            // the immutable result when both are present.
-            var deliveryBranch = req.ImmutableResultRef ?? req.SalvageBranch;
+            // the immutable result when both are present. AGT-2494: a divergent
+            // salvage parks the run's result on its collision branch, so the
+            // canonical branch is ranked behind that recovery branch.
+            var deliveryCandidates = RemoteDeliveryRefPolicy.Candidates(
+                req.ImmutableResultRef,
+                req.SalvageResolution,
+                req.SalvageBranch,
+                req.SalvageRecoveryBranch,
+                req.SalvageRecoveryCommitSha,
+                resultSha);
+            var deliveryBranch = deliveryCandidates.Count > 0
+                ? deliveryCandidates[0].Ref
+                : null;
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
@@ -1154,6 +1165,35 @@ public static class LeaseEndpoints
                         resultSha,
                         req.IntegrationBranch,
                         ct);
+                    // AGT-2494: the top-ranked claim is contradicted by the
+                    // repository, so let the repository name the ref instead of
+                    // the ranking. A divergent salvage published this run's
+                    // result to its collision branch; reviewing it there beats
+                    // escalating a delivery that demonstrably exists.
+                    if (deliveryRange.IsDisproved && deliveryCandidates.Count > 1)
+                    {
+                        var reselected = RemoteDeliveryRefPolicy.Select(
+                            deliveryCandidates,
+                            candidate => git.VerifyDeliveredCommit(repoRoot, candidate, resultSha));
+                        if (reselected.CarriesResult
+                            && !string.Equals(reselected.Ref, deliveryBranch, StringComparison.Ordinal))
+                        {
+                            loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                                "remote-delivery-ref-reselected task={TaskKey} claimed={Claimed} selected={Selected} origin={Origin} verification={Verification}",
+                                req.TaskKey,
+                                deliveryBranch,
+                                reselected.Ref,
+                                reselected.Origin,
+                                reselected.Verification);
+                            deliveryBranch = reselected.Ref!;
+                            deliveryRange = git.InspectRemoteDeliveryCommitRange(
+                                repoRoot,
+                                deliveryBranch,
+                                resultSha,
+                                req.IntegrationBranch,
+                                ct);
+                        }
+                    }
                     if (!deliveryRange.Success)
                     {
                         attributionWarning = deliveryRange.Warning;
@@ -1497,11 +1537,19 @@ public static class LeaseEndpoints
                 // It still uses the canonical RunAttempt for its lane write and
                 // completion evidence, then delegates child creation to the
                 // shared idempotent decomposition lifecycle.
-                if (!string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+                //
+                // The lane is the one a valid plan earns: never 4-auto-review,
+                // which would park a run with no Result-SHA in a canonical
+                // attempt wait that can never be satisfied (see
+                // EpicRunPolicy.PlanningCompletionLane). The move stays ahead of
+                // Finalize so spawn evidence is written on the post-move folder;
+                // an invalid plan is recovered from there to 0-backlog below.
+                var planningLane = EpicRunPolicy.PlanningCompletionLane(decompositionValid: true);
+                if (!string.Equals(task.State, planningLane, StringComparison.OrdinalIgnoreCase))
                 {
                     var planningMove = await transitions.MoveAsync(
                         task.Id,
-                        TaskStates.AutoReview,
+                        planningLane,
                         task.WatchPath,
                         ct,
                         cause: $"remote-epic-planning-completion:{source}",
@@ -1531,7 +1579,8 @@ public static class LeaseEndpoints
                         "remote-epic-planning-invalid task={TaskKey} runner={Runner} sourceMutated={SourceMutated} reason={Reason}",
                         req.TaskKey, source, req.SourceMutated, finalized.Error);
                     return Results.Ok(new RemoteRunCompletionResponse(
-                        req.TaskKey, reportedOutcome, TaskStates.Backlog,
+                        req.TaskKey, reportedOutcome,
+                        EpicRunPolicy.PlanningCompletionLane(decompositionValid: false),
                         req.SourceMutated
                             ? "Epic planning attempted to mutate the read-only checkout; no children were created."
                             : finalized.Error,
@@ -1548,7 +1597,7 @@ public static class LeaseEndpoints
                         req.FencingToken, outcome));
                 }
                 return Results.Ok(new RemoteRunCompletionResponse(
-                    req.TaskKey, reportedOutcome, TaskStates.AutoReview,
+                    req.TaskKey, reportedOutcome, planningLane,
                     RunAttemptId: attemptId));
             }
 
