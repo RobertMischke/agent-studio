@@ -80,14 +80,13 @@ public sealed class TopologyTests
             "--hostname", "topology-host",
             "--git-remote", bareRepository,
             "--workdir", runnerWork.Path,
-            "--cli", "/bin/sh",
-            "--cli-args", fakeCli,
+            "--cli", fakeCli,
             "--ttl", "15",
             "--max-parallelism", "1",
             "--poll-seconds", "1");
 
-        using var serverClient = Client(serverUrl);
-        await WaitForAuditCountAsync(serverClient, "run.claimed", 1, runner);
+        using var serverClient = ProtocolClient(serverUrl);
+        await WaitForAuditCountAsync(serverClient, "work.permit.accepted", 1, runner);
         var activeHistory = await serverClient.GetFromJsonAsync<TaskHistoryDto>(
             $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
         Assert.NotNull(activeHistory);
@@ -154,7 +153,7 @@ public sealed class TopologyTests
         Assert.Single(history.Artifacts);
         Assert.StartsWith("results/proof-attempt-", history.Artifacts[0].Name);
         Assert.Equal(history.Events.Max(item => item.Cursor), history.LastCursor);
-        Assert.Contains(history.Audit, item => item.Action == "run.claimed");
+        Assert.Contains(history.Audit, item => item.Action == "work.permit.accepted");
         Assert.Single(history.Audit, item => item.Action == "run.completed");
 
         var replayAfterFirstRun = await freshClient.GetFromJsonAsync<TaskHistoryDto>(
@@ -175,6 +174,7 @@ public sealed class TopologyTests
         var root = ProtocolTests.RepositoryRoot();
         using var data = new TempDirectory();
         using var runnerWork = new TempDirectory();
+        using var replacementRunnerWork = new TempDirectory();
         using var repository = new TempDirectory();
         using var fixture = new TempDirectory();
         var bareRepository = await CreateBareRepositoryAsync(repository.Path);
@@ -192,7 +192,7 @@ public sealed class TopologyTests
             "--TaskServer:MinimumLeaseSeconds", "5",
             "--TaskServer:MaximumLeaseSeconds", "15");
         await WaitForHttpAsync(serverUrl + "/readyz", firstServer);
-        using var client = Client(serverUrl);
+        using var client = ProtocolClient(serverUrl);
         var (project, task) = await SeedReadyTaskAsync(client, "OUT");
 
         using var originalRunner = StartBuilt(
@@ -213,12 +213,11 @@ public sealed class TopologyTests
             "--hostname", "outage-host",
             "--git-remote", bareRepository,
             "--workdir", runnerWork.Path,
-            "--cli", "/bin/sh",
-            "--cli-args", fakeCli,
+            "--cli", fakeCli,
             "--ttl", "10",
             "--max-parallelism", "1",
             "--poll-seconds", "1");
-        await WaitForAuditCountAsync(client, "run.claimed", 1, originalRunner);
+        await WaitForAuditCountAsync(client, "work.permit.accepted", 1, originalRunner);
 
         firstServer.Stop();
         await WaitForOutputAsync(
@@ -236,7 +235,7 @@ public sealed class TopologyTests
             "--TaskServer:MinimumLeaseSeconds", "5",
             "--TaskServer:MaximumLeaseSeconds", "15");
         await WaitForHttpAsync(serverUrl + "/readyz", restartedServer);
-        using var restartedClient = Client(serverUrl);
+        using var restartedClient = ProtocolClient(serverUrl);
         var quarantined = await restartedClient.GetFromJsonAsync<TaskHistoryDto>(
             $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
         Assert.NotNull(quarantined);
@@ -258,7 +257,8 @@ public sealed class TopologyTests
                     "contender-host",
                     "contender-before-proof",
                     "1.0.0",
-                    TaskServerProtocol.Current));
+                    TaskServerProtocol.Current,
+                    [ReviewCapabilities.CodingExecutor]));
             var denied = await PostAsync<ClaimRequest, ClaimResponse>(
                 contender,
                 "/api/v1/runners/contender/claims",
@@ -293,9 +293,8 @@ public sealed class TopologyTests
             "--runner-name", "replacement-runner",
             "--hostname", "replacement-host",
             "--git-remote", bareRepository,
-            "--workdir", runnerWork.Path,
-            "--cli", "/bin/sh",
-            "--cli-args", fakeCli,
+            "--workdir", replacementRunnerWork.Path,
+            "--cli", fakeCli,
             "--ttl", "10",
             "--max-parallelism", "1",
             "--poll-seconds", "1");
@@ -348,7 +347,7 @@ public sealed class TopologyTests
             "--TaskServer:MinimumLeaseSeconds", "5",
             "--TaskServer:MaximumLeaseSeconds", "30");
         await WaitForHttpAsync(serverUrl + "/readyz", server);
-        using var client = Client(serverUrl);
+        using var client = ProtocolClient(serverUrl);
         var (project, task) = await SeedReadyTaskAsync(client, "NET");
         var secondTask = await PostAsync<CreateTaskRequest, TaskDto>(
             client,
@@ -376,8 +375,7 @@ public sealed class TopologyTests
             "--hostname", "transport-host",
             "--git-remote", bareRepository,
             "--workdir", runnerWork.Path,
-            "--cli", "/bin/sh",
-            "--cli-args", fakeCli,
+            "--cli", fakeCli,
             "--ttl", "20",
             "--max-parallelism", "1",
             "--poll-seconds", "1");
@@ -505,8 +503,7 @@ public sealed class TopologyTests
             "--hostname", "tls-host",
             "--git-remote", bareRepository,
             "--workdir", runnerWork.Path,
-            "--cli", "/bin/sh",
-            "--cli-args", fakeCli,
+            "--cli", fakeCli,
             "--ttl", "15",
             "--max-parallelism", "1",
             "--poll-seconds", "1");

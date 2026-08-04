@@ -31,7 +31,14 @@ public sealed class TaskServerClient : IDisposable
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
     private bool _supportsCapabilityAdvertisement;
+    private bool _supportsHostOrchestrator;
     private readonly bool _usesServiceCredential;
+    private readonly SemaphoreSlim _hostProtocolGate = new(1, 1);
+    private readonly ConcurrentDictionary<string, Contract.WorkPermitAcceptanceDto> _hostAcceptedWork =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly TaskCompletionSource<long> _hostReportReady =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private long _lastHostReportSequence;
     private int? _centralHostMaxParallelism;
     private DateTime? _centralHostMaxParallelismAppliedAt;
 
@@ -82,7 +89,8 @@ public sealed class TaskServerClient : IDisposable
         string? authToken = null,
         bool usesDurableTaskServer = false,
         RunnerOptions? options = null,
-        string? runnerInstanceId = null)
+        string? runnerInstanceId = null,
+        bool supportsHostOrchestrator = false)
     {
         _http = http;
         _options = options;
@@ -94,6 +102,7 @@ public sealed class TaskServerClient : IDisposable
         SetClientId(configuredClientId ?? runnerId);
         _useV1 = usesDurableTaskServer;
         _supportsCapabilityAdvertisement = usesDurableTaskServer;
+        _supportsHostOrchestrator = usesDurableTaskServer && supportsHostOrchestrator;
     }
 
     /// <summary>
@@ -114,6 +123,7 @@ public sealed class TaskServerClient : IDisposable
         {
             _useV1 = false;
             _supportsCapabilityAdvertisement = false;
+            _supportsHostOrchestrator = false;
             return;
         }
 
@@ -127,6 +137,9 @@ public sealed class TaskServerClient : IDisposable
         _supportsCapabilityAdvertisement =
             serverCapabilities.Contains("capability-advertisement", StringComparer.Ordinal)
             || serverCapabilities.Contains("coding-plane", StringComparer.Ordinal);
+        _supportsHostOrchestrator =
+            _options?.Role != "review"
+            && serverCapabilities.Contains("host-orchestrator", StringComparer.Ordinal);
         _useV1 = _options?.Role == "review"
             ? serverCapabilities.Contains("review-plane", StringComparer.Ordinal)
             : serverCapabilities.Contains("coding-plane", StringComparer.Ordinal);
@@ -145,18 +158,16 @@ public sealed class TaskServerClient : IDisposable
         {
             var options = _options ?? throw new InvalidOperationException("Runner options are unavailable for v1 registration.");
             var runnerId = options.RunnerId;
-            var capabilities = options.Role == "review"
-                ? new[]
-                {
+            string[] capabilities = options.Role == "review"
+                ? [
                     Contract.ReviewCapabilities.ReviewExecutor,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SourceBundleMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                     Contract.ReviewCapabilities.VisionReview,
                     Contract.ReviewCapabilities.BaselineComparison,
-                }
-                : new[]
-                {
+                ]
+                : [
                     Contract.ReviewCapabilities.CodingExecutor,
                     "claim",
                     "events",
@@ -164,7 +175,10 @@ public sealed class TaskServerClient : IDisposable
                     "fenced-completion",
                     "durable-result-handoff",
                     "host-outbox-replay",
-                };
+                    .. (_supportsHostOrchestrator
+                        ? new[] { "permits", "local-queue", "host-post-processing" }
+                        : []),
+                ];
             var request = new Contract.RegisterRunnerRequest(
                 displayName,
                 options.Hostname,
@@ -172,6 +186,12 @@ public sealed class TaskServerClient : IDisposable
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown",
                 RunnerOptions.ProtocolVersion,
                 capabilities,
+                HostOrchestratorMinimum: _supportsHostOrchestrator
+                    ? Contract.HostOrchestratorContract.MinimumSupported
+                    : null,
+                HostOrchestratorMaximum: _supportsHostOrchestrator
+                    ? Contract.HostOrchestratorContract.MaximumSupported
+                    : null,
                 BootstrapMaxParallelism: options.HostMaxParallelism);
             try
             {
@@ -262,12 +282,232 @@ public sealed class TaskServerClient : IDisposable
     public string ClientId { get; private set; } = string.Empty;
 
     public bool UsesDurableTaskServer => _useV1;
+    public bool UsesHostOrchestrator => _useV1 && _supportsHostOrchestrator;
+    internal bool HasAcceptedHostWork(string taskKey)
+        => _hostAcceptedWork.ContainsKey(taskKey);
     internal string RunnerInstanceId => _runnerInstanceIdOverride
                                         ?? $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
     internal int HostMaxParallelism => Math.Clamp(
         _centralHostMaxParallelism ?? _options?.HostMaxParallelism ?? 1,
         1,
         256);
+
+    public async Task<Contract.HostReportResponse> ReportHostAsync(
+        Contract.HostReportRequest request,
+        CancellationToken ct)
+    {
+        if (!UsesHostOrchestrator)
+            throw new TaskServerException(409, "Host reporting requires the negotiated host-orchestrator contract.");
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        await _hostProtocolGate.WaitAsync(ct);
+        try
+        {
+            var response = await SendJsonAsync<Contract.HostReportRequest, Contract.HostReportResponse>(
+                               HttpMethod.Post,
+                               $"/api/v1/runners/{Uri.EscapeDataString(options.RunnerId)}/reports",
+                               request,
+                               ct)
+                           ?? throw new TaskServerException(502, "Task Server returned an empty host report acknowledgement.");
+            Interlocked.Exchange(ref _lastHostReportSequence, response.AcceptedSequence);
+            _hostReportReady.TrySetResult(response.AcceptedSequence);
+            return response;
+        }
+        finally
+        {
+            _hostProtocolGate.Release();
+        }
+    }
+
+    public async Task<Contract.WorkPermitAcceptanceDto> AcceptWorkPermitAsync(
+        Contract.WorkPermitDto permit,
+        long reportSequence,
+        long policyVersion,
+        CancellationToken ct)
+    {
+        if (!UsesHostOrchestrator)
+            throw new TaskServerException(409, "Work permits require the negotiated host-orchestrator contract.");
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        await _hostProtocolGate.WaitAsync(ct);
+        try
+        {
+            var acceptance = await SendJsonAsync<Contract.WorkPermitAcceptRequest, Contract.WorkPermitAcceptanceDto>(
+                                     HttpMethod.Post,
+                                     $"/api/v1/work-permits/{Uri.EscapeDataString(permit.PermitId)}/accept",
+                                     new Contract.WorkPermitAcceptRequest(
+                                         Contract.HostOrchestratorContract.Current,
+                                         options.Hostname,
+                                         RunnerInstanceId,
+                                         options.RunnerId,
+                                         reportSequence,
+                                         policyVersion,
+                                         $"host-permit:{options.RunnerId}:{permit.PermitId}",
+                                         options.TtlSeconds),
+                                     ct)
+                                 ?? throw new TaskServerException(502, "Task Server returned an empty work permit acceptance.");
+            AdoptWorkPermit(acceptance);
+            return acceptance;
+        }
+        finally
+        {
+            _hostProtocolGate.Release();
+        }
+    }
+
+    public RunnerClaimResponse AdoptWorkPermit(Contract.WorkPermitAcceptanceDto acceptance)
+        => AdoptWorkPermitCore(acceptance, allowPriorInstance: false);
+
+    internal RunnerClaimResponse RestoreHostWorkAuthority(
+        Contract.WorkPermitAcceptanceDto acceptance)
+        => AdoptWorkPermitCore(acceptance, allowPriorInstance: true);
+
+    private RunnerClaimResponse AdoptWorkPermitCore(
+        Contract.WorkPermitAcceptanceDto acceptance,
+        bool allowPriorInstance)
+    {
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        if (!string.Equals(acceptance.Lease.RunnerId, options.RunnerId, StringComparison.Ordinal)
+            || (!allowPriorInstance
+                && !string.Equals(acceptance.Lease.InstanceId, RunnerInstanceId, StringComparison.Ordinal))
+            || acceptance.Run.Fence != acceptance.Lease.Fence)
+        {
+            throw new InvalidDataException(
+                $"Work permit '{acceptance.PermitId}' does not carry this runner's exact fenced authority.");
+        }
+
+        var lease = new RunLeaseInfoDto(
+            acceptance.Task.TaskKey,
+            acceptance.Lease.RunnerId,
+            options.RunnerName,
+            options.Hostname,
+            Environment.ProcessId,
+            options.BackendName,
+            acceptance.Lease.LeaseId,
+            acceptance.Lease.Fence,
+            acceptance.Lease.AcquiredAt,
+            acceptance.Lease.ExpiresAt,
+            acceptance.Run.RunId);
+        _hostAcceptedWork[acceptance.Task.TaskKey] = acceptance;
+        _v1Leases[acceptance.Task.TaskKey] = (
+            acceptance.Run.RunId,
+            lease,
+            acceptance.Lease.InstanceId);
+        if (!string.IsNullOrWhiteSpace(acceptance.Task.Body))
+            _v1TaskBodies[acceptance.Task.TaskKey] = acceptance.Task.Body;
+        return new RunnerClaimResponse(
+            RunnerClaimStatus.Claimed,
+            acceptance.Task.TaskKey,
+            acceptance.Task.TaskId,
+            ProjectName: acceptance.Task.ProjectId,
+            Lease: lease,
+            ProjectId: RepositoryIdentity(options.GitRemote),
+            RepositoryUrl: options.GitRemote,
+            DefaultBranch: options.BaseBranch,
+            RunId: acceptance.Run.RunId,
+            LeaseInstanceId: acceptance.Lease.InstanceId);
+    }
+
+    public async Task ReconcileHostRunAsync(
+        Contract.WorkPermitAcceptanceDto acceptance,
+        long reportSequence,
+        CancellationToken ct)
+    {
+        if (!UsesHostOrchestrator) return;
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        await _hostProtocolGate.WaitAsync(ct);
+        try
+        {
+            var response = await SendJsonAsync<Contract.RunReconcileRequest, Contract.RunReconcileResponse>(
+                               HttpMethod.Post,
+                               $"/api/v1/runs/{Uri.EscapeDataString(acceptance.Run.RunId)}/reconcile",
+                               new Contract.RunReconcileRequest(
+                                   Contract.HostOrchestratorContract.Current,
+                                   options.Hostname,
+                                   RunnerInstanceId,
+                                   options.RunnerId,
+                                   acceptance.Lease.LeaseId,
+                                   acceptance.Lease.Fence,
+                                   reportSequence,
+                                   options.TtlSeconds,
+                                   acceptance.Lease.InstanceId),
+                               ct)
+                           ?? throw new TaskServerException(502, "Task Server returned an empty host reconciliation.");
+            if (_v1Leases.TryGetValue(acceptance.Task.TaskKey, out var authority))
+                _v1Leases[acceptance.Task.TaskKey] = (
+                    authority.RunId,
+                    authority.Lease with { ExpiresAt = response.Lease.ExpiresAt },
+                    authority.InstanceId);
+        }
+        finally
+        {
+            _hostProtocolGate.Release();
+        }
+    }
+
+    public async Task CompleteHostPostProcessingAsync(
+        string taskKey,
+        string? evidenceHash,
+        CancellationToken ct)
+    {
+        if (!_hostAcceptedWork.TryGetValue(taskKey, out var acceptance)) return;
+        var options = _options ?? throw new InvalidOperationException("Runner options are unavailable.");
+        if (Volatile.Read(ref _lastHostReportSequence) == 0)
+            await _hostReportReady.Task.WaitAsync(ct);
+
+        await _hostProtocolGate.WaitAsync(ct);
+        try
+        {
+            var reportSequence = Volatile.Read(ref _lastHostReportSequence);
+            foreach (var step in acceptance.PostProcessingPlan)
+            {
+                if (!string.Equals(step.StepId, "post-worktree-containment", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Host post-step '{step.StepId}' has no runner implementation. " +
+                        "The host refuses to report an unexecuted step as complete.");
+                }
+                var claimKey =
+                    $"host-post-claim:{acceptance.Run.RunId}:{step.StepExecutionId}:{acceptance.Lease.Fence}";
+                var claim = await SendJsonAsync<Contract.PostStepClaimRequest, Contract.PostStepClaimResponse>(
+                                HttpMethod.Post,
+                                $"/api/v1/runs/{Uri.EscapeDataString(acceptance.Run.RunId)}/post-steps/{Uri.EscapeDataString(step.StepExecutionId)}/claim",
+                                new Contract.PostStepClaimRequest(
+                                    Contract.HostOrchestratorContract.Current,
+                                    options.Hostname,
+                                    RunnerInstanceId,
+                                    options.RunnerId,
+                                    acceptance.Lease.LeaseId,
+                                    acceptance.Lease.Fence,
+                                    reportSequence,
+                                    claimKey,
+                                    acceptance.Lease.InstanceId),
+                                ct)
+                            ?? throw new TaskServerException(502, "Task Server returned an empty post-step claim.");
+                if (string.Equals(claim.Status, "completed", StringComparison.Ordinal)) continue;
+
+                var hashes = string.IsNullOrWhiteSpace(evidenceHash) ? [] : new[] { evidenceHash };
+                _ = await SendJsonAsync<Contract.PostStepCompleteRequest, Contract.PostStepCompleteResponse>(
+                    HttpMethod.Post,
+                    $"/api/v1/runs/{Uri.EscapeDataString(acceptance.Run.RunId)}/post-steps/{Uri.EscapeDataString(step.StepExecutionId)}/complete",
+                    new Contract.PostStepCompleteRequest(
+                        Contract.HostOrchestratorContract.Current,
+                        options.Hostname,
+                        RunnerInstanceId,
+                        options.RunnerId,
+                        acceptance.Lease.LeaseId,
+                        acceptance.Lease.Fence,
+                        claim.ClaimFence,
+                        "passed",
+                        hashes,
+                        $"host-post-complete:{acceptance.Run.RunId}:{step.StepExecutionId}:{acceptance.Lease.Fence}",
+                        acceptance.Lease.InstanceId),
+                    ct);
+            }
+        }
+        finally
+        {
+            _hostProtocolGate.Release();
+        }
+    }
 
     internal RunOutboxAuthority OutboxAuthority(string taskKey)
     {
@@ -738,6 +978,7 @@ public sealed class TaskServerClient : IDisposable
         if (!_v1Leases.TryGetValue(req.TaskKey, out var cached))
         {
             _v1TaskBodies.TryRemove(req.TaskKey, out _);
+            _hostAcceptedWork.TryRemove(req.TaskKey, out _);
             return new RunLeaseResponse("Released", false, null, "Run already completed and closed by Task Server.");
         }
         var authority = cached;
@@ -752,6 +993,7 @@ public sealed class TaskServerClient : IDisposable
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
+        _hostAcceptedWork.TryRemove(req.TaskKey, out _);
         return new RunLeaseResponse(response?.Status ?? "Released", false, authority.Lease, response?.Message);
     }
 
@@ -859,6 +1101,7 @@ public sealed class TaskServerClient : IDisposable
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
+        _hostAcceptedWork.TryRemove(req.TaskKey, out _);
         return new RemoteRunCompletionResponse(req.TaskKey, typedOutcome, "4-auto-review");
     }
 
@@ -925,6 +1168,10 @@ public sealed class TaskServerClient : IDisposable
             {
                 var payload = JsonSerializer.Deserialize<DurableCompletionPayload>(item.PayloadJson, Json)
                               ?? throw new InvalidDataException("Durable completion payload is empty.");
+                await CompleteHostPostProcessingAsync(
+                    authority.TaskKey,
+                    payload.ResultEnvelopeDigest,
+                    ct);
                 await SendJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
                     HttpMethod.Post,
                     $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
@@ -942,6 +1189,7 @@ public sealed class TaskServerClient : IDisposable
                     ct);
                 _v1Leases.TryRemove(authority.TaskKey, out _);
                 _v1TaskBodies.TryRemove(authority.TaskKey, out _);
+                _hostAcceptedWork.TryRemove(authority.TaskKey, out _);
                 return;
             }
             default:
@@ -1026,6 +1274,7 @@ public sealed class TaskServerClient : IDisposable
                 ct);
             _v1Leases.TryRemove(jobId, out _);
             _v1TaskBodies.TryRemove(jobId, out _);
+            _hostAcceptedWork.TryRemove(jobId, out _);
             return new ExternalCompletionResponse(jobId, "4-auto-review", req.Source);
         }
         return await PostJsonAsync<ExternalCompletionRequest, ExternalCompletionResponse>(

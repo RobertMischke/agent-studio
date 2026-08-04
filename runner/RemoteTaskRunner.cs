@@ -325,6 +325,17 @@ public sealed class RemoteTaskRunner
                     CancellationToken.None);
             }
             outcomeDecision = WithDurableOutput(outcomeDecision, teardown);
+            if (outbox is not null)
+            {
+                // The isolated checkout has now either been removed after a
+                // Task-Server-acknowledged immutable handoff or torn down by the
+                // read-only path. This is the host-side containment work, so it
+                // must be acknowledged before fenced run completion.
+                await _client.CompleteHostPostProcessingAsync(
+                    taskKey,
+                    envelopeDigest,
+                    stopRun.Token);
+            }
             if (outbox is not null && !epicPlanning)
             {
                 var completion = outbox.Enqueue(
@@ -378,12 +389,29 @@ public sealed class RemoteTaskRunner
             await shipper.FlushAsync(CancellationToken.None);
             if (!heartbeat.LeaseLost)
             {
+                teardownAttempted = true;
+                var failedTeardown = WorktreeTeardownResult.NoWork;
+                if (Directory.Exists(workspace.RepoPath))
+                {
+                    if (epicPlanning)
+                        sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
+                    else
+                        failedTeardown = await workspace.TeardownAsync(
+                            outcome.Kind.ToString(),
+                            lease.AttemptId,
+                            CancellationToken.None);
+                }
+                outcomeDecision = WithDurableOutput(outcomeDecision, failedTeardown);
+                await _client.CompleteHostPostProcessingAsync(
+                    taskKey,
+                    evidenceHash: null,
+                    CancellationToken.None);
                 await CompleteAsync(
                     taskKey,
                     lease,
                     outcome,
                     outcomeDecision,
-                    WorktreeTeardownResult.NoWork,
+                    failedTeardown,
                     workspace.RepositoryUrl,
                     baseSha: null,
                     workspace.IntegrationBranchRef,
