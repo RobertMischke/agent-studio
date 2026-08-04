@@ -75,12 +75,16 @@ public static class PosixShell
 
     private static string? Resolve()
     {
-        if (!OperatingSystem.IsWindows())
-            return File.Exists("/bin/sh") ? "/bin/sh" : FindOnPath("sh") ?? FindOnPath("bash");
-
         // Prefer an explicitly configured shell so an unusual install still works.
         var configured = Environment.GetEnvironmentVariable("AGENT_STUDIO_TEST_SHELL");
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
+
+        // Repository shell fixtures use Bash features such as pipefail,
+        // arrays, and [[ ... ]]. On Debian-family hosts /bin/sh is dash, so
+        // treating it as a usable interpreter makes the suite fail before the
+        // tested script reaches its contract.
+        if (!OperatingSystem.IsWindows())
+            return File.Exists("/bin/bash") ? "/bin/bash" : FindOnPath("bash");
 
         return FindOnPath("bash") ?? FindWindowsGitBash();
     }

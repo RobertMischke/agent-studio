@@ -253,6 +253,15 @@ state.
   boundary: the Task Server never substitutes its checkout or local
   `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
   authority continue through the established local compatibility path.
+- ReviewAttempt claimability is also bound to the current task lane. A
+  successful transition into `6-completed` or `7-archive` supersedes every open
+  ReviewAttempt for that task before another claim can cross the lifecycle
+  boundary. Each claim poll fails closed for attempts whose card is absent or
+  no longer in `4-auto-review`, and writes a durable supersession journal fact.
+  The compatibility store uses `review_attempt_superseded` in the task
+  timeline; the canonical Task Server uses `review.superseded` in its audit
+  journal. The startup sweep applies the same idempotent repair to authority
+  records left by older binaries.
 - `task-server.Tests/TopologyTests.cs`: release-blocking sibling-process
   harness for Studio detach, canonical history replay, renewal safety stop,
   Task Server restart quarantine, Runner replacement after positive

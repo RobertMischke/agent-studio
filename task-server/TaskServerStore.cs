@@ -129,6 +129,17 @@ public sealed partial class TaskServerStore
                        SET status = 'server-restarted'
                      WHERE status = 'active';
                     """, cancellationToken);
+
+                await using var transaction =
+                    (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+                await SupersedeUnclaimableReviewAttemptsAsync(
+                    connection,
+                    transaction,
+                    "task-server-boot",
+                    "boot-sweep",
+                    taskId: null,
+                    cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
 
             var integrity = Convert.ToString(await ScalarAsync(connection, "PRAGMA integrity_check;", cancellationToken), CultureInfo.InvariantCulture);
@@ -450,6 +461,13 @@ public sealed partial class TaskServerStore
                 ("$version", updated.Version), ("$updated", Iso(now)), ("$id", updated.TaskId), ("$expected", request.ExpectedVersion));
             if (updated.State is "6-completed" or "7-archive")
             {
+                await SupersedeUnclaimableReviewAttemptsAsync(
+                    connection,
+                    transaction,
+                    actorId,
+                    "lane-transition",
+                    updated.TaskId,
+                    ct);
                 var retainedThrough = now.AddDays(Math.Max(1, _options.ResultRetentionDays));
                 await ExecuteAsync(connection, """
                     UPDATE result_handoffs
