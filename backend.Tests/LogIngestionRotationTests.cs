@@ -10,7 +10,7 @@ public sealed class LogIngestionRotationTests : IDisposable
         Path.Combine(Path.GetTempPath(), "atp-log-rotation-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void AppendBounded_RotatesAtEightMiB_AndRetainsNewestTailWithMarker()
+    public void AppendBounded_RotatesAtTenMiB_AndRetainsPreviousFileWithMarker()
     {
         Directory.CreateDirectory(_root);
         var path = Path.Combine(_root, "cli-output.log");
@@ -30,8 +30,12 @@ public sealed class LogIngestionRotationTests : IDisposable
             $"Rotated log remained {info.Length} bytes.");
         var content = File.ReadAllText(path);
         Assert.StartsWith("[21:45:00.000] [system] [cli-output-rotated]", content, StringComparison.Ordinal);
-        Assert.Contains("old-tail-line", content, StringComparison.Ordinal);
-        Assert.EndsWith(newest, content, StringComparison.Ordinal);
+        Assert.EndsWith(newest, content.TrimEnd(), StringComparison.Ordinal);
+
+        var rotation = path + CliOutputLogFile.RotationSuffix;
+        Assert.True(File.Exists(rotation));
+        Assert.True(new FileInfo(rotation).Length <= LogIngestionEndpoints.CliOutputLogCapBytes);
+        Assert.Contains("old-tail-line", File.ReadAllText(rotation), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -49,6 +53,51 @@ public sealed class LogIngestionRotationTests : IDisposable
             path, payload, receipt, new DateTime(2026, 7, 25, 21, 45, 1)));
 
         Assert.Equal(1, File.ReadLines(path).Count(line => line.Contains("once", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void MigrateExisting_SplitsLegacyOversizedLogIntoOneBoundedRotationAndActiveTail()
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, "cli-output.log");
+        const int cap = 512;
+        var lines = Enumerable.Range(0, 80)
+            .Select(i => $"[{i:000}] [stdout] legacy-line-{i:000}-abcdefghijklmnopqrstuvwxyz")
+            .ToArray();
+        File.WriteAllLines(path, lines, new UTF8Encoding(false));
+
+        Assert.True(CliOutputLogFile.MigrateExisting(
+            path,
+            cap,
+            new DateTime(2026, 8, 2, 9, 30, 0)));
+
+        var rotation = path + CliOutputLogFile.RotationSuffix;
+        Assert.True(new FileInfo(path).Length <= cap);
+        Assert.True(new FileInfo(rotation).Length <= cap);
+        Assert.StartsWith("[09:30:00.000] [system] [cli-output-rotated]", File.ReadAllText(path));
+        Assert.Contains("legacy-line-079", File.ReadAllText(path), StringComparison.Ordinal);
+        Assert.Contains("legacy-line-070", File.ReadAllText(rotation), StringComparison.Ordinal);
+        Assert.False(CliOutputLogFile.MigrateExisting(
+            path,
+            cap,
+            new DateTime(2026, 8, 2, 9, 31, 0)));
+    }
+
+    [Fact]
+    public void EnsureRotationIgnored_AppendsRuleOnceAndPreservesExistingEntries()
+    {
+        Directory.CreateDirectory(_root);
+        var ignore = Path.Combine(_root, ".gitignore");
+        File.WriteAllText(ignore, "projects/*/tasks/*/*/results/\n");
+
+        Assert.True(CliOutputLogMaintenanceService.EnsureRotationIgnored(_root));
+        Assert.False(CliOutputLogMaintenanceService.EnsureRotationIgnored(_root));
+
+        var content = File.ReadAllText(ignore);
+        Assert.Contains("projects/*/tasks/*/*/results/", content, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            content.Split('\n').Count(line => line == CliOutputLogFile.RotationIgnorePattern));
     }
 
     private static void WriteOversizedLineLog(string path)

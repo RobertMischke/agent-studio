@@ -406,10 +406,10 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
 
         try
         {
-            var logsDir = Path.Combine(info.FolderPath, "logs");
+            var logsDir = TaskPaths.LogsDir(info.FolderPath);
             Directory.CreateDirectory(logsDir);
-            var logPath = Path.Combine(logsDir, "cli-output.log");
-            File.AppendAllText(logPath, request.LogLine!.EndsWith('\n') ? request.LogLine : request.LogLine + "\n");
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
+            CliOutputLogFile.Append(logPath, request.LogLine!);
             // No TaskInfo field changes; skip cache invalidation and
             // version bump. Subscribers don't need a log-line tick.
             return Task.FromResult(new TaskMutationResult

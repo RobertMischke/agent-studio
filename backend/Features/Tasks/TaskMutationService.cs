@@ -126,7 +126,7 @@ public class TaskMutationService
 
             var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
             var line = $"[{ts}] [system] [taskboard] Model changed from={from} to={to}";
-            File.AppendAllText(logPath, Environment.NewLine + line + Environment.NewLine, Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, line);
         }
         catch (Exception ex)
         {

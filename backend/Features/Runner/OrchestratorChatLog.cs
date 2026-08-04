@@ -100,10 +100,7 @@ public class OrchestratorChatLog
             var ts = DateTime.UtcNow;
             var oneLine = (body ?? string.Empty).Replace("\r", " ").Replace("\n", " ").TrimEnd();
             var persistLine = $"[{ts:HH:mm:ss.fff}] [{streamTag}] {oneLine}";
-            var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
-                ? Environment.NewLine
-                : string.Empty;
-            File.AppendAllText(logPath, prefix + persistLine + Environment.NewLine, System.Text.Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, persistLine);
 
             if (liveBuffer != null)
             {

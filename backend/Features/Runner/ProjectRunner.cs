@@ -6904,10 +6904,7 @@ public class ProjectRunner
             var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff");
             var line = $"[{ts}] [system] --- Session lost ({reason}) - recovering from job folder ---";
-            var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
-                ? Environment.NewLine
-                : string.Empty;
-            File.AppendAllText(logPath, prefix + line + Environment.NewLine, System.Text.Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, line);
         }
         catch (Exception ex)
         {
@@ -6940,10 +6937,7 @@ public class ProjectRunner
                 : cliError;
             var line =
                 $"[{now:HH:mm:ss.fff}] [system] [taskboard] {cliType ?? "CLI"} spawn failed: {reason}";
-            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
-                File.AppendAllText(logPath, Environment.NewLine + line, System.Text.Encoding.UTF8);
-            else
-                File.WriteAllText(logPath, line, System.Text.Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, line);
             _logger.LogWarning(
                 "[taskboard] spawn failed for job {JobId} on {Cli}: {Reason}",
                 info.Id, cliType ?? "CLI", reason);
@@ -6974,10 +6968,7 @@ public class ProjectRunner
                 output.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
 
             // Append so that continuation sessions accumulate rather than overwrite.
-            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
-                File.AppendAllText(logPath, Environment.NewLine + logContent, System.Text.Encoding.UTF8);
-            else
-                File.WriteAllText(logPath, logContent, System.Text.Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, logContent);
             return true;
         }
         catch (Exception ex)

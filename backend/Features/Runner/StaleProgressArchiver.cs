@@ -768,10 +768,7 @@ public sealed class StaleProgressArchiver
                 RecoveryChatLine.ReasonHostRestart,
                 "run stuck in 3-progress after restart",
                 $"requeued to {TaskStates.Ready}");
-            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
-                File.AppendAllText(logPath, Environment.NewLine + line, Encoding.UTF8);
-            else
-                File.WriteAllText(logPath, line, Encoding.UTF8);
+            CliOutputLogFile.Append(logPath, line);
         }
         catch (Exception ex)
         {

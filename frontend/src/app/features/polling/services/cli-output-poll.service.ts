@@ -34,7 +34,8 @@ function capLines(lines: CliOutputLine[]): CliOutputLine[] {
   if (lines.length <= MAX_RENDERED_LINES) return lines;
   // Drop the oldest entries; the activity log shows newest at the bottom,
   // so the cap takes the tail. The user can still scroll the log up to
-  // the trim boundary; full history lives on disk in cli-output.log.
+  // the trim boundary; the bounded durable tail lives on disk in
+  // cli-output.log, with one preceding segment in cli-output.log.1.
   return lines.slice(-MAX_RENDERED_LINES);
 }
 
