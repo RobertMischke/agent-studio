@@ -343,9 +343,10 @@ public sealed class RemoteReviewWorkspace
             clearEnvironment: true,
             ct: ct);
         if (!worktree.Success)
-            throw new ReviewInfrastructureException(
-                "BaselineUnavailable",
-                $"Baseline worktree at '{baselineSha}' could not be created: {worktree.StdErr.Trim()}");
+            throw BaselineUnavailable(
+                $"Baseline worktree at '{baselineSha}' could not be created: {worktree.StdErr.Trim()}",
+                baselineSha,
+                command);
 
         var execution = await RunCommandAsync(
             command,
@@ -353,9 +354,10 @@ public sealed class RemoteReviewWorkspace
             ct,
             BaselineProcessEnvironment(commandHash));
         if (execution.Signal is not null || execution.Process.ExitCode < 0)
-            throw new ReviewInfrastructureException(
-                "BaselineUnavailable",
-                $"Baseline command '{command.StepId}' did not complete normally.");
+            throw BaselineUnavailable(
+                $"Baseline command '{command.StepId}' did not complete normally.",
+                baselineSha,
+                command);
         var failures = ParsedTestFailures(execution.Process);
         var entry = new BaselineCacheEntry(
             TestFailureParserVersion,
@@ -402,9 +404,10 @@ public sealed class RemoteReviewWorkspace
     {
         if (_baselineSha is not null) return _baselineSha;
         if (string.IsNullOrWhiteSpace(_subject.Plan.IntegrationRef))
-            throw new ReviewInfrastructureException(
-                "BaselineUnavailable",
-                "A baseline-compared review command requires the integration ref in the immutable review plan.");
+            throw BaselineUnavailable(
+                "A baseline-compared review command requires the integration ref in the immutable review plan.",
+                baselineSha: null,
+                command: null);
 
         var fetch = await ProcessRunner.RunAsync(
             "git",
@@ -414,16 +417,48 @@ public sealed class RemoteReviewWorkspace
             clearEnvironment: true,
             ct: ct);
         if (!fetch.Success)
-            throw new ReviewInfrastructureException(
-                "BaselineUnavailable",
-                $"Integration ref '{_subject.Plan.IntegrationRef}' could not be fetched: {fetch.StdErr.Trim()}");
+            throw BaselineUnavailable(
+                $"Integration ref '{_subject.Plan.IntegrationRef}' could not be fetched: {fetch.StdErr.Trim()}",
+                baselineSha: null,
+                command: null);
         _baselineSha = await GitValueAsync(["merge-base", _subject.ExpectedResultSha, "FETCH_HEAD"], ct);
         if (_baselineSha.Length == 0)
-            throw new ReviewInfrastructureException(
-                "BaselineUnavailable",
-                $"No merge-base exists between the subject and '{_subject.Plan.IntegrationRef}'.");
+            throw BaselineUnavailable(
+                $"No merge-base exists between the subject and '{_subject.Plan.IntegrationRef}'.",
+                baselineSha: null,
+                command: null);
+        _log(
+            $"review baseline resolved repository={_subject.RepositoryId} " +
+            $"ref={_subject.Plan.IntegrationRef} base={_baselineSha}");
         return _baselineSha;
     }
+
+    /// <summary>
+    /// Every <c>BaselineUnavailable</c> carries the base it used, the ref it
+    /// resolved that base from, and the command that died. AGT-2220 repeated the
+    /// bare classification four times, so nothing on the card ever showed that
+    /// the base was an ancient merge-base against a stale integration ref.
+    /// </summary>
+    private ReviewInfrastructureException BaselineUnavailable(
+        string message,
+        string? baselineSha,
+        ReviewCommandDto? command)
+        => new(
+            "BaselineUnavailable",
+            ReviewInfrastructureDiagnosis.Append(
+                message,
+                [
+                    new(ReviewInfrastructureDiagnosis.BaseKey,
+                        baselineSha ?? ReviewInfrastructureDiagnosis.UnresolvedBase),
+                    new(ReviewInfrastructureDiagnosis.RefKey, _subject.Plan.IntegrationRef),
+                    new(ReviewInfrastructureDiagnosis.StepKey, command?.StepId),
+                    new(ReviewInfrastructureDiagnosis.CommandKey, CommandLine(command)),
+                ]));
+
+    private static string? CommandLine(ReviewCommandDto? command)
+        => command is null
+            ? null
+            : string.Join(' ', new[] { command.FileName }.Concat(command.Arguments));
 
     private static async Task<FileStream> AcquireCacheLockAsync(string path, CancellationToken ct)
     {

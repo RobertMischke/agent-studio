@@ -480,6 +480,68 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal("FlakyQuarantine", Assert.Single(evidence.Verdicts).Classification);
     }
 
+    [Fact]
+    public async Task Baseline_failure_names_the_base_the_ref_and_the_command_it_used()
+    {
+        var (baselineSha, subjectSha) = await SeedSubjectBranchAsync();
+        // AGT-2220 shape: the baseline command never completes normally. The
+        // classification alone said nothing about which base it ran against.
+        var command = new ReviewCommandDto(
+            "verify-2",
+            "build-tests",
+            PosixShell.RequirePath(),
+            ["-c", "sleep 30"],
+            TimeoutSeconds: 1,
+            CompareToBaseline: true);
+        var (workspace, _) = Workspace(
+            "attempt-diagnosis",
+            subjectSha,
+            [command],
+            26040,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main");
+        await workspace.PrepareAsync(null!, default);
+
+        var exception = await Assert.ThrowsAsync<ReviewInfrastructureException>(
+            () => workspace.ExecutePlanAsync(default));
+
+        Assert.Equal("BaselineUnavailable", exception.Classification);
+        var facts = ReviewInfrastructureDiagnosis.Parse(exception.Message);
+        Assert.Equal(baselineSha, facts[ReviewInfrastructureDiagnosis.BaseKey]);
+        Assert.Equal("refs/heads/main", facts[ReviewInfrastructureDiagnosis.RefKey]);
+        Assert.Equal("verify-2", facts[ReviewInfrastructureDiagnosis.StepKey]);
+        Assert.Contains(
+            "sleep 30",
+            facts[ReviewInfrastructureDiagnosis.CommandKey],
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_unfetchable_integration_ref_is_reported_with_an_unresolved_base()
+    {
+        var (_, subjectSha) = await SeedSubjectBranchAsync();
+        var (workspace, _) = Workspace(
+            "attempt-missing-ref",
+            subjectSha,
+            [BaselineCommand("exit 1")],
+            26048,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/retired-integration-line");
+        await workspace.PrepareAsync(null!, default);
+
+        var exception = await Assert.ThrowsAsync<ReviewInfrastructureException>(
+            () => workspace.ExecutePlanAsync(default));
+
+        Assert.Equal("BaselineUnavailable", exception.Classification);
+        var facts = ReviewInfrastructureDiagnosis.Parse(exception.Message);
+        Assert.Equal(
+            ReviewInfrastructureDiagnosis.UnresolvedBase,
+            facts[ReviewInfrastructureDiagnosis.BaseKey]);
+        Assert.Equal(
+            "refs/heads/retired-integration-line",
+            facts[ReviewInfrastructureDiagnosis.RefKey]);
+    }
+
     private static ReviewCommandDto BaselineCommand(string shell)
         => new(
             "verify-2",

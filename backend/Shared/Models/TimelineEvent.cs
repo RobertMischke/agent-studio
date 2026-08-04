@@ -272,6 +272,23 @@ public static class TimelineEventKinds
     /// integration branch.
     /// </summary>
     public const string IntegrationRecoveryQueued = "integration_recovery_queued";
+    /// <summary>
+    /// AGT-2220: the card's recorded <c>integrationBranch</c> disagreed with
+    /// project truth when a review was claimed, so the review plane rewrote it.
+    /// A stale field (still <c>refs/heads/main</c> after develop became the
+    /// working branch) resolves the review baseline to an ancient merge-base.
+    /// <see cref="TimelineEvent.Details"/> carries the previous branch, the new
+    /// ref, and which source decided it.
+    /// </summary>
+    public const string IntegrationBranchCorrected = "integration_branch_corrected";
+    /// <summary>
+    /// AGT-2220: the same review infrastructure cause failed several linked
+    /// attempts in a row, so the concrete diagnosis is named on the card instead
+    /// of only a repeated classification. <see cref="TimelineEvent.Details"/>
+    /// carries the classification, repeat count, attempt ids, and the base ref /
+    /// base commit / step / command the runner reported.
+    /// </summary>
+    public const string ReviewInfrastructureRepeatDiagnosed = "review_infrastructure_repeat_diagnosed";
 }
 
 /// <summary>

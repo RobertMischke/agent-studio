@@ -717,6 +717,37 @@ public sealed class AttemptAuthorityService
     }
 
     /// <summary>
+    /// Returns the infrastructure retry chain that ends at
+    /// <paramref name="attemptId"/>, oldest attempt first, with each attempt's
+    /// terminal classification and reason. Retries are only ever linked after an
+    /// infrastructure failure, so this is the evidence a repeat diagnosis needs
+    /// (AGT-2220: four linked attempts, one identical cause, no named diagnosis).
+    /// </summary>
+    public IReadOnlyList<ReviewInfrastructureAttemptFact> ReviewInfrastructureChain(string attemptId)
+    {
+        lock (_gate)
+        {
+            var review = FindReview(attemptId);
+            if (review is null) return [];
+
+            var chain = new List<ReviewInfrastructureAttemptFact>();
+            var cursor = review;
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (cursor is not null && visited.Add(cursor.AttemptId))
+            {
+                chain.Insert(0, new ReviewInfrastructureAttemptFact(
+                    cursor.AttemptId,
+                    cursor.FailureClassification,
+                    cursor.TerminalReason));
+                cursor = Blank(cursor.SourceReviewAttemptId)
+                    ? null
+                    : FindReview(cursor.SourceReviewAttemptId!);
+            }
+            return chain;
+        }
+    }
+
+    /// <summary>
     /// Terminalizes current ReviewSubjects created from pre-plane completions
     /// that have no immutable Result-Envelope. Returning every matching current
     /// record lets the claim endpoint retry a failed lane escalation without
