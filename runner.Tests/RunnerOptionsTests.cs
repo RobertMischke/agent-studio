@@ -44,9 +44,17 @@ public class RunnerOptionsTests
     public void Daemon_slot_flags_are_parsed()
     {
         var (options, _, _, _) = RunnerOptions.Parse(
-            ["--poll", "--max-parallelism", "4", "--poll-seconds", "9"]);
+            [
+                "--poll",
+                "--max-parallelism", "4",
+                "--poll-seconds", "9",
+                "--server-request-timeout-seconds", "17",
+                "--idle-watchdog-minutes", "3",
+            ]);
         Assert.Equal(4, options.HostMaxParallelism);
         Assert.Equal(9, options.PollSeconds);
+        Assert.Equal(17, options.ServerRequestTimeoutSeconds);
+        Assert.Equal(3, options.IdleWatchdogMinutes);
     }
 
     [Fact]
@@ -88,6 +96,20 @@ public class RunnerOptionsTests
         Assert.Equal("exec resume {sessionId} --json", options.CliResumeArgs);
         Assert.Throws<ArgumentException>(() => RunnerOptions.Parse(
             ["--cli-resume-args", "exec resume fixed-session --json"]));
+    }
+
+    [Fact]
+    public void Provider_specific_card_binaries_are_configurable_in_both_directions()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--cli", "/opt/bin/codex",
+            "--claude-cli", "/opt/bin/claude",
+            "--codex-cli", "/opt/bin/codex-card",
+        ]);
+
+        Assert.Equal("/opt/bin/codex", options.CliBin);
+        Assert.Equal("/opt/bin/claude", options.ClaudeCliBin);
+        Assert.Equal("/opt/bin/codex-card", options.CodexCliBin);
     }
 
     [Fact]

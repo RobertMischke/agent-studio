@@ -244,6 +244,7 @@ internal static class SetupApplication
             executionGroup,
             homeDirectory,
             cliPath,
+            installedClis.GetValueOrDefault("claude"),
             installedClis.GetValueOrDefault("codex"),
             agentCli.Equals("codex", StringComparison.OrdinalIgnoreCase)
                 ? "exec --skip-git-repo-check --sandbox danger-full-access -"

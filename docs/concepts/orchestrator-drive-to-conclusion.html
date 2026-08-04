@@ -1533,6 +1533,32 @@
             <code>NewTestFailures</code> and reaches <code>ProductFailure</code>.
           </td>
         </tr>
+        <tr id="case-agt-2488">
+          <td>2026-08-02 to 2026-08-03</td>
+          <td><code>AGT-2488</code><br><span class="small">slot-free claim loop silence after worker loss and backend restart</span></td>
+          <td>
+            A coding daemon logged a detached worker loss and then produced no poll, claim, or error for six hours while
+            four cards remained Ready and the unit stayed active. After the backend restarted, coding and review daemons
+            also stopped before their first claim while capability advertisement waited or returned
+            <code>409 Register this runner identity before advertising capabilities</code>.
+          </td>
+          <td>
+            A hard worker kill alone did not terminate the current claim loop, but its release cleanup used an uncancelled
+            token and only one delivery attempt. Capability advertisement had no 409 recovery even though the monolith
+            intentionally stores runner registrations in process memory. The daemon had no independent invariant able to
+            detect a blocked startup or claim-path await from outside the loop. The backend registry lock itself contains
+            only bounded in-memory validation and dictionary mutation; it performs no asynchronous work or external I/O.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> every Task Server request now has a configurable hard deadline;
+            worker-loss release makes three bounded attempts; capability publication repeats idempotent registration on
+            409 and retries transient faults with the normal backoff. A separate slot-free watchdog logs a fatal error and
+            cancels the daemon after five minutes without a started claim poll so <code>Restart=always</code> replaces it.
+            A fake-server regression hard-kills the detached worker and proves that the same daemon releases the lease and
+            polls again. Additional tests cover a hanging advertisement, backend registration loss, concurrent registry
+            register/advertise calls, and the watchdog terminal.
+          </td>
+        </tr>
         <tr>
           <td>2026-07-31</td>
           <td><code>AGT-2463</code><br><span class="small">four local restart orphans</span></td>
@@ -1663,6 +1689,53 @@
             reap. Regressions run an actual <code>git ls-remote</code> against a hanging fake SSH remote three times, verify
             every remote helper and descendant PID exits, cover explicit cancellation, and classify simulated
             file-handle exhaustion without crashing the backend.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-04</td>
+          <td><code>AGT-2499</code><br><span class="small">AGT-2458 completed without a persisted result envelope</span></td>
+          <td>
+            The 31 July AGT-2458 attempt persisted both its Result-SHA and immutable ResultEnvelope. The 4 August
+            attempt reported <code>Done</code> and persisted its Result-SHA, but its ResultEnvelope remained null. The
+            server created a ReviewAttempt anyway. Fifteen minutes later, Review escalated the card because the
+            immutable ReviewSubject could never be materialized.
+          </td>
+          <td>
+            The protocol 1 Runner deliberately omitted the whole envelope trio when the base SHA, immutable result ref,
+            or artifact-manifest digest was missing. In particular, the legacy Git handoff tolerated an immutable-ref
+            push failure after salvage and completed without the envelope. The compatibility completion endpoint logged
+            the omission but still settled the coding RunAttempt as Completed and minted its ReviewSubject. The envelope
+            was therefore not lost during persistence; it was absent from the completion request and incorrectly treated
+            as optional at the server boundary.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> one pure completion-envelope policy now runs before settlement. A coding
+            <code>Done</code> or <code>NoOp</code> without the complete trio settles as <code>Failed/unverified</code>,
+            creates no ReviewAttempt, and reaches Escalated immediately with category
+            <code>unverified-delivery</code> and a requeue action. Full-envelope completion remains reviewable, while
+            epic planning and report-only modes remain exempt. The endpoint regression proves the delayed
+            unmaterializable-ReviewSubject escalation is structurally unreachable for new completions.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-03</td>
+          <td><code>AGT-2459</code><br><span class="small">claim replay returned a Ready card with a live lease</span></td>
+          <td>
+            A daemon claim could persist its fenced RunAttempt and then lose the Ready-to-Progress lane move or HTTP
+            response. Retrying the same acquire delivery returned <code>Claimed</code> while folder and
+            <code>task.json</code> still exposed the card in Ready, reopening local or later remote pickup.
+          </td>
+          <td>
+            The replay path reconstructed the lease and run specification directly from acquire authority but did not
+            execute the lane side of the claim convergence unit. Only the first-delivery path moved the task and checked
+            the transition result.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> replay now accepts only Progress as converged, repairs Ready to
+            Progress with the original attempt, fence, authority epoch, and deterministic lane delivery key, then reads
+            task truth back before returning <code>Claimed</code>. Other lanes and failed repairs return no claim while
+            retaining the live lease guard. A crash-window endpoint regression proves folder and <code>task.json</code>
+            convergence and exactly one RunAttempt after a contender poll.
           </td>
         </tr>
       </tbody>

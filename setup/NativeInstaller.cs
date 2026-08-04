@@ -20,6 +20,7 @@ internal sealed record HostConfiguration(
     string ExecutionGroup,
     string HomeDirectory,
     string CliPath,
+    string? ClaudePath,
     string? CodexPath,
     string CliArguments,
     string? GitRemote,
@@ -332,7 +333,7 @@ internal sealed class NativeInstaller(
         File.Move(temporary, path, overwrite: true);
     }
 
-    private static string BuildRunnerEnvironment(
+    internal static string BuildRunnerEnvironment(
         HostConfiguration configuration,
         string credentialPath,
         string workRoot,
@@ -351,6 +352,8 @@ internal sealed class NativeInstaller(
             $"RUNNER_CLI_BIN={EnvironmentValue(configuration.CliPath)}",
             $"RUNNER_CLI_ARGS={EnvironmentValue(configuration.CliArguments)}",
         };
+        if (configuration.ClaudePath is not null)
+            lines.Add($"RUNNER_CLAUDE_CLI_BIN={EnvironmentValue(configuration.ClaudePath)}");
         if (configuration.CodexPath is not null)
             lines.Add($"RUNNER_CODEX_CLI_BIN={EnvironmentValue(configuration.CodexPath)}");
         if (configuration.GitRemote is not null)

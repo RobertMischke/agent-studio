@@ -73,13 +73,37 @@ public sealed class RunSpecInvocationTests : IDisposable
     }
 
     [Fact]
+    public void Codex_primary_host_routes_a_claude_card_to_its_claude_binary()
+    {
+        var options = Options(
+            "codex",
+            "exec --experimental-json",
+            claudeCliBin: "/usr/local/bin/claude-card-cli");
+
+        var invocation = AgentCliProcess.Resolve(
+            options,
+            new RunSpecDto("claude", "claude-opus-5", "high"));
+
+        Assert.Equal("/usr/local/bin/claude-card-cli", invocation.FileName);
+        Assert.Equal(AgentCliProcess.ClaudeCli, invocation.CliType);
+        Assert.Equal(
+            ["-p", "--model", "claude-opus-5", "--effort", "high"],
+            invocation.Arguments);
+        Assert.Equal("claude-opus-5", invocation.Model);
+        Assert.Null(invocation.Note);
+    }
+
+    [Fact]
     public void A_cli_this_host_has_no_binary_for_keeps_the_configured_one_and_says_so()
     {
         // The host runs codex only. A claude card must not silently spawn a
         // binary the operator never configured. The claude model and effort
         // selectors must not cross-apply to codex; the host's configured args
         // and default model win, and the mismatch is stated instead.
-        var options = Options("codex", "exec --experimental-json");
+        var options = Options(
+            "codex",
+            "exec --experimental-json",
+            claudeCliBin: string.Empty);
         var invocation = AgentCliProcess.Resolve(
             options,
             new RunSpecDto("claude", "claude-opus-5", "max"));
@@ -223,7 +247,10 @@ public sealed class RunSpecInvocationTests : IDisposable
         Assert.Equal("AGT-LEGACY-SLOT", reloaded.TaskKey);
     }
 
-    private static RunnerOptions Options(string cliBin, string cliArgs) => new()
+    private static RunnerOptions Options(
+        string cliBin,
+        string cliArgs,
+        string? claudeCliBin = null) => new()
     {
         ServerUrl = "http://localhost",
         RunnerId = "runner-run-spec-test",
@@ -233,6 +260,7 @@ public sealed class RunSpecInvocationTests : IDisposable
         WorkDir = Path.GetTempPath(),
         BaseBranch = "main",
         CliBin = cliBin,
+        ClaudeCliBin = claudeCliBin ?? "claude",
         CliArgs = cliArgs,
         TtlSeconds = 120,
         HeartbeatSeconds = 30,

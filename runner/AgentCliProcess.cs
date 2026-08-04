@@ -45,11 +45,11 @@ public static class AgentCliProcess
     /// </para>
     ///
     /// <para>
-    /// The host knows exactly two binaries — <c>RUNNER_CLI_BIN</c> (claude in
-    /// practice) and <c>RUNNER_CODEX_CLI_BIN</c>. If a card asks for a CLI this
-    /// host has no binary for, the configured binary wins and the invocation says
-    /// so in <see cref="CliInvocation.Note"/> rather than spawning something that
-    /// cannot exist.
+    /// The host knows its primary <c>RUNNER_CLI_BIN</c> plus provider-specific
+    /// <c>RUNNER_CLAUDE_CLI_BIN</c> and <c>RUNNER_CODEX_CLI_BIN</c> paths. If a
+    /// card asks for a CLI this host has no binary for, the configured binary wins
+    /// and the invocation says so in <see cref="CliInvocation.Note"/> rather than
+    /// spawning something that cannot exist.
     /// </para>
     /// </summary>
     public static CliInvocation Resolve(
@@ -65,10 +65,13 @@ public static class AgentCliProcess
         string? note = null;
         if (requestedType is not null && !string.Equals(requestedType, configuredType, StringComparison.Ordinal))
         {
-            if (requestedType == CodexCli && !string.IsNullOrWhiteSpace(options.CodexCliBin))
+            var requestedBinary = requestedType == CodexCli
+                ? options.CodexCliBin
+                : options.ClaudeCliBin;
+            if (!string.IsNullOrWhiteSpace(requestedBinary))
             {
-                cliType = CodexCli;
-                fileName = options.CodexCliBin;
+                cliType = requestedType;
+                fileName = requestedBinary;
             }
             else
             {

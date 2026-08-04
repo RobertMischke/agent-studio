@@ -36,12 +36,15 @@ state.
 
 - `backend/Services/TaskRunnerService.cs`: project runner ownership and public
   start, stop, continue, and mode surface.
-- `runner/TaskServerConnectivityMonitor.cs`, `RemoteRunnerDaemon.cs`, and
-  `RemoteReviewDaemon.cs`: host-side Task Server route state. Poll failures use
-  bounded backoff and transition logging, escalate after five continuous
-  minutes, and recover without restarting the daemon. The connectivity
-  capability's three-minute freshness deadline is the remote alarm because a
-  broken route cannot deliver its own failure telemetry.
+- `runner/TaskServerConnectivityMonitor.cs`, `DaemonIdleWatchdog.cs`,
+  `RemoteRunnerDaemon.cs`, and `RemoteReviewDaemon.cs`: host-side Task Server
+  route and loop liveness. Poll failures use bounded backoff and transition
+  logging, while a slot-free process that stops starting polls for five minutes
+  logs a fatal invariant and exits for service-manager replacement. Capability
+  advertisement re-registers after the backend forgets its in-memory runner
+  identity. The connectivity capability's three-minute freshness deadline is
+  the remote alarm because a broken route cannot deliver its own failure
+  telemetry.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `backend/Features/Runner/PromptEnrichmentService.cs`,
@@ -96,8 +99,11 @@ state.
   and HEAD revision.
 - Coding hosts advertise fresh `cli-execution:<cliType>` and
   `provider-auth:<cliType>` capabilities for every card CLI binary they can
-  invoke. `LeaseEndpoints` adds the candidate card's normalized CLI keys to the
-  existing required-capability set before repository preflight or lease
+  invoke. The primary `RUNNER_CLI_BIN` and the provider-specific
+  `RUNNER_CLAUDE_CLI_BIN` / `RUNNER_CODEX_CLI_BIN` paths form that inventory;
+  setup preserves both discovered paths even when Codex is selected as the
+  primary. `LeaseEndpoints` adds the candidate card's normalized CLI keys to
+  the existing required-capability set before repository preflight or lease
   acquisition. An incompatible card stays Ready. Fenced idempotent claim replay
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
@@ -361,7 +367,10 @@ state.
   Server. It validates the registered Review runner and instance, schema,
   freshness, and generation before retaining the latest snapshot. The separate
   `review-executor` identity therefore remains on the V1 Review plane after
-  registration instead of failing startup on a missing capability route.
+  registration instead of failing startup on a missing capability route. The
+  authenticated `GET /api/v1/management/remote-hosts` route exposes the latest
+  retained coding and review snapshots in both the monolith compatibility
+  profile and the standalone Task Server profile.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
@@ -628,6 +637,17 @@ state.
   A process restart replays the original outbox before new claims and never
   starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
   worktree, and consumes no coding or completion budget.
+- The compatibility Remote completion boundary also fails closed when an older
+  Runner reports `Done` or `NoOp` without the complete `BaseSha`,
+  `ImmutableResultRef`, and `ArtifactManifestDigest` trio. The RunAttempt settles
+  as `Failed` with terminal outcome `unverified`, no ReviewAttempt or
+  ReviewSubject is created, and the card reaches Escalated with category
+  `unverified-delivery`. This closes the legacy path where an immutable-ref push
+  failure intentionally omitted the trio but the server still persisted `Done`
+  and waited for Review to discover the impossible subject. Epic planning and
+  report-only modes remain exempt because they do not produce a coding review
+  subject. The canonical protocol 2 Task Server continues to reject successful
+  coding completion until the matching envelope handoff is acknowledged.
 - The Task Server stores one result envelope per RunAttempt with repository ID
   and URL, base and result SHA, immutable ref or source-bundle digest,
   artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion
