@@ -948,7 +948,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Scanner,
             deps.Settings,
             deps.Merge,
-            deps.Pipeline,
             deps.Integration,
             deps.Mutations,
             deps.Configuration,
