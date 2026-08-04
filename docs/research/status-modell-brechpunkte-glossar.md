@@ -184,6 +184,12 @@ anchors, and 1–2 hardening *directions* (not designs — the Status-Workbench 
    (`GetFirstParent(mergedSha)`); (b) never let `AlreadyMerged` release a push unless a durable
    gate verdict exists for exactly that SHA (gate evidence is already SHA-stamped in
    `post-steps/pre-develop-build-gate-N.log`).
+   Implementation status (AGT-2457, 2026-07-31): direction (b) is implemented for the current
+   backstop. An `AlreadyMerged` replay with an applicable pre-develop gate now reuses only a
+   complete green receipt whose expected and tested SHA equal the integration tip; otherwise it
+   runs the missing gate. The pipeline step remains pending and no push request is released while
+   that gate runs. A red recovery gate records `GateFailed` and releases no push. The broader
+   Workbench target, merge intent plus isolated candidate promotion, remains separate work.
 
 **BP-03 · Stale `review-subject.json` outlives its attempt and re-targets integration.**
 1. Card T runs remotely; completion writes `review-subject.json` (ResultRef = runner ref R1,

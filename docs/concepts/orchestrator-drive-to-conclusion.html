@@ -1623,6 +1623,26 @@
             diagnostic. Generic exit 125 behavior is unchanged.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-31</td>
+          <td><code>AGT-2457</code><br><span class="small">BP-02 merge and gate crash window</span></td>
+          <td>
+            The BP-02 replay simulated a hard process death after the accepted delivery created a local integration
+            merge commit but before the pre-develop build gate, pipeline verdict, or push request became durable.
+            After restart, the accepted-integration backstop saw the delivery as <code>AlreadyMerged</code>.
+          </td>
+          <td>
+            Git ancestry was treated as if it were a gate verdict. <code>MergeIntoDevelopRunner</code> gated only a newly
+            created <code>Merged</code> result, then projected every <code>AlreadyMerged</code> result as Passed and released
+            the current integration tip for push even when no exact-SHA gate receipt existed.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> an applicable pre-develop gate now requires a durable receipt whose expected
+            and tested SHA match the exact integration tip. A missing receipt reruns the gate while the pipeline and task
+            remain pending and no push is released. A matching green receipt resumes idempotently; a red verdict reaches
+            <code>GateFailed</code>, releases no push, and leaves the existing graph for manual repair.
+          </td>
+        </tr>
       </tbody>
     </table>
 
