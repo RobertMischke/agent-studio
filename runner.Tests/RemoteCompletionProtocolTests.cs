@@ -29,7 +29,7 @@ public sealed class RemoteCompletionProtocolTests
     }
 
     [Fact]
-    public void Missing_immutable_result_ref_degrades_to_the_pre_envelope_completion()
+    public void Missing_immutable_result_ref_omits_the_trio_for_server_side_unverified_routing()
     {
         var (baseSha, resultRef, manifestDigest) = RemoteTaskRunner.BuildEnvelopeCompletionFields(
             SecuredTeardown(immutableResultRef: null), ValidBaseSha, ValidManifestDigest);

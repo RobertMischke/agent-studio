@@ -271,6 +271,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "remote-done-completion",
+            BaseSha: "4136f00d4136f00d4136f00d4136f00d4136f00d",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             IntegrationBranch: "refs/heads/main");
 
         var missingAuthority = await http.PostAsJsonAsync(
@@ -379,6 +386,66 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("\"idempotencyKey\":\"lane-completion:remote-done-completion\"", timeline, StringComparison.Ordinal);
         Assert.DoesNotContain("external_completion", timeline);
         Assert.Equal(1, timeline.Split("agent_run_finished", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public async Task Coding_done_without_result_envelope_escalates_as_unverified_before_review_is_created()
+    {
+        const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        SeedTask(TaskStates.Progress, TaskKey, "Remote done without envelope", "Make a trivial change.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease!.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            ExitCode: 0,
+            ResultSha: resultSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            Repository: "https://example.invalid/agent-studio.git",
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "remote-done-without-envelope"), ct);
+
+        Assert.NotNull(completion);
+        Assert.Equal("Unverified", completion!.Outcome);
+        Assert.Equal(TaskStates.Escalated, completion.TargetState);
+        Assert.Contains("result envelope", completion.Message, StringComparison.OrdinalIgnoreCase);
+
+        var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{TaskKey}", ApiJson, ct);
+        Assert.NotNull(projection);
+        Assert.Equal(AttemptLifecycleState.Failed, projection.CurrentRunAttempt!.State);
+        Assert.Equal("unverified", projection.CurrentRunAttempt.TerminalOutcome);
+        Assert.Contains("result envelope", projection.CurrentRunAttempt.TerminalReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(resultSha, projection.CurrentRunAttempt.ResultSha);
+        Assert.Null(projection.CurrentRunAttempt.ResultEnvelope);
+        Assert.Null(projection.CurrentReviewSubject);
+        Assert.Empty(projection.ReviewAttempts);
+
+        var escalated = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
+        Assert.True(Directory.Exists(escalated));
+        var status = File.ReadAllText(Path.Combine(escalated, "status.md"));
+        Assert.Contains("unverified-delivery", status);
+        Assert.DoesNotContain("cannot be materialized", status, StringComparison.OrdinalIgnoreCase);
+        var timeline = File.ReadAllText(Path.Combine(escalated, "logs", "timeline.jsonl"));
+        Assert.Contains("\"status\":\"unverified\"", timeline);
+        Assert.DoesNotContain("\"status\":\"done\"", timeline);
+        Assert.Empty(factory.Services.GetRequiredService<AttemptAuthorityService>()
+            .TerminalizeLegacyReviewSubjectsWithoutResultEnvelope());
     }
 
     [Fact]
@@ -775,7 +842,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             SalvageAuthoritativeBaseSha: canonicalSha,
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
-            IdempotencyKey: "salvage-collision-completion"), ct);
+            IdempotencyKey: "salvage-collision-completion",
+            BaseSha: "4136f00d4136f00d4136f00d4136f00d4136f00d",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                localSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), ct);
 
         Assert.NotNull(completion);
         Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
@@ -932,7 +1006,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             Repository: claim.RepositoryUrl,
             AttemptId: claim.Lease.AttemptId,
             AuthorityEpoch: claim.Lease.AuthorityEpoch,
-            IdempotencyKey: "daemon-claim-completion"), CancellationToken.None);
+            IdempotencyKey: "daemon-claim-completion",
+            BaseSha: "4136f00d4136f00d4136f00d4136f00d4136f00d",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                claim.Lease.AttemptId!,
+                claim.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), CancellationToken.None);
         Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
         var completedProjection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
             $"/api/attempts/tasks/{claim.TaskKey}", ApiJson, CancellationToken.None);

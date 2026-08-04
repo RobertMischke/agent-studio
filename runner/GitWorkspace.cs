@@ -729,9 +729,10 @@ public sealed class GitWorkspace
             catch (Exception ex) when (!immutableRefRequired && ex is not OperationCanceledException)
             {
                 // On the legacy completion path the immutable ref is best-effort
-                // evidence: without it the completion simply carries no result
-                // envelope (pre-envelope behaviour) instead of failing a run
-                // whose salvage already succeeded. No ref, no delivery proof.
+                // evidence. Without it the request carries no result envelope,
+                // so the server routes a reported coding success to unverified
+                // instead of creating an impossible review subject. No ref, no
+                // delivery proof.
                 _log($"immutable-result-ref-push-failed ref={candidateRef} path={RepoPath} error={OneLine(ex.Message)}; completing without result envelope");
             }
         }

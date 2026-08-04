@@ -988,40 +988,35 @@ public static class LeaseEndpoints
             AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? resultEnvelope = null;
             string? resultEnvelopeDigest = null;
             var leasedRun = authority.GetRun(attemptId);
-            if (!isEpicPlanning
-                && resultSha is not null
-                && leasedRun is not null
-                && !string.IsNullOrWhiteSpace(req.BaseSha)
-                && !string.IsNullOrWhiteSpace(req.ImmutableResultRef)
-                && !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest))
+            var envelopeDecision = RemoteCompletionEnvelopePolicy.Decide(
+                requiresEnvelope: !isEpicPlanning && !TaskModes.IsReportOnly(task.Mode),
+                outcome,
+                runAttemptKnown: leasedRun is not null,
+                hasBaseSha: !string.IsNullOrWhiteSpace(req.BaseSha),
+                hasImmutableResultRef: !string.IsNullOrWhiteSpace(req.ImmutableResultRef),
+                hasArtifactManifestDigest: !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest));
+            var responseOutcome = reportedOutcome;
+            string? unverifiedDelivery = null;
+            if (envelopeDecision.ShouldPersist)
             {
                 resultEnvelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
-                    leasedRun.RepositoryId,
+                    leasedRun!.RepositoryId,
                     attemptId,
-                    req.BaseSha,
-                    resultSha,
-                    req.ImmutableResultRef,
+                    req.BaseSha!,
+                    resultSha!,
+                    req.ImmutableResultRef!,
                     null,
-                    req.ArtifactManifestDigest,
+                    req.ArtifactManifestDigest!,
                     RepositoryUrl: req.Repository);
                 resultEnvelopeDigest =
                     AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(resultEnvelope);
             }
-            else if (!isEpicPlanning && outcome is "done" or "noop")
+            else if (envelopeDecision.ShouldEscalate)
             {
-                // Without the envelope trio the review subject can never be
-                // materialised and the card will terminalize as
-                // SnapshotUnavailable after the grace window. Surface the
-                // drift loudly at ingest instead of failing silently later.
-                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
-                    "Completion for {TaskKey} (attempt {AttemptId}, runner {RunnerId}) carries no result-envelope trio "
-                    + "(BaseSha={HasBaseSha}, ImmutableResultRef={HasResultRef}, ArtifactManifestDigest={HasManifestDigest}, run-known={RunKnown}); "
-                    + "auto-review cannot materialise this subject - update the runner binary to one that emits the fields.",
-                    req.TaskKey, attemptId, req.RunnerId,
-                    !string.IsNullOrWhiteSpace(req.BaseSha),
-                    !string.IsNullOrWhiteSpace(req.ImmutableResultRef),
-                    !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest),
-                    leasedRun is not null);
+                outcome = envelopeDecision.AuthorityOutcome;
+                responseOutcome = "Unverified";
+                targetState = TaskStates.Escalated;
+                unverifiedDelivery = envelopeDecision.Reason;
             }
             var settled = authority.SettleRun(new SettleRunAttemptRequest
             {
@@ -1032,7 +1027,7 @@ public static class LeaseEndpoints
                     completionKey),
                 Outcome = outcome,
                 ResultSha = resultSha,
-                Reason = req.Reason,
+                Reason = unverifiedDelivery ?? req.Reason,
                 ExecutorId = req.RunnerId,
                 LeaseId = req.LeaseId,
                 ExpectedTaskKey = req.TaskKey,
@@ -1050,6 +1045,17 @@ public static class LeaseEndpoints
                     ? Results.BadRequest(response)
                     : Results.Conflict(response);
             }
+            if (envelopeDecision.ShouldEscalate)
+            {
+                mutations.AddJobTag(
+                    task.Id, OutOfBandStampPolicy.UnverifiedDeliveryTag, task.WatchPath);
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                    "remote-completion-envelope-missing task={TaskKey} attempt={AttemptId} runner={RunnerId} reason={Reason}",
+                    req.TaskKey,
+                    attemptId,
+                    req.RunnerId,
+                    unverifiedDelivery);
+            }
 
             // The immutable ResultEnvelope ref is the reviewed delivery. A
             // salvage branch is recovery evidence only and must never outrank
@@ -1058,10 +1064,9 @@ public static class LeaseEndpoints
             RemoteDeliveryCommitRange? deliveryRange = null;
             RemoteCommitAttributionResult? remoteAttribution = null;
             string? attributionWarning = null;
-            // AGT-2220: set when the target repository actively contradicts the
-            // claimed delivery; suppresses both the review attempt and the
-            // auto-review lane move.
-            string? unverifiedDelivery = null;
+            // Set when the completion cannot produce a verified, materializable
+            // coding subject: either its immutable envelope is absent or the
+            // target repository actively contradicts the claimed delivery.
             if (!isEpicPlanning && outcome is ("done" or "noop"))
             {
                 var reportedIntegrationBranch =
@@ -1131,7 +1136,9 @@ public static class LeaseEndpoints
                 // recorded, never upgraded to proof.
                 if (deliveryRange is not null && deliveryRange.IsDisproved)
                 {
-                    unverifiedDelivery = attributionWarning;
+                    unverifiedDelivery =
+                        $"Delivery not verified against the target repository: {attributionWarning} "
+                        + "No completion stamp was written (AGT-2220).";
                     targetState = TaskStates.Escalated;
                     mutations.AddJobTag(
                         task.Id, OutOfBandStampPolicy.UnverifiedDeliveryTag, task.WatchPath);
@@ -1145,9 +1152,9 @@ public static class LeaseEndpoints
             // deterministically by the lightweight report pipeline
             // (ReviewDecisionOrchestrator.ProcessReportOnlyDoneAsync), so no
             // remote ReviewAttempt is minted for them.
-            // AGT-2220: no review subject is minted for a delivery the
-            // repository disproved - there is nothing materializable to review,
-            // and minting one is how AGT-2220 itself acquired a review subject
+            // No review subject is minted for an envelope-less or repository-
+            // disproved delivery. There is nothing materializable to review,
+            // and minting one is how the AGT-2220 incident acquired a subject
             // pinned to a SHA that was never on its recorded ref.
             if (!isEpicPlanning
                 && outcome is ("done" or "noop")
@@ -1228,7 +1235,7 @@ public static class LeaseEndpoints
                 ["sentinel"] = outcome switch
                 {
                     "needsinput" => "TASK_NEEDS_INPUT",
-                    "unknown" => string.Empty,
+                    "unknown" or "unverified" => string.Empty,
                     _ => $"TASK_{outcome.ToUpperInvariant()}",
                 },
             };
@@ -1486,13 +1493,10 @@ public static class LeaseEndpoints
 
             if (targetState == TaskStates.Escalated)
             {
-                // AGT-2220: a disproved delivery carries its own category and the
-                // git-level reason, so the card names what the repository holds
-                // instead of a generic agent-outcome text.
+                // An unverified completion carries its own category and exact
+                // boundary reason instead of a generic agent-outcome text.
                 var (category, reason) = unverifiedDelivery is not null
-                    ? (HumanReviewEscalationCategories.UnverifiedDelivery,
-                        $"Delivery not verified against the target repository: {unverifiedDelivery} "
-                        + "No completion stamp was written (AGT-2220).")
+                    ? (HumanReviewEscalationCategories.UnverifiedDelivery, unverifiedDelivery)
                     : RemoteEscalation(outcome, req.Reason);
                 var escalated = await humanReviewEscalation.EscalateAsync(
                     task.Id,
@@ -1505,7 +1509,7 @@ public static class LeaseEndpoints
                 if (escalated.Status != MoveJobStatus.Success)
                     return Results.Conflict(new RemoteRunCompletionResponse(
                         req.TaskKey,
-                        reportedOutcome,
+                        responseOutcome,
                         task.State,
                         $"Escalation lane move refused: {escalated.Status} {escalated.Message}",
                         RunAttemptId: attemptId));
@@ -1522,7 +1526,7 @@ public static class LeaseEndpoints
                     });
                 return Results.Ok(new RemoteRunCompletionResponse(
                     req.TaskKey,
-                    reportedOutcome,
+                    responseOutcome,
                     TaskStates.Escalated,
                     reason,
                     RunAttemptId: attemptId));
@@ -1554,7 +1558,7 @@ public static class LeaseEndpoints
                     req.FencingToken, outcome));
             }
             return Results.Ok(new RemoteRunCompletionResponse(
-                req.TaskKey, reportedOutcome, targetState,
+                req.TaskKey, responseOutcome, targetState,
                 RunAttemptId: attemptId,
                 ReviewAttemptId: reviewAttempt?.AttemptId,
                 ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
