@@ -74,16 +74,18 @@ public sealed class GitResultRefDeleter(
         start.ArgumentList.Add($":{immutableRemoteRef}");
 
         using var process = new Process { StartInfo = start };
+        Task<string>? stdoutTask = null;
+        Task<string>? stderrTask = null;
         try
         {
             if (!process.Start())
                 return new ResultRefDeleteResult(false, "git process did not start");
 
-            var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
+            stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
-            var output = OneLine(await stdout);
-            var error = OneLine(await stderr);
+            var output = OneLine(await stdoutTask);
+            var error = OneLine(await stderrTask);
             if (process.ExitCode == 0)
                 return new ResultRefDeleteResult(true);
 
@@ -95,12 +97,17 @@ public sealed class GitResultRefDeleter(
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            TryKill(process);
+            await TerminateAndDrainAsync(process, stdoutTask, stderrTask);
             return new ResultRefDeleteResult(false, "git deletion timed out");
+        }
+        catch (OperationCanceledException)
+        {
+            await TerminateAndDrainAsync(process, stdoutTask, stderrTask);
+            throw;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            TryKill(process);
+            await TerminateAndDrainAsync(process, stdoutTask, stderrTask);
             return new ResultRefDeleteResult(
                 false,
                 RedactRepositoryUrl(OneLine(exception.Message), repositoryUrl));
@@ -135,6 +142,22 @@ public sealed class GitResultRefDeleter(
         {
             // Best effort only. The timeout is already the authoritative error.
         }
+    }
+
+    private static async Task TerminateAndDrainAsync(
+        Process process,
+        Task<string>? stdout,
+        Task<string>? stderr)
+    {
+        TryKill(process);
+        var drains = new List<Task>(3);
+        try { drains.Add(process.WaitForExitAsync(CancellationToken.None)); }
+        catch { /* A start failure has no process to wait for. */ }
+        if (stdout is not null) drains.Add(stdout);
+        if (stderr is not null) drains.Add(stderr);
+        if (drains.Count == 0) return;
+        try { await Task.WhenAll(drains).WaitAsync(TimeSpan.FromSeconds(3)); }
+        catch { /* Bounded cleanup is best effort after the authoritative failure. */ }
     }
 }
 

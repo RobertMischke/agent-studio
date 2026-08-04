@@ -186,7 +186,7 @@ public sealed class MergeIntoDevelopRunner
             BuildTestGateResult? preMainResult = null;
             BuildTestGateResult? preDevelopResult = null;
             MergeIntoIntegrationResult result;
-            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch);
+            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch, ct);
             if (!synchronized.Success)
             {
                 result = MergeIntoIntegrationResult.Of(
@@ -222,7 +222,8 @@ public sealed class MergeIntoDevelopRunner
                         repoRoot,
                         delivery.Ref,
                         delivery.ExpectedResultSha ?? string.Empty,
-                        branch)).ConfigureAwait(false);
+                        branch,
+                        ct)).ConfigureAwait(false);
             }
             else
             {
@@ -232,7 +233,7 @@ public sealed class MergeIntoDevelopRunner
                     jobFolderPath,
                     repoRoot,
                     branch,
-                    () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch)).ConfigureAwait(false);
+                    () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch, ct)).ConfigureAwait(false);
             }
             _logger.LogInformation(
                 "merge-into-develop project={Project} job={JobId} delivery={Delivery} integration={Integration} strategy={Strategy} outcome={Outcome}",
@@ -522,7 +523,8 @@ public sealed class MergeIntoDevelopRunner
                 repoRoot,
                 taskBranch,
                 delivery.ExpectedResultSha!,
-                releaseBranch);
+                releaseBranch,
+                ct);
             if (!inspected.Success)
             {
                 return (
@@ -605,8 +607,9 @@ public sealed class MergeIntoDevelopRunner
                     repoRoot,
                     delivery.Ref,
                     delivery.ExpectedResultSha ?? string.Empty,
-                    releaseBranch)
-                : _git.MergeBranchIntoIntegration(repoRoot, taskBranch, releaseBranch);
+                    releaseBranch,
+                    ct)
+                : _git.MergeBranchIntoIntegration(repoRoot, taskBranch, releaseBranch, ct);
             return (docsMerge, lightGate);
         }
 

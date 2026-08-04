@@ -86,11 +86,12 @@ public sealed class WorkspaceArtifactPushWorker : BackgroundService
             CreateNoWindow = true,
         };
         foreach (var arg in args) psi.ArgumentList.Add(arg);
-        using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEndAsync(ct);
-        var stderr = process.StandardError.ReadToEndAsync(ct);
-        await process.WaitForExitAsync(ct);
-        await stdout;
-        return (process.ExitCode, (await stderr).Trim());
+        var result = await GitNetworkProcessRunner.RunAsync(
+            psi,
+            stdin: null,
+            GitNetworkProcessRunner.DefaultTimeout,
+            ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return (result.ExitCode, result.StandardError.Trim());
     }
 }

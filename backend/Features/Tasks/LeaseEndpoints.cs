@@ -1086,7 +1086,8 @@ public static class LeaseEndpoints
                         repoRoot,
                         deliveryBranch,
                         resultSha,
-                        req.IntegrationBranch);
+                        req.IntegrationBranch,
+                        ct);
                     if (!deliveryRange.Success)
                     {
                         attributionWarning = deliveryRange.Warning;

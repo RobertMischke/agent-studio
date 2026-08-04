@@ -978,7 +978,7 @@ public sealed class TaskTransitionService
             $"Acceptance started integration into {integrationBranch}.",
             outcome: "integrating");
 
-        var synchronized = RefreshIntegrationBranch(integrating, integrationBranch);
+        var synchronized = RefreshIntegrationBranch(integrating, integrationBranch, ct);
         if (!synchronized.Success)
         {
             RecordIntegrationSyncFailure(
@@ -1086,7 +1086,8 @@ public sealed class TaskTransitionService
 
     private IntegrationBranchSyncResult RefreshIntegrationBranch(
         TaskInfo job,
-        string integrationBranch)
+        string integrationBranch,
+        CancellationToken cancellationToken)
     {
         var repoRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath)
             ?? (string.IsNullOrWhiteSpace(job.WatchPath) ? null : job.WatchPath);
@@ -1094,7 +1095,7 @@ public sealed class TaskTransitionService
             ? new IntegrationBranchSyncResult(
                 IntegrationBranchSyncOutcome.Error,
                 "Could not resolve repository root for the integration branch sync.")
-            : _git.RefreshIntegrationBranch(repoRoot, integrationBranch);
+            : _git.RefreshIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
     }
 
     private void RecordIntegrationSyncFailure(TaskInfo job, string detail)
