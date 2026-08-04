@@ -66,6 +66,7 @@ import { TaskSelectionService } from '../../../task-detail';
 import { PostProcessingActivityComponent } from '../post-processing-activity/post-processing-activity.component';
 import { TaskTestEvidenceComponent } from '../task-test-evidence/task-test-evidence';
 import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
+import { ProviderAuthStatusService, providerAuthWaitReason } from '../../../remote-hosts';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -77,12 +78,6 @@ if (typeof window !== 'undefined') {
   selector: 'app-task-card, app-job-card',
   standalone: true,
   imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
-  // OnPush + signal-based reactivity. With ~30+ cards in a single
-  // 4-auto-review lane, default Zone CD on every microtask was cumulating
-  // into 80-100 ms long tasks during scroll/poll bursts. The component's
-  // template only reads signal inputs, computed signals, and the shared
-  // `taskCardNow` signal, so OnPush updates remain correct without any
-  // explicit `markForCheck` calls.
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
@@ -110,11 +105,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   /** True when this card should render the just-created highlight. */
   readonly isJustCreated = computed(() => this.highlightJobId() === this.job().id);
 
-  /**
-   * Scroll-into-view effect: when this card becomes the highlighted
-   * "just created" target, scroll it into the board viewport so the
-   * operator's eye lands on it even on a 200+ card board.
-   */
+  /** Scroll a newly created card into the board viewport. */
   private readonly scrollEffect = effect(() => {
     if (!this.isJustCreated()) return;
     queueMicrotask(() => {
@@ -127,6 +118,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);
   private readonly codeReviewActivity = inject(CodeReviewActivityStore);
+  private readonly providerAuthStatus = inject(ProviderAuthStatusService);
   private stopPolling: (() => void) | null = null;
 
   readonly taskTypeChip = computed(() => buildTaskTypeChip(this.job().taskType));
@@ -438,6 +430,9 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    * status (fulfilled/open per target, blocked, cycle). Null when no deps.
    */
   readonly dependencyChip = computed(() => buildDependencyChip(this.job().waitsOn));
+  readonly providerAuthWait = computed(() => this.providerAuthStatus.loaded()
+    ? providerAuthWaitReason(this.job(), this.providerAuthStatus.statuses())
+    : null);
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;

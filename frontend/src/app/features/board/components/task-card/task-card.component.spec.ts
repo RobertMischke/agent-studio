@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
 import { MODEL_IDS } from '../../../cli';
+import { ProviderAuthStatusService } from '../../../remote-hosts';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
@@ -1286,6 +1287,44 @@ describe('TaskCardComponent (smoke)', () => {
   it('shows no runner chip on an idle (not-running) card', async () => {
     const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, executionLocation: null }));
     expect(fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]')).toBeNull();
+  });
+
+  it('shows why a remote Ready card is waiting when its CLI authentication is unavailable', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready',
+      cliType: 'claude',
+      execution: null,
+      executionLocation: {
+        state: 'queued-remote', executionKind: 'remote', runnerId: 'agent-runner-01',
+        configuredRunnerId: 'agent-runner-01', connectionState: 'connected',
+        leaseState: 'queued', trustReason: 'Project execution assignment targets this runner.',
+      },
+    }));
+    const now = new Date();
+    TestBed.inject(ProviderAuthStatusService).ingest([{
+      runnerId: 'agent-runner-01', name: 'linux-host', hostId: 'host-01', instanceId: 'coding-01',
+      runnerVersion: '1.0.0', protocolVersion: 2, status: 'active',
+      registeredAt: now.toISOString(), lastSeenAt: now.toISOString(),
+      hostAdmission: { hostId: 'host-01', admissionState: 'open' },
+      capabilities: [{
+        key: 'cli-execution:claude', category: 'cli-execution', advertisedStatus: 'ready',
+        healthState: 'healthy', advertisedAt: now.toISOString(),
+        freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
+        consecutiveFailures: 0, affectedClaims: [], recoveryHistory: [],
+      }, {
+        key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', advertisedAt: now.toISOString(),
+        freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
+        consecutiveFailures: 0, detail: 'Not logged in', affectedClaims: [], recoveryHistory: [],
+      }],
+    }]);
+    fixture.detectChanges();
+
+    const wait = fixture.nativeElement.querySelector(
+      '[data-testid="task-card-provider-auth-wait"]',
+    ) as HTMLElement | null;
+    expect(wait?.textContent).toContain('Waiting for Claude sign-in on linux-host');
+    expect(fixture.componentInstance.providerAuthWait()?.tooltip).toContain('Not logged in');
   });
 
   it('renders a compact family code and named thinking level without model text', async () => {

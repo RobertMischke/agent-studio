@@ -27,6 +27,35 @@ public static class ManagementEndpoints
             if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
             return Results.Ok(registry.ListCapabilitySnapshots());
         });
+        group.MapPost("/remote-hosts/provider-auth", async (
+            HttpContext context,
+            ProviderAuthProvisioningRequest request,
+            IProviderAuthProvisioner provisioner,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
+            var validation = ProviderAuthProvisioningPolicy.Validate(request);
+            if (validation is not null)
+                return Results.Json(new { error = "invalid-provider-auth-request", message = validation }, statusCode: 400);
+            try
+            {
+                return Results.Ok(await provisioner.ProvisionAsync(request, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Json(
+                    new { error = "invalid-provider-auth-request", message = ex.Message },
+                    statusCode: 400);
+            }
+            catch (ProviderAuthProvisioningException ex)
+            {
+                return Results.Json(
+                    new { error = "provider-auth-provisioning-failed", message = ex.Message },
+                    statusCode: 502);
+            }
+        });
         group.MapPost("/commands", (HttpContext context, ManagementCommandRequest request, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";

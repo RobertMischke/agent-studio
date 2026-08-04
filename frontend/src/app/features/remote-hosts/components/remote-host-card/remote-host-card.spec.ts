@@ -120,6 +120,41 @@ describe('RemoteHostCardComponent', () => {
       .toContain('Task inflowopen');
   });
 
+  it('shows per-provider auth state, probe detail, expiry warning, and latest transition', () => {
+    const fixture = mount({
+      ...HOST,
+      capabilityHealth: [{
+        key: 'cli-execution:claude', category: 'cli-execution', advertisedStatus: 'ready',
+        healthState: 'healthy', advertisedAt: '2026-07-10T11:59:30Z',
+        freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
+        affectedClaims: [], recoveryHistory: [],
+      }, {
+        key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', advertisedAt: '2026-07-10T11:59:30Z',
+        freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
+        detail: 'Not logged in', expiresAt: '2026-07-20T12:00:00Z', affectedClaims: [],
+        recoveryHistory: [{
+          occurredAt: '2026-07-10T11:59:30Z', fromState: 'ready', toState: 'unavailable',
+          reason: 'Provider authentication probe changed from ready to unavailable.',
+        }],
+      }],
+    });
+    const badge = fixture.nativeElement.querySelector(
+      '[data-testid="remote-host-provider-auth-claude"]',
+    ) as HTMLElement;
+
+    expect(badge.textContent).toContain('Claude');
+    expect(badge.textContent).toContain('unavailable');
+    expect(badge.getAttribute('data-state')).toBe('unavailable');
+    expect(fixture.debugElement
+      .query(By.css('[data-testid="remote-host-provider-auth-claude"]'))
+      .injector.get(AppTooltipDirective).appTooltip()).toContain('Not logged in');
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-provider-auth-expiry-claude"]')?.textContent)
+      .toContain('Expires in 10 days');
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-provider-auth-history-claude"]')?.textContent)
+      .toContain('ready → unavailable');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

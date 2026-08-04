@@ -210,6 +210,88 @@ public sealed class CapabilityAdmissionTests
         Assert.Equal("workflow scope missing", workflow.Detail);
     }
 
+    [Fact]
+    public async Task Provider_auth_probe_transitions_are_retained_across_advertisements_and_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        const string runner = "claude";
+        const string instance = "claude-instance";
+        var capability = CapabilityProtocol.ProviderAuthentication("claude");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            capability);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await store.AdvertiseCapabilitiesAsync(
+            Advertisement(
+                clock,
+                runner,
+                instance,
+                2,
+                CapabilityProtocol.CodingExecutor,
+                capability) with
+            {
+                Capabilities =
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        "unavailable",
+                        Identity: "claude",
+                        Detail: "Not logged in"),
+                ],
+            },
+            runner,
+            default);
+
+        var unavailable = Assert.Single(
+            Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        var transition = Assert.Single(unavailable.RecoveryHistory);
+        Assert.Equal("ready", transition.FromState);
+        Assert.Equal("unavailable", transition.ToState);
+        Assert.Contains("probe changed", transition.Reason, StringComparison.Ordinal);
+
+        var restarted = Store(temp.Path, clock);
+        await restarted.InitializeAsync();
+        var afterRestart = Assert.Single(
+            Assert.Single(await restarted.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        Assert.Single(afterRestart.RecoveryHistory);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await restarted.AdvertiseCapabilitiesAsync(
+            Advertisement(
+                clock,
+                runner,
+                instance,
+                3,
+                CapabilityProtocol.CodingExecutor,
+                capability),
+            runner,
+            default);
+        var recovered = Assert.Single(
+            Assert.Single(await restarted.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        Assert.Collection(
+            recovered.RecoveryHistory,
+            item => Assert.Equal("unavailable", item.ToState),
+            item =>
+            {
+                Assert.Equal("unavailable", item.FromState);
+                Assert.Equal("ready", item.ToState);
+            });
+    }
+
     [Theory]
     [InlineData(CapabilityProtocol.Disk)]
     [InlineData(CapabilityProtocol.LeaseAuthority)]

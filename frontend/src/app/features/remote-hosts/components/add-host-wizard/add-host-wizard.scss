@@ -72,9 +72,19 @@
 
 .form-grid,
 .auth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--studio-spacing-3); }
-.form-grid label { display: grid; gap: var(--studio-spacing-2); color: var(--studio-fg-dim); font-size: 11px; font-weight: 700; }
-.form-grid input { min-width: 0; padding: var(--studio-spacing-3); background: var(--studio-bg-surface); border: 1px solid var(--studio-border-strong); border-radius: 7px; color: var(--studio-fg-strong); font: inherit; }
-.form-grid input:focus { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.form-grid label,
+.auth-field { display: grid; gap: var(--studio-spacing-2); color: var(--studio-fg-dim); font-size: 11px; font-weight: 700; }
+.form-grid input,
+.auth-field input,
+.auth-field select { min-width: 0; padding: var(--studio-spacing-3); background: var(--studio-bg-surface); border: 1px solid var(--studio-border-strong); border-radius: 7px; color: var(--studio-fg-strong); font: inherit; }
+.form-grid input:focus,
+.auth-field input:focus,
+.auth-field select:focus { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.auth-provision { align-self: center; justify-self: start; }
+.auth-result { display: grid; gap: var(--studio-spacing-1); padding: var(--studio-spacing-3); border: 1px solid var(--notify-warning-border); border-radius: 8px; background: var(--notify-warning-tint); }
+.auth-result[data-state='ok'] { border-color: var(--notify-success-border); background: var(--notify-success-tint); }
+.auth-result strong { color: var(--studio-fg-strong); font-size: 11px; }
+.auth-result small { color: var(--studio-fg-dim); font-size: 10px; line-height: 1.4; }
 
 .check-card {
   display: flex;

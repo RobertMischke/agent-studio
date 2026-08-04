@@ -19,15 +19,12 @@ npm i -g @anthropic-ai/claude-code @openai/codex
 npx playwright install --with-deps chromium
 ```
 
-Authenticate each CLI on the host. Do not copy credential files from the
-operator workstation:
-
-```bash
-claude auth login --claudeai
-claude auth status --text
-codex login --device-auth
-codex login status
-```
+Provision Claude authentication in the wizard. Studio sends
+`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` through SSH stdin and installs
+`/etc/agent-runner/provider-auth.env` as `root:agent` mode `640`. The value is
+never retained in Studio, a task, or the repository. Both runner units load the
+same file; the runner probe verifies only the process environment and CLI
+status. Do not copy credential files from the operator workstation.
 
 ## Give the host push identity
 
