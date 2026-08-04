@@ -62,6 +62,45 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public async Task AcceptPlanningCompletedEpic_ReachesCompleted_WithoutAMergeItCannotHave()
+    {
+        // An Epic planning completion parks in 5-human-review with no task
+        // branch and no commits: its delivery is the child cards, not code.
+        // Accepting it must not enter the transactional merge, which would
+        // return NoTaskBranch and bounce the card back to Human Review for
+        // ever - the TE-8 dead end relocated one lane over.
+        var deliverySha = PublishDelivery("epic-unused.txt", "unrelated\n");
+        var deps = Build(deliverySha);
+        var epicFolder = Path.Combine(_watchPath, TaskStates.HumanReview, "planned-epic");
+        Directory.CreateDirectory(epicFolder);
+        File.WriteAllText(
+            Path.Combine(epicFolder, "task.json"),
+            JsonSerializer.Serialize(
+                new
+                {
+                    id = "planned-epic",
+                    title = "Planned epic",
+                    state = TaskStates.HumanReview,
+                    order = 2,
+                    agent = "codex",
+                    cliType = "codex",
+                    kind = TaskKinds.Epic,
+                    mode = TaskModes.Coding,
+                    projectName = Project,
+                },
+                new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(epicFolder, "status.md"), "Result: decomposed.\n");
+        deps.Scanner.InvalidateCache();
+
+        var outcome = await deps.Transitions.MoveAsync("planned-epic", TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var accepted = deps.Scanner.FindJob("planned-epic", _watchPath);
+        Assert.NotNull(accepted);
+        Assert.Equal(TaskStates.Completed, accepted!.State);
+    }
+
+    [Fact]
     public async Task AcceptRemoteDelivery_MergesFencedResult_AndClearsPendingTag()
     {
         Assert.Equal(

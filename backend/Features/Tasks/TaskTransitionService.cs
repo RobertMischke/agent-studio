@@ -200,10 +200,15 @@ public sealed class TaskTransitionService
         var fromState = info.State;
         var projectName = info.ProjectName;
 
+        // An Epic owns no delivery branch: its planning run is source-read-only
+        // and its result is the child cards, so there is nothing to merge. Left
+        // in the transactional accept it returns NoTaskBranch, which bounces the
+        // card back to Human Review on every accept.
         if (!suppressIntegrationTrigger
             && !suppressProductExecution
             && !isReadOnly
             && !TaskModes.IsConcept(info.Mode)
+            && !TaskKinds.IsEpic(info.Kind)
             && fromState == TaskStates.HumanReview
             && targetState == TaskStates.Completed
             && (_acceptedIntegrationQueue != null || _mergeRunner != null))

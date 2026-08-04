@@ -76,6 +76,49 @@ internal static class PostProcessingLifecycleStore
         string detail,
         ILogger logger,
         bool onlyWhenActive = false)
+        => Close(
+            folderPath,
+            finishedAtUtc,
+            failed ? LifecycleCheckStatuses.Failed : LifecycleCheckStatuses.Completed,
+            failed ? LifecyclePhases.PostProcessingBlocked : LifecyclePhases.AwaitingReview,
+            blocking: failed,
+            detail,
+            logger,
+            onlyWhenActive);
+
+    /// <summary>
+    /// Closes an active Post Processing pass that never ran its check: the card
+    /// was passed over (another actor owns it, it is no longer pending, the
+    /// pass was cancelled). <c>skipped</c> is the honest terminal for that -
+    /// <c>completed</c> would claim a decision that never happened, and leaving
+    /// the check <c>running</c> re-arms a phantom in-flight step at every
+    /// backend restart that nothing ever terminalizes. The card rests in
+    /// <c>awaiting-review</c> with no blocking reason and stays pickable.
+    /// </summary>
+    internal static bool Skip(
+        string folderPath,
+        DateTime finishedAtUtc,
+        string detail,
+        ILogger logger)
+        => Close(
+            folderPath,
+            finishedAtUtc,
+            LifecycleCheckStatuses.Skipped,
+            LifecyclePhases.AwaitingReview,
+            blocking: false,
+            detail,
+            logger,
+            onlyWhenActive: true);
+
+    private static bool Close(
+        string folderPath,
+        DateTime finishedAtUtc,
+        string terminalStatus,
+        string phase,
+        bool blocking,
+        string detail,
+        ILogger logger,
+        bool onlyWhenActive)
         => Update(folderPath, logger, snapshot =>
         {
             var active = snapshot.PostProcessingChecks.Any(IsActive)
@@ -86,9 +129,6 @@ internal static class PostProcessingLifecycleStore
             if (onlyWhenActive && !active) return null;
 
             var at = Utc(finishedAtUtc);
-            var terminalStatus = failed
-                ? LifecycleCheckStatuses.Failed
-                : LifecycleCheckStatuses.Completed;
             var checks = snapshot.PostProcessingChecks
                 .Select(check => IsActive(check)
                     ? check with
@@ -102,11 +142,9 @@ internal static class PostProcessingLifecycleStore
                 .ToList();
             return snapshot with
             {
-                Phase = failed
-                    ? LifecyclePhases.PostProcessingBlocked
-                    : LifecyclePhases.AwaitingReview,
+                Phase = phase,
                 PhaseEnteredAt = at,
-                BlockingReason = failed ? detail : null,
+                BlockingReason = blocking ? detail : null,
                 PostProcessingChecks = checks,
             };
         });
@@ -164,4 +202,10 @@ internal static class LifecycleCheckStatuses
     internal const string Running = "running";
     internal const string Completed = "completed";
     internal const string Failed = "failed";
+
+    /// <summary>
+    /// The pass closed without running the check. Terminal, so no restart
+    /// re-arms it, but it never claims a decision that did not happen.
+    /// </summary>
+    internal const string Skipped = "skipped";
 }

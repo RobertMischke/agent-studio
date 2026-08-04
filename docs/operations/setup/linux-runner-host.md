@@ -565,8 +565,9 @@ cancellation lifecycle. The server supplies the same rendered Epic
 decomposition prompt used by the local runner. The daemon creates a bounded,
 detached checkout for read-only repository inspection and removes it after the
 run without creating or pushing a runner branch. A valid plan creates child
-coding cards and sends the Epic to auto-review. Empty or invalid output, or any
-attempted source mutation, returns the Epic to Backlog.
+coding cards and sends the Epic to human review; a planning run owns no
+Result-SHA, so it never enters the auto-review code-review lane. Empty or
+invalid output, or any attempted source mutation, returns the Epic to Backlog.
 
 Epic planning uses the same repository-specific delivery preflight as coding
 claims. A failure blocks only that project's claim and does not reduce the

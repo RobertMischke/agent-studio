@@ -217,8 +217,12 @@ clears checks from the preceding review attempt. Entering Post Processing, or a
 startup recovery sweep that re-enqueues it, sets `post-processing-running`,
 replaces older checks, and timestamps the new attempt. Leaving Auto Review or
 terminating the worker changes every active `pending` or `running` check to
-`completed` or `failed` and supplies `finishedAt`; an active check must never
-survive a terminal boundary. Automation scans exclude cards whose `task.json`
+`completed`, `failed`, or `skipped` and supplies `finishedAt`; an active check
+must never survive a terminal boundary. `skipped` is the honest terminal for a
+pass that closed without running its check, for example when the decision
+engine passed the card over because another actor owns it: `completed` would
+claim a decision that never happened, and a check left `running` is re-armed as
+a phantom in-flight step by every backend restart and never terminalizes. Automation scans exclude cards whose `task.json`
 has `fixture: true`, while explicit fixture management and test APIs may still
 read them.
 
