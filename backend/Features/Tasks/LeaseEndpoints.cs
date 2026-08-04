@@ -1497,11 +1497,19 @@ public static class LeaseEndpoints
                 // It still uses the canonical RunAttempt for its lane write and
                 // completion evidence, then delegates child creation to the
                 // shared idempotent decomposition lifecycle.
-                if (!string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+                //
+                // The lane is the one a valid plan earns: never 4-auto-review,
+                // which would park a run with no Result-SHA in a canonical
+                // attempt wait that can never be satisfied (see
+                // EpicRunPolicy.PlanningCompletionLane). The move stays ahead of
+                // Finalize so spawn evidence is written on the post-move folder;
+                // an invalid plan is recovered from there to 0-backlog below.
+                var planningLane = EpicRunPolicy.PlanningCompletionLane(decompositionValid: true);
+                if (!string.Equals(task.State, planningLane, StringComparison.OrdinalIgnoreCase))
                 {
                     var planningMove = await transitions.MoveAsync(
                         task.Id,
-                        TaskStates.AutoReview,
+                        planningLane,
                         task.WatchPath,
                         ct,
                         cause: $"remote-epic-planning-completion:{source}",
@@ -1531,7 +1539,8 @@ public static class LeaseEndpoints
                         "remote-epic-planning-invalid task={TaskKey} runner={Runner} sourceMutated={SourceMutated} reason={Reason}",
                         req.TaskKey, source, req.SourceMutated, finalized.Error);
                     return Results.Ok(new RemoteRunCompletionResponse(
-                        req.TaskKey, reportedOutcome, TaskStates.Backlog,
+                        req.TaskKey, reportedOutcome,
+                        EpicRunPolicy.PlanningCompletionLane(decompositionValid: false),
                         req.SourceMutated
                             ? "Epic planning attempted to mutate the read-only checkout; no children were created."
                             : finalized.Error,
@@ -1548,7 +1557,7 @@ public static class LeaseEndpoints
                         req.FencingToken, outcome));
                 }
                 return Results.Ok(new RemoteRunCompletionResponse(
-                    req.TaskKey, reportedOutcome, TaskStates.AutoReview,
+                    req.TaskKey, reportedOutcome, planningLane,
                     RunAttemptId: attemptId));
             }
 

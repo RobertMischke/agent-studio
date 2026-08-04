@@ -5788,7 +5788,8 @@ public class ProjectRunner
                 {
                     var handled = await TryRunAbortReviewAsync(
                         activeInfo, jobId, jobKey, cliType, execution, action,
-                        liveOutputSnapshot, commitsDuringRun, headShaAfter, usage);
+                        liveOutputSnapshot, commitsDuringRun, headShaAfter, usage,
+                        EpicRunPolicy.IsPlanningRun(activeInfo.Kind, intentSnapshot));
                     if (handled) return;
                 }
 
@@ -5943,36 +5944,42 @@ public class ProjectRunner
             // crash mid-finalisation cannot strand a successful plan with no
             // sub-tasks. A continue on an epic is steering, not decomposition,
             // so it does not trigger this (mirrors RunCliAsync's gate).
+            // A planning run carries no Result-SHA, so its completion lane is
+            // never 4-auto-review (EpicRunPolicy.PlanningCompletionLane).
+            string? epicPlanningLane = null;
             if (movedToReview
                 && activeInfo != null
                 && EpicRunPolicy.IsPlanningRun(activeInfo.Kind, intentSnapshot))
             {
-                DecomposeEpicAndCreateSubTasks(
+                var finalized = DecomposeEpicAndCreateSubTasks(
                     activeInfo,
                     liveOutputSnapshot.Select(l => l.Text).ToList(),
                     planSnapshot?.EventInputSessionId);
+                epicPlanningLane = EpicRunPolicy.PlanningCompletionLane(finalized.Valid);
             }
 
             if (movedToReview)
             {
+                var completionLane = epicPlanningLane ?? TaskStates.AutoReview;
                 // Drop a completion marker BEFORE the move so a crash between
                 // here and the folder-rename leaves enough state on disk for
                 // CrashRecoveryService to finish the transition on next boot.
                 // Cleared after a successful move (no point keeping a marker
                 // in 4-auto-review). See ADR-0020 + ADR-0025 (post-CLI lane
                 // is 4-auto-review now; the orchestrator decides whether to
-                // promote to 5-human-review).
+                // promote to 5-human-review). An Epic planning run is the one
+                // exception and names its own lane.
                 if (activeInfo != null)
                 {
                     CompletionMarker.Write(activeInfo.FolderPath, new CompletionMarker
                     {
-                        TargetState = TaskStates.AutoReview,
+                        TargetState = completionLane,
                         ExecutionStatus = execution.Status,
                         AgentOutcome = outcome.Kind.ToString()
                     }, _logger);
                 }
 
-                var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
+                var moveOutcome = await _transitions.MoveAsync(jobId, completionLane, Entry.Path, CancellationToken.None);
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     // The job made it out of the run loop; forget any spent
@@ -6359,12 +6366,11 @@ public class ProjectRunner
     /// 0-backlog for triage). Emits the "Epic decomposition" timeline step
     /// either way so the operator sees the outcome.
     /// </summary>
-    private void DecomposeEpicAndCreateSubTasks(TaskInfo epic, IReadOnlyList<string> outputLines, string? runId)
-    {
-        EpicDecompositionLifecycle.Finalize(
+    private EpicDecompositionFinalization DecomposeEpicAndCreateSubTasks(
+        TaskInfo epic, IReadOnlyList<string> outputLines, string? runId)
+        => EpicDecompositionLifecycle.Finalize(
             epic, outputLines, runId, _projectSettings, _mutations, _scanner,
             _states, _timeline, _chatLog, _logger);
-    }
 
     private static bool ShouldRouteIssueToEscalated(RunIssueKind issueKind)
         => issueKind is RunIssueKind.PermissionBlocked
@@ -6660,7 +6666,8 @@ public class ProjectRunner
         List<CliOutputLine> liveOutputSnapshot,
         int commitsDuringRun,
         string? headShaAfter,
-        SessionUsage? usage)
+        SessionUsage? usage,
+        bool isPlanningRun)
     {
         var review = _postAbortReview;
         if (review == null) return false;
@@ -6751,13 +6758,20 @@ public class ProjectRunner
 
             case PostAbortAction.AcceptAndContinue:
                 _abortReviewRerunsUsed.TryRemove(jobId, out _);
+                // This exit never decomposes, so an accepted planning run holds
+                // no validated plan and no Result-SHA. Accepting it into the
+                // code-review lane is the TE-8 dead end; it returns to Backlog
+                // instead, exactly as an empty plan does.
+                var acceptLane = isPlanningRun
+                    ? EpicRunPolicy.PlanningCompletionLane(decompositionValid: false)
+                    : TaskStates.AutoReview;
                 CompletionMarker.Write(activeInfo.FolderPath, new CompletionMarker
                 {
-                    TargetState = TaskStates.AutoReview,
+                    TargetState = acceptLane,
                     ExecutionStatus = execution.Status,
                     AgentOutcome = "abort-review-accept"
                 }, _logger);
-                var move = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
+                var move = await _transitions.MoveAsync(jobId, acceptLane, Entry.Path, CancellationToken.None);
                 if (move.Status == MoveJobStatus.Success)
                 {
                     // Terminal accept: tear down the coding worktree+branch.

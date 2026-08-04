@@ -317,7 +317,10 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
     /// <item><b>Deferred</b> - a legitimate hand-off (the canonical review
     /// executor owns the card) or a transient limit. The card is parked in
     /// <c>awaiting-review</c> without a blocking reason and re-driven with
-    /// backoff. This is the case that used to be blocked terminally.</item>
+    /// backoff, and its decision check is closed as <c>skipped</c> - no
+    /// decision ran, so neither <c>completed</c> nor a lingering
+    /// <c>running</c> would be honest. This is the case that used to be
+    /// blocked terminally.</item>
     /// <item><b>Blocked</b> - a real precondition failure, terminalized with
     /// the concrete reason rather than the generic sentence.</item>
     /// </list>
@@ -416,23 +419,33 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
     }
 
     /// <summary>
-    /// Closes an active post-processing lifecycle without a failure: the pass
-    /// legitimately produced no verdict, so the card rests in
-    /// <c>awaiting-review</c> with no blocking reason and stays pickable.
+    /// Closes an active post-processing lifecycle without a failure and without
+    /// a verdict: the pass legitimately skipped the card, so the
+    /// <c>post-orchestrator-decision</c> check is closed as <c>skipped</c> and
+    /// the card rests in <c>awaiting-review</c> with no blocking reason and
+    /// stays pickable. Closing it terminally is what keeps a backend restart
+    /// from finding a phantom <c>running</c> check that nothing ever finishes.
     /// </summary>
     private void ParkActiveLifecycle(AutoReviewPostProcessingRequest request, string reason)
     {
         try
         {
             var info = _scanner.FindJob(request.JobId, request.WatchPath);
-            if (info == null) return;
-            var updated = PostProcessingLifecycleStore.Terminalize(
+            if (info == null)
+            {
+                // The card moved or was renamed mid-pass, so the check this
+                // worker opened cannot be closed. Say so instead of leaving a
+                // silent "running" behind.
+                _logger.LogWarning(
+                    "auto-review-postprocessing-lifecycle-park-unresolved project={Project} job={JobId} reason={Reason}",
+                    request.ProjectName, request.JobId, reason);
+                return;
+            }
+            var updated = PostProcessingLifecycleStore.Skip(
                 info.FolderPath,
                 DateTime.UtcNow,
-                failed: false,
-                "Post Processing deferred: " + reason + ".",
-                _logger,
-                onlyWhenActive: true);
+                "Post Processing skipped the decision: " + reason + ".",
+                _logger);
             if (updated && string.Equals(info.State, TaskStates.AutoReview, StringComparison.Ordinal))
                 _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.AwaitingReview);
         }
@@ -481,7 +494,13 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
         try
         {
             var info = _scanner.FindJob(request.JobId, request.WatchPath);
-            if (info == null) return;
+            if (info == null)
+            {
+                _logger.LogWarning(
+                    "auto-review-postprocessing-lifecycle-terminalize-unresolved project={Project} job={JobId} detail={Detail}",
+                    request.ProjectName, request.JobId, detail);
+                return;
+            }
             var updated = PostProcessingLifecycleStore.Terminalize(
                 info.FolderPath,
                 DateTime.UtcNow,

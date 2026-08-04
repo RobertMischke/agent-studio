@@ -286,8 +286,20 @@ cannot erase an operator decision.
   `EpicSubTaskFactory`. Valid plans create child coding cards with the Epic's
   project, `epicId`, CLI, and model defaults, append
   `.metadata/spawned-tasks.jsonl` planning-spawn evidence, and move the Epic to
-  `4-auto-review`. Empty, invalid, or source-mutating plans record a failed
+  `5-human-review`. Empty, invalid, or source-mutating plans record a failed
   decomposition and return the Epic to `0-backlog`.
+- A planning run is source-read-only and therefore never carries a Result-SHA,
+  so no ReviewAttempt can be minted for it. `4-auto-review` is consequently not
+  a legal planning-completion lane: an Epic parked there waits forever on a code
+  review of a subject that does not exist, and the report-only exception in the
+  decision engine does not apply because the card is `mode=coding`. The lane is
+  a pure decision in `EpicRunPolicy.PlanningCompletionLane`.
+- Two Human Review behaviours follow from an Epic owning no delivery branch.
+  Accepting it to `6-completed` skips the transactional merge, which would
+  otherwise return `NoTaskBranch` and bounce the card back on every accept. The
+  boot-time verdict-less backfill also leaves it alone: an Epic is verdict-less
+  by construction, not by legacy, so escalating it would only move the dead end
+  one lane over.
 - Empty Epic cleanup uses the Task API to move records to `7-archive`; it never
   deletes the task folder. Archived zero-member cleanup records are omitted
   from the overview, while completed Epics with historical children remain.

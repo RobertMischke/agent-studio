@@ -1432,8 +1432,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             claim.RunId, claim.LeaseInstanceId, claim.RunSpec);
 
         Assert.Equal(0, exit);
-        var epicFolder = Path.Combine(_watchPath, TaskStates.AutoReview, epicKey);
+        // A planning run owns no Result-SHA, so it must never land in the
+        // code-review lane; its delivery is the validated child set.
+        var epicFolder = Path.Combine(_watchPath, TaskStates.HumanReview, epicKey);
         Assert.True(Directory.Exists(epicFolder));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.AutoReview)));
         var children = Directory.EnumerateFiles(_workspace, "task.json", SearchOption.AllDirectories)
             .Where(path =>
             {
@@ -1458,6 +1461,58 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             allowFailure: true);
         Assert.NotEqual(0, runnerBranch.ExitCode);
         Assert.False(Directory.Exists(Path.Combine(runnerWork, "PROJ-001", "worktrees", epicKey)));
+    }
+
+    [Fact]
+    public async Task Remote_epic_planning_completion_without_result_sha_never_enters_auto_review()
+    {
+        // TE-8's dead end, reproduced as a regression: a planning run settles
+        // Completed with terminalOutcome=done, resultSha=null, on a mode=coding
+        // card. CreateReviewAttempt demands a non-empty ExpectedResultSha, and
+        // the report-only exception in the decision engine does not apply to a
+        // coding card, so 4-auto-review would wait forever on a ReviewAttempt
+        // that can never be minted.
+        const string epicKey = "AGT-EPIC-NO-SHA";
+        SeedTask(TaskStates.Ready, epicKey, "Planning Epic", "Split this goal into coding cards.",
+            kind: TaskKinds.Epic);
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+        var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
+            RunnerId, ProjectName, "host", 1, "remote-runner"));
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            claim.TaskKey!, claim.Lease!.LeaseId, claim.Lease.FencingToken, RunnerId,
+            "Done", Source: ProjectName,
+            ExitCode: 0,
+            // A read-only planning teardown reports no Result-SHA, by design.
+            ResultSha: null,
+            OutputLines: ["{\"subTasks\":[{\"title\":\"Implement API\",\"prompt\":\"Build and test the API.\"}]}"],
+            AttemptId: claim.Lease.AttemptId,
+            AuthorityEpoch: claim.Lease.AuthorityEpoch,
+            IdempotencyKey: $"epic-no-sha:{epicKey}"), ct);
+
+        Assert.Equal(TaskStates.HumanReview, completion!.TargetState);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, epicKey)));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.AutoReview)));
+
+        // The card really is the constellation from the report: coding mode,
+        // done, no Result-SHA - and therefore no ReviewAttempt to wait for.
+        using var task = JsonDocument.Parse(await File.ReadAllTextAsync(
+            Path.Combine(_watchPath, TaskStates.HumanReview, epicKey, "task.json")));
+        Assert.Equal(
+            TaskModes.Coding,
+            TaskModes.Normalize(task.RootElement.TryGetProperty("mode", out var mode) ? mode.GetString() : null));
+        var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{claim.TaskKey}", ApiJson, ct);
+        Assert.Equal(AttemptLifecycleState.Completed, projection!.CurrentRunAttempt!.State);
+        Assert.Equal("done", projection.CurrentRunAttempt.TerminalOutcome);
+        Assert.Null(projection.CurrentRunAttempt.ResultSha);
+        Assert.Null(projection.CurrentReviewAttempt);
     }
 
     [Theory]
