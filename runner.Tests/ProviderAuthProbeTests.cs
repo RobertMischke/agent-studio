@@ -20,8 +20,9 @@ public sealed class ProviderAuthProbeTests
         bool binaryExists = true,
         Func<DateTimeOffset>? clock = null,
         TimeSpan? ttl = null,
-        TimeSpan? timeout = null)
-        => new(launcher, _ => binaryExists, clock, ttl, timeout);
+        TimeSpan? timeout = null,
+        Func<string, DateTimeOffset?>? knownExpiry = null)
+        => new(launcher, _ => binaryExists, clock, ttl, timeout, knownExpiry);
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
@@ -191,6 +192,78 @@ public sealed class ProviderAuthProbeTests
         Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
         Assert.Contains("[redacted]", status.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-ant-api03", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_known_expiry_is_advertised_without_exposing_the_credential()
+    {
+        var now = new DateTimeOffset(2026, 8, 4, 8, 0, 0, TimeSpan.Zero);
+        var expiry = now.AddDays(10);
+        var probe = Probe(
+            Answers(0, "Logged in"),
+            clock: () => now,
+            knownExpiry: provider => provider == "claude" ? expiry : null);
+
+        await probe.RefreshAsync("claude", CancellationToken.None);
+        var advertised = RunnerCapabilityProbe.Advertise(
+            CodingOptions(),
+            gitPushReady: true,
+            providerAuth: probe);
+
+        var auth = Assert.Single(
+            advertised,
+            item => item.Key == CapabilityProtocol.ProviderAuthentication("claude"));
+        Assert.Equal(expiry.UtcDateTime, auth.ExpiresAt);
+        Assert.DoesNotContain("token", auth.Detail!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task A_real_run_auth_failure_overrides_the_cached_ready_verdict_immediately()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+        await probe.RefreshAsync("claude", CancellationToken.None);
+
+        var revoked = probe.MarkUnavailable("claude", "HTTP 401 sk-ant-api03-AAAABBBBCCCCDDDDEEEEFFFF");
+
+        Assert.Equal(ProviderAuthProbe.Unavailable, revoked.Status);
+        Assert.Equal(ProviderAuthProbe.Unavailable, probe.Current("claude").Status);
+        Assert.Contains("[redacted]", revoked.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_expired_known_credential_is_unavailable_before_launching_the_cli()
+    {
+        var launched = false;
+        var now = new DateTimeOffset(2026, 8, 4, 8, 0, 0, TimeSpan.Zero);
+        var probe = Probe(
+            (_, _, _) =>
+            {
+                launched = true;
+                return Task.FromResult(new ProcessResult(0, "Logged in", ""));
+            },
+            clock: () => now,
+            knownExpiry: _ => now.AddMinutes(-1));
+
+        var status = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
+        Assert.Contains("expired", status.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.False(launched);
+    }
+
+    [Fact]
+    public void A_jwt_expiry_is_read_locally_without_retaining_the_token()
+    {
+        const long expirySeconds = 1_788_215_400;
+        var payload = Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes($"{{\"exp\":{expirySeconds}}}"))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
+        var expiry = ProviderAuthProbe.TryReadJwtExpiry($"header.{payload}.signature");
+
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(expirySeconds), expiry);
     }
 
     private static RunnerOptions CodingOptions() => new()

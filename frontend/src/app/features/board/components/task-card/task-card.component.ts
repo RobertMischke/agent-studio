@@ -55,7 +55,7 @@ import { IntegrationStatusBadgeComponent } from '../../../../components/integrat
 import { ReviewDecisionBadgesComponent } from '../review-decision-badges/review-decision-badges.component';
 import { TaskLiveStatusComponent } from '../../../../components/task-live-status/task-live-status.component';
 import { TokenPopoverDirective } from './token-popover.directive';
-import { TaskCardQuotaWaitComponent } from '../task-card-quota-wait/task-card-quota-wait.component';
+import { TaskCardProviderAuthWaitComponent } from '../task-card-provider-auth-wait/task-card-provider-auth-wait.component';
 import { taskCardNow } from './task-card-clock';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -76,7 +76,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TaskTestEvidenceComponent, TaskLiveStatusComponent, TaskCardProviderAuthWaitComponent, CopyableTaskKeyComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -327,8 +327,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     this.job().state === TaskState.Progress ? this.job().pendingIntent ?? null : null);
   readonly currentAutoLoop = computed(() =>
     this.job().state === TaskState.Progress ? this.job().autoLoop ?? null : null);
-  readonly currentQuotaWait = computed(() =>
-    this.job().state === TaskState.Progress ? this.job().quotaWait ?? null : null);
   /**
    * Card-level "code review running" flag. Reads the shared
    * {@link CodeReviewActivityStore} singleton the detail-pane panel marks

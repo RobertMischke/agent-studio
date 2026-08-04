@@ -57,7 +57,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
     scope: `Set up the agent host daemon on ${host.name}`,
     reason: 'Provision the host idempotently, authenticate its agent CLIs, register its agent-host daemon, and prove one real remote task handoff.',
     command: controllerCommand,
-    expectedDuration: '10 to 20 minutes plus operator login time',
+    expectedDuration: '10 to 20 minutes plus provider authentication time',
     cliType: 'codex',
     context: {
       host: host.name,
@@ -91,6 +91,8 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       '',
       '3. Host-native CLI authentication',
       '- Install Codex and Claude CLI on the host when missing, then report their versions.',
+      '- If a Claude credential was supplied to the Studio provisioning controller, consume it only through the controller stdin option. Never request it in this task conversation, place it in this task command/context, or write it to the Studio database or repository.',
+      '- The controller must install secret-based Claude auth at `/etc/agent-runner/provider-auth.env` with mode `0640`, owner `root`, and the runner group, then verify `claude auth status --text` immediately.',
       '- Run `codex login --device-auth`. Print the browser URL and device code verbatim in this task conversation, pause for the operator to complete the browser step locally, then run `codex login status` and report the logged-in identity.',
       '- Run the supported Claude host login flow (`claude auth login`) and surface its browser URL or device code in this task conversation. Then run `claude auth status` and report the logged-in identity.',
       '- Never copy, upload, or reuse credential files from the operator workstation. Credentials must be created and refreshed by each CLI on this host.',

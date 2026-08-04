@@ -18,11 +18,18 @@ export class CapabilityHealthComponent {
 
   tone(capability: RemoteHostCapabilityHealth): 'ok' | 'warn' | 'error' | 'idle' {
     if (!capability.isFresh) return 'error';
+    if (capability.advertisedStatus !== 'ready') return 'error';
     switch (capability.healthState) {
       case 'healthy': return 'ok';
       case 'suspect': return 'warn';
       case 'draining': return 'error';
       case 'half-open': return 'idle';
     }
+  }
+
+  displayState(capability: RemoteHostCapabilityHealth): string {
+    if (!capability.isFresh) return 'stale';
+    if (capability.advertisedStatus !== 'ready') return capability.advertisedStatus;
+    return capability.healthState;
   }
 }

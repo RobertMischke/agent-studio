@@ -14,6 +14,8 @@ User=agent-runner
 Group=agent-runner
 WorkingDirectory=/var/lib/agent-runner
 EnvironmentFile=/etc/agent-runner/runner.env
+# Optional CLI-provider secret provisioned through controller SSH stdin.
+EnvironmentFile=-/etc/agent-runner/provider-auth.env
 # Keep the host-owned Mode-A Studio stack available for headless UI and
 # screenshot tasks. A missing script is non-fatal for non-UI hosts.
 ExecStartPre=-/home/agent-runner/bin/stack-start.sh

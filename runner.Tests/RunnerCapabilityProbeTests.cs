@@ -9,6 +9,8 @@ public sealed class RunnerCapabilityProbeTests
     [Theory]
     [InlineData(1, "", "HTTP 401 Missing bearer authentication", true)]
     [InlineData(1, "", "login required", true)]
+    [InlineData(1, "", "OAuth token expired", true)]
+    [InlineData(1, "", "invalid api key", true)]
     [InlineData(1, "", "ordinary product failure", false)]
     [InlineData(0, "", "HTTP 401 in historical output", false)]
     public void Provider_authentication_failure_requires_a_nonzero_typed_signal(

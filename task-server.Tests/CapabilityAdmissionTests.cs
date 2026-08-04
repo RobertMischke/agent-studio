@@ -266,6 +266,16 @@ public sealed class CapabilityAdmissionTests
         await FailAsync(store, clock, runner, instance, capability, "fail-1");
         var initialDrain = await FailAsync(store, clock, runner, instance, capability, "fail-2");
         clock.Advance(initialDrain.CooldownUntil!.Value - clock.GetUtcNow().UtcDateTime + TimeSpan.FromSeconds(1));
+        await store.AdvertiseCapabilitiesAsync(
+            Advertisement(
+                clock,
+                runner,
+                instance,
+                2,
+                CapabilityProtocol.CodingExecutor,
+                capability),
+            runner,
+            default);
 
         var canary = await store.ClaimAsync(
             new ClaimRequest(runner, instance, RequiredCapabilities: [CapabilityProtocol.CodingExecutor, capability]),
@@ -297,7 +307,7 @@ public sealed class CapabilityAdmissionTests
                 clock,
                 runner,
                 instance,
-                2,
+                3,
                 CapabilityProtocol.CodingExecutor,
                 capability),
             runner,
@@ -434,6 +444,86 @@ public sealed class CapabilityAdmissionTests
                 "runner",
                 default));
         Assert.Contains("future", future.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Provider_auth_history_and_expiry_survive_and_a_run_failure_revokes_ready_immediately()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        await store.RegisterRunnerAsync(
+            "claude",
+            new RegisterRunnerRequest(
+                "agent-runner-01",
+                "host-a",
+                "instance-a",
+                "1.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor]),
+            "test",
+            default);
+        var expiry = Start.AddDays(10).UtcDateTime;
+        await store.AdvertiseCapabilitiesAsync(
+            new CapabilityAdvertisementRequest(
+                "claude",
+                "instance-a",
+                CapabilityProtocol.CurrentSchemaVersion,
+                clock.GetUtcNow().UtcDateTime,
+                300,
+                1,
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        CapabilityProtocol.ProviderAuthentication("claude"),
+                        "provider-auth",
+                        Detail: "active session",
+                        ExpiresAt: expiry),
+                ]),
+            "claude",
+            default);
+
+        var response = await FailAsync(
+            store,
+            clock,
+            "claude",
+            "instance-a",
+            CapabilityProtocol.ProviderAuthentication("claude"),
+            "run-auth-failure");
+
+        Assert.Equal(CapabilityHealthStates.Suspect, response.HealthState);
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var auth = Assert.Single(
+            snapshot.Capabilities,
+            item => item.Key == CapabilityProtocol.ProviderAuthentication("claude"));
+        Assert.Equal("unavailable", auth.AdvertisedStatus);
+        Assert.Equal(expiry, auth.ExpiresAt);
+        Assert.Collection(
+            auth.StatusHistory!,
+            initial =>
+            {
+                Assert.Null(initial.FromStatus);
+                Assert.Equal("ready", initial.ToStatus);
+                Assert.Equal("probe", initial.Source);
+            },
+            revoked =>
+            {
+                Assert.Equal("ready", revoked.FromStatus);
+                Assert.Equal("unavailable", revoked.ToStatus);
+                Assert.Equal("run-failure", revoked.Source);
+            });
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                "claude",
+                "instance-a",
+                RequiredCapabilities: [CapabilityProtocol.ProviderAuthentication("claude")]),
+            "claude",
+            default);
+        Assert.Equal("empty", claim.Status);
+        Assert.Contains("advertised as unavailable", claim.Message);
     }
 
     private static TaskServerStore Store(string path, TimeProvider clock)

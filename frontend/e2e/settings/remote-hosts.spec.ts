@@ -224,6 +224,63 @@ test.describe('Execution Hosts settings section', () => {
     await remote.screenshot({ path: join(SHOT_DIR, 'runtime-capacity-light--mocked.png') });
   });
 
+  test('shows provider auth loss, probe detail, renewal warning, and notifications in both themes', async ({ page }) => {
+    const now = Date.now();
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+        instanceId: 'coding', runnerVersion: '1.3.0', protocolVersion: 3,
+        status: 'active', registeredAt: new Date(now - 86_400_000).toISOString(),
+        lastSeenAt: new Date(now - 10_000).toISOString(),
+        hostAdmission: {
+          hostId: 'host-berlin', admissionState: 'open', automaticDrainReason: null,
+          automaticDrainAt: null, operatorDrainReason: null, operatorDrainAt: null,
+        },
+        capabilities: [{
+          key: 'cli-execution:claude', category: 'cli-execution', advertisedStatus: 'ready',
+          healthState: 'healthy', reason: null, advertisedAt: new Date(now - 10_000).toISOString(),
+          freshUntil: new Date(now + 170_000).toISOString(), isFresh: true,
+          firstFailureAt: null, lastFailureAt: null, cooldownUntil: null,
+          canaryClaimId: null, consecutiveFailures: 0, version: 'available',
+          identity: '/usr/bin/claude', detail: 'Claude CLI binary is available.',
+          affectedClaims: [], recoveryHistory: [], statusHistory: [], expiresAt: null,
+        }, {
+          key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'unavailable',
+          healthState: 'suspect', reason: 'Not logged in', advertisedAt: new Date(now - 10_000).toISOString(),
+          freshUntil: new Date(now + 170_000).toISOString(), isFresh: true,
+          firstFailureAt: new Date(now - 10_000).toISOString(), lastFailureAt: new Date(now - 10_000).toISOString(),
+          cooldownUntil: null, canaryClaimId: null, consecutiveFailures: 1, version: 'available',
+          identity: 'claude', detail: "'claude auth status --text' reports no usable session: Not logged in",
+          affectedClaims: [], recoveryHistory: [],
+          statusHistory: [{
+            occurredAt: new Date(now - 10_000).toISOString(), fromStatus: 'ready',
+            toStatus: 'unavailable', source: 'probe', detail: 'Not logged in',
+          }],
+          expiresAt: new Date(now + 10 * 86_400_000).toISOString(),
+        }],
+        telemetry: null,
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    const auth = remote.getByTestId('remote-host-provider-auth-claude');
+    await expect(auth).toContainText('Claude Code auth · unavailable');
+    await expect(auth).toContainText('renew soon');
+    await auth.hover();
+    await expect(page.getByRole('tooltip')).toContainText('Not logged in');
+    await expect(page.getByText('Claude Code sign-in required', { exact: true })).toBeVisible();
+    await expect(page.getByText('Claude Code credential expires soon', { exact: true })).toBeVisible();
+
+    await setTheme(page, 'dark');
+    await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-unavailable-dark--mocked.png') });
+    await setTheme(page, 'light');
+    await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-unavailable-light--mocked.png') });
+  });
+
   test('Drain and graceful Retire require confirmation and keep a revivable retired client', async ({ page }) => {
     let kind = 'service';
     let draining = false;
@@ -284,6 +341,8 @@ test.describe('Execution Hosts settings section', () => {
     await remote.getByTestId('remote-host-action-setup').click();
 
     await expect(page.getByTestId('runner-setup-dialog')).toBeVisible();
+    await expect(page.getByTestId('runner-setup-provider-auth-guardrail'))
+      .toContainText('Secrets never become task data');
     await expect(page.getByTestId('runner-setup-loopback-block')).toContainText('Loopback is not remotely reachable');
     await expect(page.getByTestId('visible-cli-task-card')).toBeHidden();
 
@@ -294,7 +353,7 @@ test.describe('Execution Hosts settings section', () => {
     await expect(page.getByTestId('visible-cli-task-card')).toBeVisible();
     await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('Reachability gate (must run first)');
     await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('codex login --device-auth');
-    await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes plus operator login time');
+    await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes plus provider authentication time');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-runner-setup--mocked.png'), fullPage: false });
     await page.getByTestId('visible-cli-task-start').click();
 
@@ -310,6 +369,7 @@ test.describe('Execution Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).toContain("--host 'agent-runner'");
     expect(String(createBody?.['promptMarkdown'])).toContain('X-Client-Id: agent-runner-01');
     expect(String(createBody?.['promptMarkdown'])).toContain('Never copy, upload, or reuse credential files');
+    expect(String(createBody?.['promptMarkdown'])).toContain('Never request it in this task conversation');
   });
 
   test('surfaces a failed startup push probe as a read-only host', async ({ page }) => {

@@ -1038,7 +1038,9 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    [],
+                    capability.ExpiresAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1060,6 +1062,26 @@ public sealed class V1ReviewExecutorRegistry
                 throw new InvalidOperationException(
                     $"Capability generation {request.Generation} is older than {existing.Generation}.");
             }
+
+            var previousCapabilities = _capabilityStates.TryGetValue(runnerId, out var previousState)
+                ? previousState.Capabilities
+                : [];
+            capabilities = capabilities
+                .Select(capability =>
+                {
+                    if (!IsProviderAuthentication(capability.Key)) return capability;
+                    var previous = previousCapabilities.FirstOrDefault(item =>
+                        string.Equals(item.Key, capability.Key, StringComparison.Ordinal));
+                    var history = AppendCapabilityStatusHistory(
+                        previous?.StatusHistory ?? [],
+                        previous?.AdvertisedStatus,
+                        capability.AdvertisedStatus,
+                        advertisedAt,
+                        "probe",
+                        capability.Detail);
+                    return capability with { StatusHistory = history };
+                })
+                .ToArray();
 
             registration = registration with { LastSeenAt = now };
             _registrations[runnerId] = registration;
@@ -1178,6 +1200,32 @@ public sealed class V1ReviewExecutorRegistry
                 cooldownUntil,
                 consecutive,
                 wholeHost);
+            if (IsProviderAuthentication(capabilityKey)
+                && _capabilityStates.TryGetValue(runnerId, out var capabilityState))
+            {
+                var updatedCapabilities = capabilityState.Capabilities
+                    .Select(capability => !string.Equals(
+                            capability.Key,
+                            capabilityKey,
+                            StringComparison.Ordinal)
+                        ? capability
+                        : capability with
+                        {
+                            AdvertisedStatus = "unavailable",
+                            StatusHistory = AppendCapabilityStatusHistory(
+                                capability.StatusHistory ?? [],
+                                capability.AdvertisedStatus,
+                                "unavailable",
+                                occurredAt,
+                                "run-failure",
+                                request.Reason),
+                        })
+                    .ToArray();
+                _capabilityStates[runnerId] = capabilityState with
+                {
+                    Capabilities = updatedCapabilities,
+                };
+            }
 
             var response = new Contract.CapabilityFailureResponse(
                 "accepted",
@@ -1500,6 +1548,30 @@ public sealed class V1ReviewExecutorRegistry
         {
             entries.Remove(key);
         }
+    }
+
+    private static bool IsProviderAuthentication(string key)
+        => key.StartsWith("provider-auth:", StringComparison.Ordinal);
+
+    private static IReadOnlyList<Contract.CapabilityStatusHistoryEventDto>
+        AppendCapabilityStatusHistory(
+            IReadOnlyList<Contract.CapabilityStatusHistoryEventDto> history,
+            string? fromStatus,
+            string toStatus,
+            DateTime occurredAt,
+            string source,
+            string? detail)
+    {
+        if (string.Equals(fromStatus, toStatus, StringComparison.Ordinal)) return history;
+        return history
+            .Append(new Contract.CapabilityStatusHistoryEventDto(
+                occurredAt,
+                fromStatus,
+                toStatus,
+                source,
+                detail))
+            .TakeLast(64)
+            .ToArray();
     }
 
     /// <summary>

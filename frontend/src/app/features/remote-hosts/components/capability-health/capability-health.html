@@ -45,7 +45,7 @@
           <div class="capability__head">
             <strong>{{ capability.key }}</strong>
             <span class="state" [attr.data-tone]="tone(capability)">
-              {{ capability.isFresh ? capability.healthState : 'stale' }}
+              {{ displayState(capability) }}
             </span>
           </div>
           <dl>
@@ -55,7 +55,23 @@
             <div><dt>Cooldown</dt><dd>{{ capability.cooldownUntil ? (capability.cooldownUntil | date:'short') : 'none' }}</dd></div>
             <div><dt>Canary</dt><dd>{{ capability.canaryClaimId || 'none' }}</dd></div>
             <div><dt>Affected claims</dt><dd>{{ capability.affectedClaims.length ? capability.affectedClaims.join(', ') : 'none' }}</dd></div>
+            @if (capability.expiresAt) {
+              <div><dt>Credential expiry</dt><dd>{{ capability.expiresAt | date:'short' }}</dd></div>
+            }
           </dl>
+          @if (capability.statusHistory?.length) {
+            <details>
+              <summary>Status history · {{ capability.statusHistory?.length }}</summary>
+              <ol>
+                @for (event of capability.statusHistory; track event.occurredAt + event.toStatus + event.source) {
+                  <li>
+                    <time [attr.datetime]="event.occurredAt">{{ event.occurredAt | date:'short' }}</time>
+                    · {{ event.fromStatus || 'unknown' }} → {{ event.toStatus }} · {{ event.source }}
+                  </li>
+                }
+              </ol>
+            </details>
+          }
           @if (capability.recoveryHistory.length) {
             <details>
               <summary>Recovery history · {{ capability.recoveryHistory.length }}</summary>

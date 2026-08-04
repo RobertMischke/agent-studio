@@ -59,15 +59,28 @@ public sealed partial class TaskServerStore
                 var key = NormalizeCapability(capability.Key);
                 if (key.Length == 0 || string.IsNullOrWhiteSpace(capability.Category))
                     throw new ArgumentException("Capability key and category are required.");
+                if (IsProviderAuthentication(key))
+                {
+                    await RecordCapabilityStatusAsync(
+                        connection,
+                        transaction,
+                        request.RunnerId,
+                        key,
+                        capability.Status.Trim().ToLowerInvariant(),
+                        advertisedAt,
+                        "probe",
+                        capability.Detail,
+                        ct);
+                }
                 await ExecuteAsync(connection, """
                     INSERT INTO runner_capabilities(
                         runner_id, capability_key, category, schema_version,
                         advertised_status, health_state, reason, version,
-                        identity_value, detail, advertised_at, fresh_until,
+                        identity_value, detail, expires_at, advertised_at, fresh_until,
                         generation, recovery_history_json, updated_at)
                     VALUES (
                         $runner, $key, $category, $schema, $status, 'healthy',
-                        NULL, $version, $identity, $detail, $advertised,
+                        NULL, $version, $identity, $detail, $expires, $advertised,
                         $fresh, $generation, '[]', $updated)
                     ON CONFLICT(runner_id, capability_key) DO UPDATE SET
                         category = excluded.category,
@@ -76,6 +89,7 @@ public sealed partial class TaskServerStore
                         version = excluded.version,
                         identity_value = excluded.identity_value,
                         detail = excluded.detail,
+                        expires_at = excluded.expires_at,
                         advertised_at = excluded.advertised_at,
                         fresh_until = excluded.fresh_until,
                         generation = excluded.generation,
@@ -89,6 +103,7 @@ public sealed partial class TaskServerStore
                     ("$version", capability.Version),
                     ("$identity", capability.Identity),
                     ("$detail", capability.Detail),
+                    ("$expires", capability.ExpiresAt is null ? null : Iso(capability.ExpiresAt.Value.ToUniversalTime())),
                     ("$advertised", Iso(advertisedAt)),
                     ("$fresh", Iso(freshUntil)),
                     ("$generation", request.Generation),
@@ -200,6 +215,7 @@ public sealed partial class TaskServerStore
                 ct);
 
             var wholeHost = WholeHostCapabilities.Contains(capability.Key);
+            var providerAuthentication = IsProviderAuthentication(capability.Key);
             var failures = capability.ConsecutiveFailures + 1;
             var nextState = capability.HealthState switch
             {
@@ -219,9 +235,23 @@ public sealed partial class TaskServerStore
                     nextState,
                     request.Reason,
                     request.ClaimId));
+            if (providerAuthentication)
+            {
+                await RecordCapabilityStatusAsync(
+                    connection,
+                    transaction,
+                    request.RunnerId,
+                    capability.Key,
+                    "unavailable",
+                    occurredAt,
+                    "run-failure",
+                    request.Reason,
+                    ct);
+            }
             await ExecuteAsync(connection, """
                 UPDATE runner_capabilities
-                   SET health_state = $state,
+                   SET advertised_status = CASE WHEN $provider_auth = 1 THEN 'unavailable' ELSE advertised_status END,
+                       health_state = $state,
                        reason = $reason,
                        first_failure_at = COALESCE(first_failure_at, $occurred),
                        last_failure_at = $occurred,
@@ -233,6 +263,7 @@ public sealed partial class TaskServerStore
                  WHERE runner_id = $runner AND capability_key = $capability;
                 """, ct, transaction,
                 ("$state", nextState),
+                ("$provider_auth", providerAuthentication ? 1 : 0),
                 ("$reason", $"{request.Classification}: {request.Reason}"),
                 ("$occurred", Iso(occurredAt)),
                 ("$cooldown", cooldownUntil is null ? null : Iso(cooldownUntil.Value)),
@@ -339,7 +370,7 @@ public sealed partial class TaskServerStore
                 SELECT capability_key, category, advertised_status, health_state,
                        reason, advertised_at, fresh_until, first_failure_at,
                        last_failure_at, cooldown_until, canary_claim_id,
-                       consecutive_failures, version, identity_value, detail,
+                       consecutive_failures, version, identity_value, detail, expires_at,
                        recovery_history_json
                   FROM runner_capabilities
                  WHERE runner_id = $runner
@@ -369,7 +400,9 @@ public sealed partial class TaskServerStore
                         reader.IsDBNull(13) ? null : reader.GetString(13),
                         reader.IsDBNull(14) ? null : reader.GetString(14),
                         await AffectedClaimsAsync(connection, runner.Id, key, ct),
-                        DeserializeHistory(reader.GetString(15))));
+                        DeserializeHistory(reader.GetString(16)),
+                        await ReadCapabilityStatusHistoryAsync(connection, runner.Id, key, ct),
+                        reader.IsDBNull(15) ? null : Parse(reader.GetString(15))));
                 }
             }
             HostTelemetrySnapshotDto? telemetry = null;
@@ -826,6 +859,88 @@ public sealed partial class TaskServerStore
             }
         }
         return affected;
+    }
+
+    private static bool IsProviderAuthentication(string key)
+        => key.StartsWith("provider-auth:", StringComparison.Ordinal);
+
+    private static async Task RecordCapabilityStatusAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runnerId,
+        string capabilityKey,
+        string toStatus,
+        DateTime occurredAt,
+        string source,
+        string? detail,
+        CancellationToken ct)
+    {
+        var previous = Convert.ToString(
+            await ScalarAsync(
+                connection,
+                """
+                SELECT advertised_status
+                  FROM runner_capabilities
+                 WHERE runner_id = $runner AND capability_key = $key;
+                """,
+                ct,
+                transaction,
+                ("$runner", runnerId),
+                ("$key", capabilityKey)),
+            CultureInfo.InvariantCulture);
+        if (string.Equals(previous, toStatus, StringComparison.Ordinal)) return;
+
+        await ExecuteAsync(connection, """
+            INSERT INTO capability_status_history(
+                runner_id, capability_key, occurred_at, from_status, to_status, source, detail)
+            VALUES ($runner, $key, $occurred, $from, $to, $source, $detail);
+            """, ct, transaction,
+            ("$runner", runnerId),
+            ("$key", capabilityKey),
+            ("$occurred", Iso(occurredAt)),
+            ("$from", string.IsNullOrWhiteSpace(previous) ? null : previous),
+            ("$to", toStatus),
+            ("$source", source),
+            ("$detail", detail));
+        await ExecuteAsync(connection, """
+            DELETE FROM capability_status_history
+             WHERE runner_id = $runner
+               AND capability_key = $key
+               AND id NOT IN (
+                   SELECT id
+                     FROM capability_status_history
+                    WHERE runner_id = $runner AND capability_key = $key
+                    ORDER BY occurred_at DESC, id DESC
+                    LIMIT 64
+               );
+            """, ct, transaction, ("$runner", runnerId), ("$key", capabilityKey));
+    }
+
+    private static async Task<IReadOnlyList<CapabilityStatusHistoryEventDto>>
+        ReadCapabilityStatusHistoryAsync(
+            SqliteConnection connection,
+            string runnerId,
+            string capabilityKey,
+            CancellationToken ct)
+    {
+        var history = new List<CapabilityStatusHistoryEventDto>();
+        await using var command = Command(connection, """
+            SELECT occurred_at, from_status, to_status, source, detail
+              FROM capability_status_history
+             WHERE runner_id = $runner AND capability_key = $key
+             ORDER BY occurred_at, id;
+            """, ("$runner", runnerId), ("$key", capabilityKey));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            history.Add(new CapabilityStatusHistoryEventDto(
+                Parse(reader.GetString(0)),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
+        }
+        return history;
     }
 
     private static string NormalizeCapability(string value)

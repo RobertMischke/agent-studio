@@ -29,6 +29,7 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("ExecStart=/opt/agent-host/current/agent-host --poll", content);
         Assert.DoesNotContain("ExecStart=/opt/agent-host/agent-host --poll", content);
         Assert.Contains("Alias=agent-runner.service", content);
+        Assert.Contains("EnvironmentFile=-/etc/agent-runner/provider-auth.env", content);
     }
 
     [Fact]
@@ -82,6 +83,20 @@ public sealed class RunnerServiceUnitTests
 
         Assert.Contains("service_root=\"/var/lib/agent-runner\"", content);
         Assert.Contains("RUNNER_STATE_DIR=%s/state", content);
+    }
+
+    [Fact]
+    public void Onboarding_provisions_provider_auth_only_through_ssh_stdin()
+    {
+        var content = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "remote-runner-onboard.sh"));
+
+        Assert.Contains("--claude-code-oauth-token-stdin", content);
+        Assert.Contains("--anthropic-api-key-stdin", content);
+        Assert.Contains("IFS= read -r provider_auth_secret", content);
+        Assert.Contains("/etc/agent-runner/provider-auth.env", content);
+        Assert.Contains("install -m 0640 -o root -g \"$runner_group\"", content);
+        Assert.Contains("EnvironmentFile=-/etc/agent-runner/provider-auth.env", content);
+        Assert.Contains("claude auth status --text", content);
     }
 
     [SkippableTheory]

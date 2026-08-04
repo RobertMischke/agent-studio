@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-24
+Version: 2026-08-04
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -80,6 +80,15 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   auto-review status snapshot into a compact current-step or elapsed-wait
   indicator; the lane header reconciles those visible cards as active versus
   waiting, with machine-lock gate queueing remaining a distinct waiting state.
+  A `2-ready` remote card also derives provider-auth admission from the shared
+  Execution Hosts snapshot. When matching runners advertise no usable auth, the
+  card names the provider and host that need sign-in instead of appearing idle.
+- `frontend/src/app/features/remote-hosts/`: Execution Hosts projects each
+  advertised CLI provider as an `ok`, `unavailable`, or `unknown` badge with the
+  probe detail in its tooltip. Stored `ready` to `unavailable` transitions
+  generate one persistent notification. Known credential expiry produces a
+  renewal warning during the final 14 days. All three surfaces consume the same
+  capability snapshot and do not persist provider secrets.
 - `frontend/src/app/features/board/components/epic-overview-screen/`: the
   read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
   It fetches `GET /api/epics` (archive-inclusive) and splits rollups into

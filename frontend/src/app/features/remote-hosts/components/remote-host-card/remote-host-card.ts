@@ -7,6 +7,7 @@ import { CapabilityHealthComponent } from '../capability-health/capability-healt
 import { GitTokenCapabilityComponent } from '../git-token-capability/git-token-capability';
 import { HostWorkloadSummaryComponent } from '../host-workload-summary/host-workload-summary';
 import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
+import { ProviderAuthStatusComponent } from '../provider-auth-status/provider-auth-status';
 import {
   RuntimeCapacityEditorComponent,
   type RuntimeCapacityChange,
@@ -59,6 +60,7 @@ interface Meter {
     GitTokenCapabilityComponent,
     HostWorkloadSummaryComponent,
     HostTelemetryHistoryComponent,
+    ProviderAuthStatusComponent,
     RuntimeCapacityEditorComponent,
   ],
   templateUrl: './remote-host-card.html',

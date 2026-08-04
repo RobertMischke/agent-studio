@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentStudio.TaskServer.Contracts;
 
@@ -188,11 +190,7 @@ internal static class RunnerCapabilityProbe
     {
         if (result.ExitCode == 0) return false;
         var text = $"{result.StdErr}\n{result.StdOut}";
-        return text.Contains("401", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("authentication failed", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("not logged in", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("login required", StringComparison.OrdinalIgnoreCase);
+        return ProviderAuthProbe.IndicatesNoUsableSession(text);
     }
 
     private static void AddToolchain(
@@ -228,7 +226,8 @@ internal static class RunnerCapabilityProbe
                 binaryAvailable ? "available" : null,
                 cliType,
                 auth.Status,
-                auth.Detail));
+                auth.Detail,
+                auth.ExpiresAt));
         }
     }
 
@@ -259,8 +258,9 @@ internal static class RunnerCapabilityProbe
         string? version,
         string? identity,
         string status = "ready",
-        string? detail = null)
-        => new(key, category, status, version, identity, detail);
+        string? detail = null,
+        DateTimeOffset? expiresAt = null)
+        => new(key, category, status, version, identity, detail, expiresAt?.UtcDateTime);
 
     private static string Platform()
         => $"{(OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsLinux() ? "linux" : "other")}:{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}";
@@ -296,7 +296,12 @@ internal static class RunnerCapabilityProbe
 /// <param name="Status">Exactly what goes on the wire: <c>ready</c> or <c>unavailable</c>.</param>
 /// <param name="Detail">One line, no secrets, safe to show on the capability panel.</param>
 /// <param name="ObservedAt">When the verdict was taken - the TTL is measured from here.</param>
-public sealed record ProviderAuthStatus(string Status, string Detail, DateTimeOffset ObservedAt)
+/// <param name="ExpiresAt">Known credential expiry, when the host can prove it without exposing the credential.</param>
+public sealed record ProviderAuthStatus(
+    string Status,
+    string Detail,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? ExpiresAt = null)
 {
     public bool IsReady => Status == ProviderAuthProbe.Ready;
 }
@@ -348,13 +353,6 @@ public sealed class ProviderAuthProbe
     public const string Unavailable = "unavailable";
     public const string ConceptPath = "docs/operations/token-refresh-ohne-tunnel.md";
 
-    // TODO (stage S1 "Vorwarnung", concept section 3.3): a third status
-    // "expiring", read from the credential file's expiry field, is deliberately
-    // NOT built here. The on-disk format of both CLIs is unverified (concept
-    // section 6, open point 1) and no code in this repo reads those files today.
-    // Add it only once a fixture proves the field - guessing it would produce
-    // exactly the blind status this class exists to remove.
-
     /// <summary>Idle cost is one child process per host per five minutes.</summary>
     public static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(5);
 
@@ -369,6 +367,7 @@ public sealed class ProviderAuthProbe
     private readonly Func<DateTimeOffset> _clock;
     private readonly TimeSpan _ttl;
     private readonly TimeSpan _timeout;
+    private readonly Func<string, DateTimeOffset?> _knownExpiry;
     private ProviderAuthLauncher? _launcher;
     private readonly Dictionary<string, ProviderAuthStatus> _observed =
         new(StringComparer.Ordinal);
@@ -380,13 +379,15 @@ public sealed class ProviderAuthProbe
         Func<string, bool>? executableExists = null,
         Func<DateTimeOffset>? clock = null,
         TimeSpan? ttl = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        Func<string, DateTimeOffset?>? knownExpiry = null)
     {
         _launcher = launcher;
         _executableExists = executableExists ?? ExecutableExists;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _ttl = ttl ?? DefaultTtl;
         _timeout = timeout ?? DefaultTimeout;
+        _knownExpiry = knownExpiry ?? KnownExpiryFromEnvironment;
     }
 
     /// <summary>
@@ -458,6 +459,28 @@ public sealed class ProviderAuthProbe
     }
 
     /// <summary>
+    /// Invalidates a cached provider immediately after a real run reports an
+    /// authentication failure. This closes the window between that failure and
+    /// the next bounded status-command probe, including intervening one-minute
+    /// capability advertisements.
+    /// </summary>
+    public ProviderAuthStatus MarkUnavailable(string cliBinary, string detail)
+    {
+        var provider = RunnerCapabilityProbe.Provider(cliBinary);
+        var status = new ProviderAuthStatus(
+            Unavailable,
+            $"'{provider}' run reported no usable session: {Excerpt(detail)}",
+            _clock(),
+            _knownExpiry(provider));
+        lock (_sync)
+        {
+            _observed[cliBinary] = status;
+            _refreshInFlight.Remove(cliBinary);
+        }
+        return status;
+    }
+
+    /// <summary>
     /// The status command per provider, or null when this runner has none for it.
     /// Null means "keep the presence check": inventing a command for an unknown
     /// wrapper binary would drain the host on its first advertisement.
@@ -477,6 +500,13 @@ public sealed class ProviderAuthProbe
 
         var provider = RunnerCapabilityProbe.Provider(cliBinary);
         if (!_executableExists(cliBinary)) return BinaryMissing(cliBinary, provider);
+        var expiresAt = _knownExpiry(provider);
+        if (expiresAt is not null && expiresAt <= _clock())
+            return new ProviderAuthStatus(
+                Unavailable,
+                $"The locally configured {provider} credential expired at {expiresAt:O}.",
+                _clock(),
+                expiresAt);
 
         var arguments = AuthStatusArguments(provider);
         if (arguments is null)
@@ -484,7 +514,8 @@ public sealed class ProviderAuthProbe
                 Ready,
                 $"unverified: no auth status command is known for provider '{provider}'; "
                 + $"binary presence only. See {ConceptPath}.",
-                _clock());
+                _clock(),
+                expiresAt);
 
         var command = $"{provider} {string.Join(' ', arguments)}";
         ProcessResult result;
@@ -499,7 +530,8 @@ public sealed class ProviderAuthProbe
             return new ProviderAuthStatus(
                 Unavailable,
                 $"'{command}' did not answer within {_timeout.TotalSeconds:0}s.",
-                _clock());
+                _clock(),
+                expiresAt);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -507,45 +539,60 @@ public sealed class ProviderAuthProbe
                 Unavailable,
                 $"'{command}' could not be started: "
                 + Excerpt($"{exception.GetType().Name}: {exception.Message}"),
-                _clock());
+                _clock(),
+                expiresAt);
         }
 
-        return Interpret(command, result);
+        return Interpret(command, result, expiresAt);
     }
 
-    private ProviderAuthStatus Interpret(string command, ProcessResult result)
+    private ProviderAuthStatus Interpret(
+        string command,
+        ProcessResult result,
+        DateTimeOffset? expiresAt)
     {
         var text = $"{result.StdOut}\n{result.StdErr}";
         if (IndicatesNoUsableSession(text))
             return new ProviderAuthStatus(
                 Unavailable,
                 $"'{command}' reports no usable session (exit {result.ExitCode}): {Excerpt(text)}",
-                _clock());
+                _clock(),
+                expiresAt);
         if (result.Success)
-            return new ProviderAuthStatus(Ready, $"'{command}' confirmed an active session.", _clock());
+            return new ProviderAuthStatus(
+                Ready,
+                $"'{command}' confirmed an active session.",
+                _clock(),
+                expiresAt);
         if (IndicatesUnsupportedCommand(text))
             return new ProviderAuthStatus(
                 Ready,
                 $"unverified: '{command}' is not supported by the installed CLI (exit {result.ExitCode}): "
                 + $"{Excerpt(text)} Binary presence only. See {ConceptPath}.",
-                _clock());
+                _clock(),
+                expiresAt);
         return new ProviderAuthStatus(
             Unavailable,
             $"'{command}' failed (exit {result.ExitCode}): {Excerpt(text)}",
-            _clock());
+            _clock(),
+            expiresAt);
     }
 
     private ProviderAuthStatus PresenceOnly(string cliBinary, bool probeWired)
     {
         var provider = RunnerCapabilityProbe.Provider(cliBinary);
         if (!_executableExists(cliBinary)) return BinaryMissing(cliBinary, provider);
+        var expiresAt = _knownExpiry(provider);
         return new ProviderAuthStatus(
-            Ready,
-            probeWired
-                ? $"unverified: the auth probe for '{provider}' has not answered yet; binary presence only."
-                : $"unverified: no auth probe is wired on this host; '{provider}' binary presence only. "
-                  + $"See {ConceptPath}.",
-            _clock());
+            expiresAt is not null && expiresAt <= _clock() ? Unavailable : Ready,
+            expiresAt is not null && expiresAt <= _clock()
+                ? $"The locally configured {provider} credential expired at {expiresAt:O}."
+                : probeWired
+                    ? $"unverified: the auth probe for '{provider}' has not answered yet; binary presence only."
+                    : $"unverified: no auth probe is wired on this host; '{provider}' binary presence only. "
+                      + $"See {ConceptPath}.",
+            _clock(),
+            expiresAt);
     }
 
     private ProviderAuthStatus BinaryMissing(string cliBinary, string provider)
@@ -579,6 +626,71 @@ public sealed class ProviderAuthProbe
 
     public static bool IndicatesUnsupportedCommand(string? text)
         => Matches(text, UnsupportedCommandSignals);
+
+    /// <summary>
+    /// Returns only expiry metadata. Explicit companion variables win; when an
+    /// OAuth token is a JWT, its standard <c>exp</c> claim is decoded locally.
+    /// Opaque API keys simply return no expiry and remain subject to live probes.
+    /// </summary>
+    internal static DateTimeOffset? KnownExpiryFromEnvironment(string provider)
+    {
+        var explicitNames = provider switch
+        {
+            "claude" => new[]
+            {
+                "CLAUDE_CODE_OAUTH_TOKEN_EXPIRES_AT",
+                "ANTHROPIC_API_KEY_EXPIRES_AT",
+            },
+            "codex" => new[]
+            {
+                "CODEX_AUTH_TOKEN_EXPIRES_AT",
+                "OPENAI_API_KEY_EXPIRES_AT",
+            },
+            _ => [],
+        };
+        foreach (var name in explicitNames)
+        {
+            if (DateTimeOffset.TryParse(
+                    Environment.GetEnvironmentVariable(name),
+                    out var expiresAt))
+                return expiresAt.ToUniversalTime();
+        }
+
+        var tokenNames = provider switch
+        {
+            "claude" => new[] { "CLAUDE_CODE_OAUTH_TOKEN" },
+            "codex" => new[] { "CODEX_AUTH_TOKEN" },
+            _ => [],
+        };
+        foreach (var name in tokenNames)
+        {
+            var expiry = TryReadJwtExpiry(Environment.GetEnvironmentVariable(name));
+            if (expiry is not null) return expiry;
+        }
+        return null;
+    }
+
+    internal static DateTimeOffset? TryReadJwtExpiry(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+        var parts = token.Split('.');
+        if (parts.Length != 3) return null;
+        try
+        {
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            using var json = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
+            if (!json.RootElement.TryGetProperty("exp", out var exp)) return null;
+            return exp.ValueKind == JsonValueKind.Number && exp.TryGetInt64(out var seconds)
+                ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+                : null;
+        }
+        catch (Exception exception) when (
+            exception is FormatException or JsonException or ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
 
     private static bool Matches(string? text, string[] signals)
         => !string.IsNullOrWhiteSpace(text)

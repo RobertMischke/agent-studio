@@ -11,10 +11,10 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 6 = union of develop's capacity/quota schema (5) and AGT-2395's additive
-    // result_ref_gc table (branched as 4 from base 3). The migration block is
-    // idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 6;
+    // 7 adds provider-auth advertised-status history and optional credential
+    // expiry metadata. The migration block is idempotent; the number only
+    // guards downgrades.
+    public const int CurrentSchemaVersion = 7;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -1942,6 +1942,7 @@ public sealed partial class TaskServerStore
                 version TEXT,
                 identity_value TEXT,
                 detail TEXT,
+                expires_at TEXT,
                 advertised_at TEXT NOT NULL,
                 fresh_until TEXT NOT NULL,
                 generation INTEGER NOT NULL,
@@ -1953,6 +1954,16 @@ public sealed partial class TaskServerStore
                 recovery_history_json TEXT NOT NULL DEFAULT '[]',
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY(runner_id, capability_key)
+            );
+            CREATE TABLE IF NOT EXISTS capability_status_history(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                capability_key TEXT NOT NULL,
+                occurred_at TEXT NOT NULL,
+                from_status TEXT,
+                to_status TEXT NOT NULL,
+                source TEXT NOT NULL,
+                detail TEXT
             );
             CREATE TABLE IF NOT EXISTS capability_failure_deliveries(
                 runner_id TEXT NOT NULL REFERENCES runners(id),
@@ -2217,6 +2228,8 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
             CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
             CREATE INDEX IF NOT EXISTS ix_runner_capabilities_state ON runner_capabilities(runner_id, health_state, fresh_until);
+            CREATE INDEX IF NOT EXISTS ix_capability_status_history_lookup
+                ON capability_status_history(runner_id, capability_key, occurred_at DESC);
             CREATE INDEX IF NOT EXISTS ix_orchestration_runs_status_stage
                 ON orchestration_runs(status, current_stage, updated_at);
             CREATE INDEX IF NOT EXISTS ix_orchestration_stage_results_run
@@ -2234,6 +2247,7 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_maximum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "expires_at", "TEXT", ct);
         await ExecuteAsync(connection, """
             INSERT INTO runtime_capacity_settings(
                 host_id, max_parallelism, target_load_percent, ramp_strategy,

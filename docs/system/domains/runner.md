@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-02
+Version: 2026-08-04
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -108,6 +108,13 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- `runner/RunnerCapabilityProbe.cs`, `task-server/TaskServerCapabilityStore.cs`,
+  and the shared capability contracts own provider-auth truth. The bounded CLI
+  probe supplies `ready` or `unavailable`, a UI-safe detail, and optional known
+  credential expiry. The Task Server retains advertised-status transitions per
+  runner and provider. A real run authentication failure changes the advertised
+  provider to `unavailable` immediately, before the next 60-second capability
+  advertisement, while unrelated provider claims remain eligible.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -171,6 +178,11 @@ state.
   `/etc/agent-host/profile.conf`, and adopts legacy resource drop-ins before the
   managed main unit replaces them. The target contract lives in
   [runner-host resource governance](../../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
+  Provider secrets use a separate controller-stdin to SSH-stdin path. They are
+  installed only on the host as `/etc/agent-runner/provider-auth.env` with mode
+  `0640 root:<runner-group>`, then verified by the CLI status command and daemon
+  capability probe. They never enter a task payload, Studio persistence, or the
+  repository.
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store

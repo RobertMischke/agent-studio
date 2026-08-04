@@ -125,10 +125,14 @@ public sealed class ManagementApiTests : IDisposable
         Assert.Contains(
             snapshot.Capabilities,
             capability => capability.Key == "provider-auth:claude"
-                          && capability.AdvertisedStatus == "ready"
+                          && capability.AdvertisedStatus == "unavailable"
                           && capability.HealthState == Contract.CapabilityHealthStates.Suspect
                           && capability.ConsecutiveFailures == 1
-                          && capability.FirstFailureAt is not null);
+                          && capability.FirstFailureAt is not null
+                          && capability.StatusHistory is [
+                              { FromStatus: null, ToStatus: "ready", Source: "probe" },
+                              { FromStatus: "ready", ToStatus: "unavailable", Source: "run-failure" },
+                          ]);
     }
 
     [Fact]

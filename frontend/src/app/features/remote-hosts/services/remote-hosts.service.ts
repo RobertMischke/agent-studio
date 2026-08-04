@@ -208,8 +208,12 @@ export class RemoteHostsService {
               status,
               lastHeartbeatAt: snapshot.lastSeenAt,
               capabilityHealth: snapshot.capabilities,
-              capabilities: snapshot.capabilities.map(capability =>
-                capability.version ? `${capability.key} ${capability.version}` : capability.key),
+              capabilities: snapshot.capabilities.map(capability => {
+                const suffix = capability.advertisedStatus === 'ready'
+                  ? capability.version
+                  : capability.advertisedStatus;
+                return suffix ? `${capability.key} ${suffix}` : capability.key;
+              }),
               gitPushStatus,
               gitPushDetail: gitWorkflowPush?.detail ?? gitPush?.detail ?? current.gitPushDetail,
               gitPushCheckedAt:

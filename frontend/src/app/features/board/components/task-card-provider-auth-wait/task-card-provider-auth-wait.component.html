@@ -1,0 +1,20 @@
+@if (quotaWait(); as quota) {
+  <span class="quota-wait"
+        [cacTooltip]="quota.tooltip"
+        [attr.data-minutes-left]="quota.minutesLeft"
+        data-testid="task-card-quota-wait"
+        role="status">
+    <span aria-hidden="true">◴</span>
+    {{ quota.label }}
+  </span>
+}
+@if (wait(); as reason) {
+  <span class="provider-auth-wait"
+        [cacTooltip]="reason.detail"
+        [attr.data-provider]="reason.provider"
+        data-testid="task-card-provider-auth-wait"
+        role="status">
+    <span aria-hidden="true">🔐</span>
+    {{ reason.label }}
+  </span>
+}

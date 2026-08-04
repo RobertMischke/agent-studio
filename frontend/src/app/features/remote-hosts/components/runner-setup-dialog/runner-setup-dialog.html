@@ -94,9 +94,27 @@
         }
       </section>
 
-      <section class="setup__execution" aria-labelledby="runner-setup-execution-title">
+      <section class="setup__configuration" aria-labelledby="runner-setup-auth-title">
         <div class="setup__section-head">
           <span class="setup__step">2</span>
+          <div>
+            <h3 id="runner-setup-auth-title">Provider authentication</h3>
+            <p>Choose interactive host login, or provision Claude through the controller's protected stdin channel.</p>
+          </div>
+        </div>
+        <div class="setup__reachability" data-testid="runner-setup-provider-auth-guardrail">
+          <strong>Secrets never become task data.</strong>
+          <span>
+            The setup task contains no token field or token value. For headless setup, enter
+            CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY only when the local provisioning controller asks for it.
+            It writes the host-only 0640 environment file and runs the authentication probe immediately.
+          </span>
+        </div>
+      </section>
+
+      <section class="setup__execution" aria-labelledby="runner-setup-execution-title">
+        <div class="setup__section-head">
+          <span class="setup__step">3</span>
           <div>
             <h3 id="runner-setup-execution-title">Visible setup task</h3>
             <p>The standard CLI-task surface owns live output, OAuth device codes, operator replies, completion, and history.</p>

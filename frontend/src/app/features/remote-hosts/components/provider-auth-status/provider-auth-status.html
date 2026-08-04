@@ -1,0 +1,16 @@
+@if (providers().length) {
+  <div class="provider-auth" aria-label="CLI provider authentication">
+    @for (provider of providers(); track provider.provider) {
+      <span class="provider-auth__badge"
+            [attr.data-tone]="provider.state"
+            [attr.data-testid]="'remote-host-provider-auth-' + provider.provider"
+            [appTooltip]="tooltip(provider.detail, provider.expiresAt, provider.expiresSoon)">
+        <span class="provider-auth__dot" aria-hidden="true"></span>
+        {{ provider.label }} auth · {{ provider.state }}
+        @if (provider.expiresSoon) {
+          <span class="provider-auth__renew">renew soon</span>
+        }
+      </span>
+    }
+  </div>
+}

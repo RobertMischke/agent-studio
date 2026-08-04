@@ -25,6 +25,8 @@
     }
   </div>
 
+  <app-provider-auth-status [host]="h" [now]="now()" />
+
   <app-git-token-capability mode="warning" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
 
   <section class="activity" data-testid="remote-host-activity" [class.activity--stale]="stale()">

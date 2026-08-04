@@ -20,6 +20,9 @@ package_id="CodingAgentRunner"
 runner_command="agent-host"
 minimum_version="0.5.0"
 skip_auth=0
+provider_auth_kind=""
+provider_auth_secret=""
+provider_auth_expires_at=""
 
 usage() {
   cat <<'EOF'
@@ -40,6 +43,12 @@ Options:
   --runner-command <cmd>  Installed tool command (default: agent-host)
   --minimum-version <v>   Minimum accepted package version (default: 0.5.0)
   --auth-token-file <p>   Protected Runner credential file already on the host
+  --claude-code-oauth-token-stdin
+                           Read one CLAUDE_CODE_OAUTH_TOKEN line from stdin
+  --anthropic-api-key-stdin
+                           Read one ANTHROPIC_API_KEY line from stdin
+  --provider-auth-expires-at <UTC timestamp>
+                           Optional known expiry stored with the selected secret
   --skip-auth             Do not launch login flows; status checks still run
   -h, --help              Show this help
 
@@ -69,6 +78,17 @@ while (($#)); do
     --package-id) package_id="${2:-}"; shift 2 ;;
     --runner-command) runner_command="${2:-}"; shift 2 ;;
     --minimum-version) minimum_version="${2:-}"; shift 2 ;;
+    --claude-code-oauth-token-stdin)
+      [[ -z "$provider_auth_kind" ]] || die "Choose exactly one provider-auth stdin option."
+      provider_auth_kind="CLAUDE_CODE_OAUTH_TOKEN"
+      shift
+      ;;
+    --anthropic-api-key-stdin)
+      [[ -z "$provider_auth_kind" ]] || die "Choose exactly one provider-auth stdin option."
+      provider_auth_kind="ANTHROPIC_API_KEY"
+      shift
+      ;;
+    --provider-auth-expires-at) provider_auth_expires_at="${2:-}"; shift 2 ;;
     --skip-auth) skip_auth=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument '$1'. Run with --help." ;;
@@ -108,6 +128,11 @@ scp_git_pattern='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9.-]+:[A-Za-z0-9._~/%+@:-]
 [[ "$package_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--package-id contains unsupported characters."
 [[ "$runner_command" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--runner-command contains unsupported characters."
 [[ "$minimum_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die "--minimum-version is not a semantic version."
+if [[ -n "$provider_auth_expires_at" ]]; then
+  [[ -n "$provider_auth_kind" ]] || die "--provider-auth-expires-at requires a provider-auth stdin option."
+  [[ "$provider_auth_expires_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$ ]] \
+    || die "--provider-auth-expires-at must be an ISO-8601 UTC timestamp ending in Z."
+fi
 if [[ ! "$git_remote" =~ $https_git_pattern \
       && ! "$git_remote" =~ $ssh_git_pattern \
       && ! "$git_remote" =~ $scp_git_pattern ]]; then
@@ -135,6 +160,15 @@ if [[ "$topology" != "tunnel" ]]; then
 else
   runner_id="${runner_id:-$runner_name}"
   [[ -n "$client_id" ]] || die "--client-id is required for the local profile reached through a tunnel."
+fi
+
+if [[ -n "$provider_auth_kind" ]]; then
+  IFS= read -r provider_auth_secret \
+    || die "The selected provider-auth secret was not supplied on stdin."
+  [[ -n "$provider_auth_secret" ]] || die "The provider-auth secret read from stdin is empty."
+  [[ ${#provider_auth_secret} -le 16384 ]] || die "The provider-auth secret exceeds 16 KiB."
+  [[ "$provider_auth_secret" =~ ^[A-Za-z0-9._~+/=:-]+$ ]] \
+    || die "The provider-auth secret contains characters that cannot be stored safely in an EnvironmentFile."
 fi
 
 printf '[onboarding] host=%s runner=%s role=%s client=%s topology=%s server=%s\n' \
@@ -244,10 +278,45 @@ then
   die "Runner installation failed. Verify that '$package_id' version $minimum_version or newer is published as a NuGet package with package type DotnetTool and exposes '$runner_command'. The CodingAgentRunner 0.5.0 library reference alone is not installable with 'dotnet tool'."
 fi
 
+if [[ -n "$provider_auth_kind" ]]; then
+  printf '[onboarding] phase=provider-auth Provisioning %s through SSH stdin. The secret is not placed in task arguments or repository files.\n' "$provider_auth_kind"
+  provider_auth_expiry_key="${provider_auth_kind}_EXPIRES_AT"
+  {
+    printf '%s\n' "$provider_auth_kind"
+    printf '%s\n' "$provider_auth_expiry_key"
+    printf '%s\n' "$provider_auth_expires_at"
+    printf '%s\n' "$provider_auth_secret"
+  } | "${ssh_base[@]}" -T "$host" 'set -euo pipefail
+provider_auth_key=""; provider_auth_expiry_key=""; provider_auth_expires_at=""; provider_auth_secret=""
+IFS= read -r provider_auth_key
+IFS= read -r provider_auth_expiry_key
+IFS= read -r provider_auth_expires_at
+IFS= read -r provider_auth_secret
+[[ "$provider_auth_key" == "CLAUDE_CODE_OAUTH_TOKEN" || "$provider_auth_key" == "ANTHROPIC_API_KEY" ]]
+runner_group="$(id -gn)"
+provider_auth_tmp="$(mktemp)"
+trap '\''rm -f "$provider_auth_tmp"'\'' EXIT
+chmod 0600 "$provider_auth_tmp"
+printf "%s=%s\n" "$provider_auth_key" "$provider_auth_secret" >"$provider_auth_tmp"
+if [[ -n "$provider_auth_expires_at" ]]; then
+  printf "%s=%s\n" "$provider_auth_expiry_key" "$provider_auth_expires_at" >>"$provider_auth_tmp"
+fi
+sudo install -d -m 0750 /etc/agent-runner
+sudo install -m 0640 -o root -g "$runner_group" "$provider_auth_tmp" /etc/agent-runner/provider-auth.env
+printf "[remote] Provider credential installed: key=%s file=/etc/agent-runner/provider-auth.env owner=root:%s mode=0640\n" "$provider_auth_key" "$runner_group"'
+  unset provider_auth_secret
+fi
+
 remote_login_status() {
   "${ssh_base[@]}" -T "$host" bash -s <<'REMOTE_AUTH_STATUS'
 set -uo pipefail
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
+if [[ -r /etc/agent-runner/provider-auth.env ]]; then
+  set -a
+  # shellcheck disable=SC1091 -- provisioned absolute host contract
+  source /etc/agent-runner/provider-auth.env
+  set +a
+fi
 codex_ok=0
 claude_ok=0
 echo '[remote] Codex authentication status:'
@@ -355,6 +424,7 @@ WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$env_file
+EnvironmentFile=-/etc/agent-runner/provider-auth.env
 ExecStart=$agent_host_root/current/$runner_command --poll
 Restart=always
 RestartSec=10s
@@ -431,6 +501,21 @@ if [[ "$role" == "coding" ]]; then
   if [[ "$git_status" == ready-no-workflow-scope ]]; then
     printf '[remote] Contents push is ready, but GitHub workflow writes need additional token permissions. See docs/operations/setup/linux-runner-host.md#token-requirements.\n' >&2
   fi
+  provider_auth_status=""
+  for _ in $(seq 1 30); do
+    journal="$(sudo journalctl -u "$service_name" -n 120 --no-pager)"
+    printf '%s' "$journal" | grep -Fq 'runner-provider-auth binary=claude status=unavailable' \
+      && { provider_auth_status=unavailable; break; }
+    printf '%s' "$journal" | grep -Fq 'runner-provider-auth binary=claude status=ready' \
+      && { provider_auth_status=ready; break; }
+    sleep 2
+  done
+  [[ "$provider_auth_status" == ready ]] || {
+    sudo journalctl -u "$service_name" -n 60 --no-pager >&2
+    printf '[remote] Claude provider-auth probe is %s; Claude claims remain disabled.\n' "${provider_auth_status:-unreported}" >&2
+    exit 43
+  }
+  printf '[remote] Provider authentication verified by daemon probe: claude=%s\n' "$provider_auth_status"
 fi
 printf '[remote] service=%s role=%s active health=passed identity=%s\n' "$service_name" "$role" "$runner_id"
 REMOTE_SYSTEMD

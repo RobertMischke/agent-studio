@@ -120,6 +120,31 @@ describe('RemoteHostCardComponent', () => {
       .toContain('Task inflowopen');
   });
 
+  it('shows provider authentication status and exposes the exact probe detail', () => {
+    const fixture = mount({
+      ...HOST,
+      capabilityHealth: [{
+        key: 'provider-auth:claude',
+        category: 'provider-auth',
+        advertisedStatus: 'unavailable',
+        healthState: 'healthy',
+        advertisedAt: '2026-07-10T11:59:50Z',
+        freshUntil: '2026-07-10T12:04:50Z',
+        isFresh: true,
+        consecutiveFailures: 0,
+        detail: 'Not logged in',
+        affectedClaims: [],
+        recoveryHistory: [],
+      }],
+    });
+    const badge = fixture.debugElement.query(
+      By.css('[data-testid="remote-host-provider-auth-claude"]'),
+    );
+
+    expect(badge.nativeElement.textContent).toContain('Claude Code auth · unavailable');
+    expect(badge.injector.get(AppTooltipDirective).appTooltip()).toContain('Not logged in');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

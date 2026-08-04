@@ -4,6 +4,7 @@ export { RemoteHostCardComponent } from './components/remote-host-card/remote-ho
 export { AddHostWizardComponent } from './components/add-host-wizard/add-host-wizard';
 export { RunnerSetupDialogComponent } from './components/runner-setup-dialog/runner-setup-dialog';
 export { RemoteHostsService } from './services/remote-hosts.service';
+export { ProviderAuthNotificationBridge } from './services/provider-auth-notification-bridge.service';
 export { seedRemoteHosts } from './services/remote-hosts.seed';
 export {
   boardRemoteSlotsForHost,
@@ -30,6 +31,16 @@ export type {
   MeterTone,
 } from './models/remote-host.model';
 export type { RunnerSetupConfig, RunnerSetupConnectionMode } from './models/runner-setup.model';
+export {
+  providerAuthView,
+  providerAuthViews,
+  providerAuthWaitReason,
+} from './models/provider-auth.model';
+export type {
+  ProviderAuthState,
+  ProviderAuthView,
+  ProviderAuthWaitReason,
+} from './models/provider-auth.model';
 export { buildRunnerSetupRequest, runnerSetupIssues } from './models/runner-setup.model';
 export {
   formatMemory,

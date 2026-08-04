@@ -150,6 +150,14 @@ export interface CapabilityRecoveryEvent {
   claimId?: string | null;
 }
 
+export interface CapabilityStatusHistoryEvent {
+  occurredAt: string;
+  fromStatus?: string | null;
+  toStatus: string;
+  source: 'probe' | 'run-failure' | string;
+  detail?: string | null;
+}
+
 export interface RemoteHostCapabilityHealth {
   key: string;
   category: string;
@@ -169,6 +177,8 @@ export interface RemoteHostCapabilityHealth {
   detail?: string | null;
   affectedClaims: readonly string[];
   recoveryHistory: readonly CapabilityRecoveryEvent[];
+  statusHistory?: readonly CapabilityStatusHistoryEvent[] | null;
+  expiresAt?: string | null;
 }
 
 export interface RemoteHostAdmission {

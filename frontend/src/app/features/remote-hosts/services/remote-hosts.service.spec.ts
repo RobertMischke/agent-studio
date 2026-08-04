@@ -289,6 +289,7 @@ describe('RemoteHostsService client registry hydration', () => {
       capabilities: [
         capability('git:push', 'ready', 'contents ready'),
         capability('git:workflow-push', 'ready-no-workflow-scope', 'workflow scope missing'),
+        capability('provider-auth:claude', 'unavailable', 'Not logged in'),
       ],
       telemetry: null,
     }]);
@@ -296,6 +297,11 @@ describe('RemoteHostsService client registry hydration', () => {
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       gitPushStatus: 'ready-no-workflow-scope',
       gitPushDetail: 'workflow scope missing',
+      capabilities: [
+        'git:push available',
+        'git:workflow-push ready-no-workflow-scope',
+        'provider-auth:claude unavailable',
+      ],
     });
     http.verify();
   });

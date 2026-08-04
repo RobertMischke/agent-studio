@@ -762,13 +762,14 @@ public sealed class RemoteTaskRunner
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
                     if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
                     {
-                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
-                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var invocation = AgentCliProcess.Resolve(_options, slot.RunSpec);
+                        var provider = invocation.CliType;
                         var claimId = outbox?.Authority.RunId;
                         var diagnostic = result.StdErr
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                             .LastOrDefault()
                             ?? $"{provider} exited {result.ExitCode} with an authentication failure";
+                        ProviderAuthProbe.Shared.MarkUnavailable(invocation.FileName, diagnostic);
                         // Diagnosis only: the run's own classification and fenced
                         // completion below must survive a server that rejects or
                         // does not mount the capability route.

@@ -23,6 +23,7 @@ import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
+  ProviderAuthNotificationBridge,
   RemoteHostsService,
 } from '../../../remote-hosts';
 
@@ -49,6 +50,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
+  private readonly _providerAuthBridge = inject(ProviderAuthNotificationBridge);
   private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
 
   readonly projectNames = input<string[]>([]);

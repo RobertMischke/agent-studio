@@ -176,11 +176,13 @@ The controller is intentionally repeatable after a host wipe:
    from the host.
 2. Install or update the `CodingAgentRunner` NuGet global tool and require
    version `0.5.0` or newer, then install the Codex and Claude CLIs.
-3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
-   and one-time code stay visible in the task conversation. Claude uses
-   `claude auth login --claudeai`. The operator completes browser steps locally,
-   then `codex login status` and `claude auth status --text` report the active
-   account. Credential files are never copied as the normal path.
+3. Establish host-owned provider authentication. Codex uses
+   `codex login --device-auth`; the URL and one-time code stay visible in the
+   task conversation. Claude can use `claude auth login --claudeai`, or the
+   Studio controller can deliver `CLAUDE_CODE_OAUTH_TOKEN` or
+   `ANTHROPIC_API_KEY` through SSH stdin as described below. In both cases,
+   `codex login status` and `claude auth status --text` run immediately and the
+   daemon's `provider-auth` probe must advertise `ready`.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
    stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
    and fallback git origin. Install and start `agent-host.service` through
@@ -218,6 +220,37 @@ logged out after an operator-side token rotation, needing a manual re-seed); a
 host that logged in independently is immune to it. Per-host login is the
 permanent replacement for the earlier shared-credential seeding.
 
+For headless Claude setup, enter the secret only into the local Studio
+provisioning controller. The controller reads exactly one line from its stdin,
+passes it through SSH stdin, and writes `/etc/agent-runner/provider-auth.env`
+as `0640 root:<runner-group>`. The value is never a command argument and must
+never be put in a task prompt, task field, Studio database, repository, or
+result artifact:
+
+```bash
+read -rsp 'Claude OAuth token: ' studio_claude_token
+printf '\n'
+printf '%s\n' "$studio_claude_token" |
+  bash scripts/remote-runner-onboard.sh \
+    --host agent@runner.example \
+    --server https://tasks.example.com \
+    --topology central \
+    --runner-id runner_example \
+    --runner-name agent-runner-01 \
+    --role coding \
+    --git-remote https://github.com/example/repository.git \
+    --git-push-remote git@github.com:example/repository.git \
+    --claude-code-oauth-token-stdin
+unset studio_claude_token
+```
+
+Use `--anthropic-api-key-stdin` instead when the host should receive
+`ANTHROPIC_API_KEY`. If the issuer supplies a known UTC expiry, also pass
+`--provider-auth-expires-at 2026-09-01T00:00:00Z`. That timestamp is not a
+secret. The runner advertises it so Execution Hosts can warn 14 days before
+renewal is due. Opaque credentials without issuer expiry remain valid until the
+probe or a real run proves otherwise.
+
 - **Claude.** Log in directly on the host, once, over an `ssh -L` port-forward so
   the OAuth browser step can complete (`claude`, finish onboarding), **or** mint a
   long-lived headless token on the host with `claude setup-token`. Either way the
@@ -228,6 +261,13 @@ permanent replacement for the earlier shared-credential seeding.
 - **Rotation is now per host.** If a host's own token is ever revoked, re-run that
   host's login / `setup-token` **on that host**. No other host and no operator-side
   action is involved, so there is no cross-host drift to chase.
+
+The runner probes provider authentication every 60-second advertisement cycle,
+with CLI invocations cached for five minutes. A transition from `ready` to
+`unavailable` is retained in provider status history. Execution Hosts shows the
+probe detail, Studio sends a notification, and matching Ready cards state which
+host needs sign-in. A real CLI run that returns an authentication error marks
+the provider unavailable immediately instead of waiting for the next probe.
 
 The host's `~/.claude/.credentials.json` must stay a plain file the runner user
 can read and write in place, so Claude's own token refresh persists for the next
@@ -304,6 +344,17 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_IDLE_WATCHDOG_MINUTES` | `--idle-watchdog-minutes` | `5` | A daemon with no active slots exits after this long without starting a claim poll. The fatal journal line is followed by a service-manager restart. |
 | `RUNNER_CLAIM_MAX_LOAD_PER_CORE` | `--claim-max-load-per-core` | `1.5` | Load-per-core ceiling for new work. Coding uses the sustained gate below; Review checks it immediately before each single-slot claim. |
 | `RUNNER_LOAD_GATE_SUSTAINED_SECONDS` | none | `120` | Continuous high-load duration before Coding claim admission closes. Review admission does not use this delay. |
+
+Provider CLI credentials live in the separate
+`/etc/agent-runner/provider-auth.env`, never in `runner.env`. The managed unit
+reads that optional file after `runner.env`:
+
+| Env var | Meaning |
+|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code OAuth credential delivered through the provisioning stdin channel. |
+| `ANTHROPIC_API_KEY` | Alternative Claude API credential delivered through the same channel. |
+| `CLAUDE_CODE_OAUTH_TOKEN_EXPIRES_AT` | Optional UTC expiry metadata used for the 14-day Studio warning. |
+| `ANTHROPIC_API_KEY_EXPIRES_AT` | Optional UTC expiry metadata used for the 14-day Studio warning. |
 
 Recommended per-CLI headless defaults (verify against your installed version):
 

@@ -47,7 +47,8 @@ public sealed record AdvertisedCapabilityDto(
     string Status = "ready",
     string? Version = null,
     string? Identity = null,
-    string? Detail = null);
+    string? Detail = null,
+    DateTime? ExpiresAt = null);
 
 public sealed record CapabilityAdvertisementRequest(
     string RunnerId,
@@ -110,6 +111,18 @@ public sealed record CapabilityRecoveryEventDto(
     string Reason,
     string? ClaimId = null);
 
+/// <summary>
+/// One observed advertised-status transition. Provider authentication uses
+/// this quiet history to distinguish a host that was never verified from a
+/// login that was revoked after it had worked.
+/// </summary>
+public sealed record CapabilityStatusHistoryEventDto(
+    DateTime OccurredAt,
+    string? FromStatus,
+    string ToStatus,
+    string Source,
+    string? Detail = null);
+
 public sealed record CapabilityHealthDto(
     string Key,
     string Category,
@@ -128,7 +141,9 @@ public sealed record CapabilityHealthDto(
     string? Identity,
     string? Detail,
     IReadOnlyList<string> AffectedClaims,
-    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory);
+    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory,
+    IReadOnlyList<CapabilityStatusHistoryEventDto>? StatusHistory = null,
+    DateTime? ExpiresAt = null);
 
 public sealed record RemoteHostAdmissionDto(
     string HostId,
