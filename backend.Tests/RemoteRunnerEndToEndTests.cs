@@ -355,6 +355,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
         Assert.True(Directory.Exists(moved));
         Assert.Equal(
+            lease.Lease.AttemptId,
+            ReviewSubjectStore.Read(moved)!.RunAttemptId);
+        Assert.Equal(
             "refs/heads/main",
             ReviewSubjectStore.Read(moved)!.IntegrationBranch);
 

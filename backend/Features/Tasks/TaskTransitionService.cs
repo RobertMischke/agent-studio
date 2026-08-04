@@ -560,6 +560,7 @@ public sealed class TaskTransitionService
                         new AgentStudio.Pipeline.ReviewSubjectRecord
                         {
                             TaskKey = taskKey,
+                            RunAttemptId = run.AttemptId,
                             Project = info.ProjectName,
                             Repository = envelope.RepositoryUrl ?? string.Empty,
                             ResultSha = run.ResultSha!,
@@ -957,6 +958,20 @@ public sealed class TaskTransitionService
         string? reason,
         AttemptWriteReference? authorityWrite)
     {
+        var reviewSubject = AgentStudio.Pipeline.ReviewSubjectStore.Read(reviewed.FolderPath);
+        if (reviewSubject is not null
+            && _attemptAuthority is not null
+            && !AgentStudio.Pipeline.ReviewSubjectStore.TryValidateCurrentAttempt(
+                reviewed.FolderPath,
+                reviewSubject,
+                _attemptAuthority,
+                out var subjectError))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                subjectError ?? "The review subject does not belong to the current run attempt.");
+        }
+
         if (string.Equals(reviewed.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal))
         {
             return new MoveJobOutcome(

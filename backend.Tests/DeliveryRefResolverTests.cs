@@ -100,6 +100,7 @@ public sealed class DeliveryRefResolverTests : IDisposable
         ReviewSubjectStore.Write(_folder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-42",
+            RunAttemptId = "run-42",
             Project = "Fixture",
             Repository = "fixture",
             ResultSha = new string('a', 40),

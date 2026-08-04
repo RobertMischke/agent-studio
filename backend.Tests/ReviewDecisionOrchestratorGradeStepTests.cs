@@ -143,6 +143,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         ReviewSubjectStore.Write(taskFolder, new ReviewSubjectRecord
         {
             TaskKey = "grade-remote-subject",
+            RunAttemptId = "run-remote-attempt-1",
             Project = Project,
             Repository = _watchPath,
             ResultSha = remoteResultSha,

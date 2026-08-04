@@ -81,6 +81,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-2400",
+            RunAttemptId = "run-main",
             Project = "Fixture",
             Repository = repo,
             ResultSha = resultSha,
@@ -100,6 +101,72 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Contains("Pre-main test gate", outcome.Error, StringComparison.Ordinal);
         Assert.NotEqual(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
         Assert.NotEqual(resultSha, RunGit(repo, "rev-parse develop").Out.Trim());
+    }
+
+    [Fact]
+    public void Run_StaleRemoteSubject_DoesNotRetargetAcceptedDelivery()
+    {
+        var repo = SeedRepo("runner-stale-subject");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b runner/agent-runner-01/AGT-STALE");
+        File.WriteAllText(Path.Combine(repo, "stale.txt"), "superseded work");
+        Commit(repo, "feat: superseded remote work");
+        var staleSha = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var authority = new AttemptAuthorityService(
+            new ConfigurationBuilder().Build(),
+            NullLogger<AttemptAuthorityService>.Instance);
+        var staleRun = authority.AcquireRun(
+            "AGT-STALE", "PROJ-FIXTURE", null,
+            "agent-runner-01", "host-a", 60, "claim-stale").RunAttempt!;
+        var settled = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                staleRun.AttemptId,
+                staleRun.LastFence,
+                staleRun.AuthorityEpoch,
+                "settle-stale"),
+            Outcome = "done",
+            ResultSha = staleSha,
+        });
+        Assert.True(settled.Accepted);
+        var currentRun = authority.AcquireRun(
+            "AGT-STALE", "PROJ-FIXTURE", staleRun.AttemptId,
+            "local", "host-local", 60, "claim-current").RunAttempt!;
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "AGT-STALE");
+        File.WriteAllText(
+            Path.Combine(jobFolder, "task.json"),
+            """{"id":"AGT-STALE","key":"AGT-STALE"}""");
+        ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-STALE",
+            RunAttemptId = staleRun.AttemptId,
+            Project = "Fixture",
+            Repository = repo,
+            ResultSha = staleSha,
+            AttemptChainId = staleRun.Lease!.LeaseId,
+            Executor = "agent-runner-01",
+            LeaseId = staleRun.Lease.LeaseId,
+            FencingToken = staleRun.LastFence,
+            ResultRef = "runner/agent-runner-01/AGT-STALE",
+            IntegrationBranch = "develop",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            attemptAuthority: authority);
+
+        var outcome = runner.Run("Fixture", "AGT-STALE", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains(staleRun.AttemptId, outcome.Error);
+        Assert.Contains(currentRun.AttemptId, outcome.Error);
+        Assert.NotEqual(0, RunGit(repo, $"merge-base --is-ancestor {staleSha} develop").Code);
     }
 
     [Fact]
@@ -303,6 +370,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-REMOTE-MAIN",
+            RunAttemptId = "run-remote-main",
             Project = "Fixture",
             Repository = repo,
             ResultSha = resultSha,
@@ -370,6 +438,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         ReviewSubjectStore.Write(jobFolder, new ReviewSubjectRecord
         {
             TaskKey = "AGT-STALE-MAIN",
+            RunAttemptId = "run-stale-main",
             Project = "Fixture",
             Repository = repo,
             ResultSha = resultSha,
