@@ -97,26 +97,41 @@ head use the same type-to-icon mapping.
 
 ## Durable agent-read evidence
 
-Each page can carry observed agent read evidence in its adjacent
-`<page>.meta.json` companion:
+Observed agent reads are runtime telemetry, not document metadata. Each page's
+evidence is stored outside the tracked docs tree at
+`<project repo>/.orchestrator/wiki-agent-reads/<docs-relative-page>.json`. For
+example, `docs/concepts/runner.md` maps to
+`.orchestrator/wiki-agent-reads/concepts/runner.md.json`. The repository-wide
+`.orchestrator/` ignore convention keeps these atomic state files out of Git,
+so read observation cannot make an integration checkout dirty.
 
 ```jsonc
 {
-  "agentReads": {
-    "total": 23,
-    "lastReadAt": "2026-07-22T10:15:00Z",
-    "recent": [
-      { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" }
-    ]
-  }
+  "schemaVersion": "wiki-agent-reads/v1",
+  "sourcePath": "docs/concepts/runner.md",
+  "total": 23,
+  "lastReadAt": "2026-07-22T10:15:00Z",
+  "recent": [
+    { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" }
+  ]
 }
 ```
 
 `total` is the lifetime count reconstructed from durable task CLI logs plus
 continuously observed local and remote runs. `recent` is newest first and
 retains at most 20 reads. The one-time startup backfill is guarded by
-`<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`; companion
+`<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`; runtime state
 updates use atomic replace writes.
+
+Adjacent `<page>.meta.json` companions may still contain `agentReads` blocks
+written before 8 August 2026. Readers fall back to that legacy block when no
+runtime state exists. The first subsequent read copies the complete legacy
+total and retained history into runtime state before adding the new event,
+without changing the tracked companion. When a grading or classification write
+later changes that companion for a content-metadata reason, the same baseline
+is persisted if needed and the legacy block is removed. This copy-on-write
+migration preserves the history while keeping telemetry-only writes outside
+Git from the first read after deployment.
 
 The persistence and initialization contract is:
 
@@ -126,13 +141,13 @@ The persistence and initialization contract is:
 - the marker has schema `wiki-agent-read-backfill/v1` and records completion
   time, logs scanned, and reads applied; its presence makes later startups a
   no-op,
-- a restart after companion writes but before marker creation is safe because
+- a restart after runtime-state writes but before marker creation is safe because
   backfill merges a monotonic reconstructed baseline instead of adding the
   baseline again,
 - local CLI output and fenced remote-runner log ingestion both feed the same
   live attribution method after the log line is durable,
-- each companion update preserves unrelated metadata blocks and is published
-  with an atomic temporary-file replacement.
+- each runtime update is serialized per page and published with an atomic
+  temporary-file replacement.
 
 Only actual read tool uses and recognized read-only shell commands count.
 Agent prose that merely mentions a `docs/**` path, writes, edits, `docs/app/**`
@@ -210,7 +225,8 @@ an `ETag` with `Cache-Control: no-cache`. A matching `If-None-Match` returns
 ### `GET /wiki/tree`
 
 Returns the recursive physical docs tree. A page's compact `metadata` includes
-`agentReads` when its companion contains observed read evidence.
+`agentReads` when runtime state or a tolerated legacy companion contains
+observed read evidence.
 
 ```jsonc
 {

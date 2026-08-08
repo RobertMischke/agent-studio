@@ -22,6 +22,7 @@ public class ProjectDocsService
     private readonly GitService? _git;
     private readonly ILogger<ProjectDocsService> _logger;
     private readonly WorkbenchCatalogueService? _workbenches;
+    private readonly WikiAgentReadStore _agentReads;
     private WikiContentCache _wikiContentCache;
 
     private const string SecurityRel = "docs/operations/security";
@@ -89,13 +90,15 @@ public class ProjectDocsService
         ProjectRegistry registry,
         ILogger<ProjectDocsService> logger,
         GitService? git = null,
-        WorkbenchCatalogueService? workbenches = null)
+        WorkbenchCatalogueService? workbenches = null,
+        WikiAgentReadStore? agentReads = null)
     {
         _scanner = scanner;
         _registry = registry;
         _git = git;
         _logger = logger;
         _workbenches = workbenches;
+        _agentReads = agentReads ?? new WikiAgentReadStore();
         // Unit fixtures construct this service directly. Production replaces
         // this local instance with the DI singleton during host wiring.
         _wikiContentCache = new WikiContentCache(
@@ -453,7 +456,9 @@ public class ProjectDocsService
         }
 
         var signature = ComputeDocsSignature(wikiDir) ?? "unavailable";
-        var metadata = LoadWikiMetadataIndex(wikiDir);
+        var checkout = ResolveBaseDir(projectName) ?? source.BaseDir;
+        var agentReadWikiDir = Path.GetFullPath(Path.Combine(checkout, WikiRel));
+        var metadata = LoadWikiMetadataIndex(wikiDir, agentReadWikiDir);
         var folderOrder = LoadWikiOrderMap(wikiDir, "folderOrder");
         var fileOrder = LoadWikiOrderMap(wikiDir, "fileOrder");
         var root = BuildTreeNodes(
@@ -485,7 +490,7 @@ public class ProjectDocsService
         }
         foreach (var rel in folderPaths)
         {
-            var folder = BuildWikiFolderRaw(projectName, rel, wikiDir);
+            var folder = BuildWikiFolderRaw(projectName, rel, wikiDir, agentReadWikiDir);
             if (folder != null) folders[rel] = folder;
         }
 
@@ -1552,7 +1557,9 @@ public class ProjectDocsService
     /// physical files beside the document but are not rendered as separate
     /// navigation rows; their compact summary enriches the source row.
     /// </summary>
-    private static IReadOnlyDictionary<string, WikiTreeMetadata> LoadWikiMetadataIndex(string wikiDir)
+    private IReadOnlyDictionary<string, WikiTreeMetadata> LoadWikiMetadataIndex(
+        string wikiDir,
+        string agentReadWikiDir)
     {
         var index = new Dictionary<string, WikiTreeMetadata>(StringComparer.OrdinalIgnoreCase);
         if (!Directory.Exists(wikiDir)) return index;
@@ -1607,7 +1614,7 @@ public class ProjectDocsService
                     ClassificationSupersededBy: JsonString(classification, "supersededBy"),
                     ClassificationType: JsonString(classification, "type"),
                     ClassificationAnalyzedAt: JsonString(classification, "analyzedAt"),
-                    AgentReads: ParseAgentReads(agentReads));
+                    AgentReads: _agentReads.Read(agentReadWikiDir, sourceRel, agentReads));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -1616,8 +1623,37 @@ public class ProjectDocsService
             }
         }
 
+        // Runtime state can exist for a page that never had a tracked metadata
+        // companion. Merge it after companions so the new store is authoritative
+        // while legacy-only pages remain visible during migration.
+        foreach (var (sourceRel, reads) in _agentReads.ReadAll(agentReadWikiDir))
+        {
+            var sourceFull = Path.GetFullPath(Path.Combine(wikiDir, sourceRel.Replace('/', Path.DirectorySeparatorChar)));
+            if (!File.Exists(sourceFull)) continue;
+            index[sourceRel] = index.TryGetValue(sourceRel, out var metadata)
+                ? metadata with { AgentReads = reads }
+                : AgentReadOnlyMetadata(reads);
+        }
+
         return index;
     }
+
+    private static WikiTreeMetadata AgentReadOnlyMetadata(WikiAgentReads reads) => new(
+        DocumentMode: null,
+        TemporalState: null,
+        ImplementationState: null,
+        DriftGrade: null,
+        HasDrift: null,
+        DriftScore: null,
+        Quality: null,
+        DuplicateSuspected: null,
+        DuplicateGroupSize: null,
+        ReportPath: null,
+        Summary: null,
+        CompanionPath: null,
+        SourceChangedSinceReview: null,
+        FindingsCount: null,
+        AgentReads: reads);
 
     /// <summary>
     /// Hidden wiki paths - any dot-prefixed path segment (e.g. <c>.curator/…</c>,
@@ -1808,46 +1844,11 @@ public class ProjectDocsService
     }
 
     /// <summary>Agent-read projection for one folder-overview page row.</summary>
-    private static WikiAgentReads? ReadPageAgentReads(string pageFullPath)
-    {
-        var companion = pageFullPath + ".meta.json";
-        if (!File.Exists(companion)) return null;
-        try
-        {
-            GitProcessTelemetry.RecordFileRead();
-            using var doc = JsonDocument.Parse(File.ReadAllText(companion));
-            return TryJsonObject(doc.RootElement, "agentReads", out var reads)
-                ? ParseAgentReads(reads)
-                : null;
-        }
-        catch (Exception ex)
-        {
-            SilentCatch.Note(ex, "ProjectDocsService: unreadable companion during folder agent-read projection.");
-            return null;
-        }
-    }
-
-    private static WikiAgentReads? ParseAgentReads(JsonElement reads)
-    {
-        if (reads.ValueKind != JsonValueKind.Object) return null;
-        var total = JsonInt(reads, "total") ?? 0;
-        DateTime? lastReadAt = DateTime.TryParse(JsonString(reads, "lastReadAt"), out var last)
-            ? last.ToUniversalTime()
-            : null;
-        var recent = new List<WikiAgentReadRecent>();
-        if (reads.TryGetProperty("recent", out var array) && array.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in array.EnumerateArray().Take(WikiCompanionStore.MaxRecentAgentReads))
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                if (!DateTime.TryParse(JsonString(item, "at"), out var at)) continue;
-                var taskKey = JsonString(item, "taskKey");
-                if (string.IsNullOrWhiteSpace(taskKey)) continue;
-                recent.Add(new WikiAgentReadRecent(at.ToUniversalTime(), taskKey));
-            }
-        }
-        return new WikiAgentReads(Math.Max(0, total), lastReadAt, recent);
-    }
+    private WikiAgentReads? ReadPageAgentReads(
+        string agentReadWikiDir,
+        string pageRelPath,
+        string legacyCompanionPath) =>
+        _agentReads.Read(agentReadWikiDir, pageRelPath, legacyCompanionPath);
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
     {
@@ -2550,13 +2551,17 @@ public class ProjectDocsService
     private WikiFolderView? BuildWikiFolderRaw(
         string projectName,
         string? relPath,
-        string? wikiRootOverride = null)
+        string? wikiRootOverride = null,
+        string? agentReadWikiRootOverride = null)
     {
         var baseDir = wikiRootOverride == null ? ResolveBaseDir(projectName) : null;
         if (wikiRootOverride == null && baseDir == null) return null;
         var root = wikiRootOverride == null
             ? Path.GetFullPath(Path.Combine(baseDir!, WikiRel))
             : Path.GetFullPath(wikiRootOverride);
+        var agentReadRoot = agentReadWikiRootOverride == null
+            ? root
+            : Path.GetFullPath(agentReadWikiRootOverride);
         var rel = (relPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
 
         string full;
@@ -2618,7 +2623,7 @@ public class ProjectDocsService
                 ChildCount: null,
                 Classification: ReadPageClassification(file.FullName, fileRel),
                 UpdatedAtSource: updated.Source,
-                AgentReads: ReadPageAgentReads(file.FullName)));
+                AgentReads: ReadPageAgentReads(agentReadRoot, fileRel, file.FullName + ".meta.json")));
         }
 
         // Same saved category and document drag-orders as the tree. Unlisted
@@ -3173,7 +3178,7 @@ public record WikiDocMetadata(
 /// cref="RelPath"/> is the docs-root-relative path; <see cref="Title"/> is the
 /// display label (first H1 for docs, order-prefix-stripped name otherwise).
 /// <see cref="Metadata"/> is an optional compact summary read from visible
-/// adjacent <c>*.meta.json</c> companion records.
+/// adjacent <c>*.meta.json</c> companion records and runtime agent-read state.
 /// </summary>
 public record WikiTreeMetadata(
     string? DocumentMode,

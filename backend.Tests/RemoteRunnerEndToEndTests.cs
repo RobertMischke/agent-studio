@@ -198,9 +198,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("remote runner: starting task", cliLog);
         Assert.Contains("[[TASK_DONE]]", cliLog);
 
-        using var companion = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(_watchPath, "docs", "concepts", "remote-runner.md.meta.json")));
-        var agentReads = companion.RootElement.GetProperty("agentReads");
+        using var agentReadState = JsonDocument.Parse(File.ReadAllText(WikiAgentReadStore.StatePathFor(
+            Path.Combine(_watchPath, "docs"), "concepts/remote-runner.md")));
+        var agentReads = agentReadState.RootElement;
         using var movedTask = JsonDocument.Parse(File.ReadAllText(Path.Combine(moved, "task.json")));
         var displayTaskKey = movedTask.RootElement.GetProperty("key").GetString();
         Assert.Equal(1, agentReads.GetProperty("total").GetInt32());

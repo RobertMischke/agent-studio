@@ -204,6 +204,26 @@ public class ProjectWikiEnhancementsTests : IDisposable
     }
 
     [Fact]
+    public void GetWikiTree_ProjectsRuntimeAgentReadsWithoutTrackedCompanion()
+    {
+        var projectRoot = Path.Combine(_tempDir, "runtime-reads-tree");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+        File.WriteAllText(Path.Combine(docsDir, "page.md"), "# Page\n");
+        new WikiAgentReadStore().Increment(
+            docsDir,
+            "page.md",
+            new DateTime(2026, 8, 8, 10, 0, 0, DateTimeKind.Utc),
+            "AGT-2507");
+
+        var page = Assert.Single(BuildDocsService(("RuntimeReads", projectRoot)).GetWikiTree("RuntimeReads")!.Root);
+
+        Assert.Equal(1, page.Metadata?.AgentReads?.Total);
+        Assert.Equal("AGT-2507", Assert.Single(page.Metadata!.AgentReads!.Recent).TaskKey);
+        Assert.False(File.Exists(Path.Combine(docsDir, "page.md.meta.json")));
+    }
+
+    [Fact]
     public void GetWikiTree_UnknownProject_ReturnsNull()
     {
         var docs = BuildDocsService(("Known", Path.Combine(_tempDir, "known")));
