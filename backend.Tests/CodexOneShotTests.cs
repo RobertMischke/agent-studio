@@ -43,4 +43,42 @@ public sealed class CodexOneShotTests
         Assert.False(result.Ok);
         Assert.Equal("model is unavailable", result.Error);
     }
+
+    [Fact]
+    public void BuildStartInfo_OrchestratorChatOutsideGit_AddsRepositoryCheckBypass()
+    {
+        var nonRepository = Path.Combine(Path.GetTempPath(), $"codex-chat-cwd-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(nonRepository);
+        try
+        {
+            var request = new CliOneShotRequest("codex", "gpt-5.4-mini", "answer the question")
+            {
+                Source = "orchestrator-chat",
+                WorkingDirectory = nonRepository,
+            };
+
+            var startInfo = CodexOneShot.BuildStartInfo(request, "codex");
+
+            Assert.Equal(nonRepository, startInfo.WorkingDirectory);
+            Assert.Contains("--skip-git-repo-check", startInfo.ArgumentList);
+            Assert.Contains("read-only", startInfo.ArgumentList);
+        }
+        finally
+        {
+            Directory.Delete(nonRepository, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void BuildStartInfo_NonChatCall_KeepsRepositoryCheck()
+    {
+        var request = new CliOneShotRequest("codex", "gpt-5.4-mini", "review")
+        {
+            Source = "review-decision",
+        };
+
+        var startInfo = CodexOneShot.BuildStartInfo(request, "codex");
+
+        Assert.DoesNotContain("--skip-git-repo-check", startInfo.ArgumentList);
+    }
 }

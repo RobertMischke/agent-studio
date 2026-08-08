@@ -201,6 +201,7 @@ The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-
 | Session storage | `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` |
 
 **Quirks.**
+- Claude print mode skips the workspace trust dialog, including outside a Git repository. The non-agent `ClaudeOneShot` already uses print mode plus `--dangerously-skip-permissions`, so it does not need a Codex-style repository-check bypass.
 - The CAR path uses the CAR-A one-shot stdin prompt transport and closes stdin immediately after the full prompt is flushed. This keeps prompts of at least 200 KiB out of argv and process listings without leaving an interactive pipe open. The temporary `legacy` rollback retains the older argv transport from ADR-0014.
 - CAR performs its built-in npm-shim healing before a CAR-backed Claude launch. The explicit legacy rollback and non-agent one-shot paths retain the pre-existing Studio healer until T4 because CAR 0.7.0 exposes no public repair API. CAR-backed agent runs never call the Studio healer.
 - Studio adds its centrally managed rules file through the narrow launch decorator until PROJ-011 `public-cli-launch-overlay` is available.
@@ -222,6 +223,7 @@ The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-
 | Session storage | `~/.codex/session_index.jsonl` + `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
 
 **Quirks.**
+- The read-only orchestrator-chat one-shot adds `--skip-git-repo-check`. Project chat can fall back to a non-repository working directory, and the Git trust gate adds no safety to this Q&A-only path. Other Codex one-shot sources retain the repository check.
 - Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter. Sending `1<Enter>` leaves a stray `1` that prefixes the next slash command, so use `<Enter>` alone.
 - Trust, welcome, and `/status` form a fragile multi-step probe. See [`CodexQuotaProbe`](../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs).
 - The CAR callback bridge must capture raw usage before publishing the matching `TurnCompleted` event.

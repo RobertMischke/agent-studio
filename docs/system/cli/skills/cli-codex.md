@@ -45,6 +45,12 @@ Codex `exec` runs unattended and may inspect the working tree with `git status` 
 codex exec --json [-m <model>] -    # then write prompt to stdin, close
 ```
 
+The read-only orchestrator-chat one-shot also passes
+`--skip-git-repo-check`. Unlike coding and review runs, project chat can
+legitimately resolve to a non-repository fallback directory, and its Q&A-only
+sandbox does not gain safety from Codex's Git repository gate. Other one-shot
+sources keep the gate.
+
 The orchestrator passes `-` as the positional and pipes the full prompt
 (system-prefix + rendered template) over the redirected stdin pipe, then
 closes the pipe so Codex sees EOF. `-m` selects the model. `--json` makes

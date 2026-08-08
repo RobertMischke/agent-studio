@@ -139,6 +139,59 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
     }
 
     [Fact]
+    public void Translate_CodexFailure_AddsBoundedStderrCoreToFriendlyMessage()
+    {
+        const string stderr = "Not inside a trusted directory and --skip-git-repo-check was not specified.\nignored second line";
+
+        var t = OrchestratorChatErrorTranslator.Translate(stderr, "codex");
+
+        Assert.Contains("could not produce a reply", t.FriendlyMessage);
+        Assert.Contains("codex: Not inside a trusted directory", t.FriendlyMessage);
+        Assert.DoesNotContain("ignored second line", t.FriendlyMessage);
+        Assert.Equal(stderr, t.RawDetail);
+    }
+
+    [Fact]
+    public async Task SendAsync_RunnerReturnsCodexStderr_PersistsFriendlyMessageWithCore()
+    {
+        const string stderr = "Not inside a trusted directory and --skip-git-repo-check was not specified.\nignored second line";
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _root,
+                ["WatchPaths:0:Name"] = "project-a",
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _watchPath,
+            })
+            .Build();
+        var sessionStore = new GlobalOrchestratorSessionStore(
+            config, NullLogger<GlobalOrchestratorSessionStore>.Instance);
+        var summary = new AgentStudio.Review.SummaryGenerationService(
+            NullLogger<AgentStudio.Review.SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var runner = new PipeClosedRunner(stderr);
+        var bootstrap = new GlobalOrchestratorBootstrap(
+            NullLogger<GlobalOrchestratorBootstrap>.Instance,
+            sessionStore, runner, scanner, config);
+        var chat = new OrchestratorChat(NullLogger<OrchestratorChat>.Instance);
+        var service = new OrchestratorChatService(
+            chat, runner, sessionStore, bootstrap, scanner, config,
+            NullLogger<OrchestratorChatService>.Instance);
+
+        var reply = await service.SendAsync(
+            "project-a", _watchPath,
+            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            CancellationToken.None);
+
+        Assert.Contains("codex: Not inside a trusted directory", reply.ErrorMessage);
+        Assert.DoesNotContain("ignored second line", reply.ErrorMessage);
+        Assert.Equal(stderr, reply.ErrorDetail);
+        var persisted = chat.Read(_watchPath).Single(turn => turn.Role == OrchestratorChatRoles.Orchestrator);
+        Assert.Equal(reply.ErrorMessage, persisted.ErrorMessage);
+        Assert.Equal(stderr, persisted.ErrorDetail);
+    }
+
+    [Fact]
     public async Task SendAsync_RunnerReturnsPipeClosedError_PersistsFriendlyMessageAndDetail()
     {
         // Arrange: a stored session so SendAsync does not short-circuit

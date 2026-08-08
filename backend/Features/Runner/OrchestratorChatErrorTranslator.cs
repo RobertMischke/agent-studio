@@ -24,10 +24,12 @@ public static class OrchestratorChatErrorTranslator
     /// or the runner's <c>ErrorMessage</c> bus field) to a friendly
     /// explanation plus a flag indicating whether the underlying CLI
     /// session is likely dead and should be re-bootstrapped on the next
-    /// turn. Falls back to a generic envelope when no shape matches, so
-    /// the bubble never shows a bare .NET message.
+    /// turn. Falls back to a generic envelope when no shape matches. When
+    /// <paramref name="cliType"/> identifies a CLI failure, that envelope also
+    /// carries one bounded stderr line so the operator can see the cause
+    /// without opening the backend log.
     /// </summary>
-    public static OrchestratorChatErrorTranslation Translate(string? rawError)
+    public static OrchestratorChatErrorTranslation Translate(string? rawError, string? cliType = null)
     {
         if (string.IsNullOrWhiteSpace(rawError))
         {
@@ -140,11 +142,31 @@ public static class OrchestratorChatErrorTranslator
         // bubble at least reads as a system explanation rather than a
         // dropped stack trace fragment. The raw detail is kept for the
         // backend log and the (future) detail-slot expander.
+        var cliSummary = SummarizeCliError(cliType, raw);
         return new OrchestratorChatErrorTranslation(
             FriendlyMessage:
-                "The orchestrator could not produce a reply (the underlying CLI reported an error). Please try again; if this repeats, check the backend log.",
+                "The orchestrator could not produce a reply (the underlying CLI reported an error). " +
+                (cliSummary == null
+                    ? "Please try again; if this repeats, check the backend log."
+                    : cliSummary),
             SessionLikelyLost: false,
             RawDetail: raw);
+    }
+
+    private static string? SummarizeCliError(string? cliType, string rawError)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return null;
+
+        var core = rawError
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+        if (string.IsNullOrWhiteSpace(core)) return null;
+
+        const int maxLength = 300;
+        if (core.Length > maxLength)
+            core = core[..(maxLength - 3)].TrimEnd() + "...";
+
+        return $"{cliType.Trim().ToLowerInvariant()}: {core}";
     }
 }
 

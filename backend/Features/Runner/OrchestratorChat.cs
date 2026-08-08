@@ -541,7 +541,7 @@ public class OrchestratorChatService
             var thinkingLevel = string.IsNullOrWhiteSpace(req.ThinkingLevel)
                 ? ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, requestedModel)
                 : req.ThinkingLevel.Trim();
-            var workingDirectory = ResolveWorkingDirectory(watchPath);
+            var workingDirectory = ResolveWorkingDirectory(projectName, watchPath);
             OrchestratorDecisionResult result;
             try
             {
@@ -598,7 +598,7 @@ public class OrchestratorChatService
                 _logger.LogError(
                     "Orchestrator chat call failed for project {Project} (model={Model}): {Raw}",
                     projectName, result.Model, result.ErrorMessage ?? "(no error message)");
-                var translation = OrchestratorChatErrorTranslator.Translate(result.ErrorMessage);
+                var translation = OrchestratorChatErrorTranslator.Translate(result.ErrorMessage, CliTypes.Codex);
                 var failure = new OrchestratorChatTurn
                 {
                     Role = OrchestratorChatRoles.Orchestrator,
@@ -876,13 +876,24 @@ public class OrchestratorChatService
         sb.AppendLine();
     }
 
-    private string ResolveWorkingDirectory(string watchPath)
+    internal string ResolveWorkingDirectory(string projectName, string watchPath)
     {
         var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
             string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase));
-        return !string.IsNullOrWhiteSpace(entry?.RootPath)
-            ? entry!.RootPath
-            : Path.GetTempPath();
+        if (!string.IsNullOrWhiteSpace(entry?.RootPath))
+            return entry!.RootPath;
+
+        var project = _projects?.FindByStorageLocation(watchPath)
+                      ?? _projects?.FindByIdOrDisplayName(projectName);
+        if (!string.IsNullOrWhiteSpace(project?.RepositoryPath))
+            return project!.RepositoryPath!;
+
+        var fallback = Path.GetTempPath();
+        _logger.LogWarning(
+            "orchestrator_chat_working_directory_temp_fallback project={Project} watchPath={WatchPath} " +
+            "reason=missing-watch-root-path-and-registry-repository-path fallback={FallbackPath}",
+            projectName, watchPath, fallback);
+        return fallback;
     }
 
     /// <summary>
@@ -909,7 +920,7 @@ public class OrchestratorChatService
                 DateTime.UtcNow);
         }
 
-        var root = ResolveWorkingDirectory(watchPath);
+        var root = ResolveWorkingDirectory(projectName, watchPath);
         return new ChatExecutionContext(
             "local",
             "local",
