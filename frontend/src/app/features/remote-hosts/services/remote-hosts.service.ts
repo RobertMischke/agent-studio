@@ -28,6 +28,7 @@ export class RemoteHostsService {
   readonly hosts = signal<RemoteHost[]>([]);
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
+  readonly identityDiagnostics = signal<readonly ClientSummary[]>([]);
 
   private static readonly FRESH_CLIENT_MS = 90_000;
   private static readonly DEGRADED_CLIENT_MS = 5 * 60_000;
@@ -85,6 +86,7 @@ export class RemoteHostsService {
     const startedAt = performance.now();
     this.http.get<ClientSummary[]>('/api/clients').subscribe({
       next: clients => {
+        this.identityDiagnostics.set((clients ?? []).filter(client => !!client.identityFileError));
         const byId = new Map((clients ?? []).map(client => [client.id, client]));
         const now = Date.now();
         this.hosts.update(hosts => {
@@ -129,7 +131,8 @@ export class RemoteHostsService {
           clients: clients?.length ?? 0,
           durationMs: Math.round(performance.now() - startedAt),
         });
-        for (const host of this.hosts().filter(host => byId.has(host.clientId) && host.status !== 'retired')) {
+        for (const host of this.hosts().filter(host =>
+          byId.has(host.clientId) && host.status !== 'retired' && !host.identityFileError)) {
           this.patch(host.id, current => preserveLongTelemetry && current.telemetry?.window === '14d'
             ? { ...current, telemetryLoading: true }
             : { ...current, stats: null, telemetry: null, telemetryLoading: true });
@@ -138,6 +141,7 @@ export class RemoteHostsService {
         this.hydrateCapabilityRegistry();
       },
       error: error => {
+        this.identityDiagnostics.set([]);
         this.hosts.update(hosts => hosts.map(host => ({ ...host, liveDataState: 'error' })));
         this.loading.set(false);
         this.error.set('Live host status is temporarily unavailable.');
@@ -183,7 +187,9 @@ export class RemoteHostsService {
             const telemetryFresh = snapshot.telemetry && Number.isFinite(telemetryAt)
               && now - telemetryAt <= RemoteHostsService.DEGRADED_CLIENT_MS
               && heartbeatFresh;
-            const status = hostDraining
+            const status = current.identityFileError
+              ? 'offline'
+              : hostDraining
               ? 'draining'
               : !heartbeatFresh
                 ? current.status
@@ -533,7 +539,9 @@ function statusFor(lastSeenAt: string | null, now: number): RemoteHost['status']
 function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHost['status']): RemoteHost {
   return {
     ...host, status, lastHeartbeatAt: client.lastSeenAt, stats: null, telemetry: null,
-    liveDataState: 'ready', telemetryLoading: status !== 'retired',
+    liveDataState: 'ready', telemetryLoading: status !== 'retired' && !client.identityFileError,
+    identityFileError: client.identityFileError ?? null,
+    identityRestoreHint: client.identityRestoreHint ?? null,
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
     projectPreflights: client.runnerProjectPreflights ?? [],

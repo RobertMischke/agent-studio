@@ -614,6 +614,12 @@ export interface ClientSummary {
   runnerEffectiveMaxParallelismAppliedAt?: string | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
+  /** Present only for a synthetic row representing an unreadable identity file. */
+  identityFileError?: string | null;
+  identityFileName?: string | null;
+  identityFileModifiedAt?: string | null;
+  identityFileSizeBytes?: number | null;
+  identityRestoreHint?: string | null;
 }
 
 export interface RunnerProjectPreflight {

@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RemoteHostsPanelComponent } from './remote-hosts-panel';
+import { RemoteHostsService } from '../../services/remote-hosts.service';
 
 /**
  * Render-path test: the panel seeds its registry on init and renders one card
@@ -54,6 +55,38 @@ describe('RemoteHostsPanelComponent', () => {
     expect(el.querySelector('[data-testid="add-host-wizard"]')).toBeTruthy();
     expect(el.querySelector('#add-host-title')?.textContent).toContain('Add an execution host');
 
+    fixture.destroy();
+  });
+
+  it('renders the corrupt identity recovery diagnostic', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteHostsPanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const service = TestBed.inject(RemoteHostsService);
+    service.identityDiagnostics.set([{
+      id: 'agent-runner-01', displayName: 'agent-runner-01', emoji: null, colour: null,
+      kind: 'service', registeredAt: '2026-08-05T14:35:00Z', lastSeenAt: null,
+      tokenBudgetMonthly: null, notes: null,
+      identityFileError: 'identity file corrupt: agent-runner-01.json',
+      identityFileName: 'agent-runner-01.json',
+      identityFileModifiedAt: '2026-08-05T14:35:00Z',
+      identityRestoreHint: 'Restore a valid file or re-register with POST /api/clients/register.',
+    }]);
+
+    const fixture = TestBed.createComponent(RemoteHostsPanelComponent);
+    fixture.detectChanges();
+    const diagnostic = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="remote-hosts-identity-errors"]',
+    );
+
+    expect(diagnostic?.textContent).toContain('identity file corrupt: agent-runner-01.json');
+    expect(diagnostic?.textContent).toContain('POST /api/clients/register');
     fixture.destroy();
   });
 });

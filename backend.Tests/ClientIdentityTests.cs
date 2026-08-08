@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 
 using Xunit;
 
@@ -47,6 +49,12 @@ public class ClientIdentityTests : IDisposable
 
     private ClientIdentityStore BuildStore(IConfiguration config)
         => new(config, NullLogger<ClientIdentityStore>.Instance);
+
+    private ClientIdentityStore BuildStore(
+        IConfiguration config,
+        ILogger<ClientIdentityStore> logger,
+        IAtomicJsonFileWriter? writer = null)
+        => writer is null ? new(config, logger) : new(config, logger, writer);
 
     private TaskScannerService BuildScanner(IConfiguration config)
     {
@@ -141,6 +149,158 @@ public class ClientIdentityTests : IDisposable
         var found = store2.Find("persisted");
         Assert.NotNull(found);
         Assert.Equal("Persisted", found!.DisplayName);
+    }
+
+    [Fact]
+    public void EnsureLoaded_NulIdentity_LogsErrorAndKeepsHealthyIdentitiesVisible()
+    {
+        var config = BuildConfig();
+        var seeded = BuildStore(config);
+        var healthy = seeded.Register(new RegisterClientRequest { DisplayName = "Healthy Runner", Kind = ClientIdentityKinds.Service });
+        var corruptPath = Path.Combine(_root, "identities", "agent-runner-01.json");
+        File.WriteAllBytes(corruptPath, new byte[4481]);
+        File.SetLastWriteTimeUtc(corruptPath, new DateTime(2026, 8, 5, 14, 35, 0, DateTimeKind.Utc));
+        var logger = new RecordingLogger<ClientIdentityStore>();
+
+        var reloaded = BuildStore(config, logger);
+        reloaded.EnsureLoaded();
+
+        Assert.NotNull(reloaded.Find(healthy.Id));
+        Assert.NotNull(reloaded.Find(DefaultClientIdentity.Id));
+        var diagnostic = Assert.Single(reloaded.ListDiagnostics());
+        Assert.Equal("agent-runner-01", diagnostic.IdentityId);
+        Assert.Equal("agent-runner-01.json", diagnostic.FileName);
+        Assert.Equal("identity file corrupt: agent-runner-01.json", diagnostic.Message);
+        Assert.Contains("POST /api/clients/register", diagnostic.RestoreHint, StringComparison.Ordinal);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Error
+            && entry.Message.Contains("identity-file-corrupt", StringComparison.Ordinal)
+            && entry.Message.Contains("agent-runner-01.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AtomicWriteFailure_LeavesPublishedIdentityParseableAndUnchanged()
+    {
+        var config = BuildConfig();
+        var writer = new ControllableAtomicJsonFileWriter();
+        var store = BuildStore(config, NullLogger<ClientIdentityStore>.Instance, writer);
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "atomic-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+        var path = Path.Combine(_root, "identities", runner.Id + ".json");
+        var published = File.ReadAllText(path);
+        writer.ShouldFail = (candidate, writeNumber) => candidate == path && writeNumber == 2;
+
+        Assert.Throws<IOException>(() =>
+            store.RecordRunnerActivity(runner.Id, activeSlots: 1, availableSlots: 1, claimed: true));
+
+        Assert.Equal(published, File.ReadAllText(path));
+        using var parsed = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(runner.Id, parsed.RootElement.GetProperty("Id").GetString());
+        Assert.DoesNotContain('\0', File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void AtomicWrite_OrphanedNulTempFileDoesNotReplacePublishedIdentity()
+    {
+        var config = BuildConfig();
+        var store = BuildStore(config);
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "interrupted-runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+        var path = Path.Combine(_root, "identities", runner.Id + ".json");
+        var orphanedTemp = $"{path}.{Guid.NewGuid():N}.tmp";
+
+        // Simulate termination after staging bytes but before the atomic rename.
+        File.WriteAllBytes(orphanedTemp, new byte[4481]);
+
+        var reloaded = BuildStore(config);
+        var published = reloaded.Find(runner.Id);
+        Assert.NotNull(published);
+        Assert.Equal(runner.DisplayName, published!.DisplayName);
+        Assert.Empty(reloaded.ListDiagnostics());
+        using var parsed = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(runner.Id, parsed.RootElement.GetProperty("Id").GetString());
+    }
+
+    [Fact]
+    public void Find_ReloadsAnExternallyRestoredCorruptIdentityWithoutRestart()
+    {
+        var config = BuildConfig();
+        var identities = Path.Combine(_root, "identities");
+        Directory.CreateDirectory(identities);
+        var path = Path.Combine(identities, "agent-runner-01.json");
+        File.WriteAllBytes(path, new byte[128]);
+        var store = BuildStore(config);
+        store.EnsureLoaded();
+        Assert.Single(store.ListDiagnostics());
+        var restored = new ClientIdentity
+        {
+            Id = "agent-runner-01",
+            DisplayName = "agent-runner-01",
+            Kind = ClientIdentityKind.Service,
+            RegisteredAt = DateTime.UtcNow.AddDays(-1),
+            LastSeenAt = DateTime.UtcNow,
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(restored));
+
+        var found = store.Find("agent-runner-01");
+
+        Assert.NotNull(found);
+        Assert.Equal(ClientIdentityKind.Service, found!.Kind);
+        Assert.Empty(store.ListDiagnostics());
+    }
+
+    [Fact]
+    public void Register_ReplacesACorruptIdentityThroughTheDocumentedHealingPath()
+    {
+        var config = BuildConfig();
+        var identities = Path.Combine(_root, "identities");
+        Directory.CreateDirectory(identities);
+        File.WriteAllBytes(Path.Combine(identities, "agent-runner-01.json"), new byte[4481]);
+        var store = BuildStore(config);
+        store.EnsureLoaded();
+
+        var repaired = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "agent-runner-01",
+            Kind = ClientIdentityKinds.Service,
+        });
+
+        Assert.Equal("agent-runner-01", repaired.Id);
+        Assert.Empty(store.ListDiagnostics());
+        Assert.Equal(ClientIdentityKind.Service, BuildStore(config).Find(repaired.Id)?.Kind);
+    }
+
+    [Fact]
+    public void RecordSeen_PersistsAtMostOncePerThirtySecondWindow()
+    {
+        var config = BuildConfig();
+        var identities = Path.Combine(_root, "identities");
+        Directory.CreateDirectory(identities);
+        var record = new ClientIdentity
+        {
+            Id = "seen-runner",
+            DisplayName = "seen-runner",
+            Kind = ClientIdentityKind.Service,
+            RegisteredAt = DateTime.UtcNow.AddDays(-1),
+            LastSeenAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+        var path = Path.Combine(identities, record.Id + ".json");
+        File.WriteAllText(path, JsonSerializer.Serialize(record));
+        var writer = new ControllableAtomicJsonFileWriter();
+        var store = BuildStore(config, NullLogger<ClientIdentityStore>.Instance, writer);
+        store.EnsureLoaded();
+
+        store.RecordSeen(record.Id);
+        store.RecordSeen(record.Id);
+
+        Assert.Equal(1, writer.WritesFor(path));
+        Assert.True(BuildStore(config).Find(record.Id)?.LastSeenAt > record.LastSeenAt);
     }
 
     [Fact]
@@ -366,5 +526,22 @@ public class ClientIdentityTests : IDisposable
         // because the kind is already retired.
         Assert.True(store.SoftDelete(DefaultClientIdentity.Id));
         Assert.False(store.SoftDelete(DefaultClientIdentity.Id));
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 }

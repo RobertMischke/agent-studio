@@ -43,13 +43,31 @@ public static class ClientEndpoints
                     RunnerGateCapacity = gates.Capacity,
                 };
             }).ToList();
+            summaries.AddRange(store.ListDiagnostics().Select(DiagnosticSummary));
             return Results.Ok(summaries);
         });
 
         clients.MapGet("/{id}", (string id, ClientIdentityStore store, TaskScannerService scanner) =>
         {
             var record = store.Find(id);
-            if (record is null) return Results.NotFound(new { error = "client-not-found" });
+            if (record is null)
+            {
+                var diagnostic = store.FindDiagnostic(id);
+                if (diagnostic is not null)
+                {
+                    return Results.Conflict(new
+                    {
+                        error = "identity-file-corrupt",
+                        message = diagnostic.Message,
+                        file = diagnostic.FileName,
+                        modifiedAt = diagnostic.ModifiedAt,
+                        sizeBytes = diagnostic.SizeBytes,
+                        detail = diagnostic.Detail,
+                        hint = diagnostic.RestoreHint,
+                    });
+                }
+                return Results.NotFound(new { error = "client-not-found" });
+            }
 
             var owned = scanner.ScanAllAutomationJobs()
                 .Where(j => string.Equals(j.OwnerClientId, id, StringComparison.OrdinalIgnoreCase))
@@ -268,4 +286,18 @@ public static class ClientEndpoints
             });
         });
     }
+
+    private static ClientSummary DiagnosticSummary(ClientIdentityFileDiagnostic diagnostic) => new()
+    {
+        Id = diagnostic.IdentityId,
+        DisplayName = diagnostic.IdentityId,
+        Kind = ClientIdentityKinds.Service,
+        RegisteredAt = diagnostic.ModifiedAt,
+        Notes = diagnostic.RestoreHint,
+        IdentityFileError = diagnostic.Message,
+        IdentityFileName = diagnostic.FileName,
+        IdentityFileModifiedAt = diagnostic.ModifiedAt,
+        IdentityFileSizeBytes = diagnostic.SizeBytes,
+        IdentityRestoreHint = diagnostic.RestoreHint,
+    };
 }
