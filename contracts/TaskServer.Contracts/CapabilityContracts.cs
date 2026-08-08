@@ -153,7 +153,8 @@ public sealed record RunnerCapabilitySnapshotDto(
     HostTelemetrySnapshotDto? Telemetry,
     RuntimeCapacitySettingsDto? RuntimeCapacity = null,
     int? EffectiveMaxParallelism = null,
-    DateTime? RuntimeCapacityAppliedAt = null);
+    DateTime? RuntimeCapacityAppliedAt = null,
+    long? RuntimeCapacityAppliedVersion = null);
 
 public sealed record OperatorHostDrainRequest(string Reason);
 

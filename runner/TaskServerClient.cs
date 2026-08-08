@@ -41,10 +41,15 @@ public sealed class TaskServerClient : IDisposable
     private long _lastHostReportSequence;
     private int? _centralHostMaxParallelism;
     private DateTime? _centralHostMaxParallelismAppliedAt;
+    private long? _centralRuntimeCapacityVersion;
+    private Contract.RuntimeCapacitySettingsDto? _centralRuntimeCapacity;
+    private readonly bool _persistRuntimeCapacityCache;
 
     public TaskServerClient(RunnerOptions options)
     {
         _options = options;
+        _persistRuntimeCapacityCache = true;
+        RestoreRuntimeCapacityCache(options);
         HttpMessageHandler handler = new HttpClientHandler();
         if (!string.IsNullOrWhiteSpace(options.TlsServerCertificateSha256))
         {
@@ -94,7 +99,8 @@ public sealed class TaskServerClient : IDisposable
         bool usesDurableTaskServer = false,
         RunnerOptions? options = null,
         string? runnerInstanceId = null,
-        bool supportsHostOrchestrator = false)
+        bool supportsHostOrchestrator = false,
+        bool persistRuntimeCapacityCache = false)
     {
         _http = http;
         _options = options;
@@ -106,6 +112,9 @@ public sealed class TaskServerClient : IDisposable
         }
         _configuredClientId = configuredClientId;
         _runnerInstanceIdOverride = runnerInstanceId;
+        _persistRuntimeCapacityCache = persistRuntimeCapacityCache;
+        if (persistRuntimeCapacityCache && options is not null)
+            RestoreRuntimeCapacityCache(options);
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
         if (_usesServiceCredential)
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
@@ -202,7 +211,10 @@ public sealed class TaskServerClient : IDisposable
                 HostOrchestratorMaximum: _supportsHostOrchestrator
                     ? Contract.HostOrchestratorContract.MaximumSupported
                     : null,
-                BootstrapMaxParallelism: options.HostMaxParallelism);
+                BootstrapMaxParallelism: options.HostMaxParallelism,
+                EffectiveMaxParallelism: HostMaxParallelism,
+                EffectiveRuntimeCapacityVersion: _centralRuntimeCapacityVersion,
+                EffectiveRuntimeCapacityAppliedAt: _centralHostMaxParallelismAppliedAt);
             try
             {
                 var registered = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
@@ -315,10 +327,16 @@ public sealed class TaskServerClient : IDisposable
             var response = await SendJsonAsync<Contract.HostReportRequest, Contract.HostReportResponse>(
                                HttpMethod.Post,
                                $"/api/v1/runners/{Uri.EscapeDataString(options.RunnerId)}/reports",
-                               request,
+                               request with
+                               {
+                                   EffectiveMaxParallelism = HostMaxParallelism,
+                                   EffectiveRuntimeCapacityVersion = _centralRuntimeCapacityVersion,
+                                   EffectiveRuntimeCapacityAppliedAt = _centralHostMaxParallelismAppliedAt,
+                               },
                                ct)
                            ?? throw new TaskServerException(502, "Task Server returned an empty host report acknowledgement.");
             Interlocked.Exchange(ref _lastHostReportSequence, response.AcceptedSequence);
+            AdoptRuntimeCapacity(response.RuntimeCapacity);
             _hostReportReady.TrySetResult(response.AcceptedSequence);
             return response;
         }
@@ -594,6 +612,8 @@ public sealed class TaskServerClient : IDisposable
                 EffectiveMaxParallelism = req.EffectiveMaxParallelism ?? HostMaxParallelism,
                 EffectiveMaxParallelismAppliedAt =
                     req.EffectiveMaxParallelismAppliedAt ?? _centralHostMaxParallelismAppliedAt,
+                EffectiveRuntimeCapacityVersion =
+                    req.EffectiveRuntimeCapacityVersion ?? _centralRuntimeCapacityVersion,
                 BootstrapMaxParallelism = req.BootstrapMaxParallelism ?? _options?.HostMaxParallelism,
                 CapabilityInstanceId = RunnerInstanceId,
                 RequiredCapabilities = _options is null
@@ -619,7 +639,9 @@ public sealed class TaskServerClient : IDisposable
                 req.AvailableSlots,
                 ToContract(req.Inventory),
                 _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options),
-                req.EffectiveMaxParallelism ?? HostMaxParallelism),
+                req.EffectiveMaxParallelism ?? HostMaxParallelism,
+                req.EffectiveRuntimeCapacityVersion ?? _centralRuntimeCapacityVersion,
+                req.EffectiveMaxParallelismAppliedAt ?? _centralHostMaxParallelismAppliedAt),
             ct);
         AdoptRuntimeCapacity(claim?.RuntimeCapacity);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
@@ -664,7 +686,25 @@ public sealed class TaskServerClient : IDisposable
     }
 
     private void AdoptRuntimeCapacity(Contract.RuntimeCapacitySettingsDto? capacity)
-        => AdoptCentralMaxParallelism(capacity?.MaxParallelism);
+    {
+        if (capacity is null
+            || capacity.Version <= 0
+            || capacity.MaxParallelism is < 1 or > 256)
+            return;
+        if (_centralRuntimeCapacity == capacity) return;
+
+        _centralRuntimeCapacity = capacity;
+        _centralHostMaxParallelism = capacity.MaxParallelism;
+        _centralRuntimeCapacityVersion = capacity.Version;
+        _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
+        if (_persistRuntimeCapacityCache && _options is not null)
+        {
+            RuntimeCapacityCache.Save(
+                _options.StateDir,
+                capacity,
+                _centralHostMaxParallelismAppliedAt.Value);
+        }
+    }
 
     /// <summary>
     /// Adopt a server-owned ceiling and remember when it took effect, so the
@@ -677,6 +717,16 @@ public sealed class TaskServerClient : IDisposable
         if (_centralHostMaxParallelism == maxParallelism) return;
         _centralHostMaxParallelism = maxParallelism;
         _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
+    }
+
+    private void RestoreRuntimeCapacityCache(RunnerOptions options)
+    {
+        var cached = RuntimeCapacityCache.Load(options.StateDir, options.Hostname);
+        if (cached is null) return;
+        _centralHostMaxParallelism = cached.Capacity.MaxParallelism;
+        _centralRuntimeCapacityVersion = cached.Capacity.Version;
+        _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
+        _centralRuntimeCapacity = cached.Capacity;
     }
 
     /// <summary>

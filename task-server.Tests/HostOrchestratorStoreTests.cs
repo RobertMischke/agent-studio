@@ -8,6 +8,62 @@ namespace TaskServer.Tests;
 public sealed class HostOrchestratorStoreTests
 {
     [Fact]
+    public async Task Host_reports_refresh_and_acknowledge_the_exact_central_capacity_version()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "runner-a", default);
+        var current = await store.GetRuntimeCapacitySettingsAsync("host-a", default);
+        var updated = await store.UpdateRuntimeCapacitySettingsAsync(
+            "host-a",
+            new UpdateRuntimeCapacitySettingsRequest(
+                6,
+                current!.TargetLoadPercent,
+                current.RampStrategy,
+                current.Version),
+            "operator",
+            default);
+
+        var stale = await store.AcceptHostReportAsync(
+            "runner-a",
+            Report(
+                1,
+                new HostCapacityDto(4, 4, 0, 0, 4),
+                effectiveMaxParallelism: current.MaxParallelism,
+                effectiveVersion: current.Version),
+            "runner-a",
+            default);
+        Assert.Equal(updated, stale.RuntimeCapacity);
+        var beforeAck = (await store.ListRunnerCapabilitySnapshotsAsync(default))
+            .Single(item => item.RunnerId == "runner-a");
+        Assert.Null(beforeAck.RuntimeCapacityAppliedVersion);
+
+        var appliedAt = DateTime.UtcNow.AddSeconds(-1);
+        await store.AcceptHostReportAsync(
+            "runner-a",
+            Report(
+                2,
+                new HostCapacityDto(6, 6, 0, 0, 6),
+                effectiveMaxParallelism: updated.MaxParallelism,
+                effectiveVersion: updated.Version,
+                effectiveAppliedAt: appliedAt),
+            "runner-a",
+            default);
+
+        var afterAck = (await store.ListRunnerCapabilitySnapshotsAsync(default))
+            .Single(item => item.RunnerId == "runner-a");
+        Assert.Equal(updated.Version, afterAck.RuntimeCapacityAppliedVersion);
+        Assert.Contains(
+            await store.ListAuditAsync(0, default),
+            item => item.Action == "runtime-capacity.applied"
+                    && item.TargetId == "runner-a"
+                    && item.DetailJson.Contains(
+                        $"\"settingsVersion\":{updated.Version}",
+                        StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Host_report_permit_queue_restart_reconcile_and_post_processing_form_one_fenced_flow()
     {
         using var temp = new TempDirectory();
@@ -352,7 +408,10 @@ public sealed class HostOrchestratorStoreTests
         long sequence,
         HostCapacityDto capacity,
         IReadOnlyList<HostWorkStatusDto>? work = null,
-        string instanceId = "instance-a")
+        string instanceId = "instance-a",
+        int? effectiveMaxParallelism = null,
+        long? effectiveVersion = null,
+        DateTime? effectiveAppliedAt = null)
         => new(
             HostOrchestratorContract.Current,
             "host-a",
@@ -363,7 +422,10 @@ public sealed class HostOrchestratorStoreTests
             [new HostCapabilityDto("git-push", "ready", ObservedAt: DateTime.UtcNow)],
             work ?? [],
             [],
-            []);
+            [],
+            EffectiveMaxParallelism: effectiveMaxParallelism,
+            EffectiveRuntimeCapacityVersion: effectiveVersion,
+            EffectiveRuntimeCapacityAppliedAt: effectiveAppliedAt);
 
     private static HostWorkStatusDto Work(
         WorkPermitAcceptanceDto acceptance,

@@ -12,6 +12,43 @@ public sealed class HostOrchestratorClientTests
     private const string CurrentInstance = "host-1:current";
 
     [Fact]
+    public async Task Host_report_adopts_server_capacity_and_acknowledges_it_on_the_next_report()
+    {
+        var bodies = new List<JsonElement>();
+        var now = DateTime.UtcNow;
+        var capacity = new RuntimeCapacitySettingsDto(
+            "host-1", 5, 80, "balanced", 2, now);
+        var handler = new ContractHandler(async (request, ct) =>
+        {
+            bodies.Add(await request.Content!.ReadFromJsonAsync<JsonElement>(cancellationToken: ct));
+            return Json(new HostReportResponse(
+                "accepted",
+                bodies.Count,
+                new HostContractRangeDto(
+                    HostOrchestratorContract.Current,
+                    HostOrchestratorContract.Current),
+                1,
+                "active",
+                [],
+                [],
+                capacity));
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        using var client = Client(http);
+
+        await client.ReportHostAsync(Report(now), default);
+        Assert.Equal(5, client.HostMaxParallelism);
+        await client.ReportHostAsync(Report(now.AddSeconds(1)), default);
+
+        Assert.Equal(2, bodies.Count);
+        Assert.Equal(2, bodies[1].GetProperty("effectiveRuntimeCapacityVersion").GetInt64());
+        Assert.Equal(5, bodies[1].GetProperty("effectiveMaxParallelism").GetInt32());
+        Assert.Equal(
+            JsonValueKind.String,
+            bodies[1].GetProperty("effectiveRuntimeCapacityAppliedAt").ValueKind);
+    }
+
+    [Fact]
     public async Task Permit_is_adopted_and_containment_step_is_reported_after_host_report()
     {
         var now = DateTime.UtcNow;

@@ -118,6 +118,7 @@ public sealed record RunnerClaimRequest(
     // telemetry: the server owns the policy and echoes it back on every poll.
     int? EffectiveMaxParallelism = null,
     DateTime? EffectiveMaxParallelismAppliedAt = null,
+    long? EffectiveRuntimeCapacityVersion = null,
     // RUNNER_MAX_PARALLELISM. Seeds the central host ceiling on first contact.
     int? BootstrapMaxParallelism = null,
     string? CapabilityInstanceId = null,

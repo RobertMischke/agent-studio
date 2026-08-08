@@ -299,7 +299,7 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_TTL_SECONDS` | `--ttl` | `900` | Requested lease TTL; the server clamps it. The default grants a bounded 15-minute authority window so an already-claimed run can survive ten minutes of transport loss. |
 | `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
-| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Bootstrap value for first host registration and fallback for an older server. The live ceiling is managed centrally in Execution Hosts. |
+| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Bootstrap value for first host registration and fallback for an older server. The live ceiling is managed centrally in Execution Hosts and cached as `runtime-capacity-cache.json` under `RUNNER_STATE_DIR`; the next Task Server response always wins. |
 | `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
 | `RUNNER_SERVER_REQUEST_TIMEOUT_SECONDS` | `--server-request-timeout-seconds` | `60` | Hard deadline for every Task Server HTTP request, including capability advertisement and worker-loss release. |
 | `RUNNER_IDLE_WATCHDOG_MINUTES` | `--idle-watchdog-minutes` | `5` | A daemon with no active slots exits after this long without starting a claim poll. The fatal journal line is followed by a service-manager restart. |

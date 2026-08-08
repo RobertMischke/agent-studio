@@ -24,6 +24,7 @@ public sealed partial class TaskServerStore
             throw new TaskServerConflictException("host-report-sequence-invalid", "Host report sequence must be positive.");
         ValidateCapacity(request.Capacity);
         HostReportResponse? response = null;
+        RuntimeCapacitySettingsDto? runtimeCapacity = null;
         var reportJson = JsonSerializer.Serialize(request);
         var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(reportJson))).ToLowerInvariant();
 
@@ -31,6 +32,23 @@ public sealed partial class TaskServerStore
         {
             await ValidateRunnerAsync(connection, transaction, runnerId, request.InstanceId, ct);
             await ValidateHostContractDeclarationAsync(connection, transaction, runnerId, request.HostId, ct);
+            runtimeCapacity = await ReadRuntimeCapacitySettingsAsync(
+                connection,
+                transaction,
+                request.HostId,
+                ct)
+                ?? throw new InvalidOperationException(
+                    $"Runtime capacity is missing for host '{request.HostId}'.");
+            await RecordRuntimeCapacityAdoptionAsync(
+                connection,
+                transaction,
+                runnerId,
+                runtimeCapacity,
+                request.EffectiveMaxParallelism,
+                request.EffectiveRuntimeCapacityVersion,
+                request.EffectiveRuntimeCapacityAppliedAt,
+                actorId,
+                ct);
 
             long? acceptedSequence = null;
             string? acceptedDigest = null;
@@ -112,7 +130,8 @@ public sealed partial class TaskServerStore
                 HostPolicyVersion,
                 _mode == TaskServerMode.Normal ? "active" : _mode.ToString().ToLowerInvariant(),
                 permits,
-                []);
+                [],
+                runtimeCapacity);
         }, ct);
 
         return response!;

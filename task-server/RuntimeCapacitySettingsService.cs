@@ -158,6 +158,78 @@ public sealed partial class TaskServerStore
                 """, ct, transaction, ("$host", hostId)) ?? 0,
             CultureInfo.InvariantCulture);
 
+    private async Task RecordRuntimeCapacityAdoptionAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runnerId,
+        RuntimeCapacitySettingsDto current,
+        int? reportedMaxParallelism,
+        long? reportedVersion,
+        DateTime? reportedAppliedAt,
+        string actorId,
+        CancellationToken ct)
+    {
+        var validMaxParallelism = reportedMaxParallelism is >= 1 and <= 256
+            ? reportedMaxParallelism
+            : null;
+        long? exactVersion = reportedVersion == current.Version
+                             && validMaxParallelism == current.MaxParallelism
+            ? reportedVersion
+            : null;
+        var previousVersionValue = await ScalarAsync(
+            connection,
+            "SELECT runtime_capacity_applied_version FROM runners WHERE id = $runner;",
+            ct,
+            transaction,
+            ("$runner", runnerId));
+        long? previousVersion = previousVersionValue is null or DBNull
+            ? null
+            : Convert.ToInt64(previousVersionValue, CultureInfo.InvariantCulture);
+        var appliedAt = NormalizeReportedAppliedAt(reportedAppliedAt);
+
+        await ExecuteAsync(connection, """
+            UPDATE runners
+               SET last_seen_at = $now,
+                   effective_max_parallelism = COALESCE($effective, effective_max_parallelism),
+                   runtime_capacity_applied_at = CASE
+                       WHEN $effective IS NOT NULL THEN $applied
+                       ELSE runtime_capacity_applied_at
+                   END,
+                   runtime_capacity_applied_version = $version
+             WHERE id = $runner;
+            """, ct, transaction,
+            ("$now", Iso(UtcNow)),
+            ("$effective", validMaxParallelism),
+            ("$applied", Iso(appliedAt)),
+            ("$version", exactVersion),
+            ("$runner", runnerId));
+
+        if (exactVersion is null || previousVersion == exactVersion) return;
+        await AuditAsync(
+            connection,
+            transaction,
+            actorId,
+            "runtime-capacity.applied",
+            "runner",
+            runnerId,
+            JsonSerializer.Serialize(new
+            {
+                current.HostId,
+                settingsVersion = exactVersion,
+                current.MaxParallelism,
+                appliedAt,
+            }),
+            ct);
+    }
+
+    private DateTime NormalizeReportedAppliedAt(DateTime? value)
+    {
+        var now = UtcNow;
+        if (value is null) return now;
+        var normalized = value.Value.ToUniversalTime();
+        return normalized <= now.AddMinutes(2) ? normalized : now;
+    }
+
     private static void ValidateRuntimeCapacity(
         UpdateRuntimeCapacitySettingsRequest request)
     {

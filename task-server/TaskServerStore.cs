@@ -11,10 +11,9 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 6 = union of develop's capacity/quota schema (5) and AGT-2395's additive
-    // result_ref_gc table (branched as 4 from base 3). The migration block is
-    // idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 6;
+    // 7 adds the exact runtime-capacity version acknowledged by each Runner.
+    // The migration block is idempotent; the number also guards downgrades.
+    public const int CurrentSchemaVersion = 7;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -513,6 +512,9 @@ public sealed partial class TaskServerStore
         var id = StableOrGeneratedId(runnerId, "rnr");
         var now = Iso(UtcNow);
         var bootstrapMaxParallelism = Math.Clamp(request.BootstrapMaxParallelism, 1, 256);
+        var reportedMaxParallelism = request.EffectiveMaxParallelism is >= 1 and <= 256
+            ? request.EffectiveMaxParallelism
+            : bootstrapMaxParallelism;
         var managesCodingCapacity = capabilities.Contains(
             ReviewCapabilities.CodingExecutor,
             StringComparer.Ordinal);
@@ -545,11 +547,12 @@ public sealed partial class TaskServerStore
                     id, name, host_id, instance_id, runner_version, protocol_version,
                     capabilities_json, status, registered_at, last_seen_at,
                     host_orchestrator_minimum, host_orchestrator_maximum,
-                    effective_max_parallelism, runtime_capacity_applied_at)
+                    effective_max_parallelism, runtime_capacity_applied_at,
+                    runtime_capacity_applied_version)
                 VALUES (
                     $id, $name, $host, $instance, $version, $protocol,
                     $capabilities, 'active', $now, $now, $hostOrchestratorMinimum,
-                    $hostOrchestratorMaximum, $effective, $applied)
+                    $hostOrchestratorMaximum, $effective, $applied, NULL)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     host_id = excluded.host_id,
@@ -559,6 +562,13 @@ public sealed partial class TaskServerStore
                     capabilities_json = excluded.capabilities_json,
                     host_orchestrator_minimum = excluded.host_orchestrator_minimum,
                     host_orchestrator_maximum = excluded.host_orchestrator_maximum,
+                    effective_max_parallelism = excluded.effective_max_parallelism,
+                    runtime_capacity_applied_at = excluded.runtime_capacity_applied_at,
+                    runtime_capacity_applied_version = CASE
+                        WHEN runners.instance_id = excluded.instance_id
+                        THEN runners.runtime_capacity_applied_version
+                        ELSE NULL
+                    END,
                     status = CASE WHEN runners.status = 'retired' THEN 'retired' ELSE 'active' END,
                     last_seen_at = excluded.last_seen_at;
                 """, ct, transaction,
@@ -567,8 +577,10 @@ public sealed partial class TaskServerStore
                 ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)),
                 ("$hostOrchestratorMinimum", request.HostOrchestratorMinimum),
                 ("$hostOrchestratorMaximum", request.HostOrchestratorMaximum),
-                ("$effective", managesCodingCapacity ? bootstrapMaxParallelism : null),
-                ("$applied", managesCodingCapacity ? now : null),
+                ("$effective", managesCodingCapacity ? reportedMaxParallelism : null),
+                ("$applied", managesCodingCapacity
+                    ? Iso(NormalizeReportedAppliedAt(request.EffectiveRuntimeCapacityAppliedAt))
+                    : null),
                 ("$now", now));
             if (managesCodingCapacity)
             {
@@ -587,15 +599,16 @@ public sealed partial class TaskServerStore
                     transaction,
                     request.HostId.Trim(),
                     ct);
-                await ExecuteAsync(connection, """
-                    UPDATE runners
-                       SET effective_max_parallelism = $effective,
-                           runtime_capacity_applied_at = $now
-                     WHERE id = $id;
-                    """, ct, transaction,
-                    ("$effective", runtimeCapacity!.MaxParallelism),
-                    ("$now", now),
-                    ("$id", id));
+                await RecordRuntimeCapacityAdoptionAsync(
+                    connection,
+                    transaction,
+                    id,
+                    runtimeCapacity!,
+                    reportedMaxParallelism,
+                    request.EffectiveRuntimeCapacityVersion,
+                    request.EffectiveRuntimeCapacityAppliedAt,
+                    actorId,
+                    ct);
             }
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new
@@ -607,7 +620,10 @@ public sealed partial class TaskServerStore
                     request.HostOrchestratorMinimum,
                     request.HostOrchestratorMaximum,
                     bootstrapMaxParallelism,
+                    reportedMaxParallelism,
+                    request.EffectiveRuntimeCapacityVersion,
                     runtimeCapacity?.MaxParallelism,
+                    runtimeCapacity?.Version,
                 }), ct);
         }, ct);
         return new RunnerDto(id, request.Name.Trim(), request.HostId.Trim(), request.InstanceId.Trim(), request.RunnerVersion,
@@ -645,24 +661,16 @@ public sealed partial class TaskServerStore
                 capabilityRunner.HostId,
                 request.RequiredCapabilities,
                 ct);
-            var reportedMaxParallelism = request.EffectiveMaxParallelism is >= 1 and <= 256
-                ? request.EffectiveMaxParallelism
-                : null;
-            await ExecuteAsync(connection, """
-                UPDATE runners
-                   SET last_seen_at = $now,
-                       effective_max_parallelism = COALESCE($effective, effective_max_parallelism),
-                       runtime_capacity_applied_at = CASE
-                           WHEN $effective IS NOT NULL
-                            AND (effective_max_parallelism IS NULL OR effective_max_parallelism <> $effective)
-                           THEN $now
-                           ELSE runtime_capacity_applied_at
-                       END
-                 WHERE id = $id;
-                """, ct, transaction,
-                ("$now", Iso(UtcNow)),
-                ("$effective", reportedMaxParallelism),
-                ("$id", request.RunnerId));
+            await RecordRuntimeCapacityAdoptionAsync(
+                connection,
+                transaction,
+                request.RunnerId,
+                runtimeCapacity,
+                request.EffectiveMaxParallelism,
+                request.EffectiveRuntimeCapacityVersion,
+                request.EffectiveRuntimeCapacityAppliedAt,
+                actorId,
+                ct);
 
             if (!capabilityAdmission.Eligible)
             {
@@ -1921,7 +1929,8 @@ public sealed partial class TaskServerStore
                 host_orchestrator_minimum TEXT,
                 host_orchestrator_maximum TEXT,
                 effective_max_parallelism INTEGER,
-                runtime_capacity_applied_at TEXT
+                runtime_capacity_applied_at TEXT,
+                runtime_capacity_applied_version INTEGER
             );
             CREATE TABLE IF NOT EXISTS runtime_capacity_settings(
                 host_id TEXT PRIMARY KEY,
@@ -2234,6 +2243,7 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_maximum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_version", "INTEGER", ct);
         await ExecuteAsync(connection, """
             INSERT INTO runtime_capacity_settings(
                 host_id, max_parallelism, target_load_percent, ramp_strategy,

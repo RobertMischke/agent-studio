@@ -290,6 +290,86 @@ public class TaskServerClientHealthTests
     }
 
     [Fact]
+    public async Task Durable_capacity_survives_a_daemon_restart_as_last_known_server_state()
+    {
+        var stateDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"agent-runner-capacity-{Guid.NewGuid():N}");
+        try
+        {
+            var now = DateTime.UtcNow.ToString("O");
+            var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent($$"""
+                    {
+                      "runnerId":"runner-v1",
+                      "name":"Runner v1",
+                      "hostId":"host-a",
+                      "instanceId":"host-a:1",
+                      "runnerVersion":"1.0.0",
+                      "protocolVersion":3,
+                      "status":"active",
+                      "registeredAt":"{{now}}",
+                      "lastSeenAt":"{{now}}",
+                      "runtimeCapacity":{
+                        "hostId":"host-a",
+                        "maxParallelism":7,
+                        "targetLoadPercent":80,
+                        "rampStrategy":"balanced",
+                        "version":3,
+                        "updatedAt":"{{now}}"
+                      }
+                    }
+                    """),
+            });
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1") };
+            var options = new RunnerOptions
+            {
+                ServerUrl = "http://127.0.0.1",
+                RunnerId = "runner-v1",
+                RunnerName = "Runner v1",
+                Hostname = "host-a",
+                BackendName = "remote",
+                WorkDir = Path.Combine(stateDirectory, "work"),
+                StateDir = stateDirectory,
+                BaseBranch = "main",
+                CliBin = "claude",
+                CliArgs = "",
+                HostMaxParallelism = 2,
+            };
+            using (var client = new TaskServerClient(
+                       http,
+                       "runner-v1",
+                       usesDurableTaskServer: true,
+                       options: options,
+                       persistRuntimeCapacityCache: true))
+            {
+                await client.RegisterAsync("Runner v1", "service", CancellationToken.None);
+                Assert.Equal(7, client.HostMaxParallelism);
+            }
+
+            using var restartedHttp = new HttpClient(new RecordingHandler(_ =>
+                throw new InvalidOperationException("Cache restore must not call the server.")))
+            {
+                BaseAddress = new Uri("http://127.0.0.1"),
+            };
+            using var restarted = new TaskServerClient(
+                restartedHttp,
+                "runner-v1",
+                usesDurableTaskServer: true,
+                options: options,
+                persistRuntimeCapacityCache: true);
+
+            Assert.Equal(7, restarted.HostMaxParallelism);
+            Assert.True(File.Exists(Path.Combine(stateDirectory, "runtime-capacity-cache.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(stateDirectory)) Directory.Delete(stateDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Durable_task_server_claim_without_repository_registration_uses_runner_git_fallback()
     {
         var now = DateTime.UtcNow;

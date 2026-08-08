@@ -67,7 +67,10 @@ public sealed record HostReportRequest(
     IReadOnlyList<HostWorkStatusDto> Work,
     IReadOnlyList<HostPostProcessingStatusDto> PostProcessing,
     IReadOnlyList<HostFaultDto> Faults,
-    IReadOnlyList<string>? AcknowledgedCommands = null);
+    IReadOnlyList<string>? AcknowledgedCommands = null,
+    int? EffectiveMaxParallelism = null,
+    long? EffectiveRuntimeCapacityVersion = null,
+    DateTime? EffectiveRuntimeCapacityAppliedAt = null);
 
 public sealed record HostContractRangeDto(string Minimum, string Maximum);
 
@@ -84,7 +87,8 @@ public sealed record HostReportResponse(
     long PolicyVersion,
     string Mode,
     IReadOnlyList<WorkPermitDto> AvailableWork,
-    IReadOnlyList<string> Commands);
+    IReadOnlyList<string> Commands,
+    RuntimeCapacitySettingsDto? RuntimeCapacity = null);
 
 public sealed record WorkPermitAcceptRequest(
     string SchemaVersion,

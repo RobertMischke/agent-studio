@@ -402,6 +402,15 @@ state.
   and never cancel already-running work. Projects consume the shared host
   ceiling and do not own independent capacity settings. Review GATE work
   remains governed by its separate pool and does not consume a RUN slot.
+  Coding Runners receive the current record on registration, every claim poll,
+  and every Host Orchestrator report. They acknowledge the exact version and
+  effective ceiling on the next request. The Task Server records the first
+  exact acknowledgement per Runner process as `runtime-capacity.applied`; a
+  stale value remains visible as telemetry but never counts as adoption. The
+  Runner atomically caches the last server record under `RUNNER_STATE_DIR` so
+  reconnecting or already-authorized work retains the last-known ceiling. The
+  cache is bootstrap state only: any later Task Server response replaces it,
+  including a lower version returned after an authoritative backup restore.
 
 - Linux host resource enforcement belongs to agent-host-managed systemd units,
   separately for Coding and Review. Host-level cgroups are the hard CPU and I/O

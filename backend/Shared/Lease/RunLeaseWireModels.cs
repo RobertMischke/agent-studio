@@ -109,6 +109,7 @@ public sealed record RunnerClaimRequest(
     // Ceiling the daemon has actually adopted, reported as telemetry.
     int? EffectiveMaxParallelism = null,
     DateTime? EffectiveMaxParallelismAppliedAt = null,
+    long? EffectiveRuntimeCapacityVersion = null,
     // The daemon's own RUNNER_MAX_PARALLELISM. It only seeds the central host
     // ceiling on first contact; afterwards the server value wins.
     int? BootstrapMaxParallelism = null,

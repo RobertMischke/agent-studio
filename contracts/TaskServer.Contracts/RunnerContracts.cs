@@ -9,7 +9,10 @@ public sealed record RegisterRunnerRequest(
     IReadOnlyList<string>? Capabilities = null,
     string? HostOrchestratorMinimum = null,
     string? HostOrchestratorMaximum = null,
-    int BootstrapMaxParallelism = 2);
+    int BootstrapMaxParallelism = 2,
+    int? EffectiveMaxParallelism = null,
+    long? EffectiveRuntimeCapacityVersion = null,
+    DateTime? EffectiveRuntimeCapacityAppliedAt = null);
 
 /// <summary>
 /// Server-owned runtime admission policy for one execution host. Projects use
@@ -48,7 +51,9 @@ public sealed record ClaimRequest(
     int AvailableSlots = 1,
     RunnerProcessInventory? Inventory = null,
     IReadOnlyList<string>? RequiredCapabilities = null,
-    int? EffectiveMaxParallelism = null);
+    int? EffectiveMaxParallelism = null,
+    long? EffectiveRuntimeCapacityVersion = null,
+    DateTime? EffectiveRuntimeCapacityAppliedAt = null);
 
 public sealed record ClaimResponse(
     string Status,
