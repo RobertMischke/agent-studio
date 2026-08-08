@@ -42,9 +42,7 @@ public sealed class WorkbenchCatalogueService
         new("app-survey", "Application survey",
             "Understand the current product surfaces through the visual survey findings.",
             "docs/quality/design/app-survey-2026-07-11.html", "decision-ready", []),
-        new("decoupled-lifecycles", "Decoupled lifecycles",
-            "Understand and separate task, run, pipeline, and delivery lifecycles.",
-            "docs/concepts/mockups/decoupled-lifecycles.html", "shaping", ["AGT-2091", "AGT-2122"]),
+        // "Decoupled lifecycles" removed 2026-08-08: wiki page deleted by the operator.
     ];
 
     public WorkbenchCatalogueService(TaskScannerService scanner, ProjectRegistry registry, GitService git)
