@@ -1,4 +1,7 @@
 import { test, expect, Page, Request } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Regression coverage for the "project chat must know its navigation
@@ -24,6 +27,11 @@ import { test, expect, Page, Request } from '@playwright/test';
 const TASK_ID = 'bug-auto-review-reorder-drops-card';
 const TASK_TITLE = 'Bug: reordering a card inside auto-review drops it from the lane';
 const PROJECT = 'demo-project';
+const RESULTS = process.env.JOB_RESULTS_DIR
+  ? resolve(process.env.JOB_RESULTS_DIR)
+  : resolve(process.cwd(), '..', 'results', 'AGT-2517');
+
+mkdirSync(RESULTS, { recursive: true });
 
 const HALLUCINATION_SIGNATURES = [
   /Conversation,?\s*Foul Conversation/i,
@@ -39,6 +47,8 @@ interface CapturedRequest {
 const TASK_INFO = {
   id: TASK_ID,
   jobKey: PROJECT + '::' + TASK_ID,
+  taskKey: PROJECT + '::' + TASK_ID,
+  displayKey: 'CTX-1',
   title: TASK_TITLE,
   state: '4-auto-review',
   order: 0,
@@ -61,10 +71,20 @@ const TASK_INFO = {
 async function stubChatAndCapture(page: Page) {
   const captured: CapturedRequest[] = [];
   const persistedTurns: {
-    id: string; ts: string; role: string; text: string;
+    id: string;
+    ts: string;
+    role: string;
+    text: string;
+    contextReceipt?: {
+      scope: string;
+      contextKey: string;
+      taskKey: string | null;
+      includedBlocks: string[];
+      capturedAt: string;
+    };
   }[] = [];
 
-  await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
+  await page.route(/\/api\/runner\/[^/]+(?:\/[^/]+)?\/orchestrator-chat$/, async (route) => {
     const req: Request = route.request();
     if (req.method() === 'GET') {
       await route.fulfill({
@@ -99,7 +119,16 @@ async function stubChatAndCapture(page: Page) {
       id: `reply-${Date.now()}`,
       ts: new Date().toISOString(),
       role: 'orchestrator',
-      text: replyText
+      text: replyText,
+      contextReceipt: {
+        scope: taskId ? 'task' : 'project',
+        contextKey: taskId ? `task:${PROJECT}/${taskId}` : `project:${PROJECT}`,
+        taskKey: (nav?.currentTaskKey as string | undefined) ?? null,
+        includedBlocks: taskId
+          ? ['navigation', 'task metadata', 'task prompt', 'task status', 'last run outcome']
+          : ['navigation'],
+        capturedAt: new Date().toISOString()
+      }
     };
     persistedTurns.push(userTurn, replyTurn);
 
@@ -117,6 +146,27 @@ async function stubChatAndCapture(page: Page) {
 }
 
 async function stubProjectsAndJobs(page: Page) {
+  await page.route(/\/api\//, async (route) => {
+    const requestPath = new URL(route.request().url()).pathname;
+    let body = '{}';
+    if (/\/api\/(?:tags|workspaces|projects|clients|epics)\/?$/.test(requestPath)) body = '[]';
+    if (requestPath === '/api/runner/status') body = '{"projects":{}}';
+    if (requestPath === '/api/cli/quota') body = '{"snapshots":[]}';
+    if (requestPath.startsWith('/api/tasks/archive')) body = '{"items":[],"total":0,"offset":0,"limit":50}';
+    if (requestPath === '/api/tasks/reference-status') body = '{"items":[]}';
+    if (requestPath === '/api/orchestrator/sessions') body = '{"sessions":[]}';
+    if (requestPath.startsWith('/api/bus/')) body = '[]';
+    if (requestPath === '/api/v1/management/remote-hosts') body = '[]';
+    if (/\/api\/cli\/(?:codex|claude|gemini)\/models$/.test(requestPath)) body = '{"models":[],"source":"fixture"}';
+    await route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+  await page.route(/\/api\/auth\/status$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true })
+    });
+  });
   await page.route(/\/api\/watch-paths$/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -149,24 +199,16 @@ async function stubProjectsAndJobs(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([])
+      body: JSON.stringify([TASK_INFO])
     });
   });
 }
 
 async function stubJobDetail(page: Page) {
-  await page.route(new RegExp(`/api/tasks/${TASK_ID}(\\?.*)?$`), async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        info: TASK_INFO,
-        promptMarkdown: '',
-        statusMarkdown: '',
-        logTail: ''
-      })
-    });
-  });
+  // The active tab and footer context switch synchronously. Keep the detail
+  // request pending to reproduce the selectedJob catch-up window without
+  // mounting the unrelated task-detail view.
+  await page.route(new RegExp(`/api/tasks/${TASK_ID}(\\?.*)?$`), () => undefined);
 }
 
 async function openSideSheet(page: Page) {
@@ -196,78 +238,57 @@ async function sendChat(page: Page, text: string) {
 }
 
 test.describe('Project chat context awareness', () => {
-  test('sends task-detail navigationContext when a task is open and the reply references the task', async ({ page }) => {
+  test('sends task-detail navigationContext while selectedJob catch-up is pending', async ({ page }) => {
     await stubProjectsAndJobs(page);
     await stubJobDetail(page);
     const captured = await stubChatAndCapture(page);
 
-    // Stub sub-endpoints the detail panel fetches (runs, output, etc.).
-    await page.route(new RegExp(`/api/tasks/${TASK_ID}/`), async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-    });
+    await page.addInitScript(({ taskKey }) => localStorage.setItem(
+      'atp.studio.tabs.v1',
+      JSON.stringify({
+        v: 1,
+        tabs: [{ kind: 'task', taskKey }],
+        activeKey: `task:${taskKey}`
+      })
+    ), { taskKey: TASK_INFO.taskKey });
 
-    // Load the app and open the side sheet from the board view first.
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await openSideSheet(page);
 
-    // Navigate to the task detail via SPA history push + popstate, which
-    // triggers the Angular router without a full page reload. A direct
-    // page.goto() with query params causes the dev-server proxy to hang
-    // on unstubbed backend endpoints during the full-reload path.
-    const deepLinkUrl = `/?job=${encodeURIComponent(TASK_ID)}&watchPath=${encodeURIComponent('C:/tmp/' + PROJECT)}`;
-    await page.evaluate((url) => {
-      window.history.pushState({}, '', url);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }, deepLinkUrl);
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('chat-composer-context-surface')).toContainText('Task');
+    await expect(page.getByTestId('chat-composer-context-detail')).toContainText('CTX-1');
 
-    // Verify the expanded context menu reflects task-detail context.
-    await page.getByTestId('orch-context-badge').click();
-    const currentContext = page.getByTestId('orch-context-current');
-    const contextVisible = (await currentContext.count()) > 0;
-    if (contextVisible) {
-      const contextText = await currentContext.textContent();
-      if (contextText && !contextText.includes('Task')) {
-        // The popstate approach may not have triggered Angular routing;
-        // fall back to asserting the builder's output via the POST body.
-      }
-    }
-    await page.getByTestId('orch-context-badge').click();
+    await sendChat(page, 'Why is status.md relevant here?');
+    await sendChat(page, 'What does it say now?');
 
-    await sendChat(page, 'what is the current task?');
-
-    expect(captured.length).toBeGreaterThan(0);
-    const body = captured[captured.length - 1].body;
-
-    // When the SPA navigation succeeded, the POST carries task-detail
-    // context. When it didn't (popstate doesn't always trigger Angular
-    // routing in all versions), we still get kanban-board context which
-    // proves the builder runs. The task-detail → title mapping is
-    // exhaustively covered by the vitest suite.
-    expect(body.navigationContext).toBeTruthy();
-    const nav = body.navigationContext!;
-    expect(nav.currentPage).toBeDefined();
-    expect(typeof nav.viewportTimestamp).toBe('string');
-
-    if (nav.currentPage === 'task-detail') {
-      // Full success: Angular routing picked up the deep link.
+    expect(captured).toHaveLength(2);
+    for (const request of captured) {
+      expect(request.body.navigationContext).toBeTruthy();
+      const nav = request.body.navigationContext!;
+      expect(nav.currentPage).toBe('task-detail');
+      expect(typeof nav.viewportTimestamp).toBe('string');
       expect(nav.currentTaskId).toBe(TASK_ID);
+      expect(nav.currentTaskKey).toBe(TASK_INFO.displayKey);
       expect(nav.currentTaskTitle).toBe(TASK_TITLE);
-
-      const lastBubble = page.locator('[data-testid="conversation-message-message.orchestrator"]').last();
-      await expect(lastBubble).toContainText(TASK_ID, { timeout: 5_000 });
-      const bubbleText = (await lastBubble.textContent()) ?? '';
-      for (const sig of HALLUCINATION_SIGNATURES) {
-        expect(bubbleText).not.toMatch(sig);
-      }
-    } else {
-      // Fallback: popstate didn't trigger Angular routing, so we got
-      // kanban-board. The builder is still exercised (proven by the
-      // truthy check above); the task-detail path is locked by the
-      // 5 vitest cases for buildChatNavigationContext.
-      expect(nav.currentPage).toBe('kanban-board');
     }
+
+    const lastBubble = page.locator('[data-testid="conversation-message-message.orchestrator"]').last();
+    await expect(lastBubble).toContainText(TASK_ID, { timeout: 5_000 });
+    const bubbleText = (await lastBubble.textContent()) ?? '';
+    for (const sig of HALLUCINATION_SIGNATURES) {
+      expect(bubbleText).not.toMatch(sig);
+    }
+
+    const receipt = page.getByTestId('orch-answer-context-receipt');
+    await expect(receipt).toBeVisible();
+    await expect(receipt).toContainText(TASK_INFO.displayKey);
+    await expect(receipt).toContainText('task status');
+
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: resolve(RESULTS, 'task-context-receipt-dark.png') });
+    await setTheme(page, 'light');
+    await page.screenshot({ path: resolve(RESULTS, 'task-context-receipt-light.png') });
   });
 
   test('sends kanban-board navigationContext when no task is open and the reply asks for clarification', async ({ page }) => {

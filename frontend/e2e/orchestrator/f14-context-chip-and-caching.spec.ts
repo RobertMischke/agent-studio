@@ -2,8 +2,7 @@ import { test, expect, Page, Request } from '@playwright/test';
 
 /**
  * F14 regression coverage for the subtle orchestrator-chat context chip,
- * the subtitle-sync fix, and the send-time caching of the navigation
- * context block.
+ * the subtitle-sync fix, and reliable per-message navigation context.
  *
  * The chat backend is stubbed so the spec runs without burning quota.
  * What we lock:
@@ -15,10 +14,8 @@ import { test, expect, Page, Request } from '@playwright/test';
  *      `Context: <Project> · Task '<title>'` when a task is in scope.
  *   3. Clicking the chip's close button hides it and makes the next
  *      send carry `navigationContext: null` (observable in Network).
- *   4. Two identical consecutive sends ship the full context block
- *      only on the first one; the second carries `null` (caching).
- *   5. Switching project clears the cache: the first send on the new
- *      project ships the full block again.
+ *   4. Consecutive sends both ship the full current context block.
+ *   5. Switching project makes the next send use the new project context.
  */
 
 const PROJECT_A = 'project-alpha';
@@ -73,6 +70,27 @@ async function stubChatAndCapture(page: Page): Promise<CapturedRequest[]> {
 }
 
 async function stubProjectsAndJobs(page: Page) {
+  await page.route(/\/api\//, async (route) => {
+    const requestPath = new URL(route.request().url()).pathname;
+    let body = '{}';
+    if (/\/api\/(?:tags|workspaces|projects|clients|epics)\/?$/.test(requestPath)) body = '[]';
+    if (requestPath === '/api/runner/status') body = '{"projects":{}}';
+    if (requestPath === '/api/cli/quota') body = '{"snapshots":[]}';
+    if (requestPath.startsWith('/api/tasks/archive')) body = '{"items":[],"total":0,"offset":0,"limit":50}';
+    if (requestPath === '/api/tasks/reference-status') body = '{"items":[]}';
+    if (requestPath === '/api/orchestrator/sessions') body = '{"sessions":[]}';
+    if (requestPath.startsWith('/api/bus/')) body = '[]';
+    if (requestPath === '/api/v1/management/remote-hosts') body = '[]';
+    if (/\/api\/cli\/(?:codex|claude|gemini)\/models$/.test(requestPath)) body = '{"models":[],"source":"fixture"}';
+    await route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+  await page.route(/\/api\/auth\/status$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true })
+    });
+  });
   await page.route(/\/api\/watch-paths$/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -98,6 +116,8 @@ async function stubProjectsAndJobs(page: Page) {
           {
             id: TASK_ID,
             jobKey: PROJECT_A + '::' + TASK_ID,
+            taskKey: PROJECT_A + '::' + TASK_ID,
+            displayKey: 'CTX-1',
             title: TASK_TITLE,
             state: '4-auto-review',
             order: 0,
@@ -115,6 +135,8 @@ async function stubProjectsAndJobs(page: Page) {
           {
             id: TASK_ID,
             jobKey: PROJECT_A + '::' + TASK_ID,
+            taskKey: PROJECT_A + '::' + TASK_ID,
+            displayKey: 'CTX-1',
             title: TASK_TITLE,
             state: '4-auto-review',
             order: 0,
@@ -182,7 +204,7 @@ async function selectProject(page: Page, projectName: string) {
   await page.waitForTimeout(150);
 }
 
-test.describe('F14: context badge, menu and send caching', () => {
+test.describe('F14: context badge, menu and per-message sending', () => {
   test('expanded current-context label follows the project picker', async ({ page }) => {
     await stubProjectsAndJobs(page);
     await stubChatAndCapture(page);
@@ -233,7 +255,7 @@ test.describe('F14: context badge, menu and send caching', () => {
     expect(captured[captured.length - 1].body.navigationContext).toBeNull();
   });
 
-  test('consecutive identical sends: first carries full block, second carries null', async ({ page }) => {
+  test('consecutive sends both carry the current navigation context', async ({ page }) => {
     await stubProjectsAndJobs(page);
     const captured = await stubChatAndCapture(page);
     await openSideSheet(page);
@@ -246,10 +268,11 @@ test.describe('F14: context badge, menu and send caching', () => {
 
     await sendChat(page, 'second message');
     expect(captured.length).toBe(2);
-    expect(captured[1].body.navigationContext).toBeNull();
+    expect(captured[1].body.navigationContext).toBeTruthy();
+    expect((captured[1].body.navigationContext as Record<string, unknown>).currentPage).toBe('kanban-board');
   });
 
-  test('switching project re-arms context and the next send carries the full block', async ({ page }) => {
+  test('switching project makes the next send carry the new full block', async ({ page }) => {
     await stubProjectsAndJobs(page);
     const captured = await stubChatAndCapture(page);
     await openSideSheet(page);

@@ -33,6 +33,7 @@ public class OrchestratorChatNavigationContextTests
         var nav = new ChatNavigationContext(
             CurrentPage: "task-detail",
             CurrentTaskId: "bug-X",
+            CurrentTaskKey: "AGT-2517",
             CurrentTaskTitle: "Bug: reordering drops the card",
             CurrentTaskState: "4-auto-review");
 
@@ -44,6 +45,7 @@ public class OrchestratorChatNavigationContextTests
         Assert.NotNull(req.NavigationContext);
         Assert.Equal("task-detail", req.NavigationContext!.CurrentPage);
         Assert.Equal("bug-X", req.NavigationContext.CurrentTaskId);
+        Assert.Equal("AGT-2517", req.NavigationContext.CurrentTaskKey);
         Assert.Equal("Bug: reordering drops the card", req.NavigationContext.CurrentTaskTitle);
         Assert.Equal("4-auto-review", req.NavigationContext.CurrentTaskState);
     }
@@ -64,6 +66,7 @@ public class OrchestratorChatNavigationContextTests
         var nav = new ChatNavigationContext(
             CurrentPage: "task-detail",
             CurrentTaskId: "bug-auto-review-reorder-drops-card",
+            CurrentTaskKey: "AGT-2517",
             CurrentTaskTitle: "Bug: reordering a card inside auto-review drops it from the lane",
             CurrentTaskState: "4-auto-review",
             CurrentLaneFilter: "4-auto-review",
@@ -76,6 +79,7 @@ public class OrchestratorChatNavigationContextTests
         Assert.Contains("=== NAVIGATION CONTEXT ===", rendered);
         Assert.Contains("currentPage: task-detail", rendered);
         Assert.Contains("currentTaskId: bug-auto-review-reorder-drops-card", rendered);
+        Assert.Contains("currentTaskKey: AGT-2517", rendered);
         Assert.Contains("currentTaskTitle: Bug: reordering a card inside auto-review drops it from the lane", rendered);
         Assert.Contains("currentTaskState: 4-auto-review", rendered);
         Assert.Contains("currentLaneFilter: 4-auto-review", rendered);

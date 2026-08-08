@@ -9,6 +9,7 @@ import { pageContextKey } from '../../models/page-context.model';
  */
 export interface ChatNavigationContextInput {
   activeJobId: string | null;
+  activeTaskKey?: string | null;
   activeJobTitle: string | null;
   activeJobState?: string | null;
   laneFilter?: string | null;
@@ -40,6 +41,7 @@ export function buildChatNavigationContext(
 ): ChatNavigationContext {
   const out: ChatNavigationContext = {};
   const taskId = sanitize(input.activeJobId);
+  const taskKey = sanitize(input.activeTaskKey ?? null);
   const taskTitle = sanitize(input.activeJobTitle);
   const taskState = sanitize(input.activeJobState ?? null);
   const lane = sanitize(input.laneFilter ?? null);
@@ -47,8 +49,9 @@ export function buildChatNavigationContext(
   const component = sanitize(input.affectedComponent ?? null);
   const page = input.pageContext ?? null;
 
-  out.currentPage = page ? 'repository-page' : taskId ? 'task-detail' : 'kanban-board';
+  out.currentPage = page ? 'repository-page' : taskKey || taskId ? 'task-detail' : 'kanban-board';
   if (!page && taskId) out.currentTaskId = taskId;
+  if (!page && taskKey) out.currentTaskKey = taskKey;
   if (!page && taskTitle) out.currentTaskTitle = taskTitle;
   if (!page && taskState) out.currentTaskState = taskState;
   if (lane) out.currentLaneFilter = lane;
