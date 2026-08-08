@@ -4,15 +4,16 @@ import type { CodeReviewListEntry } from '../../../../services/task.service';
 import type { SteeringInfo } from '../../../../components/steering-detail';
 import {
   buildDelivery,
-  buildEscalationStateSentence,
+  buildEscalationEssence,
   buildEscalationSummaryView,
   deriveEscalationClass,
   deriveReissues,
   deriveRecommendation,
+  escalationReasonClass,
+  gateItemsFromCouncil,
   gateItemsFromEvidence,
   gateItemsFromFindings,
   gradeTone,
-  parseFollowUpGateItems,
   parseStatusStubEscalation,
   pickReviewHead,
   resolveGateItems,
@@ -43,6 +44,7 @@ function review(over: Partial<CodeReviewListEntry> = {}): CodeReviewListEntry {
     model: over.model ?? 'claude-opus-4-8',
     cliType: over.cliType ?? 'claude',
     runAt: over.runAt ?? '2026-07-09T19:22:02Z',
+    councilReaction: over.councilReaction,
   };
 }
 
@@ -50,30 +52,18 @@ function info(over: Partial<TaskInfo> = {}): TaskInfo {
   return { orchestratorVerdict: 'escalate', ...(over as object) } as TaskInfo;
 }
 
-describe('parseFollowUpGateItems', () => {
-  it('lifts task-list rows and ignores free-form preamble', () => {
-    const md = [
-      '# Orchestrator follow-up',
-      '',
-      'STEER THE DIFF, DO NOT RESTART: close out only the open items.',
-      '',
-      '- [ ] Frontend Playwright verification skipped (worktree limitation).',
-      '- [x] Live Haiku probe not run.',
-      '* [ ] JSON aspect artefacts left for follow-up.',
-    ].join('\n');
-    const items = parseFollowUpGateItems(md);
-    expect(items).toHaveLength(3);
-    expect(items[0]).toEqual({
-      text: 'Frontend Playwright verification skipped (worktree limitation).',
-      checked: false,
-    });
-    expect(items[1].checked).toBe(true);
-    expect(items[2].checked).toBe(false);
-  });
-
-  it('returns [] for null or checklist-free markdown', () => {
-    expect(parseFollowUpGateItems(null)).toEqual([]);
-    expect(parseFollowUpGateItems('Just prose, no boxes.')).toEqual([]);
+describe('gateItemsFromCouncil', () => {
+  it('projects typed council actions without inspecting Markdown', () => {
+    const items = gateItemsFromCouncil([
+      { finding: 'Fix the regression.', action: 'FixNextRound', reason: 'Required next round.' },
+      { finding: 'Accepted tradeoff.', action: 'Accept', reason: 'Operator-safe.' },
+      { finding: 'Budget exhausted.', action: 'Escalate', reason: 'Needs a human.' },
+    ]);
+    expect(items).toEqual([
+      { id: 'council-0-Fix the regression.', text: 'Fix the regression.', detail: 'Required next round.', checked: false, verdict: 'fix next round', tone: 'warn' },
+      { id: 'council-1-Accepted tradeoff.', text: 'Accepted tradeoff.', detail: 'Operator-safe.', checked: true, verdict: 'accepted', tone: 'ok' },
+      { id: 'council-2-Budget exhausted.', text: 'Budget exhausted.', detail: 'Needs a human.', checked: false, verdict: 'escalate', tone: 'danger' },
+    ]);
   });
 });
 
@@ -118,19 +108,32 @@ describe('resolveGateItems priority', () => {
     commits: [],
   };
 
-  it('prefers the follow-up checklist over findings and evidence', () => {
+  it('prefers the newest typed council reaction over findings and evidence', () => {
     const { items, source } = resolveGateItems({
-      followUpMarkdown: '- [ ] do the thing',
+      codeReviews: [review({
+        grade: 'B',
+        councilReaction: {
+          createdAt: '2026-07-09T19:22:03Z',
+          reviewFileName: 'code-review-grade-2026-07-09T19-22-02Z.md',
+          grade: 'B',
+          disposition: 'Escalate',
+          summary: 'Escalate one finding.',
+          assessments: [{ finding: 'do the thing', action: 'Escalate', reason: 'budget exhausted' }],
+          startsNewRound: false,
+          targetJobId: null,
+          targetRunAttempt: null,
+        },
+      })],
       steering,
       reviewEvidence: [evidence()],
     });
-    expect(source).toBe('follow-up');
+    expect(source).toBe('council-reaction');
     expect(items).toHaveLength(1);
   });
 
-  it('falls back to gate findings when no follow-up file', () => {
+  it('falls back to gate findings when the latest review has no council sidecar', () => {
     const { source } = resolveGateItems({
-      followUpMarkdown: null,
+      codeReviews: [review({ grade: 'B' })],
       steering,
       reviewEvidence: [evidence()],
     });
@@ -139,7 +142,7 @@ describe('resolveGateItems priority', () => {
 
   it('falls back to review evidence when neither follow-up nor findings exist', () => {
     const { source, items } = resolveGateItems({
-      followUpMarkdown: null,
+      codeReviews: [],
       steering: null,
       reviewEvidence: [evidence({ title: 'lonely finding' })],
     });
@@ -149,7 +152,7 @@ describe('resolveGateItems priority', () => {
 
   it('reports none when there is nothing to show', () => {
     expect(
-      resolveGateItems({ followUpMarkdown: null, steering: null, reviewEvidence: [] }).source,
+      resolveGateItems({ codeReviews: [], steering: null, reviewEvidence: [] }).source,
     ).toBe('none');
   });
 });
@@ -263,8 +266,24 @@ describe('buildEscalationSummaryView', () => {
         },
       } as Partial<TaskInfo>),
       reviewEvidence: [],
-      codeReviews: [review({ grade: 'B', verdict: 'pass' })],
-      followUpMarkdown: '- [ ] Frontend Playwright verification skipped.\n- [ ] Live Haiku probe not run.',
+      codeReviews: [review({
+        grade: 'B',
+        verdict: 'pass',
+        councilReaction: {
+          createdAt: '2026-07-09T19:22:03Z',
+          reviewFileName: 'code-review-grade-2026-07-09T19-22-02Z.md',
+          grade: 'B',
+          disposition: 'Escalate',
+          summary: 'Escalate two findings.',
+          assessments: [
+            { finding: 'Frontend verification missing.', action: 'Escalate', reason: 'Budget exhausted.' },
+            { finding: 'Live probe missing.', action: 'Escalate', reason: 'Budget exhausted.' },
+          ],
+          startsNewRound: false,
+          targetJobId: null,
+          targetRunAttempt: null,
+        },
+      })],
       steering: {
         verdict: 'escalate',
         verdictLabel: 'Escalate',
@@ -294,7 +313,7 @@ describe('buildEscalationSummaryView', () => {
       ],
     });
 
-    expect(view.gateSource).toBe('follow-up');
+    expect(view.gateSource).toBe('council-reaction');
     expect(view.gateItems).toHaveLength(2);
     expect(view.review?.grade).toBe('B');
     expect(view.reason).toBe('completion gate found unfinished work');
@@ -304,27 +323,50 @@ describe('buildEscalationSummaryView', () => {
     expect(view.delivery.merge?.main.merged).toBe(true);
     expect(view.recommendation?.kind).toBe('needs-decision');
     expect(view.reissues[0].trigger).toBe('build/test gate failed: npm test exited with 1');
-    expect(view.stateSentence).toBe(
-      'Delivered and merged; waiting for your decision because the reissue budget is exhausted, and 2 gate points remain open.',
+    expect(view.essence.label).toBe(
+      '1 review round · Grade B · 2 open findings · Reissue budget exhausted',
     );
     // A completion-gate escalation is a logical / quality review, not a give-up.
     expect(view.escalation?.kind).toBe('needs-review');
   });
 });
 
-describe('buildEscalationStateSentence', () => {
-  it('does not claim that zero gate points remain open when no gate data exists', () => {
-    const sentence = buildEscalationStateSentence(
-      { merge: null, commitCount: 0, filesChanged: 0 },
-      [],
-      [],
-      null,
-    );
+describe('buildEscalationEssence', () => {
+  it('composes three review rounds, the latest grade, open findings and budget class', () => {
+    const codeReviews = [
+      review({ grade: 'B', runAt: '2026-07-09T19:00:00Z' }),
+      review({ grade: 'C', runAt: '2026-07-09T18:00:00Z', fileName: 'code-review-grade-round-2.md' }),
+      review({ grade: 'D', runAt: '2026-07-09T17:00:00Z', fileName: 'code-review-grade-round-1.md' }),
+    ];
+    const essence = buildEscalationEssence({
+      codeReviews,
+      gateItems: [
+        { id: 'one', text: 'one', checked: false },
+        { id: 'two', text: 'two', checked: false },
+        { id: 'three', text: 'three', checked: false },
+        { id: 'four', text: 'four', checked: false },
+      ],
+      timeline: [{
+        ts: '2026-07-09T20:00:00Z', kind: 'orchestrator_escalated', actor: 'orchestrator',
+        summary: 'The Markdown body may be arbitrarily long.', details: { attempt: '3', maxAttempts: '3' },
+      }],
+      steering: null,
+    });
+    expect(essence).toEqual({
+      reviewRounds: 3,
+      latestGrade: 'B',
+      openFindings: 4,
+      reasonClass: 'Reissue budget exhausted',
+      label: '3 review rounds · Grade B · 4 open findings · Reissue budget exhausted',
+    });
+    expect(essence.label).not.toContain('Markdown body');
+  });
 
-    expect(sentence).toBe(
-      'Not delivered yet; waiting for your decision because the orchestrator escalated the remaining gaps.',
-    );
-    expect(sentence).not.toContain('0 gate points');
+  it('uses structured cause and council disposition fallbacks', () => {
+    expect(escalationReasonClass([], {
+      verdict: 'escalate', verdictLabel: 'Escalate', tone: 'danger', reason: '# raw Markdown',
+      openItems: [], prompt: null, context: [{ key: 'Cause', value: 'completion-gate' }], commits: [],
+    }, [])).toBe('Completion gate');
   });
 });
 

@@ -109,12 +109,15 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   dot status treatment without a coloured left accent line. Activity and Result
   retain their existing live and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
-  reconciles delivery and decision state in one sentence, places the primary
-  reissue, accept-as-is, and abort decisions beside the recommendation, lists
-  reissue timestamps and triggers from the timeline, and shows only recorded
-  gate, review, and delivery context. When none of that structured context is
-  present, the section renders one compact empty-context line instead of three
-  placeholder columns.
+  keeps one bounded essence line visible: typed review-round count, latest
+  grade, open-finding count, and escalation-reason class. Markdown bodies never
+  feed that line. The expanded section renders structured council findings,
+  complete council reactions and `orchestrator-follow-up.md`, every
+  `code-review-grade-*.md` artifact with file history, reissue history, and
+  delivery context. Long artifact blocks scroll within their own container and
+  never truncate the source text. The primary reissue, accept-as-is, and abort
+  decisions remain beside the recommendation. When findings, review artifacts,
+  and delivery context are absent, the section renders one compact empty line.
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
