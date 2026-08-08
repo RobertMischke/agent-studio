@@ -9,6 +9,7 @@ import { HostWorkloadSummaryComponent } from '../host-workload-summary/host-work
 import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
 import {
   RuntimeCapacityEditorComponent,
+  type HostProjectPolicyChange,
   type RuntimeCapacityChange,
 } from '../runtime-capacity-editor/runtime-capacity-editor';
 import {
@@ -80,6 +81,7 @@ export class RemoteHostCardComponent {
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();
   readonly capacityChange = output<RuntimeCapacityChange>();
+  readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly setup = output<RemoteHost>();
 
   readonly liveLoading = computed(() => this.host().liveDataState === 'loading');

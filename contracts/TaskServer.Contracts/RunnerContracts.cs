@@ -29,6 +29,23 @@ public sealed record UpdateRuntimeCapacitySettingsRequest(
     string RampStrategy,
     long ExpectedVersion);
 
+/// <summary>
+/// Server-owned project admission policy for one execution host. The Task
+/// Server applies it while selecting claims, so runners never need a second
+/// project-policy resolver.
+/// </summary>
+public sealed record HostProjectPolicyDto(
+    string HostId,
+    bool AllowAllProjects,
+    IReadOnlyList<string> AllowedProjectIds,
+    long Version,
+    DateTime UpdatedAt);
+
+public sealed record UpdateHostProjectPolicyRequest(
+    bool AllowAllProjects,
+    IReadOnlyList<string>? AllowedProjectIds,
+    long ExpectedVersion);
+
 public sealed record RunnerDto(
     string RunnerId,
     string Name,
@@ -48,7 +65,8 @@ public sealed record ClaimRequest(
     int AvailableSlots = 1,
     RunnerProcessInventory? Inventory = null,
     IReadOnlyList<string>? RequiredCapabilities = null,
-    int? EffectiveMaxParallelism = null);
+    int? EffectiveMaxParallelism = null,
+    long? RuntimeCapacityAppliedVersion = null);
 
 public sealed record ClaimResponse(
     string Status,

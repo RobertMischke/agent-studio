@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import {
   RuntimeCapacityEditorComponent,
+  type HostProjectPolicyChange,
   type RuntimeCapacityChange,
 } from './runtime-capacity-editor';
 import type { RemoteHost } from '../../models/remote-host.model';
@@ -23,6 +24,15 @@ const HOST: RemoteHost = {
   activeTaskCount: 2,
   effectiveMaxParallelism: 4,
   runtimeCapacityAppliedAt: new Date().toISOString(),
+  runtimeCapacityAppliedVersion: 1,
+  capacityHostId: 'host-a',
+  projectPolicy: {
+    hostId: 'host-a',
+    allowAllProjects: false,
+    allowedProjectIds: ['PROJ-001'],
+    version: 2,
+    updatedAt: new Date().toISOString(),
+  },
   runtimeCapacity: {
     hostId: 'host-a',
     maxParallelism: 4,
@@ -195,12 +205,38 @@ describe('RuntimeCapacityEditorComponent', () => {
     const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
     fixture.componentRef.setInput('host', {
       ...HOST,
-      runtimeCapacity: { ...HOST.runtimeCapacity!, maxParallelism: 6, version: 2 },
+      runtimeCapacity: { ...HOST.runtimeCapacity!, version: 2 },
     });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector(
       '[data-testid="remote-host-capacity-awaiting-adoption"]',
     )).toBeTruthy();
+  });
+
+  it('edits the versioned project allowlist without creating a runner-side resolver', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RuntimeCapacityEditorComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RuntimeCapacityEditorComponent);
+    fixture.componentRef.setInput('host', HOST);
+    let change: HostProjectPolicyChange | null = null;
+    fixture.componentInstance.projectPolicyChange.subscribe(value => { change = value; });
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    const ids = element.querySelector(
+      '[data-testid="remote-host-project-policy-ids"]') as HTMLInputElement;
+    ids.value = 'PROJ-002, PROJ-003, PROJ-002';
+    ids.dispatchEvent(new Event('input'));
+    (element.querySelector(
+      '[data-testid="remote-host-project-policy-save"]') as HTMLButtonElement).click();
+
+    expect(change).toEqual({
+      id: 'runner-a',
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-002', 'PROJ-003'],
+      expectedVersion: 2,
+    });
   });
 });

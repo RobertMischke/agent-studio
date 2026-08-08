@@ -150,6 +150,7 @@ test.describe('Execution Hosts settings section', () => {
   test('shows and centrally updates the host runtime capacity', async ({ page }) => {
     const now = new Date().toISOString();
     let capacityBody: Record<string, unknown> | null = null;
+    let projectPolicyBody: Record<string, unknown> | null = null;
     await page.unroute('**/api/v1/management/remote-hosts');
     await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
       status: 200,
@@ -184,6 +185,14 @@ test.describe('Execution Hosts settings section', () => {
         },
         effectiveMaxParallelism: 4,
         runtimeCapacityAppliedAt: now,
+        runtimeCapacityAppliedVersion: 1,
+        projectPolicy: {
+          hostId: 'runner-host-a',
+          allowAllProjects: true,
+          allowedProjectIds: [],
+          version: 1,
+          updatedAt: now,
+        },
       }]),
     }));
     await page.route('**/api/v1/hosts/runner-host-a/runtime-capacity', async route => {
@@ -196,6 +205,20 @@ test.describe('Execution Hosts settings section', () => {
           maxParallelism: 6,
           targetLoadPercent: 85,
           rampStrategy: 'aggressive',
+          version: 2,
+          updatedAt: now,
+        }),
+      });
+    });
+    await page.route('**/api/v1/hosts/runner-host-a/project-policy', async route => {
+      projectPolicyBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          hostId: 'runner-host-a',
+          allowAllProjects: false,
+          allowedProjectIds: ['PROJ-001', 'PROJ-002'],
           version: 2,
           updatedAt: now,
         }),
@@ -218,6 +241,17 @@ test.describe('Execution Hosts settings section', () => {
     });
     await expect(remote.getByTestId('remote-host-slots')).toContainText('0 active / 6 free / 6 total');
     await expect(remote.getByTestId('remote-host-capacity-awaiting-adoption')).toBeVisible();
+    await remote.getByTestId('remote-host-project-policy-mode').selectOption('selected');
+    await remote.getByTestId('remote-host-project-policy-ids').fill('PROJ-001, PROJ-002');
+    await remote.getByTestId('remote-host-project-policy-save').click();
+    await expect.poll(() => projectPolicyBody).toEqual({
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-001', 'PROJ-002'],
+      expectedVersion: 1,
+    });
+    await expect(remote.getByTestId('remote-host-project-policy'))
+      .toContainText('Allowed projects: PROJ-001, PROJ-002');
+    await expect(remote.getByTestId('remote-host-project-policy-save')).toBeEnabled();
     await setTheme(page, 'dark');
     await remote.screenshot({ path: join(SHOT_DIR, 'runtime-capacity-dark--mocked.png') });
     await setTheme(page, 'light');

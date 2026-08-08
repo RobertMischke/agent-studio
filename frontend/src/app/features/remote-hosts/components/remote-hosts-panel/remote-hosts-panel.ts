@@ -3,7 +3,10 @@ import { TaskService } from '../../../../services/task.service';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind, HostProjectSlots, RemoteHost } from '../../models/remote-host.model';
-import type { RuntimeCapacityChange } from '../runtime-capacity-editor/runtime-capacity-editor';
+import type {
+  HostProjectPolicyChange,
+  RuntimeCapacityChange,
+} from '../runtime-capacity-editor/runtime-capacity-editor';
 import {
   boardProjectSlotsForHost,
   boardRemoteSlotsForHost,
@@ -116,6 +119,15 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
       change.maxParallelism,
       change.targetLoadPercent,
       change.rampStrategy,
+    );
+  }
+
+  onProjectPolicyChange(change: HostProjectPolicyChange): void {
+    this.service.setProjectPolicy(
+      change.id,
+      change.allowAllProjects,
+      change.allowedProjectIds,
+      change.expectedVersion,
     );
   }
 

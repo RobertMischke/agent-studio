@@ -41,6 +41,8 @@ public sealed class TaskServerClient : IDisposable
     private long _lastHostReportSequence;
     private int? _centralHostMaxParallelism;
     private DateTime? _centralHostMaxParallelismAppliedAt;
+    private long? _centralRuntimeCapacityVersion;
+    private readonly RuntimeCapacityCache? _runtimeCapacityCache;
 
     public TaskServerClient(RunnerOptions options)
     {
@@ -77,6 +79,8 @@ public sealed class TaskServerClient : IDisposable
         SetClientId(options.ClientId ?? options.RunnerId);
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.HeaderName, RunnerOptions.ProtocolVersion.ToString());
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown");
+        _runtimeCapacityCache = ConfigureRuntimeCapacityCache(options);
+        RestoreRuntimeCapacityCache();
     }
 
     /// <summary>
@@ -113,6 +117,8 @@ public sealed class TaskServerClient : IDisposable
         _useV1 = usesDurableTaskServer;
         _supportsCapabilityAdvertisement = usesDurableTaskServer;
         _supportsHostOrchestrator = usesDurableTaskServer && supportsHostOrchestrator;
+        _runtimeCapacityCache = ConfigureRuntimeCapacityCache(options);
+        RestoreRuntimeCapacityCache();
     }
 
     /// <summary>
@@ -301,6 +307,7 @@ public sealed class TaskServerClient : IDisposable
         _centralHostMaxParallelism ?? _options?.HostMaxParallelism ?? 1,
         1,
         256);
+    internal long? RuntimeCapacityVersion => _centralRuntimeCapacityVersion;
 
     public async Task<Contract.HostReportResponse> ReportHostAsync(
         Contract.HostReportRequest request,
@@ -619,7 +626,8 @@ public sealed class TaskServerClient : IDisposable
                 req.AvailableSlots,
                 ToContract(req.Inventory),
                 _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options),
-                req.EffectiveMaxParallelism ?? HostMaxParallelism),
+                req.EffectiveMaxParallelism ?? HostMaxParallelism,
+                _centralRuntimeCapacityVersion),
             ct);
         AdoptRuntimeCapacity(claim?.RuntimeCapacity);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
@@ -664,7 +672,30 @@ public sealed class TaskServerClient : IDisposable
     }
 
     private void AdoptRuntimeCapacity(Contract.RuntimeCapacitySettingsDto? capacity)
-        => AdoptCentralMaxParallelism(capacity?.MaxParallelism);
+    {
+        if (capacity is not
+            {
+                Version: > 0,
+                MaxParallelism: >= 1 and <= 256,
+                TargetLoadPercent: >= 50 and <= 95,
+            }
+            || capacity.RampStrategy is not ("conservative" or "balanced" or "aggressive"))
+        {
+            return;
+        }
+        if (_centralRuntimeCapacityVersion > capacity.Version) return;
+        if (_centralRuntimeCapacityVersion == capacity.Version
+            && _centralHostMaxParallelism == capacity.MaxParallelism)
+        {
+            return;
+        }
+
+        var adoptedAt = DateTime.UtcNow;
+        _centralHostMaxParallelism = capacity.MaxParallelism;
+        _centralHostMaxParallelismAppliedAt = adoptedAt;
+        _centralRuntimeCapacityVersion = capacity.Version;
+        _runtimeCapacityCache?.Save(capacity, adoptedAt);
+    }
 
     /// <summary>
     /// Adopt a server-owned ceiling and remember when it took effect, so the
@@ -677,6 +708,22 @@ public sealed class TaskServerClient : IDisposable
         if (_centralHostMaxParallelism == maxParallelism) return;
         _centralHostMaxParallelism = maxParallelism;
         _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
+    }
+
+    private static RuntimeCapacityCache? ConfigureRuntimeCapacityCache(
+        RunnerOptions? options)
+        => options is null || string.Equals(options.Role, "review", StringComparison.Ordinal)
+            ? null
+            : new RuntimeCapacityCache(options.StateDir);
+
+    private void RestoreRuntimeCapacityCache()
+    {
+        if (_runtimeCapacityCache is null || _options is null) return;
+        var cached = _runtimeCapacityCache.Load(_options.Hostname);
+        if (cached is null) return;
+        _centralHostMaxParallelism = cached.Capacity.MaxParallelism;
+        _centralHostMaxParallelismAppliedAt = cached.AdoptedAt;
+        _centralRuntimeCapacityVersion = cached.Capacity.Version;
     }
 
     /// <summary>

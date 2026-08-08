@@ -41,7 +41,8 @@
       [host]="h"
       [boardActiveSlots]="boardActiveSlots()"
       [projectSlots]="projectSlots()"
-      (capacityChange)="capacityChange.emit($event)" />
+      (capacityChange)="capacityChange.emit($event)"
+      (projectPolicyChange)="projectPolicyChange.emit($event)" />
   }
 
   <app-host-workload-summary

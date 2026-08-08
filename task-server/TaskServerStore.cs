@@ -11,10 +11,9 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 6 = union of develop's capacity/quota schema (5) and AGT-2395's additive
-    // result_ref_gc table (branched as 4 from base 3). The migration block is
+    // 8 adds versioned host-to-project admission. The migration block is
     // idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 8;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -545,11 +544,12 @@ public sealed partial class TaskServerStore
                     id, name, host_id, instance_id, runner_version, protocol_version,
                     capabilities_json, status, registered_at, last_seen_at,
                     host_orchestrator_minimum, host_orchestrator_maximum,
-                    effective_max_parallelism, runtime_capacity_applied_at)
+                    effective_max_parallelism, runtime_capacity_applied_at,
+                    runtime_capacity_applied_version)
                 VALUES (
                     $id, $name, $host, $instance, $version, $protocol,
                     $capabilities, 'active', $now, $now, $hostOrchestratorMinimum,
-                    $hostOrchestratorMaximum, $effective, $applied)
+                    $hostOrchestratorMaximum, NULL, NULL, NULL)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     host_id = excluded.host_id,
@@ -559,6 +559,24 @@ public sealed partial class TaskServerStore
                     capabilities_json = excluded.capabilities_json,
                     host_orchestrator_minimum = excluded.host_orchestrator_minimum,
                     host_orchestrator_maximum = excluded.host_orchestrator_maximum,
+                    effective_max_parallelism = CASE
+                        WHEN runners.instance_id <> excluded.instance_id
+                          OR runners.host_id <> excluded.host_id
+                        THEN NULL
+                        ELSE runners.effective_max_parallelism
+                    END,
+                    runtime_capacity_applied_at = CASE
+                        WHEN runners.instance_id <> excluded.instance_id
+                          OR runners.host_id <> excluded.host_id
+                        THEN NULL
+                        ELSE runners.runtime_capacity_applied_at
+                    END,
+                    runtime_capacity_applied_version = CASE
+                        WHEN runners.instance_id <> excluded.instance_id
+                          OR runners.host_id <> excluded.host_id
+                        THEN NULL
+                        ELSE runners.runtime_capacity_applied_version
+                    END,
                     status = CASE WHEN runners.status = 'retired' THEN 'retired' ELSE 'active' END,
                     last_seen_at = excluded.last_seen_at;
                 """, ct, transaction,
@@ -567,8 +585,6 @@ public sealed partial class TaskServerStore
                 ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)),
                 ("$hostOrchestratorMinimum", request.HostOrchestratorMinimum),
                 ("$hostOrchestratorMaximum", request.HostOrchestratorMaximum),
-                ("$effective", managesCodingCapacity ? bootstrapMaxParallelism : null),
-                ("$applied", managesCodingCapacity ? now : null),
                 ("$now", now));
             if (managesCodingCapacity)
             {
@@ -587,15 +603,6 @@ public sealed partial class TaskServerStore
                     transaction,
                     request.HostId.Trim(),
                     ct);
-                await ExecuteAsync(connection, """
-                    UPDATE runners
-                       SET effective_max_parallelism = $effective,
-                           runtime_capacity_applied_at = $now
-                     WHERE id = $id;
-                    """, ct, transaction,
-                    ("$effective", runtimeCapacity!.MaxParallelism),
-                    ("$now", now),
-                    ("$id", id));
             }
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new
@@ -638,6 +645,11 @@ public sealed partial class TaskServerStore
                 ct)
                 ?? throw new InvalidOperationException(
                     $"Runtime capacity is missing for host '{capabilityRunner.HostId}'.");
+            var hostProjectPolicy = await ReadHostProjectPolicyAsync(
+                connection,
+                transaction,
+                capabilityRunner.HostId,
+                ct);
             var capabilityAdmission = await EvaluateCapabilityAdmissionAsync(
                 connection,
                 transaction,
@@ -648,21 +660,52 @@ public sealed partial class TaskServerStore
             var reportedMaxParallelism = request.EffectiveMaxParallelism is >= 1 and <= 256
                 ? request.EffectiveMaxParallelism
                 : null;
+            var adoption = RuntimeCapacityAdoptionPolicy.Decide(
+                runtimeCapacity,
+                reportedMaxParallelism,
+                request.RuntimeCapacityAppliedVersion,
+                capabilityRunner.RuntimeCapacityAppliedVersion);
+            var observedAt = UtcNow;
             await ExecuteAsync(connection, """
                 UPDATE runners
                    SET last_seen_at = $now,
                        effective_max_parallelism = COALESCE($effective, effective_max_parallelism),
                        runtime_capacity_applied_at = CASE
-                           WHEN $effective IS NOT NULL
-                            AND (effective_max_parallelism IS NULL OR effective_max_parallelism <> $effective)
+                           WHEN $newConfirmation = 1
                            THEN $now
                            ELSE runtime_capacity_applied_at
+                       END,
+                       runtime_capacity_applied_version = CASE
+                           WHEN $confirms = 1
+                           THEN $appliedVersion
+                           ELSE runtime_capacity_applied_version
                        END
                  WHERE id = $id;
                 """, ct, transaction,
-                ("$now", Iso(UtcNow)),
+                ("$now", Iso(observedAt)),
                 ("$effective", reportedMaxParallelism),
+                ("$confirms", adoption.ConfirmsDesired ? 1 : 0),
+                ("$newConfirmation", adoption.EmitAudit ? 1 : 0),
+                ("$appliedVersion", runtimeCapacity.Version),
                 ("$id", request.RunnerId));
+            if (adoption.EmitAudit)
+            {
+                await AuditAsync(
+                    connection,
+                    transaction,
+                    actorId,
+                    "runtime-capacity.applied",
+                    "runner",
+                    request.RunnerId,
+                    JsonSerializer.Serialize(new
+                    {
+                        runtimeCapacity.HostId,
+                        request.InstanceId,
+                        runtimeCapacity.Version,
+                        runtimeCapacity.MaxParallelism,
+                    }),
+                    ct);
+            }
 
             if (!capabilityAdmission.Eligible)
             {
@@ -706,9 +749,21 @@ public sealed partial class TaskServerStore
                    AND NOT EXISTS (
                        SELECT 1 FROM leases l
                         WHERE l.task_id = t.id AND l.status IN ('active', 'process-unknown'))
+                   AND (
+                       NOT EXISTS (
+                           SELECT 1 FROM host_project_policies policy
+                            WHERE policy.host_id = $host)
+                       OR EXISTS (
+                           SELECT 1 FROM host_project_policies policy
+                            WHERE policy.host_id = $host
+                              AND policy.allow_all_projects = 1)
+                       OR EXISTS (
+                           SELECT 1 FROM host_allowed_projects allowed
+                            WHERE allowed.host_id = $host
+                              AND allowed.project_id = t.project_id))
                  ORDER BY t.created_at, t.task_key
                  LIMIT 1;
-                """, transaction))
+                """, transaction, ("$host", capabilityRunner.HostId)))
             await using (var reader = await command.ExecuteReaderAsync(ct))
                 task = await reader.ReadAsync(ct) ? ReadTask(reader) : null;
 
@@ -757,7 +812,15 @@ public sealed partial class TaskServerStore
                 runId,
                 ct);
             await AuditAsync(connection, transaction, actorId, "run.claimed", "run", runId,
-                JsonSerializer.Serialize(new { task.TaskId, request.RunnerId, request.InstanceId, fence }), ct);
+                JsonSerializer.Serialize(new
+                {
+                    task.TaskId,
+                    task.ProjectId,
+                    request.RunnerId,
+                    request.InstanceId,
+                    fence,
+                    hostProjectPolicyVersion = hostProjectPolicy?.Version,
+                }), ct);
 
             var run = new RunDto(runId, task.TaskId, "running", request.RunnerId, fence, now, now, null);
             var lease = new LeaseDto(leaseId, runId, task.TaskId, request.RunnerId, request.InstanceId, fence, now, expires, "active");
@@ -1921,7 +1984,8 @@ public sealed partial class TaskServerStore
                 host_orchestrator_minimum TEXT,
                 host_orchestrator_maximum TEXT,
                 effective_max_parallelism INTEGER,
-                runtime_capacity_applied_at TEXT
+                runtime_capacity_applied_at TEXT,
+                runtime_capacity_applied_version INTEGER
             );
             CREATE TABLE IF NOT EXISTS runtime_capacity_settings(
                 host_id TEXT PRIMARY KEY,
@@ -1930,6 +1994,17 @@ public sealed partial class TaskServerStore
                 ramp_strategy TEXT NOT NULL,
                 version INTEGER NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS host_project_policies(
+                host_id TEXT PRIMARY KEY,
+                allow_all_projects INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS host_allowed_projects(
+                host_id TEXT NOT NULL REFERENCES host_project_policies(host_id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                PRIMARY KEY(host_id, project_id)
             );
             CREATE TABLE IF NOT EXISTS runner_capabilities(
                 runner_id TEXT NOT NULL REFERENCES runners(id),
@@ -2217,6 +2292,8 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
             CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
             CREATE INDEX IF NOT EXISTS ix_runner_capabilities_state ON runner_capabilities(runner_id, health_state, fresh_until);
+            CREATE INDEX IF NOT EXISTS ix_host_allowed_projects_project
+                ON host_allowed_projects(project_id, host_id);
             CREATE INDEX IF NOT EXISTS ix_orchestration_runs_status_stage
                 ON orchestration_runs(status, current_stage, updated_at);
             CREATE INDEX IF NOT EXISTS ix_orchestration_stage_results_run
@@ -2234,6 +2311,7 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_maximum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_version", "INTEGER", ct);
         await ExecuteAsync(connection, """
             INSERT INTO runtime_capacity_settings(
                 host_id, max_parallelism, target_load_percent, ramp_strategy,

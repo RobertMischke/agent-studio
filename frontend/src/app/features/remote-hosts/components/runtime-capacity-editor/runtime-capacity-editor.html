@@ -5,8 +5,13 @@
       <strong>Runtime capacity</strong>
       <span data-testid="remote-host-slots">{{ slotsLabel() }}</span>
       <span>
-        Central ceiling {{ capacity.maxParallelism }} slots. Daemon adopted
-        {{ h.effectiveMaxParallelism ?? 'not reported' }}.
+        Central ceiling {{ capacity.maxParallelism }} slots, policy version {{ capacity.version }}.
+        Daemon reports {{ h.effectiveMaxParallelism ?? 'not reported' }} slots.
+        @if (h.runtimeCapacityAppliedVersion) {
+          Confirmed version {{ h.runtimeCapacityAppliedVersion }}.
+        } @else if (capacity.version >= 1) {
+          No version confirmed yet.
+        }
         @if (h.runtimeCapacityAppliedAt) {
           Applied {{ h.runtimeCapacityAppliedAt | date:'short' }}.
         }
@@ -68,7 +73,7 @@
               data-testid="remote-host-capacity-save"
               [appPendingButton]="h.busyAction === 'capacity'"
               pendingLabel="Saving capacity…"
-              [disabled]="!!h.busyAction"
+              [disabled]="!!h.busyAction && h.busyAction !== 'capacity'"
               (click)="save()">
         Apply
       </button>
@@ -123,9 +128,61 @@
               data-testid="remote-host-capacity-seed-save"
               [appPendingButton]="h.busyAction === 'capacity'"
               pendingLabel="Saving capacity…"
-              [disabled]="!!h.busyAction"
+              [disabled]="!!h.busyAction && h.busyAction !== 'capacity'"
               (click)="save()">
         Set a ceiling
+      </button>
+    </div>
+  </section>
+}
+@if (h.capacityHostId) {
+  <section class="capacity" data-testid="remote-host-project-policy"
+           aria-label="Host project admission policy">
+    <div class="capacity__copy">
+      <strong>Project access</strong>
+      @if (h.projectPolicy; as policy) {
+        <span>
+          Central policy version {{ policy.version }}.
+          @if (policy.allowAllProjects) {
+            This host can claim every project.
+          } @else if (policy.allowedProjectIds.length) {
+            Allowed projects: {{ policy.allowedProjectIds.join(', ') }}.
+          } @else {
+            No project is allowed. Running work continues, but new claims are blocked.
+          }
+        </span>
+      } @else {
+        <span>
+          No central project policy exists yet. Compatibility mode allows every project.
+        </span>
+      }
+    </div>
+    <div class="capacity__form">
+      <label>
+        Claim access
+        <select data-testid="remote-host-project-policy-mode"
+                [value]="(allowAllProjectsDraft() ?? h.projectPolicy?.allowAllProjects ?? true) ? 'all' : 'selected'"
+                [disabled]="!!h.busyAction"
+                (change)="updateProjectPolicyMode($event)">
+          <option value="all">All projects</option>
+          <option value="selected">Selected projects</option>
+        </select>
+      </label>
+      <label>
+        Project IDs
+        <input type="text" data-testid="remote-host-project-policy-ids"
+               [value]="allowedProjectIdsDraft() ?? h.projectPolicy?.allowedProjectIds?.join(', ') ?? ''"
+               [disabled]="!!h.busyAction || (allowAllProjectsDraft() ?? h.projectPolicy?.allowAllProjects ?? true)"
+               placeholder="PROJ-001, PROJ-002"
+               (input)="updateAllowedProjects($event)" />
+      </label>
+      <button class="capacity__save" type="button"
+              data-testid="remote-host-project-policy-save"
+              [appPendingButton]="h.busyAction === 'project-policy'"
+              pendingLabel="Saving access…"
+              [disabled]="!!h.busyAction && h.busyAction !== 'project-policy'"
+              (click)="saveProjectPolicy()">
+        Apply
       </button>
     </div>
   </section>

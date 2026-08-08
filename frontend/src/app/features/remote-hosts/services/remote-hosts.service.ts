@@ -218,9 +218,20 @@ export class RemoteHostsService {
               capacityHostId: snapshot.hostId,
               runtimeCapacity: snapshot.runtimeCapacity ?? current.runtimeCapacity ?? null,
               effectiveMaxParallelism:
-                snapshot.effectiveMaxParallelism ?? current.effectiveMaxParallelism ?? null,
+                snapshot.effectiveMaxParallelism !== undefined
+                  ? snapshot.effectiveMaxParallelism
+                  : current.effectiveMaxParallelism ?? null,
               runtimeCapacityAppliedAt:
-                snapshot.runtimeCapacityAppliedAt ?? current.runtimeCapacityAppliedAt ?? null,
+                snapshot.runtimeCapacityAppliedAt !== undefined
+                  ? snapshot.runtimeCapacityAppliedAt
+                  : current.runtimeCapacityAppliedAt ?? null,
+              runtimeCapacityAppliedVersion:
+                snapshot.runtimeCapacityAppliedVersion !== undefined
+                  ? snapshot.runtimeCapacityAppliedVersion
+                  : current.runtimeCapacityAppliedVersion ?? null,
+              projectPolicy: snapshot.projectPolicy !== undefined
+                ? snapshot.projectPolicy
+                : current.projectPolicy ?? null,
               taskServerConnection: snapshot.telemetry
                 ? taskServerConnection(snapshot.telemetry)
                 : current.taskServerConnection ?? null,
@@ -416,6 +427,40 @@ export class RemoteHostsService {
     });
   }
 
+  /** Persist host-to-project claim admission in the Task Server. */
+  setProjectPolicy(
+    id: string,
+    allowAllProjects: boolean,
+    allowedProjectIds: readonly string[],
+    expectedVersion: number,
+  ): void {
+    const current = this.hosts().find(host => host.id === id);
+    const hostId = current?.capacityHostId;
+    if (!current || current.busyAction || !hostId || !this.http) return;
+    this.patch(id, host => ({ ...host, busyAction: 'project-policy' }));
+    this.http.put<NonNullable<RemoteHost['projectPolicy']>>(
+      `/api/v1/hosts/${encodeURIComponent(hostId)}/project-policy`,
+      { allowAllProjects, allowedProjectIds, expectedVersion },
+    ).subscribe({
+      next: updated => {
+        this.hosts.update(hosts => hosts.map(host =>
+          host.capacityHostId === hostId
+            ? {
+                ...host,
+                projectPolicy: updated,
+                busyAction: host.id === id ? null : host.busyAction,
+              }
+            : host));
+        this.log('project-policy-saved', {
+          hostId,
+          allowAllProjects,
+          allowedProjectIds,
+        });
+      },
+      error: error => this.actionFailed(id, error),
+    });
+  }
+
   permanentlyDelete(id: string): void {
     const host = this.hosts().find(item => item.id === id);
     if (!host || !this.http) return;
@@ -496,6 +541,8 @@ interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
   effectiveMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
+  runtimeCapacityAppliedVersion?: number | null;
+  projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
 }
 
 function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<RemoteHost['stats']> {
@@ -567,6 +614,7 @@ function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<Remote
       effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? host.effectiveMaxParallelism ?? null,
       runtimeCapacityAppliedAt:
         client.runnerEffectiveMaxParallelismAppliedAt ?? host.runtimeCapacityAppliedAt ?? null,
+      runtimeCapacityAppliedVersion: host.runtimeCapacityAppliedVersion ?? null,
     };
   }
   if (client.runnerDesiredMaxParallelism === null
@@ -587,6 +635,7 @@ function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<Remote
     },
     effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? null,
     runtimeCapacityAppliedAt: client.runnerEffectiveMaxParallelismAppliedAt ?? null,
+    runtimeCapacityAppliedVersion: null,
   };
 }
 

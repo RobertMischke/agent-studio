@@ -33,7 +33,14 @@ export type HostHeartbeatStatus =
   | 'retired';
 
 /** Operator actions offered per host row. */
-export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete' | 'capacity';
+export type HostActionKind =
+  | 'reprobe'
+  | 'drain'
+  | 'retire'
+  | 'revive'
+  | 'delete'
+  | 'capacity'
+  | 'project-policy';
 export type HostRampStrategy = 'conservative' | 'balanced' | 'aggressive';
 
 /**
@@ -53,6 +60,15 @@ export interface RuntimeCapacitySettings {
   maxParallelism: number;
   targetLoadPercent: number;
   rampStrategy: HostRampStrategy;
+  version: number;
+  updatedAt: string;
+}
+
+/** Task Server claim admission for projects on one execution host. */
+export interface HostProjectPolicy {
+  hostId: string;
+  allowAllProjects: boolean;
+  allowedProjectIds: readonly string[];
   version: number;
   updatedAt: string;
 }
@@ -230,6 +246,10 @@ export interface RemoteHost {
   /** Latest capacity value reported as adopted by this daemon process. */
   effectiveMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
+  /** Exact Task Server policy version confirmed by this daemon. */
+  runtimeCapacityAppliedVersion?: number | null;
+  /** Projects the Task Server may offer to this host. Missing means compatibility allow-all. */
+  projectPolicy?: HostProjectPolicy | null;
   /** Which projects currently occupy this host's shared slot ceiling. */
   projectSlots?: readonly HostProjectSlots[];
   /** Transient: an action currently in flight for this host. */

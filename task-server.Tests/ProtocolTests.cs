@@ -243,6 +243,78 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public async Task Runtime_capacity_endpoint_can_provision_a_host_before_registration()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        client.DefaultRequestHeaders.Add("X-Client-Id", "host-provisioner");
+
+        var create = await client.PutAsJsonAsync(
+            "/api/v1/hosts/fresh-host/runtime-capacity",
+            new UpdateRuntimeCapacitySettingsRequest(8, 80, "balanced", 0));
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<RuntimeCapacitySettingsDto>();
+
+        var registration = await client.PutAsJsonAsync(
+            "/api/v1/runners/fresh-runner",
+            new RegisterRunnerRequest(
+                "fresh-runner",
+                "fresh-host",
+                "fresh-host:1",
+                "1.0.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor],
+                BootstrapMaxParallelism: 2));
+        registration.EnsureSuccessStatusCode();
+        var registered = await registration.Content.ReadFromJsonAsync<RunnerDto>();
+
+        Assert.Equal(1, created!.Version);
+        Assert.Equal(8, registered!.RuntimeCapacity!.MaxParallelism);
+    }
+
+    [Fact]
+    public async Task Project_policy_endpoint_versions_a_preprovisioned_host_allowlist()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        client.DefaultRequestHeaders.Add("X-Client-Id", "host-provisioner");
+        var workspaceResponse = await client.PostAsJsonAsync(
+            "/api/v1/workspaces",
+            new CreateWorkspaceRequest("Workspace"));
+        workspaceResponse.EnsureSuccessStatusCode();
+        var workspace = await workspaceResponse.Content.ReadFromJsonAsync<WorkspaceDto>();
+        var projectResponse = await client.PostAsJsonAsync(
+            "/api/v1/projects",
+            new CreateProjectRequest(workspace!.WorkspaceId, "Project", "PRJ"));
+        projectResponse.EnsureSuccessStatusCode();
+        var project = await projectResponse.Content.ReadFromJsonAsync<ProjectDto>();
+
+        var create = await client.PutAsJsonAsync(
+            "/api/v1/hosts/fresh-host/project-policy",
+            new UpdateHostProjectPolicyRequest(false, [project!.ProjectId], 0));
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<HostProjectPolicyDto>();
+        var read = await client.GetFromJsonAsync<HostProjectPolicyDto>(
+            "/api/v1/hosts/fresh-host/project-policy");
+
+        Assert.Equal(1, created!.Version);
+        Assert.False(read!.AllowAllProjects);
+        Assert.Equal([project.ProjectId], read.AllowedProjectIds);
+        var stale = await client.PutAsJsonAsync(
+            "/api/v1/hosts/fresh-host/project-policy",
+            new UpdateHostProjectPolicyRequest(true, [], 0));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+    }
+
+    [Fact]
     public async Task Published_contract_fixtures_pin_supported_and_unsupported_mixed_versions()
     {
         var root = RepositoryRoot();
