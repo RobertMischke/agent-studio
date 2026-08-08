@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// The write half of the Sichtblick gate (AGT-2375). The decision must land in
+/// The Workbench decision must land in
 /// the Workbench's own <c>workbench.json</c> - that file, not a
 /// <c>.meta.json</c> sidecar, is what the catalogue and the Wiki read.
 /// </summary>
@@ -69,6 +69,7 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
             Actor = "Robert",
             ExpectedFingerprint = fingerprint,
             Task = FeaturePrepare(fingerprint).Task,
+            Answers = InlineAnswers(),
             Confirmed = true,
         });
 
@@ -84,11 +85,17 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
         Assert.Equal("decided", history[^1].GetProperty("state").GetString());
         Assert.Contains("Implement the routing policy", history[^1].GetProperty("note").GetString());
         Assert.Equal("succeeded", descriptor.GetProperty("decision").GetProperty("state").GetString());
+        var answer = descriptor.GetProperty("decision").GetProperty("answers")[0];
+        Assert.Equal("routing-owner", answer.GetProperty("decisionId").GetString());
+        Assert.Equal("task-api", answer.GetProperty("selectedOptions")[0].GetProperty("id").GetString());
+        Assert.Equal("Keep the recommendation editable.", answer.GetProperty("comment").GetString());
 
         // The descriptor still validates, so the catalogue projects the decision.
         var item = catalogue.List("Project", includeHistory: true)!.Items.Single();
         Assert.Equal("decided", item.Status);
         Assert.Equal("succeeded", item.DecisionStage);
+        Assert.Equal("routing-owner", Assert.Single(item.Decision!.Answers).DecisionId);
+        Assert.Contains("Confirmed decisions", item.Decision.TaskDraft!.Goal);
         Assert.False(File.Exists(Descriptor("routing-policy") + ".meta.json"));
     }
 
@@ -247,11 +254,22 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
         Task = new WorkbenchTaskDraft
         {
             Title = "Implement the routing policy",
-            Goal = "Ship the confirmed direction.",
+            Goal = "Ship the confirmed direction.\n\nConfirmed decisions are recorded here.",
             AcceptanceCriteria = ["The direction is implemented and verified."],
             TargetProject = "Project",
         },
     };
+
+    private static List<WorkbenchDecisionAnswer> InlineAnswers() =>
+    [
+        new()
+        {
+            DecisionId = "routing-owner",
+            Kind = "single",
+            SelectedOptions = [new() { Id = "task-api", Label = "Task API recommendation" }],
+            Comment = "Keep the recommendation editable.",
+        },
+    ];
 
     private string Descriptor(string id) =>
         Path.Combine(_root, "docs", "workbenches", id, "workbench.json");

@@ -68,7 +68,11 @@ export class WorkbenchDecisionStore {
         this.patch(key, { error: decisionError(error) });
         return throwError(() => error);
       }),
-      finalize(() => this.patch(key, { pending: null })),
+      finalize(() => {
+        // A prepare success may synchronously start confirm. Do not let the
+        // completed prepare request clear the newer confirm pending state.
+        if (this.entries()[key]?.pending === phase) this.patch(key, { pending: null });
+      }),
     );
   }
 

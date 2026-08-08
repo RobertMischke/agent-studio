@@ -4,13 +4,25 @@
   } @else if (error(); as message) {
     <div class="workbench-viewer__state workbench-viewer__state--error" role="alert">{{ message }}</div>
   } @else if (document(); as doc) {
-    <header class="workbench-viewer__header">
-      <div class="workbench-viewer__identity">
-        <span class="workbench-viewer__eyebrow">Workbenches / open experiment</span>
-        <h1>{{ doc.workbench.title }}</h1>
-        <p>{{ doc.workbench.summary }}</p>
+    <app-workbench-decision-panel
+      [projectName]="projectName()"
+      [document]="doc"
+      [decisionPoints]="decisionPoints()"
+      [answers]="inlineAnswers()"
+      (decisionChanged)="refreshDecision()" />
+    <div class="workbench-viewer__toolbar">
+      <div class="workbench-viewer__provenance" data-testid="workbench-viewer-provenance">
+        <app-studio-icon name="branch" [size]="12" />
+        <span>{{ projectName() }}</span><span aria-hidden="true">·</span>
+        <code>{{ doc.workbench.entryPath }}</code><span aria-hidden="true">·</span>
+        <span>{{ doc.branch || 'branch unavailable' }}</span>
+        @if (doc.workingTreeModified) {
+          <span data-testid="workbench-viewer-working-tree">working tree · uncommitted</span>
+        } @else if (doc.revision) {
+          <code>{{ doc.revision.slice(0, 8) }}</code>
+        }
       </div>
-      <div class="workbench-viewer__header-actions">
+      <div class="workbench-viewer__toolbar-actions">
         <button type="button"
                 class="workbench-viewer__wiki-link"
                 data-testid="workbench-viewer-open-wiki"
@@ -18,32 +30,8 @@
           <app-studio-icon name="book" [size]="13" />
           <span>Open in Wiki</span>
         </button>
-        <span class="workbench-viewer__status" [attr.data-status]="doc.workbench.status">
-          <i aria-hidden="true"></i>{{ statusLabel() }}
-        </span>
       </div>
-      @if (pageContext(); as pageContext) {
-        <app-page-action-bar
-          class="workbench-viewer__actions"
-          [context]="pageContext"
-          [decisionActionsOwned]="true" />
-      }
-    </header>
-    <div class="workbench-viewer__provenance" data-testid="workbench-viewer-provenance">
-      <app-studio-icon name="branch" [size]="12" />
-      <span>{{ projectName() }}</span><span aria-hidden="true">·</span>
-      <code>{{ doc.workbench.entryPath }}</code><span aria-hidden="true">·</span>
-      <span>{{ doc.branch || 'branch unavailable' }}</span>
-      @if (doc.workingTreeModified) {
-        <span data-testid="workbench-viewer-working-tree">working tree · uncommitted</span>
-      } @else if (doc.revision) {
-        <code>{{ doc.revision.slice(0, 8) }}</code>
-      }
     </div>
-    <app-workbench-decision-panel
-      [projectName]="projectName()"
-      [document]="doc"
-      (decisionChanged)="refreshDecision()" />
     <div class="workbench-viewer__frame-shell"
          [class.workbench-viewer__frame-shell--maximized]="maximized()"
          data-testid="workbench-viewer-frame-shell">

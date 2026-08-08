@@ -14,6 +14,7 @@ public sealed record PrepareWorkbenchDecisionRequest
     public string Actor { get; init; } = "";
     public string? ArchiveReason { get; init; }
     public WorkbenchTaskDraft? Task { get; init; }
+    public List<WorkbenchDecisionAnswer> Answers { get; init; } = [];
 }
 
 /// <summary>
@@ -29,6 +30,7 @@ public sealed record ConfirmWorkbenchDecisionRequest
     public string Actor { get; init; } = "";
     public string? ArchiveReason { get; init; }
     public WorkbenchTaskDraft? Task { get; init; }
+    public List<WorkbenchDecisionAnswer> Answers { get; init; } = [];
     /// <summary>Cards the caller already created for this decision, if any.</summary>
     public string[]? SpawnedTaskKeys { get; init; }
     public bool Confirmed { get; init; }
@@ -57,7 +59,7 @@ public sealed record WorkbenchDecisionResult
 }
 
 /// <summary>
-/// The write half of the Workbench Sichtblick gate (AGT-2375). Deliberately
+/// The write half of the Workbench decision gate. Deliberately
 /// small: <see cref="Prepare"/> validates and fingerprints without touching the
 /// disk, <see cref="Confirm"/> writes the decision straight into the Workbench's
 /// own <c>workbench.json</c>. Visibility hangs on that descriptor - never on a
@@ -96,7 +98,8 @@ public sealed class WorkbenchDecisionService
         string projectName, string id, PrepareWorkbenchDecisionRequest body)
     {
         var gate = Gate(projectName, id, body.OperationId, body.Outcome, body.Actor,
-            body.ArchiveReason, body.Task, body.ExpectedRevision, body.ExpectedFingerprint);
+            body.ArchiveReason, body.Task, body.Answers,
+            body.ExpectedRevision, body.ExpectedFingerprint);
         if (gate.Failure != null) return gate.Failure;
         var snapshot = gate.Snapshot!;
         return new WorkbenchDecisionResult
@@ -164,7 +167,8 @@ public sealed class WorkbenchDecisionService
         string projectName, string id, ConfirmWorkbenchDecisionRequest body)
     {
         var gate = Gate(projectName, id, body.OperationId, body.Outcome, body.Actor,
-            body.ArchiveReason, body.Task, body.ExpectedRevision, body.ExpectedFingerprint,
+            body.ArchiveReason, body.Task, body.Answers,
+            body.ExpectedRevision, body.ExpectedFingerprint,
             body.SpawnedTaskKeys);
         if (gate.Failure != null) return gate.Failure;
         var snapshot = gate.Snapshot!;
@@ -196,6 +200,7 @@ public sealed class WorkbenchDecisionService
             ["confirmedAt"] = now,
             ["confirmedBy"] = actor,
             ["decidedAt"] = now,
+            ["answers"] = JsonSerializer.SerializeToNode(body.Answers, DraftJson),
             ["spawnedTaskKeys"] = new JsonArray(spawned.Select(key => (JsonNode)key!).ToArray()),
         };
         if (archive) receipt["reason"] = body.ArchiveReason!.Trim();
@@ -300,6 +305,7 @@ public sealed class WorkbenchDecisionService
     private GateResult Gate(
         string projectName, string id, string operationId, string outcome, string actor,
         string? archiveReason, WorkbenchTaskDraft? task,
+        IReadOnlyList<WorkbenchDecisionAnswer>? answers,
         string? expectedRevision, string? expectedFingerprint,
         string[]? spawnedTaskKeys = null)
     {
@@ -309,6 +315,9 @@ public sealed class WorkbenchDecisionService
             return new(Failure(id, operationId, "validation", $"Unsupported outcome '{outcome}'."));
         if (string.IsNullOrWhiteSpace(actor) || actor.Trim().Length > 120)
             return new(Failure(id, operationId, "validation", "actor is required."));
+        var answersError = WorkbenchDecisionContracts.ValidateAnswers(answers);
+        if (answersError != null)
+            return new(Failure(id, operationId, "validation", $"Decision {answersError}"));
 
         WorkbenchTaskDraft? draft = null;
         if (outcome == "archive")

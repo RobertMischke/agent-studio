@@ -64,6 +64,61 @@ public static class WorkbenchDecisionContracts
             return "task.taskType is invalid.";
         return null;
     }
+
+    /// <summary>
+    /// Bounds the repository-authored decision ids and the operator text that
+    /// will be stored in the Git-backed receipt. The browser additionally
+    /// checks every id against the inertly parsed HTML convention.
+    /// </summary>
+    public static string? ValidateAnswers(IReadOnlyList<WorkbenchDecisionAnswer>? answers)
+    {
+        if (answers == null)
+            return "answers must be an array.";
+        if (answers.Count > 100)
+            return "answers may contain at most 100 decision points.";
+        var decisionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var answer in answers)
+        {
+            if (!SafeMarkupId(answer.DecisionId) || !decisionIds.Add(answer.DecisionId))
+                return "answers contain an invalid or duplicate decisionId.";
+            if (answer.Kind is not ("single" or "multi" or "confirm"))
+                return $"answer '{answer.DecisionId}' has an invalid kind.";
+            if (answer.SelectedOptions.Count is 0 or > 100)
+                return $"answer '{answer.DecisionId}' must select at least one bounded option.";
+            if (answer.Kind is "single" or "confirm" && answer.SelectedOptions.Count != 1)
+                return $"answer '{answer.DecisionId}' must select exactly one option.";
+            var optionIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var option in answer.SelectedOptions)
+            {
+                if (!SafeMarkupId(option.Id) || !optionIds.Add(option.Id)
+                    || string.IsNullOrWhiteSpace(option.Label) || option.Label.Trim().Length > 2_000)
+                    return $"answer '{answer.DecisionId}' contains an invalid option.";
+            }
+            if (answer.Comment is { Length: > 20_000 })
+                return $"answer '{answer.DecisionId}' comment is too long.";
+        }
+        return null;
+    }
+
+    private static bool SafeMarkupId(string? value) =>
+        value is { Length: >= 1 and <= 120 }
+        && char.IsAsciiLetterOrDigit(value[0])
+        && value.All(character =>
+            char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.');
+}
+
+public sealed record WorkbenchDecisionOption
+{
+    public string Id { get; init; } = "";
+    public string Label { get; init; } = "";
+}
+
+public sealed record WorkbenchDecisionAnswer
+{
+    public string DecisionId { get; init; } = "";
+    public string Kind { get; init; } = "";
+    public List<WorkbenchDecisionOption> SelectedOptions { get; init; } = [];
+    public string? Comment { get; init; }
 }
 
 /// <summary>

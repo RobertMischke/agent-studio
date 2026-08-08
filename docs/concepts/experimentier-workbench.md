@@ -2,13 +2,17 @@
 lifecycleSchema: wiki-page-lifecycle/v1
 pageKind: concept
 lifecycleState: in-progress
-editedBy: "Codex / AGT-2137"
-editedAt: 2026-07-21T05:46:33Z
+editedBy: "Codex / AGT-2520"
+editedAt: 2026-08-08T20:30:00Z
 lifecycleHistory:
   - state: in-progress
     editedBy: "Codex / AGT-2137"
     editedAt: 2026-07-21T05:46:33Z
     note: "Initial classification: the read-only slice exists; chat and decision mutations remain open."
+  - state: in-progress
+    editedBy: "Codex / AGT-2520"
+    editedAt: 2026-08-08T20:30:00Z
+    note: "Decision input moved into the Workbench document through progressive enhancement."
 ---
 
 # Experiment workbenches
@@ -16,8 +20,9 @@ lifecycleHistory:
 Status: concept and mockup complete, 2026-07-11. The first read-only production
 slice landed on 2026-07-12: repository discovery, Explorer catalogue, isolated
 viewer, Pulse thinking inbox, and the curated legacy pilot. The card-scoped
-Sichtblick panel and repository-backed decision mutation landed on 2026-07-26.
-Chat attachment remains a future slice.
+The first repository-backed Decision panel landed on 2026-07-26. Inline
+decision points, compact card confirmation, and durable answer receipts landed
+on 2026-08-08. Chat attachment remains a future slice.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -305,41 +310,38 @@ preview, but it never bypasses confirmation.
 
 ## 7. Decision to feature card
 
-**Build as feature** opens a preview before any mutation. The preview includes:
+Decision input lives beside its evidence inside the Workbench document. Authors
+mark static option rows with the
+[inline decision contract](../system/contracts/workbench-inline-decisions.md).
+Without Studio those rows remain an ordinary readable list. The isolated viewer
+adds radios, checkboxes, and optional comment fields, then sends only their ids
+and text to the trusted host. The host validates every id against an inert parse
+of the same source before it accepts the draft.
 
-- target project, initial lane, coding mode, agent/model defaults, and task type;
-- editable title, goal, acceptance criteria, and evidence links;
-- Workbench path, exact source revision, chosen option, and related task keys;
-- the resulting relationship to a source planning task when one exists.
-
-The preview is a user-driven task draft editor in trusted Workbench host chrome.
-The operator can revise generated or chat-prepared defaults before submission,
-including the title, goal, acceptance criteria, evidence, target project, and
-lane. Chat may prepare values and request that the editor open, but it cannot
-persist, confirm, or submit the draft. The sandboxed Workbench HTML cannot read
-or write the editor fields. This keeps the final task authoring decision with
-the operator even though the editor is visually inside the Workbench view.
-
-Confirmation creates the card through `TaskMutationService.CreateJob`, the same
-bounded entry point used by the Project Hub proposal flow and the AGT-2028 task
-spawner. It does not invoke the post-task-spawner pipeline step, because this is
-an explicit operator action rather than post-run relevance automation.
+The Decision header is one compact row with Workbench title, status, and
+decision owner. `Prepare feature card` becomes available when every declared
+point has an answer. Its compact confirmation includes editable title and goal,
+plus a read-only summary of the chosen options. The title starts from the
+Workbench title. The goal and `chosenOption` combine the Workbench summary with
+all selected labels and optional comments. Acceptance and evidence defaults are
+derived without presenting a second large form.
 
 The trusted Workbench host now owns this action through
-`WorkbenchDecisionPanelComponent` and `WorkbenchDecisionStore`. The panel first
-*prepares*: the backend validates the draft against the exact Workbench
-revision/fingerprint and writes nothing. A separate visible confirmation is the
-single durable write, and it lands in the Workbench's own `workbench.json`
+`WorkbenchDecisionPanelComponent` and `WorkbenchDecisionStore`. On visible
+confirmation the client first prepares: the backend validates the draft against
+the exact Workbench revision/fingerprint and writes nothing. It then confirms
+through the single durable write, which lands in the Workbench's own `workbench.json`
 (schema v2: `lifecycleState` + a `lifecycleHistory` entry carrying the decision
 text; schema v1: `status` + `updatedAt`) together with a `decision` receipt.
 Visibility hangs on that descriptor, never on a `.meta.json` sidecar - which is
 why generic Wiki classification cannot archive a canonical Workbench.
 
-The delivered slice deliberately stops short of creating the card: the decision
-service records the direction and hands the validated draft back, and task
-creation stays on the existing task API owned by the client. A settled feature
-receipt therefore carries the spawned task keys only once the client reports
-them.
+The receipt stores every answer, selected option label, optional comment,
+decision owner, timestamp, and the validated task proposal. Reload restores the
+controls as read-only and auditably identifies who decided when. The delivered
+slice deliberately stops short of creating the card: task creation stays on the
+existing task API owned by the client. A settled feature receipt therefore
+carries spawned task keys only once the client reports them.
 
 WB-4 should implement a narrow **decision draft -> validated task mutation ->
 receipt** service over the existing mutation boundary instead of copying the

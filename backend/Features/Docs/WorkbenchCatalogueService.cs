@@ -564,11 +564,30 @@ public sealed class WorkbenchCatalogueService
         var reason = OptionalString(value, "reason");
         var failure = OptionalString(value, "failure");
         var spawned = StringArray(value, "spawnedTaskKeys");
+        var answers = new List<WorkbenchDecisionAnswer>();
+        if (value.TryGetProperty("answers", out var answerValue))
+        {
+            if (answerValue.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("decision answers must be an array.");
+            try
+            {
+                answers = answerValue.Deserialize<List<WorkbenchDecisionAnswer>>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException("decision answers are malformed.", ex);
+            }
+            var answersError = WorkbenchDecisionContracts.ValidateAnswers(answers);
+            if (answersError != null)
+                throw new InvalidDataException($"Decision {answersError}");
+        }
 
         if (outcome == "archive" && string.IsNullOrWhiteSpace(reason))
             throw new InvalidDataException("Archive decision reason is required.");
         if (outcome == "archive" && value.TryGetProperty("taskDraft", out _))
             throw new InvalidDataException("Archive decisions cannot carry a task draft.");
+        WorkbenchTaskDraft? parsedDraft = null;
         if (outcome == "feature-spawn")
         {
             if (value.TryGetProperty("reason", out _))
@@ -576,7 +595,6 @@ public sealed class WorkbenchCatalogueService
             if (!value.TryGetProperty("taskDraft", out var taskDraft)
                 || taskDraft.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("Feature decision taskDraft is required.");
-            WorkbenchTaskDraft? parsedDraft;
             try
             {
                 parsedDraft = taskDraft.Deserialize<WorkbenchTaskDraft>(
@@ -618,7 +636,7 @@ public sealed class WorkbenchCatalogueService
         return new WorkbenchDecisionProjection(
             outcome, state, operationId, sourceRevision, sourceFingerprint,
             preparedAt, preparedBy, confirmedAt, confirmedBy, decidedAt,
-            reason, failure, spawned);
+            reason, failure, answers, parsedDraft, spawned);
     }
 
     private static string StatusFromDecision(
@@ -739,6 +757,8 @@ public sealed record WorkbenchDecisionProjection(
     string? DecidedAt,
     string? Reason,
     string? Failure,
+    List<WorkbenchDecisionAnswer> Answers,
+    WorkbenchTaskDraft? TaskDraft,
     string[] SpawnedTaskKeys);
 
 internal sealed record WorkbenchMutationSnapshot(

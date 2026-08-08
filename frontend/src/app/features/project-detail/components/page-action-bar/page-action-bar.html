@@ -7,13 +7,15 @@
   </span>
   <span class="page-action-bar__separator" aria-hidden="true"></span>
   <div class="page-action-bar__actions" aria-label="Page actions">
-    <button class="page-action-bar__button page-action-bar__button--primary"
-            type="button"
-            data-testid="page-action-create-task"
-            (click)="createTask()">
-      <app-studio-icon name="plus" [size]="12" />
-      <span>Create Task in Project</span>
-    </button>
+    @if (!decisionActionsOwned()) {
+      <button class="page-action-bar__button page-action-bar__button--primary"
+              type="button"
+              data-testid="page-action-create-task"
+              (click)="createTask()">
+        <app-studio-icon name="plus" [size]="12" />
+        <span>Create Task in Project</span>
+      </button>
+    }
     @if (!decisionActionsOwned()) {
       <button class="page-action-bar__button"
               type="button"

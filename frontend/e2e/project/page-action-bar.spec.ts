@@ -23,7 +23,25 @@ const EMPTY_GROUPED = {
 const pages: Record<string, string> = {
   [DOC_PATH]: '# Action bar contract\n\nEvery repository page exposes the same dependable actions in its page head.',
   [CONCEPT_PATH]: '# Pages as interfaces\n\nAIP-4 treats each page as a bidirectional interface between knowledge and delivery.',
-  [WORKBENCH_PATH]: '<main><h1>Action Bar Workbench</h1><p>Compare the shared actions in both themes.</p></main>',
+  [WORKBENCH_PATH]: `<!doctype html><html><head><style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { max-width: 780px; margin: 0 auto; padding: 28px; line-height: 1.5; }
+    [data-decision-id] { margin-top: 24px; }
+    [data-option-id] { margin-block: 8px; }
+    [data-option-id] strong { display: block; }
+  </style></head><body><main>
+    <h1>Action Bar Workbench</h1>
+    <p>Compare the shared actions in both themes and choose the implementation boundary in context.</p>
+    <section data-decision-id="action-owner" data-decision-kind="single">
+      <h2>Which surface owns the primary action?</h2>
+      <p>Choose one option after reading the analysis.</p>
+      <ul>
+        <li data-option-id="page-head"><strong>Page head</strong><span>Keep the action beside its source context.</span></li>
+        <li data-option-id="global-toolbar"><strong>Global toolbar</strong><span>Move the action away from the document.</span></li>
+      </ul>
+      <p data-comment data-comment-label="Optional implementation note">Add an implementation constraint if needed.</p>
+    </section>
+  </main></body></html>`,
 };
 
 interface CapturedCalls {
@@ -106,6 +124,15 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     cliType: 'codex',
     model: 'gpt-5',
     thinkingLevel: null,
+  }));
+  await page.route('**/api/cli/model-routing/recommendation**', route => json(route, {
+    model: 'gpt-5',
+    thinkingLevel: null,
+    tier: 'standard',
+    taskType: 'chore',
+    economyDowngraded: false,
+    policyVersion: 'e2e',
+    policyWikiPath: 'docs/system/domains/model-routing-policy.md',
   }));
   await page.route('**/api/crash-recovery/pending**', route => json(route, { pending: [] }));
   await page.route('**/api/tasks/archive**', route => json(route, {
@@ -326,6 +353,8 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         decidedAt: null,
         reason: body['archiveReason'],
         failure: null,
+        answers: body['answers'],
+        taskDraft: body['task'],
         spawnedTaskKeys: [],
       };
       return json(route, {
@@ -349,6 +378,8 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         confirmedAt: '2026-07-23T10:02:00Z',
         confirmedBy: body['actor'],
         decidedAt: '2026-07-23T10:02:00Z',
+        answers: body['answers'],
+        taskDraft: body['task'],
         spawnedTaskKeys: ['AGT-2400'],
       };
       return json(route, {
@@ -537,19 +568,41 @@ test('shared page action bar preserves placement, task source, chat context, and
   const workbenchTab = page.getByRole('tab', { name: 'Action Bar Workbench' });
   if (await workbenchTab.count()) await workbenchTab.click();
   await expect(page.getByTestId('workbench-viewer')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('page-action-bar')).toHaveAttribute('data-page-type', 'workbench');
+  await expect(page.getByTestId('page-action-bar')).toHaveCount(0);
   await expect(page.getByTestId('page-action-extra')).toHaveCount(0);
   await expect(page.getByTestId('page-action-archive')).toHaveCount(0);
-  await page.getByTestId('workbench-decision-build').click();
-  await page.getByTestId('workbench-decision-prepare').click();
-  await expect(page.getByTestId('workbench-decision-confirm')).toBeVisible();
-  await page.getByTestId('workbench-decision-confirm').click();
-  await expect(page.getByTestId('workbench-decision-receipt')).toContainText('AGT-2400');
+  await expect(page.getByTestId('page-action-create-task')).toHaveCount(0);
+  const workbenchFrame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
+  const pageHead = workbenchFrame.getByTestId('workbench-decision-action-owner-page-head');
+  await expect(pageHead).toBeVisible();
+  await pageHead.check();
+  await workbenchFrame.getByTestId('workbench-decision-action-owner-comment')
+    .fill('Keep the recommendation editable.');
+  await page.getByTestId('workbench-decision-prepare-card').click();
+  await expect(page.getByTestId('workbench-feature-card-confirmation')).toContainText('Page head');
+  await expect(page.getByTestId('workbench-decision-goal')).toHaveValue(/Keep the recommendation editable/);
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await expect(workbenchFrame.locator('html')).toHaveAttribute('data-agent-studio-theme', theme);
+    await capture(page, 'workbench-viewer', `workbench-feature-card-confirmation-${theme}--mocked.png`);
+  }
+  await page.getByTestId('workbench-decision-submit').click();
+  await expect(page.getByTestId('workbench-decision-receipt')).toContainText('stored in workbench.json');
   expect(captured.decisionBodies).toHaveLength(2);
   expect(captured.decisionBodies[0]).toEqual(expect.objectContaining({
     outcome: 'feature-spawn',
     expectedRevision: '0123456789abcdef',
     expectedFingerprint: 'a'.repeat(64),
+    answers: [expect.objectContaining({
+      decisionId: 'action-owner',
+      selectedOptions: [{ id: 'page-head', label: 'Page head' }],
+      comment: 'Keep the recommendation editable.',
+    })],
+    task: expect.objectContaining({
+      title: 'Implement Action Bar Workbench',
+      goal: expect.stringContaining('Keep the recommendation editable.'),
+      chosenOption: expect.stringContaining('Page head'),
+    }),
   }));
   expect(captured.decisionBodies[1]).toEqual(expect.objectContaining({
     confirmed: true,
@@ -557,8 +610,14 @@ test('shared page action bar preserves placement, task source, chat context, and
     expectedRevision: '1234567890abcdef',
     expectedFingerprint: 'b'.repeat(64),
   }));
+  await expect(workbenchFrame.getByTestId('workbench-decision-action-owner-page-head')).toBeChecked();
+  await expect(workbenchFrame.getByTestId('workbench-decision-action-owner-page-head')).toBeDisabled();
+  await expect(workbenchFrame.getByTestId('workbench-decision-action-owner-comment'))
+    .toHaveValue('Keep the recommendation editable.');
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await capture(page, 'workbench-viewer', `page-action-workbench-${theme}.png`);
+    await expect(workbenchFrame.locator('html')).toHaveAttribute('data-agent-studio-theme', theme);
+    await expect(workbenchFrame.getByTestId('workbench-decision-action-owner-page-head')).toBeChecked();
+    await capture(page, 'workbench-viewer', `workbench-inline-decision-after-${theme}--mocked.png`);
   }
 });

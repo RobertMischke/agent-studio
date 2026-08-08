@@ -11,13 +11,18 @@ import {
 import { PendingButtonDirective } from '../../../../components/async-feedback';
 import {
   PrepareWorkbenchDecisionRequest,
-  WorkbenchDecisionProjection,
+  WorkbenchDecisionAnswer,
+  WorkbenchDecisionPoint,
   WorkbenchDocument,
   WorkbenchTaskDraft,
 } from '../../../../models/project-docs.model';
 import { WorkbenchDecisionStore } from '../../state/workbench-decision.store';
+import {
+  workbenchDecisionAnswersComplete,
+  workbenchDecisionSummary,
+} from '../workbench-viewer/workbench-decision-markup';
 
-type DecisionChoice = 'feature-spawn' | 'archive';
+type DraftMode = 'feature' | 'archive' | null;
 
 @Component({
   selector: 'app-workbench-decision-panel',
@@ -30,17 +35,16 @@ type DecisionChoice = 'feature-spawn' | 'archive';
 export class WorkbenchDecisionPanelComponent {
   readonly projectName = input.required<string>();
   readonly document = input.required<WorkbenchDocument>();
+  readonly decisionPoints = input.required<readonly WorkbenchDecisionPoint[]>();
+  readonly answers = input.required<readonly WorkbenchDecisionAnswer[]>();
   readonly decisionChanged = output<void>();
 
   private readonly store = inject(WorkbenchDecisionStore);
 
-  readonly choice = signal<DecisionChoice | null>(null);
   readonly actor = signal('Operator');
+  readonly draftMode = signal<DraftMode>(null);
   readonly title = signal('');
   readonly goal = signal('');
-  readonly acceptanceCriteria = signal('');
-  readonly evidenceLinks = signal('');
-  readonly chosenOption = signal('');
   readonly archiveReason = signal('');
   readonly validationError = signal<string | null>(null);
   private readonly operationId = signal('');
@@ -48,13 +52,10 @@ export class WorkbenchDecisionPanelComponent {
   readonly requestState = computed(() =>
     this.store.state(this.projectName(), this.document().workbench.id));
   readonly persistedDecision = computed(() => this.document().workbench.decision ?? null);
-  readonly result = computed(() => this.requestState().result);
   readonly pending = computed(() => this.requestState().pending !== null);
   readonly settled = computed(() => {
     const decision = this.persistedDecision();
     if (decision) return decision.state === 'succeeded';
-    // Schema-v1 descriptors carry no decision receipt in the projection; their
-    // settled state is visible only through the status field.
     const status = this.document().workbench.status;
     return status === 'decided' || status === 'archived';
   });
@@ -65,38 +66,61 @@ export class WorkbenchDecisionPanelComponent {
   readonly mutationBlocked = computed(() =>
     this.document().workingTreeModified
     || (!this.document().revision && !this.document().fingerprint));
-  readonly activeOutcome = computed<DecisionChoice | null>(() =>
-    this.persistedDecision()?.outcome
-    ?? this.result()?.outcome
-    ?? this.choice());
+  readonly complete = computed(() => workbenchDecisionAnswersComplete(
+    this.decisionPoints(),
+    this.answers(),
+  ));
+  readonly selectionSummary = computed(() => workbenchDecisionSummary(
+    this.decisionPoints(),
+    this.answers(),
+  ));
+  readonly selectionRows = computed(() => {
+    const summaries = this.selectionSummary();
+    return this.answers()
+      .filter(answer => answer.selectedOptions.length > 0)
+      .map((answer, index) => ({ id: answer.decisionId, text: summaries[index] ?? answer.decisionId }));
+  });
+  readonly selectedOptionCount = computed(() => this.answers()
+    .reduce((total, answer) => total + answer.selectedOptions.length, 0));
+  readonly commentCount = computed(() => this.answers()
+    .filter(answer => answer.comment).length);
+  readonly decisionOwner = computed(() => this.persistedDecision()?.confirmedBy
+    ?? this.persistedDecision()?.preparedBy
+    ?? null);
+  readonly decisionTime = computed(() => this.persistedDecision()?.decidedAt
+    ?? this.persistedDecision()?.confirmedAt
+    ?? null);
   readonly stage = computed(() =>
     this.document().workbench.decisionStage
-    ?? this.result()?.decisionStage
+    ?? this.requestState().result?.decisionStage
     ?? null);
-  readonly canConfirm = computed(() => {
-    const stage = this.stage();
-    return !this.settled()
-      && !this.mutationBlocked()
-      && (stage === 'prepared' || stage === 'pending' || stage === 'failed');
-  });
 
-  choose(choice: DecisionChoice): void {
-    if (this.persistedDecision() || this.pending()) return;
-    this.choice.set(choice);
-    this.validationError.set(null);
+  openFeatureDraft(): void {
+    if (this.pending() || this.settled() || this.mutationBlocked() || !this.complete()) return;
+    const workbench = this.document().workbench;
+    const summary = this.selectionSummary();
+    this.draftMode.set('feature');
     this.operationId.set(createOperationId());
-    if (choice === 'feature-spawn' && !this.title()) {
-      const workbench = this.document().workbench;
-      this.title.set(`Implement ${workbench.title}`);
-      this.goal.set(workbench.summary);
-      this.acceptanceCriteria.set('Implement the confirmed Workbench decision and verify the resulting behavior.');
-      this.evidenceLinks.set(workbench.entryPath);
-    }
+    this.title.set(`Implement ${workbench.title}`);
+    this.goal.set([
+      workbench.summary,
+      '',
+      'Confirmed decisions:',
+      ...summary.map(item => `- ${item}`),
+    ].join('\n'));
+    this.validationError.set(null);
+  }
+
+  openArchiveDraft(): void {
+    if (this.pending() || this.settled() || this.mutationBlocked()) return;
+    this.draftMode.set('archive');
+    this.operationId.set(createOperationId());
+    this.validationError.set(null);
   }
 
   cancelDraft(): void {
     if (this.pending()) return;
-    this.choice.set(null);
+    this.draftMode.set(null);
     this.validationError.set(null);
     this.operationId.set('');
   }
@@ -105,85 +129,61 @@ export class WorkbenchDecisionPanelComponent {
     target.set((event.target as HTMLInputElement | HTMLTextAreaElement).value);
   }
 
-  prepare(): void {
-    const choice = this.choice();
-    if (!choice || this.pending() || this.mutationBlocked()) return;
-    const request = this.prepareRequest(choice);
+  submitDecision(): void {
+    if (this.pending() || this.settled() || this.mutationBlocked()) return;
+    const request = this.prepareRequest();
     if (!request) return;
     const workbench = this.document().workbench;
     this.store.prepare(this.projectName(), workbench.id, request).subscribe({
-      next: () => this.decisionChanged.emit(),
+      next: prepared => this.store.confirm(this.projectName(), workbench.id, {
+        ...request,
+        expectedRevision: prepared.revision,
+        expectedFingerprint: prepared.fingerprint,
+        confirmed: true,
+      }).subscribe({
+        next: () => this.decisionChanged.emit(),
+        error: () => undefined,
+      }),
       error: () => undefined,
     });
-  }
-
-  /**
-   * Prepare only validates and fingerprints; nothing is written until here. So
-   * confirm repeats the prepared payload against the revision/fingerprint that
-   * prepare reported back.
-   */
-  confirm(): void {
-    if (!this.canConfirm() || this.pending()) return;
-    const outcome = this.activeOutcome();
-    if (!outcome) return;
-    const prepared = this.prepareRequest(outcome);
-    if (!prepared) return;
-    const decision = this.persistedDecision();
-    const result = this.result();
-    const operationId = decision?.operationId ?? result?.operationId ?? prepared.operationId;
-    const matches = result?.operationId === operationId;
-    this.store.confirm(this.projectName(), this.document().workbench.id, {
-      operationId,
-      outcome,
-      expectedRevision: matches ? result!.revision : this.document().revision,
-      expectedFingerprint: matches ? result!.fingerprint : this.document().fingerprint,
-      actor: this.actor().trim() || decision?.preparedBy || 'Operator',
-      archiveReason: prepared.archiveReason,
-      task: prepared.task,
-      confirmed: true,
-    }).subscribe({
-      next: () => this.decisionChanged.emit(),
-      error: () => undefined,
-    });
-  }
-
-  outcomeLabel(decision: WorkbenchDecisionProjection | null = this.persistedDecision()): string {
-    const outcome = decision?.outcome ?? this.activeOutcome();
-    return outcome === 'archive' ? 'Archive Workbench' : 'Build as feature';
   }
 
   stageLabel(): string {
     switch (this.stage()) {
-      case 'prepared': return 'Awaiting confirmation';
-      case 'pending': return 'Decision in progress';
+      case 'prepared': return 'Decision ready';
+      case 'pending': return 'Decision pending';
       case 'failed': return 'Retry needed';
-      case 'succeeded': return 'Feature created';
+      case 'succeeded': return 'Decided';
       case 'archived': return 'Archived';
-      default: return this.gateReady() ? 'Ready for Sichtblick' : 'Still being shaped';
+      default: return this.gateReady() ? 'Decision ready' : 'In progress';
     }
   }
 
-  private prepareRequest(choice: DecisionChoice): PrepareWorkbenchDecisionRequest | null {
+  private prepareRequest(): PrepareWorkbenchDecisionRequest | null {
     const actor = this.actor().trim();
     if (!actor) return this.invalid('Add the decision owner.');
-    if (choice === 'archive') {
+    const mode = this.draftMode();
+    if (mode === 'archive') {
       const reason = this.archiveReason().trim();
-      if (!reason) return this.invalid('Add a reason before preparing the archive decision.');
+      if (!reason) return this.invalid('Add a reason before archiving the Workbench.');
       this.validationError.set(null);
-      return this.baseRequest(choice, actor, null, reason);
+      return this.baseRequest('archive', actor, null, reason);
     }
+    if (mode !== 'feature' || !this.complete())
+      return this.invalid('Complete every decision point before preparing the feature card.');
 
     const title = this.title().trim();
     const goal = this.goal().trim();
-    const acceptanceCriteria = lines(this.acceptanceCriteria());
-    if (!title || !goal || acceptanceCriteria.length === 0)
-      return this.invalid('Title, goal, and at least one acceptance criterion are required.');
+    if (!title || !goal) return this.invalid('Title and goal are required.');
+    const summary = this.selectionSummary();
     const task: WorkbenchTaskDraft = {
       title,
       goal,
-      acceptanceCriteria,
-      evidenceLinks: lines(this.evidenceLinks()),
-      chosenOption: this.chosenOption().trim() || null,
+      acceptanceCriteria: [
+        'Implement the confirmed Workbench decisions and verify the resulting behavior.',
+      ],
+      evidenceLinks: [this.document().workbench.entryPath],
+      chosenOption: summary.join('\n'),
       relatedTaskKeys: this.document().workbench.sourceTaskKeys,
       targetProject: this.projectName(),
       initialLane: '1-preparation',
@@ -191,11 +191,11 @@ export class WorkbenchDecisionPanelComponent {
       taskType: 'feature',
     };
     this.validationError.set(null);
-    return this.baseRequest(choice, actor, task, null);
+    return this.baseRequest('feature-spawn', actor, task, null);
   }
 
   private baseRequest(
-    outcome: DecisionChoice,
+    outcome: 'feature-spawn' | 'archive',
     actor: string,
     task: WorkbenchTaskDraft | null,
     archiveReason: string | null,
@@ -208,6 +208,12 @@ export class WorkbenchDecisionPanelComponent {
       actor,
       archiveReason,
       task,
+      answers: this.answers()
+        .filter(answer => answer.selectedOptions.length > 0)
+        .map(answer => ({
+          ...answer,
+          selectedOptions: answer.selectedOptions.map(option => ({ ...option })),
+        })),
     };
   }
 
@@ -215,10 +221,6 @@ export class WorkbenchDecisionPanelComponent {
     this.validationError.set(message);
     return null;
   }
-}
-
-function lines(value: string): string[] {
-  return [...new Set(value.split(/\r?\n/).map(line => line.trim()).filter(Boolean))];
 }
 
 function createOperationId(): string {

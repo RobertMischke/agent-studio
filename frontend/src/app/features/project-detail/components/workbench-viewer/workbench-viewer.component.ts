@@ -1,28 +1,33 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
-import { WorkbenchDocument } from '../../../../models/project-docs.model';
+import { WorkbenchDecisionAnswer, WorkbenchDocument } from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
 import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
-import { PageContext, pageExcerpt } from '../../../../models/page-context.model';
 import {
   ISOLATED_HTML_LINK_MESSAGE,
-  buildIsolatedHtmlSrcdoc,
   resolveIsolatedHtmlNavigation,
 } from '../../../../services/sandboxed-html.util';
+import {
+  WORKBENCH_DECISION_CHANGE_MESSAGE,
+  WORKBENCH_THEME_MESSAGE,
+  buildWorkbenchDecisionSrcdoc,
+  normalizeWorkbenchDecisionAnswers,
+  parseWorkbenchDecisionPoints,
+} from './workbench-decision-markup';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
  * opaque origin (`allow-scripts` without `allow-same-origin`) and a deny-by-
  * default CSP. No credential, API, form, direct navigation, download, popup,
- * modal, or clipboard capability is bridged into the frame. Link clicks cross
- * one typed host boundary: docs-relative targets open in the Wiki and absolute
- * HTTP(S) targets open in a separate browser tab.
+ * modal, or clipboard capability is bridged into the frame. Link clicks and
+ * declared decision drafts cross typed host boundaries. Decision ids are
+ * checked against an inert parse before host state changes; mutations remain
+ * in trusted chrome.
  */
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [PageActionBarComponent, StudioIconComponent, WorkbenchDecisionPanelComponent],
+  imports: [StudioIconComponent, WorkbenchDecisionPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -32,27 +37,50 @@ export class WorkbenchViewerComponent {
   readonly workbenchId = input.required<string>();
   readonly openWiki = output<string>();
   private readonly docs = inject(ProjectDocsService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
 
   readonly document = signal<WorkbenchDocument | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly maximized = signal(false);
+  readonly inlineAnswers = signal<WorkbenchDecisionAnswer[]>([]);
+  readonly studioTheme = signal<'light' | 'dark'>(readStudioTheme());
 
-  readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(this.document()?.html ?? ''));
-  readonly pageContext = computed<PageContext | null>(() => {
+  readonly decisionPoints = computed(() => parseWorkbenchDecisionPoints(this.document()?.html ?? ''));
+  readonly decisionInteractionDisabled = computed(() => {
     const document = this.document();
-    if (!document) return null;
-    return {
-      projectName: this.projectName(),
-      relPath: document.workbench.entryPath.replace(/^docs\//i, ''),
-      title: document.workbench.title,
-      pageType: 'workbench',
-      excerpt: pageExcerpt(document.html, document.workbench.summary),
-    };
+    if (!document) return true;
+    const settled = document.workbench.decision?.state === 'succeeded'
+      || document.workbench.status === 'decided'
+      || document.workbench.status === 'archived';
+    const ready = document.workbench.phase === 'decision-ready'
+      || document.workbench.decision !== null && document.workbench.decision !== undefined;
+    return settled || !ready || document.workingTreeModified
+      || (!document.revision && !document.fingerprint);
   });
+  readonly sourceAnswers = computed(() => {
+    const points = this.decisionPoints();
+    return normalizeWorkbenchDecisionAnswers(
+      points,
+      this.document()?.workbench.decision?.answers ?? [],
+    ) ?? [];
+  });
+  readonly srcdoc = computed(() => buildWorkbenchDecisionSrcdoc(
+    this.document()?.html ?? '',
+    this.decisionPoints(),
+    this.sourceAnswers(),
+    this.decisionInteractionDisabled(),
+    untracked(() => this.studioTheme()),
+  ));
 
   constructor() {
+    const themeObserver = new MutationObserver(() => this.studioTheme.set(readStudioTheme()));
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-studio-theme'],
+    });
+    this.destroyRef.onDestroy(() => themeObserver.disconnect());
     effect(() => {
       const frame = this.frame();
       // This is the single audited HTML sink. The fixed wrapper is assigned as
@@ -60,19 +88,18 @@ export class WorkbenchViewerComponent {
       if (frame) frame.nativeElement.srcdoc = this.srcdoc();
     });
     effect(() => {
+      const theme = this.studioTheme();
+      this.frame()?.nativeElement.contentWindow?.postMessage({
+        type: WORKBENCH_THEME_MESSAGE,
+        theme,
+      }, '*');
+    });
+    effect(() => {
       const project = this.projectName();
       const id = this.workbenchId();
       this.maximized.set(false);
       this.loadDocument(project, id);
     });
-  }
-
-  statusLabel(): string {
-    const workbench = this.document()?.workbench;
-    if (!workbench) return '';
-    return workbench.status === 'active'
-      ? workbench.phase ?? workbench.status
-      : workbench.status;
   }
 
   openCurrentPageInWiki(): void {
@@ -84,7 +111,13 @@ export class WorkbenchViewerComponent {
   onFrameMessage(event: MessageEvent): void {
     const frameWindow = this.frame()?.nativeElement.contentWindow;
     if (!frameWindow || event.source !== frameWindow) return;
-    const message = event.data as { type?: unknown; href?: unknown } | null;
+    const message = event.data as { type?: unknown; href?: unknown; answers?: unknown } | null;
+    if (message?.type === WORKBENCH_DECISION_CHANGE_MESSAGE) {
+      if (this.decisionInteractionDisabled()) return;
+      const answers = normalizeWorkbenchDecisionAnswers(this.decisionPoints(), message.answers);
+      if (answers) this.inlineAnswers.set(answers);
+      return;
+    }
     if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
     const entryPath = this.document()?.workbench.entryPath;
     if (!entryPath) return;
@@ -116,6 +149,10 @@ export class WorkbenchViewerComponent {
     this.docs.getWorkbench(project, id).subscribe({
       next: document => {
         this.document.set(document);
+        this.inlineAnswers.set(normalizeWorkbenchDecisionAnswers(
+          parseWorkbenchDecisionPoints(document.html),
+          document.workbench.decision?.answers ?? [],
+        ) ?? []);
         this.loading.set(false);
       },
       error: () => {
@@ -124,4 +161,8 @@ export class WorkbenchViewerComponent {
       },
     });
   }
+}
+
+function readStudioTheme(): 'light' | 'dark' {
+  return document.documentElement.dataset['studioTheme'] === 'dark' ? 'dark' : 'light';
 }

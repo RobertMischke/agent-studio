@@ -40,7 +40,7 @@ export class PageActionBarComponent {
   readonly context = input.required<PageContext>();
   readonly archived = input(false);
   readonly archivePending = input(false);
-  /** Workbench host owns archive/build mutations through its two-phase decision gate. */
+  /** Workbench host owns task, archive, and build mutations through its decision surface. */
   readonly decisionActionsOwned = input(false);
   readonly archiveRequest = output<void>();
 

@@ -227,6 +227,32 @@ export interface WorkbenchTaskDraft {
   taskType: 'feature';
 }
 
+export type WorkbenchDecisionKind = 'single' | 'multi' | 'confirm';
+
+/** One author-declared option in a progressively enhanced decision point. */
+export interface WorkbenchDecisionOption {
+  id: string;
+  label: string;
+}
+
+/** A decision point discovered in the static Workbench HTML. */
+export interface WorkbenchDecisionPoint {
+  id: string;
+  kind: WorkbenchDecisionKind;
+  label: string;
+  options: WorkbenchDecisionOption[];
+  commentEnabled: boolean;
+  commentLabel: string;
+}
+
+/** The durable, audit-friendly answer stored in `workbench.json`. */
+export interface WorkbenchDecisionAnswer {
+  decisionId: string;
+  kind: WorkbenchDecisionKind;
+  selectedOptions: WorkbenchDecisionOption[];
+  comment: string | null;
+}
+
 /** The durable decision receipt stored inside `workbench.json` (schema v2). */
 export interface WorkbenchDecisionProjection {
   outcome: 'feature-spawn' | 'archive';
@@ -241,6 +267,8 @@ export interface WorkbenchDecisionProjection {
   decidedAt: string | null;
   reason: string | null;
   failure: string | null;
+  answers: WorkbenchDecisionAnswer[];
+  taskDraft: WorkbenchTaskDraft | null;
   spawnedTaskKeys: string[];
 }
 
@@ -272,6 +300,7 @@ export interface PrepareWorkbenchDecisionRequest {
   actor: string;
   archiveReason: string | null;
   task: WorkbenchTaskDraft | null;
+  answers: WorkbenchDecisionAnswer[];
 }
 
 /**
@@ -286,6 +315,7 @@ export interface ConfirmWorkbenchDecisionRequest {
   actor: string;
   archiveReason: string | null;
   task: WorkbenchTaskDraft | null;
+  answers: WorkbenchDecisionAnswer[];
   /** Keys of cards the client already created for this decision, if any. */
   spawnedTaskKeys?: string[];
   confirmed: true;

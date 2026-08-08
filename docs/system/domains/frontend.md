@@ -166,7 +166,7 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   and archived cards. Readiness and last-start diagnosis remain independent, so
   a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
-  read-only Workbench host. Explorer discovery is lazy per expanded project;
+  isolated Workbench host. Explorer discovery is lazy per expanded project;
   Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
   in an opaque-origin `srcdoc` iframe with the Workbench CSP. A source-checked
   message boundary maps docs-relative links to the in-app Wiki and opens absolute
@@ -174,7 +174,12 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   DOM parse moves artifact nodes into a fixed policy-first wrapper. Workbench
   pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
-  revision. Chat pinning and decision mutations are intentionally not mounted.
+  revision. An inert parse discovers the
+  [inline decision convention](../contracts/workbench-inline-decisions.md).
+  Studio-owned controls are injected inside the sandbox, while the source HTML
+  remains a readable list. The host validates every reported id against that
+  parse and the existing decision service atomically persists answers, comments,
+  actor, timestamp, and the prefilled feature-card proposal in `workbench.json`.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

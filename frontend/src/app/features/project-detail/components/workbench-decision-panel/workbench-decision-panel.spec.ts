@@ -2,8 +2,31 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { WorkbenchDocument } from '../../../../models/project-docs.model';
+import {
+  WorkbenchDecisionAnswer,
+  WorkbenchDecisionPoint,
+  WorkbenchDocument,
+} from '../../../../models/project-docs.model';
 import { WorkbenchDecisionPanelComponent } from './workbench-decision-panel';
+
+const POINTS: WorkbenchDecisionPoint[] = [{
+  id: 'routing-owner',
+  kind: 'single',
+  label: 'Where should routing run?',
+  options: [
+    { id: 'task-api', label: 'Task API recommendation' },
+    { id: 'studio-only', label: 'Studio default only' },
+  ],
+  commentEnabled: true,
+  commentLabel: 'Optional note',
+}];
+
+const ANSWERS: WorkbenchDecisionAnswer[] = [{
+  decisionId: 'routing-owner',
+  kind: 'single',
+  selectedOptions: [{ id: 'task-api', label: 'Task API recommendation' }],
+  comment: 'Keep the recommendation editable.',
+}];
 
 const DOCUMENT: WorkbenchDocument = {
   workbench: {
@@ -40,17 +63,23 @@ describe('WorkbenchDecisionPanelComponent', () => {
     fixture = TestBed.createComponent(WorkbenchDecisionPanelComponent);
     fixture.componentRef.setInput('projectName', 'Agent Studio');
     fixture.componentRef.setInput('document', DOCUMENT);
+    fixture.componentRef.setInput('decisionPoints', POINTS);
+    fixture.componentRef.setInput('answers', ANSWERS);
     fixture.detectChanges();
     http = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => http.verify());
 
-  it('prepares a feature decision and confirms it through the durable service', () => {
-    click('workbench-decision-build');
-    fixture.detectChanges();
-    click('workbench-decision-prepare');
+  it('prefills a compact card confirmation from inline answers and persists both', () => {
+    click('workbench-decision-prepare-card');
+    const confirmation = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-feature-card-confirmation"]') as HTMLElement;
+    expect(confirmation.textContent).toContain('Task API recommendation');
+    expect((confirmation.querySelector('[data-testid="workbench-decision-goal"]') as HTMLTextAreaElement).value)
+      .toContain('Keep the recommendation editable.');
 
+    click('workbench-decision-submit');
     const prepare = http.expectOne(
       '/api/projects/Agent%20Studio/workbenches/routing-policy/decisions/prepare');
     expect(prepare.request.body).toEqual(expect.objectContaining({
@@ -58,8 +87,10 @@ describe('WorkbenchDecisionPanelComponent', () => {
       expectedRevision: 'a'.repeat(40),
       expectedFingerprint: 'b'.repeat(64),
       actor: 'Operator',
+      answers: ANSWERS,
       task: expect.objectContaining({
         title: 'Implement Routing policy',
+        chosenOption: expect.stringContaining('Task API recommendation'),
         relatedTaskKeys: ['AGT-2300'],
         initialLane: '1-preparation',
         mode: 'coding',
@@ -80,22 +111,15 @@ describe('WorkbenchDecisionPanelComponent', () => {
       spawnedTaskKeys: [],
       idempotent: false,
     });
-    fixture.detectChanges();
 
-    click('workbench-decision-confirm');
     const confirm = http.expectOne(
       '/api/projects/Agent%20Studio/workbenches/routing-policy/decisions/confirm');
-    // Prepare writes nothing, so confirm repeats the payload against the
-    // revision/fingerprint that prepare reported back.
     expect(confirm.request.body).toEqual(expect.objectContaining({
       operationId,
-      outcome: 'feature-spawn',
+      confirmed: true,
+      answers: ANSWERS,
       expectedRevision: 'c'.repeat(40),
       expectedFingerprint: 'd'.repeat(64),
-      actor: 'Operator',
-      archiveReason: null,
-      confirmed: true,
-      task: expect.objectContaining({ title: 'Implement Routing policy' }),
     }));
     confirm.flush({
       success: true,
@@ -107,12 +131,12 @@ describe('WorkbenchDecisionPanelComponent', () => {
       decisionStage: 'succeeded',
       revision: 'e'.repeat(40),
       fingerprint: 'f'.repeat(64),
-      spawnedTaskKeys: ['AGT-2400'],
+      spawnedTaskKeys: [],
       idempotent: false,
     });
   });
 
-  it('renders a persisted archive decision after reload', () => {
+  it('renders compact audit provenance for a persisted archive after reload', () => {
     fixture.componentRef.setInput('document', {
       ...DOCUMENT,
       workbench: {
@@ -133,6 +157,8 @@ describe('WorkbenchDecisionPanelComponent', () => {
           decidedAt: '2026-07-26T10:01:00Z',
           reason: 'The experiment disproved the direction.',
           failure: null,
+          answers: ANSWERS,
+          taskDraft: null,
           spawnedTaskKeys: [],
         },
       },
@@ -140,9 +166,9 @@ describe('WorkbenchDecisionPanelComponent', () => {
     fixture.detectChanges();
 
     const receipt = fixture.nativeElement.querySelector('[data-testid="workbench-decision-receipt"]');
-    expect(receipt.textContent).toContain('Archive Workbench');
-    expect(receipt.textContent).toContain('The experiment disproved the direction.');
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-confirm"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Decision by Robert');
+    expect(receipt.textContent).toContain('1 selected option');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-submit"]')).toBeNull();
   });
 
   function click(testId: string): void {
