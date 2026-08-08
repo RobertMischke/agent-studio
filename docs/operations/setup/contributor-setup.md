@@ -124,7 +124,7 @@ Three things describe one project and should be decided in the same sitting. Ski
    - a `package.json` (repo root or one level down, e.g. `frontend/`) -> `npm run build` / `npm test` / `npm run lint`, but only for the scripts that manifest actually declares;
    - a repo with both -> both.
 
-   If nothing is derivable (no root solution/project, no usable npm scripts), the gate **runs without a build check and records `no verify commands derivable`** in its verdict - it does not fail against a path that does not exist. When your project needs a non-conventional command (a `make` target, a monorepo build, a nested solution), declare an explicit **build profile** with `PUT /api/projects/{project}/build-profile` (`buildCmds` / `testCmds`); those commands are the override and take precedence over the derivation. See [onboard-a-project.md](./onboard-a-project.md) for the build-profile fields.
+   If nothing is derivable (no root solution/project, no usable npm scripts), the gate records the neutral `not-applicable` outcome with reason `no verify commands derivable`; it does not fail against a path that does not exist and does not claim that verification passed. Project Settings keeps this visible as a no-verification-defined notice. When your project needs a non-conventional command (a `make` target, a monorepo build, a nested solution), declare an explicit **build profile** with `PUT /api/projects/{project}/build-profile` (`buildCmds` / `testCmds`); those commands are the override and take precedence over the derivation. See [onboard-a-project.md](./onboard-a-project.md) for the build-profile fields.
 
 ## 4. Run your first task
 

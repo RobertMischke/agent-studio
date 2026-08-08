@@ -8,6 +8,7 @@ import type { RunRecord, RunTimeline } from '../../../run-timeline';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TIMELINE_KIND, type TaskTimelineEvent } from '../../models/task-timeline.model';
+import type { TaskTestRunEvidence } from '../../../../models/task.model';
 
 function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
   return {
@@ -43,7 +44,11 @@ function runTimeline(runs: RunRecord[]): RunTimeline {
   };
 }
 
-async function build(events: TaskTimelineEvent[] = [], runs: RunRecord[] = []) {
+async function build(
+  events: TaskTimelineEvent[] = [],
+  runs: RunRecord[] = [],
+  evidence: TaskTestRunEvidence | null = null,
+) {
   await TestBed.configureTestingModule({
     imports: [TaskTimelinePaneComponent],
     providers: [
@@ -57,6 +62,7 @@ async function build(events: TaskTimelineEvent[] = [], runs: RunRecord[] = []) {
   TestBed.inject(TaskTimelinePollService).events.set(events);
   TestBed.inject(RunTimelinePollService).timeline.set(runs.length > 0 ? runTimeline(runs) : null);
   const fixture = TestBed.createComponent(TaskTimelinePaneComponent);
+  fixture.componentRef.setInput('evidence', evidence);
   try { fixture.detectChanges(); } catch (e) {
     console.warn('[smoke] TaskTimelinePaneComponent render skipped:', (e as Error).message);
   }
@@ -71,6 +77,19 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.hasLoop()).toBe(false);
     const html = fixture.nativeElement as HTMLElement;
     expect(html.querySelector('[data-testid="timeline-empty"]')).not.toBeNull();
+  });
+
+  it('renders applicable gate skips as attention evidence', async () => {
+    const fixture = await build([], [], {
+      runId: null, runCommit: null, runState: null, runResult: null,
+      matchQuality: 'perfect', direction: 'exact', distance: 0,
+      diffContained: true, evidenceState: 'not-proven', awaitingEvidence: false,
+      summary: 'Build/test gate skipped at d1649ce9',
+      sources: [{ kind: 'build-test-gate', id: 'gate-skip', commit: 'd1649ce9', result: 'not-proven', observedAt: null, summary: 'Build/test gate skipped at d1649ce9' }],
+    });
+
+    const status = fixture.nativeElement.querySelector('[data-testid="timeline-test-evidence"]') as HTMLElement;
+    expect(status.dataset['evidenceState']).toBe('not-proven');
   });
 
   it('renders the verdict banner + event list when a loop has activity', async () => {

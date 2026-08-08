@@ -3470,7 +3470,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             RecordBuildTestGateStep(current.FolderPath, PipelineStepStatus.Skipped,
                 durationMs: 0, verdictToken: "condition",
-                reason: "pipeline condition did not match");
+                reason: "pipeline condition did not match",
+                outcomeClass: BuildTestGateOutcomePolicy.SkippedToken);
             return new BuildTestGateResult(BuildTestGateVerdict.Skipped, null, 0, "",
                 "condition", false, false);
         }
@@ -3488,7 +3489,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             RecordBuildTestGateStep(current.FolderPath, PipelineStepStatus.Skipped,
                 durationMs: 0, verdictToken: "off",
-                reason: "post-step disabled by config");
+                reason: "post-step disabled by config",
+                outcomeClass: BuildTestGateOutcomePolicy.SkippedToken);
             return new BuildTestGateResult(BuildTestGateVerdict.Skipped, null, 0, "",
                 "mode=off", false, false);
         }
@@ -3622,7 +3624,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildTestGateVerdict.Skipped => "skipped",
             _ => "skipped",
         };
-        RecordBuildTestGateStep(current.FolderPath, status, result.DurationMs, verdictToken, result.Reason);
+        RecordBuildTestGateStep(
+            current.FolderPath,
+            status,
+            result.DurationMs,
+            verdictToken,
+            result.Reason,
+            BuildTestGateOutcomePolicy.Token(result.OutcomeClass));
 
         _logger.LogInformation(
             "ReviewDecisionOrchestrator: build-test gate {Verdict} for {Project}/{JobId} in {DurationMs}ms (backend={Backend} frontend={Frontend} changedFiles={ChangedFiles})",
@@ -3682,7 +3690,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PipelineStepStatus status,
         long durationMs,
         string verdictToken,
-        string reason)
+        string reason,
+        string outcomeClass)
     {
         if (_pipelineLog == null) return;
         var now = DateTime.UtcNow;
@@ -3696,6 +3705,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DurationMs = durationMs,
             Verdict = verdictToken,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+            OutcomeClass = outcomeClass,
         });
     }
 
@@ -3718,7 +3728,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 WriteIndented = true,
             });
-            var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} signal={result.TerminationSignal ?? "n/a"} durationMs={result.DurationMs}\n" +
+            var body = $"verdict={result.Verdict} outcomeClass={BuildTestGateOutcomePolicy.Token(result.OutcomeClass)} exit={result.ExitCode?.ToString() ?? "n/a"} signal={result.TerminationSignal ?? "n/a"} durationMs={result.DurationMs}\n" +
                        $"gateId={result.GateId} failureKind={result.FailureKind} failureFingerprint={result.FailureFingerprint ?? "n/a"}\n" +
                        $"gateRunId={result.GateRunId ?? "n/a"} startedAtUtc={result.GateStartedAtUtc?.ToString("O") ?? "n/a"} completedAtUtc={result.GateCompletedAtUtc?.ToString("O") ?? "n/a"}\n" +
                        $"collision={result.GateCollisionDetected} queueWaitMs={result.GateQueueWaitMs}\n" +

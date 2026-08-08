@@ -5,6 +5,27 @@ using Xunit;
 
 namespace AgentStudio.Tests;
 
+public sealed class BuildTestGateOutcomePolicyTests
+{
+    [Theory]
+    [InlineData(BuildTestGateVerdict.Skipped, "no verify commands derivable", BuildTestGateOutcomeClass.NotApplicable, "not-applicable")]
+    [InlineData(BuildTestGateVerdict.Skipped, "pipeline condition did not match", BuildTestGateOutcomeClass.Skipped, "skipped")]
+    [InlineData(BuildTestGateVerdict.Skipped, "mode=off", BuildTestGateOutcomeClass.Skipped, "skipped")]
+    [InlineData(BuildTestGateVerdict.Fail, "process crashed", BuildTestGateOutcomeClass.Executed, "executed")]
+    [InlineData(BuildTestGateVerdict.Ok, "all commands passed", BuildTestGateOutcomeClass.Executed, "executed")]
+    public void Classify_SeparatesNotApplicableFromEveryOtherSkip(
+        BuildTestGateVerdict verdict,
+        string reason,
+        BuildTestGateOutcomeClass expected,
+        string expectedToken)
+    {
+        var actual = BuildTestGateOutcomePolicy.Classify(verdict, reason);
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(expectedToken, BuildTestGateOutcomePolicy.Token(actual));
+    }
+}
+
 /// <summary>
 /// AGT-2065: the build/test gate derives its verify commands per project instead
 /// of hardcoding <c>backend/OrchestratorApi.csproj</c> (the Studio-specific path
@@ -350,6 +371,7 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         var r = await Run(profile: null);
         Assert.Equal(BuildTestGateVerdict.Skipped, r.Verdict);
         Assert.Equal("no verify commands derivable", r.Reason);
+        Assert.Equal(BuildTestGateOutcomeClass.NotApplicable, r.OutcomeClass);
         Assert.False(r.RanBackendBuild);
         Assert.False(r.RanFrontendBuild);
     }

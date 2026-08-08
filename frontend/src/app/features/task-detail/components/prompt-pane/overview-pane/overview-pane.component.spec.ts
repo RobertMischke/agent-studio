@@ -1285,6 +1285,65 @@ describe('OverviewPaneComponent (smoke)', () => {
       .toContain('skipped: chain ended by early escalate');
   });
 
+  it.each([
+    {
+      outcomeClass: 'not-applicable',
+      reason: 'no verify commands derivable',
+      expectedStatus: 'not-applicable',
+      expectedGateOutcome: 'not-applicable',
+      expectedHint: 'not applicable · no build/test commands defined',
+      expectedTone: 'not-applicable',
+    },
+    {
+      outcomeClass: 'skipped',
+      reason: 'pipeline condition did not match',
+      expectedStatus: 'skipped',
+      expectedGateOutcome: 'skipped',
+      expectedHint: 'skipped: verification did not run',
+      expectedTone: 'danger',
+    },
+  ] as const)(
+    'pipeline block: build/test gate outcome $outcomeClass keeps its distinct semantics',
+    async ({ outcomeClass, reason, expectedStatus, expectedGateOutcome, expectedHint, expectedTone }) => {
+      const fixture = await build(baseJob({ state: '5-human-review' }));
+      const pipe: TaskPipelineResponse = {
+        pipeline: {
+          id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+          pre: [], core: [], post: [],
+          allSteps: [
+            { id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          ],
+        },
+        execution: {
+          pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+          startedAt: '2026-08-08T10:00:00Z', completedAt: '2026-08-08T10:00:01Z',
+          steps: [{
+            stepId: 'post-build-test-gate', kind: 'tool', status: 'skipped',
+            durationMs: 0, inputTokens: 0, outputTokens: 0,
+            cacheReadTokens: 0, cacheCreationTokens: 0,
+            verdict: 'skipped', outcomeClass, reason,
+          }],
+        },
+        cost: emptyCost(),
+        config: {},
+      };
+      TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+      fixture.detectChanges();
+
+      const row = fixture.componentInstance.pipelineRows()[0];
+      expect(row.status).toBe(expectedStatus);
+      expect(row.gateOutcome).toBe(expectedGateOutcome);
+      expect(row.skipHint).toBe(expectedHint);
+      expect(fixture.componentInstance.pipelineGroups()[0].tone).toBe(expectedTone);
+
+      fixture.componentInstance.expandAllPipelineGroups();
+      fixture.detectChanges();
+      const element = fixture.nativeElement.querySelector('[data-step-id="post-build-test-gate"]') as HTMLElement;
+      expect(element.dataset['status']).toBe(expectedStatus);
+      expect(element.dataset['gateOutcome']).toBe(expectedGateOutcome);
+    },
+  );
+
   it('pipeline block: per-step rows carry start/end stamps and a live-counting duration for the running step', async () => {
     const fixture = await build(baseJob({ state: '3-progress' }));
     const runningStart = new Date(Date.now() - 4_000).toISOString();

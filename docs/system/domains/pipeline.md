@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-02
+Version: 2026-08-08
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -602,6 +602,14 @@ operator changes cause the step to fail before its writer runs.
   a shared checkout and its linked worktrees cannot launch overlapping full
   builds or test suites. Admission and host-load waits are cancellable and do
   not consume the per-command execution timeout.
+- `BuildTestGateOutcomePolicy` refines terminal gate telemetry into
+  `executed`, `skipped`, or `not-applicable`. Only the exact
+  `no verify commands derivable` result is not applicable. A condition,
+  cancellation, crash window, or any other reason remains skipped and visible
+  as an attention state. The policy never creates green evidence: if verify
+  commands are derivable and did not run, the gate is still unproven. The
+  outcome class is persisted in the gate receipt and pipeline execution row so
+  the Board, Task Overview, Result, and Timeline use the same semantics.
 - `PipelineHealthService` is the visibility-only sensor for pipeline-wide
   failure modes. `BuildTestGateRunner` reports acquired/completed pairs into
   it, and the service reads the existing append-only `lane_changed` ledgers.

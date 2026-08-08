@@ -1,0 +1,19 @@
+@if (status()?.hasVerifyCommands === false) {
+  <aside class="verify-note"
+         data-testid="project-settings-no-verify-commands"
+         aria-label="No build or test verification is configured">
+    <span class="verify-note__dot" aria-hidden="true"></span>
+    <span>
+      <strong>No build/test verification defined.</strong>
+      @if (status()?.profile === null) {
+        No BuildProfile exists and no commands can be derived, so the build/test gate is not applicable.
+      } @else {
+        This BuildProfile supplies no commands and none can be derived, so the build/test gate is not applicable.
+      }
+      <a class="verify-note__link"
+         href="https://github.com/agent-orc/agent-studio/blob/main/docs/operations/setup/contributor-setup.md#onboarding-checklist-registry--working-directory--build-profile-belong-together"
+         target="_blank"
+         rel="noopener noreferrer">BuildProfile convention</a>
+    </span>
+  </aside>
+}

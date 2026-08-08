@@ -2,16 +2,20 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import type { TaskTestRunEvidence } from '../../../../models/task.model';
 
+export type TestEvidenceStatusVariant = 'card' | 'panel';
+
 @Component({
-  selector: 'app-task-test-evidence',
+  selector: 'app-test-evidence-status',
   standalone: true,
   imports: [AppTooltipDirective],
-  templateUrl: './task-test-evidence.html',
-  styleUrl: './task-test-evidence.scss',
+  templateUrl: './test-evidence-status.component.html',
+  styleUrl: './test-evidence-status.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TaskTestEvidenceComponent {
+export class TestEvidenceStatusComponent {
   readonly evidence = input.required<TaskTestRunEvidence>();
+  readonly variant = input<TestEvidenceStatusVariant>('card');
+  readonly testId = input('task-test-evidence');
 
   tooltipText(): string {
     const evidence = this.evidence();

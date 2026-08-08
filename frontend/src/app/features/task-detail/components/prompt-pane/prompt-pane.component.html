@@ -100,7 +100,7 @@
       }
 
       @case ('timeline') {
-        <app-task-timeline-pane />
+        <app-task-timeline-pane [evidence]="job()?.testEvidence ?? null" />
       }
 
       @case ('evidence') {

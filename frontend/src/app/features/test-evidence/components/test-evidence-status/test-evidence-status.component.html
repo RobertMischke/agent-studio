@@ -1,8 +1,9 @@
 <div class="test-evidence"
+     [class.test-evidence--panel]="variant() === 'panel'"
      [attr.data-evidence-state]="evidence().evidenceState"
      [attr.data-match-quality]="evidence().matchQuality"
-     [appTooltip]="tooltipText()"
-     data-testid="task-card-test-evidence">
+     [attr.data-testid]="testId()"
+     [appTooltip]="tooltipText()">
   <span class="test-evidence__dot" aria-hidden="true"></span>
   <span class="test-evidence__copy">
     <strong>{{ evidence().summary }}</strong>

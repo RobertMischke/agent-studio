@@ -778,6 +778,26 @@
     }
   }
 
+  // A missing verification definition is an intentionally quiet third state.
+  // Every other build/test-gate skip remains an attention state because the
+  // backstop must not imply successful verification when commands exist.
+  &[data-status='not-applicable'] {
+    opacity: 0.72;
+    background: var(--studio-card-muted-bg);
+    color: var(--studio-fg-dim);
+  }
+
+  &[data-gate-outcome='skipped'] {
+    opacity: 1;
+    background: color-mix(in srgb, var(--studio-danger, var(--severity-high)) 12%, transparent);
+    color: var(--studio-danger, var(--severity-high));
+
+    .ov-pl-step__name {
+      color: inherit;
+      text-decoration: none;
+    }
+  }
+
   // Active state uses a whole-row tint and dot, never a side stripe.
   &--running {
     background: color-mix(in srgb, var(--lane-progress) 14%, var(--studio-bg-running));

@@ -73,6 +73,21 @@ describe('ResultViewComponent', () => {
     expect(el.querySelector('[data-testid="result-overview-solution"]')?.textContent).toContain('Re-toned');
   });
 
+  it('renders the same neutral not-applicable evidence state as the board', async () => {
+    const fixture = await build(detail(HEAD_ONLY, {
+      testEvidence: {
+        runId: null, runCommit: null, runState: null, runResult: null,
+        matchQuality: 'perfect', direction: 'exact', distance: 0,
+        diffContained: true, evidenceState: 'not-applicable', awaitingEvidence: false,
+        summary: 'No build/test commands defined at d1649ce9',
+        sources: [{ kind: 'build-test-gate', id: 'gate-na', commit: 'd1649ce9', result: 'not-applicable', observedAt: null, summary: 'No build/test commands defined at d1649ce9' }],
+      },
+    }), verdict());
+
+    const status = fixture.nativeElement.querySelector('[data-testid="result-test-evidence"]') as HTMLElement;
+    expect(status.dataset['evidenceState']).toBe('not-applicable');
+  });
+
   it('renders one verdict plus grade, duration and tokens metrics', async () => {
     const fixture = await build(detail(HEAD_ONLY), verdict());
     const el = fixture.nativeElement as HTMLElement;

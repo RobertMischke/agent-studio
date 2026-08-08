@@ -68,6 +68,8 @@ export interface PipelineStepExecution {
   cacheCreationTokens: number;
   tokenUsageSource?: string | null;
   reason?: string | null;
+  /** Semantic refinement for a terminal gate result, e.g. not-applicable vs skipped. */
+  outcomeClass?: 'executed' | 'skipped' | 'not-applicable' | string | null;
   verdict?: string | null;
   /**
    * Human-readable concern detail for aspect steps with a non-pass

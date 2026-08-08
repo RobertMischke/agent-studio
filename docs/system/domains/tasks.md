@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-03
+Version: 2026-08-08
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -206,6 +206,16 @@ files. The corrected card copy names the source and SHA, for example
 `No test evidence assigned` and say that no SHA-linked project run, build gate,
 or review grade is recorded. Only a matched planned or running project test
 run uses `Evidence pending`.
+
+A build/test gate receipt with the explicit `not-applicable` outcome, or a
+legacy receipt whose exact reason is `no verify commands derivable`, projects
+as neutral `No build/test commands defined at <sha>`. It is neither green proof
+nor a failure. Every other skipped gate projects as red `not-proven` evidence.
+The shared evidence component carries this distinction across Board cards,
+Task Result, and Task Timeline; Task Overview derives the same distinction from
+the pipeline execution outcome class. Project Settings also exposes a neutral
+notice when the current BuildProfile and repository conventions yield no
+verify commands.
 
 ## Files-tab document projection
 

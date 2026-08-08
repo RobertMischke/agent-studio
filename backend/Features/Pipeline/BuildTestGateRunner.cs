@@ -16,6 +16,46 @@ public enum BuildTestGateVerdict
     Fail,
 }
 
+/// <summary>
+/// Operator-facing classification of a build/test gate outcome. A repository
+/// with no derivable verification commands is intentionally distinct from a
+/// gate that should have run but was skipped.
+/// </summary>
+public enum BuildTestGateOutcomeClass
+{
+    Executed,
+    Skipped,
+    NotApplicable,
+}
+
+/// <summary>
+/// Pure compatibility policy for current results and historical gate logs.
+/// The reason token predates the explicit outcome-class field, so keeping the
+/// legacy mapping here lets old task evidence acquire the new semantics.
+/// </summary>
+public static class BuildTestGateOutcomePolicy
+{
+    public const string NoVerifyCommandsReason = "no verify commands derivable";
+    public const string ExecutedToken = "executed";
+    public const string SkippedToken = "skipped";
+    public const string NotApplicableToken = "not-applicable";
+
+    public static BuildTestGateOutcomeClass Classify(BuildTestGateVerdict verdict, string? reason)
+    {
+        if (verdict != BuildTestGateVerdict.Skipped) return BuildTestGateOutcomeClass.Executed;
+        return string.Equals(reason?.Trim(), NoVerifyCommandsReason, StringComparison.OrdinalIgnoreCase)
+            ? BuildTestGateOutcomeClass.NotApplicable
+            : BuildTestGateOutcomeClass.Skipped;
+    }
+
+    public static string Token(BuildTestGateOutcomeClass outcomeClass) => outcomeClass switch
+    {
+        BuildTestGateOutcomeClass.NotApplicable => NotApplicableToken,
+        BuildTestGateOutcomeClass.Skipped => SkippedToken,
+        _ => ExecutedToken,
+    };
+}
+
 public enum BuildTestGateFailureKind
 {
     None,
@@ -114,6 +154,8 @@ public sealed record BuildTestGateResult(
     bool RanBackendBuild,
     bool RanFrontendBuild)
 {
+    public BuildTestGateOutcomeClass OutcomeClass =>
+        BuildTestGateOutcomePolicy.Classify(Verdict, Reason);
     public string? GateRunId { get; init; }
     public DateTimeOffset? GateStartedAtUtc { get; init; }
     public DateTimeOffset? GateCompletedAtUtc { get; init; }
@@ -348,7 +390,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     _logger.LogInformation(
                         "BuildTestGateRunner: no verify commands derivable for {Repo}; gate runs without a build check",
                         workspace);
-                    completed = Skipped("no verify commands derivable");
+                    completed = Skipped(BuildTestGateOutcomePolicy.NoVerifyCommandsReason);
                 }
                 else
                 {

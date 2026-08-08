@@ -45,6 +45,7 @@
   flex-direction: column;
   gap: var(--studio-spacing-3);
 }
+
 /* Bounded quick-setup form. The accent tint is gone: Deck-Panel v1 keeps a
    tinted surface for acute state, never for "important content". */
 .ps-settings__section--preview {

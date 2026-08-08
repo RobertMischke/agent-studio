@@ -28,6 +28,7 @@ import { ExecutionAssignmentCardComponent } from '../execution-assignment-card/e
 import { ParallelExecutionCardComponent } from '../parallel-execution-card/parallel-execution-card';
 import { ProjectBasicsCardComponent } from '../project-basics-card/project-basics-card.component';
 import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
+import { ProjectBuildVerificationNoteComponent } from '../project-build-verification-note/project-build-verification-note.component';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -91,6 +92,7 @@ interface WorkspaceListItemLite {
     ExecutionAssignmentCardComponent,
     ParallelExecutionCardComponent,
     ProjectBasicsCardComponent,
+    ProjectBuildVerificationNoteComponent,
     ProjectUrlsPanelComponent,
   ],
   templateUrl: './project-settings-panel.component.html',

@@ -237,6 +237,67 @@ public sealed class TestRunServiceTests : IDisposable
         Assert.Equal("gate-42", source.Id);
     }
 
+    [Theory]
+    [InlineData("outcomeClass=not-applicable", "not-applicable", "No build/test commands defined at")]
+    [InlineData("", "not-applicable", "No build/test commands defined at")]
+    public void CardEvidence_NoDerivableCommands_IsNeutralForCurrentAndLegacyLogs(
+        string outcomeToken,
+        string expectedState,
+        string expectedSummaryPrefix)
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.HumanReview, "static-site");
+        var postSteps = Path.Combine(folder, "post-steps");
+        Directory.CreateDirectory(postSteps);
+        File.WriteAllText(
+            Path.Combine(postSteps, "build-test-gate-1.log"),
+            $"verdict=Skipped {outcomeToken} exit=n/a signal=n/a durationMs=0\n"
+            + "gateId=post-build-test-gate failureKind=None failureFingerprint=n/a\n"
+            + "gateRunId=gate-static startedAtUtc=2026-08-08T10:00:00Z completedAtUtc=2026-08-08T10:00:01Z\n"
+            + $"repository=demo expectedSha={commit} testedSha={commit}\n"
+            + "reason=no verify commands derivable\n");
+        var job = Task("static-site", stack.Storage, commit) with
+        {
+            State = TaskStates.HumanReview,
+            FolderPath = folder,
+        };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(expectedState, evidence.EvidenceState);
+        Assert.StartsWith(expectedSummaryPrefix, evidence.Summary, StringComparison.Ordinal);
+        Assert.Equal("not-applicable", Assert.Single(evidence.Sources).Result);
+    }
+
+    [Fact]
+    public void CardEvidence_OtherSkippedBuildGate_RemainsNotProven()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.HumanReview, "interrupted-gate");
+        var postSteps = Path.Combine(folder, "post-steps");
+        Directory.CreateDirectory(postSteps);
+        File.WriteAllText(
+            Path.Combine(postSteps, "build-test-gate-1.log"),
+            $"verdict=Skipped outcomeClass=skipped exit=n/a signal=n/a durationMs=0\n"
+            + "gateId=post-build-test-gate failureKind=None failureFingerprint=n/a\n"
+            + "gateRunId=gate-skipped startedAtUtc=2026-08-08T10:00:00Z completedAtUtc=2026-08-08T10:00:01Z\n"
+            + $"repository=demo expectedSha={commit} testedSha={commit}\n"
+            + "reason=pipeline condition did not match\n");
+        var job = Task("interrupted-gate", stack.Storage, commit) with
+        {
+            State = TaskStates.HumanReview,
+            FolderPath = folder,
+        };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("not-proven", evidence.EvidenceState);
+        Assert.StartsWith("Build/test gate skipped at", evidence.Summary, StringComparison.Ordinal);
+        Assert.Equal("not-proven", Assert.Single(evidence.Sources).Result);
+    }
+
     [Fact]
     public void CardEvidence_DoesNotReuseTaskScopedGradeForDifferentCommit()
     {

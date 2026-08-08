@@ -58,6 +58,13 @@
       </div>
     </header>
 
+    @if (detail().info.testEvidence; as evidence) {
+      <app-test-evidence-status
+        [evidence]="evidence"
+        variant="panel"
+        testId="result-test-evidence" />
+    }
+
     <!-- 2. Overview: the shareable "problem -> solution", laid out per case.
          data-layout drives visibly distinct arrangements (concept doc §8.3):
          sequence (arrow flow), before-after (two columns), blocker (warn

@@ -31,6 +31,7 @@ export type PipelineRowStatusLike =
   | 'passed'
   | 'failed'
   | 'skipped'
+  | 'not-applicable'
   | 'not-run'
   | 'planned'
   | 'disabled';
@@ -49,6 +50,8 @@ export interface PipelineGroupRowLike {
   totalTokens: number;
   /** True for local pipeline work deliberately omitted by a remote lifecycle. */
   remoteNotApplicable?: boolean;
+  /** Build/test gate was skipped despite being potentially applicable. */
+  gateOutcome?: 'skipped' | 'not-applicable' | null;
 }
 
 /** One collapsible pipeline section, carrying its rows and aggregate counters. */
@@ -138,18 +141,21 @@ function rowHasRun(status: PipelineRowStatusLike): boolean {
 
 /** A row the operator should look at right now: active or problematic. */
 export function rowIsRisk(row: PipelineGroupRowLike): boolean {
+  if (row.gateOutcome === 'skipped') return true;
   if (row.status === 'running' || row.status === 'failed') return true;
   return CONCERN_VERDICTS.has(verdictKey(row.verdict));
 }
 
 /** A row carrying an unresolved concern (drives the concern rollup + row marker). */
 export function rowHasConcern(row: PipelineGroupRowLike): boolean {
+  if (row.gateOutcome === 'skipped') return true;
   if (row.status === 'failed') return true;
   return CONCERN_VERDICTS.has(verdictKey(row.verdict));
 }
 
 /** A row that forces the whole section into the danger tone. */
 function rowIsBlocking(row: PipelineGroupRowLike): boolean {
+  if (row.gateOutcome === 'skipped') return true;
   if (row.status === 'failed') return true;
   return BLOCKING_VERDICTS.has(verdictKey(row.verdict));
 }
@@ -170,10 +176,11 @@ export function groupTone(rows: readonly PipelineGroupRowLike[]): PipelineGroupT
   if (rows.some(r => r.status === 'running')) return 'warn';
   if (rows.some(rowHasConcern)) return 'concern';
   const executable = rows.filter(
-    r => r.status !== 'disabled' && r.status !== 'skipped' && r.status !== 'not-run' && r.status !== 'planned',
+    r => r.status !== 'disabled' && r.status !== 'skipped' && r.status !== 'not-applicable' && r.status !== 'not-run' && r.status !== 'planned',
   );
   if (executable.length > 0 && executable.every(r => r.status === 'passed')) return 'ok';
   if (executable.length === 0 && rows.some(r => r.status === 'not-run')) return 'not-run';
+  if (executable.length === 0 && rows.some(r => r.status === 'not-applicable')) return 'not-applicable';
   if (executable.length === 0 && rows.some(r => r.remoteNotApplicable)) return 'not-applicable';
   if (executable.length === 0) return 'muted';
   return 'neutral';

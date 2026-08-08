@@ -101,13 +101,15 @@ interface PipelineRowVm {
   hasExecution: boolean;
   config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
-  status: PipelineStepStatus | 'disabled' | 'not-run';
+  status: PipelineStepStatus | 'disabled' | 'not-run' | 'not-applicable';
   /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
   /** Small causal note for the designed skip cascade after an early escalate. */
   skipHint: string | null;
   /** This local step is structurally absent from the remote execution route. */
   remoteNotApplicable: boolean;
+  /** Build/test-gate refinement. A true skip stays attention-red; no commands is neutral. */
+  gateOutcome: 'skipped' | 'not-applicable' | null;
   /** Remote Review Plane explanation when this is its projected decision row. */
   remoteReviewDetail: string | null;
   model: string | null;
@@ -300,12 +302,14 @@ function buildStepStatusTooltip(
   const body = detail?.trim();
   if (!body) return null;
   const passedTestCoverage = status === 'passed' && /(?:^|;\s*)test-level=/i.test(body);
-  if (status !== 'failed' && status !== 'skipped' && status !== 'not-run' && !passedTestCoverage) return null;
+  if (status !== 'failed' && status !== 'skipped' && status !== 'not-run' && status !== 'not-applicable' && !passedTestCoverage) return null;
   const title = status === 'failed'
     ? 'Failed'
     : status === 'skipped'
       ? 'Skipped'
-      : status === 'not-run' ? 'Not run' : 'Passed';
+      : status === 'not-applicable'
+        ? 'Not applicable'
+        : status === 'not-run' ? 'Not run' : 'Passed';
   return { title: `${label}: ${title}`, body };
 }
 
@@ -413,6 +417,8 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
  * Mirrors backend `PipelineCatalogue.OrchestratorDecisionStepId`.
  */
 const FINAL_VERDICT_STEP_ID = 'post-orchestrator-decision';
+const BUILD_TEST_GATE_STEP_ID = 'post-build-test-gate';
+const NO_VERIFY_COMMANDS_REASON = 'no verify commands derivable';
 
 const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
   pre: {
@@ -880,6 +886,13 @@ export class OverviewPaneComponent {
       else if (step.stub) status = 'planned';
       else if (attemptSettledOutsideFullPipeline && !step.deferred) status = 'not-run';
       else status = 'pending';
+      const gateOutcome: PipelineRowVm['gateOutcome'] = key === BUILD_TEST_GATE_STEP_ID && status === 'skipped'
+        ? (e?.outcomeClass === 'not-applicable'
+            || e?.reason?.trim().toLowerCase() === NO_VERIFY_COMMANDS_REASON
+          ? 'not-applicable'
+          : 'skipped')
+        : null;
+      if (gateOutcome === 'not-applicable') status = 'not-applicable';
       const label = step.displayName || step.id;
       // Model precedence: a recorded execution model (what actually ran) wins;
       // before any run, fall back to the backend-resolved effective model so the
@@ -930,12 +943,17 @@ export class OverviewPaneComponent {
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
         skipHint: status === 'not-run'
           ? 'not run: lightweight pipeline or escalation'
+          : gateOutcome === 'not-applicable'
+            ? 'not applicable · no build/test commands defined'
+          : gateOutcome === 'skipped'
+            ? 'skipped: verification did not run'
           : remoteNotApplicable
             ? 'executed remotely · not applicable'
           : status === 'skipped' && chainEndedByEarlyEscalate
             ? 'skipped: chain ended by early escalate'
             : null,
         remoteNotApplicable,
+        gateOutcome,
         remoteReviewDetail: e?.reason?.startsWith('Remote Review Plane verdict')
           ? e.reason
           : null,

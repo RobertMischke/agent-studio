@@ -2,6 +2,7 @@
 
 namespace AgentStudio.Projects;
 
+using AgentStudio.Pipeline;
 using AgentStudio.Registry;
 using AgentStudio.Security;
 
@@ -751,8 +752,14 @@ public static class ProjectSettingsEndpoints
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
+            var entry = scanner.GetWatchPaths().First(e =>
+                string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             var profile = settings.Get(projectName).BuildProfile;
             var gate = BuildProfileGate.Evaluate(profile);
+            var repositoryPath = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+                ? entry.RootPath
+                : entry.RepositoryPath;
+            var verifyPlan = VerifyCommandPlanner.Plan(repositoryPath, profile);
             return Results.Ok(new
             {
                 profile,
@@ -760,6 +767,9 @@ public static class ProjectSettingsEndpoints
                 pickupAllowed = gate.AllowsPickup,
                 gateReason = gate.Reason,
                 plannedDryRun = BuildProfileDryRunPlanner.Plan(profile),
+                hasVerifyCommands = !verifyPlan.IsEmpty,
+                verifyPlanSource = verifyPlan.Source,
+                verifyCommandCount = verifyPlan.Commands.Count,
             });
         });
 

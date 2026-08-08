@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import {
   AspectFindingsListComponent,
@@ -30,6 +30,8 @@ import {
   timelineKindLabel,
   type TimelineSourceDisclosure,
 } from '../task-timeline-presentation';
+import type { TaskTestRunEvidence } from '../../../../models/task.model';
+import { TestEvidenceStatusComponent } from '../../../test-evidence';
 
 /**
  * Timeline tab of the task-detail prompt pane (ADR-0049 / ASS-566).
@@ -49,11 +51,13 @@ import {
   selector: 'app-task-timeline-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective, AspectFindingsListComponent, SteeringDetailComponent],
+  imports: [TooltipDirective, AspectFindingsListComponent, SteeringDetailComponent, TestEvidenceStatusComponent],
   templateUrl: './task-timeline-pane.component.html',
   styleUrl: './task-timeline-pane.component.scss',
 })
 export class TaskTimelinePaneComponent {
+  readonly evidence = input<TaskTestRunEvidence | null>(null);
+
   private readonly poll = inject(TaskTimelinePollService);
   private readonly runPoll = inject(RunTimelinePollService, { optional: true });
 

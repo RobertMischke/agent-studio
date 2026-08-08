@@ -1,4 +1,11 @@
 <div class="tl" data-testid="timeline-tab">
+  @if (evidence(); as testEvidence) {
+    <app-test-evidence-status
+      [evidence]="testEvidence"
+      variant="panel"
+      testId="timeline-test-evidence" />
+  }
+
   @if (hasLoop()) {
     @let loop = completionLoop();
     <!-- Prominent final-verdict banner: the at-a-glance answer to

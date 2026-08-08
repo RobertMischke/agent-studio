@@ -64,6 +64,18 @@ describe('groupTone', () => {
     ).toBe('not-applicable');
   });
 
+  it('is not-applicable when a repository has no verify commands', () => {
+    expect(groupTone([
+      row({ phaseKey: 'tool', status: 'not-applicable', gateOutcome: 'not-applicable' }),
+    ])).toBe('not-applicable');
+  });
+
+  it('keeps an applicable but skipped build/test gate in danger', () => {
+    expect(groupTone([
+      row({ phaseKey: 'tool', status: 'skipped', gateOutcome: 'skipped' }),
+    ])).toBe('danger');
+  });
+
   it('is neutral when nothing has run yet', () => {
     expect(groupTone([row({ phaseKey: 'tool', status: 'pending' })])).toBe('neutral');
   });

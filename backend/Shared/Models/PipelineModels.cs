@@ -253,6 +253,12 @@ public sealed record PipelineStepExecution
     /// <summary>Short reason on failure / skip; null on success.</summary>
     public string? Reason { get; init; }
     /// <summary>
+    /// Optional semantic refinement for terminal outcomes. The build/test gate
+    /// writes <c>not-applicable</c> when the repository has no derivable verify
+    /// commands and <c>skipped</c> when a gate that could apply did not run.
+    /// </summary>
+    public string? OutcomeClass { get; init; }
+    /// <summary>
     /// Optional verdict token from the step (e.g. <c>pass</c>,
     /// <c>concerns</c>, <c>block</c> for aspect steps). Lets the UI
     /// render the right pill without re-reading the aspect MD.
