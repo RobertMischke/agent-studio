@@ -41,7 +41,7 @@ export class DecisionBacklogHintComponent {
           const waitingTask = tasksByKey.get(key.trim().toUpperCase()) ?? null;
           return {
             key,
-            title: waitingTask?.title?.trim() || 'Titel nicht verfügbar',
+            title: waitingTask?.title?.trim() || 'Title unavailable',
             task: waitingTask,
           };
         });

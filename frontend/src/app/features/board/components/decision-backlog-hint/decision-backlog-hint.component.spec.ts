@@ -44,7 +44,38 @@ describe('DecisionBacklogHintComponent', () => {
       .toEqual(['AGT-9', 'AGT-4', 'AGT-2']);
   });
 
-  it('explains the impact in German and opens a resolved waiting card', async () => {
+  it.each([
+    {
+      count: 1,
+      expectedSummary: 'Your decision on AGT-9 blocks 1 waiting card',
+      details: 'This card is waiting for your decision:',
+    },
+    {
+      count: 3,
+      expectedSummary: 'Your decision on AGT-9 blocks 3 waiting cards',
+      details: 'These cards are waiting for your decision:',
+    },
+  ])('pluralizes the English impact copy for $count waiting card(s)', async ({ count, expectedSummary, details }) => {
+    await TestBed.configureTestingModule({
+      imports: [DecisionBacklogHintComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DecisionBacklogHintComponent);
+    const decision = task('AGT-9', count);
+    const waitingTasks = Array.from({ length: count }, (_, index) =>
+      task(`WAIT-${index + 1}`, 0, `Waiting implementation ${index + 1}`));
+    fixture.componentRef.setInput('tasks', [decision]);
+    fixture.componentRef.setInput('allTasks', [decision, ...waitingTasks]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const summaryButton = host.querySelector<HTMLButtonElement>('[data-testid="decision-backlog-item-AGT-9"]')!;
+    expect(summaryButton.textContent?.replace(/\s+/g, ' ').trim()).toContain(expectedSummary);
+    expect(host.querySelector('.decision-backlog__waiters p')?.textContent?.replace(/\s+/g, ' ').trim())
+      .toBe(details);
+  });
+
+  it('opens a resolved waiting card and preserves its user-authored title', async () => {
     await TestBed.configureTestingModule({
       imports: [DecisionBacklogHintComponent],
       providers: [provideZonelessChangeDetection()],
@@ -60,10 +91,6 @@ describe('DecisionBacklogHintComponent', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     const summary = host.querySelector<HTMLButtonElement>('[data-testid="decision-backlog-item-AGT-9"]')!;
-    const summaryText = summary.textContent?.replace(/\s+/g, ' ').trim();
-    expect(summaryText).toContain('Deine Entscheidung zu');
-    expect(summaryText).toContain('blockiert 1 wartende Karte');
-
     summary.click();
     fixture.detectChanges();
     expect(summary.getAttribute('aria-expanded')).toBe('true');
