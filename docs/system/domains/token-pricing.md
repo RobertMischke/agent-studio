@@ -1,7 +1,8 @@
 # Token pricing
 
-> **Status (2026-07-21):** Live. Pricing is owned by the published
-> `TokenEconomy` package. Studio contains no model rates.
+> **Status (2026-08-09):** Live. Pricing is owned by the exactly pinned
+> `TokenEconomy` 0.2.0 package, which is still the latest version published on
+> nuget.org. Studio contains no model rates.
 
 ## Contract
 
@@ -25,6 +26,19 @@ TokenEconomy distinguishes `Resolved`, `UnknownModel`, and `NoPriceForDate`.
 Studio maps only `Resolved` to a dollar value. The other states keep the token
 count and set the existing unknown-price flags so UI surfaces render `Unknown`,
 never a silent `$0.00`.
+
+An `UnknownModel` result for a token-bearing call emits one structured warning
+per model and process. Token Summary also renders an `N models without price
+data` badge for active model rows with no applicable catalog price, including
+`UnknownModel` and `NoPriceForDate`, so an outdated or incomplete exact package
+pin is visible without inspecting individual tooltips.
+
+## Package update procedure
+
+1. Query nuget.org for the latest stable `TokenEconomy` version and confirm that the required model and historical price entries are present in that package.
+2. Update the exact `TokenEconomy` pin in `backend/OrchestratorApi.csproj` and the assembly-version assertion in `backend.Tests/TokenPricingTests.cs` in the same change.
+3. Restore and compile the backend against `ITokenPriceProvider` and `TokenEconomyPriceProvider`, adapting package-specific API changes only inside the provider adapter.
+4. Run `TokenPricingTests` plus the complete non-machine-bound .NET suite, then verify a recorded run timestamp and an `UnknownModel` fixture through the UI tests.
 
 ## Cost surfaces
 

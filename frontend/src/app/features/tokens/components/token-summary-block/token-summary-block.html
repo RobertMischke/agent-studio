@@ -1,11 +1,18 @@
 @if (summary(); as s) {
   <section class="tok-sum" data-testid="token-summary">
-    <header class="tok-sum__head">
+    <header class="tok-sum__head" data-testid="token-summary-head">
       <h3 class="tok-sum__title">Tokens & cost</h3>
       @if (s.orchestratorLlmCalls > 0) {
         <span class="tok-sum__sub">{{ s.orchestratorLlmCalls }} orchestrator call{{ s.orchestratorLlmCalls === 1 ? '' : 's' }}</span>
       } @else {
         <span class="tok-sum__sub">No orchestrator activity yet.</span>
+      }
+      @if (unpricedModelCount() > 0) {
+        <span class="tok-sum__drift"
+              data-testid="token-summary-catalog-drift"
+              [cacTooltip]="'Active usage contains models with no applicable price in the pinned TokenEconomy catalog. Check and update the exact package pin.'">
+          {{ unpricedModelCount() }} model{{ unpricedModelCount() === 1 ? '' : 's' }} without price data
+        </span>
       }
     </header>
 
@@ -35,12 +42,14 @@
 
       <div class="tok-sum__cost" data-testid="token-summary-cost">
         <span class="tok-sum__cost-label">Theoretical API cost</span>
-        <button type="button" class="tok-sum__cost-amount tok-sum__cost-button"
-              [class.tok-sum__cost-amount--partial]="!s.allModelsPriced"
-              (click)="showTotalCalculation(s)">
-          {{ formatUsd(s.estimatedApiCostUsd) }}
-          @if (!s.allModelsPriced) { <span class="tok-sum__partial">(partial; some models not priced)</span> }
-        </button>
+        @if (totalCost(); as cost) {
+          <button type="button" class="tok-sum__cost-amount tok-sum__cost-button"
+                [class.tok-sum__cost-amount--partial]="!s.allModelsPriced"
+                (click)="showTotalCalculation(s)">
+            {{ cost.label }}
+            @if (cost.partial) { <span class="tok-sum__partial">(partial; some models not priced)</span> }
+          </button>
+        }
       </div>
 
       @if (s.byModel.length > 0) {

@@ -43,6 +43,8 @@ export interface TokenSummaryByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  /** Catalog resolution status; `unknownModel` means the exact package pin has drifted behind active usage. */
+  priceStatus?: 'resolved' | 'unknownModel' | 'noPriceForDate';
 }
 
 export interface TokenSummaryByProject {

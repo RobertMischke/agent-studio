@@ -117,7 +117,23 @@ public class TokenSummaryTests
         Assert.False(s.AllModelsPriced);
         var unknown = s.ByModel.Single(m => m.Model == "gpt-5");
         Assert.False(unknown.ModelPriced);
+        Assert.Equal(TokenEconomy.PriceStatus.NoPriceForDate, unknown.PriceStatus);
         Assert.Equal(0m, unknown.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void Summarize_ModelMissingFromPinnedCatalog_ExposesUnknownModelDrift()
+    {
+        var summary = TokenSummaryService.Summarize("Demo",
+        [
+            Entry("future-active-model", 1_000, 100),
+            Entry("claude-haiku-4-5", 1_000, 100),
+        ]);
+
+        var drift = Assert.Single(summary.ByModel,
+            model => model.PriceStatus == TokenEconomy.PriceStatus.UnknownModel);
+        Assert.Equal("future-active-model", drift.Model);
+        Assert.False(drift.ModelPriced);
     }
 
     [Fact]

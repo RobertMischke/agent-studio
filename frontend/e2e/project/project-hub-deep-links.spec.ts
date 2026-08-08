@@ -4,7 +4,8 @@ import * as path from 'node:path';
 
 const PROJECT_ID = 'PROJ-900';
 const PROJECT_NAME = 'Durable Links';
-const RESULTS_DIR = process.env.PROJECT_HUB_DEEP_LINK_RESULTS_DIR
+const RESULTS_DIR = process.env.JOB_RESULTS_DIR
+  ?? process.env.PROJECT_HUB_DEEP_LINK_RESULTS_DIR
   ?? path.resolve(__dirname, '..', '..', 'test-results', 'project-hub-deep-links');
 
 const project = {
@@ -48,6 +49,69 @@ async function installRoutes(page: Page): Promise<void> {
     escalated: [], review: [], completed: [], archive: [],
   }));
   await page.route(/\/api\/runner\/status(?:\?|$)/, route => json(route, { projects: {} }));
+  await page.route(/\/api\/runner\/Durable%20Links\/token-summary(?:\?|$)/, route => json(route, {
+    project: PROJECT_NAME,
+    orchestratorEntries: 2,
+    orchestratorLlmCalls: 2,
+    totalInputTokens: 2_000,
+    totalOutputTokens: 200,
+    totalCacheReadTokens: 0,
+    totalCacheCreationTokens: 0,
+    estimatedApiCostUsd: 0.0015,
+    allModelsPriced: false,
+    byModel: [
+      {
+        model: 'future-active-model', calls: 1, inputTokens: 1_000, outputTokens: 100,
+        cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0,
+        modelPriced: false, priceStatus: 'unknownModel',
+      },
+      {
+        model: 'Claude Haiku 4.5', calls: 1, inputTokens: 1_000, outputTokens: 100,
+        cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0.0015,
+        modelPriced: true, priceStatus: 'resolved',
+      },
+    ],
+    disclaimer: 'Estimate only.',
+  }));
+  await page.route(/\/api\/supervisor\/Durable%20Links\/observation(?:\?|$)/, route => json(route, {
+    capturedAt: '2026-07-22T12:00:00Z',
+    project: PROJECT_NAME,
+    runnerStatus: 'manual',
+    currentJobId: null,
+    currentRunState: null,
+    lastProgressAt: null,
+    quota: null,
+    recentDecisions: [],
+    recentAgentSamples: [],
+    errorCounts: {
+      cliErrorsLastHour: 0,
+      orchestratorErrorsLastHour: 0,
+      runFailuresLastHour: 0,
+    },
+  }));
+  await page.route(/\/api\/supervisor\/Durable%20Links\/recent-events(?:\?|$)/, route => json(route, {
+    advisories: [],
+    interventions: [],
+  }));
+  await page.route(/\/api\/supervisor\/Durable%20Links\/meta-cycle(?:\?|$)/, route => json(route, {
+    enabled: false,
+    config: {
+      enabled: false,
+      cycleLengthN: 5,
+      stuckInProgressThreshold: '00:30:00',
+      advisorySeverityThreshold: 'Warn',
+      runUpdateStableOnHealthy: false,
+      maxFixesPerHour: 0,
+      extraGlobs: [],
+      extraAdvisoryTopics: [],
+      extraGlobAction: 'noOp',
+    },
+    reports: [],
+  }));
+  await page.route(/\/api\/analysis\/Durable%20Links\/reports(?:\?|$)/, route => json(route, {
+    reports: [],
+  }));
+  await page.route(/\/api\/analysis\/Durable%20Links\/schedule(?:\?|$)/, route => json(route, {}));
   await page.route(/\/api\/projects\/[^/]+\/snapshot(?:\?|$)/, route => json(route, {
     project: PROJECT_NAME,
     capturedAt: '2026-07-22T12:00:00Z',
@@ -182,4 +246,24 @@ test('a legacy Wiki page route redirects to the id and restores the exact page',
   await expect(page.getByTestId('project-wiki-viewer-path'))
     .toContainText('concepts/overview.md');
   await expect(page.getByTestId('project-shell')).toHaveCount(1);
+});
+
+test('observability shows pinned pricing-catalog drift in both themes', async ({ page }) => {
+  await page.goto(`/#/projects/${PROJECT_ID}/observability`);
+  await expectRail(page, 'observability');
+
+  const summary = page.getByTestId('token-summary');
+  const summaryHead = page.getByTestId('token-summary-head');
+  const drift = page.getByTestId('token-summary-catalog-drift');
+  await expect(summary).toBeVisible();
+  await expect(summaryHead).toBeVisible();
+  await expect(drift).toHaveText('1 model without price data');
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+    await summaryHead.screenshot({
+      path: path.join(RESULTS_DIR, `token-summary-catalog-drift-${theme}--mocked.png`),
+    });
+  }
 });

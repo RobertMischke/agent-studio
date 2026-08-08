@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using Serilog;
 using EconomyPricing = TokenEconomy;
 
 namespace AgentStudio.Runner;
@@ -11,6 +13,18 @@ public sealed class TokenEconomyPriceProvider : ITokenPriceProvider
 {
     private static readonly EconomyPricing.ModelPriceCatalog Source =
         EconomyPricing.ModelPriceCatalog.Default;
+    private readonly ConcurrentDictionary<string, byte> _warnedUnknownModels =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Action<string> _warnUnknownModel;
+
+    public TokenEconomyPriceProvider() : this(WriteUnknownModelWarning)
+    {
+    }
+
+    internal TokenEconomyPriceProvider(Action<string> warnUnknownModel)
+    {
+        _warnUnknownModel = warnUnknownModel;
+    }
 
     public TokenCostEstimate Estimate(
         string? modelId,
@@ -30,6 +44,13 @@ public sealed class TokenEconomyPriceProvider : ITokenPriceProvider
                 cacheReadTokens,
                 cacheCreationTokens),
             atUtc);
+
+        if (cost.Status == EconomyPricing.PriceStatus.UnknownModel
+            && HasUsage(inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens)
+            && _warnedUnknownModels.TryAdd(key, 0))
+        {
+            _warnUnknownModel(key);
+        }
 
         if (!cost.HasPrice || cost.Total is null || cost.Price is null)
         {
@@ -67,5 +88,15 @@ public sealed class TokenEconomyPriceProvider : ITokenPriceProvider
             ModelKnown: true,
             cost.Status,
             basis);
+    }
+
+    private static bool HasUsage(long inputTokens, long outputTokens, long cacheReadTokens, long cacheCreationTokens)
+        => inputTokens > 0 || outputTokens > 0 || cacheReadTokens > 0 || cacheCreationTokens > 0;
+
+    private static void WriteUnknownModelWarning(string modelId)
+    {
+        Log.Warning(
+            "Token pricing catalog drift: active model {ModelId} is unknown to the pinned TokenEconomy catalog; update the exact package pin",
+            modelId);
     }
 }

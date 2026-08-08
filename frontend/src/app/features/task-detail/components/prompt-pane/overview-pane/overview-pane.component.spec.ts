@@ -968,6 +968,70 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(el.querySelector('.ov-pl-total__label')?.textContent).toContain('SUM');
   });
 
+  it('pipeline block: SUM cost is Unknown when every token-bearing step is unpriced', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('future-active-model');
+    pipe.cost = emptyCost({
+      steps: [
+        stepCost({
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'future-active-model',
+          modelKnown: false,
+          inputTokens: 1_000,
+          outputTokens: 100,
+          totalTokens: 1_100,
+          costUsd: 0,
+        }),
+      ],
+      totalInputTokens: 1_000,
+      totalOutputTokens: 100,
+      totalTokens: 1_100,
+      totalCostUsd: 0,
+      anyModelUnknown: true,
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const total = fixture.nativeElement.querySelector(
+      '[data-testid="overview-pipeline-total-cost"]',
+    ) as HTMLElement | null;
+    expect(total?.textContent?.trim()).toBe('Unknown');
+    expect(total?.textContent).not.toContain('$0.00');
+    expect(fixture.componentInstance.pipelineTotal()?.costPartial).toBe(false);
+    expect(fixture.componentInstance.pipelineTotal()?.costTooltip?.body).toContain('no price data');
+  });
+
+  it('pipeline block: SUM cost marks a mixed priced and unpriced aggregate as partial', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('claude-opus-4-8');
+    pipe.cost = emptyCost({
+      steps: [
+        stepCost({
+          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', modelKnown: true,
+          inputTokens: 1_000, outputTokens: 100, totalTokens: 1_100, costUsd: 0.5,
+        }),
+        stepCost({
+          stepId: 'aspect-code-quality', kind: 'aspect', model: 'future-active-model', modelKnown: false,
+          inputTokens: 1_000, outputTokens: 100, totalTokens: 1_100, costUsd: 0,
+        }),
+      ],
+      totalInputTokens: 2_000,
+      totalOutputTokens: 200,
+      totalTokens: 2_200,
+      totalCostUsd: 0.5,
+      anyModelUnknown: true,
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const total = fixture.nativeElement.querySelector(
+      '[data-testid="overview-pipeline-total-cost"]',
+    ) as HTMLElement | null;
+    expect(total?.textContent?.replace(/\s+/g, '')).toBe('$0.50*');
+    expect(fixture.componentInstance.pipelineTotal()?.costPartial).toBe(true);
+  });
+
   it('pipeline block: clicking CORE tokens opens a step-scoped token modal', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const startedAt = new Date('2026-06-09T08:00:00.000Z').toISOString();

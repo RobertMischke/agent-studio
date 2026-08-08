@@ -33,6 +33,19 @@ public class TokenPricingTests
     }
 
     [Fact]
+    public void Estimate_UsedUnknownModel_EmitsOneCatalogDriftWarningPerModel()
+    {
+        var warnings = new List<string>();
+        var provider = new TokenEconomyPriceProvider(warnings.Add);
+
+        provider.Estimate("future-active-model", 100, 0, 0, 0);
+        provider.Estimate("FUTURE-ACTIVE-MODEL", 200, 0, 0, 0);
+        provider.Estimate("unused-future-model", 0, 0, 0, 0);
+
+        Assert.Equal(["future-active-model"], warnings);
+    }
+
+    [Fact]
     public void Estimate_KnownGpt56WithoutPriceForRunDate_IsExplicitlyUnknown()
     {
         var c = _provider.Estimate("gpt-5.6-sol", 1_000_000, 100_000, 0, 0, new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));

@@ -190,6 +190,32 @@ function pipeline() {
   };
 }
 
+function unknownPricePipeline() {
+  const response = pipeline();
+  response.cost.steps = [
+    {
+      ...response.cost.steps[0],
+      model: 'future-active-model',
+      modelKnown: false,
+      inputCostUsd: 0,
+      outputCostUsd: 0,
+      cacheReadCostUsd: 0,
+      cacheCreationCostUsd: 0,
+      costUsd: 0,
+    },
+  ];
+  response.cost.totalInputTokens = response.cost.steps[0].inputTokens;
+  response.cost.totalOutputTokens = response.cost.steps[0].outputTokens;
+  response.cost.totalTokens = response.cost.steps[0].totalTokens;
+  response.cost.totalInputCostUsd = 0;
+  response.cost.totalOutputCostUsd = 0;
+  response.cost.totalCacheReadCostUsd = 0;
+  response.cost.totalCacheCreationCostUsd = 0;
+  response.cost.totalCostUsd = 0;
+  response.cost.anyModelUnknown = true;
+  return response;
+}
+
 function runTimeline() {
   return {
     runCount: 2,
@@ -200,7 +226,7 @@ function runTimeline() {
   };
 }
 
-async function installFixtureRoutes(page: Page) {
+async function installFixtureRoutes(page: Page, pipelineResponse = pipeline()) {
   await page.route('**/api/**', route => route.fulfill(json([])));
   await page.route('**/api/auth/status', route => route.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
@@ -224,7 +250,7 @@ async function installFixtureRoutes(page: Page) {
   })));
 
   const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipeline())));
+  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipelineResponse)));
   await page.route(new RegExp(`/api/tasks/${id}/runs(\\?|$)`), route => route.fulfill(json(runTimeline())));
   await page.route(new RegExp(`/api/tasks/${id}/output(\\?|$)`), route => route.fulfill(json([])));
   await page.route(new RegExp(`/api/tasks/${id}/session-events(\\?|$)`), route => route.fulfill(json({ events: [], sessionChain: [] })));
@@ -316,6 +342,33 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
   await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
+});
+
+test('task total cost stays unknown when every token-bearing step is unpriced', async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    } catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page, unknownPricePipeline());
+
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  const pipelineBlock = page.getByTestId('overview-pipeline');
+  const totalCost = page.getByTestId('overview-pipeline-total-cost');
+  await expect(pipelineBlock).toBeVisible({ timeout: 10_000 });
+  await expect(totalCost).toHaveText('Unknown');
+  await expect(totalCost).not.toContainText('$0.00');
+  await totalCost.hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('Estimated cost: no price data');
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+    const path = RESULTS_DIR
+      ? join(RESULTS_DIR, `task-total-unknown-${theme}--mocked.png`)
+      : `test-results/task-total-unknown-${theme}--mocked.png`;
+    await pipelineBlock.screenshot({ path });
+  }
 });
 
 test('post-step lifecycle shows backend activation, history, and the exact settings row in both themes', async ({ page }) => {

@@ -41,7 +41,8 @@ public sealed record TokenSummaryByModel(
     long CacheReadTokens,
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
-    bool ModelPriced);
+    bool ModelPriced,
+    TokenEconomy.PriceStatus PriceStatus);
 
 public class TokenSummaryService
 {
@@ -312,7 +313,7 @@ public class TokenSummaryService
                 bucket.CacheRead += m.CacheReadTokens;
                 bucket.CacheCreate += m.CacheCreationTokens;
                 bucket.Cost += m.EstimatedApiCostUsd;
-                if (!m.ModelPriced) bucket.AnyUnpriced = true;
+                bucket.IncludePriceStatus(m.PriceStatus);
             }
         }
 
@@ -326,7 +327,8 @@ public class TokenSummaryService
                 CacheReadTokens: b.CacheRead,
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
-                ModelPriced: !b.AnyUnpriced))
+                ModelPriced: !b.AnyUnpriced,
+                PriceStatus: b.PriceStatus))
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -417,7 +419,7 @@ public class TokenSummaryService
                 key, u.InputTokens, u.OutputTokens, u.CacheReadTokens,
                 u.CacheCreationTokens, entry.Ts);
             bucket.Cost += entryCost.Total;
-            if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
+            bucket.IncludePriceStatus(entryCost.Status);
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -435,7 +437,8 @@ public class TokenSummaryService
                 CacheReadTokens: bucket.CacheRead,
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
-                ModelPriced: !bucket.AnyUnpriced));
+                ModelPriced: !bucket.AnyUnpriced,
+                PriceStatus: bucket.PriceStatus));
         }
 
         return new TokenSummary(
@@ -463,6 +466,7 @@ public class TokenSummaryService
         public long CacheCreate;
         public decimal Cost;
         public bool AnyUnpriced;
+        public TokenEconomy.PriceStatus PriceStatus { get; private set; } = TokenEconomy.PriceStatus.Resolved;
         public ModelBucket(string model) : this(model, model)
         {
         }
@@ -471,6 +475,17 @@ public class TokenSummaryService
         {
             Model = model;
             DisplayModel = displayModel;
+        }
+
+        public void IncludePriceStatus(TokenEconomy.PriceStatus status)
+        {
+            if (status == TokenEconomy.PriceStatus.Resolved) return;
+            AnyUnpriced = true;
+            if (status == TokenEconomy.PriceStatus.UnknownModel
+                || PriceStatus == TokenEconomy.PriceStatus.Resolved)
+            {
+                PriceStatus = status;
+            }
         }
     }
 }

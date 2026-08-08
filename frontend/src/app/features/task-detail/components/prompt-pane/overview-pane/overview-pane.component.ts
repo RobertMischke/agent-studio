@@ -191,6 +191,8 @@ interface PipelineTotalVm {
   totalCacheCreationCostUsd: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  costLabel: string;
+  costPartial: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
 }
@@ -1346,6 +1348,8 @@ export class OverviewPaneComponent {
     if (!this.selectedPipelineIsCurrent()) return null;
     const c = this.pipelinePoll.pipeline()?.cost ?? null;
     if (c == null) return null;
+    const hasPricedUsage = c.steps.some(step => step.totalTokens > 0 && step.modelKnown);
+    const costUnknown = c.anyModelUnknown && !hasPricedUsage;
     return {
       totalInputTokens: c.totalInputTokens,
       totalOutputTokens: c.totalOutputTokens,
@@ -1358,6 +1362,8 @@ export class OverviewPaneComponent {
       totalCacheCreationCostUsd: c.totalCacheCreationCostUsd,
       totalCostUsd: c.totalCostUsd,
       anyModelUnknown: c.anyModelUnknown,
+      costLabel: costUnknown ? 'Unknown' : formatPipelineCost(c.totalCostUsd),
+      costPartial: c.anyModelUnknown && hasPricedUsage,
       tokenTooltip: buildPipelineTotalTokenTooltip(c),
       costTooltip: buildPipelineTotalCostTooltip(c),
     };

@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import type { TokenSummary } from '../../../../features/tokens';
-import { TaskService } from '../../../../services/task.service';
 import { TokensApiService } from '../../../../features/tokens';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
 import type { TokenSummaryByModel } from '../../models/tokens.model';
@@ -37,8 +36,26 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
   private readonly costBreakdown = inject(CostBreakdownService);
   readonly projectName = input.required<string>();
 
-  private readonly jobService = inject(TaskService);
   readonly summary = signal<TokenSummary | null>(null);
+  readonly unpricedModelCount = computed(() =>
+    this.summary()?.byModel.filter(model =>
+      !model.modelPriced
+      && model.inputTokens + model.outputTokens + model.cacheReadTokens + model.cacheCreationTokens > 0,
+    ).length ?? 0,
+  );
+  readonly totalCost = computed(() => {
+    const summary = this.summary();
+    if (summary == null) return null;
+    const hasPricedUsage = summary.byModel.some(model =>
+      model.modelPriced
+      && model.inputTokens + model.outputTokens + model.cacheReadTokens + model.cacheCreationTokens > 0,
+    );
+    const unknown = !summary.allModelsPriced && !hasPricedUsage;
+    return {
+      label: unknown ? 'Unknown' : this.formatUsd(summary.estimatedApiCostUsd),
+      partial: !summary.allModelsPriced && hasPricedUsage,
+    };
+  });
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   ngOnInit(): void {
