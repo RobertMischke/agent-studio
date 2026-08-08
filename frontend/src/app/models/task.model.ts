@@ -29,6 +29,54 @@ export type TaskStateKey = (typeof TaskState)[keyof typeof TaskState];
 /** All canonical lane keys, in board order. */
 export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState);
 
+/** One requested state transition in an asynchronous batch-move job. */
+export interface BatchMoveItemInput {
+  jobId: string;
+  watchPath: string;
+  targetState: string;
+}
+
+/** Final outcome for one batch item, available as soon as that item finishes. */
+export interface BatchMoveJobItemResult {
+  index: number;
+  jobId: string;
+  status: string;
+  message: string | null;
+  durationMs: number;
+}
+
+/** Server-side timings for diagnosing filesystem, scanner, lock, and Git cost. */
+export interface BatchMoveJobMetrics {
+  totalDurationMs: number;
+  itemMoveDurationMs: number;
+  laneLockAcquisitions: number;
+  laneLockWaitMs: number;
+  laneLockHeldMs: number;
+  scannerInvalidations: number;
+  scannerRefreshes: number;
+  scannerRefreshMs: number;
+  gitProcesses: number;
+  gitProcessMs: number;
+}
+
+export type BatchMoveJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+/** Progress snapshot returned by the asynchronous batch-move endpoints. */
+export interface BatchMoveJobResponse {
+  id: string;
+  status: BatchMoveJobStatus;
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  results: BatchMoveJobItemResult[];
+  metrics: BatchMoveJobMetrics;
+  message: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 // Cycle 9i: this file is the canonical "shared kernel" — TaskInfo,
 // TaskDetail, GroupedJobs, CliExecution, etc. Feature-specific types
 // (git, tokens, orchestrator, screenshots, claude, run-timeline,

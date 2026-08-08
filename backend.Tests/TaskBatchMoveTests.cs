@@ -71,7 +71,7 @@ public class TaskBatchMoveTests : IDisposable
     // MachineBound 20.07.: WebApplicationFactory-Batch-Move flaked unter Gate-Parallellast (AGT-2192 Gate-11), solo gruen.
     [Trait("Category", "MachineBound")]
     [Fact]
-    public async Task JobsBatchMoveEndpoint_FiveMovesAcrossThreeLanes_ReturnsOrderedPerItemResults()
+    public async Task JobsBatchMoveEndpoint_FiveMovesAcrossThreeLanes_ReturnsHandleThenOrderedPerItemResults()
     {
         WriteJob(TaskStates.Archive, "alpha");
         WriteJob(TaskStates.Archive, "beta");
@@ -89,7 +89,8 @@ public class TaskBatchMoveTests : IDisposable
                     {
                         ["WatchPaths:0:Name"] = "batchmove-test",
                         ["WatchPaths:0:Path"] = _watchPath,
-                        ["WatchPaths:0:RootPath"] = _watchPath
+                        ["WatchPaths:0:RootPath"] = _watchPath,
+                        ["TaskRepository"] = _watchPath
                     });
                 });
             });
@@ -112,12 +113,28 @@ public class TaskBatchMoveTests : IDisposable
         request.Headers.Add("X-Client-Id", "local-default");
 
         using var response = await client.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadFromJsonAsync<BatchMoveResponse>();
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
+        var accepted = await response.Content.ReadFromJsonAsync<BatchMoveJobResponse>();
 
-        Assert.NotNull(body);
-        Assert.Equal(["alpha", "beta", "gamma", "delta", "epsilon"], body!.Results.Select(r => r.JobId).ToArray());
-        Assert.All(body.Results, r => Assert.Equal("moved", r.Status));
+        Assert.NotNull(accepted);
+        Assert.Equal(5, accepted!.Total);
+        Assert.Equal($"/api/tasks/batch-move/{accepted.Id}", response.Headers.Location?.ToString());
+        Assert.True(accepted.Status is BatchMoveJobStates.Queued or BatchMoveJobStates.Running);
+
+        BatchMoveJobResponse? completed = null;
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            completed = await client.GetFromJsonAsync<BatchMoveJobResponse>(
+                $"/api/tasks/batch-move/{accepted.Id}");
+            if (completed is not null && BatchMoveJobStates.IsTerminal(completed.Status)) break;
+            await Task.Delay(20);
+        }
+
+        Assert.NotNull(completed);
+        Assert.Equal(BatchMoveJobStates.Completed, completed!.Status);
+        Assert.Equal(5, completed.Completed);
+        Assert.Equal(["alpha", "beta", "gamma", "delta", "epsilon"], completed.Results.Select(r => r.JobId).ToArray());
+        Assert.All(completed.Results, r => Assert.Equal("moved", r.Status));
 
         var laneByJob = ReadLaneByJob();
         Assert.Equal(TaskStates.Ready,       laneByJob["alpha"]);

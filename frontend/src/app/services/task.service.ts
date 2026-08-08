@@ -3,6 +3,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { catchError, finalize, map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
+  BatchMoveItemInput,
+  BatchMoveJobResponse,
   CreateTaskRequest,
   GroupedJobs,
   TaskArtifactsResponse,
@@ -662,6 +664,21 @@ export class TaskService {
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move`,
       body,
       this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Queue independent task moves and return the server-side job handle. */
+  startBatchMove(items: readonly BatchMoveItemInput[]) {
+    return this.http.post<BatchMoveJobResponse>(
+      `${this.baseUrl}/tasks/batch-move`,
+      { items },
+    );
+  }
+
+  /** Read the latest per-item progress for a queued batch move. */
+  getBatchMove(batchId: string) {
+    return this.http.get<BatchMoveJobResponse>(
+      `${this.baseUrl}/tasks/batch-move/${encodeURIComponent(batchId)}`,
     );
   }
 

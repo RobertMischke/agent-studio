@@ -56,6 +56,18 @@ export class NotificationService {
     return id;
   }
 
+  /** Update a live toast in place without changing its dismissal timer. */
+  update(id: number, patch: Partial<NotificationOptions>): boolean {
+    let found = false;
+    this.notifications.update((arr) => arr.map((notification) => {
+      if (notification.id !== id) return notification;
+      found = true;
+      return { ...notification, ...patch, id };
+    }));
+    if (found) queueMicrotask(() => this.renderPendingFeedback?.());
+    return found;
+  }
+
   dismissTopmost(): void {
     const all = this.notifications();
     if (all.length > 0) this.dismiss(all[0].id);

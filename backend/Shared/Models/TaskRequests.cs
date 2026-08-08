@@ -211,8 +211,9 @@ public record RestoreFromFailedPickupRequest
 /// the job, the watch path that disambiguates a slug that lives in two
 /// workspaces, the target lane, and an optional 0-based insertion slot
 /// (<see cref="MoveJobRequest.TargetIndex"/>). Items are processed
-/// independently: a failure on one item does not roll back items that
-/// already moved.
+/// independently by a background job: a failure on one item does not roll
+/// back items that already moved. The endpoint returns a job handle and the
+/// caller reads progress from <c>GET /api/tasks/batch-move/{batchId}</c>.
 /// </summary>
 public record BatchMoveItem
 {
@@ -243,11 +244,6 @@ public record BatchMoveItemResult
     public string JobId { get; init; } = "";
     public string Status { get; init; } = "";
     public string? Message { get; init; }
-}
-
-public record BatchMoveResponse
-{
-    public List<BatchMoveItemResult> Results { get; init; } = [];
 }
 
 public record CreateTaskRequest

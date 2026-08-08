@@ -526,38 +526,6 @@ public static class TaskCrudEndpoints
                 cause: OperatorActor(ctx), reason: req.Reason));
         });
 
-        // Batch move / restore. Per-item atomic: a failure on item N must
-        // not roll back items already applied; each item is independently
-        // routed through TaskTransitionService.MoveAsync, which is the same
-        // path the single-item endpoint above uses. The whole batch returns
-        // 200 OK with a per-item status array so the caller can retry just
-        // the failures. See AGENTS.md "Job organization rule: API first".
-        group.MapPost("/batch-move", async (BatchMoveRequest req,
-            HttpContext ctx,
-            TaskTransitionService transitions,
-            TaskScannerService scanner,
-            AgentStudio.Registry.ProjectRegistry projects,
-            CancellationToken ct) =>
-        {
-            if (req?.Items is null || req.Items.Count == 0)
-                return Results.BadRequest(new { error = "items is required and must contain at least one entry" });
-
-            // batch-move is body-addressed, so the networked middleware defers
-            // project-scope enforcement to here. A scoped non-owner human may only
-            // move tasks inside its own projects; resolve every item's project and
-            // fail closed on any that is out of scope or unresolvable.
-            if (!ProjectAccessAuthorization.AllowsTasks(
-                    ctx,
-                    req.Items.Select(i => scanner.FindJob(i.JobId, string.IsNullOrWhiteSpace(i.WatchPath) ? null : i.WatchPath)?.ProjectName),
-                    projects))
-                return Results.Json(
-                    new { error = "project-scope-denied", message = "This account is not a member of every task in the batch." },
-                    statusCode: StatusCodes.Status403Forbidden);
-
-            var results = await transitions.BatchMoveAsync(req.Items, ct, OperatorActor(ctx));
-            return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
-        });
-
         // Lift a folder out of 3a-failed-pickup back into 2-ready and
         // rename it to drop the -pickup-failed-<utc> suffix. Closes the
         // gap that previously forced operators to fall back to `mv` +

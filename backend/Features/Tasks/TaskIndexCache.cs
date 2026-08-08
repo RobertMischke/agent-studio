@@ -259,7 +259,10 @@ public sealed class TaskIndexCache
                 genBefore = _invalidationGen;
                 mutationGenBefore = _requiredMutationGen;
             }
+            var refreshTimer = System.Diagnostics.Stopwatch.StartNew();
             var fresh = _scanAllJobsRaw();
+            refreshTimer.Stop();
+            BatchMoveOperationTelemetry.RecordScannerRefresh(refreshTimer.Elapsed);
             var board = new List<TaskInfo>(fresh.Count);
             var archive = new List<TaskInfo>();
             foreach (var job in fresh)
@@ -318,6 +321,8 @@ public sealed class TaskIndexCache
             Interlocked.Increment(ref _invalidationGen);
             _dirty = true;
         }
+        if (source == InvalidationSource.Mutation)
+            BatchMoveOperationTelemetry.RecordScannerInvalidation();
         if (source == InvalidationSource.External)
             Interlocked.Increment(ref ExternalInvalidations);
         else
