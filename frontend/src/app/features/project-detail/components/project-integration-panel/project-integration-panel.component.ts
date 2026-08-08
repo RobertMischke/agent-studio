@@ -19,6 +19,7 @@ export class ProjectIntegrationPanelComponent {
   readonly view = signal<ProjectIntegrationView | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  readonly selectedStatus = signal<'all' | IntegrationQueueState>('all');
 
   readonly counts = computed(() => {
     const queue = this.view()?.queue ?? [];
@@ -27,7 +28,16 @@ export class ProjectIntegrationPanelComponent {
       waiting: queue.filter(item => item.status === 'waiting').length,
       conflict: queue.filter(item => item.status === 'conflict').length,
       skipped: queue.filter(item => item.status === 'skipped').length,
+      legacyUnverifiable: queue.filter(item => item.status === 'legacy-unverifiable').length,
+      superseded: queue.filter(item => item.status === 'superseded').length,
+      all: queue.length,
     };
+  });
+
+  readonly visibleQueue = computed(() => {
+    const queue = this.view()?.queue ?? [];
+    const selected = this.selectedStatus();
+    return selected === 'all' ? queue : queue.filter(item => item.status === selected);
   });
 
   constructor() {
@@ -43,7 +53,12 @@ export class ProjectIntegrationPanelComponent {
   }
 
   statusLabel(status: IntegrationQueueState): string {
-    return status === 'merged' ? 'Merged' : status[0].toUpperCase() + status.slice(1);
+    if (status === 'legacy-unverifiable') return 'Legacy unverifiable';
+    return status[0].toUpperCase() + status.slice(1);
+  }
+
+  selectStatus(status: 'all' | IntegrationQueueState): void {
+    this.selectedStatus.set(status);
   }
 
   private load(project: string): void {

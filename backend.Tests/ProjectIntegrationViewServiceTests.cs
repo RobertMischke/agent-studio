@@ -79,6 +79,43 @@ public sealed class ProjectIntegrationViewServiceTests : IDisposable
     }
 
     [Fact]
+    public void Build_TerminalizesArchivedLegacyAndFileConflicts_WithOriginalEvidence()
+    {
+        var remote = Path.Combine(_temp, "terminal-remote.git");
+        var repo = Path.Combine(_temp, "terminal-repo");
+        var tasks = Path.Combine(_temp, "terminal-tasks");
+        Directory.CreateDirectory(repo);
+        RunGit(_temp, "init", "-q", "--bare", remote);
+        RunGit(repo, "init", "-q", "-b", "main");
+        RunGit(repo, "config", "user.email", "test@example.com");
+        RunGit(repo, "config", "user.name", "publisher");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "seed\n");
+        RunGit(repo, "add", "-A");
+        RunGit(repo, "commit", "-q", "-m", "seed");
+        RunGit(repo, "remote", "add", "origin", remote);
+        RunGit(repo, "push", "-q", "-u", "origin", "main");
+        RunGit(repo, "checkout", "-q", "-b", "develop");
+        RunGit(repo, "push", "-q", "-u", "origin", "develop");
+
+        const string missingSha = "ffffffffffffffffffffffffffffffffffffffff";
+        WriteTask(tasks, "legacy", "AGT-LEGACY", "Legacy subject", missingSha, TaskStates.Archive);
+        WriteTask(tasks, "files", "AGT-FILES", "Archived file conflict", missingSha, TaskStates.Archive);
+        WriteConflict(Path.Combine(tasks, TaskStates.Archive, "legacy"), "Conflicted: legacy.cs");
+        WriteConflict(Path.Combine(tasks, TaskStates.Archive, "files"), "Conflicted: current.cs");
+        WriteLegacyReviewSubject(Path.Combine(tasks, TaskStates.Archive, "legacy"), "AGT-LEGACY", missingSha);
+
+        var view = BuildService(repo, tasks).Build("Demo");
+
+        var legacy = Assert.Single(view.Queue, item => item.TaskKey == "AGT-LEGACY");
+        Assert.Equal(IntegrationQueueStates.LegacyUnverifiable, legacy.Status);
+        Assert.Contains("Conflicted: legacy.cs", legacy.Reason);
+        var superseded = Assert.Single(view.Queue, item => item.TaskKey == "AGT-FILES");
+        Assert.Equal(IntegrationQueueStates.Superseded, superseded.Status);
+        Assert.Contains("Conflicted: current.cs", superseded.Reason);
+        Assert.DoesNotContain(view.Queue, item => item.Status == IntegrationQueueStates.Conflict);
+    }
+
+    [Fact]
     public async Task Endpoint_ReturnsTheGitDerivedIntegrationProjection()
     {
         var remote = Path.Combine(_temp, "endpoint-remote.git");
@@ -126,6 +163,67 @@ public sealed class ProjectIntegrationViewServiceTests : IDisposable
         Assert.Equal("AGT-9", Assert.Single(body.PublisherMerges).TaskKey);
     }
 
+    [Fact]
+    public void ClassificationPolicy_SeparatesActionableAndArchivedConflictOutcomes()
+    {
+        var activeConflict = IntegrationQueueClassificationPolicy.Decide(Facts(
+            archived: false,
+            legacy: false,
+            IntegrationStatuses.ConflictSkipped,
+            "Conflict in app.ts."));
+        var legacyArchive = IntegrationQueueClassificationPolicy.Decide(Facts(
+            archived: true,
+            legacy: true,
+            IntegrationStatuses.ConflictSkipped,
+            "Review subject for 'AGT-1' has no RunAttemptId and cannot be accepted."));
+        var archivedConflict = IntegrationQueueClassificationPolicy.Decide(Facts(
+            archived: true,
+            legacy: false,
+            IntegrationStatuses.ConflictSkipped,
+            "Conflict in app.ts."));
+
+        Assert.Equal(IntegrationQueueStates.Conflict, activeConflict.Status);
+        Assert.Equal("Conflict in app.ts.", activeConflict.Reason);
+        Assert.Equal(IntegrationQueueStates.LegacyUnverifiable, legacyArchive.Status);
+        Assert.Contains("predates RunAttempt authority", legacyArchive.Reason);
+        Assert.Contains("Original integration outcome", legacyArchive.Reason);
+        Assert.Equal(IntegrationQueueStates.Superseded, archivedConflict.Status);
+        Assert.Contains("archived card", archivedConflict.Reason);
+        Assert.Contains("Recover still-required work through a new card", archivedConflict.Reason);
+    }
+
+    [Fact]
+    public void ClassificationPolicy_PreservesIntegratedAndNonConflictOutcomes()
+    {
+        const string proof = "0123456789012345678901234567890123456789";
+        var merged = IntegrationQueueClassificationPolicy.Decide(new(
+            IsIntegrated: true,
+            IntegrationProof: proof,
+            IsArchived: true,
+            HasLegacyUnfencedReviewSubject: true,
+            IntegrationStatus: IntegrationStatuses.ConflictSkipped,
+            IntegrationDetail: "stale conflict",
+            IntegrationRef: "origin/develop"));
+        var skipped = IntegrationQueueClassificationPolicy.Decide(Facts(
+            archived: true,
+            legacy: true,
+            IntegrationStatuses.NoBranch,
+            "No delivery ref."));
+        var waiting = IntegrationQueueClassificationPolicy.Decide(Facts(
+            archived: false,
+            legacy: false,
+            IntegrationStatuses.Pending,
+            null));
+
+        Assert.Equal(IntegrationQueueStates.Merged, merged.Status);
+        Assert.Equal(proof, merged.MergeSha);
+        Assert.Null(merged.Reason);
+        Assert.Equal(IntegrationQueueStates.Skipped, skipped.Status);
+        Assert.Equal("No delivery ref.", skipped.Reason);
+        Assert.Equal(IntegrationQueueStates.Waiting, waiting.Status);
+        Assert.Equal("Accepted change is not present in origin/develop.", waiting.Reason);
+    }
+
     private ProjectIntegrationViewService BuildService(string repo, string tasks)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -145,6 +243,62 @@ public sealed class ProjectIntegrationViewServiceTests : IDisposable
         var taskIntegration = new TaskIntegrationStatusService(
             git, settings, pipeline, NullLogger<TaskIntegrationStatusService>.Instance);
         return new ProjectIntegrationViewService(git, scanner, settings, taskIntegration);
+    }
+
+    private static IntegrationQueueClassificationFacts Facts(
+        bool archived,
+        bool legacy,
+        string integrationStatus,
+        string? detail)
+        => new(
+            IsIntegrated: false,
+            IntegrationProof: null,
+            IsArchived: archived,
+            HasLegacyUnfencedReviewSubject: legacy,
+            IntegrationStatus: integrationStatus,
+            IntegrationDetail: detail,
+            IntegrationRef: "origin/develop");
+
+    private static void WriteConflict(string folder, string summary)
+    {
+        File.WriteAllText(Path.Combine(folder, PipelineExecutionLog.FileName),
+            $$"""
+            {
+              "pipelineId": "standard",
+              "pipelineVersion": 1,
+              "project": "Demo",
+              "jobId": "fixture",
+              "startedAt": "2026-07-22T10:00:00Z",
+              "attempt": 1,
+              "steps": [
+                {
+                  "stepId": "post-merge-into-develop",
+                  "status": 3,
+                  "verdict": "conflict",
+                  "verdictSummary": "{{summary}}"
+                }
+              ]
+            }
+            """);
+    }
+
+    private static void WriteLegacyReviewSubject(string folder, string key, string sha)
+    {
+        var path = ReviewSubjectStore.PathFor(folder);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            $$"""
+            {
+              "version": 1,
+              "taskKey": "{{key}}",
+              "runAttemptId": "",
+              "project": "Demo",
+              "repository": "fixture",
+              "resultSha": "{{sha}}",
+              "attemptChainId": "legacy-chain",
+              "completedAtUtc": "2026-07-22T10:00:00Z"
+            }
+            """);
     }
 
     private static void WriteTask(

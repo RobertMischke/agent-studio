@@ -20,6 +20,8 @@ function response(): ProjectIntegrationView {
       { taskId: 'two', taskKey: 'AGT-2', title: 'Waiting work', lane: '6-completed', stateSince: '2026-07-22T09:01:00Z', status: 'waiting', mergeSha: null, reason: 'Not on origin/develop.' },
       { taskId: 'three', taskKey: 'AGT-3', title: 'Conflict work', lane: '6-completed', stateSince: '2026-07-22T09:02:00Z', status: 'conflict', mergeSha: null, reason: 'Conflict in app.ts.' },
       { taskId: 'four', taskKey: 'AGT-4', title: 'Docs only', lane: '6-completed', stateSince: '2026-07-22T09:03:00Z', status: 'skipped', mergeSha: null, reason: 'No integrable change set.' },
+      { taskId: 'five', taskKey: 'AGT-5', title: 'Legacy delivery', lane: '7-archive', stateSince: '2026-07-22T09:04:00Z', status: 'legacy-unverifiable', mergeSha: null, reason: 'Archived review subject has no RunAttemptId.' },
+      { taskId: 'six', taskKey: 'AGT-6', title: 'Retired delivery', lane: '7-archive', stateSince: '2026-07-22T09:05:00Z', status: 'superseded', mergeSha: null, reason: 'Archived delivery is no longer actionable.' },
     ],
     publisherMerges: [
       { taskKey: 'AGT-1', title: 'Merged work', sha: 'a'.repeat(40), shortSha: 'aaaaaaa', integratedAt: '2026-07-22T09:30:00Z', publisher: 'publisher', subject: 'merge(AGT-1): merged work' },
@@ -35,7 +37,7 @@ function response(): ProjectIntegrationView {
 }
 
 describe('ProjectIntegrationPanelComponent', () => {
-  it('renders all four queue states, publisher merges, and the promotion file stat', () => {
+  it('renders and filters actionable and terminal queue states', () => {
     TestBed.configureTestingModule({
       imports: [ProjectIntegrationPanelComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -48,8 +50,10 @@ describe('ProjectIntegrationPanelComponent', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    expect(root.querySelectorAll('[data-testid="integration-queue-row"]')).toHaveLength(4);
+    expect(root.querySelectorAll('[data-testid="integration-queue-row"]')).toHaveLength(6);
     expect(root.textContent).toContain('1 merged');
+    expect(root.textContent).toContain('1 legacy unverifiable');
+    expect(root.textContent).toContain('1 superseded');
     expect(root.querySelector('[data-testid="integration-queue"]')?.textContent).toContain('Conflict in app.ts');
     expect(root.querySelector('[data-testid="promotion-diff"]')?.textContent).toContain('src/app.ts');
     expect(root.querySelector('[data-testid="promotion-diff"]')?.textContent).toContain('+12');
@@ -57,6 +61,14 @@ describe('ProjectIntegrationPanelComponent', () => {
     expect(root.querySelector('[data-testid="publisher-merges"]')?.textContent).toContain('publisher');
     expect(root.querySelector('[data-testid="integration-queue"] code[title]')?.getAttribute('title')).toBe('a'.repeat(40));
     expect(root.textContent).toContain('origin/develop');
+
+    const conflictFilter = root.querySelector('[data-testid="integration-filter-conflict"]') as HTMLButtonElement;
+    conflictFilter.click();
+    fixture.detectChanges();
+    expect(root.querySelectorAll('[data-testid="integration-queue-row"]')).toHaveLength(1);
+    expect(root.querySelector('[data-testid="integration-queue"]')?.textContent).toContain('AGT-3');
+    expect(root.querySelector('[data-testid="integration-queue"]')?.textContent).not.toContain('AGT-5');
+    expect(conflictFilter.getAttribute('aria-pressed')).toBe('true');
     http.verify();
   });
 });
