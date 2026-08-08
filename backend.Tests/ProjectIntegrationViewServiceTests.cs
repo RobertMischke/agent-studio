@@ -144,7 +144,12 @@ public sealed class ProjectIntegrationViewServiceTests : IDisposable
         var pipeline = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
         var taskIntegration = new TaskIntegrationStatusService(
             git, settings, pipeline, NullLogger<TaskIntegrationStatusService>.Instance);
-        return new ProjectIntegrationViewService(git, scanner, settings, taskIntegration);
+        return new ProjectIntegrationViewService(
+            git,
+            scanner,
+            settings,
+            taskIntegration,
+            new IntegrationQueueDispositionStore());
     }
 
     private static void WriteTask(

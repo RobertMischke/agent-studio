@@ -8,6 +8,12 @@ public static class IntegrationQueueStates
     public const string Waiting = "waiting";
     public const string Conflict = "conflict";
     public const string Skipped = "skipped";
+    public const string LegacyUnverifiable = "legacy-unverifiable";
+    public const string Superseded = "superseded";
+    public const string RecoveryRecommended = "recovery-recommended";
+
+    public static bool IsTerminalDisposition(string status)
+        => status is LegacyUnverifiable or Superseded or RecoveryRecommended;
 }
 
 public sealed record IntegrationQueueItem(
@@ -18,7 +24,8 @@ public sealed record IntegrationQueueItem(
     DateTime StateSince,
     string Status,
     string? MergeSha,
-    string? Reason);
+    string? Reason,
+    string? EvidenceSha = null);
 
 public sealed record PublisherMergeItem(
     string TaskKey,
@@ -84,17 +91,20 @@ public sealed class ProjectIntegrationViewService
     private readonly TaskScannerService _scanner;
     private readonly ProjectSettingsService _settings;
     private readonly TaskIntegrationStatusService _taskIntegration;
+    private readonly IntegrationQueueDispositionStore _dispositions;
 
     public ProjectIntegrationViewService(
         GitService git,
         TaskScannerService scanner,
         ProjectSettingsService settings,
-        TaskIntegrationStatusService taskIntegration)
+        TaskIntegrationStatusService taskIntegration,
+        IntegrationQueueDispositionStore dispositions)
     {
         _git = git;
         _scanner = scanner;
         _settings = settings;
         _taskIntegration = taskIntegration;
+        _dispositions = dispositions;
     }
 
     public ProjectIntegrationView Build(string projectName)
@@ -147,6 +157,10 @@ public sealed class ProjectIntegrationViewService
                 proofByTask[task.TaskKey] = proof;
                 return Item(task, IntegrationQueueStates.Merged, proof, null);
             }
+
+            var disposition = _dispositions.Read(task.FolderPath, TaskKey(task));
+            if (disposition is not null)
+                return Item(task, disposition.Status, null, disposition.Reason, disposition.EvidenceCommit);
 
             fallback.TryGetValue(task.TaskKey, out var localStatus);
             if (localStatus?.Status == IntegrationStatuses.ConflictSkipped)
@@ -233,8 +247,13 @@ public sealed class ProjectIntegrationViewService
                     : null);
     }
 
-    private static IntegrationQueueItem Item(TaskInfo task, string status, string? sha, string? reason)
-        => new(task.Id, TaskKey(task), task.Title, task.State, task.EnteredLaneAt, status, sha, reason);
+    private static IntegrationQueueItem Item(
+        TaskInfo task,
+        string status,
+        string? sha,
+        string? reason,
+        string? evidenceSha = null)
+        => new(task.Id, TaskKey(task), task.Title, task.State, task.EnteredLaneAt, status, sha, reason, evidenceSha);
 
     private static bool IsAcceptedQueueTask(TaskInfo task)
     {
@@ -253,8 +272,11 @@ public sealed class ProjectIntegrationViewService
     {
         IntegrationQueueStates.Conflict => 0,
         IntegrationQueueStates.Waiting => 1,
-        IntegrationQueueStates.Skipped => 2,
-        _ => 3,
+        IntegrationQueueStates.RecoveryRecommended => 2,
+        IntegrationQueueStates.LegacyUnverifiable => 3,
+        IntegrationQueueStates.Superseded => 4,
+        IntegrationQueueStates.Skipped => 5,
+        _ => 6,
     };
 
     private static ProjectIntegrationView Empty(string project, string integrationRef, string releaseRef, string error)

@@ -576,6 +576,8 @@ builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
 builder.Services.AddSingleton<IntakeRunner>();
 builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
+builder.Services.AddSingleton<IntegrationQueueDispositionStore>();
+builder.Services.AddSingleton<ArchiveIntegrationDispositionMigration>();
 builder.Services.AddSingleton<ProjectIntegrationViewService>();
 builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
@@ -1001,6 +1003,34 @@ try
     };
 }
 catch (Exception ex) { crashRecorder.Record("BusAggregationCache.Wire", ex); }
+
+// AGT-2508: remove archived, already-decided deliveries from the actionable
+// conflict bucket without deleting their evidence. The migration is
+// idempotent and preserves any existing operator disposition.
+{
+    var migrationState = app.Services.GetRequiredService<MigrationStateStore>();
+    const string migrationId = "archive-integration-dispositions-v1";
+    try { migrationState.Begin(migrationId, "Classifying archived integration conflicts."); }
+    catch (Exception ex) { crashRecorder.Record("MigrationState.Begin:ArchiveIntegrationDispositions", ex); }
+    try
+    {
+        var migration = app.Services.GetRequiredService<ArchiveIntegrationDispositionMigration>();
+        var report = migration.Migrate();
+        Log.ForContext("SourceContext", "ArchiveIntegrationDispositionMigration").Information(
+            "Archive integration dispositions migrated: candidates={Candidates} written={Written} existing={Existing}",
+            report.Candidates,
+            report.Written,
+            report.AlreadyClassified);
+        try { migrationState.Complete(migrationId); }
+        catch (Exception ex) { crashRecorder.Record("MigrationState.Complete:ArchiveIntegrationDispositions", ex); }
+    }
+    catch (Exception ex)
+    {
+        try { migrationState.Fail(migrationId, ex.Message); }
+        catch (Exception stateEx) { crashRecorder.Record("MigrationState.Fail:ArchiveIntegrationDispositions", stateEx); }
+        crashRecorder.Record("ArchiveIntegrationDispositionMigration", ex);
+    }
+}
 
 // Slice D project-chat: migrate the legacy `orchestrator-chat.jsonl`
 // per-project file into the new per-month markdown tree, then ensure
