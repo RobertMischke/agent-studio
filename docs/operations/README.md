@@ -20,6 +20,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 |---|---|
 | [setup/](setup/README.md) | Project onboarding, CLI onboarding, first task, troubleshooting, and worktree stack. |
 | [security/](security/overview.md) | Security overview, requirements, state, and reviews. |
+| [security/agent-runner-01-host-hardening.md](security/agent-runner-01-host-hardening.md) | Versioned sudoers policy, fixed-path deploy helper, migration, and acceptance record for the agent-runner-01 service account. |
 | [runtime/](runtime/) | Product runtime observability and log-capture contracts. |
 | [git/](git/) | Commit, push, and attribution doctrine. |
 | [testing/](testing/) | Dedicated test workspace and probe contracts; Windows test baseline and platform gates. |

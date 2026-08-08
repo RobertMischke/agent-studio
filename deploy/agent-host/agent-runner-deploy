@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Promote one staged agent-host release through fixed, least-privilege paths.
+set -euo pipefail
+
+readonly service_user="agent"
+readonly service_group="agent"
+readonly deploy_root="/var/lib/agent-runner/deploy"
+readonly incoming_root="$deploy_root/incoming"
+readonly accepted_root="$deploy_root/accepted"
+readonly product_root="/opt/agent-host"
+readonly releases_root="$product_root/releases"
+readonly current_link="$product_root/current"
+readonly compatibility_link="/opt/agent-runner"
+readonly legacy_backup="/opt/agent-runner.pre-hardening"
+readonly maximum_release_bytes=$((1024 * 1024 * 1024))
+
+die() {
+  printf 'agent-runner-deploy: %s\n' "$*" >&2
+  exit 2
+}
+
+[[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"
+[[ "$#" -eq 0 ]] || die "arguments are not accepted"
+
+command -v find >/dev/null || die "find is required"
+command -v flock >/dev/null || die "flock is required"
+command -v stat >/dev/null || die "stat is required"
+id "$service_user" >/dev/null 2>&1 || die "service account '$service_user' does not exist"
+getent group "$service_group" >/dev/null || die "service group '$service_group' does not exist"
+
+install -d -o root -g root -m 0755 "$deploy_root" "$accepted_root" "$product_root" "$releases_root"
+exec 9>"$deploy_root/.deploy.lock"
+flock -n 9 || die "another release promotion is already running"
+
+[[ -d "$incoming_root" ]] || die "staged release is missing: $incoming_root"
+[[ ! -L "$incoming_root" ]] || die "staged release root must not be a symbolic link"
+[[ "$(stat -c '%U:%G' "$incoming_root")" == "$service_user:$service_group" ]] \
+  || die "staged release must be owned by $service_user:$service_group"
+
+invalid_entry="$(find "$incoming_root" -xdev -mindepth 1 ! -type d ! -type f -print -quit)"
+[[ -z "$invalid_entry" ]] || die "staged release contains a non-regular entry: $invalid_entry"
+
+release_id_file="$incoming_root/release-id"
+[[ -f "$release_id_file" && ! -L "$release_id_file" ]] || die "release-id is missing or invalid"
+release_id="$(<"$release_id_file")"
+[[ "$release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] \
+  || die "release-id must contain 1 to 64 safe characters"
+
+for required_file in agent-host agent-host.dll agent-host.deps.json agent-host.runtimeconfig.json; do
+  [[ -f "$incoming_root/$required_file" && ! -L "$incoming_root/$required_file" ]] \
+    || die "required release file is missing or invalid: $required_file"
+done
+[[ -x "$incoming_root/agent-host" ]] || die "agent-host is not executable"
+
+release_bytes="$(du -sb "$incoming_root" | awk '{print $1}')"
+[[ "$release_bytes" =~ ^[0-9]+$ ]] || die "could not measure staged release"
+((release_bytes <= maximum_release_bytes)) \
+  || die "staged release exceeds the 1 GiB safety limit"
+
+release_root="$releases_root/$release_id"
+[[ ! -e "$release_root" ]] || die "immutable release already exists: $release_root"
+accepted_release="$accepted_root/$release_id"
+[[ ! -e "$accepted_release" ]] || die "accepted upload already exists: $accepted_release"
+
+staging_root="$releases_root/.staging.$release_id.$$"
+cleanup() {
+  rm -rf --one-file-system -- "$staging_root"
+}
+trap cleanup EXIT
+
+install -d -o root -g root -m 0755 "$staging_root"
+cp -R --no-preserve=all "$incoming_root/." "$staging_root/"
+rm -- "$staging_root/release-id"
+chown -R root:root "$staging_root"
+find "$staging_root" -type d -exec chmod 0755 {} +
+find "$staging_root" -type f -exec chmod 0644 {} +
+chmod 0755 "$staging_root/agent-host"
+mv -- "$staging_root" "$release_root"
+trap - EXIT
+
+ln -sfnT "$release_root" "$current_link"
+chown -h root:root "$current_link"
+
+if [[ -e "$compatibility_link" && ! -L "$compatibility_link" ]]; then
+  [[ ! -e "$legacy_backup" ]] \
+    || die "legacy compatibility backup already exists: $legacy_backup"
+  mv -- "$compatibility_link" "$legacy_backup"
+fi
+ln -sfnT "$current_link" "$compatibility_link"
+chown -h root:root "$compatibility_link"
+
+mv -- "$incoming_root" "$accepted_release"
+chown -R root:root "$accepted_release"
+install -d -o "$service_user" -g "$service_group" -m 0750 "$incoming_root"
+
+logger -p authpriv.notice -t agent-runner-deploy \
+  "release=$release_id source=$incoming_root target=$release_root result=promoted" \
+  || true
+printf 'agent-runner-deploy: promoted release %s to %s\n' "$release_id" "$release_root"
+printf 'agent-runner-deploy: restart agent-runner.service and agent-runner-review.service to activate it\n'

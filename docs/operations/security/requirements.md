@@ -93,3 +93,7 @@ audit. Tests cover the product credential formats and named secret fields.
 - Watched-project writes follow the task lifecycle contract.
 - User-authored Markdown remains inert and sanitized.
 - Security actions leave durable, non-secret audit evidence.
+- Agent Host service accounts have no unrestricted sudo rule and are not
+  members of host-root-equivalent groups such as `docker` or `sudo`. Bounded
+  host changes use root-owned helpers with fixed paths and exact sudoers
+  command lines.

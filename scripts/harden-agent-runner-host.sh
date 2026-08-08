@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# One-time root migration for the audited agent-runner-01 service account.
+set -euo pipefail
+
+readonly service_user="agent"
+readonly service_group="agent"
+readonly legacy_sudoers="/etc/sudoers.d/agent"
+readonly installed_sudoers="/etc/sudoers.d/agent-runner"
+readonly installed_helper="/usr/local/sbin/agent-runner-deploy"
+
+usage() {
+  printf '%s\n' \
+    "Usage: harden-agent-runner-host.sh --apply" \
+    "" \
+    "Installs the versioned deploy helper and sudoers whitelist, removes the" \
+    "service account from the sudo and docker groups, and verifies the result." \
+    "Run from a root-owned operator session, not from an Agent CLI."
+}
+
+die() {
+  printf 'agent-runner host hardening: %s\n' "$*" >&2
+  exit 2
+}
+
+[[ "${1:-}" == "--apply" && "$#" -eq 1 ]] || { usage >&2; exit 2; }
+[[ "$EUID" -eq 0 ]] || die "must run as root from an operator session"
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+sudoers_source="$repo_root/deploy/agent-host/sudoers.d/agent-runner"
+helper_source="$repo_root/deploy/agent-host/agent-runner-deploy"
+handoff_source="$repo_root/deploy/agent-host/systemd/10-agent-runner-hardening.conf"
+
+[[ -f "$sudoers_source" ]] || die "versioned sudoers source is missing: $sudoers_source"
+[[ -f "$helper_source" ]] || die "versioned deploy helper is missing: $helper_source"
+[[ -f "$handoff_source" ]] || die "versioned systemd drop-in is missing: $handoff_source"
+command -v visudo >/dev/null || die "visudo is required"
+command -v gpasswd >/dev/null || die "gpasswd is required"
+id "$service_user" >/dev/null 2>&1 || die "service account '$service_user' does not exist"
+getent group "$service_group" >/dev/null || die "service group '$service_group' does not exist"
+
+for unit in agent-runner.service agent-runner-review.service; do
+  systemctl cat "$unit" >/dev/null || die "required service unit is missing: $unit"
+done
+
+candidate="$(mktemp)"
+trap 'rm -f "$candidate"' EXIT
+install -m 0440 "$sudoers_source" "$candidate"
+visudo -cf "$candidate" >/dev/null || die "versioned sudoers source did not parse"
+
+if [[ -e "$legacy_sudoers" ]]; then
+  legacy_rule="$(sed -e 's/[[:space:]]//g' -e '/^#/d' -e '/^$/d' "$legacy_sudoers")"
+  [[ "$legacy_rule" == "agentALL=(ALL)NOPASSWD:ALL" \
+    || "$legacy_rule" == "agentALL=(ALL:ALL)NOPASSWD:ALL" ]] \
+    || die "refusing to replace unexpected content in $legacy_sudoers"
+fi
+
+backup_root="/var/backups/agent-runner-hardening/$(date -u +%Y%m%dT%H%M%SZ)"
+install -d -o root -g root -m 0700 "$backup_root"
+[[ ! -e "$legacy_sudoers" ]] || cp -a "$legacy_sudoers" "$backup_root/legacy-sudoers"
+[[ ! -e "$installed_sudoers" ]] || cp -a "$installed_sudoers" "$backup_root/previous-agent-runner-sudoers"
+[[ ! -e "$installed_helper" ]] || cp -a "$installed_helper" "$backup_root/previous-agent-runner-deploy"
+for unit in agent-runner.service agent-runner-review.service; do
+  drop_in="/etc/systemd/system/$unit.d/10-agent-runner-hardening.conf"
+  [[ ! -e "$drop_in" ]] \
+    || cp -a "$drop_in" "$backup_root/previous-$unit-handoff.conf"
+done
+
+install -d -o root -g root -m 0755 /usr/local/sbin
+install -o root -g root -m 0755 "$helper_source" "$installed_helper"
+install -o root -g root -m 0440 "$sudoers_source" "$installed_sudoers"
+visudo -c >/dev/null || die "installed sudoers policy did not parse"
+rm -f -- "$legacy_sudoers"
+
+for unit in agent-runner.service agent-runner-review.service; do
+  drop_in_directory="/etc/systemd/system/$unit.d"
+  install -d -o root -g root -m 0755 "$drop_in_directory"
+  install -o root -g root -m 0644 \
+    "$handoff_source" "$drop_in_directory/10-agent-runner-hardening.conf"
+done
+systemctl daemon-reload
+for unit in agent-runner.service agent-runner-review.service; do
+  [[ "$(systemctl show "$unit" --property=KillMode --value)" == "process" ]] \
+    || die "$unit did not adopt KillMode=process"
+done
+
+for privileged_group in sudo docker; do
+  if id -nG "$service_user" | tr ' ' '\n' | grep -Fxq "$privileged_group"; then
+    gpasswd -d "$service_user" "$privileged_group" >/dev/null
+  fi
+done
+
+install -d -o root -g root -m 0755 \
+  /var/lib/agent-runner/deploy \
+  /var/lib/agent-runner/deploy/accepted
+install -d -o "$service_user" -g "$service_group" -m 0750 \
+  /var/lib/agent-runner/deploy/incoming
+
+visudo -c >/dev/null || die "final sudoers policy did not parse"
+groups_after="$(id -nG "$service_user")"
+for privileged_group in sudo docker; do
+  ! tr ' ' '\n' <<<"$groups_after" | grep -Fxq "$privileged_group" \
+    || die "service account remains in privileged group '$privileged_group'"
+done
+
+sudo_list="$(sudo -l -U "$service_user")"
+! grep -Eq 'NOPASSWD:[[:space:]]*ALL([[:space:]]|$)' <<<"$sudo_list" \
+  || die "service account still has an unrestricted NOPASSWD rule"
+grep -Fq '/usr/local/sbin/agent-runner-deploy ""' <<<"$sudo_list" \
+  || die "deploy helper is missing from the effective sudo policy"
+
+printf 'agent-runner host hardening: applied\n'
+printf '  backup: %s\n' "$backup_root"
+printf '  groups: %s\n' "$groups_after"
+printf '  sudoers: %s\n' "$installed_sudoers"
+printf '  deploy helper: %s\n' "$installed_helper"
+printf '%s\n' \
+  "Existing login sessions retain supplementary groups. End them and restart both services from an operator session before acceptance."

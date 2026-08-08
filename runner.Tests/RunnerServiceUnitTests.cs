@@ -49,12 +49,67 @@ public sealed class RunnerServiceUnitTests
         var content = File.ReadAllText(
             Path.Combine(RepoRoot(), "docs", "operations", "setup", "linux-runner-host.md"));
 
-        Assert.Contains("release_root=\"/opt/agent-host/releases/$release_id\"", content);
         Assert.Contains("dotnet publish runner/AgentRunner.csproj -c Release -o \"$staging_root\"", content);
-        Assert.Contains("ln -sfnT \"$release_root\" /opt/agent-host/current", content);
+        Assert.Contains("agent-runner-01:/var/lib/agent-runner/deploy/incoming/", content);
+        Assert.Contains("sudo /usr/local/sbin/agent-runner-deploy", content);
         Assert.DoesNotContain(
             "dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host",
             content);
+    }
+
+    [Fact]
+    public void Agent_runner_sudoers_is_an_exact_least_privilege_whitelist()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "sudoers.d", "agent-runner"));
+
+        Assert.DoesNotContain("NOPASSWD:ALL", content);
+        Assert.DoesNotContain("NOPASSWD: ALL", content);
+        Assert.Equal(2, CountOccurrences(content, "/usr/bin/systemctl restart agent-runner"));
+        Assert.Equal(2, CountOccurrences(content, "/usr/bin/systemctl status agent-runner"));
+        Assert.Contains("/usr/local/sbin/agent-runner-deploy \"\"", content);
+        Assert.DoesNotContain("docker", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Agent_runner_deploy_helper_uses_only_fixed_ingress_and_release_paths()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-deploy"));
+
+        Assert.Contains("readonly incoming_root=\"$deploy_root/incoming\"", content);
+        Assert.Contains("readonly releases_root=\"$product_root/releases\"", content);
+        Assert.Contains("[[ \"$#\" -eq 0 ]]", content);
+        Assert.Contains("! -type d ! -type f", content);
+        Assert.Contains("chown -R root:root \"$staging_root\"", content);
+        Assert.Contains("ln -sfnT \"$release_root\" \"$current_link\"", content);
+    }
+
+    [Fact]
+    public void Agent_runner_host_migration_removes_privileged_group_memberships()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "scripts", "harden-agent-runner-host.sh"));
+
+        Assert.Contains("for privileged_group in sudo docker", content);
+        Assert.Contains("gpasswd -d \"$service_user\" \"$privileged_group\"", content);
+        Assert.Contains("visudo -c", content);
+        Assert.DoesNotContain("usermod -aG docker", content);
+    }
+
+    [Fact]
+    public void Agent_runner_host_migration_preserves_detached_workers_during_restart()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(
+                RepoRoot(),
+                "deploy",
+                "agent-host",
+                "systemd",
+                "10-agent-runner-hardening.conf"));
+
+        Assert.Contains("KillSignal=SIGTERM", content);
+        Assert.Contains("KillMode=process", content);
     }
 
     [Fact]
@@ -255,6 +310,9 @@ public sealed class RunnerServiceUnitTests
         Directory.CreateDirectory(path);
         return path;
     }
+
+    private static int CountOccurrences(string content, string value)
+        => content.Split(value, StringSplitOptions.None).Length - 1;
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "")
     {

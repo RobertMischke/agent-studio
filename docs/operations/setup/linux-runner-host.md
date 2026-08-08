@@ -111,7 +111,10 @@ checkout fallback.
 ## Test host
 
 `agent-runner` (a Hetzner cloud VM at `<runner-host-ip>`; substitute the address
-of your own host). SSH key-auth, one sudo-capable user.
+of your own host). SSH key-auth uses separate operator and service-account
+boundaries. The service account has no unrestricted sudo and is not a member of
+`docker` or `sudo`; see the
+[agent-runner-01 hardening runbook](../security/agent-runner-01-host-hardening.md).
 For the local profile, expose no inbound Task Server port and reach it through a
 supervised `ssh -R`/`-L` tunnel. For the networked profile, the runner connects
 outbound to the authenticated HTTPS origin with its enrolled service identity.
@@ -173,8 +176,10 @@ remediation instead of waiting on a runner request.
 
 The controller is intentionally repeatable after a host wipe:
 
-1. Verify SSH key access, passwordless sudo, .NET 10, and Task Server health
-   from the host.
+1. Verify SSH key access, the pre-provisioned fixed-path deploy helper and
+   exact service-control whitelist, .NET 10, and Task Server health from the
+   host. Initial package and unit provisioning belongs to an operator-root
+   session; it must not leave the service account with unrestricted sudo.
 2. Install or update the `CodingAgentRunner` NuGet global tool and require
    version `0.5.0` or newer, then install the Codex and Claude CLIs.
 3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
@@ -243,15 +248,11 @@ copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 git clone <origin> agent-taskboard && cd agent-taskboard
 release_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
 staging_root="$(mktemp -d)"
-release_root="/opt/agent-host/releases/$release_id"
 dotnet publish runner/AgentRunner.csproj -c Release -o "$staging_root"
-sudo install -d -m 0755 "$release_root"
-sudo cp -a "$staging_root/." "$release_root/"
-sudo ln -sfnT "$release_root" /opt/agent-host/current
-if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
-  sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
-fi
-sudo ln -sfnT /opt/agent-host /opt/agent-runner
+printf '%s\n' "$release_id" >"$staging_root/release-id"
+scp -r "$staging_root/." \
+  agent-runner-01:/var/lib/agent-runner/deploy/incoming/
+ssh agent-runner-01 'sudo /usr/local/sbin/agent-runner-deploy'
 ```
 
 The selected output binary is `/opt/agent-host/current/agent-host`.
@@ -687,15 +688,11 @@ atomically switch `/opt/agent-host/current`, and only then restart the main
 service process. Record the previous `readlink -f /opt/agent-host/current`
 target before switching so rollback can select that complete release.
 
-```bash
-sudo systemctl restart agent-host
-sudo journalctl -u agent-host --since '-2 minutes' \
-  | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
-
-sudo systemctl restart agent-runner-review
-sudo journalctl -u agent-runner-review --since '-2 minutes' \
-  | grep -E 'planned shutdown|review daemon handoff|persisted review accepted|adopting persisted review|review adoption failed'
-```
+The trusted operator workstation uses the exact restart and no-pager status
+commands in the
+[hardening runbook deploy recipe](../security/agent-runner-01-host-hardening.md#deploy-recipe-scp-promote-restart).
+Journal review belongs to the operator session and is not added to the service
+account's sudo whitelist.
 
 On SIGTERM the old daemon stops making claims, leaves detached coding and review
 workers running, flushes its already-atomic slot records, and exits. systemd
