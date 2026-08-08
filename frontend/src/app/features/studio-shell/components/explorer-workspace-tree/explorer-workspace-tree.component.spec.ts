@@ -409,6 +409,23 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(wiki?.getAttribute('aria-current')).toBe('page');
   });
 
+  it('reveals the workspace ancestors of the active Workbench', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', true);
+    cmp.setCollapsed('ws:ws-default', true);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('activeProjectSurface', 'workbench');
+    fixture.componentRef.setInput('activeWorkbenchId', 'active-lab');
+    fixture.detectChanges();
+
+    expect(cmp.isCollapsed('workspace')).toBe(false);
+    expect(cmp.isCollapsed('ws:ws-default')).toBe(false);
+  });
+
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;

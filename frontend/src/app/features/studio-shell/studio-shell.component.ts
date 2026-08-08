@@ -559,6 +559,11 @@ export class StudioShellComponent {
     return null;
   });
 
+  readonly activeWorkbenchId = computed<string | null>(() => {
+    const tab = this.activeTab();
+    return tab?.kind === 'workbench' ? tab.workbenchId : null;
+  });
+
   /**
    * The project the user is contextually "in" — drives the active titlebar
    * pill and the default project for sidebar CTAs. Board/Deck tabs name a

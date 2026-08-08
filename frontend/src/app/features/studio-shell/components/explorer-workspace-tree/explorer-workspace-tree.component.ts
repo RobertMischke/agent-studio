@@ -10,6 +10,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
@@ -81,6 +82,7 @@ export class ExplorerWorkspaceTreeComponent {
   readonly expandedProjects = input<ReadonlySet<string>>(new Set());
   readonly showAllActive = input(false);
   readonly activeProjectSurface = input<ExplorerProjectSurface | null>(null);
+  readonly activeWorkbenchId = input<string | null>(null);
   /** Experimental active-work visualization. Numbers remain the default. */
   readonly metricView = input<ExplorerTreeMetricView>('numbers');
   /** Project name to always-visible auto-pickup configuration and gate state. */
@@ -189,6 +191,27 @@ export class ExplorerWorkspaceTreeComponent {
       this.registryProjects(),
       this.projectStorageByName(),
     ));
+
+  /** Reveal every ancestor of an opened Workbench without fighting later manual collapse. */
+  private lastRevealedWorkbench: string | null = null;
+  private readonly revealActiveWorkbenchAncestorsFx = effect(() => {
+    const activeWorkbenchId = this.activeWorkbenchId();
+    if (!activeWorkbenchId) {
+      this.lastRevealedWorkbench = null;
+      return;
+    }
+    const activeGroup = this.groups().find(group => group.projects.some(project => project.isActive));
+    const activeProject = activeGroup?.projects.find(project => project.isActive);
+    if (!activeGroup || !activeProject) return;
+
+    const identity = `${activeProject.name}:${activeWorkbenchId}`;
+    if (this.lastRevealedWorkbench === identity) return;
+    this.lastRevealedWorkbench = identity;
+    untracked(() => {
+      this.sections.setCollapsed('workspace', false);
+      this.sections.setCollapsed(`ws:${activeGroup.id}`, false);
+    });
+  });
 
   isCollapsed(key: string): boolean {
     return this.sections.isCollapsed(key);

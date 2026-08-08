@@ -6,23 +6,28 @@
   // spacing tokens, so they live as named local metrics.
   --workbench-topics-indent: 60px;
   --workbench-row-pad-block: 3px;
-  --workbench-row-gap: 1px;
   --workbench-history-pad-block: 2px;
 }
 // Nest the expanded workbench items under the "Workbenches" child row.
 .studio-workbench-topics { padding-left: var(--workbench-topics-indent); padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3)); }
 .studio-workbench-topics__state { display: block; padding: var(--workbench-row-pad-block) var(--studio-spacing-2); color: var(--studio-fg-muted); font-size: 11px; }
-.studio-workbench-topic { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: var(--workbench-row-gap); padding: var(--workbench-row-pad-block) var(--studio-spacing-2); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; }
+.studio-workbench-topic { width: 100%; display: flex; align-items: center; gap: var(--studio-spacing-2); padding: var(--workbench-row-pad-block) var(--studio-spacing-2); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; transition: background 120ms ease, color 120ms ease; }
 .studio-workbench-topic:hover { background: var(--studio-bg-hover); }
 .studio-workbench-topic:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: -2px; }
 .studio-workbench-topic:disabled { cursor: default; }
+.studio-workbench-topic--active { background: var(--studio-nav-active-bg); color: var(--studio-nav-active-fg); font-weight: 600; }
+.studio-workbench-topic--active:hover { background: var(--studio-nav-active-bg-hover); }
 // Match the tree-row type scale (13px rows) so the section reads as part of
 // the tree instead of a foreign block.
-.studio-workbench-topic__title { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.35; }
-.studio-workbench-topic__meta { display: flex; align-items: center; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 10px; line-height: 1.3; }
-.studio-workbench-topic__meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-accent-3); flex: none; }
-.studio-workbench-topic__meta i[data-status='decision-pending'], .studio-workbench-topic__meta i[data-status='invalid'] { background: var(--studio-warn); }
+.studio-workbench-topic__title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.35; }
+.studio-workbench-topic__signal { display: flex; align-items: center; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 10px; line-height: 1.3; white-space: nowrap; }
+.studio-workbench-topic__signal i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-warn); flex: none; }
+.studio-workbench-topic__history-state { color: var(--studio-fg-muted); font-size: 10px; font-weight: 400; text-transform: capitalize; }
 .studio-workbench-history { margin: var(--studio-spacing-1) 0 0; padding: var(--workbench-history-pad-block) var(--studio-spacing-2); border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
 .studio-workbench-history:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
 .studio-workbench-history__items { opacity: 0.78; }
 .studio-workbench-topic--settled { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-workbench-topic { transition-duration: 0s; }
+}

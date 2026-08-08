@@ -208,6 +208,7 @@
                   [expandedProjects]="expandedProjects()"
                   [showAllActive]="activeProjectName() === null && activeTab()?.kind === 'board'"
                   [activeProjectSurface]="activeProjectSurface()"
+                  [activeWorkbenchId]="activeWorkbenchId()"
                   [metricView]="uiPrefs.treeMetricView()"
                   [projectAutoPickupByName]="projectAutoPickupByName()"
                   (showAll)="pickProject(null)"

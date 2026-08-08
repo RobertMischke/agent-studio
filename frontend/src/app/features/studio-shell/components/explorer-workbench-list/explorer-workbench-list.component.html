@@ -1,7 +1,6 @@
 <app-tree-row level="child" glyph="eye" label="Workbenches"
               [chevron]="expanded() ? 'expanded' : 'collapsed'"
               [count]="catalogue()?.count ?? null" [active]="active()"
-              [ariaCurrent]="active() ? 'page' : null"
               [testid]="'studio-explorer-project-workbenches-' + projectName()"
               (chevronClick)="toggle()" (selectRequest)="toggle()" />
 @if (expanded()) {
@@ -10,12 +9,20 @@
       <span class="studio-workbench-topics__state">Loading…</span>
     } @else {
       @for (workbench of catalogue()?.items ?? []; track workbench.id) {
-        <button type="button" class="studio-workbench-topic" [disabled]="!workbench.valid"
-                [attr.aria-label]="workbench.title + ', ' + meta(workbench)"
+        <button #workbenchTopic type="button" class="studio-workbench-topic"
+                [class.studio-workbench-topic--active]="isActive(workbench)"
+                [disabled]="!workbench.valid"
+                [attr.aria-current]="isActive(workbench) ? 'page' : null"
+                [attr.aria-label]="itemAriaLabel(workbench)"
+                [attr.data-workbench-id]="workbench.id"
                 [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                 (click)="openWorkbench.emit(workbench)">
           <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
-          <span class="studio-workbench-topic__meta"><i [attr.data-status]="workbench.status"></i>{{ meta(workbench) }}</span>
+          @if (attentionLabel(workbench); as attention) {
+            <span class="studio-workbench-topic__signal" [attr.data-status]="workbench.status">
+              <i aria-hidden="true"></i>{{ attention }}
+            </span>
+          }
         </button>
       } @empty { <span class="studio-workbench-topics__state">No open Workbenches</span> }
       <button type="button" class="studio-workbench-history"
@@ -30,11 +37,15 @@
       @if (historyOpen()) {
         <div class="studio-workbench-history__items">
           @for (workbench of settledHistory(); track workbench.id) {
-            <button type="button" class="studio-workbench-topic studio-workbench-topic--settled"
+            <button #workbenchTopic type="button" class="studio-workbench-topic studio-workbench-topic--settled"
+                    [class.studio-workbench-topic--active]="isActive(workbench)"
+                    [attr.aria-current]="isActive(workbench) ? 'page' : null"
+                    [attr.aria-label]="itemAriaLabel(workbench)"
+                    [attr.data-workbench-id]="workbench.id"
                     [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                     (click)="openWorkbench.emit(workbench)">
               <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
-              <span class="studio-workbench-topic__meta">{{ workbench.status }} · {{ meta(workbench) }}</span>
+              <span class="studio-workbench-topic__history-state">{{ workbench.status }}</span>
             </button>
           } @empty { <span class="studio-workbench-topics__state">No settled Workbenches</span> }
         </div>
