@@ -97,26 +97,43 @@ head use the same type-to-icon mapping.
 
 ## Durable agent-read evidence
 
-Each page can carry observed agent read evidence in its adjacent
-`<page>.meta.json` companion:
+Observed agent read evidence is runtime telemetry stored outside the product
+repository. Each page can have one record at
+`<TaskRepository>/.metadata/wiki-agent-reads/<project-id>/<docs-relative-path>.json`:
 
 ```jsonc
 {
-  "agentReads": {
-    "total": 23,
-    "lastReadAt": "2026-07-22T10:15:00Z",
-    "recent": [
-      { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" }
-    ]
-  }
+  "schemaVersion": "wiki-agent-read-state/v1",
+  "sourcePath": "docs/concepts/overview.md",
+  "total": 23,
+  "lastReadAt": "2026-07-22T10:15:00Z",
+  "recent": [
+    { "at": "2026-07-22T10:15:00Z", "taskKey": "AGT-2242" }
+  ]
 }
 ```
 
 `total` is the lifetime count reconstructed from durable task CLI logs plus
 continuously observed local and remote runs. `recent` is newest first and
-retains at most 20 reads. The one-time startup backfill is guarded by
-`<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`; companion
-updates use atomic replace writes.
+retains at most 20 reads. The cap is a code convention, not a setting, and is
+applied on every read, live increment, migration, and backfill write. State
+updates use atomic replacement and the Wiki tree ETag includes the runtime
+state signature.
+
+Older tracked `<page>.meta.json` companions can still contain an `agentReads`
+block. Readers accept it as a read-only fallback. The first later live or
+backfill write for that page copies the full legacy total and retained history
+into the runtime record before applying new evidence. The legacy block is not
+removed automatically: changing a tracked companion during migration would
+recreate the dirty-worktree failure this boundary prevents. Once runtime state
+exists it is authoritative, while the tracked block remains an immutable
+baseline. Companion generators continue to preserve that baseline, so an
+upgrade does not discard history before copy-on-write migration occurs.
+
+The one-time startup backfill remains guarded by
+`<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`. A pre-existing
+marker is safe after upgrade because pages without runtime state continue to
+project their legacy companion baseline and migrate on their next write.
 
 The persistence and initialization contract is:
 
@@ -126,18 +143,25 @@ The persistence and initialization contract is:
 - the marker has schema `wiki-agent-read-backfill/v1` and records completion
   time, logs scanned, and reads applied; its presence makes later startups a
   no-op,
-- a restart after companion writes but before marker creation is safe because
-  backfill merges a monotonic reconstructed baseline instead of adding the
-  baseline again,
+- a restart after runtime-state writes but before marker creation is safe
+  because backfill merges a monotonic reconstructed baseline instead of adding
+  the baseline again,
 - local CLI output and fenced remote-runner log ingestion both feed the same
   live attribution method after the log line is durable,
-- each companion update preserves unrelated metadata blocks and is published
-  with an atomic temporary-file replacement.
+- no agent-read path creates or modifies a file in `RepositoryPath` or its
+  tracked `docs/` tree.
 
 Only actual read tool uses and recognized read-only shell commands count.
 Agent prose that merely mentions a `docs/**` path, writes, edits, `docs/app/**`
 contracts, companion files, and generated reports do not count. This evidence
 is observational only. It never affects drift, gates, or workflow state.
+
+The regression
+`WikiAgentReadBackfillTests.ProcessOutput_LeavesTrackedWikiRepositoryClean`
+creates a real Git repository with a tracked legacy companion, records a new
+agent read, verifies the migrated total, and asserts that `git status
+--porcelain` is empty. This pins the merge-queue invariant at the original
+failure boundary.
 
 ## Pulse drift groups and the `human-action` convention
 
@@ -210,7 +234,8 @@ an `ETag` with `Cache-Control: no-cache`. A matching `If-None-Match` returns
 ### `GET /wiki/tree`
 
 Returns the recursive physical docs tree. A page's compact `metadata` includes
-`agentReads` when its companion contains observed read evidence.
+`agentReads` when runtime state or a legacy companion contains observed read
+evidence.
 
 ```jsonc
 {

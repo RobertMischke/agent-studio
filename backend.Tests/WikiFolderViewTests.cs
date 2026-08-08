@@ -284,6 +284,36 @@ public class WikiFolderViewTests : IDisposable
         Assert.Equal(new[] { "AGT-2242", "AGT-2200" }, row.AgentReads.Recent.Select(r => r.TaskKey));
     }
 
+    [Fact]
+    public void GetWikiFolder_RuntimeAgentReadsProjectWithoutTrackedCompanion()
+    {
+        WritePage("concepts/runtime.md", "# Runtime\n");
+        var config = BuildConfig();
+        var scanner = BuildScanner(config);
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var projectId = registry.FindByIdOrDisplayName(ProjectName)?.Id ?? ProjectName;
+        var store = new WikiAgentReadStore(config);
+        store.Increment(
+            projectId,
+            _docsDir,
+            "concepts/runtime.md",
+            new DateTime(2026, 8, 8, 9, 0, 0, DateTimeKind.Utc),
+            "AGT-2507");
+        var docs = new ProjectDocsService(
+            scanner,
+            registry,
+            NullLogger<ProjectDocsService>.Instance,
+            agentReads: store);
+
+        var row = docs.GetWikiFolder(ProjectName, "concepts")!
+            .Children.Single(child => child.Name == "runtime.md");
+
+        Assert.NotNull(row.AgentReads);
+        Assert.Equal(1, row.AgentReads!.Total);
+        Assert.Equal("AGT-2507", Assert.Single(row.AgentReads.Recent).TaskKey);
+        Assert.False(File.Exists(Path.Combine(_docsDir, "concepts", "runtime.md.meta.json")));
+    }
+
     // ---- Guards ----
 
     [Fact]
@@ -331,6 +361,7 @@ public class WikiFolderViewTests : IDisposable
             ["WatchPaths:0:Name"] = ProjectName,
             ["WatchPaths:0:RootPath"] = _tempDir,
             ["WatchPaths:0:Path"] = Path.Combine(_tempDir, ".orchestrator", "jobs"),
+            ["TaskRepository"] = Path.Combine(_tempDir, "task-repository"),
         })
         .Build();
 

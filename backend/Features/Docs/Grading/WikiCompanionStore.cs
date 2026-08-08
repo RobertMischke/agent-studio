@@ -20,8 +20,6 @@ public sealed record WikiCompanionWriteResult(bool Changed, string CompanionAbsP
 /// </summary>
 public sealed class WikiCompanionStore
 {
-    public const int MaxRecentAgentReads = 20;
-
     private const string SchemaId =
         "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json";
     private const string Generator = "backend/Features/Docs/Grading/WikiGradingService.cs";
@@ -213,65 +211,6 @@ public sealed class WikiCompanionStore
         }
     }
 
-    /// <summary>
-    /// Adds one observed agent read to a page companion. The complete
-    /// read-modify-replace sequence is serialized per sidecar and the final
-    /// move is atomic. Recent history is newest first and bounded.
-    /// </summary>
-    public WikiCompanionWriteResult IncrementAgentRead(
-        string wikiDir, string docsRelPath, string title, string content, DateTime atUtc, string taskKey)
-    {
-        var companionAbs = CompanionPathFor(wikiDir, docsRelPath);
-        lock (GateFor(companionAbs))
-        {
-            var root = ReadExistingRoot(companionAbs)
-                ?? BuildCreationCompanion(docsRelPath, title, content, atUtc.ToUniversalTime().ToString("o"));
-            var reads = root["agentReads"] as JsonObject ?? new JsonObject();
-            var total = JsonInt(reads["total"]);
-            var recent = ReadRecentAgentReads(reads);
-            recent.Add(new WikiAgentReadRecent(atUtc.ToUniversalTime(), NormalizeTaskKey(taskKey)));
-            SetAgentReads(reads, checked(total + 1), recent);
-            root["agentReads"] = reads;
-            return WriteRootAtomically(companionAbs, root);
-        }
-    }
-
-    /// <summary>
-    /// Applies the historical-log baseline monotonically so a repeated or
-    /// crash-resumed backfill cannot add the same reads twice.
-    /// </summary>
-    public WikiCompanionWriteResult ApplyAgentReadBackfill(
-        string wikiDir,
-        string docsRelPath,
-        string title,
-        string content,
-        int total,
-        IReadOnlyCollection<WikiAgentReadRecent> recent)
-    {
-        var companionAbs = CompanionPathFor(wikiDir, docsRelPath);
-        lock (GateFor(companionAbs))
-        {
-            var capturedAt = recent.Count == 0 ? DateTime.UtcNow : recent.Max(r => r.At);
-            var root = ReadExistingRoot(companionAbs)
-                ?? BuildCreationCompanion(docsRelPath, title, content, capturedAt.ToUniversalTime().ToString("o"));
-            var reads = root["agentReads"] as JsonObject ?? new JsonObject();
-            var storedTotal = JsonInt(reads["total"]);
-            var reconstructedTotal = Math.Max(0, total);
-            // When the reconstructed inventory is at least as complete as the
-            // stored baseline, replace history from that source. This keeps
-            // two genuine reads by the same task in the same millisecond while
-            // making a crash-resumed backfill idempotent. A larger stored total
-            // means live evidence already extends beyond this baseline, so its
-            // newer retained history wins.
-            var history = reconstructedTotal >= storedTotal
-                ? recent
-                : ReadRecentAgentReads(reads);
-            SetAgentReads(reads, Math.Max(storedTotal, reconstructedTotal), history);
-            root["agentReads"] = reads;
-            return WriteRootAtomically(companionAbs, root);
-        }
-    }
-
     private static object GateFor(string path) =>
         WriteGates.GetOrAdd(Path.GetFullPath(path), _ => new object());
 
@@ -297,49 +236,6 @@ public sealed class WikiCompanionStore
         }
         return new WikiCompanionWriteResult(true, companionAbs);
     }
-
-    private static int JsonInt(JsonNode? node)
-    {
-        try { return node?.GetValue<int>() ?? 0; }
-        catch { return 0; }
-    }
-
-    private static List<WikiAgentReadRecent> ReadRecentAgentReads(JsonObject reads)
-    {
-        var result = new List<WikiAgentReadRecent>();
-        if (reads["recent"] is not JsonArray recent) return result;
-        foreach (var item in recent.OfType<JsonObject>())
-        {
-            if (!DateTime.TryParse(item["at"]?.GetValue<string>(), out var at)) continue;
-            var taskKey = item["taskKey"]?.GetValue<string>();
-            if (string.IsNullOrWhiteSpace(taskKey)) continue;
-            result.Add(new WikiAgentReadRecent(at.ToUniversalTime(), NormalizeTaskKey(taskKey)));
-        }
-        return result;
-    }
-
-    private static void SetAgentReads(JsonObject reads, int total, IEnumerable<WikiAgentReadRecent> recent)
-    {
-        var bounded = recent
-            .OrderByDescending(read => read.At)
-            .Take(MaxRecentAgentReads)
-            .ToList();
-        reads["total"] = total;
-        reads["lastReadAt"] = bounded.Count == 0 ? null : bounded[0].At.ToUniversalTime().ToString("o");
-        var array = new JsonArray();
-        foreach (var item in bounded)
-        {
-            array.Add(new JsonObject
-            {
-                ["at"] = item.At.ToUniversalTime().ToString("o"),
-                ["taskKey"] = NormalizeTaskKey(item.TaskKey),
-            });
-        }
-        reads["recent"] = array;
-    }
-
-    private static string NormalizeTaskKey(string taskKey) =>
-        string.IsNullOrWhiteSpace(taskKey) ? "unknown" : taskKey.Trim();
 
     /// <summary>A schema-valid minimal companion (no report/review/drift blocks yet).</summary>
     private static JsonObject BuildCreationCompanion(string docsRelPath, string title, string content, string iso)

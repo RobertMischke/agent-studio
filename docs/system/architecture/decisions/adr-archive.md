@@ -1474,3 +1474,37 @@ Restart, boundary, stage, env, version, and handshake tests:
 **Status.** Accepted. The API-only binary, durable run authority, restart
 reclaim, protocol handshake, version surface, env contract, and migration
 switch ship together.
+
+---
+
+## ADR-0067 - Wiki read telemetry lives outside product repositories (2026-08-08)
+
+**Decision.** Agent read totals and bounded recent history are runtime state at
+`<TaskRepository>/.metadata/wiki-agent-reads/<project-id>/<docs-relative-path>.json`.
+The backend never writes this telemetry into tracked Wiki companions. The
+`recent` list is capped at 20 by convention. Existing companion `agentReads`
+blocks remain read-only fallbacks and are copied into runtime state on the
+page's first later write before new evidence is applied.
+
+**Context.** Updating tracked `docs/**/*.meta.json` for every observed read kept
+the integration checkout dirty. `MergeIntoDevelopRunner` correctly refuses a
+dirty integration worktree, so observational telemetry could block every card
+in the merge queue.
+
+**Reasoning style.** Bound high-churn telemetry at its producer and keep source
+repositories deterministic. Copy-on-write migration preserves historical
+totals without automatically removing legacy blocks, because a removal would
+itself create the forbidden tracked modification. Runtime state is atomic and
+project-scoped; readers overlay it on the existing Wiki tree and folder DTOs.
+
+**Implementation pointers.** Storage and migration:
+[`backend/Features/Docs/WikiAgentReadStore.cs`](../../../../backend/Features/Docs/WikiAgentReadStore.cs).
+Attribution and backfill:
+[`backend/Features/Docs/WikiAgentReadService.cs`](../../../../backend/Features/Docs/WikiAgentReadService.cs).
+Projection:
+[`backend/Features/Docs/ProjectDocsService.cs`](../../../../backend/Features/Docs/ProjectDocsService.cs).
+Contract: [wiki-tree.md](../../contracts/wiki-tree.md#durable-agent-read-evidence).
+Regression:
+[`backend.Tests/WikiAgentReadServiceTests.cs`](../../../../backend.Tests/WikiAgentReadServiceTests.cs).
+
+**Status.** Accepted.

@@ -149,7 +149,7 @@
     },
     "agentReads": {
       "type": "object",
-      "description": "Observed agent tool-use reads of this wiki page. This is durable usage evidence only; it never drives drift, gates, or workflow state.",
+      "description": "Legacy read-only baseline for observed agent tool-use reads. New telemetry is written outside the repository under <TaskRepository>/.metadata/wiki-agent-reads; readers retain this block for copy-on-write migration compatibility.",
       "required": ["total", "lastReadAt", "recent"],
       "additionalProperties": false,
       "properties": {

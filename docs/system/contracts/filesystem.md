@@ -11,6 +11,10 @@ canonical layout:
   .metadata/
     projects.json
     workspaces.json
+    wiki-agent-reads/
+      PROJ-023/
+        concepts/
+          overview.md.json
     test-runs/
       PROJ-023.json
   projects/
@@ -25,6 +29,14 @@ The product checkout is a separate location referenced by `RepositoryPath`.
 It contains source code and the project's own `docs/` tree, but Agent Studio
 must not create `.orchestrator/jobs`, task prompts, logs, attachments, results,
 or task metadata there.
+
+Observed agent reads of Wiki pages are runtime telemetry, not documentation
+metadata. The backend stores one bounded record per page at
+`<TaskRepository>/.metadata/wiki-agent-reads/<project-id>/<docs-relative-path>.json`.
+It never writes this telemetry into the product checkout. The path is a
+convention derived from the existing `TaskRepository` and stable project id;
+there is no per-project setting for it. The detailed record, migration, and
+reader contract is in [wiki-tree.md](./wiki-tree.md#durable-agent-read-evidence).
 
 Older projects may still resolve an in-repository `.orchestrator/jobs` folder,
 or may use an `.orchestrator.yml` pointer to the legacy

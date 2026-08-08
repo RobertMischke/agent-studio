@@ -630,6 +630,7 @@ builder.Services.AddSingleton<AgentStudio.Tasks.IParkedBlockerProbe>(sp =>
     new AgentStudio.Tasks.ParkedBlockerProbe(sp.GetService<AgentStudio.Git.GitService>()));
 builder.Services.AddSingleton<AgentStudio.Tasks.ParkedCardRecallSweep>();
 builder.Services.AddHostedService<AgentStudio.Tasks.ParkedCardRecallSweepHostedService>();
+builder.Services.AddSingleton<WikiAgentReadStore>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<WikiContentCache>();
 // Warms the central wiki cache off the startup path and logs the periodic
@@ -849,10 +850,10 @@ catch (Exception ex)
     crashRecorder.Record("ReviewAttemptTaskLifecycle.BootSweep", ex);
 }
 
-// One-time initialization of durable per-page agent read counters from the
-// historical cli-output.log inventory. The marker makes subsequent boots a
-// cheap no-op; this runs before CLI reattachment and before the listener starts
-// so historical and new live observations cannot race each other.
+// One-time initialization of runtime-only per-page agent read counters from
+// the historical cli-output.log inventory. The marker makes subsequent boots
+// a cheap no-op; this runs before CLI reattachment and before the listener
+// starts so historical and new live observations cannot race each other.
 try
 {
     app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>().EnsureBackfilled();

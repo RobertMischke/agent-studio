@@ -198,13 +198,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("remote runner: starting task", cliLog);
         Assert.Contains("[[TASK_DONE]]", cliLog);
 
-        using var companion = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(_watchPath, "docs", "concepts", "remote-runner.md.meta.json")));
-        var agentReads = companion.RootElement.GetProperty("agentReads");
+        var projectId = factory.Services.GetRequiredService<ProjectRegistry>()
+            .FindByIdOrDisplayName(ProjectName)!.Id;
+        var agentReads = Assert.Single(factory.Services.GetRequiredService<WikiAgentReadStore>()
+            .ReadAll(projectId).ByDocsRelativePath).Value;
         using var movedTask = JsonDocument.Parse(File.ReadAllText(Path.Combine(moved, "task.json")));
         var displayTaskKey = movedTask.RootElement.GetProperty("key").GetString();
-        Assert.Equal(1, agentReads.GetProperty("total").GetInt32());
-        Assert.Equal(displayTaskKey, agentReads.GetProperty("recent")[0].GetProperty("taskKey").GetString());
+        Assert.Equal(1, agentReads.Total);
+        Assert.Equal(displayTaskKey, agentReads.Recent[0].TaskKey);
+        Assert.False(File.Exists(
+            Path.Combine(_watchPath, "docs", "concepts", "remote-runner.md.meta.json")));
 
         var evidence = File.ReadAllText(Path.Combine(moved, "results", "runner-evidence--real.txt"));
         Assert.Equal("evidence bytes", evidence);

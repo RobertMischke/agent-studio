@@ -22,6 +22,7 @@ public class ProjectDocsService
     private readonly GitService? _git;
     private readonly ILogger<ProjectDocsService> _logger;
     private readonly WorkbenchCatalogueService? _workbenches;
+    private readonly WikiAgentReadStore _agentReads;
     private WikiContentCache _wikiContentCache;
 
     private const string SecurityRel = "docs/operations/security";
@@ -89,13 +90,15 @@ public class ProjectDocsService
         ProjectRegistry registry,
         ILogger<ProjectDocsService> logger,
         GitService? git = null,
-        WorkbenchCatalogueService? workbenches = null)
+        WorkbenchCatalogueService? workbenches = null,
+        WikiAgentReadStore? agentReads = null)
     {
         _scanner = scanner;
         _registry = registry;
         _git = git;
         _logger = logger;
         _workbenches = workbenches;
+        _agentReads = agentReads ?? WikiAgentReadStore.Unconfigured;
         // Unit fixtures construct this service directly. Production replaces
         // this local instance with the DI singleton during host wiring.
         _wikiContentCache = new WikiContentCache(
@@ -453,7 +456,8 @@ public class ProjectDocsService
         }
 
         var signature = ComputeDocsSignature(wikiDir) ?? "unavailable";
-        var metadata = LoadWikiMetadataIndex(wikiDir);
+        var agentReadIndex = _agentReads.ReadAll(ResolveWikiCacheKey(projectName));
+        var metadata = LoadWikiMetadataIndex(wikiDir, agentReadIndex.ByDocsRelativePath);
         var folderOrder = LoadWikiOrderMap(wikiDir, "folderOrder");
         var fileOrder = LoadWikiOrderMap(wikiDir, "fileOrder");
         var root = BuildTreeNodes(
@@ -467,7 +471,7 @@ public class ProjectDocsService
         var tree = new WikiTree(projectName, "docs", true, root, source.Info);
         var treeResult = new WikiTreeResult(
             tree,
-            FormatETag("wiki-tree-" + sourceKey + "-" + signature));
+            FormatETag("wiki-tree-" + sourceKey + "-" + signature + "-" + agentReadIndex.Signature));
 
         var files = ListWikiDocs(wikiDir);
         var filesByRelPath = files.ToDictionary(
@@ -485,7 +489,7 @@ public class ProjectDocsService
         }
         foreach (var rel in folderPaths)
         {
-            var folder = BuildWikiFolderRaw(projectName, rel, wikiDir);
+            var folder = BuildWikiFolderRaw(projectName, rel, wikiDir, metadata);
             if (folder != null) folders[rel] = folder;
         }
 
@@ -1552,7 +1556,9 @@ public class ProjectDocsService
     /// physical files beside the document but are not rendered as separate
     /// navigation rows; their compact summary enriches the source row.
     /// </summary>
-    private static IReadOnlyDictionary<string, WikiTreeMetadata> LoadWikiMetadataIndex(string wikiDir)
+    private static IReadOnlyDictionary<string, WikiTreeMetadata> LoadWikiMetadataIndex(
+        string wikiDir,
+        IReadOnlyDictionary<string, WikiAgentReads> runtimeAgentReads)
     {
         var index = new Dictionary<string, WikiTreeMetadata>(StringComparer.OrdinalIgnoreCase);
         if (!Directory.Exists(wikiDir)) return index;
@@ -1607,7 +1613,7 @@ public class ProjectDocsService
                     ClassificationSupersededBy: JsonString(classification, "supersededBy"),
                     ClassificationType: JsonString(classification, "type"),
                     ClassificationAnalyzedAt: JsonString(classification, "analyzedAt"),
-                    AgentReads: ParseAgentReads(agentReads));
+                    AgentReads: WikiAgentReadStore.ParseAgentReads(agentReads));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -1616,8 +1622,35 @@ public class ProjectDocsService
             }
         }
 
+        // Runtime state wins after a page's first copy-on-write migration. A
+        // legacy companion remains a read-only fallback until that point so
+        // migration never dirties the source repository.
+        foreach (var (sourceRel, reads) in runtimeAgentReads)
+        {
+            index[sourceRel] = index.TryGetValue(sourceRel, out var metadata)
+                ? metadata with { AgentReads = reads }
+                : AgentReadOnlyMetadata(reads);
+        }
+
         return index;
     }
+
+    private static WikiTreeMetadata AgentReadOnlyMetadata(WikiAgentReads reads) => new(
+        DocumentMode: null,
+        TemporalState: null,
+        ImplementationState: null,
+        DriftGrade: null,
+        HasDrift: null,
+        DriftScore: null,
+        Quality: null,
+        DuplicateSuspected: null,
+        DuplicateGroupSize: null,
+        ReportPath: null,
+        Summary: null,
+        CompanionPath: null,
+        SourceChangedSinceReview: null,
+        FindingsCount: null,
+        AgentReads: reads);
 
     /// <summary>
     /// Hidden wiki paths - any dot-prefixed path segment (e.g. <c>.curator/…</c>,
@@ -1805,48 +1838,6 @@ public class ProjectDocsService
             }
         }
         return BuildClassification(relPath, status, supersededBy, type, analyzedAt);
-    }
-
-    /// <summary>Agent-read projection for one folder-overview page row.</summary>
-    private static WikiAgentReads? ReadPageAgentReads(string pageFullPath)
-    {
-        var companion = pageFullPath + ".meta.json";
-        if (!File.Exists(companion)) return null;
-        try
-        {
-            GitProcessTelemetry.RecordFileRead();
-            using var doc = JsonDocument.Parse(File.ReadAllText(companion));
-            return TryJsonObject(doc.RootElement, "agentReads", out var reads)
-                ? ParseAgentReads(reads)
-                : null;
-        }
-        catch (Exception ex)
-        {
-            SilentCatch.Note(ex, "ProjectDocsService: unreadable companion during folder agent-read projection.");
-            return null;
-        }
-    }
-
-    private static WikiAgentReads? ParseAgentReads(JsonElement reads)
-    {
-        if (reads.ValueKind != JsonValueKind.Object) return null;
-        var total = JsonInt(reads, "total") ?? 0;
-        DateTime? lastReadAt = DateTime.TryParse(JsonString(reads, "lastReadAt"), out var last)
-            ? last.ToUniversalTime()
-            : null;
-        var recent = new List<WikiAgentReadRecent>();
-        if (reads.TryGetProperty("recent", out var array) && array.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in array.EnumerateArray().Take(WikiCompanionStore.MaxRecentAgentReads))
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                if (!DateTime.TryParse(JsonString(item, "at"), out var at)) continue;
-                var taskKey = JsonString(item, "taskKey");
-                if (string.IsNullOrWhiteSpace(taskKey)) continue;
-                recent.Add(new WikiAgentReadRecent(at.ToUniversalTime(), taskKey));
-            }
-        }
-        return new WikiAgentReads(Math.Max(0, total), lastReadAt, recent);
     }
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
@@ -2550,7 +2541,8 @@ public class ProjectDocsService
     private WikiFolderView? BuildWikiFolderRaw(
         string projectName,
         string? relPath,
-        string? wikiRootOverride = null)
+        string? wikiRootOverride = null,
+        IReadOnlyDictionary<string, WikiTreeMetadata>? metadataByRelPath = null)
     {
         var baseDir = wikiRootOverride == null ? ResolveBaseDir(projectName) : null;
         if (wikiRootOverride == null && baseDir == null) return null;
@@ -2618,7 +2610,10 @@ public class ProjectDocsService
                 ChildCount: null,
                 Classification: ReadPageClassification(file.FullName, fileRel),
                 UpdatedAtSource: updated.Source,
-                AgentReads: ReadPageAgentReads(file.FullName)));
+                AgentReads: metadataByRelPath != null
+                    && metadataByRelPath.TryGetValue(fileRel, out var metadata)
+                        ? metadata.AgentReads
+                        : null));
         }
 
         // Same saved category and document drag-orders as the tree. Unlisted
