@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Website onboarding copy template",
+  "source": {
+    "path": "docs/operations/setup/website-onboarding-template.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "d023b15d699fab62b952cec4658004dc5e7cdfc1987726405726d11731bd1820",
+      "sizeBytes": 2672,
+      "lineCount": 85,
+      "capturedAt": "2026-08-04T18:16:38.3113731Z"
+    }
+  },
+  "agentReads": {
+    "total": 4,
+    "lastReadAt": "2026-08-04T18:16:38.3113731Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:16:38.3113731Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113731Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113731Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113731Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

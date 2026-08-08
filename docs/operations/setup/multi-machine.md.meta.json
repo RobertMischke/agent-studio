@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Multi-machine setup",
+  "source": {
+    "path": "docs/operations/setup/multi-machine.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "ba297d2d5daa462fb444c9b16b004aceb1b5067d06746be9c27b70423f7952a5",
+      "sizeBytes": 7348,
+      "lineCount": 200,
+      "capturedAt": "2026-08-04T18:16:38.3113500Z"
+    }
+  },
+  "agentReads": {
+    "total": 4,
+    "lastReadAt": "2026-08-04T18:16:38.3113500Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:16:38.3113500Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113500Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113500Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113500Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

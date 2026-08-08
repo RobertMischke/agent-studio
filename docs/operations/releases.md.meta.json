@@ -1,0 +1,46 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Release, installation, update, and rollback",
+  "source": {
+    "path": "docs/operations/releases.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "daf94e0ff8842d3ad91eaf26fd86d281c9532388a3d48292bb260e3cc97e7c6b",
+      "sizeBytes": 9155,
+      "lineCount": 190,
+      "capturedAt": "2026-08-04T18:14:37.7664509Z"
+    }
+  },
+  "agentReads": {
+    "total": 6,
+    "lastReadAt": "2026-08-04T18:14:37.7664509Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:14:37.7664509Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:14:37.7664509Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:14:37.7664509Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:14:37.7664509Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:14:37.7664509Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:14:37.7664509Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

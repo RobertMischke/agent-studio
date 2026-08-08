@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Wiki conventions",
+  "source": {
+    "path": "docs/start/wiki-conventions.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "4f62d0495457a6d10c2938578cfff27c2f5bd54ca0e735a62188812b416a331f",
+      "sizeBytes": 3709,
+      "lineCount": 84,
+      "capturedAt": "2026-08-04T18:16:38.3113322Z"
+    }
+  },
+  "agentReads": {
+    "total": 4,
+    "lastReadAt": "2026-08-04T18:16:38.3113322Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:16:38.3113322Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113322Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113322Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113322Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

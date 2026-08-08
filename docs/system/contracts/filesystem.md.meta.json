@@ -1,0 +1,70 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Filesystem Contract",
+  "source": {
+    "path": "docs/system/contracts/filesystem.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "3e5aa2271cb8f9e65d4f4de208e14f59e4c520888a949ef0b07e727d8169fc23",
+      "sizeBytes": 32226,
+      "lineCount": 428,
+      "capturedAt": "2026-08-04T18:30:06.8052007Z"
+    }
+  },
+  "agentReads": {
+    "total": 12,
+    "lastReadAt": "2026-08-04T19:18:48.7390602Z",
+    "recent": [
+      {
+        "at": "2026-08-04T19:18:48.7390602Z",
+        "taskKey": "AGT-2490"
+      },
+      {
+        "at": "2026-08-04T19:15:30.2578496Z",
+        "taskKey": "AGT-2490"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052012Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052012Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052012Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052012Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052012Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052007Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052007Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052007Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052007Z",
+        "taskKey": "AGT-2492"
+      },
+      {
+        "at": "2026-08-04T18:30:06.8052007Z",
+        "taskKey": "AGT-2492"
+      }
+    ]
+  }
+}

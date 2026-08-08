@@ -1,0 +1,58 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "index",
+  "source": {
+    "path": "docs/operations/nordstern/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "87b987b436484e4796061de00f62faa98d40b59eae82ec35f9fb0ff32c497388",
+      "sizeBytes": 9987,
+      "lineCount": 101,
+      "capturedAt": "2026-08-04T18:15:38.0331870Z"
+    }
+  },
+  "agentReads": {
+    "total": 9,
+    "lastReadAt": "2026-08-04T18:18:38.8347358Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:18:38.8347358Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:18:38.8347358Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:18:38.8347334Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:18:38.8347334Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331870Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331870Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331870Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331870Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331870Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

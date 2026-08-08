@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": ".NET backend guide",
+  "source": {
+    "path": "docs/quality/dotnet-backend.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "b355b22b1571f7d0e236427b2a28da70c40b3b0a567cecc6824334ad89796452",
+      "sizeBytes": 3510,
+      "lineCount": 74,
+      "capturedAt": "2026-08-04T18:13:34.3061985Z"
+    }
+  },
+  "agentReads": {
+    "total": 2,
+    "lastReadAt": "2026-08-04T19:14:35.6847537Z",
+    "recent": [
+      {
+        "at": "2026-08-04T19:14:35.6847537Z",
+        "taskKey": "AGT-2490"
+      },
+      {
+        "at": "2026-08-04T18:13:34.3061985Z",
+        "taskKey": "AGT-2493"
+      }
+    ]
+  }
+}

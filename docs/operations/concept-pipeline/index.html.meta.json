@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "index",
+  "source": {
+    "path": "docs/operations/concept-pipeline/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "36b07e52e6c2be381cc4773ae999444355fcba99ec8a4c865b3964cf8391d5b5",
+      "sizeBytes": 14018,
+      "lineCount": 169,
+      "capturedAt": "2026-08-04T18:16:38.3113354Z"
+    }
+  },
+  "agentReads": {
+    "total": 4,
+    "lastReadAt": "2026-08-04T18:16:38.3113354Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:16:38.3113354Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113354Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113354Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113354Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

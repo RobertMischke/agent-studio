@@ -1,0 +1,42 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "index",
+  "source": {
+    "path": "docs/quality/visual-styleguide-workbench-wiki/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "a7b0af674cf899f732a6b6bafe00249de4770a05930c7d6470b3376f32f0efa6",
+      "sizeBytes": 10594,
+      "lineCount": 284,
+      "capturedAt": "2026-08-04T18:15:38.0332026Z"
+    }
+  },
+  "agentReads": {
+    "total": 5,
+    "lastReadAt": "2026-08-04T18:15:38.0332026Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:15:38.0332026Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0332026Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0332026Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0332026Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0332026Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}
