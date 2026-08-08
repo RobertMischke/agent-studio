@@ -16,7 +16,11 @@ export interface RunRecord {
   intent: string; // 'start' | 'continue' | 'recovery' | 'restart' | 'reissue'
   startedAt: string;
   endedAt: string | null;
-  status: string; // 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'
+  status: string; // 'running' | 'completed' | typed terminal status | 'unknown'
+  /** Canonical terminal outcome when recorded or derived, such as done, failed, or superseded. */
+  result?: string | null;
+  /** Durable or legacy evidence used to close this projected run. */
+  closeoutSource?: string | null;
   cli: string | null;
   /** Effective model resolved by the runner before this CLI process started. */
   model?: string | null;

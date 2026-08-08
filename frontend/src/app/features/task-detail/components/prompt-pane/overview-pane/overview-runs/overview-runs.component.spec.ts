@@ -141,12 +141,37 @@ describe('OverviewRunsComponent', () => {
   });
 
   it('uses the persisted CORE duration only when timeline rows have no duration', () => {
-    const fixture = setup([run(1, { status: 'interrupted', durationSeconds: null })], 125);
+    const fixture = setup([
+      run(1, {
+        status: 'unknown',
+        result: null,
+        closeoutSource: 'legacy-missing',
+        durationSeconds: null,
+      }),
+    ], 125);
 
     expect(one(fixture, 'overview-runs-duration').textContent?.trim()).toBe('2m 5s total');
-    expect(testText(all(fixture, 'overview-run-row')[0], 'overview-run-duration')).toBe(
-      'Not recorded',
+    expect(testText(all(fixture, 'overview-run-row')[0], 'overview-run-result')).toContain(
+      'Not recorded (legacy run)',
     );
+    expect(testText(all(fixture, 'overview-run-row')[0], 'overview-run-duration')).toBe(
+      'Not recorded (legacy run)',
+    );
+  });
+
+  it('shows the derived terminal result and duration for a legacy remote run', () => {
+    const fixture = setup([
+      run(1, {
+        status: 'completed',
+        result: 'done',
+        closeoutSource: 'timeline',
+        durationSeconds: 1_679,
+      }),
+    ]);
+    const row = all(fixture, 'overview-run-row')[0];
+
+    expect(testText(row, 'overview-run-result')).toContain('Done');
+    expect(testText(row, 'overview-run-duration')).toBe('27m 59s');
   });
 
   it('renders the fallback total without inventing a run row or count badge', () => {

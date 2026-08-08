@@ -813,6 +813,7 @@ public static class LeaseEndpoints
                     Ts = acquire.Lease.AcquiredAt,
                     Kind = "start",
                     Cli = "remote-runner",
+                    RunAttemptId = acquire.Lease.AttemptId,
                     Model = candidate.Model,
                     ThinkingLevel = candidate.ThinkingLevel,
                     Cwd = candidate.FolderPath,
@@ -935,6 +936,7 @@ public static class LeaseEndpoints
             TaskTransitionService transitions,
             RunLeaseService leases,
             AttemptAuthorityService authority,
+            TaskSessionLog sessions,
             TimelineLog timeline,
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
@@ -1105,6 +1107,23 @@ public static class LeaseEndpoints
                 return settled.Status == AttemptWriteStatus.Invalid
                     ? Results.BadRequest(response)
                     : Results.Conflict(response);
+            }
+            var settledRun = settled.RunAttempt ?? authority.GetRun(attemptId);
+            var terminalAt = settledRun?.TerminalAt ?? DateTime.UtcNow;
+            var terminalResult = settledRun?.TerminalOutcome ?? outcome;
+            if (!sessions.CloseSessionEvent(task.Id, new RunSessionCloseout
+                {
+                    RunAttemptId = attemptId,
+                    FinishedAt = terminalAt,
+                    Result = terminalResult,
+                    Status = RunCloseoutPolicy.StatusFor(terminalResult, recordedStatus: null),
+                    ExitCode = req.ExitCode
+                }, task.WatchPath))
+            {
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                    "remote-run-closeout-missing task={TaskKey} attempt={AttemptId}",
+                    req.TaskKey,
+                    attemptId);
             }
             if (envelopeDecision.ShouldEscalate)
             {

@@ -1693,6 +1693,21 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("done", projection.CurrentRunAttempt.TerminalOutcome);
         Assert.Null(projection.CurrentRunAttempt.ResultSha);
         Assert.Null(projection.CurrentReviewAttempt);
+
+        var sessionEvent = JsonSerializer.Deserialize<SessionEvent>(
+            Assert.Single(File.ReadLines(Path.Combine(
+                _watchPath,
+                TaskStates.HumanReview,
+                epicKey,
+                "logs",
+                TaskPaths.SessionEventsLogFileName))),
+            TaskJsonFile.ReadOpts)!;
+        Assert.Equal(claim.Lease.AttemptId, sessionEvent.RunAttemptId);
+        Assert.Equal("done", sessionEvent.Result);
+        Assert.Equal(RunStatuses.Completed, sessionEvent.Status);
+        Assert.Equal(0, sessionEvent.ExitCode);
+        Assert.NotNull(sessionEvent.FinishedAt);
+        Assert.NotNull(sessionEvent.DurationSeconds);
     }
 
     [Theory]
