@@ -154,6 +154,13 @@ in-process broker is a compatibility seam toward the durable Task Server work
 permit model described by ADR-0063 and the distributed target architecture.
 Repository materialization and CLI execution remain Runner responsibilities.
 
+For local execution, the working directory resolves in this order: the watch
+entry's `RootPath`, the project's registry `RepositoryPath`, then the operating
+system temporary directory. The final fallback emits a warning containing the
+project and the missing-path reason. Local Codex chat one-shots pass
+`--skip-git-repo-check` because the chat sandbox is read-only and a missing Git
+checkout must not block a Q&A turn.
+
 Every side-sheet chat read and send response includes an `executionContext`
 with:
 

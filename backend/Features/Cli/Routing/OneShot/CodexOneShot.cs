@@ -41,32 +41,7 @@ public sealed class CodexOneShot : ICliOneShot
         var requestedAt = DateTime.UtcNow;
         var timeout = request.Timeout ?? DefaultTimeout;
         var executable = GenericCliExecutionService.ResolveExecutable(_configuration["CodexCli:Path"] ?? "codex");
-        var psi = new ProcessStartInfo
-        {
-            FileName = executable,
-            WorkingDirectory = request.WorkingDirectory ?? Directory.GetCurrentDirectory(),
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        psi.ArgumentList.Add("exec");
-        psi.ArgumentList.Add("--experimental-json");
-        psi.ArgumentList.Add("--sandbox");
-        psi.ArgumentList.Add("read-only");
-        psi.ArgumentList.Add("-m");
-        psi.ArgumentList.Add(request.Model);
-        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliTypes.Codex, request.Model, request.ThinkingLevel))
-            psi.ArgumentList.Add(flag);
-        if (request.ExtraArgs is { Count: > 0 })
-        {
-            foreach (var arg in request.ExtraArgs) psi.ArgumentList.Add(arg);
-        }
-        psi.ArgumentList.Add("-");
+        var psi = BuildStartInfo(executable, request);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(timeout);
@@ -125,6 +100,45 @@ public sealed class CodexOneShot : ICliOneShot
         {
             process?.Dispose();
         }
+    }
+
+    internal static ProcessStartInfo BuildStartInfo(string executable, CliOneShotRequest request)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = request.WorkingDirectory ?? Directory.GetCurrentDirectory(),
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardInputEncoding = Encoding.UTF8,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("exec");
+        psi.ArgumentList.Add("--experimental-json");
+        if (string.Equals(request.Source, "orchestrator-chat", StringComparison.OrdinalIgnoreCase))
+        {
+            // Chat is a read-only Q&A surface and may legitimately run from a
+            // non-repository fallback directory. Git trust is not a useful
+            // boundary here, while the default Codex gate rejects the turn
+            // before the model can answer.
+            psi.ArgumentList.Add("--skip-git-repo-check");
+        }
+        psi.ArgumentList.Add("--sandbox");
+        psi.ArgumentList.Add("read-only");
+        psi.ArgumentList.Add("-m");
+        psi.ArgumentList.Add(request.Model);
+        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliTypes.Codex, request.Model, request.ThinkingLevel))
+            psi.ArgumentList.Add(flag);
+        if (request.ExtraArgs is { Count: > 0 })
+        {
+            foreach (var arg in request.ExtraArgs) psi.ArgumentList.Add(arg);
+        }
+        psi.ArgumentList.Add("-");
+        return psi;
     }
 
     internal static CliOneShotResult ParseOutput(

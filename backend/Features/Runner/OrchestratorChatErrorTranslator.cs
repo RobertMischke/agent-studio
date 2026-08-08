@@ -2,8 +2,8 @@ namespace AgentStudio.Runner;
 
 /// <summary>
 /// Pure mapping from CLI / IO failure shapes to a user-facing message
-/// the orchestrator chat bubble can render without leaking raw .NET
-/// exception text. The 2026-05-24 incident showed the operator the bare
+/// the orchestrator chat bubble can render without presenting raw .NET
+/// exception text as the whole explanation. The 2026-05-24 incident showed the operator the bare
 /// string <c>"The pipe is being closed."</c> as an orchestrator reply -
 /// a <see cref="System.IO.IOException.Message"/> that means nothing to a
 /// human looking at the chat surface.
@@ -27,7 +27,7 @@ public static class OrchestratorChatErrorTranslator
     /// turn. Falls back to a generic envelope when no shape matches, so
     /// the bubble never shows a bare .NET message.
     /// </summary>
-    public static OrchestratorChatErrorTranslation Translate(string? rawError)
+    public static OrchestratorChatErrorTranslation Translate(string? rawError, string? cliType = null)
     {
         if (string.IsNullOrWhiteSpace(rawError))
         {
@@ -135,16 +135,32 @@ public static class OrchestratorChatErrorTranslator
                 RawDetail: raw);
         }
 
-        // Generic fallback. Still avoid leaking the raw .NET-shaped text
-        // as the primary message: wrap it in a one-line envelope so the
-        // bubble at least reads as a system explanation rather than a
-        // dropped stack trace fragment. The raw detail is kept for the
-        // backend log and the (future) detail-slot expander.
+        // Generic fallback. Keep the system explanation as the primary
+        // message, then surface one bounded CLI stderr line so an operator can
+        // diagnose an unknown refusal without opening the backend log.
+        var cliCause = FormatCliCause(cliType, raw);
         return new OrchestratorChatErrorTranslation(
             FriendlyMessage:
-                "The orchestrator could not produce a reply (the underlying CLI reported an error). Please try again; if this repeats, check the backend log.",
+                "The orchestrator could not produce a reply (the underlying CLI reported an error). Please try again." +
+                (cliCause == null ? " If this repeats, check the backend log." : $"\n{cliCause}"),
             SessionLikelyLost: false,
             RawDetail: raw);
+    }
+
+    private static string? FormatCliCause(string? cliType, string raw)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return null;
+
+        const int maxLength = 300;
+        var summary = string.Join(" ", raw
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (summary.Length > maxLength)
+            summary = summary[..(maxLength - 3)].TrimEnd() + "...";
+
+        var label = cliType.Trim().ToLowerInvariant();
+        return summary.StartsWith(label + ":", StringComparison.OrdinalIgnoreCase)
+            ? summary
+            : $"{label}: {summary}";
     }
 }
 
