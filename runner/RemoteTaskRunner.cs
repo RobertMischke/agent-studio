@@ -217,6 +217,7 @@ public sealed class RemoteTaskRunner
         var sourceMutated = false;
         var handedBack = false;
         var teardownAttempted = false;
+        var resultTransferAcknowledged = false;
         var releaseOnly = false;
         DurableArtifactManifest? artifactManifest = null;
         try
@@ -233,6 +234,7 @@ public sealed class RemoteTaskRunner
                 lease,
                 outbox,
                 stopRun.Token);
+            resultTransferAcknowledged = true;
 
             if (heartbeat.LeaseLost)
             {
@@ -504,50 +506,59 @@ public sealed class RemoteTaskRunner
             // independent token because SIGINT has already cancelled the run.
             if (outbox is null && !teardownAttempted && Directory.Exists(workspace.RepoPath))
             {
-                try
+                if (!resultTransferAcknowledged)
                 {
-                    teardownAttempted = true;
-                    var teardown = epicPlanning
-                        ? WorktreeTeardownResult.NoWork
-                        : await workspace.TeardownAsync(
-                            outcome.Kind.ToString(),
-                            lease.AttemptId,
-                            CancellationToken.None);
-                    if (epicPlanning)
-                        sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
-                    if (!handedBack && !heartbeat.LeaseLost && !releaseOnly)
-                    {
-                        outcomeDecision = WithDurableOutput(outcomeDecision, teardown);
-                        await CompleteOrReconcileAsync(
-                            taskKey,
-                            lease,
-                            outcome,
-                            outcomeDecision,
-                            teardown,
-                            workspace.RepositoryUrl,
-                            workspace.BaseSha,
-                            workspace.IntegrationBranchRef,
-                            artifactManifest?.Digest,
-                            outputLines,
-                            sourceMutated,
-                            CancellationToken.None);
-                        handedBack = true;
-                    }
+                    _log(
+                        $"result transfer was not acknowledged; retaining worktree before teardown " +
+                        $"task={taskKey} path={workspace.RepoPath}");
                 }
-                catch (WorktreeSalvageException ex)
+                else
                 {
-                    // Even a lost lease cannot hide an unsecured host-local
-                    // checkout. The gate is safety evidence, not an ownership
-                    // claim over the run's successful outcome.
-                    if (!handedBack)
+                    try
                     {
-                        await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
-                        handedBack = true;
+                        teardownAttempted = true;
+                        var teardown = epicPlanning
+                            ? WorktreeTeardownResult.NoWork
+                            : await workspace.TeardownAsync(
+                                outcome.Kind.ToString(),
+                                lease.AttemptId,
+                                CancellationToken.None);
+                        if (epicPlanning)
+                            sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
+                        if (!handedBack && !heartbeat.LeaseLost && !releaseOnly)
+                        {
+                            outcomeDecision = WithDurableOutput(outcomeDecision, teardown);
+                            await CompleteOrReconcileAsync(
+                                taskKey,
+                                lease,
+                                outcome,
+                                outcomeDecision,
+                                teardown,
+                                workspace.RepositoryUrl,
+                                workspace.BaseSha,
+                                workspace.IntegrationBranchRef,
+                                artifactManifest?.Digest,
+                                outputLines,
+                                sourceMutated,
+                                CancellationToken.None);
+                            handedBack = true;
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _log($"task worktree teardown failed; worktree retained at {workspace.RepoPath}: {ex.Message}");
+                    catch (WorktreeSalvageException ex)
+                    {
+                        // Even a lost lease cannot hide an unsecured host-local
+                        // checkout. The gate is safety evidence, not an ownership
+                        // claim over the run's successful outcome.
+                        if (!handedBack)
+                        {
+                            await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
+                            handedBack = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log($"task worktree teardown failed; worktree retained at {workspace.RepoPath}: {ex.Message}");
+                    }
                 }
             }
 
@@ -1016,10 +1027,38 @@ public sealed class RemoteTaskRunner
                 AttemptId: lease.AttemptId,
                 Fence: lease.FencingToken,
                 AuthorityEpoch: lease.AuthorityEpoch,
-                IdempotencyKey: $"artifacts:{lease.AttemptId}:{WireDigest.Hash(digestInput)}"), ct);
-            _log($"uploaded {resp?.Uploaded ?? 0} artifact(s); commit {resp?.CommitStatus ?? "n/a"}");
+                IdempotencyKey: $"artifacts:{lease.AttemptId}:{WireDigest.Hash(digestInput)}",
+                FinalizeResult: true), ct);
+            ValidateArtifactAcknowledgement(taskKey, uploads, resp);
+            _log(
+                $"uploaded {resp!.Uploaded} artifact(s); commit {resp.CommitStatus ?? "n/a"}; " +
+                $"result-document={resp.ResultDocumentStatus ?? "not-reported"}");
         }
         return artifactManifest;
+    }
+
+    internal static void ValidateArtifactAcknowledgement(
+        string taskKey,
+        IReadOnlyList<RunnerArtifactUpload> uploads,
+        ArtifactIngestResponse? response)
+    {
+        if (response is null)
+            throw new InvalidDataException($"Task Server returned no artifact acknowledgement for '{taskKey}'.");
+
+        var expected = uploads
+            .Select(upload => upload.Path.Replace('\\', '/'))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+        var acknowledged = response.Files
+            .Select(path => path.Replace('\\', '/'))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+        if (response.Uploaded != expected.Count
+            || !expected.SequenceEqual(acknowledged, StringComparer.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"Task Server acknowledged {response.Uploaded}/{expected.Count} artifact(s) for '{taskKey}'.");
+        }
     }
 
     private async Task<WorktreeTeardownResult> SecureForHandoffWithRetryAsync(

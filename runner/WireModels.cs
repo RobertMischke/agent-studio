@@ -398,7 +398,8 @@ public sealed record ArtifactIngestRequest(
     string? AttemptId = null,
     long? Fence = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    bool FinalizeResult = false);
 
 public sealed record ArtifactIngestResponse(
     string TaskKey,
@@ -406,7 +407,9 @@ public sealed record ArtifactIngestResponse(
     List<string> Files,
     string? Message = null,
     string? CommitSha = null,
-    string? CommitStatus = null);
+    string? CommitStatus = null,
+    bool ResultDocumentGenerated = false,
+    string? ResultDocumentStatus = null);
 
 /// <summary>One delivered artifact recorded by the external-completion endpoint.</summary>
 public sealed record ExternalDeliverable(string? Path = null, string? Url = null, string? Note = null);

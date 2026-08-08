@@ -18,24 +18,28 @@ public static class ArtifactIngestionEndpoints
 
     public static void MapArtifactIngestionEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/runner/artifacts", (
+        app.MapPost("/api/runner/artifacts", async (
             ArtifactIngestRequest req,
             HttpContext context,
             ITaskScanner scanner,
             RunLeaseService leases,
             AttemptAuthorityService authority,
             WorkspaceArtifactCommitService artifactCommits,
-            ILoggerFactory loggerFactory) =>
+            SummaryGenerationService summaries,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Diagnostics.ArtifactIngestionEndpoints");
             if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
                 return Results.Conflict(new ArtifactIngestResponse(req.TaskKey, 0, [], "The authenticated Runner does not hold the current fenced lease."));
-            if (req.Artifacts is null || req.Artifacts.Count == 0)
+            if ((req.Artifacts is null || req.Artifacts.Count == 0) && !req.FinalizeResult)
                 return Results.Ok(new ArtifactIngestResponse(req.TaskKey, 0, [], "no artifacts"));
 
             var task = ResolveTask(scanner, req.TaskKey);
             if (task is null)
                 return Results.NotFound(new ArtifactIngestResponse(req.TaskKey, 0, [], $"No task '{req.TaskKey}'."));
+
+            req = req with { Artifacts = req.Artifacts ?? [] };
 
             var projection = authority.GetTaskProjection(req.TaskKey);
             AttemptWriteReference? write = null;
@@ -75,10 +79,15 @@ public static class ArtifactIngestionEndpoints
                         () => sideEffectResult = WriteArtifacts(task, req),
                         evidenceDigest);
                     if (accepted.Status == AttemptWriteStatus.Duplicate)
-                        return Results.Ok(new ArtifactIngestResponse(req.TaskKey, 0, [], "duplicate delivery"));
-                    if (accepted.Status != AttemptWriteStatus.Accepted)
-                        return Results.Conflict(accepted);
-                    written = sideEffectResult!;
+                    {
+                        written = DescribeArtifacts(req) with { Message = "duplicate delivery" };
+                    }
+                    else
+                    {
+                        if (accepted.Status != AttemptWriteStatus.Accepted)
+                            return Results.Conflict(accepted);
+                        written = sideEffectResult!;
+                    }
                 }
             }
             catch (ArtifactIngestException ex)
@@ -90,11 +99,50 @@ public static class ArtifactIngestionEndpoints
                 return Results.Problem(CredentialRedactor.Redact($"Failed to ingest artifacts for '{req.TaskKey}': {ex.Message}"));
             }
 
+            var resultDocumentGenerated = false;
+            string? resultDocumentStatus = null;
+            if (req.FinalizeResult)
+            {
+                await summaries.GenerateAsync(task, ct);
+                var summaryState = summaries.GetState(task.TaskKey);
+                var statusPath = Path.Combine(task.FolderPath, "status.md");
+                var statusText = File.Exists(statusPath)
+                    ? await File.ReadAllTextAsync(statusPath, ct)
+                    : string.Empty;
+                resultDocumentGenerated = summaryState?.Status == TaskSummaryStatus.Ready
+                    && !string.IsNullOrWhiteSpace(statusText)
+                    && !statusText.Contains(TaskTransitionService.ResultScaffoldMarker, StringComparison.Ordinal);
+                resultDocumentStatus = resultDocumentGenerated
+                    ? "generated"
+                    : CredentialRedactor.Redact(
+                        summaryState?.ErrorMessage
+                        ?? summaryState?.Status.ToString().ToLowerInvariant()
+                        ?? "missing");
+                if (resultDocumentGenerated)
+                {
+                    logger.LogInformation(
+                        "remote-result-finalized taskKey={TaskKey} jobId={JobId} status=generated",
+                        req.TaskKey,
+                        task.Id);
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "remote-result-finalize-missing taskKey={TaskKey} jobId={JobId} status={Status}",
+                        req.TaskKey,
+                        task.Id,
+                        resultDocumentStatus);
+                }
+            }
+
+            var committedFiles = written.Files.ToList();
+            if (resultDocumentGenerated)
+                committedFiles.Add("status.md");
             var commit = artifactCommits.TryCommitArtifactUpload(
                 null,
                 task.Id,
                 task.FolderPath,
-                written.Files);
+                committedFiles);
 
             var status = commit.Success
                 ? commit.DidCommit ? "committed" : $"skipped:{commit.Error}"
@@ -106,9 +154,19 @@ public static class ArtifactIngestionEndpoints
             return Results.Ok(written with
             {
                 CommitSha = commit.Sha,
-                CommitStatus = status
+                CommitStatus = status,
+                ResultDocumentGenerated = resultDocumentGenerated,
+                ResultDocumentStatus = resultDocumentStatus
             });
         });
+    }
+
+    private static ArtifactIngestResponse DescribeArtifacts(ArtifactIngestRequest req)
+    {
+        var files = req.Artifacts
+            .Select(artifact => NormalizeResultsPath(artifact.Path).Replace('\\', '/'))
+            .ToList();
+        return new ArtifactIngestResponse(req.TaskKey, files.Count, files);
     }
 
     internal static ArtifactIngestResponse WriteArtifacts(TaskInfo task, ArtifactIngestRequest req)
