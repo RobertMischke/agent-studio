@@ -194,10 +194,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   commit-bound runs in product order, including scope, host, duration, result,
   and cards attached by the backend ancestry projection. Board cards render the
   same project-run projection as perfect, diff included, diff not included,
-  pending, or no assigned run. The card evidence block also renders SHA-linked
-  task-owned Remote Review build-tests grades and build/test gate logs supplied
-  by the backend. It names their source and tested SHA instead of showing the
-  project-run default when task-owned evidence exists.
+  pending, or no assigned run. A missing-evidence block stays absent in Backlog,
+  Preparation, Ready, and an active run until an attributed delivery exists; it
+  becomes relevant in Post Processing, Human Review, Completed, and Archive.
+  Recorded evidence remains visible regardless of lane. The card evidence block
+  also renders SHA-linked task-owned Remote Review build-tests grades and
+  build/test gate logs supplied by the backend. It names their source and tested
+  SHA instead of showing the project-run default when task-owned evidence exists.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
