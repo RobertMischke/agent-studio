@@ -43,13 +43,27 @@ public static class ClientEndpoints
                     RunnerGateCapacity = gates.Capacity,
                 };
             }).ToList();
+            summaries.AddRange(store.ListDiagnostics().Select(ClientSummary.From));
             return Results.Ok(summaries);
         });
 
         clients.MapGet("/{id}", (string id, ClientIdentityStore store, TaskScannerService scanner) =>
         {
             var record = store.Find(id);
-            if (record is null) return Results.NotFound(new { error = "client-not-found" });
+            if (record is null)
+            {
+                var diagnostic = store.FindDiagnostic(id);
+                return diagnostic is null
+                    ? Results.NotFound(new { error = "client-not-found" })
+                    : Results.Json(new
+                    {
+                        error = diagnostic.Code,
+                        message = diagnostic.Message,
+                        diagnostic.FileName,
+                        diagnostic.ModifiedAt,
+                        diagnostic.RestoreHint,
+                    }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
 
             var owned = scanner.ScanAllAutomationJobs()
                 .Where(j => string.Equals(j.OwnerClientId, id, StringComparison.OrdinalIgnoreCase))

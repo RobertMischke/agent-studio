@@ -614,6 +614,18 @@ export interface ClientSummary {
   runnerEffectiveMaxParallelismAppliedAt?: string | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
+  /** Present only when this list entry represents a corrupt file, not a registration. */
+  identityDiagnostic?: ClientIdentityDiagnostic | null;
+}
+
+export interface ClientIdentityDiagnostic {
+  code: 'identity-file-corrupt';
+  identityId: string;
+  fileName: string;
+  detectedAt: string;
+  modifiedAt: string | null;
+  message: string;
+  restoreHint: string;
 }
 
 export interface RunnerProjectPreflight {

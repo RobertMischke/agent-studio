@@ -39,6 +39,18 @@
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }
 
+  @if (identityDiagnostics().length) {
+    <section class="rh__identity-errors" data-testid="remote-hosts-identity-errors" aria-label="Corrupt client identity files">
+      <strong>Client identity storage needs repair</strong>
+      @for (diagnostic of identityDiagnostics(); track diagnostic.fileName) {
+        <p>
+          <span>{{ diagnostic.message }}</span>
+          {{ diagnostic.restoreHint }}
+        </p>
+      }
+    </section>
+  }
+
   @if (total() === 0 && !loading()) {
     <div class="rh__empty" data-testid="remote-hosts-empty">
       No execution hosts registered yet. This local machine and remote runners

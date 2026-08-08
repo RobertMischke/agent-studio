@@ -84,6 +84,37 @@ public class ClientIdentityMiddlewareTests : IDisposable
     }
 
     [Fact]
+    public async Task Mutation_WithCorruptIdentity_ReturnsVisible503RecoveryError()
+    {
+        var identities = Path.Combine(_root, "identities");
+        Directory.CreateDirectory(identities);
+        File.WriteAllBytes(Path.Combine(identities, "agent-runner-01.json"), new byte[4481]);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _root,
+                ["Environment:DefaultIdentityName"] = "Mw Default",
+            }).Build();
+        var store = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
+        store.EnsureLoaded();
+        var called = new BoolBox();
+        var middleware = new ClientIdentityMiddleware(
+            _ => { called.Value = true; return Task.CompletedTask; },
+            store,
+            NullLogger<ClientIdentityMiddleware>.Instance);
+        var context = BuildContext("POST", "/api/runner/claim", "agent-runner-01");
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        Assert.False(called.Value);
+        var body = await ReadBody(context);
+        Assert.Contains("identity-file-corrupt", body);
+        Assert.Contains("agent-runner-01.json", body);
+        Assert.Contains("POST /api/clients/register", body);
+    }
+
+    [Fact]
     public async Task Mutation_WithKnownClient_PassesThrough()
     {
         var (mw, store, called) = BuildMiddleware();

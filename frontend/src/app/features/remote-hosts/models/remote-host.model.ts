@@ -1,5 +1,4 @@
-import type { CliType } from '../../../models/task.model';
-import type { RunnerProjectPreflight } from '../../../models/task.model';
+import type { CliType, ClientIdentityDiagnostic, RunnerProjectPreflight } from '../../../models/task.model';
 
 /**
  * Remote-hosts registry model (AGT-1921).
@@ -190,6 +189,8 @@ export interface RemoteHost {
   address: string | null;
   /** Task-server client identity used as X-Client-Id by this host. */
   clientId: string;
+  /** Acute persistence failure. This entry is visible but is not registered. */
+  identityDiagnostic?: ClientIdentityDiagnostic | null;
   status: HostHeartbeatStatus;
   os: string;
   /** ISO timestamp of the last heartbeat, or null if never seen. */

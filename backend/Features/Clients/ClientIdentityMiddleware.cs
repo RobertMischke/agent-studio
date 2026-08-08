@@ -91,12 +91,31 @@ public class ClientIdentityMiddleware
 
         if (!_store.IsRegistered(clientId))
         {
+            var diagnostic = _store.FindDiagnostic(clientId);
             if (isWrite)
             {
+                if (diagnostic is not null)
+                {
+                    await RejectCorrupt(context, diagnostic);
+                    return;
+                }
                 await Reject(context, "client-unknown", $"X-Client-Id '{clientId}' is not registered");
                 return;
             }
-            _logger.LogWarning("Unknown clientId '{ClientId}' on read {Method} {Path}", clientId, method, path);
+            if (diagnostic is not null)
+            {
+                _logger.LogError(
+                    "Identity file corrupt for clientId '{ClientId}' on read {Method} {Path}: {File}. {RestoreHint}",
+                    clientId,
+                    method,
+                    path,
+                    diagnostic.FileName,
+                    diagnostic.RestoreHint);
+            }
+            else
+            {
+                _logger.LogWarning("Unknown clientId '{ClientId}' on read {Method} {Path}", clientId, method, path);
+            }
             await _next(context);
             return;
         }
@@ -130,6 +149,22 @@ public class ClientIdentityMiddleware
             error = code,
             message,
             hint = "Register an identity at POST /api/clients/register, then send the returned id as X-Client-Id."
+        });
+    }
+
+    private static async Task RejectCorrupt(
+        HttpContext context,
+        ClientIdentityDiagnostic diagnostic)
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = diagnostic.Code,
+            message = diagnostic.Message,
+            diagnostic.FileName,
+            diagnostic.ModifiedAt,
+            diagnostic.RestoreHint,
         });
     }
 }

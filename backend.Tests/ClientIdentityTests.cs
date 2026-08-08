@@ -45,8 +45,11 @@ public class ClientIdentityTests : IDisposable
             .Build();
     }
 
-    private ClientIdentityStore BuildStore(IConfiguration config)
-        => new(config, NullLogger<ClientIdentityStore>.Instance);
+    private ClientIdentityStore BuildStore(
+        IConfiguration config,
+        IAtomicJsonFileWriter? fileWriter = null,
+        ILogger<ClientIdentityStore>? logger = null)
+        => new(config, logger ?? NullLogger<ClientIdentityStore>.Instance, fileWriter);
 
     private TaskScannerService BuildScanner(IConfiguration config)
     {
@@ -141,6 +144,110 @@ public class ClientIdentityTests : IDisposable
         var found = store2.Find("persisted");
         Assert.NotNull(found);
         Assert.Equal("Persisted", found!.DisplayName);
+    }
+
+    [Fact]
+    public void EnsureLoaded_NulIdentityBecomesVisibleDiagnostic_WithoutHidingHealthyIdentities()
+    {
+        var config = BuildConfig();
+        var seeded = BuildStore(config);
+        var healthy = seeded.Register(new RegisterClientRequest { DisplayName = "Healthy Runner" });
+        var corrupt = seeded.Register(new RegisterClientRequest { DisplayName = "agent-runner-01" });
+        File.WriteAllBytes(
+            Path.Combine(_root, "identities", corrupt.Id + ".json"),
+            new byte[4481]);
+        var logger = new IdentityLogger();
+
+        var reloaded = BuildStore(config, logger: logger);
+        reloaded.EnsureLoaded();
+
+        Assert.NotNull(reloaded.Find(healthy.Id));
+        Assert.Null(reloaded.Find(corrupt.Id));
+        var diagnostic = Assert.Single(reloaded.ListDiagnostics());
+        Assert.Equal("agent-runner-01.json", diagnostic.FileName);
+        Assert.Equal("identity file corrupt: agent-runner-01.json", diagnostic.Message);
+        Assert.Contains("POST /api/clients/register", diagnostic.RestoreHint);
+        Assert.Contains("idempotent on displayName", diagnostic.RestoreHint);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Error
+            && entry.Message.Contains("Client identity file corrupt", StringComparison.Ordinal)
+            && entry.Message.Contains("agent-runner-01.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ExternalRestore_IsReloadedWithoutBackendRestart()
+    {
+        var config = BuildConfig();
+        var seeded = BuildStore(config);
+        var runner = seeded.Register(new RegisterClientRequest
+        {
+            DisplayName = "agent-runner-01",
+            Kind = ClientIdentityKinds.Service,
+        });
+        var path = Path.Combine(_root, "identities", runner.Id + ".json");
+        var knownGood = File.ReadAllText(path);
+        File.WriteAllBytes(path, new byte[4481]);
+        var runningStore = BuildStore(config);
+
+        runningStore.EnsureLoaded();
+        Assert.Null(runningStore.Find(runner.Id));
+        Assert.Single(runningStore.ListDiagnostics());
+
+        File.WriteAllText(path, knownGood);
+
+        Assert.Equal(runner.Id, runningStore.Find(runner.Id)?.Id);
+        Assert.Empty(runningStore.ListDiagnostics());
+        Assert.True(runningStore.IsRegistered(runner.Id));
+    }
+
+    [Fact]
+    public void InterruptedAtomicWrite_LeavesAuthoritativeIdentityParseable()
+    {
+        var config = BuildConfig();
+        var seeded = BuildStore(config);
+        var runner = seeded.Register(new RegisterClientRequest { DisplayName = "Atomic Runner" });
+        var path = Path.Combine(_root, "identities", runner.Id + ".json");
+        var before = File.ReadAllText(path);
+        var interrupted = new InterruptedIdentityWriter();
+        var store = BuildStore(config, interrupted);
+        Assert.NotNull(store.Find(runner.Id));
+        interrupted.Interrupt = true;
+
+        Assert.Throws<IOException>(() =>
+            store.SetDefaults(runner.Id, "codex", "gpt-5", defaultThinkingLevel: "high"));
+
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.NotNull(JsonSerializer.Deserialize<ClientIdentity>(File.ReadAllText(path), new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        }));
+        Assert.True(File.Exists(path + ".simulated-torn.tmp"));
+    }
+
+    [Fact]
+    public void HighFrequencySeenAndUnchangedRunnerPolls_AreDebounced()
+    {
+        var writer = new ControllableAtomicJsonFileWriter();
+        var store = BuildStore(BuildConfig(), writer);
+        var runner = store.Register(new RegisterClientRequest
+        {
+            DisplayName = "Debounced Runner",
+            Kind = ClientIdentityKinds.Service,
+        });
+        var path = Path.Combine(_root, "identities", runner.Id + ".json");
+
+        store.RecordSeen(runner.Id);
+        store.RecordRunnerActivity(runner.Id, activeSlots: 0, availableSlots: 2, claimed: false);
+        var afterMaterialChange = writer.WritesFor(path);
+        for (var i = 0; i < 20; i++)
+        {
+            store.RecordSeen(runner.Id);
+            store.RecordRunnerActivity(runner.Id, activeSlots: 0, availableSlots: 2, claimed: false);
+        }
+
+        Assert.Equal(afterMaterialChange, writer.WritesFor(path));
+        Assert.True(store.Find(runner.Id)!.LastSeenAt > runner.LastSeenAt);
     }
 
     [Fact]
@@ -366,5 +473,43 @@ public class ClientIdentityTests : IDisposable
         // because the kind is already retired.
         Assert.True(store.SoftDelete(DefaultClientIdentity.Id));
         Assert.False(store.SoftDelete(DefaultClientIdentity.Id));
+    }
+
+    private sealed class InterruptedIdentityWriter : IAtomicJsonFileWriter
+    {
+        private readonly AtomicJsonFileWriter _inner = new();
+        public bool Interrupt { get; set; }
+
+        public void Write(string path, string content)
+        {
+            if (!Interrupt)
+            {
+                _inner.Write(path, content);
+                return;
+            }
+
+            File.WriteAllBytes(path + ".simulated-torn.tmp", new byte[4481]);
+            throw new IOException("Simulated process loss after the temp-file write and before rename.");
+        }
+    }
+
+    private sealed class IdentityLogger : ILogger<ClientIdentityStore>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
     }
 }

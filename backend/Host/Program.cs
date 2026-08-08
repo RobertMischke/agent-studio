@@ -207,6 +207,7 @@ catch (Exception ex)
     Log.ForContext("SourceContext", "Program").Warning(ex, "Boot silent-death detector failed");
 }
 
+builder.Services.AddSingleton<IAtomicJsonFileWriter, AtomicJsonFileWriter>();
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<AccessSecurityStore>();
 builder.Services.AddSingleton<ManagementService>();

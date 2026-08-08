@@ -33,14 +33,22 @@ public class ClientIdentityStore
 
     private readonly IConfiguration _config;
     private readonly ILogger<ClientIdentityStore> _logger;
+    private readonly IAtomicJsonFileWriter _fileWriter;
     private readonly object _lock = new();
     private readonly Dictionary<string, ClientIdentity> _byId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ClientIdentity> _persistedById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ClientIdentityDiagnostic> _diagnosticsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IdentityFileFingerprint> _lastReadById = new(StringComparer.OrdinalIgnoreCase);
     private bool _loaded;
 
-    public ClientIdentityStore(IConfiguration config, ILogger<ClientIdentityStore> logger)
+    public ClientIdentityStore(
+        IConfiguration config,
+        ILogger<ClientIdentityStore> logger,
+        IAtomicJsonFileWriter? fileWriter = null)
     {
         _config = config;
         _logger = logger;
+        _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
     }
 
     public string IdentitiesFolder
@@ -83,29 +91,134 @@ public class ClientIdentityStore
         }
 
         foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
+            TryLoadIdentityFileLocked(file, logFailure: true);
+
+        _logger.LogInformation(
+            "Loaded {Count} client identities from {Dir}; corrupt={CorruptCount}",
+            _byId.Count,
+            dir,
+            _diagnosticsById.Count);
+    }
+
+    private bool TryLoadIdentityFileLocked(string file, bool logFailure)
+    {
+        var identityId = Path.GetFileNameWithoutExtension(file);
+        try
         {
-            try
+            var json = File.ReadAllText(file);
+            var record = JsonSerializer.Deserialize<ClientIdentity>(json, ReadOpts);
+            if (record is null || string.IsNullOrWhiteSpace(record.Id))
+                throw new JsonException("The identity record is null or has no id.");
+
+            _byId[record.Id] = record;
+            _persistedById[record.Id] = record;
+            _lastReadById[identityId] = Fingerprint(file);
+            var recovered = _diagnosticsById.Remove(identityId);
+            if (!string.Equals(identityId, record.Id, StringComparison.OrdinalIgnoreCase))
+                _diagnosticsById.Remove(record.Id);
+            if (recovered)
             {
-                var json = File.ReadAllText(file);
-                var record = JsonSerializer.Deserialize<ClientIdentity>(json, ReadOpts);
-                if (record == null || string.IsNullOrWhiteSpace(record.Id))
-                {
-                    _logger.LogWarning("Skipping malformed identity file {File}", file);
-                    continue;
-                }
-                _byId[record.Id] = record;
+                _logger.LogInformation(
+                    "Client identity corruption recovered: {File} loaded as {IdentityId}",
+                    Path.GetFileName(file),
+                    record.Id);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to read identity file {File}", file);
-            }
+            return true;
         }
-        _logger.LogInformation("Loaded {Count} client identities from {Dir}", _byId.Count, dir);
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            var fingerprint = FingerprintOrDefault(file);
+            _lastReadById[identityId] = fingerprint;
+            var restoreHint = RestoreHint(file, identityId);
+            var diagnostic = new ClientIdentityDiagnostic
+            {
+                IdentityId = identityId,
+                FileName = Path.GetFileName(file),
+                DetectedAt = _diagnosticsById.GetValueOrDefault(identityId)?.DetectedAt ?? DateTime.UtcNow,
+                ModifiedAt = fingerprint.Exists ? fingerprint.LastWriteTimeUtc : null,
+                Message = $"identity file corrupt: {Path.GetFileName(file)}",
+                RestoreHint = restoreHint,
+            };
+            _diagnosticsById[identityId] = diagnostic;
+            if (logFailure)
+            {
+                _logger.LogError(
+                    ex,
+                    "Client identity file corrupt: {File}. {RestoreHint}",
+                    file,
+                    restoreHint);
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// A missing in-memory identity gets one bounded disk re-check whenever the
+    /// target file's length or write timestamp changes. This lets a restored
+    /// file become live without a backend restart and avoids watcher complexity.
+    /// </summary>
+    private void TryReloadMissingIdentityLocked(string id)
+    {
+        if (_byId.ContainsKey(id) || !SlugAllowed.IsMatch(id)) return;
+        var file = Path.Combine(IdentitiesFolder, id + ".json");
+        if (!File.Exists(file)) return;
+        var fingerprint = FingerprintOrDefault(file);
+        if (_lastReadById.TryGetValue(id, out var previous) && previous == fingerprint) return;
+        TryLoadIdentityFileLocked(file, logFailure: true);
+    }
+
+    /// <summary>
+    /// The normal clients-list refresh is an explicit, bounded re-scan of only
+    /// files already known to be corrupt. It is intentionally not a watcher.
+    /// </summary>
+    private void RescanCorruptIdentitiesLocked()
+    {
+        foreach (var diagnostic in _diagnosticsById.Values.ToList())
+        {
+            var file = Path.Combine(IdentitiesFolder, diagnostic.FileName);
+            var current = FingerprintOrDefault(file);
+            var changed = !_lastReadById.TryGetValue(diagnostic.IdentityId, out var previous)
+                          || previous != current;
+            TryLoadIdentityFileLocked(file, logFailure: changed);
+        }
+    }
+
+    private static string RestoreHint(string file, string identityId)
+    {
+        var backup = file + ".bak";
+        var backupHint = File.Exists(backup)
+            ? $"Restore the known-good sibling '{Path.GetFileName(backup)}' over this file, then reload the clients list. "
+            : "Restore the file from a known-good backup or Git revision, then reload the clients list. ";
+        return backupHint
+               + $"The running server will re-scan the repaired identity '{identityId}'. "
+               + "Alternatively, POST /api/clients/register with the original displayName; registration is idempotent on displayName and replaces the corrupt slug.";
+    }
+
+    private static IdentityFileFingerprint Fingerprint(string file)
+    {
+        var info = new FileInfo(file);
+        return new IdentityFileFingerprint(true, info.Length, info.LastWriteTimeUtc);
+    }
+
+    private static IdentityFileFingerprint FingerprintOrDefault(string file)
+    {
+        try { return File.Exists(file) ? Fingerprint(file) : default; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return default;
+        }
     }
 
     private void EnsureBootstrapDefaultLocked()
     {
         if (_byId.ContainsKey(DefaultClientIdentity.Id)) return;
+        if (_diagnosticsById.ContainsKey(DefaultClientIdentity.Id))
+        {
+            _logger.LogError(
+                "Bootstrap identity file is corrupt; refusing to overwrite it automatically. {RestoreHint}",
+                _diagnosticsById[DefaultClientIdentity.Id].RestoreHint);
+            return;
+        }
 
         var displayName = _config["Environment:DefaultIdentityName"];
         if (string.IsNullOrWhiteSpace(displayName)) displayName = "Local Default";
@@ -134,6 +247,7 @@ public class ClientIdentityStore
         EnsureLoaded();
         lock (_lock)
         {
+            TryReloadMissingIdentityLocked(clientId);
             return _byId.TryGetValue(clientId, out var rec) && rec.Kind != ClientIdentityKind.Retired;
         }
     }
@@ -143,6 +257,7 @@ public class ClientIdentityStore
         EnsureLoaded();
         lock (_lock)
         {
+            TryReloadMissingIdentityLocked(id);
             return _byId.TryGetValue(id, out var rec) ? rec : null;
         }
     }
@@ -152,7 +267,34 @@ public class ClientIdentityStore
         EnsureLoaded();
         lock (_lock)
         {
+            RescanCorruptIdentitiesLocked();
             return _byId.Values.OrderBy(c => c.RegisteredAt).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Returns every corrupt identity file discovered at boot that has not
+    /// subsequently been restored. The clients list projects these as explicit
+    /// diagnostic entries instead of silently dropping them.
+    /// </summary>
+    public List<ClientIdentityDiagnostic> ListDiagnostics()
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            return _diagnosticsById.Values
+                .OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    public ClientIdentityDiagnostic? FindDiagnostic(string id)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            TryReloadMissingIdentityLocked(id);
+            return _diagnosticsById.GetValueOrDefault(id);
         }
     }
 
@@ -279,6 +421,8 @@ public class ClientIdentityStore
             var path = Path.Combine(IdentitiesFolder, existing.Id + ".json");
             if (File.Exists(path)) File.Delete(path);
             _byId.Remove(id);
+            _persistedById.Remove(id);
+            _lastReadById.Remove(id);
             return true;
         }
     }
@@ -354,7 +498,7 @@ public class ClientIdentityStore
                     && activeSlots.Value <= 0
                     ? ClientIdentityKind.Retired : existing.Kind
             };
-            WriteLocked(updated);
+            WriteHighFrequencyStateIfDueLocked(updated);
             _byId[id] = updated;
             return updated;
         }
@@ -533,16 +677,13 @@ public class ClientIdentityStore
         lock (_lock)
         {
             if (!_byId.TryGetValue(id, out var existing)) return;
-            // Throttle disk writes: only flush when last-seen is older than 30s.
-            // The in-memory copy always carries the freshest value.
+            // The in-memory copy always carries the freshest value. The durable
+            // comparison is tracked separately so continuous requests cannot
+            // postpone the thirty-second flush forever.
             var stamped = existing with { LastSeenAt = DateTime.UtcNow };
             _byId[id] = stamped;
-            if (existing.LastSeenAt is null
-                || (stamped.LastSeenAt!.Value - existing.LastSeenAt.Value).TotalSeconds > 30)
-            {
-                try { WriteLocked(stamped); }
-                catch (Exception ex) { _logger.LogError(ex, "Failed to persist last-seen for '{Id}'", id); }
-            }
+            try { WriteHighFrequencyStateIfDueLocked(stamped); }
+            catch (Exception ex) { _logger.LogError(ex, "Failed to persist last-seen for '{Id}'", id); }
         }
     }
 
@@ -569,17 +710,36 @@ public class ClientIdentityStore
         var dir = IdentitiesFolder;
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, record.Id + ".json");
-        var tmp = path + ".tmp";
-        try
-        {
-            File.WriteAllText(tmp, JsonSerializer.Serialize(record, WriteOpts));
-            File.Move(tmp, path, overwrite: true);
-        }
-        catch
-        {
-            try { if (File.Exists(tmp)) File.Delete(tmp); }
-            catch (Exception cleanupEx) { _logger.LogWarning(cleanupEx, "Failed to remove identity temp file {Path}", tmp); }
-            throw;
-        }
+        _fileWriter.Write(path, JsonSerializer.Serialize(record, WriteOpts));
+        _persistedById[record.Id] = record;
+        _lastReadById[record.Id] = FingerprintOrDefault(path);
+        if (_diagnosticsById.Remove(record.Id))
+            _logger.LogInformation("Client identity corruption recovered by write: {File}", Path.GetFileName(path));
     }
+
+    /// <summary>
+    /// High-frequency request and claim telemetry only reaches disk when a
+    /// material runner field changed or the durable last-seen stamp is at least
+    /// thirty seconds old. In-memory LastSeenAt remains current per request.
+    /// </summary>
+    private void WriteHighFrequencyStateIfDueLocked(ClientIdentity record)
+    {
+        if (!_persistedById.TryGetValue(record.Id, out var persisted))
+        {
+            WriteLocked(record);
+            return;
+        }
+
+        var durableComparison = record with { LastSeenAt = persisted.LastSeenAt };
+        var materialChange = durableComparison != persisted;
+        var seenDue = record.LastSeenAt is { } currentSeen
+                      && (persisted.LastSeenAt is null
+                          || currentSeen - persisted.LastSeenAt.Value >= TimeSpan.FromSeconds(30));
+        if (materialChange || seenDue) WriteLocked(record);
+    }
+
+    private readonly record struct IdentityFileFingerprint(
+        bool Exists,
+        long Length,
+        DateTime LastWriteTimeUtc);
 }

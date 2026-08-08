@@ -187,6 +187,22 @@ public static class DefaultClientIdentity
     public const string Id = "local-default";
 }
 
+/// <summary>
+/// Read-side fault record for an identity file that exists but cannot be
+/// deserialized. Corrupt files are not registered identities, but this record
+/// keeps their failure visible through the clients API and operator UI.
+/// </summary>
+public sealed record ClientIdentityDiagnostic
+{
+    public string Code { get; init; } = "identity-file-corrupt";
+    public string IdentityId { get; init; } = "";
+    public string FileName { get; init; } = "";
+    public DateTime DetectedAt { get; init; }
+    public DateTime? ModifiedAt { get; init; }
+    public string Message { get; init; } = "";
+    public string RestoreHint { get; init; } = "";
+}
+
 public record RegisterClientRequest
 {
     public string DisplayName { get; init; } = "";
@@ -229,6 +245,11 @@ public record ClientSummary
     public DateTime? RunnerEffectiveMaxParallelismAppliedAt { get; init; }
     public int RunnerActiveGateCount { get; init; }
     public int RunnerGateCapacity { get; init; }
+    /// <summary>
+    /// Present only for a synthetic list entry representing a corrupt identity
+    /// file. Such an entry is diagnostic visibility, not registration.
+    /// </summary>
+    public ClientIdentityDiagnostic? IdentityDiagnostic { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {
@@ -267,6 +288,16 @@ public record ClientSummary
         RunnerCapacityUpdatedAt = i.RunnerCapacityUpdatedAt,
         RunnerEffectiveMaxParallelism = i.RunnerEffectiveMaxParallelism,
         RunnerEffectiveMaxParallelismAppliedAt = i.RunnerEffectiveMaxParallelismAppliedAt
+    };
+
+    public static ClientSummary From(ClientIdentityDiagnostic diagnostic) => new()
+    {
+        Id = diagnostic.IdentityId,
+        DisplayName = diagnostic.IdentityId,
+        Kind = ClientIdentityKinds.Service,
+        RegisteredAt = diagnostic.ModifiedAt ?? diagnostic.DetectedAt,
+        Notes = diagnostic.Message,
+        IdentityDiagnostic = diagnostic,
     };
 }
 
