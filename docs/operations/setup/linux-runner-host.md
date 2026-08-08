@@ -111,7 +111,8 @@ checkout fallback.
 ## Test host
 
 `agent-runner` (a Hetzner cloud VM at `<runner-host-ip>`; substitute the address
-of your own host). SSH key-auth, one sudo-capable user.
+of your own host). SSH key-auth, one runner account with only the versioned
+agent-host sudo policy, and a separate operator path for initial provisioning.
 For the local profile, expose no inbound Task Server port and reach it through a
 supervised `ssh -R`/`-L` tunnel. For the networked profile, the runner connects
 outbound to the authenticated HTTPS origin with its enrolled service identity.
@@ -173,8 +174,8 @@ remediation instead of waiting on a runner request.
 
 The controller is intentionally repeatable after a host wipe:
 
-1. Verify SSH key access, passwordless sudo, .NET 10, and Task Server health
-   from the host.
+1. Verify SSH key access, the scoped `agent-host-admin` sudo boundary, absence
+   of Docker group membership, .NET 10, and Task Server health from the host.
 2. Install or update the `CodingAgentRunner` NuGet global tool and require
    version `0.5.0` or newer, then install the Codex and Claude CLIs.
 3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
@@ -182,12 +183,11 @@ The controller is intentionally repeatable after a host wipe:
    `claude auth login --claudeai`. The operator completes browser steps locally,
    then `codex login status` and `claude auth status --text` report the active
    account. Credential files are never copied as the normal path.
-4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
-   stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
-   and fallback git origin. Install and start `agent-host.service` through
-   systemd. The SSH session never owns the daemon process.
-5. Prove `systemctl is-enabled`, `systemctl is-active`, agent-host health, and an
-   authenticated claim or empty-queue response before setup completes.
+4. Stage the bounded environment fields for the root-owned helper. The helper
+   writes `/etc/agent-runner/runner.env`, renders the fixed role unit, and never
+   accepts a destination path, unit name, executable, or shell text.
+5. Prove exact unit status, agent-host health, and fresh capability output
+   before setup completes.
 
 The NuGet package must be published with package type `DotnetTool` and expose
 the `agent-host` command. A library-only `CodingAgentRunner` package cannot be
@@ -206,6 +206,28 @@ sudo apt-get update && sudo apt-get install -y git curl build-essential
 npm i -g @anthropic-ai/claude-code @openai/codex
 npx playwright install --with-deps chromium
 ```
+
+Package installation is an operator-owned provisioning step. After packages
+and the separate Runner credential file exist, drain all Coding and Review work
+and apply the versioned host privilege policy from a separate root or console
+session. Use a trusted, reviewed checkout, not an agent-controlled task
+worktree:
+
+```bash
+deploy/agent-host/install-privilege-policy.sh \
+  --user agent \
+  --revoke-file /etc/sudoers.d/<confirmed-legacy-file> \
+  --restart-units
+```
+
+The installer validates the rendered policy with `visudo`, moves the named
+legacy file to a root-only backup, removes `agent` from the Docker group, and
+fails if a broad passwordless grant or a process retaining the Docker group
+remains. Close all old logins before acceptance. General Docker access is not a
+permitted Runner capability because Docker group or socket access is equivalent
+to host root. See the
+[runner host secrets-posture review](../security/reviews/2026-08-02-runner-host-secrets-posture.md)
+for the exact negative probes and evidence rules.
 
 ### Per-host CLI credentials (D5, permanent)
 
@@ -237,30 +259,30 @@ for parallel runs by sharing the one credential file *by link* rather than
 copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
 [`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
 
-## 2. Build agent-host
+## 2. Build and deploy agent-host
 
 ```bash
 git clone <origin> agent-taskboard && cd agent-taskboard
 release_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
 staging_root="$(mktemp -d)"
-release_root="/opt/agent-host/releases/$release_id"
 dotnet publish runner/AgentRunner.csproj -c Release -o "$staging_root"
-sudo install -d -m 0755 "$release_root"
-sudo cp -a "$staging_root/." "$release_root/"
-sudo ln -sfnT "$release_root" /opt/agent-host/current
-if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
-  sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
-fi
-sudo ln -sfnT /opt/agent-host /opt/agent-runner
+bash scripts/remote-agent-host-deploy.sh \
+  --host <ssh-target> \
+  --release-dir "$staging_root" \
+  --release-id "$release_id" \
+  --role both
 ```
 
 The selected output binary is `/opt/agent-host/current/agent-host`.
 `/opt/agent-runner` is a transition symlink for existing automation; new
 deployments and units use only `/opt/agent-host`. Every publish must create a
-new release directory. Never publish into the active `current` target or over
-the files of a running daemon. The CLR can load metadata and method bodies
-lazily, so replacing only part of a live multi-file application can corrupt the
-running process even before systemd receives the planned restart.
+new immutable release id. The recipe copies only the secret-free publish output
+with `scp`, asks the root-owned helper to validate and activate it below the
+fixed release root, and then restarts only the selected owned units. Never
+publish into the active `current` target or over the files of a running daemon.
+The CLR can load metadata and method bodies lazily, so replacing only part of a
+live multi-file application can corrupt the running process even before systemd
+receives the planned restart.
 
 ## 3. Configure
 
@@ -639,7 +661,13 @@ assigned Progress work once its lease is free and issues a higher fencing token.
 
 ### systemd deployment
 
-Use the product-owned host controller for the first install and every update.
+Apply the versioned privilege-policy bootstrap in section 1 before using the
+product-owned host controller. The controller deliberately rejects generic
+`sudo -n true` and works only through `/usr/local/sbin/agent-host-admin` plus
+the exact restart and status commands in `sudoers.agent-host`.
+
+Use the product-owned host controller for the first service configuration and
+for configuration updates.
 The Coding example is:
 
 ```bash
@@ -657,7 +685,7 @@ bash scripts/remote-runner-onboard.sh \
 Use `--role review`, a separate enrolled identity, and a separate credential
 file to install or update `agent-runner-review.service`. The controller derives
 role resource policy, writes it into the main unit, migrates legacy resource
-drop-ins, runs `daemon-reload`, and restarts the selected service. Do not copy
+drop-ins through the root-owned helper, and restarts the selected service. Do not copy
 `deploy/systemd/agent-runner.service` directly for a managed host; that file is
 the legacy static unit reference and cannot derive a host quota.
 
@@ -676,26 +704,30 @@ The managed units deliberately use `KillMode=process`. This is required:
 `control-group` kills detached job workers and makes safe reattachment
 impossible. `StartLimitIntervalSec=300`, `StartLimitBurst=5`, and
 `RestartSec=10s` bound a broken-binary restart loop while allowing ordinary
-recovery. Installing or changing the unit requires root, followed by
-`systemctl daemon-reload`.
+recovery. The root-owned helper renders the unit and performs the required
+`daemon-reload`; the runner account cannot invoke daemon reload directly.
 
 ### Planned daemon restart and deploy
 
 A planned Runner deploy no longer waits for host idle. Publish the complete
-application into a new immutable release directory as described in section 2,
-atomically switch `/opt/agent-host/current`, and only then restart the main
-service process. Record the previous `readlink -f /opt/agent-host/current`
-target before switching so rollback can select that complete release.
+application and use the versioned deploy recipe from section 2. It stages with
+`scp`, validates the complete release, atomically switches
+`/opt/agent-host/current`, restarts each selected main service process, prints
+exact status, and waits for fresh capability output.
 
 ```bash
-sudo systemctl restart agent-host
-sudo journalctl -u agent-host --since '-2 minutes' \
-  | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
-
-sudo systemctl restart agent-runner-review
-sudo journalctl -u agent-runner-review --since '-2 minutes' \
-  | grep -E 'planned shutdown|review daemon handoff|persisted review accepted|adopting persisted review|review adoption failed'
+bash scripts/remote-agent-host-deploy.sh \
+  --host <ssh-target> \
+  --release-dir <publish-directory> \
+  --release-id <immutable-release-id> \
+  --role both
 ```
+
+The runner account has no general journal access. The bounded
+`agent-host-admin capability <role>` operation returns only the latest relevant
+capability line. Deeper journal inspection is an operator action, not an agent
+CLI capability. Record the previous current target from an operator session
+when a rollback point is required.
 
 On SIGTERM the old daemon stops making claims, leaves detached coding and review
 workers running, flushes its already-atomic slot records, and exits. systemd
@@ -875,6 +907,13 @@ the remote host badge, fenced lease timeline, CLI log upload, result upload,
 and runner completion all name the same runner. This is the AGT-1923 probe
 mechanic; do not substitute the static frontend readiness fixture for this
 proof.
+
+For the host privilege acceptance, also record a fresh-session `id -nG agent`,
+the non-secret effective `sudo -l -U agent` command list, denial of an unrelated
+unit restart, denial of Docker, both owned unit statuses, the Coding Git
+capability, a Review capability line, and one completed exact-SHA Remote Review.
+The canonical checklist is the
+[2026-08-02 secrets-posture review](../security/reviews/2026-08-02-runner-host-secrets-posture.md).
 
 ## Troubleshooting
 

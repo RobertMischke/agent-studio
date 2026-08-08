@@ -107,6 +107,7 @@ scp_git_pattern='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9.-]+:[A-Za-z0-9._~/%+@:-]
 [[ "$runner_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--runner-name contains unsupported characters."
 [[ "$package_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--package-id contains unsupported characters."
 [[ "$runner_command" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--runner-command contains unsupported characters."
+[[ "$runner_command" == agent-host ]] || die "--runner-command must be agent-host on a least-privilege managed host."
 [[ "$minimum_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die "--minimum-version is not a semantic version."
 if [[ ! "$git_remote" =~ $https_git_pattern \
       && ! "$git_remote" =~ $ssh_git_pattern \
@@ -142,7 +143,7 @@ printf '[onboarding] host=%s runner=%s role=%s client=%s topology=%s server=%s\n
 
 ssh_base=(ssh -o BatchMode=yes -o ConnectTimeout=10)
 
-printf '[onboarding] phase=preflight Checking SSH, sudo, .NET, and Task Server reachability from the host.\n'
+printf '[onboarding] phase=preflight Checking SSH, scoped host administration, .NET, and Task Server reachability.\n'
 "${ssh_base[@]}" -T "$host" bash -s -- "$server_url" "$client_id" "$runner_id" "$auth_token_file" "$service_auth" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 server_url="$1"
@@ -152,7 +153,11 @@ auth_token_file="$4"
 service_auth="$5"
 printf '[remote] connected host=%s user=%s\n' "$(hostname)" "$(id -un)"
 command -v sudo >/dev/null || { echo '[remote] sudo is required.' >&2; exit 20; }
-sudo -n true || { echo '[remote] passwordless sudo is required for unattended systemd installation.' >&2; exit 21; }
+sudo -n /usr/local/sbin/agent-host-admin policy-check || {
+  echo '[remote] The versioned agent-host least-privilege policy is required.' >&2
+  echo '[remote] Have an operator apply deploy/agent-host/install-privilege-policy.sh from a separate root session.' >&2
+  exit 21
+}
 command -v dotnet >/dev/null || { echo '[remote] .NET 10 is missing.' >&2; exit 22; }
 dotnet_version="$(dotnet --version)"
 [[ "$dotnet_version" == 10.* ]] || { printf '[remote] .NET 10 is required; found %s.\n' "$dotnet_version" >&2; exit 23; }
@@ -166,8 +171,8 @@ fi
 printf '[remote] Task Server reachable: %s; dotnet=%s\n' "$health_url" "$dotnet_version"
 
 if [[ "$service_auth" == 1 ]]; then
-  sudo test -f "$auth_token_file" || { printf '[remote] Runner credential file is missing: %s\n' "$auth_token_file" >&2; exit 26; }
-  token="$(sudo cat "$auth_token_file")"
+  [[ -r "$auth_token_file" ]] || { printf '[remote] Runner credential file is missing or unreadable: %s\n' "$auth_token_file" >&2; exit 26; }
+  token="$(cat "$auth_token_file")"
   [[ "$token" == rnr.* ]] || { echo '[remote] Runner credential file does not contain an rnr.* service credential.' >&2; exit 27; }
   umask 077
   curl_config="$(mktemp)"
@@ -231,11 +236,17 @@ fi
 stage_root=""
 ln -sfnT "$release_root" "$tool_root/current"
 
+deploy_stage="/var/lib/agent-host-deploy/incoming/$installed_version"
+rm -rf -- "$deploy_stage"
+install -d -m 0750 "$deploy_stage"
+cp -a -- "$release_root/." "$deploy_stage/"
+sudo -n /usr/local/sbin/agent-host-admin activate "$installed_version"
+
 command -v npm >/dev/null || { echo '[remote] Node.js/npm is missing. Install Node 22, then retry.' >&2; exit 33; }
-if ! npm install --global @openai/codex @anthropic-ai/claude-code; then
-  echo '[remote] User-level npm global install failed; retrying through passwordless sudo.' >&2
-  sudo -n npm install --global @openai/codex @anthropic-ai/claude-code
-fi
+npm install --global @openai/codex @anthropic-ai/claude-code || {
+  echo '[remote] User-level npm global install failed. Configure a user-owned npm prefix; privileged npm is not admitted.' >&2
+  exit 35
+}
 printf '[remote] runner-package=%s runner-version=%s\n' "$package_id" "$installed_version"
 codex --version
 claude --version
@@ -272,14 +283,8 @@ if ! remote_login_status; then
 fi
 
 printf '[onboarding] phase=systemd Writing configuration and enabling the OS-owned service.\n'
-resource_governance_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/agent-host-resource-governance.sh"
-[[ -x "$resource_governance_script" ]] \
-  || die "The agent-host resource governance helper is missing or not executable: $resource_governance_script"
-"${ssh_base[@]}" -T "$host" \
-  'helper_tmp="$(mktemp)"; trap '"'"'rm -f "$helper_tmp"'"'"' EXIT; cat >"$helper_tmp"; chmod 0755 "$helper_tmp"; sudo install -d -m 0755 /usr/local/libexec; sudo install -m 0755 "$helper_tmp" /usr/local/libexec/agent-host-resource-governance' \
-  <"$resource_governance_script"
 "${ssh_base[@]}" -T "$host" bash -s -- \
-  "$server_url" "$client_id" "$runner_id" "$runner_name" "$role" "$git_remote" "$git_push_remote" "$runner_command" "$auth_token_file" "$service_auth" <<'REMOTE_SYSTEMD'
+  "$server_url" "$client_id" "$runner_id" "$runner_name" "$role" "$git_remote" "$git_push_remote" "$auth_token_file" "$service_auth" <<'REMOTE_SYSTEMD'
 set -euo pipefail
 server_url="$1"
 client_id="$2"
@@ -288,35 +293,27 @@ runner_name="$4"
 role="$5"
 git_remote="$6"
 git_push_remote="$7"
-runner_command="$8"
-auth_token_file="$9"
-service_auth="${10}"
+auth_token_file="$8"
+service_auth="$9"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
-runner_user="$(id -un)"
-runner_group="$(id -gn)"
-runner_home="$HOME"
-tool_root="$runner_home/.local/share/agent-host-tools"
-runner_bin="$tool_root/current/$runner_command"
 agent_host_root="/opt/agent-host"
-legacy_root="/opt/agent-runner"
+runner_bin="$agent_host_root/current/agent-host"
 [[ -x "$runner_bin" ]] || {
-  printf '[remote] Immutable runner release is missing command %s: %s\n' "$runner_command" "$runner_bin" >&2
+  printf '[remote] Immutable runner release is missing: %s\n' "$runner_bin" >&2
   exit 42
 }
 
 if [[ "$role" == "coding" ]]; then
-  service_name="agent-runner"
-  env_file="/etc/agent-runner/runner.env"
+  service_name="agent-host.service"
   service_root="/var/lib/agent-runner"
 else
-  service_name="agent-runner-review"
-  env_file="/etc/agent-runner/review.env"
+  service_name="agent-runner-review.service"
   service_root="/var/lib/agent-runner-review"
 fi
 
 env_tmp="$(mktemp)"
-unit_tmp="$(mktemp)"
-trap 'rm -f "$env_tmp" "$unit_tmp"' EXIT
+staged_env="/var/lib/agent-host-deploy/config/$role.env"
+trap 'rm -f "$env_tmp"' EXIT
 chmod 600 "$env_tmp"
 {
   printf 'RUNNER_SERVER_URL=%s\n' "$server_url"
@@ -332,99 +329,29 @@ chmod 600 "$env_tmp"
   printf 'RUNNER_STATE_DIR=%s/state\n' "$service_root"
   printf 'RUNNER_MAX_PARALLELISM=2\n'
 } >"$env_tmp"
-
-resource_policy="$(sudo /usr/local/libexec/agent-host-resource-governance \
-  --role "$role" \
-  --profile /etc/agent-host/profile.conf \
-  --drop-in-dir "/etc/systemd/system/${service_name}.service.d" \
-  --migrate-drop-ins)"
-
-cat >"$unit_tmp" <<EOF
-[Unit]
-Description=Agent Studio $role agent host daemon
-After=network-online.target
-Wants=network-online.target
-StartLimitIntervalSec=300
-StartLimitBurst=5
-
-[Service]
-Type=simple
-User=$runner_user
-Group=$runner_group
-WorkingDirectory=$service_root
-Environment=HOME=$runner_home
-Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-EnvironmentFile=$env_file
-ExecStart=$agent_host_root/current/$runner_command --poll
-Restart=always
-RestartSec=10s
-TimeoutStopSec=90s
-KillSignal=SIGTERM
-KillMode=process
-SyslogIdentifier=$service_name
-StandardOutput=journal
-StandardError=journal
-$resource_policy
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-ReadWritePaths=$service_root $runner_home
-
-[Install]
-WantedBy=multi-user.target
-Alias=agent-runner.service
-EOF
-
-sudo install -d -m 0750 /etc/agent-runner "$service_root" "$service_root/work" "$service_root/state"
-if [[ "$role" == "review" ]]; then
-  sudo install -d -m 0750 "$service_root/review-work"
-fi
-sudo chown -R "$runner_user:$runner_group" "$service_root"
-sudo install -d -m 0755 "$agent_host_root"
-# Preserve the release boundary below the stable /opt path. The compatibility
-# command links point through current, never into files that an update mutates.
-sudo ln -sfnT "$tool_root/current" "$agent_host_root/current"
-sudo ln -sfn "current/$runner_command" "$agent_host_root/agent-host"
-sudo ln -sfn agent-host "$agent_host_root/agent-runner"
-if [[ -e "$legacy_root" && ! -L "$legacy_root" ]]; then
-  legacy_backup="${legacy_root}.pre-agent-host"
-  [[ ! -e "$legacy_backup" ]] || {
-    printf '[remote] Cannot preserve legacy publish directory: %s already exists.\n' "$legacy_backup" >&2
-    exit 41
-  }
-  sudo mv "$legacy_root" "$legacy_backup"
-  printf '[remote] Preserved legacy publish directory at %s.\n' "$legacy_backup"
-fi
-sudo ln -sfnT "$agent_host_root" "$legacy_root"
-if [[ "$service_auth" == 1 ]]; then
-  sudo chown root:"$runner_group" "$auth_token_file"
-  sudo chmod 0640 "$auth_token_file"
-fi
-sudo install -m 0640 -o root -g "$runner_group" "$env_tmp" "$env_file"
-if [[ -f /etc/systemd/system/agent-runner.service && ! -L /etc/systemd/system/agent-runner.service ]]; then
-  sudo systemctl stop agent-runner.service || true
-fi
-sudo install -m 0644 "$unit_tmp" "/etc/systemd/system/${service_name}.service"
-sudo systemctl daemon-reload
-sudo systemctl enable "$service_name"
-sudo systemctl restart "$service_name"
+install -m 0600 "$env_tmp" "$staged_env"
+sudo -n /usr/local/sbin/agent-host-admin configure "$role"
+sudo -n /usr/bin/systemctl restart "$service_name"
 sleep 2
-sudo systemctl is-enabled "$service_name"
-sudo systemctl is-active "$service_name"
+sudo -n /usr/bin/systemctl status --no-pager "$service_name"
 RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
-  "$agent_host_root/current/$runner_command" --health-check --server "$server_url"
+  "$runner_bin" --health-check --server "$server_url"
+
+capability_line=""
+for _ in $(seq 1 30); do
+  capability_line="$(sudo -n /usr/local/sbin/agent-host-admin capability "$role" 2>/dev/null || true)"
+  [[ -n "$capability_line" ]] && break
+  sleep 2
+done
+[[ -n "$capability_line" ]] || {
+  printf '[remote] No %s capability result was observed after restart.\n' "$role" >&2
+  exit 40
+}
+printf '[remote] capability=%s\n' "$capability_line"
 
 if [[ "$role" == "coding" ]]; then
-  git_status=""
-  for _ in $(seq 1 30); do
-    journal="$(sudo journalctl -u "$service_name" -n 80 --no-pager)"
-    printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready-no-workflow-scope' && { git_status=ready-no-workflow-scope; break; }
-    printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready' && { git_status=ready; break; }
-    printf '%s' "$journal" | grep -Fq 'runner-git-capability status=read-only' && { git_status=read-only; break; }
-    sleep 2
-  done
+  git_status="$(printf '%s\n' "$capability_line" | sed -n 's/.*runner-git-capability status=\([^ ]*\).*/\1/p')"
   [[ "$git_status" == ready || "$git_status" == ready-no-workflow-scope ]] || {
-    sudo journalctl -u "$service_name" -n 40 --no-pager >&2
     printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
     exit 40
   }

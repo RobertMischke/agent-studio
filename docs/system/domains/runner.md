@@ -171,6 +171,14 @@ state.
   `/etc/agent-host/profile.conf`, and adopts legacy resource drop-ins before the
   managed main unit replaces them. The target contract lives in
   [runner-host resource governance](../../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
+- `deploy/agent-host/` and `scripts/remote-agent-host-deploy.sh`: the Linux host
+  least-privilege boundary. The versioned sudoers policy exposes only a
+  root-owned validator plus restart/status for `agent-host.service` and
+  `agent-runner-review.service`. Releases enter through one fixed staging root
+  and activate below `/opt/agent-host/releases`; the runner account has no
+  Docker group or general journal, package-manager, file-tool, or systemctl
+  authority. The application and negative-proof runbook lives in the
+  [2026-08-02 secrets-posture review](../../operations/security/reviews/2026-08-02-runner-host-secrets-posture.md).
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store

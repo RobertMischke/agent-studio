@@ -119,6 +119,7 @@ public sealed class RemoteReviewDaemon
             TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
             _log,
             shutdown);
+        _log($"review-capability-advertisement status=ready generation={capabilityGeneration}");
 
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         var admissionClosed = false;
@@ -195,6 +196,7 @@ public sealed class RemoteReviewDaemon
                         TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
                         _log,
                         shutdown);
+                    _log($"review-capability-advertisement status=ready generation={generation}");
                     observedServer = true;
                     nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
                 }

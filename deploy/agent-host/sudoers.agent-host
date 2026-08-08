@@ -1,0 +1,13 @@
+# Agent Studio runner host least-privilege policy, version 2026-08-02.1.
+# install-privilege-policy.sh replaces @AGENT_USER@ after validating the local
+# account name and checks the rendered file with visudo before installation.
+Defaults:@AGENT_USER@ env_reset, use_pty
+
+Cmnd_Alias AGENT_HOST_DEPLOY = /usr/local/sbin/agent-host-admin
+Cmnd_Alias AGENT_HOST_UNITS = \
+    /usr/bin/systemctl restart agent-host.service, \
+    /usr/bin/systemctl status --no-pager agent-host.service, \
+    /usr/bin/systemctl restart agent-runner-review.service, \
+    /usr/bin/systemctl status --no-pager agent-runner-review.service
+
+@AGENT_USER@ ALL=(root) NOPASSWD: AGENT_HOST_DEPLOY, AGENT_HOST_UNITS

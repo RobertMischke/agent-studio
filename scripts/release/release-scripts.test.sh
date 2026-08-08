@@ -36,6 +36,10 @@ SOURCE_DATE_EPOCH=1 "$repo_root/scripts/release/package-release.sh" \
     tar -tzf agent-orchestrator-1.2.3-linux-x64.tar.gz \
         | grep -q 'agent-orchestrator-1.2.3-linux-x64/update.sh'
     tar -tzf agent-host-1.2.3.tar.gz | grep -q 'agent-host-1.2.3/osx-arm64/agent-host'
+    tar -tzf agent-host-1.2.3.tar.gz \
+        | grep -q 'agent-host-1.2.3/privilege/sudoers.agent-host'
+    tar -tzf agent-host-1.2.3.tar.gz \
+        | grep -q 'agent-host-1.2.3/remote-agent-host-deploy.sh'
     tar -tzf agent-studio-1.2.3.tar.gz | grep -q 'agent-studio-1.2.3/browser/index.html'
 )
 

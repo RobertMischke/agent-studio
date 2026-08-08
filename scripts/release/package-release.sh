@@ -53,6 +53,7 @@ host="agent-host-$version"
 studio="agent-studio-$version"
 install -d -m 0755 "$work/$orchestrator" "$work/$host/linux-x64" \
     "$work/$host/osx-arm64" "$work/$host/config" "$work/$host/systemd" \
+    "$work/$host/privilege" \
     "$work/$studio/browser"
 
 install -m 0755 "$publish_root/task-server/task-server" \
@@ -71,6 +72,14 @@ install -m 0644 "$repo_root/deploy/systemd/agent-host.service" \
     "$work/$host/systemd/agent-host.service"
 install -m 0755 "$repo_root/scripts/agent-host-resource-governance.sh" \
     "$work/$host/agent-host-resource-governance.sh"
+install -m 0755 "$repo_root/deploy/agent-host/agent-host-admin" \
+    "$work/$host/privilege/agent-host-admin"
+install -m 0755 "$repo_root/deploy/agent-host/install-privilege-policy.sh" \
+    "$work/$host/privilege/install-privilege-policy.sh"
+install -m 0440 "$repo_root/deploy/agent-host/sudoers.agent-host" \
+    "$work/$host/privilege/sudoers.agent-host"
+install -m 0755 "$repo_root/scripts/remote-agent-host-deploy.sh" \
+    "$work/$host/remote-agent-host-deploy.sh"
 
 cp -a "$frontend_root/." "$work/$studio/browser/"
 

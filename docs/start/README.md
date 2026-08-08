@@ -49,6 +49,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Topic | Start here |
 |---|---|
 | Contribution and style conventions for all agents | [contribution-and-style-guide.html](contribution-and-style-guide.html) |
+| Runner host least-privilege policy and 2026-08-02 secrets-posture review | [operations/security review](../operations/security/reviews/2026-08-02-runner-host-secrets-posture.md) |
 | Runner | [domains/runner.md](../system/domains/runner.md) |
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
 | Runtime prompt registry, review companions, call telemetry, and costs | [contracts/runtime-prompts.md](../system/contracts/runtime-prompts.md) |

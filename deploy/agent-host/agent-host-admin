@@ -1,0 +1,358 @@
+#!/usr/bin/env bash
+# Root-owned, narrowly scoped administration boundary for an Agent Studio host.
+# The sudo policy may expose this command to the runner account because every
+# accepted operation is implemented here with fixed roots, fixed unit names,
+# and validated identifiers. Never install this file from an agent-controlled
+# checkout without an operator reviewing the exact revision first.
+set -euo pipefail
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+readonly policy_version="2026-08-02.1"
+readonly config_file="/etc/agent-host/admin.conf"
+readonly deploy_root="/var/lib/agent-host-deploy"
+readonly incoming_root="$deploy_root/incoming"
+readonly config_stage_root="$deploy_root/config"
+readonly release_root="/opt/agent-host/releases"
+readonly current_link="/opt/agent-host/current"
+readonly resource_helper="/usr/local/libexec/agent-host-resource-governance"
+
+die() {
+  printf 'agent-host-admin: %s\n' "$*" >&2
+  exit 2
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  agent-host-admin policy-check
+  agent-host-admin activate <release-id>
+  agent-host-admin configure <coding|review>
+  agent-host-admin capability <coding|review>
+
+Release input is read only from
+/var/lib/agent-host-deploy/incoming/<release-id>. Service configuration is read
+only from /var/lib/agent-host-deploy/config/<role>.env. The command never
+accepts a source path, destination path, unit name, executable, or shell text.
+EOF
+}
+
+require_root() {
+  [[ "$(id -u)" == 0 ]] || die "must run as root through the installed sudo policy"
+}
+
+read_configured_user() {
+  [[ -f "$config_file" && ! -L "$config_file" ]] \
+    || die "missing root-owned policy configuration: $config_file"
+  [[ "$(stat -c '%U:%G:%a' "$config_file")" == "root:root:600" ]] \
+    || die "policy configuration must be root:root mode 0600"
+
+  local count
+  count="$(grep -c '^AGENT_HOST_USER=' "$config_file" || true)"
+  [[ "$count" == 1 ]] || die "policy configuration must contain one AGENT_HOST_USER entry"
+  configured_user="$(sed -n 's/^AGENT_HOST_USER=//p' "$config_file")"
+  [[ "$configured_user" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] \
+    || die "configured runner account is invalid"
+  id "$configured_user" >/dev/null 2>&1 \
+    || die "configured runner account does not exist"
+  configured_group="$(id -gn "$configured_user")"
+  configured_home="$(getent passwd "$configured_user" | cut -d: -f6)"
+  [[ "$configured_home" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+    || die "configured runner home is not a safe absolute path"
+}
+
+require_authorized_caller() {
+  local caller="${SUDO_USER:-root}"
+  [[ "$caller" == root || "$caller" == "$configured_user" ]] \
+    || die "sudo caller '$caller' is not the configured runner account"
+}
+
+role_facts() {
+  local role="$1"
+  case "$role" in
+    coding)
+      service_name="agent-host.service"
+      env_file="/etc/agent-runner/runner.env"
+      service_root="/var/lib/agent-runner"
+      auth_token_file="/etc/agent-runner/runner-auth-token"
+      ;;
+    review)
+      service_name="agent-runner-review.service"
+      env_file="/etc/agent-runner/review.env"
+      service_root="/var/lib/agent-runner-review"
+      auth_token_file="/etc/agent-runner/review-auth-token"
+      ;;
+    *) die "role must be coding or review" ;;
+  esac
+}
+
+release_id_is_safe() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]
+}
+
+validate_release_tree() {
+  local tree="$1"
+  [[ -d "$tree" && ! -L "$tree" ]] || die "release tree is not a real directory: $tree"
+  [[ -f "$tree/agent-host" && -x "$tree/agent-host" && ! -L "$tree/agent-host" ]] \
+    || die "release does not contain a regular executable agent-host"
+  if find "$tree" -xdev \( -type l -o -type b -o -type c -o -type p -o -type s \) -print -quit \
+      | grep -q .; then
+    die "release contains a link or special file"
+  fi
+  if find "$tree" -xdev -perm /6022 -print -quit | grep -q .; then
+    die "release contains a set-id or group/world-writable entry"
+  fi
+}
+
+activate_release() {
+  local release_id="$1"
+  release_id_is_safe "$release_id" || die "release id contains unsupported characters"
+
+  local source="$incoming_root/$release_id"
+  local destination="$release_root/$release_id"
+  local temporary="$release_root/.install-$release_id-$$"
+  if [[ -e /opt/agent-runner && ! -L /opt/agent-runner ]]; then
+    die "/opt/agent-runner exists and is not the compatibility symlink"
+  fi
+  [[ -d "$source" && ! -L "$source" ]] || die "staged release is missing: $source"
+  [[ "$(stat -c '%U' "$source")" == "$configured_user" ]] \
+    || die "staged release must be owned by $configured_user"
+  validate_release_tree "$source"
+
+  install -d -m 0755 -o root -g root /opt/agent-host "$release_root"
+  if [[ ! -e "$destination" ]]; then
+    [[ ! -e "$temporary" ]] || die "temporary release destination already exists"
+    install -d -m 0755 -o root -g root "$temporary"
+    cleanup_install() {
+      [[ ! -d "$temporary" ]] || rm -rf -- "$temporary"
+    }
+    trap cleanup_install EXIT
+    cp -RP --preserve=mode,timestamps \
+      --no-preserve=ownership,xattr,context,links -- "$source/." "$temporary/"
+    chown -R root:root "$temporary"
+    validate_release_tree "$temporary"
+    mv -- "$temporary" "$destination"
+    trap - EXIT
+  else
+    [[ "$(stat -c '%U:%G' "$destination")" == "root:root" ]] \
+      || die "existing release is not root-owned: $destination"
+    validate_release_tree "$destination"
+  fi
+
+  local next_link="/opt/agent-host/.current-$$"
+  ln -s -- "$destination" "$next_link"
+  mv -Tf -- "$next_link" "$current_link"
+  ln -sfnT -- /opt/agent-host /opt/agent-runner
+  rm -rf -- "$source"
+  printf 'policy=%s release=%s current=%s\n' \
+    "$policy_version" "$release_id" "$(readlink -f "$current_link")"
+}
+
+validate_environment_file() {
+  local role="$1"
+  local source="$2"
+  local line key value
+  local seen_role="" seen_server="" seen_id="" seen_name="" seen_work="" seen_state=""
+
+  [[ -f "$source" && ! -L "$source" ]] || die "staged environment file is missing: $source"
+  [[ "$(stat -c '%U' "$source")" == "$configured_user" ]] \
+    || die "staged environment file must be owned by $configured_user"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" ]] || continue
+    [[ "$line" != *[$'\t\r']* ]] || die "environment file contains control characters"
+    [[ "$line" =~ ^([A-Z0-9_]+)=(.*)$ ]] || die "invalid environment assignment"
+    key="${BASH_REMATCH[1]}"
+    value="${BASH_REMATCH[2]}"
+    case "$key" in
+      RUNNER_SERVER_URL) seen_server="$value" ;;
+      RUNNER_CLIENT_ID) ;;
+      RUNNER_ID) seen_id="$value" ;;
+      RUNNER_NAME) seen_name="$value" ;;
+      RUNNER_ROLE) seen_role="$value" ;;
+      RUNNER_AUTH_TOKEN_FILE)
+        [[ "$value" == "$auth_token_file" ]] \
+          || die "role uses an unexpected credential path"
+        ;;
+      RUNNER_GIT_REMOTE|RUNNER_GIT_PUSH_REMOTE) ;;
+      RUNNER_WORKDIR) seen_work="$value" ;;
+      RUNNER_REVIEW_WORKDIR)
+        [[ "$role" == review && "$value" == "$service_root/review-work" ]] \
+          || die "review work directory is outside the managed root"
+        ;;
+      RUNNER_STATE_DIR) seen_state="$value" ;;
+      RUNNER_MAX_PARALLELISM) [[ "$value" =~ ^[1-9][0-9]?$ ]] || die "invalid bootstrap parallelism" ;;
+      *) die "environment key is not admitted by the root boundary: $key" ;;
+    esac
+  done <"$source"
+
+  [[ "$seen_role" == "$role" ]] || die "RUNNER_ROLE does not match $role"
+  [[ "$seen_server" =~ ^https?://[^[:space:]]+$ ]] || die "RUNNER_SERVER_URL is missing or invalid"
+  [[ "$seen_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]+$ ]] || die "RUNNER_ID is missing or invalid"
+  [[ "$seen_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]+$ ]] || die "RUNNER_NAME is missing or invalid"
+  [[ "$seen_work" == "$service_root/work" ]] || die "RUNNER_WORKDIR is outside the managed root"
+  [[ "$seen_state" == "$service_root/state" ]] || die "RUNNER_STATE_DIR is outside the managed root"
+}
+
+configure_service() {
+  local role="$1"
+  role_facts "$role"
+  local staged_env="$config_stage_root/$role.env"
+  validate_environment_file "$role" "$staged_env"
+  [[ -x "$resource_helper" && ! -L "$resource_helper" ]] \
+    || die "root-owned resource helper is missing: $resource_helper"
+  [[ "$(stat -c '%U:%G:%a' "$resource_helper")" == "root:root:755" ]] \
+    || die "resource helper must be root:root mode 0755"
+  if [[ -e /etc/agent-host/profile.conf ]]; then
+    [[ -f /etc/agent-host/profile.conf && ! -L /etc/agent-host/profile.conf ]] \
+      || die "resource profile must be a regular file"
+    [[ "$(stat -c '%U' /etc/agent-host/profile.conf)" == root ]] \
+      || die "resource profile must be root-owned"
+    local profile_mode
+    profile_mode="$(stat -c '%a' /etc/agent-host/profile.conf)"
+    (((8#$profile_mode & 0022) == 0)) \
+      || die "resource profile must not be group/world writable"
+  fi
+  [[ -x "$current_link/agent-host" ]] || die "activate a release before configuring a service"
+
+  install -d -m 0750 -o root -g "$configured_group" /etc/agent-runner
+  install -d -m 0750 -o "$configured_user" -g "$configured_group" \
+    "$service_root" "$service_root/work" "$service_root/state"
+  if [[ "$role" == review ]]; then
+    install -d -m 0750 -o "$configured_user" -g "$configured_group" "$service_root/review-work"
+  fi
+  if [[ -f "$auth_token_file" && ! -L "$auth_token_file" ]]; then
+    chown root:"$configured_group" "$auth_token_file"
+    chmod 0640 "$auth_token_file"
+  fi
+
+  local env_next="${env_file}.next.$$"
+  install -m 0640 -o root -g "$configured_group" "$staged_env" "$env_next"
+  mv -f -- "$env_next" "$env_file"
+
+  local resource_policy
+  resource_policy="$($resource_helper \
+    --role "$role" \
+    --profile /etc/agent-host/profile.conf \
+    --drop-in-dir "/etc/systemd/system/${service_name}.d" \
+    --migrate-drop-ins)"
+
+  local unit_next="/etc/systemd/system/${service_name}.next.$$"
+  {
+    cat <<EOF
+[Unit]
+Description=Agent Studio $role agent host daemon
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=$configured_user
+Group=$configured_group
+WorkingDirectory=$service_root
+Environment=HOME=$configured_home
+Environment="PATH=$configured_home/.dotnet/tools:$configured_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EnvironmentFile=$env_file
+ExecStart=/opt/agent-host/current/agent-host --poll
+Restart=always
+RestartSec=10s
+TimeoutStopSec=90s
+KillSignal=SIGTERM
+KillMode=process
+SyslogIdentifier=${service_name%.service}
+StandardOutput=journal
+StandardError=journal
+$resource_policy
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=$service_root $configured_home
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    if [[ "$role" == coding ]]; then
+      printf 'Alias=agent-runner.service\n'
+    fi
+  } >"$unit_next"
+  chown root:root "$unit_next"
+  chmod 0644 "$unit_next"
+
+  if [[ "$role" == coding \
+        && -f /etc/systemd/system/agent-runner.service \
+        && ! -L /etc/systemd/system/agent-runner.service ]]; then
+    local legacy_backup="/etc/systemd/system/agent-runner.service.pre-least-privilege"
+    [[ ! -e "$legacy_backup" ]] || die "legacy coding unit backup already exists: $legacy_backup"
+    systemctl disable --now agent-runner.service >/dev/null 2>&1 || true
+    mv -- /etc/systemd/system/agent-runner.service "$legacy_backup"
+  fi
+  mv -f -- "$unit_next" "/etc/systemd/system/$service_name"
+  systemctl daemon-reload
+  systemctl enable "$service_name" >/dev/null
+  rm -f -- "$staged_env"
+  printf 'policy=%s configured=%s unit=%s\n' "$policy_version" "$role" "$service_name"
+}
+
+capability_status() {
+  local role="$1"
+  role_facts "$role"
+  local pattern
+  if [[ "$role" == coding ]]; then
+    pattern='runner-git-capability status=(ready|ready-no-workflow-scope|read-only)'
+  else
+    pattern='review-capability-advertisement status=ready generation=[0-9]+'
+  fi
+  local line
+  line="$(journalctl -u "$service_name" -n 240 --no-pager -o cat \
+    | grep -E "$pattern" | tail -n 1 || true)"
+  [[ -n "$line" ]] || die "no capability result is present for $service_name"
+  printf '%s\n' "$line"
+}
+
+policy_check() {
+  local groups
+  groups="$(id -nG "$configured_user")"
+  [[ " $groups " != *" docker "* ]] || die "$configured_user is still a member of the docker group"
+  if [[ -S /var/run/docker.sock ]] \
+      && runuser -u "$configured_user" -- /usr/bin/test -w /var/run/docker.sock; then
+    die "$configured_user can still write to the rootful Docker socket"
+  fi
+  [[ "$(stat -c '%U:%G:%a' "$0")" == "root:root:755" ]] \
+    || die "installed administration helper must be root:root mode 0755"
+  [[ -d "$incoming_root" && "$(stat -c '%U' "$incoming_root")" == "$configured_user" ]] \
+    || die "fixed incoming deploy root is missing or has the wrong owner"
+  printf 'policy=%s user=%s docker-group=absent deploy-root=%s\n' \
+    "$policy_version" "$configured_user" "$incoming_root"
+}
+
+require_root
+read_configured_user
+require_authorized_caller
+
+case "${1:-}" in
+  policy-check)
+    [[ "$#" == 1 ]] || die "policy-check accepts no arguments"
+    policy_check
+    ;;
+  activate)
+    [[ "$#" == 2 ]] || die "activate requires exactly one release id"
+    activate_release "$2"
+    ;;
+  configure)
+    [[ "$#" == 2 ]] || die "configure requires exactly one role"
+    configure_service "$2"
+    ;;
+  capability)
+    [[ "$#" == 2 ]] || die "capability requires exactly one role"
+    capability_status "$2"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

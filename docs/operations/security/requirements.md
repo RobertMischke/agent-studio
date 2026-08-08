@@ -87,6 +87,18 @@ Passwords, cookies, authorization headers, session tokens, enrollment codes,
 and Runner bearer secrets must not appear in logs, task output, diagnostics, or
 audit. Tests cover the product credential formats and named secret fields.
 
+### N10: Runner hosts do not grant host root to agent CLIs
+
+Coding and Review service accounts must not have passwordless unrestricted
+sudo and must not belong to the Docker group or another group that controls a
+rootful container socket. Unattended host operations use a root-owned command
+with fixed paths, fixed units, validated identifiers, and no caller-supplied
+shell text. Direct passwordless systemctl access is limited to restart and
+status of the Coding and Review units. General package managers, file tools,
+shells, editors, journal readers, Docker commands, and systemctl operations are
+not admitted. Every policy change passes `visudo`, leaves non-secret evidence,
+and proves negative commands are denied from a fresh account session.
+
 ## Shared data rules
 
 - Secret material never enters the repository.

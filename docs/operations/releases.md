@@ -13,7 +13,7 @@ creates the GitHub Release. A target host never builds from a checkout.
 |---|---|---|
 | `agent-orchestrator-setup` | Guided prerequisite, Demo, Single Machine, Control Plane, and Agent Host join flows | `linux-x64`, self-contained |
 | `agent-orchestrator-X.Y.Z-linux-x64.tar.gz` | Task Server, Orchestrator Engine, systemd units, configuration templates, Caddy template, and lifecycle scripts | `linux-x64`, first-class |
-| `agent-host-X.Y.Z.tar.gz` | Separate self-contained `agent-host` binaries, runner configuration template, and Linux systemd/resource-policy material | `linux-x64`, first-class; `osx-arm64`, supported |
+| `agent-host-X.Y.Z.tar.gz` | Separate self-contained `agent-host` binaries, runner configuration template, Linux systemd/resource-policy material, versioned least-privilege sudoers/admin assets, and the scoped remote deploy recipe | `linux-x64`, first-class; `osx-arm64`, supported |
 | `agent-studio-X.Y.Z.tar.gz` | Compiled static Angular application | Any static web host |
 
 The `agent-host` archive deliberately carries both runtime-specific binaries so

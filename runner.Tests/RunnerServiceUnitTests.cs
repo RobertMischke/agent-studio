@@ -9,7 +9,7 @@ public sealed class RunnerServiceUnitTests
 {
     [Theory]
     [InlineData("deploy/systemd/agent-host.service")]
-    [InlineData("scripts/remote-runner-onboard.sh")]
+    [InlineData("deploy/agent-host/agent-host-admin")]
     public void Installed_units_preserve_workers_and_bound_restart_loops(string relativePath)
     {
         var content = File.ReadAllText(Path.Combine(RepoRoot(), relativePath));
@@ -39,32 +39,35 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("releases_root=\"$tool_root/releases\"", content);
         Assert.Contains("dotnet tool install --tool-path \"$stage_root\"", content);
         Assert.Contains("ln -sfnT \"$release_root\" \"$tool_root/current\"", content);
-        Assert.Contains("ExecStart=$agent_host_root/current/$runner_command --poll", content);
+        Assert.Contains("agent-host-admin activate \"$installed_version\"", content);
+        Assert.Contains("runner_bin=\"$agent_host_root/current/agent-host\"", content);
         Assert.DoesNotContain("dotnet tool update --global", content);
     }
 
     [Fact]
     public void Manual_runner_publish_stages_an_immutable_release_before_switching_current()
     {
-        var content = File.ReadAllText(
+        var runbook = File.ReadAllText(
             Path.Combine(RepoRoot(), "docs", "operations", "setup", "linux-runner-host.md"));
+        var deployScript = File.ReadAllText(
+            Path.Combine(RepoRoot(), "scripts", "remote-agent-host-deploy.sh"));
 
-        Assert.Contains("release_root=\"/opt/agent-host/releases/$release_id\"", content);
-        Assert.Contains("dotnet publish runner/AgentRunner.csproj -c Release -o \"$staging_root\"", content);
-        Assert.Contains("ln -sfnT \"$release_root\" /opt/agent-host/current", content);
-        Assert.DoesNotContain(
-            "dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host",
-            content);
+        Assert.Contains("dotnet publish runner/AgentRunner.csproj -c Release -o \"$staging_root\"", runbook);
+        Assert.Contains("scripts/remote-agent-host-deploy.sh", runbook);
+        Assert.Contains("scp_base=(scp", deployScript);
+        Assert.Contains("agent-host-admin activate \"$release_id\"", deployScript);
+        Assert.DoesNotContain("sudo cp", runbook);
+        Assert.DoesNotContain("sudo ln", runbook);
     }
 
     [Fact]
-    public void Onboarding_creates_the_legacy_publish_path_symlink()
+    public void Scoped_admin_creates_the_legacy_publish_path_symlink()
     {
-        var content = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "remote-runner-onboard.sh"));
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-host-admin"));
 
-        Assert.Contains("agent_host_root=\"/opt/agent-host\"", content);
-        Assert.Contains("legacy_root=\"/opt/agent-runner\"", content);
-        Assert.Contains("ln -sfnT \"$agent_host_root\" \"$legacy_root\"", content);
+        Assert.Contains("readonly release_root=\"/opt/agent-host/releases\"", content);
+        Assert.Contains("ln -sfnT -- /opt/agent-host /opt/agent-runner", content);
     }
 
     [Fact]
@@ -195,14 +198,72 @@ public sealed class RunnerServiceUnitTests
     }
 
     [Fact]
-    public void Onboarding_embeds_generated_policy_in_the_managed_main_unit()
+    public void Scoped_admin_embeds_generated_resource_policy_in_the_managed_main_unit()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-host-admin"));
+
+        Assert.Contains("--migrate-drop-ins", content);
+        Assert.Contains("local resource_policy", content);
+        Assert.Contains("$resource_policy", content);
+        Assert.Contains("/etc/systemd/system/${service_name}.d", content);
+    }
+
+    [Fact]
+    public void Runner_host_sudoers_is_limited_to_the_admin_boundary_and_two_units()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "sudoers.agent-host"));
+
+        Assert.Contains("/usr/local/sbin/agent-host-admin", content);
+        Assert.Contains("/usr/bin/systemctl restart agent-host.service", content);
+        Assert.Contains("/usr/bin/systemctl status --no-pager agent-host.service", content);
+        Assert.Contains("/usr/bin/systemctl restart agent-runner-review.service", content);
+        Assert.Contains("/usr/bin/systemctl status --no-pager agent-runner-review.service", content);
+        Assert.DoesNotContain("NOPASSWD: ALL", content);
+        Assert.DoesNotContain("/usr/bin/docker", content);
+        Assert.DoesNotContain("/usr/bin/journalctl", content);
+    }
+
+    [Fact]
+    public void Scoped_admin_accepts_only_fixed_deploy_roots_and_unit_roles()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-host-admin"));
+
+        Assert.Contains("readonly incoming_root=\"$deploy_root/incoming\"", content);
+        Assert.Contains("readonly current_link=\"/opt/agent-host/current\"", content);
+        Assert.Contains("service_name=\"agent-host.service\"", content);
+        Assert.Contains("service_name=\"agent-runner-review.service\"", content);
+        Assert.Contains("release contains a link or special file", content);
+        Assert.Contains("environment key is not admitted by the root boundary", content);
+        Assert.DoesNotContain("eval ", content);
+    }
+
+    [Fact]
+    public void Review_daemon_logs_a_bounded_success_line_after_capability_advertisement()
+    {
+        var daemon = File.ReadAllText(
+            Path.Combine(RepoRoot(), "runner", "RemoteReviewDaemon.cs"));
+        var admin = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-host-admin"));
+
+        Assert.Contains("review-capability-advertisement status=ready generation=", daemon);
+        Assert.Contains("review-capability-advertisement status=ready generation=[0-9]+", admin);
+    }
+
+    [Fact]
+    public void Onboarding_no_longer_depends_on_generic_passwordless_sudo()
     {
         var content = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "remote-runner-onboard.sh"));
 
-        Assert.Contains("--migrate-drop-ins", content);
-        Assert.Contains("resource_policy=", content);
-        Assert.Contains("$resource_policy", content);
-        Assert.Contains("/etc/systemd/system/${service_name}.service", content);
+        Assert.DoesNotContain("sudo -n true", content);
+        Assert.DoesNotContain("sudo -n npm", content);
+        Assert.DoesNotContain("sudo install", content);
+        Assert.DoesNotContain("sudo chown", content);
+        Assert.DoesNotContain("sudo chmod", content);
+        Assert.DoesNotContain("sudo journalctl", content);
+        Assert.Contains("sudo -n /usr/local/sbin/agent-host-admin configure \"$role\"", content);
     }
 
     /// <summary>

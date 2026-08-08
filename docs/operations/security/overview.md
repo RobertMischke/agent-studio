@@ -131,3 +131,6 @@ with captured evidence in
 [runbook-rehearsal-evidence.md](runbook-rehearsal-evidence.md). The detailed
 target contract and lifecycle matrix are in
 [distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md).
+The runner-host root boundary, versioned sudoers policy, non-secret application
+record, and acceptance procedure are in the
+[2026-08-02 runner host secrets-posture review](reviews/2026-08-02-runner-host-secrets-posture.md).
