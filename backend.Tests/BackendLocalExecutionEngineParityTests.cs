@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentStudio.CliHosting;
 using Xunit;
 
 using StudioCleanContextPreparer = AgentStudio.Cli.CleanContextPreparer;
@@ -256,6 +257,7 @@ public sealed class BackendLocalExecutionEngineParityTests : IDisposable
         var relativeFiles = Directory
             .EnumerateFiles(prepared.TempHome, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(prepared.TempHome, path).Replace('\\', '/'))
+            .Where(path => !string.Equals(path, TaskCleanContextStore.MarkerFileName, StringComparison.Ordinal))
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
         var excludedStateImported = relativeFiles.Any(path =>
@@ -279,8 +281,16 @@ public sealed class BackendLocalExecutionEngineParityTests : IDisposable
         if (string.Equals(engine, CliExecutionEngines.Legacy, StringComparison.Ordinal))
         {
             var prepared = string.Equals(cliType, CliTypes.Claude, StringComparison.Ordinal)
-                ? StudioCleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance)
-                : StudioCleanContextPreparer.PrepareCodex(userHome, NullLogger.Instance);
+                ? StudioCleanContextPreparer.PrepareClaude(
+                    userHome,
+                    $"parity-{cliType}-{engine}",
+                    NullLogger.Instance,
+                    Path.Combine(userHome, "clean-context-store"))
+                : StudioCleanContextPreparer.PrepareCodex(
+                    userHome,
+                    $"parity-{cliType}-{engine}",
+                    NullLogger.Instance,
+                    Path.Combine(userHome, "clean-context-store"));
             Assert.NotNull(prepared);
             return new PreparedContext(
                 prepared!.TempHome,

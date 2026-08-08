@@ -184,7 +184,7 @@ runner uses the same environment variable and also defaults to `car`.
 
 | PROJ-011 card | 0.7.0 boundary | T2 bridge |
 |---|---|---|
-| `public-clean-context-lease` | CAR clean homes are process-scoped; Studio needs one stable home across task attempts and resumes. | Use Studio's task-stable home with `ContextMode=shared` plus explicit environment overrides. |
+| `public-clean-context-lease` | CAR clean homes are process-scoped; Studio needs one stable home across task attempts, host restarts, and resumes. | Local and remote consumers use the shared `TaskCleanContextStore`, then pass its lease through `ContextMode=shared` plus explicit environment overrides. Neither consumer composes a separate path. |
 | `public-hardened-spawner-composition` | CAR's hardened default spawner and Windows handle scrubber are internal and cannot be publicly decorated as one composition. | Use the public `ICliProcessSpawner` contract and keep the host decorator narrow. Do not restore the deleted Studio scrubber. |
 | `public-cli-launch-overlay` | `CliRunRequest` has no public extra-argv or descriptor overlay for the Claude rules file. | Add only the rules-file argument in the spawner decorator after CAR has built the launch. |
 | `public-pre-spawn-health` | CAR's npm-shim repair is internal to its driver and cannot be called by a legacy or one-shot host path. | Retain the pre-existing Studio healer only for the explicit rollback and `ClaudeOneShot`; delete it in T4 when those paths leave. |
@@ -342,7 +342,7 @@ Echt parallelisierbar: T0a ∥ T0b · T1 ∥ T1c · T3-Vorarbeit ∥ alles. **Ni
 
 | Risiko | Wirkung | Gegenmittel |
 |---|---|---|
-| CAR process-scoped clean home used for a resumed local task | Resume state moves to a different home between attempts | T2 keeps the Studio task-stable linked home and passes it through `ContextMode=shared` plus environment overrides; track `public-clean-context-lease` |
+| CAR process-scoped clean home used for a resumed local or remote task | Resume state moves to a different home between attempts | Both consumers acquire the shared `TaskCleanContextStore` home and pass it through `ContextMode=shared` plus environment overrides; track `public-clean-context-lease` |
 | Klartext → `stream-json` remote | `SentinelScanner` wechselt vom Rohtext- auf den `result`-Frame-Zweig | Parity P1/P5 gegen dieselbe Fixture in beiden Formen |
 | Erstmalige Permission-Flag-Injektion remote | Bypass-Modus wo bisher die Host-Config galt | gewollt (Zielbild-Konzept), aber als Verhaltensänderung dokumentieren; per RunSpec steuerbar |
 | Doppelte Log-Schreibung (CAR + Worker) | Plattenwachstum auf `agent-runner-01` | `IRunLogPathProvider` auf das Worker-Verzeichnis lenken; CAR-D beseitigt es (Log-Bloat hat schon einmal einen Push still blockiert) |

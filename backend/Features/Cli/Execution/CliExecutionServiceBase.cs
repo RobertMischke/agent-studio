@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using AgentStudio.CliHosting;
 using LibOutcome = CodingAgentRunner.Model.RunOutcome;
 
 namespace AgentStudio.Cli;
@@ -27,10 +28,10 @@ public partial class GenericCliExecutionService : ICliExecutionService
     /// attempts/recoveries of the same task reuse ONE isolated home, so the
     /// CLI's own session state (Codex <c>sessions/rollout-*.jsonl</c>, Claude
     /// per-cwd transcripts) survives a mid-run restart and a stored session id
-    /// stays resumable. A fresh home is cut only at run boundaries: the task's
-    /// first start, or after the last attempt's tracking entry was evicted
-    /// (which removes + disposes the registry entry below). The registry — not
-    /// the per-attempt <see cref="ProcInfo"/> — owns disposal.
+    /// stays resumable. A fresh home is cut only on the task's first start or
+    /// after retention removed its inactive home. The in-memory registry avoids
+    /// repeated acquisition during one backend lifetime; the marker-validated
+    /// filesystem store remains authoritative across process restarts.
     /// </summary>
     private readonly ConcurrentDictionary<string, CleanContextPreparation> _cleanContextsByJob = new();
 
@@ -592,14 +593,18 @@ public partial class GenericCliExecutionService : ICliExecutionService
         {
             _logger.LogError(ex, "Failed to start {Cli} CLI for job {JobId}", CliType, jobId);
             // The run never reached ProcInfo, so the eviction-time dispose will
-            // never fire — tear a home we freshly cut for THIS call down again
-            // so a spawn failure doesn't leak a temp dir. A REUSED home stays:
-            // it still carries the task's resumable session state, and the
-            // prior attempt's eviction path owns its eventual teardown.
+            // never fire. Delete a home freshly seeded for this call so a spawn
+            // failure does not leave an incomplete task directory. A reused
+            // home stays because it carries resumable state; retention owns its
+            // eventual teardown.
             if (cleanContext != null && !cleanContextReused)
             {
                 _cleanContextsByJob.TryRemove(new KeyValuePair<string, CleanContextPreparation>(jobKey, cleanContext));
-                cleanContext.Dispose();
+                try { cleanContext.Delete(); }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "Failed-start clean-context cleanup failed for {JobId}", jobId);
+                }
             }
             return (null, $"Failed to start {CliType} CLI: {ex.Message}");
         }
@@ -990,8 +995,8 @@ public partial class GenericCliExecutionService : ICliExecutionService
     public bool SupportsCleanContext => _behavior.SupportsCleanContext;
 
     /// <inheritdoc cref="ICliExecutionService.PrepareCleanContext" />
-    public CleanContextPreparation? PrepareCleanContext(string workingDirectory)
-        => _behavior.PrepareCleanContext?.Invoke(this, workingDirectory);
+    public CleanContextPreparation? PrepareCleanContext(string jobKey, string workingDirectory)
+        => _behavior.PrepareCleanContext?.Invoke(this, jobKey, workingDirectory);
 
     /// <summary>
     /// Acquire the clean-context home for one attempt of a task: reuse the
@@ -1007,21 +1012,31 @@ public partial class GenericCliExecutionService : ICliExecutionService
         {
             if (Directory.Exists(existing.TempHome))
                 return (existing, true);
-            // The home vanished underneath us (external temp cleanup): the
-            // registration is stale; drop it and cut a fresh home below.
+            // The home vanished underneath us: the registration is stale; drop
+            // it and let the durable store create the deterministic path again.
             _cleanContextsByJob.TryRemove(new KeyValuePair<string, CleanContextPreparation>(jobKey, existing));
         }
 
-        var prepared = PrepareCleanContext(workingDirectory);
+        var prepared = PrepareCleanContext(jobKey, workingDirectory);
         if (prepared != null) _cleanContextsByJob[jobKey] = prepared;
-        return (prepared, false);
+        return (prepared, prepared?.Reused ?? false);
     }
 
     /// <inheritdoc cref="ICliExecutionService.GetPersistentCleanContextHome" />
     public string? GetPersistentCleanContextHome(string jobKey)
-        => _cleanContextsByJob.TryGetValue(jobKey, out var prep) && Directory.Exists(prep.TempHome)
-            ? prep.TempHome
+    {
+        if (_cleanContextsByJob.TryGetValue(jobKey, out var prep) && Directory.Exists(prep.TempHome))
+            return prep.TempHome;
+
+        return CleanContextPreparer.TryGetExistingHome(
+            CliType,
+            ResolveUserHome(),
+            jobKey,
+            out var home,
+            CleanContextRetentionHostedService.ResolveRootOverride(_configuration))
+            ? home
             : null;
+    }
 
     /// <summary>
     /// Build the convention-only context for a tracked run. Shared by the engine
@@ -1034,8 +1049,8 @@ public partial class GenericCliExecutionService : ICliExecutionService
     {
         var clean = info.CleanContext;
         // Under clean the home-rooted convention probes (~/.claude, ~/.codex)
-        // no longer reflect what the run loaded — the CLI read the temp home
-        // instead. Skip them (home=null) and surface the temp paths from the
+        // no longer reflect what the run loaded. The CLI read the task home
+        // instead. Skip them (home=null) and surface the relocated paths from the
         // preparation so the panel shows the isolated home, not the operator's.
         var home = clean != null ? null : ResolveUserHome();
         var sources = CliContextConventions.For(CliType, info.WorkingDirectory, home);

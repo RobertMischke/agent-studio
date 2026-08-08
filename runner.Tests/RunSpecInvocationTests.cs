@@ -162,7 +162,8 @@ public sealed class RunSpecInvocationTests : IDisposable
             "do the thing",
             Path.Combine(_root, "results"),
             argsOverride: null,
-            runSpec: new RunSpecDto("claude", "claude-opus-4-8", "max", "yolo", "shared"));
+            runSpec: new RunSpecDto("claude", "claude-opus-4-8", "max", "yolo", "shared"),
+            cleanContextKey: "AGT-SPEC-1");
         File.WriteAllText(specPath, JsonSerializer.Serialize(built, Json));
 
         var reloaded = DurableAgentProcess.ReadSpec(specPath);
@@ -176,6 +177,7 @@ public sealed class RunSpecInvocationTests : IDisposable
         // these two yet (permission injection and clean context are T1).
         Assert.Equal("yolo", reloaded.PermissionMode);
         Assert.Equal("shared", reloaded.ContextMode);
+        Assert.Equal("AGT-SPEC-1", reloaded.CleanContextKey);
         Assert.DoesNotContain("--dangerously-skip-permissions", reloaded.Arguments);
     }
 

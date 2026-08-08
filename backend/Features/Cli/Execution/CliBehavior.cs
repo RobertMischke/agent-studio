@@ -26,7 +26,7 @@ internal sealed class CliBehavior
     /// <summary>One of <c>CliTypes</c>. Required.</summary>
     public required string CliType { get; init; }
 
-    /// <summary>Whether this CLI can isolate a clean run via a per-run config home (T1b).</summary>
+    /// <summary>Whether this CLI can isolate a clean run via a task-stable config home (T1b).</summary>
     public bool SupportsCleanContext { get; init; }
 
     /// <summary>Real CLIs emit a session id on every run; a behavior that does not can set this false.</summary>
@@ -85,8 +85,8 @@ internal sealed class CliBehavior
     /// <summary>Spawn the child process. Default: <see cref="Process"/> with redirected pipes.</summary>
     public SpawnChildDelegate? SpawnChild { get; init; }
 
-    /// <summary>Seed a per-run clean-context config home. Default: null (shared-only).</summary>
-    public Func<GenericCliExecutionService, string, CleanContextPreparation?>? PrepareCleanContext { get; init; }
+    /// <summary>Acquire a task-stable clean-context config home. Default: null (shared-only).</summary>
+    public Func<GenericCliExecutionService, string, string, CleanContextPreparation?>? PrepareCleanContext { get; init; }
 
     /// <summary>Describe the context sources a run loaded. Default: convention-only context.</summary>
     public Func<GenericCliExecutionService, string, AgentStudio.Shared.CliExecutionContext?>? DescribeContextSources { get; init; }

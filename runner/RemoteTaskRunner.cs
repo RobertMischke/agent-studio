@@ -710,7 +710,8 @@ public sealed class RemoteTaskRunner
             process = DurableAgentProcess.Start(
                 _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir,
                 runSpec: runSpec,
-                runId: slot.AttemptId);
+                runId: slot.AttemptId,
+                cleanContextKey: taskKey);
         }
         catch (Exception ex)
         {
@@ -831,7 +832,8 @@ public sealed class RemoteTaskRunner
                             // must survive the second attempt too.
                             resumeSlot.RunSpec,
                             runId: resumeSlot.AttemptId,
-                            resumeSessionId: carEngine ? sessionId : null);
+                            resumeSessionId: carEngine ? sessionId : null,
+                            cleanContextKey: resumeSlot.TaskKey);
                         resumeSlot = _state.Save(resumeSlot with
                         {
                             ProcessId = resumed.ProcessId,

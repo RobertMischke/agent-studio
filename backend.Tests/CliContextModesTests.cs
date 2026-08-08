@@ -2,26 +2,28 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
 
+using AgentStudio.CliHosting;
 using AgentStudio.Cli;
 
 namespace AgentStudio.Tests;
 
 /// <summary>
 /// T1b / ASS-1742: the context-mode vocabulary (<see cref="CliContextModes"/>)
-/// and the per-run clean-context builder (<see cref="CleanContextPreparer"/>).
+/// and the task-stable clean-context builder (<see cref="CleanContextPreparer"/>).
 /// "clean" is not a CLI flag — each adapter relocates the CLI's whole config
-/// home to a seeded per-run temp dir. These tests lock the two invariants the
+/// home to a seeded per-task directory. These tests lock the two invariants the
 /// rest of the feature leans on: (1) the vocabulary defaults to CLEAN and only
 /// Claude/Codex report clean support; (2) the preparer creates an isolated home,
 /// seeds only the auth + base config, points the right env var at it, surfaces
-/// the temp paths as sources (for the T1a panel), and tears the home down on
-/// dispose. AGT-2066 adds a third: the credential file is <b>shared by link</b>
+/// the relocated paths as sources (for the T1a panel), and retains the home
+/// until inactivity cleanup. AGT-2066 adds a third: the credential file is <b>shared by link</b>
 /// (not copied) so a mid-run OAuth refresh persists into the one home file every
 /// later launch reads, while base config stays an isolated copy.
 /// </summary>
 public sealed class CliContextModesTests : IDisposable
 {
     private readonly List<string> _homes = new();
+    private int _taskSequence;
 
     public void Dispose()
     {
@@ -76,13 +78,13 @@ public sealed class CliContextModesTests : IDisposable
         WriteFile(Path.Combine(userHome, ".claude", "CLAUDE.md"), "user memory");
         WriteFile(Path.Combine(userHome, ".claude", "projects", "p", "session.jsonl"), "history");
 
-        using var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        using var prep = PrepareClaude(userHome);
 
         Assert.NotNull(prep);
         _homes.Add(prep!.TempHome);
         Assert.Equal(CliTypes.Claude, prep.CliType);
         Assert.True(Directory.Exists(prep.TempHome));
-        // The env override points the CLI's config-dir at the temp home.
+        // The env override points the CLI's config-dir at the task home.
         Assert.True(prep.EnvOverrides.TryGetValue("CLAUDE_CONFIG_DIR", out var dir));
         Assert.Equal(prep.TempHome, dir);
         // Only the allow-listed files were seeded.
@@ -90,7 +92,7 @@ public sealed class CliContextModesTests : IDisposable
         Assert.True(File.Exists(Path.Combine(prep.TempHome, "settings.json")));
         Assert.False(File.Exists(Path.Combine(prep.TempHome, "CLAUDE.md")));
         Assert.False(Directory.Exists(Path.Combine(prep.TempHome, "projects")));
-        // The temp home is surfaced as an Env source (the T1a panel shows it).
+        // The task home is surfaced as an Env source (the T1a panel shows it).
         Assert.Contains(prep.Sources, s =>
             s.Kind == CliContextSourceKinds.Env && s.Path == prep.TempHome);
         // Seeded files are surfaced as global-config sources.
@@ -112,20 +114,20 @@ public sealed class CliContextModesTests : IDisposable
         WriteFile(homeCred, "{\"token\":\"old\"}");
         WriteFile(Path.Combine(userHome, ".claude", "settings.json"), "{}");
 
-        using var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        using var prep = PrepareClaude(userHome);
         Assert.NotNull(prep);
         _homes.Add(prep!.TempHome);
 
-        var tempCred = Path.Combine(prep.TempHome, ".credentials.json");
-        Assert.True(File.Exists(tempCred));
+        var taskCred = Path.Combine(prep.TempHome, ".credentials.json");
+        Assert.True(File.Exists(taskCred));
 
         // Simulate the CLI's in-place refresh write against the config-dir file.
-        File.WriteAllText(tempCred, "{\"token\":\"refreshed\"}");
+        File.WriteAllText(taskCred, "{\"token\":\"refreshed\"}");
 
         // It wrote through to the shared home file.
         Assert.Equal("{\"token\":\"refreshed\"}", File.ReadAllText(homeCred));
 
-        // The temp home is surfaced as a Linked source (T1a panel truthfulness).
+        // The task home is surfaced as a Linked source (T1a panel truthfulness).
         Assert.Contains(prep.Sources, s =>
             s.Kind == CliContextSourceKinds.GlobalConfig
             && (s.Label?.Contains(".credentials.json") ?? false)
@@ -136,8 +138,8 @@ public sealed class CliContextModesTests : IDisposable
     public void PrepareClaude_ParallelRuns_ShareOneCredential_SoWinningRefreshSurvives()
     {
         // The reproduction: many parallel clean contexts off the one home. Under
-        // the old copy behaviour a token rotation in one run died with its temp
-        // dir; with a shared link the winning refresh persists for everyone.
+        // the old copy behaviour a token rotation in one run died with its
+        // disposable directory; with a shared link the winning refresh persists.
         var userHome = NewUserHome();
         var homeCred = Path.Combine(userHome, ".claude", ".credentials.json");
         WriteFile(homeCred, "{\"token\":\"expired\"}");
@@ -145,7 +147,7 @@ public sealed class CliContextModesTests : IDisposable
         var preps = new List<CleanContextPreparation>();
         for (var i = 0; i < 12; i++)
         {
-            var p = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+            var p = PrepareClaude(userHome);
             Assert.NotNull(p);
             _homes.Add(p!.TempHome);
             preps.Add(p);
@@ -161,28 +163,28 @@ public sealed class CliContextModesTests : IDisposable
         foreach (var p in preps)
             Assert.Equal("{\"token\":\"rotated\"}", File.ReadAllText(Path.Combine(p.TempHome, ".credentials.json")));
 
-        // Tearing every per-run home down leaves the live home credential intact.
+        // Releasing every task lease leaves the live home credential intact.
         foreach (var p in preps) p.Dispose();
         Assert.True(File.Exists(homeCred));
         Assert.Equal("{\"token\":\"rotated\"}", File.ReadAllText(homeCred));
     }
 
     [Fact]
-    public void Dispose_WithLinkedCredential_LeavesHomeFileIntact()
+    public void Dispose_ReleasesLeaseButLeavesTaskHomeAndLinkedCredentialIntact()
     {
-        // Teardown deletes the temp home recursively; deleting the credential
-        // LINK must remove only the extra directory entry, never the home file.
+        // Lease release retains the task home and its credential link; later
+        // retention deletion must never remove the authoritative home file.
         var userHome = NewUserHome();
         var homeCred = Path.Combine(userHome, ".claude", ".credentials.json");
         WriteFile(homeCred, "{\"token\":\"live\"}");
 
-        var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        var prep = PrepareClaude(userHome);
         Assert.NotNull(prep);
         var home = prep!.TempHome;
 
         prep.Dispose();
 
-        Assert.False(Directory.Exists(home));
+        Assert.True(Directory.Exists(home));
         Assert.True(File.Exists(homeCred));
         Assert.Equal("{\"token\":\"live\"}", File.ReadAllText(homeCred));
     }
@@ -197,7 +199,7 @@ public sealed class CliContextModesTests : IDisposable
         var homeSettings = Path.Combine(userHome, ".claude", "settings.json");
         WriteFile(homeSettings, "{\"a\":1}");
 
-        using var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        using var prep = PrepareClaude(userHome);
         Assert.NotNull(prep);
         _homes.Add(prep!.TempHome);
 
@@ -215,7 +217,7 @@ public sealed class CliContextModesTests : IDisposable
         WriteFile(homeAuth, "{\"key\":\"old\"}");
         WriteFile(Path.Combine(userHome, ".codex", "config.toml"), "model = \"gpt-5-codex\"");
 
-        using var prep = CleanContextPreparer.PrepareCodex(userHome, NullLogger.Instance);
+        using var prep = PrepareCodex(userHome);
         Assert.NotNull(prep);
         _homes.Add(prep!.TempHome);
 
@@ -231,7 +233,7 @@ public sealed class CliContextModesTests : IDisposable
         WriteFile(Path.Combine(userHome, ".codex", "config.toml"), "model = \"gpt-5-codex\"");
         WriteFile(Path.Combine(userHome, ".codex", "history.jsonl"), "history");
 
-        using var prep = CleanContextPreparer.PrepareCodex(userHome, NullLogger.Instance);
+        using var prep = PrepareCodex(userHome);
 
         Assert.NotNull(prep);
         _homes.Add(prep!.TempHome);
@@ -250,7 +252,7 @@ public sealed class CliContextModesTests : IDisposable
         // missing seed is non-fatal and the clean home is still created.
         var userHome = NewUserHome();
 
-        using var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        using var prep = PrepareClaude(userHome);
 
         Assert.NotNull(prep);
         _homes.Add(prep!.TempHome);
@@ -261,20 +263,27 @@ public sealed class CliContextModesTests : IDisposable
     }
 
     [Fact]
-    public void Dispose_TearsDownTheTempHome()
+    public void Dispose_RetainsTheTaskHomeUntilTheRetentionSweep()
     {
         var userHome = NewUserHome();
         WriteFile(Path.Combine(userHome, ".claude", ".credentials.json"), "{}");
-        var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        var prep = PrepareClaude(userHome);
         Assert.NotNull(prep);
         var home = prep!.TempHome;
         Assert.True(Directory.Exists(home));
 
         prep.Dispose();
 
-        Assert.False(Directory.Exists(home));
-        // Idempotent: a second dispose is a no-op, never throws.
+        Assert.True(Directory.Exists(home));
+        // Idempotent release: a second dispose is a no-op, never throws.
         prep.Dispose();
+
+        var cleanup = TaskCleanContextStore.Cleanup(
+            CleanRoot(userHome),
+            DateTimeOffset.UtcNow.AddDays(TaskCleanContextStore.DefaultRetentionDays + 1),
+            TaskCleanContextStore.DefaultRetention);
+        Assert.Equal(1, cleanup.Deleted);
+        Assert.False(Directory.Exists(home));
     }
 
     private string NewUserHome()
@@ -290,4 +299,21 @@ public sealed class CliContextModesTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
     }
+
+    private CleanContextPreparation? PrepareClaude(string userHome)
+        => CleanContextPreparer.PrepareClaude(
+            userHome,
+            $"cli-context-test-{Interlocked.Increment(ref _taskSequence)}",
+            NullLogger.Instance,
+            CleanRoot(userHome));
+
+    private CleanContextPreparation? PrepareCodex(string userHome)
+        => CleanContextPreparer.PrepareCodex(
+            userHome,
+            $"cli-context-test-{Interlocked.Increment(ref _taskSequence)}",
+            NullLogger.Instance,
+            CleanRoot(userHome));
+
+    private static string CleanRoot(string userHome)
+        => Path.Combine(userHome, "clean-context-store");
 }

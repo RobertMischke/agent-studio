@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentStudio.CliHosting;
 using CodingAgentRunner;
 using CodingAgentRunner.Abstractions;
 using CodingAgentRunner.Adapters;
@@ -29,9 +30,9 @@ namespace AgentRunner;
 ///   <item><b>Permission injection</b>: the card's <c>permissionMode</c> becomes a
 ///   CLI flag; absent means YOLO (the zielbild default), where the host config used
 ///   to decide silently.</item>
-///   <item><b>Clean context</b>: the card's <c>contextMode</c> selects an isolated
-///   per-run config home; CAR 0.7.0 links the credential file (CAR-B), so the
-///   host's OAuth refresh writes through instead of being copied stale.</item>
+///   <item><b>Clean context</b>: the card's <c>contextMode</c> selects a stable,
+///   task-isolated config home from the shared host store. The credential file
+///   is linked so the host's OAuth refresh writes through.</item>
 ///   <item><b>Prompt on stdin</b> is preserved via CAR-A
 ///   (<see cref="ClaudePromptTransport.Stdin"/>) — no argv-length or
 ///   <c>/proc/&lt;pid&gt;/cmdline</c> regression.</item>
@@ -59,7 +60,8 @@ internal static class CarWorkerExecution
         DetachedJobSpec spec,
         string workerDirectory,
         Action<string, string> append,
-        Func<CliOptions, CliOptions>? optionsCustomizer = null)
+        Func<CliOptions, CliOptions>? optionsCustomizer = null,
+        string? cleanContextRoot = null)
     {
         var runId = string.IsNullOrWhiteSpace(spec.RunId)
             ? Path.GetFileName(Path.TrimEndingDirectorySeparator(workerDirectory))
@@ -72,6 +74,27 @@ internal static class CarWorkerExecution
         if (optionsCustomizer is not null) options = optionsCustomizer(options);
         var runner = new CliRunner(options, logger, new WorkerRunLogPathProvider(workerDirectory));
         var driver = runner.Get(cliType);
+
+        TaskCleanContextLease? cleanContext = null;
+        if (CliContextModes.Normalize(spec.ContextMode) == CliContextModes.Clean)
+        {
+            try
+            {
+                cleanContext = TaskCleanContextStore.Acquire(
+                    cliType,
+                    string.IsNullOrWhiteSpace(spec.CleanContextKey) ? runId : spec.CleanContextKey!,
+                    rootOverride: cleanContextRoot);
+                append(
+                    "system",
+                    $"[runner] clean-context {(cleanContext.Reused ? "reused" : "seeded")} " +
+                    $"task home '{cleanContext.HomePath}'");
+            }
+            catch (Exception ex)
+            {
+                append("system", $"[runner] stable clean-context acquisition failed: {ex.Message}");
+                return (new ProcessResult(125, string.Empty, ex.Message), false, true);
+            }
+        }
 
         // Same tail budgets as the legacy engine: the terminal sentinel and the
         // final reply arrive last, so a bounded tail keeps classification intact
@@ -120,16 +143,25 @@ internal static class CarWorkerExecution
                 PermissionMode = spec.PermissionMode,
                 // Null normalizes to clean — the second documented jump; safe
                 // since CAR-B links the credential seed instead of copying it.
-                ContextMode = CliContextModes.Normalize(spec.ContextMode),
-                ExtraEnvironment = new Dictionary<string, string>
-                {
-                    ["JOB_RESULTS_DIR"] = spec.ResultsDirectory,
-                },
+                // The host owns a task-stable lease and injects its home. CAR
+                // must not cut a second process-scoped temp home around it.
+                ContextMode = cleanContext is null
+                    ? CliContextModes.Normalize(spec.ContextMode)
+                    : CliContextModes.Shared,
+                ExtraEnvironment = BuildEnvironment(spec.ResultsDirectory, cleanContext),
             };
 
             var (run, error) = await driver.StartAsync(request, CancellationToken.None);
             if (run is null)
             {
+                if (cleanContext is { Reused: false })
+                {
+                    try { cleanContext.Delete(); }
+                    catch (Exception ex)
+                    {
+                        append("system", $"[runner] failed-start clean-context cleanup failed: {ex.Message}");
+                    }
+                }
                 append("system", $"[runner] car engine failed to start {cliType}: {error}");
                 return (new ProcessResult(125, string.Empty, error ?? "CAR start failed"), false, true);
             }
@@ -166,8 +198,32 @@ internal static class CarWorkerExecution
             driver.OnOutput -= OnOutput;
             driver.OnRunEvent -= OnRunEvent;
             driver.OnFinished -= OnFinished;
-            driver.Forget(runId);
+            try { driver.Forget(runId); }
+            finally
+            {
+                try { cleanContext?.Dispose(); }
+                catch (Exception ex)
+                {
+                    append("system", $"[runner] clean-context last-use update failed: {ex.Message}");
+                }
+            }
         }
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildEnvironment(
+        string resultsDirectory,
+        TaskCleanContextLease? cleanContext)
+    {
+        var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["JOB_RESULTS_DIR"] = resultsDirectory,
+        };
+        if (cleanContext is not null)
+        {
+            foreach (var pair in cleanContext.Environment)
+                environment[pair.Key] = pair.Value;
+        }
+        return environment;
     }
 
     /// <summary>The production CAR options for one worker spec.</summary>
