@@ -77,6 +77,7 @@
                 [cacTooltip]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>
           <app-execution-location-badge [execution]="info().executionLocation" />
         </div>
+        <app-remote-dispatch-rejection [execution]="info().executionLocation" />
       }
     </div>
   </div>

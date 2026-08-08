@@ -30,14 +30,28 @@ public static class ClientEndpoints
             }
         });
 
-        clients.MapGet("/", (ClientIdentityStore store, AgentStudio.Pipeline.RemoteGateActivityStore gateActivity) =>
+        clients.MapGet("/", (
+            ClientIdentityStore store,
+            AgentStudio.Pipeline.RemoteGateActivityStore gateActivity,
+            ProjectRegistry registry,
+            ProjectSettingsService projectSettings) =>
         {
+            var projects = registry.List();
+            var now = DateTime.UtcNow;
             var summaries = store.ListAll().Select(record =>
             {
+                var summary = ClientSummary.From(record) with
+                {
+                    RunnerProjectPreflights = RemoteProjectClaimabilityPolicy.ProjectForRunner(
+                        record,
+                        projects,
+                        projectSettings,
+                        now),
+                };
                 if (record.RunnerDaemonState is null && record.RunnerGitStatus is null)
-                    return ClientSummary.From(record);
+                    return summary;
                 var gates = gateActivity.ForRunner(record.Id);
-                return ClientSummary.From(record) with
+                return summary with
                 {
                     RunnerActiveGateCount = gates.Active,
                     RunnerGateCapacity = gates.Capacity,

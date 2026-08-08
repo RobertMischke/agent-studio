@@ -2166,6 +2166,15 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
 
+        // The registry invariant is visible in Remote Hosts before the Runner
+        // ever polls. Operators do not need a failed claim to discover the
+        // missing repository registration.
+        var beforeClaim = await http.GetFromJsonAsync<List<ClientSummary>>("/api/clients");
+        var registeredHost = Assert.Single(beforeClaim!, identity => identity.Id == client.ClientId);
+        var registryWarning = Assert.Single(registeredHost.RunnerProjectPreflights);
+        Assert.Equal("failed", registryWarning.Status);
+        Assert.Contains("repositoryUrl is missing", registryWarning.Detail, StringComparison.Ordinal);
+
         var claim = await client.ClaimAsync(new RClaim(
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
 
@@ -2181,6 +2190,15 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("failed", projectFailure.Status);
         Assert.Equal("develop", projectFailure.TargetBranch);
         Assert.Contains("repository URL is not configured", projectFailure.Detail, StringComparison.OrdinalIgnoreCase);
+
+        using var grouped = await http.GetAsync("/api/tasks/grouped");
+        grouped.EnsureSuccessStatusCode();
+        using var groupedJson = JsonDocument.Parse(await grouped.Content.ReadAsStringAsync());
+        var card = Assert.Single(groupedJson.RootElement.GetProperty("ready").EnumerateArray());
+        var rejection = card.GetProperty("executionLocation").GetProperty("lastRejection");
+        Assert.Equal("repository-url-missing", rejection.GetProperty("code").GetString());
+        Assert.Equal(RunnerId, rejection.GetProperty("runnerId").GetString());
+        Assert.Equal("project has no repositoryUrl", rejection.GetProperty("reason").GetString());
     }
 
     [Fact]

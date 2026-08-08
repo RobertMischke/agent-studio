@@ -522,6 +522,14 @@ export type TaskExecutionState =
   | 'recovering'
   | 'no-active-execution';
 
+export interface RemoteDispatchRejection {
+  code: string;
+  runnerId: string;
+  runnerName: string;
+  reason: string;
+  rejectedAtUtc: string;
+}
+
 export interface TaskExecutionLocation {
   state: TaskExecutionState;
   executionKind: 'local' | 'remote' | 'none';
@@ -540,6 +548,8 @@ export interface TaskExecutionLocation {
   leaseState: string;
   trustReason: string;
   historical?: boolean;
+  /** Latest remote Runner refusal during the task's current Ready-lane stay. */
+  lastRejection?: RemoteDispatchRejection | null;
 }
 
 /**

@@ -438,6 +438,14 @@ Settled session events preserve the same projection as historical run evidence.
 Historical entries never reuse disconnected warning treatment. See the
 [execution location schema](../schemas/task-execution-location.schema.json).
 
+For a Ready card offered to a remote Runner, `executionLocation.lastRejection`
+contains the latest refusal for the current lane stay. It names the Runner and
+preserves the admission reason, including missing `repositoryUrl`, capability
+mismatch, failed project delivery preflight, and dispatch preparation failure.
+The board and task detail render the complete reason inline. The durable field
+is removed after dispatch succeeds; lane-entry timestamps prevent an older
+refusal from leaking into a later Ready generation.
+
 ## Outcome issue presentation contract
 
 Task reads derive `TaskInfo.outcomeIssue` from typed runner markers in

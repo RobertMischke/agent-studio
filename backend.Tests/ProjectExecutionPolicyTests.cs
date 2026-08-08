@@ -66,4 +66,23 @@ public sealed class ProjectExecutionPolicyTests
         Assert.Equal("runner-01", migrated.ExecutionLocation);
         Assert.Equal("runner-01", migrated.ExecutionRunner);
     }
+
+    [Theory]
+    [InlineData("local", false)]
+    [InlineData("runner-01", true)]
+    public void RemoteClaimability_MissingRepositoryUrlWarnsOnlyForRemotePlacement(
+        string executionLocation,
+        bool expectedWarning)
+    {
+        var project = new ProjectRecord { Id = "PROJ-001", DisplayName = "demo" };
+        var settings = new ProjectSettings
+        {
+            PickupMode = PickupModes.Auto,
+            ExecutionLocation = executionLocation,
+        };
+
+        Assert.Equal(
+            expectedWarning,
+            RemoteProjectClaimabilityPolicy.IsMissingRepositoryUrl(project, settings));
+    }
 }

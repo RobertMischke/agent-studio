@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentStudio.Shared;
 
 public record TaskInfo
@@ -442,6 +444,16 @@ public record TaskInfo
     public TaskExecutionLocation? ExecutionLocation { get; init; }
 
     /// <summary>
+    /// Last runner-side refusal recorded while this task was offered in its
+    /// current Ready-lane stay. The durable source is
+    /// <c>task.json.remoteDispatchRejection</c>; this scanner-only member is
+    /// folded into <see cref="TaskExecutionLocation.LastRejection"/> and is not
+    /// duplicated at the API root.
+    /// </summary>
+    [JsonIgnore]
+    public RemoteDispatchRejection? RemoteDispatchRejection { get; init; }
+
+    /// <summary>
     /// AGT-2069 — read-time spawn-visibility + spawn-contract projection for a
     /// planning task (<c>Mode == planning</c>): which follow-up cards it spawned
     /// (AGT-2028 ledger), whether the operator declared "no follow-up intended",
@@ -558,6 +570,26 @@ public record TaskExecutionLocation
     public string LeaseState { get; init; } = "none";
     public string TrustReason { get; init; } = "No active runtime process or fenced run lease is present.";
     public bool Historical { get; init; }
+    /// <summary>
+    /// Most recent runner refusal for the current Ready-lane stay. Null for
+    /// active, local, historical, and later lane generations.
+    /// </summary>
+    public RemoteDispatchRejection? LastRejection { get; init; }
+}
+
+/// <summary>Durable reason why a remote runner did not claim an offered task.</summary>
+public sealed record RemoteDispatchRejection
+{
+    [JsonPropertyName("code")]
+    public string Code { get; init; } = "remote-dispatch-rejected";
+    [JsonPropertyName("runnerId")]
+    public string RunnerId { get; init; } = "";
+    [JsonPropertyName("runnerName")]
+    public string RunnerName { get; init; } = "";
+    [JsonPropertyName("reason")]
+    public string Reason { get; init; } = "Remote dispatch was rejected without a diagnostic.";
+    [JsonPropertyName("rejectedAtUtc")]
+    public DateTime RejectedAtUtc { get; init; }
 }
 
 /// <summary>

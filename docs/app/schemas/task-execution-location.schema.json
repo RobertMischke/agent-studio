@@ -26,7 +26,25 @@
     "connectionState": { "type": "string", "description": "Connected, disconnected, queued, recovering, historical, or none." },
     "leaseState": { "type": "string", "description": "Active, expired, released, local-process, or none." },
     "trustReason": { "type": "string", "minLength": 1, "description": "Explanation of which authoritative runtime fact supports the projection." },
-    "historical": { "type": "boolean", "description": "True for captured settled run attribution, which must render quietly." }
+    "historical": { "type": "boolean", "description": "True for captured settled run attribution, which must render quietly." },
+    "lastRejection": {
+      "description": "Latest remote Runner refusal recorded during the task's current Ready-lane stay. Null when no current refusal exists.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["code", "runnerId", "runnerName", "reason", "rejectedAtUtc"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "runnerId": { "type": "string", "minLength": 1 },
+            "runnerName": { "type": "string", "minLength": 1 },
+            "reason": { "type": "string", "minLength": 1 },
+            "rejectedAtUtc": { "type": "string", "format": "date-time" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
   },
   "additionalProperties": false
 }

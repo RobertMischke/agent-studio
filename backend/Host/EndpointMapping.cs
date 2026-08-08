@@ -39,6 +39,7 @@ public static class EndpointMapping
         app.MapCompletedLaneAuditEndpoints();
         app.MapParkedCardEndpoints();
         app.MapRunnerEndpoints();
+        app.MapRemoteQueueStarvationEndpoints();
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();
