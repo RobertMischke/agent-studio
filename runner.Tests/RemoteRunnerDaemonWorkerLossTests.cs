@@ -9,7 +9,6 @@ using Xunit;
 namespace AgentRunner.Tests;
 
 [Trait("Category", "MachineBound")]
-[Trait("Category", "ReviewFlaky")]
 public sealed class RemoteRunnerDaemonWorkerLossTests : IDisposable
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -18,6 +17,7 @@ public sealed class RemoteRunnerDaemonWorkerLossTests : IDisposable
         $"daemon-worker-loss-{Guid.NewGuid():N}");
 
     [Fact]
+    [Trait("Category", "ReviewFlaky")]
     public async Task Hard_killed_worker_is_released_and_the_same_daemon_polls_again()
     {
         var origin = Path.Combine(_root, "origin.git");
