@@ -196,6 +196,8 @@ function toolEvent(block: TranscriptBlock, source: string): ToolBurstEvent {
   const result = resultLine ? TOOL_RESULT.exec(resultLine)?.groups?.['status'].toLowerCase() : null;
   const failed = result === 'failed';
   const family = toolFamily(block.header);
+  const files = toolFilePaths(block.header, commandLine, content.map(({ line }) => line.text));
+  const sample = family === 'edit' && files.length > 0 ? files[0] : commandLine;
   const command: ToolCommandExecution = {
     command: commandLine,
     status: failed ? 'failed' : result === 'succeeded' ? 'completed' : 'unknown',
@@ -214,11 +216,26 @@ function toolEvent(block: TranscriptBlock, source: string): ToolBurstEvent {
     families: { [family]: 1 },
     failures: failed ? 1 : 0,
     durationMs: durationMs(content),
-    samples: { [family]: commandLine },
+    samples: { [family]: sample },
     commands: [command],
-    files: markupFile ? [markupFile] : undefined,
+    files: files.length > 0 ? files : markupFile ? [markupFile] : undefined,
     collapsedByDefault: true,
   };
+}
+
+function toolFilePaths(header: string, commandLine: string, lines: readonly string[]): string[] {
+  if (header !== 'apply_patch') return [];
+  const files: string[] = [];
+  const seen = new Set<string>();
+  const target = /^\*\*\*\s+(?:Add|Update|Delete)\s+File:\s*(?<path>.+?)\s*$/i;
+  const moveTarget = /^\*\*\*\s+Move to:\s*(?<path>.+?)\s*$/i;
+  for (const line of [commandLine, ...lines]) {
+    const path = (target.exec(line) ?? moveTarget.exec(line))?.groups?.['path']?.trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    files.push(path);
+  }
+  return files;
 }
 
 function agentEvents(block: TranscriptBlock, source: string): ConversationEvent[] {
