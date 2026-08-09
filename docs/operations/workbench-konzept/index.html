@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workbenches: Name, Muster, App-Werdung | Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00; --accent: #2a78d6;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f; --accent: #3987e5;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 17px/1.75 Georgia, "Times New Roman", serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 48px 0 28px; margin-bottom: 12px; }
+  .kicker { font: 600 13px/1 system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; }
+  h1 { font-size: 38px; line-height: 1.15; margin: 0 0 14px; letter-spacing: -0.01em; }
+  .lede { font-size: 20px; line-height: 1.6; color: var(--ink-2); margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px; font: 13px/1 system-ui, sans-serif; color: var(--ink-3); }
+  h2 { font: 700 26px/1.25 system-ui, "Segoe UI", sans-serif; margin: 56px 0 10px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font: 700 19px/1.3 system-ui, sans-serif; margin: 34px 0 6px; }
+  p { margin: 0 0 18px; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 22px 0; font: 15.5px/1.65 system-ui, sans-serif; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p { margin-bottom: 10px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  code { font: 14px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  ul, ol { padding-left: 24px; margin: 0 0 18px; }
+  li { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; font: 14.5px/1.5 system-ui, sans-serif; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  /* Full-bleed breakout: Figuren duerfen das Lesemass sprengen — genau der vorgeschlagene Mechanismus. */
+  .breakout { width: min(1080px, calc(100vw - 48px)); margin-left: 50%; transform: translateX(-50%); }
+  figure { margin: 30px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font: 13.5px/1.5 system-ui, sans-serif; color: var(--ink-2); margin-top: 10px; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-label { fill: var(--ink-1); font: 600 14px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+  .badge-accent { fill: var(--accent-soft); stroke: var(--accent); }
+  .badge-ok { fill: var(--ok-soft); stroke: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Workbench · Meta</p>
+  <h1>Workbenches: Name, Muster, App-Werdung</h1>
+  <p class="lede">Der Operator hält das Arbeitsmuster für fast ideal — Analyse reift zu Entscheidungen, Entscheidungen zu Tasks. Was stört: der Name, die Nav-Einbindung, die statische Natur. Dieses Dokument ordnet den Bestand und legt die Entscheidungen vor. Es demonstriert dabei selbst den vorgeschlagenen Artikel-Stil.</p>
+  <div class="meta">
+    <span><b>Datum</b> 2026-08-09</span>
+    <span><b>Status</b> decision-pending · shaping</span>
+  </div>
+</header>
+
+<h2><span class="no">01</span>These</h2>
+<p>Die Workbench ist die <b>Vorstufe zum Task</b>. Hier wird analysiert, verglichen und entschieden; erst danach entstehen Karten. Dass sie im Wiki liegt (versioniert, verlinkbar, ohne Studio lesbar), ist richtig und bleibt. Was fehlt, ist die App-Schicht darüber: Entscheidungen erfassen (kommt mit AGT-2520), Status halten, die entstandenen Tasks live zeigen, Inhalte aktuell halten.</p>
+<p>Die Praxis bestätigt das Muster: Allein am 08./09.08. entstanden vier Entscheidungs-Workbenches (Navigation, Task-Kopf, Badge-Kontrast, Protokoll-Verdichtung), jede mit vorbereiteter Backlog-Karte — der Fluss <i>Analyse → Entscheidung → Karte</i> funktioniert, aber jeder Schritt ist heute Handarbeit.</p>
+
+<h2><span class="no">02</span>Bestand (nüchtern)</h2>
+<ul>
+  <li><b>Discovery:</b> Ordner mit <code>workbench.json</code> irgendwo unter <code>docs/</code> des Projekt-Repos; Schema v1 (<code>id, title, summary, entrypoint, status, phase, updatedAt, sourceTaskKeys, relatedTaskKeys</code>).</li>
+  <li><b>Lifecycle:</b> status <code>active | decision-pending | decided | archived</code>; phase <code>shaping | testing | decision-ready</code> (andere Werte ⇒ invalid). Liste zeigt nur active/decision-pending, Rest unter History.</li>
+  <li><b>Entscheidung:</b> bisher Sichtblick-Formular; wird durch Inline-Entscheidungen im Dokument ersetzt (AGT-2520: Checkboxen + Freitext, „Prepare feature card" vorbefüllt).</li>
+  <li><b>Bekannte Reibungen:</b> Nav-Einbindung unbeholfen, aktive Workbench nicht hervorgehoben (AGT-2509); Archiv-Knopf schreibt am Sichtbarkeitsfeld vorbei (AGT-2375-Kontext); relatedTaskKeys sind tote Strings ohne Live-Zustand; Inhalte sind Momentaufnahmen und veralten still.</li>
+</ul>
+
+<h2><span class="no">03</span>Der Name</h2>
+<p>„Workbench" beschreibt das Werkzeug, nicht den Zweck — und kollidiert im Sprachgefühl mit Werkstatt-Metaphern, die sonst nirgends im Produkt vorkommen. Kandidaten, an der Funktion gemessen (Vorstufe zum Task, Ort der Entscheidung):</p>
+<table>
+  <thead><tr><th>Kandidat</th><th>Dafür</th><th>Dagegen</th></tr></thead>
+  <tbody>
+    <tr><td><b>Concepts / Konzepte</b></td><td>deckt beide Muster (Mockup + Text); nüchternes Substantiv; passt zur bestehenden concepts/-Ablage</td><td>klingt nach Endzustand, nicht nach lebendem Prozess</td></tr>
+    <tr><td><b>Briefs</b></td><td>kurz; impliziert Auftrag-Werdung</td><td>anglizistisch mehrdeutig (Brief/Briefing); im Deutschen schief</td></tr>
+    <tr><td><b>Studies / Studien</b></td><td>betont Analyse-Charakter</td><td>verfehlt den Entscheidungs-/Task-Zweck</td></tr>
+    <tr><td><b>Workbench (behalten)</b></td><td>eingeführt, im Code überall; Umbenennung kostet</td><td>der Operator ist unsicher; beschreibt Werkzeug statt Zweck</td></tr>
+  </tbody>
+</table>
+<div class="box accent">
+  <p><b>Empfehlung: „Concepts" / „Konzepte".</b> Funktionstreu genug, nüchtern, ohne Kunstbegriff. Wichtig: NICHT „Decisions" — AGT-2520 benennt gerade die Entscheidungs-<i>Punkte</i> im Dokument so; zwei Ebenen mit demselben Wort wären schlimmer als der heutige Zustand. Umbenennung nur an der UI-Oberfläche + Doku; Code-Bezeichner (<code>workbench.json</code>, Services) bleiben — ein Datei-Format umzubenennen kauft nichts.</p>
+</div>
+
+<h2><span class="no">04</span>Zwei Muster als erste Klasse</h2>
+<p>Aus der Praxis kristallisieren sich zwei Typen, die unterschiedliche Darstellung und Werkzeuge brauchen:</p>
+<table>
+  <thead><tr><th></th><th>ui-heavy</th><th>concept-heavy</th></tr></thead>
+  <tbody>
+    <tr><td><b>Primärinhalt</b></td><td>Mockups, Screenshots, Varianten-Bilder</td><td>Text, Tabellen, SVG-Diagramme</td></tr>
+    <tr><td><b>Beispiele</b></td><td>Deck-Icon-Exploration, Task-Kopf-Layout</td><td>Härtung verteilte Ausführung, Nav-Konsistenz</td></tr>
+    <tr><td><b>Braucht</b></td><td>Full-Bleed-Bilder, Varianten-Vergleich nebeneinander, Bild-Zoom</td><td>Lesemaß, Beleg-Links, Evidenz-Klassen</td></tr>
+  </tbody>
+</table>
+<p>Vorschlag: ein <code>pattern</code>-Feld (<code>ui | concept</code>) im Descriptor. Es steuert Listen-Icon und Template-Variante — mehr nicht. Keine zwei getrennten Systeme.</p>
+
+<h2><span class="no">05</span>Visuelles Ziel: Artikel-Stil</h2>
+<p>Beide Muster teilen den Medium-Artikel-Rahmen: ein Lesemaß um 70 Zeichen, ruhige Serifen-Grundschrift, großzügiger Weißraum, Systemschrift für Struktur-Elemente. Dieses Dokument ist in genau diesem Rahmen gesetzt. Mockups und breite Diagramme brechen das Maß gezielt auf — so:</p>
+
+<figure class="breakout">
+<svg viewBox="0 0 1080 240" role="img" aria-label="Lebenszyklus">
+  <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="context-stroke"/></marker></defs>
+  <rect x="20" y="60" width="200" height="80" rx="10" class="s-node" stroke-width="1.4"/>
+  <text x="50" y="95" class="s-label">Analyse</text>
+  <text x="50" y="117" class="s-sub">Kartierung, Belege, Varianten</text>
+  <rect x="290" y="60" width="200" height="80" rx="10" class="badge-accent" stroke-width="1.4"/>
+  <text x="320" y="95" class="s-label">Entscheidung</text>
+  <text x="320" y="117" class="s-sub">inline im Dokument (AGT-2520)</text>
+  <rect x="560" y="60" width="200" height="80" rx="10" class="s-node" stroke-width="1.4"/>
+  <text x="590" y="95" class="s-label">Karten</text>
+  <text x="590" y="117" class="s-sub">vorbefüllt aus Entscheidungen</text>
+  <rect x="830" y="60" width="230" height="80" rx="10" class="badge-ok" stroke-width="1.4"/>
+  <text x="860" y="95" class="s-label">Live-Verfolgung</text>
+  <text x="860" y="117" class="s-sub">Karten-Zustände im Dokument</text>
+  <path d="M220 100 H286" class="s-flow"/>
+  <path d="M490 100 H556" class="s-flow"/>
+  <path d="M760 100 H826" class="s-flow"/>
+  <path d="M945 140 C 945 200, 420 210, 395 144" class="s-flow" stroke-dasharray="4 5"/>
+  <text x="560" y="196" class="s-sub">Ergebnisse fließen zurück: das Dokument bleibt aktuell</text>
+</svg>
+<figcaption><b>Abb. 1</b> — Ziel-Lebenszyklus: Die Workbench begleitet die Arbeit statt sie nur vorzubereiten. Diese Figur bricht als Full-Bleed das Lesemaß — der vorgeschlagene Mechanismus für Mockups.</figcaption>
+</figure>
+
+<h2><span class="no">06</span>Mehr App: Status, Task-Tracking, Kontinuität</h2>
+<ol>
+  <li><b>Live-Task-Block (Host-gerendert):</b> Der Viewer rendert oberhalb des Dokuments die <code>relatedTaskKeys</code> als lebende Zeile — Key, Lane, Integrations-Zustand, direkt verlinkt. Kein Inhalt im HTML dupliziert; das Dokument bleibt statisch lesbar, die App-Schicht kommt vom Studio. Billigster erster Schritt mit dem größten Effekt.</li>
+  <li><b>Status halten:</b> Entscheidungs-Stände aus AGT-2520 (angekreuzt/offen, von wem, wann) erscheinen im selben Kopf-Block; „decided" wird ableitbar statt handgepflegt.</li>
+  <li><b>Kontinuierliche Aktualisierung:</b> Zwei Mechanismen, klar getrennt: (a) <i>Live-Daten</i> (Karten-Zustände, Zähler) rendert der Host bei jedem Öffnen frisch — nie stale. (b) <i>Inhaltliche</i> Aktualisierung (neue Befunde, erledigte Abschnitte) bleibt ein Schreib-Akt: eine kleine „Refresh"-Aktion, die eine vorbefüllte Update-Karte erzeugt (Agent aktualisiert das Dokument gegen die Realität). Kein stiller Selbst-Umbau von Dokumenten.</li>
+  <li><b>Interaktivität:</b> Fundament ist AGT-2520 (Checkboxen + Freitext). Darauf: Varianten-Bilder als umschaltbare Vergleiche (ui-heavy), einklappbare Beleg-Blöcke (concept-heavy). Alles progressive enhancement — ohne Studio bleibt es ein lesbarer Artikel.</li>
+</ol>
+
+<h2><span class="no">07</span>Nav-Einbindung</h2>
+<p>Heute: Unterpunkt je Projekt, ohne Hervorhebung, ohne Zustand (AGT-2509 fixt Hervorhebung + Expansion). Darüber hinaus: Der Listen-Eintrag trägt künftig Pattern-Icon, Status-Punkt und — bei decision-pending — die Zahl offener Entscheidungen („Nav-Konsistenz · 4 offen"). Damit wird die Nav vom Ablageort zur Arbeitsliste.</p>
+
+<h2><span class="no">08</span>Entscheidungen</h2>
+<ul>
+  <li>Name: Concepts/Konzepte (Empfehlung) — oder Workbench behalten / anderer Kandidat?</li>
+  <li><code>pattern</code>-Feld (ui | concept) mit Template-Varianten: GO?</li>
+  <li>Artikel-Stil als kanonisches Template v2 (dieses Dokument als Referenz): GO?</li>
+  <li>Live-Task-Block + Entscheidungs-Stand im Viewer-Kopf: GO?</li>
+  <li>Refresh-Mechanik als vorbefüllte Update-Karte (kein stiller Selbst-Umbau): GO?</li>
+</ul>
+
+<h2><span class="no">09</span>Slice-Plan (nach GO)</h2>
+<ol>
+  <li><b>Slice 1 — Viewer-Kopf:</b> Live-Task-Block + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
+  <li><b>Slice 2 — Template v2:</b> kanonisches Artikel-Stylesheet + Autoren-Doku + <code>pattern</code>-Feld; bestehende aktive Workbenches migrieren nur bei Anfassen.</li>
+  <li><b>Slice 3 — Refresh-Karte:</b> „Aktualisieren"-Aktion erzeugt vorbefüllte Update-Karte mit Dokument-Kontext.</li>
+  <li><b>Slice 4 — Umbenennung</b> (falls entschieden): UI-Oberfläche + Doku, Code-Bezeichner bleiben.</li>
+</ol>
+
+<p class="dim">Quellen: Workbench-Machinerie-Kartierungen vom 08.08. (Catalogue/Decision-Service, Nav-Feedback), Operator-Aussagen 08./09.08. Der Operator-Satz „Bisher mache ich …" brach ab — Ergänzungen fließen in die nächste Fassung.</p>
+
+</main>
+</body>
+</html>

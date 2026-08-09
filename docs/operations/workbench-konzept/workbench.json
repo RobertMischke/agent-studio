@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "workbench-konzept",
+  "title": "Workbenches: Name, Muster, App-Werdung",
+  "summary": "Meta-Workbench zum Workbench-Konzept selbst (Operator-Auftrag 09.08.). Bestandsaufnahme des heutigen Mechanismus (Discovery, Lifecycle, Nav, Decision-Flow), These: Workbench = Vorstufe zum Task und fast der ideale Arbeitsweg. Entscheidungsfelder: Name (Workbench unsicher; 4 Kandidaten mit AGT-2520-Kollisionsnotiz), Nav-Einbindung (heute unbeholfen; Vorschlag eigener Bereich mit Live-Status), zwei Muster als erste Klasse (ui-heavy Mockups vs concept-heavy Text+Diagramme), visuelles Ziel Medium-Artikel-Stil mit Full-Bleed-Mockups (dieses Dokument demonstriert ihn), Mehr-App: Live-Task-Tracking der relatedTaskKeys, kontinuierliche Aktualisierung, Interaktivität auf AGT-2520-Basis. Mit Slice-Plan für die Umsetzungskarten nach GO.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "shaping",
+  "updatedAt": "2026-08-09T02:00:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": ["AGT-2520", "AGT-2509", "AGT-2375"]
+}
