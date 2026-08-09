@@ -196,7 +196,7 @@ Each CLI has a `QuotaProbeBase` subclass under `backend/Features/Cli/Quota/`. Cl
 - **Studio runtime output mirror:** `<TaskRepository>/.runtime/cli-output/<cliType>-<jobKey>/<stream>.jsonl`
 - **Temporary CAR log mirror:** `<TaskRepository>/.runtime/car-cli-output/...` (deleted when the CAR-backed run finishes)
 - **Active jobs (for orphan reaper):** `<TaskRepository>/.runtime/active-jobs-<cliType>.json`
-- **Task-stable clean home:** a temporary directory referenced by `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, retained across attempts while the task execution state is alive
+- **Task-stable clean home:** a marker-validated directory referenced by `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, stored under the platform state root and retained across attempts and host restarts until bounded inactivity cleanup
 - **Session indexes (each CLI's own store):**
   - Claude: `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`
   - Codex: `~/.codex/session_index.jsonl` + `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`

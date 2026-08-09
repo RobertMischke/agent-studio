@@ -36,7 +36,8 @@ internal sealed record DetachedJobSpec(
     // this covers the file contract for any tooling that re-reads a spec).
     string? Engine = null,
     string? RunId = null,
-    string? ResumeSessionId = null);
+    string? ResumeSessionId = null,
+    string? CleanContextKey = null);
 
 internal sealed record DetachedJobLogLine(long Sequence, DateTime Timestamp, string Stream, string Text);
 
@@ -93,11 +94,21 @@ internal sealed class DurableAgentProcess
         IReadOnlyList<string>? argsOverride = null,
         RunSpecDto? runSpec = null,
         string? runId = null,
-        string? resumeSessionId = null)
+        string? resumeSessionId = null,
+        string? cleanContextKey = null)
     {
         Directory.CreateDirectory(workerDirectory);
         var specPath = Path.Combine(workerDirectory, "spec.json");
-        var spec = BuildSpec(options, repoPath, prompt, resultsDirectory, argsOverride, runSpec, runId, resumeSessionId);
+        var spec = BuildSpec(
+            options,
+            repoPath,
+            prompt,
+            resultsDirectory,
+            argsOverride,
+            runSpec,
+            runId,
+            resumeSessionId,
+            cleanContextKey);
         File.WriteAllText(specPath, JsonSerializer.Serialize(spec, Json));
 
         var executable = Environment.ProcessPath
@@ -143,7 +154,8 @@ internal sealed class DurableAgentProcess
         IReadOnlyList<string>? argsOverride = null,
         RunSpecDto? runSpec = null,
         string? runId = null,
-        string? resumeSessionId = null)
+        string? resumeSessionId = null,
+        string? cleanContextKey = null)
     {
         // One resolution truth for both engines: which CLI runs (card wish vs.
         // host binaries, foreign-CLI fallback drops the model pins) comes from
@@ -165,7 +177,8 @@ internal sealed class DurableAgentProcess
             runSpec?.ContextMode,
             Engine: options.ExecEngine,
             RunId: runId,
-            ResumeSessionId: resumeSessionId);
+            ResumeSessionId: resumeSessionId,
+            CleanContextKey: cleanContextKey);
     }
 
     /// <summary>Read a worker specification back, including one written before the T0b fields existed.</summary>

@@ -47,6 +47,12 @@ state.
   telemetry.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
+- `cli-hosting/TaskCleanContextStore.cs`,
+  `backend/Features/Cli/Execution/CleanContextPreparation.cs`, and
+  `runner/CarWorkerExecution.cs`: the shared local/remote clean-home path,
+  task marker, seed, restart adoption, CAR environment bridge, and bounded
+  retention contract. Continue planning resolves this stable home before Codex
+  rollout viability is checked.
 - `backend/Features/Runner/PromptEnrichmentService.cs`,
   `backend/Features/Tasks/LeaseEndpoints.cs`, and
   `runner/RemoteRunPrompt.cs`: shared pre-spawn prompt materialization. Local
