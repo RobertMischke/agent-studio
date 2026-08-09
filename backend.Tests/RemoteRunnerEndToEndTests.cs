@@ -2354,7 +2354,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         int? remoteRequeueGraceSeconds = null,
         string? additionalProjectName = null,
         string? additionalWatchPath = null,
-        ICliOneShot? summaryOneShot = null) =>
+        ICliOneShot? summaryOneShot = null,
+        string? repositoryPath = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -2366,8 +2367,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         ["TaskRepository"] = _workspace,
                         ["WatchPaths:0:Name"] = ProjectName,
                         ["WatchPaths:0:Path"] = _watchPath,
-                        ["WatchPaths:0:RootPath"] = _watchPath,
-                        ["WatchPaths:0:RepositoryPath"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = repositoryPath ?? _watchPath,
+                        ["WatchPaths:0:RepositoryPath"] = repositoryPath ?? _watchPath,
                         ["ReviewDecisionOrchestrator:Enabled"] = "false",
                         ["Runner:RemoteRequeue:GraceSeconds"] =
                             remoteRequeueGraceSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -3474,6 +3475,129 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             ct);
         Assert.Equal(resultSha, handoff!.Envelope.ResultSha);
         Assert.Equal(lease.Lease.AttemptId, handoff.Envelope.SourceRunAttemptId);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task Monolith_v1_green_remote_delivery_integrates_before_human_review()
+    {
+        const string reviewRunnerId = "review-runner-immediate-integration";
+        const string reviewInstance = "review-host:immediate-integration";
+        var origin = await SeedOriginAsync();
+        await GitAsync(origin, "branch", "develop", "main");
+        var repository = Path.Combine(_workspace, "integration-repository");
+        await GitAsync(_workspace, "clone", origin, repository);
+        await GitAsync(repository, "config", "user.name", "Remote Integration Test");
+        await GitAsync(repository, "config", "user.email", "remote-integration@example.invalid");
+        await GitAsync(repository, "checkout", "-b", "delivery-work", "origin/develop");
+        var baseSha = (await GitAsync(repository, "rev-parse", "origin/develop")).StdOut.Trim();
+        await File.WriteAllTextAsync(
+            Path.Combine(repository, "remote-immediate.txt"),
+            "remote delivery\n");
+        await GitAsync(repository, "add", "remote-immediate.txt");
+        await GitAsync(repository, "commit", "-m", "feat: remote immediate delivery");
+        var resultSha = (await GitAsync(repository, "rev-parse", "HEAD")).StdOut.Trim();
+        SeedTask(
+            TaskStates.Progress,
+            TaskKey,
+            "Immediate Remote integration",
+            "Deliver and integrate before Human Review.");
+
+        using var factory = BuildFactory(repositoryPath: repository);
+        using var http = factory.CreateClient();
+        var scanner = factory.Services.GetRequiredService<TaskScannerService>();
+        var seededTask = scanner.FindJob(TaskKey, _watchPath)!;
+        var canonicalTaskKey = seededTask.Key ?? seededTask.TaskKey;
+        factory.Services.GetRequiredService<ProjectSettingsService>()
+            .SetIntegrationBranch(ProjectName, "develop");
+        using var coding = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await coding.RegisterAsync(ProjectName, "service", ct);
+        var lease = await coding.AcquireLeaseAsync(
+            new RAcquire(canonicalTaskKey, RunnerId, ProjectName, "coding-host", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        var immutableRef = Contract.FencedGitRefs.ImmutableResult(
+            lease.Lease!.AttemptId!,
+            lease.Lease.FencingToken,
+            resultSha);
+        await GitAsync(repository, "push", "origin", $"HEAD:{immutableRef}");
+        await GitAsync(repository, "checkout", "main");
+
+        var completion = await coding.CompleteRunAsync(new RRemoteComplete(
+            canonicalTaskKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            ResultSha: resultSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            Repository: origin,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "immediate-integration-completion",
+            BaseSha: baseSha,
+            ImmutableResultRef: immutableRef,
+            ArtifactManifestDigest: new string('a', 64),
+            IntegrationBranch: "refs/heads/develop"), ct);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+
+        await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
+        using var reviewClient = new RClient(
+            http,
+            reviewRunnerId,
+            usesDurableTaskServer: true);
+        var claim = await reviewClient.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
+            ct);
+        Assert.Equal("claimed", claim.Status);
+        var reportRequest = PassingV1ReviewReport(claim, "immediate-integration-review") with
+        {
+            Summary = "All applicable Remote gates passed; build/test is not applicable.",
+            Verdicts =
+            [
+                new Contract.ReviewVerdictDto(
+                    "completion",
+                    "pass",
+                    "Verified",
+                    "The immutable delivery is complete."),
+            ],
+        };
+
+        var report = await reviewClient.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            reportRequest,
+            ct);
+        Assert.Equal(TaskStates.HumanReview, report.TaskState);
+        var reviewed = scanner.FindJob(canonicalTaskKey, _watchPath)!;
+        var ancestry = await GitAsync(
+            repository,
+            ["merge-base", "--is-ancestor", resultSha, "develop"],
+            allowFailure: true);
+        var branches = await GitAsync(repository, "branch", "--all", "--verbose");
+        Assert.True(
+            ancestry.ExitCode == 0,
+            $"Delivery did not reach develop: {ancestry.StdErr}\n{branches.StdOut}\n" +
+            (File.Exists(Path.Combine(reviewed.FolderPath, PipelineExecutionLog.FileName))
+                ? File.ReadAllText(Path.Combine(reviewed.FolderPath, PipelineExecutionLog.FileName))
+                : "no pipeline record"));
+
+        Assert.Equal(TaskStates.HumanReview, reviewed.State);
+        var integration = Assert.Single(
+            factory.Services.GetRequiredService<TaskIntegrationStatusService>()
+                .BuildLookup([reviewed]).Values);
+        Assert.Equal(IntegrationStatuses.Integrated, integration.Status);
+
+        var timeline = factory.Services.GetRequiredService<TimelineLog>()
+            .ReadAll(reviewed.FolderPath)
+            .ToList();
+        var integratedAt = timeline.FindIndex(item =>
+            item.Kind == TimelineEventKinds.IntegrationSucceeded
+            && item.Details?.GetValueOrDefault("stage") == "pre-human-review");
+        var humanReviewAt = timeline.FindIndex(item =>
+            item.Kind == TimelineEventKinds.LaneChanged
+            && item.Details?.GetValueOrDefault("to") == TaskStates.HumanReview);
+        Assert.True(integratedAt >= 0, "Immediate integration evidence was not recorded.");
+        Assert.True(humanReviewAt > integratedAt, "Human Review was entered before integration settled.");
     }
 
     [Fact]
