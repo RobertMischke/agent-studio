@@ -58,7 +58,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                         LifecyclePhases.Integrating,
                         StringComparison.Ordinal)))
             .Where(job => !TaskModes.IsReadOnly(job.Mode))
-            .OrderBy(job => job.EnteredLaneAt)
+            .OrderBy(job => job.ProjectName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(DeliveryOrder)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (acceptedJobs.Count == 0) return 0;
@@ -148,6 +149,12 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             Reason = detail,
         });
     }
+
+    private static DateTimeOffset DeliveryOrder(TaskInfo job)
+        => ReviewSubjectStore.Read(job.FolderPath)?.CompletedAtUtc
+           ?? (job.EnteredLaneAt == default
+               ? DateTimeOffset.MaxValue
+               : new DateTimeOffset(DateTime.SpecifyKind(job.EnteredLaneAt, DateTimeKind.Utc)));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

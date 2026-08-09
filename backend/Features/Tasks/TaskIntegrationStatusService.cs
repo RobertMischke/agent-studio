@@ -3,11 +3,11 @@ using System.Collections.Concurrent;
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// AGT-2202 - computes the honest, git-derived integration verdict for accepted
-/// cards (5-human-review / 6-completed / 7-archive): is the task's work actually
-/// folded into the integration branch (develop)? The result is attached to
+/// AGT-2202 - computes the honest, git-derived integration verdict for delivered
+/// cards (4-auto-review / 5-human-review / 6-completed / 7-archive): is the task's
+/// work actually folded into the integration branch (develop)? The result is attached to
 /// <see cref="TaskInfo.Integration"/> so the board renders a single, unambiguous
-/// "integrated / not integrated / conflict / no branch" badge on every accepted
+/// "integrated / not integrated / conflict / no branch" badge on every delivered
 /// card, and so the accept flow can flag an accept-without-merge the moment it
 /// happens.
 ///
@@ -53,9 +53,10 @@ public sealed class TaskIntegrationStatusService
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly ILogger<TaskIntegrationStatusService> _logger;
 
-    /// <summary>The accepted lanes this verdict applies to. Cards outside get no entry.</summary>
-    internal static readonly HashSet<string> AcceptedLanes = new(StringComparer.Ordinal)
+    /// <summary>The delivered lanes this verdict applies to. Cards outside get no entry.</summary>
+    internal static readonly HashSet<string> DeliveredLanes = new(StringComparer.Ordinal)
     {
+        TaskStates.AutoReview,
         TaskStates.HumanReview,
         TaskStates.Completed,
         TaskStates.Archive,
@@ -92,10 +93,10 @@ public sealed class TaskIntegrationStatusService
     }
 
     /// <summary>
-    /// Per-<see cref="TaskInfo.TaskKey"/> integration verdict for the accepted cards
-    /// in the given board set. Only cards in <see cref="AcceptedLanes"/> get an
-    /// entry; every other card carries no verdict and the card renders none. Never
-    /// throws.
+    /// Per-<see cref="TaskInfo.TaskKey"/> integration verdict for delivered cards
+    /// in the given board set. Auto Review is included because a green Remote
+    /// delivery now integrates before it moves to Human Review. Every earlier
+    /// lane carries no verdict and the card renders none. Never throws.
     /// </summary>
     public Dictionary<string, TaskIntegrationStatus> BuildLookup(IReadOnlyCollection<TaskInfo> jobs)
     {
@@ -108,7 +109,7 @@ public sealed class TaskIntegrationStatusService
         var noRepo = new List<TaskInfo>();
         foreach (var job in jobs)
         {
-            if (!AcceptedLanes.Contains(job.State)) continue;
+            if (!DeliveredLanes.Contains(job.State)) continue;
             var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
             if (string.IsNullOrWhiteSpace(root))
             {

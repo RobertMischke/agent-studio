@@ -1474,3 +1474,9 @@ Restart, boundary, stage, env, version, and handshake tests:
 **Status.** Accepted. The API-only binary, durable run authority, restart
 reclaim, protocol handshake, version surface, env contract, and migration
 switch ship together.
+
+---
+
+## ADR-0067 - Local and Remote deliveries integrate before Human Review (2026-08-09)
+
+**Decision.** A settled coding delivery integrates into the configured integration branch before Human Review regardless of whether execution was local or Remote. Local worktree finalization and green fenced Remote delivery use their existing integration entry points, while Remote delivery delegates to the shared `MergeIntoDevelopRunner` only after its immutable Result Envelope, Remote Review outcome, and passed or explicitly not-applicable build/test gate are settled. Same-project Fence refs wait serially in delivery order, containment and visible conflict-skipped semantics remain mandatory, and human acceptance plus `AcceptedIntegrationBackstopHostedService` retry a delivery whose immediate merge did not succeed instead of serving as the normal Remote merge trigger.

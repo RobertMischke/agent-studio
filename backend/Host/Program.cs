@@ -604,9 +604,11 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // keeps the card in Human Review with phase=integrating and enqueues merge +
 // gate here. Only successful integration moves it to Completed; failures return
 // it to ordinary Human Review with durable evidence. Both queues are latency
-// optimizations; the backstops recover from phase and pipeline facts.
+// optimizations; the backstops recover from phase and pipeline facts. Remote
+// deliveries use the same merge runner before Human Review.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // The channel is intentionally in-memory. Durable phase and pipeline facts
