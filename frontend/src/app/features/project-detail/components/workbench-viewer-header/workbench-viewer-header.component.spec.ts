@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { TaskService } from '../../../../services/task.service';
 import type { WorkbenchDocument } from '../../../../models/project-docs.model';
+import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
+import { NotificationService } from '../../../../services/notification.service';
 import { WorkbenchViewerHeaderComponent } from './workbench-viewer-header.component';
 
 const DOCUMENT: WorkbenchDocument = {
@@ -31,7 +33,7 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerHeaderComponent', () => {
-  it('derives linked cards, keeps the normal head to one row, and moves details into a popover', async () => {
+  it('keeps the head compact and creates a linked Dossier refresh card from its confirmation', async () => {
     const statuses = [
       {
         key: 'AGT-11',
@@ -57,8 +59,35 @@ describe('WorkbenchViewerHeaderComponent', () => {
         merge: null,
         reviewGrade: null,
       },
+      {
+        key: 'AGT-14',
+        exists: true,
+        taskKey: 'Agent Studio::refresh-viewer-header',
+        title: 'Refresh: Compact viewer header with a deliberately long title',
+        lane: '1-preparation',
+        projectId: 'PROJ-2',
+        projectName: 'Agent Studio',
+        projectColor: null,
+        merge: null,
+        reviewGrade: null,
+      },
     ];
     const getReferenceStatuses = vi.fn(() => of(statuses));
+    const getWatchPaths = vi.fn(() => of([
+      { name: 'Agent Studio', path: '/projects/agent-studio' },
+    ]));
+    const createJob = vi.fn(() => of({ id: 'refresh-viewer-header' }));
+    const setTaskReferences = vi.fn(() => of({
+      references: {
+        dependsOn: [],
+        relatedTo: [],
+        blockedBy: [],
+        supersedes: [],
+        workbenches: ['AGT-W4'],
+      },
+      warnings: [],
+    }));
+    const refresh = vi.fn();
     const openTaskKey = vi.fn(() => true);
 
     await TestBed.configureTestingModule({
@@ -66,7 +95,16 @@ describe('WorkbenchViewerHeaderComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: TaskService, useValue: { getReferenceStatuses } },
+        {
+          provide: TaskService,
+          useValue: {
+            createJob,
+            getReferenceStatuses,
+            getWatchPaths,
+            refresh,
+            setTaskReferences,
+          },
+        },
         { provide: TaskReferenceNavigationService, useValue: { openTaskKey } },
       ],
     }).compileComponents();
@@ -132,6 +170,64 @@ describe('WorkbenchViewerHeaderComponent', () => {
     expect(popover.textContent).toContain(DOCUMENT.workbench.summary);
     expect(popover.textContent).toContain('docs/operations/viewer-header/index.html');
     expect(popover.querySelector('[data-testid="workbench-decision-panel"]')).toBeTruthy();
+
+    (
+      header.querySelector('[data-testid="workbench-viewer-refresh"]') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    const confirm = TestBed.inject(ConfirmDialogService);
+    expect(confirm.active()).toEqual(expect.objectContaining({
+      title: 'Create Dossier refresh card?',
+      detail: expect.stringContaining('Refresh: Compact viewer header'),
+      confirmLabel: 'Create card',
+      kind: 'primary',
+    }));
+
+    confirm.accept();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Refresh: Compact viewer header with a deliberately long title',
+      watchPath: '/projects/agent-studio',
+      targetState: '1-preparation',
+      taskType: 'chore',
+      mode: 'coding',
+      promptMarkdown: expect.stringMatching(
+        /Dossier path: `docs\/operations\/viewer-header\/index\.html`[\s\S]*Dossier key: `AGT-W4`[\s\S]*Update the document against reality[\s\S]*Do not add automatic document self-modification/,
+      ),
+    }));
+    expect(setTaskReferences).toHaveBeenCalledWith(
+      'refresh-viewer-header',
+      {
+        dependsOn: [],
+        relatedTo: [],
+        blockedBy: [],
+        supersedes: [],
+        workbenches: ['AGT-W4'],
+      },
+      '/projects/agent-studio',
+    );
+    expect(refresh).toHaveBeenCalled();
+
+    http.expectOne('/api/projects/Agent%20Studio/workbenches/AGT-W4/references').flush({
+      projectName: 'Agent Studio',
+      workbenchKey: 'AGT-W4',
+      workbenchId: 'viewer-header',
+      legacyTaskKeys: ['AGT-12'],
+      items: [
+        { sourceKey: 'AGT-11' },
+        { sourceKey: 'AGT-14' },
+      ],
+    });
+    fixture.detectChanges();
+
+    expect(getReferenceStatuses).toHaveBeenLastCalledWith(['AGT-11', 'AGT-14', 'AGT-12']);
+    expect(header.querySelector('[data-testid="workbench-viewer-task-AGT-14"]')).toBeTruthy();
+    expect(TestBed.inject(NotificationService).notifications()[0]).toEqual(expect.objectContaining({
+      kind: 'success',
+      title: 'Refresh card created',
+    }));
 
     fixture.destroy();
     http.verify();
