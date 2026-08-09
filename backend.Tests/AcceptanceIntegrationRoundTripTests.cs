@@ -1044,7 +1044,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             NullLogger<AcceptedIntegrationBackstopHostedService>.Instance);
         var recoveredMerges = mergeBackstop.RunOnce();
 
-        Assert.Equal(1, recoveredMerges);
+        Assert.Equal(0, recoveredMerges);
         var completed = deps.Scanner.FindJob(Slug, _watchPath);
         Assert.NotNull(completed);
         var mergeStep = deps.Pipeline.Read(completed!.FolderPath)?.Steps.LastOrDefault(
@@ -1130,7 +1130,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Equal(remoteBefore, Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim());
 
         gate.Release();
-        Assert.Equal(1, await recovery.WaitAsync(AsyncTestDeadline));
+        Assert.Equal(0, await recovery.WaitAsync(AsyncTestDeadline));
 
         var completed = deps.Scanner.FindJob(Slug, _watchPath);
         Assert.NotNull(completed);

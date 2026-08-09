@@ -71,6 +71,17 @@ const rejectedReadyTask = task(
   '2-ready',
 );
 
+const stalledAcceptedTask = {
+  ...task(
+    'accepted-stalled',
+    'Accepted delivery is still missing',
+    location('none', null, 'none'),
+    '5-human-review',
+  ),
+  key: 'AGT-2531',
+  tags: ['integrationpending'],
+};
+
 function json(route: Route, body: unknown) {
   return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 }
@@ -95,7 +106,9 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
       ready: currentTasks().filter(item => item.state === '2-ready'),
       progress: currentTasks().filter(item => item.state === '3-progress'),
       failedPickup: [],
-      codeNotComplete: [], review: [], autoReview: [], humanReview: [], escalated: [], completed: [], archive: [],
+      codeNotComplete: [], review: [], autoReview: [],
+      humanReview: currentTasks().filter(item => item.state === '5-human-review'),
+      escalated: [], completed: currentTasks().filter(item => item.state === '6-completed'), archive: [],
     });
     if (/\/api\/(?:tasks|jobs)(\?|$)/.test(url)) return json(route, currentTasks());
     if (url.includes('/api/watch-paths')) return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
@@ -118,6 +131,26 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
           enteredLaneAt: '2026-08-08T07:30:00Z',
           waitingMinutes: 330,
           lastRejection: item.executionLocation.lastRejection,
+        })),
+      });
+    }
+    if (url.includes('/api/pipeline/accepted-integration-alert')) {
+      const stalled = currentTasks().filter(item => item.id === stalledAcceptedTask.id);
+      return json(route, {
+        active: stalled.length > 0,
+        stalledTaskCount: stalled.length,
+        thresholdMinutes: 30,
+        observedAt: '2026-08-09T13:00:00Z',
+        oldestAcceptedAt: stalled.length > 0 ? '2026-08-09T12:00:00Z' : null,
+        items: stalled.map(item => ({
+          taskId: item.id,
+          taskKey: item.key,
+          projectName: item.projectName,
+          title: item.title,
+          acceptedAt: '2026-08-09T12:00:00Z',
+          integrationStatus: 'no-branch',
+          lastOutcome: 'NoTaskBranch',
+          detail: 'No delivery branch exists.',
         })),
       });
     }
@@ -202,6 +235,30 @@ test('shows a durable remote refusal on the card and the starvation banner', asy
     await expect(rejection).toBeVisible();
     await page.screenshot({
       path: join(RESULTS, `remote-refusal-starvation-${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('shows accepted deliveries that remain unintegrated beyond the threshold', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => [stalledAcceptedTask]);
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const banner = page.getByTestId('accepted-integration-alert-banner');
+  await expect(banner).toContainText('1 accepted task has not reached successful integration for over 30 minutes.');
+  await expect(banner).toContainText(`${PROJECT}: AGT-2531`);
+
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await expect(banner).toBeVisible();
+    await page.screenshot({
+      path: join(RESULTS, `accepted-integration-alert-${theme}--mocked.png`),
       fullPage: false,
     });
   }

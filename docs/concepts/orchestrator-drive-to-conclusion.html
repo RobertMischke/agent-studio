@@ -1817,6 +1817,27 @@
             Ready work coexists with fresh free Runner capacity.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-09</td>
+          <td><code>AGT-2531</code> / <code>AGT-2541</code><br><span class="small">accepted deliveries existed only on salvage fences</span></td>
+          <td>
+            Both completed implementations existed only on salvage-fence refs. AGT-2531 then received
+            <code>NoTaskBranch</code> from the accepted-integration worker but remained silently Completed with no integration
+            record. AGT-2541 reached the visible <code>unverified-delivery</code> escalation. The missing changes left CAC,
+            QS, and TE gates falsely red, triggered the AGT-2536/2537 escalation chain, and blocked the promotion train.
+          </td>
+          <td>
+            An incomplete delivery envelope and an acceptance path that did not require successful integration combined
+            with misleading backstop telemetry. The 15-minute sweep counted <code>AlreadyMerged</code> replays as integrated,
+            and repeated failures had no project-level age alarm.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> AGT-2531 was recovered from its card-scoped salvage ref and reached
+            integrated Completed; AGT-2541 was recovered from its fence after the visible escalation. The backstop now reports
+            attempted, merged, already-merged, and failed counts separately, treats only a real merge as integrated, and
+            publishes a board banner plus task-key warning when an accepted delivery remains unintegrated for 30 minutes.
+          </td>
+        </tr>
       </tbody>
     </table>
 
