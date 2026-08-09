@@ -18,7 +18,8 @@ const GROUPS: readonly { state: WikiLifecycleState; label: string }[] = [
   { state: 'review-requested', label: 'New, wants review' },
   { state: 'in-progress', label: 'In progress' },
   { state: 'decided', label: 'Decided' },
-  { state: 'done', label: 'Done' },
+  { state: 'documented', label: 'Documented' },
+  { state: 'done', label: 'Archived' },
 ];
 
 @Component({
@@ -59,6 +60,12 @@ export class WorkbenchInboxComponent {
     if (state === 'review-requested') return 'review';
     if (state === 'in-progress') return 'active';
     return 'settled';
+  }
+
+  documentationReady(item: WikiLifecycleItem): boolean {
+    if (!item.workbenchId) return false;
+    return this.catalogue()?.items.find(candidate => candidate.id === item.workbenchId)
+      ?.documentation?.eligible === true;
   }
 
   relativeTime(iso: string): string {

@@ -56,7 +56,7 @@ export class WorkbenchDecisionPanelComponent {
     // Schema-v1 descriptors carry no decision receipt in the projection; their
     // settled state is visible only through the status field.
     const status = this.document().workbench.status;
-    return status === 'decided' || status === 'archived';
+    return status === 'decided' || status === 'documented' || status === 'archived';
   });
   readonly gateReady = computed(() =>
     this.document().workbench.phase === 'decision-ready'

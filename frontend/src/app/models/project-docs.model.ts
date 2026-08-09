@@ -211,7 +211,7 @@ export interface WikiRevisionContent {
   content: string;
 }
 
-export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
 export type WorkbenchDecisionStage = 'prepared' | 'pending' | 'failed' | 'succeeded' | 'archived';
 
 export interface WorkbenchTaskDraft {
@@ -293,6 +293,7 @@ export interface ConfirmWorkbenchDecisionRequest {
 
 export interface WorkbenchListItem {
   id: string;
+  key?: string | null;
   title: string;
   summary: string;
   status: WorkbenchStatus;
@@ -308,6 +309,41 @@ export interface WorkbenchListItem {
   lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
   decision?: WorkbenchDecisionProjection | null;
   decisionStage?: WorkbenchDecisionStage | null;
+  relatedTaskKeys?: string[];
+  documentation?: WorkbenchDocumentationProjection | null;
+}
+
+export interface WorkbenchDocumentationReference {
+  key: string;
+  exists: boolean;
+  terminal: boolean;
+  lane: string | null;
+}
+
+export interface WorkbenchDocumentationProjection {
+  eligible: boolean;
+  totalCount: number;
+  terminalCount: number;
+  openCount: number;
+  missingCount: number;
+  references: WorkbenchDocumentationReference[];
+}
+
+export interface DocumentWorkbenchRequest {
+  actor: string;
+  expectedRevision: string | null;
+  expectedFingerprint: string | null;
+}
+
+export interface DocumentWorkbenchResult {
+  success: boolean;
+  errorCode: string | null;
+  error: string | null;
+  workbenchId: string;
+  status: 'documented' | '';
+  revision: string | null;
+  fingerprint: string | null;
+  idempotent: boolean;
 }
 
 export interface WorkbenchCatalogue {
@@ -451,7 +487,7 @@ export interface WikiPulseActivity {
 }
 
 export type WikiLifecyclePageKind = 'design' | 'concept' | 'exploration' | 'workbench';
-export type WikiLifecycleState = 'in-progress' | 'review-requested' | 'decided' | 'done';
+export type WikiLifecycleState = 'in-progress' | 'review-requested' | 'decided' | 'documented' | 'done';
 
 export interface WikiLifecycleHistoryEntry {
   state: WikiLifecycleState | string;

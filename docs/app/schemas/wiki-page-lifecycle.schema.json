@@ -10,8 +10,8 @@
   "$defs": {
     "state": {
       "type": "string",
-      "enum": ["in-progress", "review-requested", "decided", "done"],
-      "description": "Current lifecycle state. Review-requested is the review-first dashboard state; decided and done are quiet history."
+      "enum": ["in-progress", "review-requested", "decided", "documented", "done"],
+      "description": "Current lifecycle state. Review-requested needs review; decided tracks accepted work; documented is the completed knowledge state; done is discarded history."
     },
     "pageKind": {
       "type": "string",

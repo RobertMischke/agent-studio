@@ -23,6 +23,16 @@
 .studio-workbench-topic__meta i[data-status='decision-pending'], .studio-workbench-topic__meta i[data-status='invalid'] { background: var(--studio-warn); }
 .studio-workbench-history { margin: var(--studio-spacing-1) 0 0; padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
 .studio-workbench-history:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
+.studio-workbench-history__items { display: flex; flex-direction: column; gap: var(--studio-spacing-1); }
+.studio-workbench-history__items + .studio-workbench-history__items { margin-top: var(--studio-spacing-2); }
+.studio-workbench-history__label {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2) 0;
+  color: var(--studio-fg-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .studio-workbench-topic--settled:not(.studio-workbench-topic--active) { color: var(--studio-fg-muted); }
 
 // `.studio button` has higher specificity than the component classes. Scope

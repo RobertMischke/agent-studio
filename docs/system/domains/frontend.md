@@ -183,7 +183,20 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   DOM parse moves artifact nodes into a fixed policy-first wrapper. Workbench
   pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
-  revision. Chat pinning and decision mutations are intentionally not mounted.
+  revision. A decided item remains in the current list while its referenced
+  cards are still moving. References are derived from the Slice-1
+  `references.workbenches` API, with descriptor `relatedTaskKeys` and decision
+  receipts retained as compatibility bridges. Once every referenced card is in
+  `6-completed` or `7-archive`, the catalogue projects a quiet `Ready to
+  document` suggestion in the viewer header and list surfaces. `POST
+  /api/projects/{projectName}/workbenches/{id}/document` revalidates that policy
+  against the archive-inclusive task snapshot and atomically writes the
+  canonical descriptor. Schema v1 stores `status=documented`; schema v2 stores
+  `lifecycleState=documented` and appends lifecycle history. Documented results
+  and discarded `archived` results remain readable in separate history groups.
+  The archive decision and documented transition both follow the AGT-2375 rule:
+  lifecycle truth lives in `workbench.json`, never in a Wiki classification
+  sidecar. Chat pinning is intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

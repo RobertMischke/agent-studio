@@ -25,6 +25,46 @@
   width: 100%;
 }
 
+.workbench-viewer__documentation-ready {
+  flex: 1 0 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid color-mix(in srgb, var(--studio-success) 30%, var(--studio-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--studio-success) 9%, var(--studio-bg));
+  color: var(--studio-fg);
+  font-size: 0.72rem;
+}
+
+.workbench-viewer__documentation-ready button {
+  min-height: 28px;
+  padding: 0 var(--studio-spacing-3);
+  border: 1px solid color-mix(in srgb, var(--studio-success) 40%, var(--studio-border));
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workbench-viewer__documentation-ready button:hover:not(:disabled) { background: var(--studio-bg-hover); }
+.workbench-viewer__documentation-ready button:disabled { cursor: default; opacity: 0.55; }
+.workbench-viewer__documentation-ready button:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 2px;
+}
+
+.workbench-viewer__documentation-error {
+  flex: 1 0 100%;
+  width: 100%;
+  color: var(--studio-error);
+}
+
 .workbench-viewer__identity { min-width: 0; }
 .workbench-viewer__header-actions {
   display: flex;
@@ -78,6 +118,8 @@
 .workbench-viewer__status[data-status='decided'] i { background: var(--studio-success); }
 .workbench-viewer__status[data-status='archived'] { background: var(--studio-bg-hover); color: var(--studio-fg-muted); }
 .workbench-viewer__status[data-status='archived'] i { background: var(--studio-fg-muted); }
+.workbench-viewer__status[data-status='documented'] { background: var(--studio-bg-hover); color: var(--studio-fg-muted); }
+.workbench-viewer__status[data-status='documented'] i { background: var(--studio-success); }
 .workbench-viewer__provenance {
   min-width: 0;
   display: flex;
@@ -128,5 +170,6 @@
 
 @media (max-width: 700px) {
   .workbench-viewer__header { flex-direction: column; }
+  .workbench-viewer__documentation-ready { align-items: flex-start; flex-direction: column; }
   .workbench-viewer__provenance { padding-inline: var(--studio-spacing-3); }
 }

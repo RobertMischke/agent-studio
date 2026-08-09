@@ -23,9 +23,9 @@ public sealed class WorkbenchCatalogueService
     private readonly GitService _git;
 
     private static readonly HashSet<string> CurrentStatuses = new(StringComparer.Ordinal)
-        { "active", "decision-pending" };
+        { "active", "decision-pending", "decided" };
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.Ordinal)
-        { "active", "decision-pending", "decided", "archived" };
+        { "active", "decision-pending", "decided", "archived", "documented" };
     private static readonly HashSet<string> AllowedPhases = new(StringComparer.Ordinal)
         { "shaping", "testing", "decision-ready" };
 
@@ -93,6 +93,8 @@ public sealed class WorkbenchCatalogueService
                 File.GetLastWriteTimeUtc(full), legacy.RepoRelPath, true, null,
                 legacy.SourceTaskKeys));
         }
+
+        ApplyDocumentationProjection(items);
 
         var visible = items
             .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
@@ -192,7 +194,7 @@ public sealed class WorkbenchCatalogueService
                 dirty,
                 item[0]);
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return null;
         }
@@ -344,11 +346,13 @@ public sealed class WorkbenchCatalogueService
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
                     updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))
                 {
+                    Key = OptionalString(obj, "key"),
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
                     LifecycleHistory = lifecycleHistory,
                     Decision = decision,
                     DecisionStage = DecisionStage(decision),
+                    RelatedTaskKeys = StringArray(obj, "relatedTaskKeys"),
                 });
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
@@ -523,7 +527,7 @@ public sealed class WorkbenchCatalogueService
     {
         if (!obj.TryGetProperty("decision", out var value) || value.ValueKind == JsonValueKind.Null)
         {
-            if (lifecycleState is "decided" or "done")
+            if (lifecycleState is "decided" or "done" or "documented")
                 throw new InvalidDataException("Settled lifecycleState requires a decision receipt.");
             return null;
         }
@@ -604,11 +608,14 @@ public sealed class WorkbenchCatalogueService
             // (AGT-2375). The receipt records the decision, not the card.
             if (outcome == "archive" && spawned.Length != 0)
                 throw new InvalidDataException("Archive decisions cannot carry spawned task receipts.");
-            var expectedLifecycle = outcome == "archive" ? "done" : "decided";
-            if (lifecycleState != null && lifecycleState != expectedLifecycle)
-                throw new InvalidDataException($"Succeeded {outcome} decision requires lifecycleState '{expectedLifecycle}'.");
+            var validLifecycle = outcome == "archive"
+                ? lifecycleState == "done"
+                : lifecycleState is "decided" or "documented";
+            if (lifecycleState != null && !validLifecycle)
+                throw new InvalidDataException(
+                    $"Succeeded {outcome} decision has an incompatible lifecycleState '{lifecycleState}'.");
         }
-        else if (lifecycleState is "decided" or "done")
+        else if (lifecycleState is "decided" or "done" or "documented")
         {
             throw new InvalidDataException("Pending or failed decisions must remain in a current lifecycle state.");
         }
@@ -626,6 +633,7 @@ public sealed class WorkbenchCatalogueService
     {
         if (decision == null) return StatusFromLifecycle(lifecycleState);
         if (decision.State is "pending" or "failed") return "decision-pending";
+        if (lifecycleState == "documented") return "documented";
         return decision.Outcome == "archive" ? "archived" : "decided";
     }
 
@@ -661,12 +669,13 @@ public sealed class WorkbenchCatalogueService
     }
 
     private static readonly HashSet<string> AllowedLifecycleStates = new(StringComparer.Ordinal)
-        { "in-progress", "review-requested", "decided", "done" };
+        { "in-progress", "review-requested", "decided", "done", "documented" };
     private static string StatusFromLifecycle(string state) => state switch
     {
         "in-progress" or "review-requested" => "active",
         "decided" => "decided",
         "done" => "archived",
+        "documented" => "documented",
         _ => "invalid",
     };
     private static string LifecycleFromStatus(string status, string? phase) => status switch
@@ -674,6 +683,7 @@ public sealed class WorkbenchCatalogueService
         "decision-pending" => "review-requested",
         "decided" => "decided",
         "archived" => "done",
+        "documented" => "documented",
         _ when phase == "decision-ready" => "review-requested",
         _ => "in-progress",
     };
@@ -711,17 +721,114 @@ public sealed class WorkbenchCatalogueService
             && DateTimeOffset.TryParse(value, out parsed)
             && parsed.Offset == TimeSpan.Zero;
     }
+
+    private void ApplyDocumentationProjection(List<WorkbenchListItem> items)
+    {
+        var tasks = _scanner.ScanAllJobsWithArchive();
+        var keyedTasks = tasks
+            .Where(task => !string.IsNullOrWhiteSpace(task.Key))
+            .GroupBy(task => task.Key!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var knownWorkbenchKeys = items
+            .Select(item => item.Key)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Select(key => key!.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var reverseReferences = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        if (knownWorkbenchKeys.Count > 0)
+        {
+            foreach (var task in tasks.Where(task => !string.IsNullOrWhiteSpace(task.Key)))
+            {
+                foreach (var workbenchKey in ReferencedWorkbenchKeys(task)
+                             .Where(knownWorkbenchKeys.Contains))
+                {
+                    if (!reverseReferences.TryGetValue(workbenchKey, out var taskKeys))
+                    {
+                        taskKeys = [];
+                        reverseReferences[workbenchKey] = taskKeys;
+                    }
+                    taskKeys.Add(task.Key!);
+                }
+            }
+        }
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            if (!item.Valid) continue;
+            var keys = item.RelatedTaskKeys
+                .Concat(item.Decision?.SpawnedTaskKeys ?? [])
+                .Concat(item.Key != null && reverseReferences.TryGetValue(item.Key, out var referenced)
+                    ? referenced
+                    : [])
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Select(key => key.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            var references = keys.Select(key => keyedTasks.TryGetValue(key, out var task)
+                ? new WorkbenchDocumentationReference(
+                    key,
+                    Exists: true,
+                    Terminal: WaitsOnEvaluator.IsFulfilledState(task.State),
+                    Lane: task.State)
+                : new WorkbenchDocumentationReference(key, Exists: false, Terminal: false, Lane: null));
+            items[index] = item with
+            {
+                Documentation = WorkbenchDocumentationPolicy.Evaluate(item.Status, references),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Reads the Slice-1 task-reference API when present. The JSON fallback is
+    /// a temporary compatibility seam for branches based before that additive
+    /// TaskReferences member landed; relatedTaskKeys remains the descriptor-side
+    /// legacy bridge.
+    /// </summary>
+    private static IEnumerable<string> ReferencedWorkbenchKeys(TaskInfo task)
+    {
+        var property = task.References?.GetType().GetProperty("Workbenches");
+        if (property?.GetValue(task.References) is IEnumerable<string> typed)
+            return NormalizeKeys(typed);
+
+        try
+        {
+            using var json = JsonDocument.Parse(File.ReadAllText(
+                Path.Combine(task.FolderPath, "task.json")));
+            if (!json.RootElement.TryGetProperty("references", out var references)
+                || references.ValueKind != JsonValueKind.Object
+                || !references.TryGetProperty("workbenches", out var workbenches)
+                || workbenches.ValueKind != JsonValueKind.Array)
+                return [];
+            return NormalizeKeys(workbenches.EnumerateArray()
+                .Where(value => value.ValueKind == JsonValueKind.String)
+                .Select(value => value.GetString()!));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            SilentCatch.Note(ex, "Workbench task references could not be read.");
+            return [];
+        }
+    }
+
+    private static string[] NormalizeKeys(IEnumerable<string> keys) => keys
+        .Where(key => !string.IsNullOrWhiteSpace(key))
+        .Select(key => key.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 }
 
 public record WorkbenchCatalogue(string ProjectName, bool IncludesHistory, int Count, List<WorkbenchListItem> Items);
 public record WorkbenchListItem(string Id, string Title, string Summary, string Status, string? Phase,
     DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
 {
+    public string? Key { get; init; }
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
     public WorkbenchDecisionProjection? Decision { get; init; }
     public string? DecisionStage { get; init; }
+    public string[] RelatedTaskKeys { get; init; } = [];
+    public WorkbenchDocumentationProjection? Documentation { get; init; }
 }
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
     bool WorkingTreeModified, string? Fingerprint);

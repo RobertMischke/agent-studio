@@ -45,9 +45,11 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     public void List_HidesSettledItemsUnlessHistoryRequested()
     {
         WriteWorkbench("current", "Current", "active", "2026-07-12T10:00:00Z");
+        WriteWorkbench("tracking", "Tracking", "decided", "2026-07-11T11:00:00Z");
+        WriteWorkbench("documented", "Documented", "documented", "2026-07-11T10:30:00Z");
         WriteWorkbench("done", "Done", "archived", "2026-07-11T10:00:00Z");
-        Assert.Single(Service().List("Project")!.Items);
-        Assert.Equal(2, Service().List("Project", includeHistory: true)!.Items.Count);
+        Assert.Equal(new[] { "current", "tracking" }, Service().List("Project")!.Items.Select(item => item.Id));
+        Assert.Equal(4, Service().List("Project", includeHistory: true)!.Items.Count);
     }
 
     [Fact]
@@ -255,14 +257,16 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     public void LifecycleMergeKeepsSettledWorkbenchesVisibleForPulse()
     {
         WriteWorkbench("decision", "Decision", "decided", "2026-07-12T10:00:00Z");
+        WriteWorkbench("documented", "Documented", "documented", "2026-07-11T11:00:00Z");
         WriteWorkbench("complete", "Complete", "archived", "2026-07-11T10:00:00Z");
         var catalogue = Service().List("Project", includeHistory: true)!;
 
         var merged = ProjectDocsService.MergeWorkbenchLifecycle(
             new WikiPulseLifecycle(true, null, 0, []), catalogue);
 
-        Assert.Equal(2, merged.Count);
+        Assert.Equal(3, merged.Count);
         Assert.Contains(merged.Items, item => item.WorkbenchId == "decision" && item.State == "decided");
+        Assert.Contains(merged.Items, item => item.WorkbenchId == "documented" && item.State == "documented");
         Assert.Contains(merged.Items, item => item.WorkbenchId == "complete" && item.State == "done");
     }
 

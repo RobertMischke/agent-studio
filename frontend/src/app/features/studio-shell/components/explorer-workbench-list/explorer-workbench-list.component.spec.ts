@@ -56,12 +56,14 @@ describe('ExplorerWorkbenchListComponent', () => {
       .flush(catalogue([item('active', 'active')], true));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('No settled Workbenches');
-    expect(fixture.componentInstance.settledHistory()).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain('No documented items');
+    expect(fixture.nativeElement.textContent).toContain('No archived items');
+    expect(fixture.componentInstance.documentedHistory()).toEqual([]);
+    expect(fixture.componentInstance.archivedHistory()).toEqual([]);
     http.verify();
   });
 
-  it('renders and emits only settled entries in the history section', async () => {
+  it('renders archived and documented entries in separate history sections', async () => {
     await TestBed.configureTestingModule({
       imports: [ExplorerWorkbenchListComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -72,14 +74,22 @@ describe('ExplorerWorkbenchListComponent', () => {
     fixture.componentInstance.expanded.set(true);
     fixture.componentInstance.historyOpen.set(true);
     const archived = item('archived', 'archived');
-    fixture.componentInstance.historyCatalogue.set(catalogue([item('active', 'active'), archived], true));
+    const documented = item('documented', 'documented');
+    fixture.componentInstance.historyCatalogue.set(catalogue([item('active', 'active'), archived, documented], true));
     let opened: WorkbenchListItem | null = null;
     fixture.componentInstance.openWorkbench.subscribe(value => opened = value);
     fixture.detectChanges();
 
     const archivedButton = fixture.nativeElement.querySelector(
       '[data-testid="studio-explorer-workbench-Demo-archived"]') as HTMLButtonElement;
+    const documentedButton = fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-Demo-documented"]') as HTMLButtonElement;
     expect(archivedButton).toBeTruthy();
+    expect(documentedButton).toBeTruthy();
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-documented-history"]')?.textContent).toContain('documented');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-archived-history"]')?.textContent).toContain('archived');
     expect(fixture.nativeElement.querySelector('[data-testid="studio-explorer-workbench-Demo-active"]')).toBeNull();
     archivedButton.click();
     expect(opened).toEqual(archived);

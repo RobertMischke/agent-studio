@@ -30,7 +30,11 @@
                     @if (item.editedAtUtc) { <time>{{ relativeTime(item.editedAtUtc) }}</time> }
                   </span>
                   <b>{{ item.title }}</b>
-                  <small>{{ item.error || item.relPath }}</small>
+                  @if (documentationReady(item)) {
+                    <small data-testid="project-wiki-lifecycle-documentation-ready">Ready to document</small>
+                  } @else {
+                    <small>{{ item.error || item.relPath }}</small>
+                  }
                 </button></li>
               }
             </ul>

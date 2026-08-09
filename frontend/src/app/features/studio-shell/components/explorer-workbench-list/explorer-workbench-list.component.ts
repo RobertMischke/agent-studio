@@ -37,8 +37,10 @@ export class ExplorerWorkbenchListComponent {
   readonly catalogue = signal<WorkbenchCatalogue | null>(null);
   readonly historyCatalogue = signal<WorkbenchCatalogue | null>(null);
   readonly historyOpen = signal(false);
-  readonly settledHistory = computed(() => (this.historyCatalogue()?.items ?? [])
-    .filter(item => item.status === 'decided' || item.status === 'archived'));
+  readonly documentedHistory = computed(() => (this.historyCatalogue()?.items ?? [])
+    .filter(item => item.status === 'documented'));
+  readonly archivedHistory = computed(() => (this.historyCatalogue()?.items ?? [])
+    .filter(item => item.status === 'archived'));
   private readonly topics = viewChildren<ElementRef<HTMLButtonElement>>('workbenchTopic');
   private lastProjectName: string | null = null;
   private lastRevealedWorkbench: string | null = null;
@@ -137,8 +139,12 @@ export class ExplorerWorkbenchListComponent {
 
   secondaryMeta(item: WorkbenchListItem): string {
     if (!item.valid) return 'Needs attention';
+    if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
     if (item.status === 'active') return item.phase ?? 'Active';
+    if (item.status === 'decided') return 'Tracking';
+    if (item.status === 'documented') return 'Documented';
+    if (item.status === 'archived') return 'Archived';
     return item.status;
   }
 
