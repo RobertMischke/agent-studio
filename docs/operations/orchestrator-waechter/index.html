@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Global Orchestrator Watcher | Decision Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch identity: develop */
+    --taskbr: #4a3aa7;       /* Branch identity: task/<slug> */
+    --salvage: #eb6834;      /* Branch identity: runner/<id>/<key> (salvage) */
+    --rescue: #b58500;       /* Branch identity: rescue/WIP */
+    --ok: #008300;           /* Good status, always paired with icon and text */
+    --bad: #c93736;          /* Problem status, always paired with icon and text */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  a { color: var(--develop); text-underline-offset: 3px; }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; white-space: nowrap; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG roles */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block p { margin: 4px 0 0; color: var(--ink-2); }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Decision dossier · Global orchestration</p>
+  <h1>Global Orchestrator Watcher</h1>
+  <p class="lede">An intelligent layer above hard delivery invariants: it detects troubled cards across projects, assembles evidence, applies only proven recovery recipes, asks a strong model for bounded analysis when uncertainty remains, and publishes every problem, decision, action, and resolution in Activity across projects.</p>
+  <div class="meta">
+    <span><b>Date</b> 09 August 2026</span>
+    <span><b>Source</b> AGT-2557</span>
+    <span><b>Status</b> Decision pending</span>
+    <span><b>Scope</b> Planning only, no implementation</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#mandate">§1 Mandate</a></li>
+    <li><a href="#triggers">§2 Trigger catalogue</a></li>
+    <li><a href="#capabilities">§3 Capability ladder</a></li>
+    <li><a href="#visibility">§4 Visibility model</a></li>
+    <li><a href="#economy">§5 Model economy</a></li>
+    <li><a href="#boundaries">§6 Authority boundary</a></li>
+    <li><a href="#operations">§7 Operating model</a></li>
+    <li><a href="#slices">§8 Slice plan</a></li>
+    <li><a href="#decision">§9 Decision request</a></li>
+  </ul>
+</nav>
+
+<section class="box accent">
+  <h4>Recommendation</h4>
+  <p><b>Approve an observe-first global Watcher, then add a narrow autonomous allowlist.</b> Slices 1 and 2 should make incidents durable, visible, and strongly analyzed without mutating task or Git state. Slice 3 may autonomously re-register an unchanged runner and issue a bounded rebase-steer or existing-policy requeue through the application API. Fence transplantation stays approval-gated until a shadow cohort proves its scope checks and gates. Conflicts, scope changes, invariant waivers, and protected-branch writes always stay human-owned.</p>
+</section>
+
+<h2 id="mandate"><span class="no">§1</span>Mandate</h2>
+<p class="stx stx-open"><b>Decision:</b> approval is requested for the architecture, action allowlist, pilot gates, and operating placement. No runtime behavior changes in this dossier.</p>
+<p>The Watcher is one global lifecycle coordinator for exception handling. It does not replace the project orchestrators, the runner, the pipeline, or the state machine. It consumes their typed facts and closes the gap between a visible fault and an evidence-backed recovery or decision.</p>
+
+<div class="building-blocks">
+  <article class="building-block">
+    <h4>Outcome</h4>
+    <p>Every accepted trigger produces one correlated case that reaches <code>resolved</code>, <code>decision-required</code>, or an explicit bounded <code>gave-up</code> terminal.</p>
+  </article>
+  <article class="building-block">
+    <h4>Lifecycle authority</h4>
+    <p>The Watcher owns case progression. Existing APIs, attempt fences, pipeline gates, merge queues, and reissue budgets remain the only mutation authorities.</p>
+  </article>
+  <article class="building-block">
+    <h4>Intelligence boundary</h4>
+    <p>Models summarize and prepare decisions. Pure policy decides whether an action is allowed. A model response never writes task or Git state directly.</p>
+  </article>
+  <article class="building-block">
+    <h4>Operator promise</h4>
+    <p>The cross-project feed separates an acute problem, a real human decision, work performed, and a finished finding. Raw model chatter is not the product surface.</p>
+  </article>
+</div>
+
+<p class="evidence-link"><b>Operational basis:</b> the manual response recorded in <a href="../unverifizierte-lieferungen/index.html">Unverified Deliveries</a> inspected salvage fences, performed card-scoped recovery, analyzed root cause, wrote a dossier, and requeued cards with steer notes. AGT-2543, AGT-2544, and AGT-2545 harden the substrate; this concept adds the reasoning layer above it.</p>
+<p class="dim">This dossier treats AGT-2543 through AGT-2545 as required upstream contracts and does not assume that every contract is already deployed. Observe-only adapters may consume their final events once available or equivalent existing facts during the pilot.</p>
+
+<h3>Case contract</h3>
+<p>One <code>WatcherCase</code> is keyed by <code>projectId + taskKey + attemptChainId + triggerClass + evidenceFingerprint</code>. At-least-once inputs may reopen or append evidence, but they must not start duplicate model calls or repeat an action. The durable case stores its trigger, current phase, evidence references, action receipts, verification, model route, token use, operator epoch, and terminal reason.</p>
+
+<h2 id="triggers"><span class="no">§2</span>Trigger catalogue</h2>
+<p class="stx stx-part">Event adapters wake immediately on typed failures. A bounded reconciliation sweep covers silent cross-source contradictions. Threshold ownership stays with the mechanical producer, not with the Watcher.</p>
+
+<table>
+  <thead>
+    <tr><th>Class</th><th>Authoritative signal</th><th>Wake and grouping</th><th>Initial disposition</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>5e escalation</b></td>
+      <td>A card enters the escalated human-review terminal with a typed category and current attempt evidence.</td>
+      <td>Immediate. One case per attempt chain; a new operator epoch may reopen it.</td>
+      <td>Inspect first. Use the strong analyzer when the category has no exact recipe or when evidence conflicts.</td>
+    </tr>
+    <tr>
+      <td><b>Integration failure</b></td>
+      <td>Integration outcome <code>Error</code>, <code>Conflict</code>, or <code>NoTaskBranch</code>.</td>
+      <td>Immediate after the worker records the outcome. Collapse retries with the same outcome fingerprint.</td>
+      <td><code>NoTaskBranch</code> may enter fence inspection. <code>Conflict</code> prepares a decision, never an automatic semantic merge.</td>
+    </tr>
+    <tr>
+      <td><b>Unverified delivery</b></td>
+      <td>AGT-2544 delivery failure or an incomplete completion envelope with a trusted salvage-fence reference.</td>
+      <td>Immediate, before any success projection.</td>
+      <td>Validate provenance and recoverability. The existing envelope policy owns requeue; the Watcher does not invent a second retry path.</td>
+    </tr>
+    <tr>
+      <td><b>Starvation or stale work</b></td>
+      <td>AGT-2545 class signals, including accepted work still lacking Git-proven integration after the producer's 30-minute threshold. Future claim-starvation signals use their own producer threshold.</td>
+      <td>On signal. Reconciliation confirms persistence across two snapshots before model use.</td>
+      <td>Known runner registration or queue recipes first. Healthy waiting with a scheduled wake is not a problem.</td>
+    </tr>
+    <tr>
+      <td><b>Repeated grade loop</b></td>
+      <td>The same requirement or finding fingerprint recurs twice in one attempt chain, or a third grading round starts without new evidence. MKT-20 is the reference pattern.</td>
+      <td>At the second repeated fingerprint or before round three.</td>
+      <td>Stop blind reissue. Strong analysis compares the requirement, diff, previous steer, and repeated finding, then prepares a narrowed task or human decision.</td>
+    </tr>
+    <tr>
+      <td><b>Silent anomaly</b></td>
+      <td>Cross-source contradiction such as accepted or Completed without integration proof, accepted then reverted without a newer operator epoch, terminal lane with an unresolved fence, or an agent-success claim backed only by a generated scaffold.</td>
+      <td>Immediate when a mutation exposes the contradiction, plus a five-minute global reconciliation sweep. AGT-2307 and MKT-22 are the 09 August reference cases.</td>
+      <td>Freeze autonomous mutation, reconstruct the state sequence, and publish a Problem. Strong analysis is the default when no single source is authoritative.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Admission guards</h3>
+<ul>
+  <li><b>Freshness:</b> the task, attempt fence, operator epoch, and Git refs must still match when an action starts and when it commits.</li>
+  <li><b>Single ownership:</b> one active case lease per task attempt. Project runners may continue normal work, but cannot run a competing recovery action for that attempt.</li>
+  <li><b>Noise control:</b> retry events with the same evidence fingerprint append to the case. They do not create feed rows or model calls on every sweep.</li>
+  <li><b>Terminal discipline:</b> an invariant-produced requeue or quarantine is not undone by the Watcher. The case reports it and can add context.</li>
+</ul>
+
+<h2 id="capabilities"><span class="no">§3</span>Capability ladder</h2>
+<p>The ladder is sequential and fail-closed. A later stage receives the receipts of every earlier stage. It may stop early when the problem is mechanically resolved.</p>
+
+<figure>
+<svg viewBox="0 0 1040 430" role="img" aria-label="Watcher layers from hard invariants through inspection, rescue, strong analysis, reporting, and the Activity feed">
+  <rect class="s-node2" x="28" y="28" width="984" height="64" rx="10"/>
+  <text class="s-label" x="50" y="54">L0 · Mechanical truth</text>
+  <text class="s-sub" x="50" y="75">AGT-2543 acceptance · AGT-2544 envelope and fence · AGT-2545 telemetry and stale alert · state machine and attempt fences</text>
+
+  <rect class="s-node" x="28" y="132" width="188" height="94" rx="10"/>
+  <text class="s-label" x="47" y="158">L1 · Inspect</text>
+  <text class="s-sub" x="47" y="181">Snapshot task, attempt, logs,</text>
+  <text class="s-sub" x="47" y="199">fences, refs, diffs, gates</text>
+
+  <rect class="badge-warn" x="254" y="132" width="188" height="94" rx="10"/>
+  <text class="s-label" x="273" y="158">L2 · Rescue</text>
+  <text class="s-sub" x="273" y="181">Match a versioned recipe;</text>
+  <text class="s-sub" x="273" y="199">execute only inside allowlist</text>
+
+  <rect class="s-node" x="480" y="132" width="188" height="94" rx="10"/>
+  <text class="s-label" x="499" y="158">L3 · Analyze</text>
+  <text class="s-sub" x="499" y="181">Strong bounded synthesis when</text>
+  <text class="s-sub" x="499" y="199">recipe or evidence is uncertain</text>
+
+  <rect class="badge-ok" x="706" y="132" width="188" height="94" rx="10"/>
+  <text class="s-label" x="725" y="158">L4 · Report</text>
+  <text class="s-sub" x="725" y="181">Card finding, action receipt,</text>
+  <text class="s-sub" x="725" y="199">decision packet, resolution</text>
+
+  <path class="s-flow" d="M216 179 H252" marker-end="url(#arrow)"/>
+  <path class="s-flow" d="M442 179 H478" marker-end="url(#arrow)"/>
+  <path class="s-flow" d="M668 179 H704" marker-end="url(#arrow)"/>
+
+  <rect class="badge-bad" x="116" y="292" width="230" height="76" rx="10"/>
+  <text class="t-bad" x="136" y="319">Problem</text>
+  <text class="s-sub" x="136" y="341">Open, acute, evidence linked</text>
+
+  <rect class="badge-warn" x="405" y="292" width="230" height="76" rx="10"/>
+  <text class="t-warn" x="425" y="319">Decision required</text>
+  <text class="s-sub" x="425" y="341">Human choice and safe options</text>
+
+  <rect class="badge-ok" x="694" y="292" width="230" height="76" rx="10"/>
+  <text class="t-ok" x="714" y="319">Resolved finding</text>
+  <text class="s-sub" x="714" y="341">Verified outcome and receipts</text>
+
+  <path class="s-flow" d="M800 226 V260 H231 V290" marker-end="url(#arrow)"/>
+  <path class="s-flow" d="M800 226 V260 H520 V290" marker-end="url(#arrow)"/>
+  <path class="s-flow" d="M800 226 V290" marker-end="url(#arrow)"/>
+  <text class="s-tiny" x="370" y="405">Activity across projects · one correlated case, distinct problem / decision / resolution presentation</text>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Layer and flow model.</b> The Watcher starts from mechanical truth, not model opinion. Inspection can prove a known recovery, rescue is policy-gated, analysis is called only for uncertainty, and reporting always leaves a durable card and workspace trace.</figcaption>
+</figure>
+
+<h3>Inspection package</h3>
+<p>The deterministic collector builds an immutable, size-bounded <code>WatcherEvidencePack</code>. It records absent evidence explicitly instead of substituting guesses:</p>
+<ul>
+  <li><code>task.json</code> snapshot, lane, transition history, operator epoch, attempt-chain and current attempt identifiers;</li>
+  <li>typed run outcome, delivery envelope, integration status, grade and aspect findings, reissue and retry budgets;</li>
+  <li>bounded log windows around the trigger, plus full-log content hashes and paths for drill-down;</li>
+  <li>task, runner, fence, and integration refs; <code>baseSha</code>, <code>resultSha</code>, merge base, ancestry verdict, and remote presence;</li>
+  <li>card-scoped diff summary, changed-path inventory, result inventory, gate receipts, and baseline comparison;</li>
+  <li>related-case links and missing-artifact facts, including AGT-2555's generated <code>status.md</code> scaffold distinction.</li>
+</ul>
+
+<h3>Recovery recipes</h3>
+<table>
+  <thead><tr><th>Recipe</th><th>Required proof</th><th>Pilot authority</th><th>Completion proof</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Re-register</b></td>
+      <td>The expected runner identity is unchanged, no competing live lease exists, credentials remain valid, and only an expired or absent registration blocks claims.</td>
+      <td><span class="pill done">Autonomous</span> one bounded retry through the registration API.</td>
+      <td>Capability heartbeat and claim eligibility become visible; otherwise escalate without repeated registration.</td>
+    </tr>
+    <tr>
+      <td><b>Rebase-steer</b></td>
+      <td>No active CLI or merge action, a trusted task or fence ref exists, the base is stale, and the existing reissue budget permits one more attempt.</td>
+      <td><span class="pill done">Autonomous</span> append a precise steer and request the existing requeue path. The pipeline, not the Watcher, performs Git work.</td>
+      <td>The new attempt starts from current integration head and retains the prior evidence link.</td>
+    </tr>
+    <tr>
+      <td><b>Fence salvage</b></td>
+      <td>Fence belongs to the exact task and attempt; ancestry is known; diff is card-scoped; no unexpected commits or paths exist; transplant is clean in a disposable worktree; required gates pass on the proposed subject SHA.</td>
+      <td><span class="pill part">Approval-gated pilot</span> prepare candidate and receipts. Later autonomy requires promotion evidence in §8.</td>
+      <td>Pipeline-owned integration reports the exact result SHA on the target branch. A fence presence alone is never success.</td>
+    </tr>
+    <tr>
+      <td><b>Conflict packet</b></td>
+      <td>Integration conflict or semantic overlap, with both sides and affected requirements identified.</td>
+      <td><span class="pill open">Human only</span> no automated resolution.</td>
+      <td>Operator chooses scope or resolution; a fresh normal pipeline attempt verifies it.</td>
+    </tr>
+    <tr>
+      <td><b>Loop break</b></td>
+      <td>Repeated grade fingerprint or reissue without new evidence.</td>
+      <td><span class="pill open">Analysis only</span> no additional blind reissue.</td>
+      <td>Narrowed acceptance, new evidence, or an explicit human decision starts the next attempt.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Analysis receipt</h3>
+<p>The strong model receives only the evidence pack and a fixed response schema. Its receipt contains competing hypotheses, evidence for and against each, confidence, root cause, affected scope, a recommended recipe or decision, required approvals, verification, rollback, and unknowns. The pure action policy independently evaluates the receipt. Free-form prose cannot grant authority.</p>
+
+<h2 id="visibility"><span class="no">§4</span>Visibility model</h2>
+<p class="stx stx-part">One durable case projects to the card and to Activity across projects. SignalR is delivery acceleration, not the source of truth.</p>
+
+<table>
+  <thead><tr><th>Case state</th><th>Existing feed kind</th><th>Presentation</th><th>Lifecycle</th></tr></thead>
+  <tbody>
+    <tr><td><code>open</code></td><td><code>alert</code></td><td><b>Problem</b>: trigger, impact, age, current phase, card link.</td><td>Acute until verified resolution or conversion to a decision.</td></tr>
+    <tr><td><code>decision-required</code></td><td><code>decision</code></td><td><b>Decision</b>: one question, recommended option, alternatives, consequences, evidence.</td><td>Remains pending until an attributable operator answer.</td></tr>
+    <tr><td><code>action-running</code></td><td><code>action</code></td><td><b>Watcher action</b>: recipe, authority class, preconditions, receipt link.</td><td>Chronological audit row, never shown as success before verification.</td></tr>
+    <tr><td><code>resolved</code></td><td><code>observation</code></td><td><b>Resolved finding</b>: cause, action or no-action result, proof, elapsed time.</td><td>Quiet history. It clears the acute problem without erasing it.</td></tr>
+    <tr><td><code>gave-up</code></td><td><code>alert</code></td><td><b>Problem</b>: bounded attempts exhausted and exact missing authority or evidence.</td><td>Visible terminal, never a silent idle case.</td></tr>
+  </tbody>
+</table>
+
+<h3>Card projection</h3>
+<p>The task shows one compact current Watcher panel, not a duplicate transcript: case id, status, last verified finding, current or proposed action, evidence links, and decision owner. Each Watcher transition also appends a structured timeline note through the application API. The panel deep-links to the case and the dossier or postmortem when one exists. Missing <code>status.md</code> remains a separate evidence fact owned by AGT-2555; the Watcher must not treat a generated scaffold as agent-authored proof.</p>
+
+<h3>Workspace aggregate</h3>
+<p>The global header shows <b>open problems</b>, <b>decisions required</b>, <b>actions running</b>, and <b>rescues verified in 24 hours</b>. Counts are sums of visible cases and respect project access. The normal feed retains its project and event filters. Strong-model tokens and historical cost state appear on the analysis row; unknown price is shown as unknown, never zero.</p>
+
+<h3>Live delivery</h3>
+<p>AGT-2535's proposed SignalR seam provides the pattern to reuse: persist first, publish a project-scoped event on the existing TaskHub, treat subscriber failure as best-effort, and refresh a complete snapshot after reconnect. The Watcher adds a stable <code>watcherCaseUpdated</code> envelope and an append-only feed projection. Authorized clients join project groups; the workspace feed merges only the groups they may read. A dropped socket cannot lose the incident because the snapshot endpoint rehydrates from the durable case store.</p>
+
+<div class="box warn">
+  <h4>Noise rule</h4>
+  <p>Every state-changing Watcher action is traceable, but identical checks are rollups, not feed rows. A periodic check that finds no new evidence updates counters on the case. It does not create an Observation every five minutes.</p>
+</div>
+
+<h2 id="economy"><span class="no">§5</span>Model economy</h2>
+<p>The repository's <a href="../../system/domains/model-routing-policy.md">model routing policy</a> remains authoritative. Cost follows uncertainty after the correctness floor is established. No model is used for typed trigger detection, ancestry, hashes, counters, thresholds, allowlist checks, or idempotency.</p>
+
+<table>
+  <thead><tr><th>Work</th><th>Route</th><th>Boundary</th></tr></thead>
+  <tbody>
+    <tr><td>Signal normalization, evidence collection, exact recipe matching, action admission</td><td><b>No model</b></td><td>Deterministic code and pure policy.</td></tr>
+    <tr><td>Bounded log clustering or evidence compression when raw text exceeds the pack limit</td><td><b>Mini/high</b></td><td>Read-only supporting call. It cannot diagnose conclusively or authorize an action.</td></tr>
+    <tr><td>Ambiguous root cause, competing evidence, repeated grade loop, or operator decision preparation</td><td><b>Sol/medium</b></td><td>Default strong analysis floor under current policy.</td></tr>
+    <tr><td>Fencing, lease authority, credible data loss, security, destructive recovery, or an ambiguous decision that can affect protected state</td><td><b>Sol/xhigh</b></td><td>Hard floor. Quota or price cannot lower it.</td></tr>
+  </tbody>
+</table>
+
+<h3>Planning cost</h3>
+<p>The following estimates are workload envelopes, not measured production prices. One <b>E-call</b> is a bounded Mini/high support call of roughly 10k input and 1k output tokens. One <b>S-call</b> is a bounded Sol/medium analysis of roughly 40k input and 4k output tokens. An xhigh call is reported separately because converting it to S-call cost without a live catalogue price would be false precision.</p>
+
+<table>
+  <thead><tr><th>Trigger class</th><th>Model-free path</th><th>Estimated model demand per new case</th><th>Pilot cost reading</th></tr></thead>
+  <tbody>
+    <tr><td><b>5e escalation</b></td><td>Normalize category, collect current attempt and receipts.</td><td>0 to 1 E-call; 0.5 to 1 S-call; 20k to 50k strong input, 2k to 5k output when invoked.</td><td>Medium. Many typed categories should resolve without strong analysis; ambiguous terminals should not.</td></tr>
+    <tr><td><b>Integration Error / Conflict / NoTaskBranch</b></td><td>Outcome, ancestry, ref presence, conflict paths, recipe match.</td><td>0 to 1 E-call; 0 to 0.25 S-call. A semantic conflict routes to a decision rather than automatic repeated analysis.</td><td>Low for known infrastructure outcomes, medium when conflict meaning matters.</td></tr>
+    <tr><td><b>Unverified delivery</b></td><td>Envelope validation, fence provenance, diff and gate inventory.</td><td>0 to 1 E-call; 0.25 to 0.75 S-call; 15k to 45k strong input when provenance is incomplete.</td><td>Low when AGT-2544's regular requeue works, higher for salvage evaluation.</td></tr>
+    <tr><td><b>Starvation / stale</b></td><td>Threshold, heartbeat, queue, lease, and integration-status checks.</td><td>Normally zero. At most 0.1 S-call averaged across cases because analysis starts only after persistent contradictory snapshots.</td><td>Very low. This class should be almost entirely mechanical.</td></tr>
+    <tr><td><b>Repeated grade loop</b></td><td>Fingerprint findings, attempts, steers, and unchanged evidence.</td><td>Up to 1 E-call and exactly 1 S-call when admitted; 25k to 60k input, 3k to 6k output.</td><td>High per case, but cheaper than another blind CORE and review cycle.</td></tr>
+    <tr><td><b>Silent anomaly</b></td><td>Cross-source state sequence, Git proof, operator epochs, scaffold markers.</td><td>Up to 1 E-call and 1 S-call; 30k to 80k input, 3k to 8k output. Use xhigh when the hard floor applies.</td><td>Highest per case because the signal is a contradiction, not a diagnosis.</td></tr>
+  </tbody>
+</table>
+
+<h3>Spend controls</h3>
+<ul>
+  <li>One strong call per evidence fingerprint. A second call requires materially new evidence or an operator-requested alternative.</li>
+  <li>Batch stale signals into a deterministic project rollup. Do not ask a model to rediscover the same substrate fault for ten cards.</li>
+  <li>Cap concurrent strong analysis globally and serialize it per project. Priority affects waiting time, never the correctness floor.</li>
+  <li>Record selected route, policy version, reason, tokens, quota bucket, price status, and case outcome. Calibrate the estimates after 30 resolved cases per trigger family where volume permits.</li>
+  <li>When the strong route is unavailable, P1/P2 cases wait visibly or ask for an override. They never silently downgrade. P0 cases surface an acute capacity problem.</li>
+</ul>
+
+<h2 id="boundaries"><span class="no">§6</span>Authority boundary</h2>
+<table>
+  <thead><tr><th>Owner</th><th>Responsibilities</th><th>Explicit non-goals</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Mechanical layer</b><br>AGT-2543 / 2544 / 2545</td>
+      <td>Truthful completion and integration, envelope and fence guarantees, automatic policy requeue, distinct telemetry, stale detection and alarms.</td>
+      <td>It does not infer root cause, compare competing recoveries, or write an operator dossier.</td>
+    </tr>
+    <tr>
+      <td><b>Watcher</b></td>
+      <td>Correlated incident lifecycle, evidence packaging, exact recipe selection, allowlisted recovery requests, bounded analysis, decision preparation, card and feed reporting.</td>
+      <td>It does not waive gates, mutate task storage directly, force-push, invent integration truth, or become a second scheduler or merge queue.</td>
+    </tr>
+    <tr>
+      <td><b>Human</b></td>
+      <td>Scope changes, semantic conflict resolution, destructive or protected-branch operations, security and permission decisions, invariant exceptions, budget overrides, and promotion of new autonomous recipes.</td>
+      <td>A human is not required to repeat mechanical evidence collection or approve a proven no-risk registration refresh.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Autonomy classes</h3>
+<ul>
+  <li><b>A0, read-only:</b> inspect, correlate, analyze, and report automatically.</li>
+  <li><b>A1, reversible and bounded:</b> existing-identity re-registration, precise steer append, and policy-approved requeue through the API. Idempotent receipt and verification required.</li>
+  <li><b>A2, prepared:</b> fence transplant candidate, clean rebase proposal, or non-trivial retry. The Watcher prepares commands, SHAs, gates, and rollback; a human confirms.</li>
+  <li><b>A3, human-only:</b> force push, history rewrite, semantic conflict, cross-card scope, failed-gate waiver, permission elevation, protected branch override, or destructive cleanup.</li>
+</ul>
+
+<div class="box bad">
+  <h4>Non-negotiable invariant</h4>
+  <p>The Watcher works on invariant signals. It cannot suppress them, mark a card complete without their proof, or reinterpret missing evidence as success. If its own analysis disagrees with AGT-2543, AGT-2544, or AGT-2545, the result is a visible decision or defect report, not an override.</p>
+</div>
+
+<h2 id="operations"><span class="no">§7</span>Operating model</h2>
+<h3>Placement</h3>
+<p><b>The logical coordinator belongs beside the global Control Plane, not inside the local Studio UI and not inside one project runner.</b> It needs workspace-wide task facts, a durable case store, global deduplication, and one lifecycle lease. Model and repository work is dispatched as bounded, attributable jobs to a runner with a <code>watcher-analysis</code> or read-only evidence capability. Existing pipeline services execute approved mutations.</p>
+
+<table>
+  <thead><tr><th>Component</th><th>Placement</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td><b>Watcher coordinator</b></td><td>Singleton hosted service in the Task Server or global orchestrator control process.</td><td>Workspace truth, durable inbox/outbox, cross-project dedupe, no dependency on an open Studio client.</td></tr>
+    <tr><td><b>Evidence collector</b></td><td>Runner or host capability close to the repository and logs.</td><td>Read refs and bounded artifacts without copying whole repositories into the Control Plane.</td></tr>
+    <tr><td><b>Strong analyzer</b></td><td>Dedicated analysis slot on an eligible runner.</td><td>Uses live catalogue routing, records actual model and tokens, and cannot hold a coding or merge authority.</td></tr>
+    <tr><td><b>Action executor</b></td><td>Existing task API, runner registration API, pipeline, merge queue, and transition services.</td><td>Preserves fences, permissions, budgets, audit, and state-machine ownership.</td></tr>
+    <tr><td><b>Projection</b></td><td>Durable case/read model plus TaskHub push.</td><td>Card and Activity views converge after reconnect and remain access-scoped.</td></tr>
+  </tbody>
+</table>
+
+<h3>Cadence</h3>
+<ul>
+  <li><b>Immediate:</b> typed escalations, delivery failures, integration outcomes, and AGT-2545 alerts enter the durable inbox.</li>
+  <li><b>Five minutes:</b> reconciliation joins task lane, attempt, Git integration, fence, runner registration, and open-case state to find silent anomalies.</li>
+  <li><b>Thirty minutes:</b> AGT-2545 owns the accepted-without-integration threshold and repeated warning cadence. The Watcher consumes the emitted fact rather than starting a parallel timer.</li>
+  <li><b>Daily:</b> a deterministic operating rollup reports trigger volume, resolution time, automatic actions, decisions, strong calls, tokens, and unknown-price rows. A model-authored news summary is optional and separately budgeted.</li>
+</ul>
+
+<h3>Self-monitoring</h3>
+<p>An independent health monitor, not the Watcher itself, evaluates a one-minute heartbeat and event watermark. Three missed heartbeats or a five-minute input lag produces a workspace <b>Watcher unavailable</b> Problem in Activity and system health. The coordinator reports queue depth, oldest unclaimed case, phase age, action retries, dedupe rate, recipe success, human reversals, strong-call latency, tokens, and spend status.</p>
+<ul>
+  <li>Restart replays the durable inbox and resumes cases by idempotency key.</li>
+  <li>An unavailable analyzer pauses only analysis-required cases. Mechanical invariants and normal pipeline recovery continue.</li>
+  <li>An action verification timeout fails closed, publishes the incomplete receipt, and blocks repetition until state is reconciled.</li>
+  <li>Global and per-project concurrency are bounded. There is no nested fan-out and no hidden subagent tree.</li>
+</ul>
+
+<h2 id="slices"><span class="no">§8</span>Slice plan</h2>
+<p class="stx stx-part">Slices are independently reviewable. Estimates are engineering days for one engineer and exclude observation time needed for pilot promotion.</p>
+
+<table>
+  <thead><tr><th>Slice</th><th>Scope</th><th>Acceptance</th><th>Estimate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>W0 · Contracts</b></td>
+      <td>Version <code>WatcherTrigger</code>, <code>WatcherCase</code>, evidence-pack, analysis-receipt, action-receipt, authority, and feed projection schemas. Define fingerprints and terminals.</td>
+      <td>Fixture matrix covers all six trigger classes, duplicate delivery, stale evidence, operator epoch change, and every autonomy class without a model call.</td>
+      <td>3 to 4 days</td>
+    </tr>
+    <tr>
+      <td><b>W1 · Observation</b><br><span class="pill queued">recommended first</span></td>
+      <td>Durable global case inbox, event adapters for 5e, integration, delivery, and AGT-2545; five-minute anomaly reconciliation; card note; Activity Problem and resolved finding; independent heartbeat.</td>
+      <td>Shadow mode changes no task or Git state. Every fixture becomes one deduplicated case, survives restart, rehydrates after SignalR reconnect, and reaches an explicit terminal.</td>
+      <td>5 to 8 days</td>
+    </tr>
+    <tr>
+      <td><b>W2 · Analysis</b><br><span class="pill queued">recommended first</span></td>
+      <td>Bounded evidence pack, optional Mini/high compression, policy-routed Sol analysis, decision packet, token and price-status attribution.</td>
+      <td>Strong analysis runs only on declared uncertainty; policy tests prove risk floors; one call per fingerprint; feed and card distinguish Problem, Decision, and resolved finding.</td>
+      <td>5 to 8 days</td>
+    </tr>
+    <tr>
+      <td><b>W3 · Safe rescue</b></td>
+      <td>A1 allowlist for existing-identity re-registration, rebase-steer, and an existing-policy requeue. All actions use public application boundaries.</td>
+      <td>Matrix tests reject active lease, stale operator epoch, exhausted budget, changed ref, duplicate receipt, and missing verification. Kill switch exists per recipe and project.</td>
+      <td>5 to 7 days</td>
+    </tr>
+    <tr>
+      <td><b>W4 · Fence preparation</b></td>
+      <td>Card-scoped fence candidate builder in a disposable worktree, diff and ancestry proof, gate execution, operator decision packet, pipeline handoff.</td>
+      <td>No direct merge. Candidate names exact source and target SHAs, unexpected paths, gates, rollback, and expiry. Conflict or ambiguity always routes to Decision.</td>
+      <td>6 to 10 days</td>
+    </tr>
+    <tr>
+      <td><b>W5 · Pattern coverage</b></td>
+      <td>Repeated-grade fingerprinting, accepted-then-reverted sequence detector, scaffold distinction from AGT-2555, workspace aggregates, and economy report.</td>
+      <td>MKT-20, AGT-2307, and MKT-22 fixtures wake exactly once; aggregate equals visible cases; realized call and token cost is reported per trigger class.</td>
+      <td>4 to 7 days</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Pilot promotion</h3>
+<p>W1 and W2 may ship together in observe-only mode after AGT-2543 to AGT-2545 signals are integrated or adapted. W3 requires at least 30 shadow cases across its enabled trigger classes, zero proposed actions outside the allowlist, and no missed stale-evidence rejection. Fence integration must remain A2 until at least 30 operator-approved fence candidates have zero scope escapes, zero wrong-attempt attribution, deterministic gates on the exact subject SHA, and no human reversal. Promotion is per recipe, never a global autonomy switch.</p>
+
+<h3>Dependency reading</h3>
+<ul>
+  <li><b>AGT-2543:</b> authoritative acceptance and integration truth. The Watcher consumes its outcome and cannot weaken it.</li>
+  <li><b>AGT-2544:</b> delivery envelope, salvage-fence reference, and regular recovery path. The Watcher handles exceptions after that policy has spoken.</li>
+  <li><b>AGT-2545:</b> honest outcome counts and stale accepted-delivery signal. It is the Watcher's low-cost wake source.</li>
+  <li><b>AGT-2555:</b> reliable <code>status.md</code> completion evidence and scaffold distinction. The Watcher reports missing proof without manufacturing it.</li>
+  <li><b>AGT-2535:</b> durable-first, project-scoped SignalR projection and reconnect convergence pattern. It is an implementation seam, not a source task of this dossier.</li>
+</ul>
+
+<h2 id="decision"><span class="no">§9</span>Decision request</h2>
+<div class="box warn">
+  <h4>Requested operator decision</h4>
+  <ol>
+    <li><b>Architecture:</b> approve the global Control Plane coordinator with runner-hosted evidence and model jobs.</li>
+    <li><b>First release:</b> approve W0 to W2 as observe-only, with no task or Git mutations.</li>
+    <li><b>Autonomy:</b> approve A1 re-registration and rebase-steer or policy-requeue for W3, subject to the stated guards and kill switches.</li>
+    <li><b>Fence policy:</b> keep fence salvage A2 and approval-gated until recipe-specific promotion evidence exists.</li>
+    <li><b>Model policy:</b> approve Mini/high only for bounded compression, Sol/medium for ambiguous analysis, and Sol/xhigh for the existing hard-floor cases.</li>
+  </ol>
+</div>
+
+<p><b>Recommended answer:</b> approve all five items. This creates useful visibility and analysis before granting mutation authority, preserves the mechanical guarantees now being added, and turns today's manual rescue pattern into a measured, auditable progression rather than an all-at-once autonomous agent.</p>
+
+<p class="dim">Related reading: <a href="../project-feed/index.html">Project Feed</a>, <a href="../../concepts/orchestrator-supervision-loop.html">Orchestrator Supervision Loop</a>, <a href="../../concepts/orchestrator-drive-to-conclusion.html">Drive to Conclusion</a>, and <a href="../../concepts/model-escalation-and-companion-routing.md">Model Escalation and Companion Routing</a>.</p>
+
+</main>
+</body>
+</html>
