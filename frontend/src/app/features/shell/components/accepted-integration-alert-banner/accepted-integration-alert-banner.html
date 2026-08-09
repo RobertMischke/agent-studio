@@ -1,0 +1,12 @@
+@if (visibleItems().length > 0) {
+  <aside class="integration-alert"
+         data-testid="accepted-integration-alert-banner"
+         role="status"
+         aria-live="polite">
+    <span class="integration-alert__signal" aria-hidden="true"></span>
+    <p>
+      <strong><span class="integration-alert__number">{{ visibleItems().length }}</span> accepted {{ visibleItems().length === 1 ? 'task has' : 'tasks have' }} not reached successful integration for over <span class="integration-alert__number">{{ thresholdMinutes() }}</span> minutes.</strong>
+      <span class="integration-alert__detail">{{ projectTaskKeys() }}. Open a task to inspect its integration outcome.</span>
+    </p>
+  </aside>
+}

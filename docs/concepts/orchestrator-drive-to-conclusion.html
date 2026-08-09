@@ -1819,7 +1819,7 @@
         </tr>
         <tr>
           <td>2026-08-09</td>
-          <td><code>AGT-2544</code><br><span class="small">AGT-2531 and AGT-2541 existed only on salvage fences</span></td>
+          <td><code>AGT-2544</code> / <code>AGT-2545</code><br><span class="small">AGT-2531 and AGT-2541 existed only on salvage fences</span></td>
           <td>
             AGT-2531 reported <code>Blocked</code> without an immutable result envelope and still reached Completed; its
             accepted-integration worker later returned <code>NoTaskBranch</code>. AGT-2541 reported <code>Done</code>
@@ -1841,7 +1841,10 @@
             and returns the first failure to <span class="lane">2-ready</span>. The second consecutive envelope failure
             reaches <span class="lane">5e-escalated</span> with category <code>unverified-delivery</code>. Teardown
             publishes and verifies the salvage fence before immutable-ref publication or worktree removal; an unsecured
-            fence still retains the checkout and uses <code>worktree-blocked</code>.
+            fence still retains the checkout and uses <code>worktree-blocked</code>. The 15-minute acceptance backstop now
+            reports attempted, merged, already-merged, and failed counts separately, treats only a real merge as
+            integrated, and publishes a project-filtered board banner plus task-key warning when an accepted delivery
+            remains unintegrated for 30 minutes.
           </td>
         </tr>
       </tbody>

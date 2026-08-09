@@ -20,6 +20,13 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     private readonly TaskTransitionService? _transitions;
     private readonly TimelineLog? _timeline;
     private readonly PipelineExecutionLog? _pipelineLog;
+    private readonly object _alertGate = new();
+    private readonly AcceptedIntegrationAlertLogState _alertLog = new();
+    private AcceptedIntegrationAlertSnapshot _currentAlert = new()
+    {
+        ObservedAt = DateTime.UtcNow,
+        ThresholdMinutes = 30,
+    };
 
     public AcceptedIntegrationBackstopHostedService(
         TaskScannerService scanner,
@@ -45,10 +52,15 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         _pipelineLog = pipelineLog;
     }
 
+    public AcceptedIntegrationAlertSnapshot CurrentAlert
+    {
+        get { lock (_alertGate) return _currentAlert; }
+    }
+
     public int RunOnce()
     {
-        // AGT-2480: Automation-Scanner schliesst Fixture-Karten aus;
-        // Variablenname acceptedJobs (AGT-2428) bleibt, damit der Rest der Methode traegt.
+        // AGT-2480: the automation scanner excludes fixture cards. Keep the
+        // acceptedJobs name from AGT-2428 because it describes the recovery set.
         var acceptedJobs = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(job =>
                 job.State is TaskStates.Completed or TaskStates.Archive
@@ -62,12 +74,12 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             .ThenBy(DeliveryOrder)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        if (acceptedJobs.Count == 0) return 0;
 
         var statusByKey = _integrationStatus.BuildLookup(acceptedJobs);
-        var integrated = 0;
+        var attemptOutcomes = new List<MergeIntoIntegrationOutcome>();
         foreach (var job in acceptedJobs)
         {
+            var attemptRecorded = false;
             try
             {
                 statusByKey.TryGetValue(job.TaskKey, out var status);
@@ -96,11 +108,12 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                     settings.IntegrationBranch,
                     settings.IntegrationStrategy,
                     PipelineTypes.Resolve(job));
+                attemptOutcomes.Add(result.Outcome);
+                attemptRecorded = true;
                 if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
                 {
                     FinalizeTransactionalAccept(job);
                     ClearPendingTag(job);
-                    integrated++;
                 }
                 else
                 {
@@ -112,6 +125,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             }
             catch (Exception ex)
             {
+                if (!attemptRecorded)
+                    attemptOutcomes.Add(MergeIntoIntegrationOutcome.Error);
                 RecordUnexpectedFailure(job, ex.Message);
                 ReturnTransactionalAcceptToReview(
                     job,
@@ -125,14 +140,96 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             }
         }
 
-        if (integrated > 0)
+        var summary = AcceptedIntegrationBackstopPolicy.Summarize(attemptOutcomes);
+        AcceptedIntegrationBackstopTelemetry.LogSweep(_logger, summary);
+        try
         {
-            _logger.LogInformation(
-                "accepted-integration-backstop integrated {Count} accepted delivery(s)",
-                integrated);
+            RefreshAlert(DateTime.UtcNow);
         }
-        return integrated;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "accepted-integration-alert-refresh-failed");
+        }
+        return summary.Integrated;
     }
+
+    internal AcceptedIntegrationAlertSnapshot RefreshAlert(DateTime nowUtc)
+    {
+        var now = nowUtc.ToUniversalTime();
+        var thresholdMinutes = Math.Clamp(
+            _configuration.GetValue<int?>("Integration:AcceptedAlertThresholdMinutes") ?? 30,
+            1,
+            24 * 60);
+        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
+            .Where(IsAcceptedAlertCandidate)
+            .OrderBy(job => job.EnteredLaneAt)
+            .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var statusByKey = _integrationStatus.BuildLookup(candidates);
+        var policyCandidates = new List<AcceptedIntegrationAlertCandidate>(candidates.Count);
+
+        foreach (var job in candidates)
+        {
+            statusByKey.TryGetValue(job.TaskKey, out var status);
+            var recovery = _integrationStatus.ResolveAcceptedIntegrationRecovery(job, status);
+            policyCandidates.Add(new AcceptedIntegrationAlertCandidate
+            {
+                Task = job,
+                AcceptedAt = ResolveAcceptedAt(job),
+                IntegrationStatus = status?.Status,
+                LastOutcome = NormalizeOutcome(recovery.LastMergeAttempt?.Verdict),
+                Detail = recovery.LastMergeAttempt?.Reason
+                         ?? recovery.LastMergeAttempt?.VerdictSummary
+                         ?? status?.Detail,
+            });
+        }
+
+        var next = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
+            now,
+            TimeSpan.FromMinutes(thresholdMinutes),
+            policyCandidates);
+        lock (_alertGate)
+        {
+            _alertLog.Publish(_logger, _currentAlert, next, now);
+            _currentAlert = next;
+            return _currentAlert;
+        }
+    }
+
+    private static bool IsAcceptedAlertCandidate(TaskInfo job)
+    {
+        if (TaskModes.IsReadOnly(job.Mode)) return false;
+        if (job.State is TaskStates.Completed or TaskStates.Archive) return true;
+        return job.State == TaskStates.HumanReview
+               && (string.Equals(job.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal)
+                   || (job.Tags ?? []).Any(IntegrationStatuses.IsPendingTag));
+    }
+
+    private DateTime ResolveAcceptedAt(TaskInfo job)
+    {
+        var integrationStarted = _timeline?.ReadAll(job.FolderPath)
+            .Where(item => string.Equals(
+                item.Kind,
+                TimelineEventKinds.IntegrationStarted,
+                StringComparison.Ordinal))
+            .OrderByDescending(item => item.Ts)
+            .FirstOrDefault();
+        return integrationStarted?.Ts ?? job.EnteredLaneAt;
+    }
+
+    private static string? NormalizeOutcome(string? verdict)
+        => verdict?.Trim().ToLowerInvariant() switch
+        {
+            "merged" => nameof(MergeIntoIntegrationOutcome.Merged),
+            "already-merged" or "already-integrated" => nameof(MergeIntoIntegrationOutcome.AlreadyMerged),
+            "no-branch" => nameof(MergeIntoIntegrationOutcome.NoTaskBranch),
+            "conflict" => nameof(MergeIntoIntegrationOutcome.Conflict),
+            "gate-failed" => nameof(MergeIntoIntegrationOutcome.GateFailed),
+            "pushed-for-review" => nameof(MergeIntoIntegrationOutcome.PushedForReview),
+            "error" => nameof(MergeIntoIntegrationOutcome.Error),
+            null or "" => null,
+            _ => verdict,
+        };
 
     private void RecordUnexpectedFailure(TaskInfo job, string detail)
     {
@@ -249,5 +346,32 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 ["outcome"] = outcome,
                 ["detail"] = detail ?? string.Empty,
             });
+    }
+}
+
+public static class AcceptedIntegrationBackstopEndpoints
+{
+    public static void MapAcceptedIntegrationBackstopEndpoints(this WebApplication app)
+    {
+        app.MapGet("/api/pipeline/accepted-integration-alert", (
+            HttpContext context,
+            AcceptedIntegrationBackstopHostedService backstop,
+            ProjectRegistry projects) =>
+        {
+            var snapshot = backstop.CurrentAlert;
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human)
+                return Results.Ok(snapshot);
+
+            var visibleItems = snapshot.Items
+                .Where(item => ProjectAccessAuthorization.Allows(human.User, item.ProjectName, projects))
+                .ToList();
+            return Results.Ok(snapshot with
+            {
+                Active = visibleItems.Count > 0,
+                StalledTaskCount = visibleItems.Count,
+                OldestAcceptedAt = visibleItems.FirstOrDefault()?.AcceptedAt,
+                Items = visibleItems,
+            });
+        });
     }
 }

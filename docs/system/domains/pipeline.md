@@ -199,7 +199,13 @@ pipeline view.
   `TaskIntegrationStatusService` target-branch verdict as the board, so a stale
   Passed step cannot overrule missing Git presence. The backstop finalizes
   Completed only after successful integration and returns decided failures to
-  Human Review.
+  Human Review. Its 15-minute sweep reports `attempted`, `merged`,
+  `alreadyMerged`, and `failed` separately; only a `Merged` result contributes
+  to the `integrated` count. The same sweep evaluates the 30-minute accepted
+  delivery invariant. Accepted cards without Git-proven integration publish a
+  project-filtered snapshot at
+  `GET /api/pipeline/accepted-integration-alert`, render a persistent board
+  banner, and emit a warning event containing the affected task keys.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability
