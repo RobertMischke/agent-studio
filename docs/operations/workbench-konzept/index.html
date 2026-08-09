@@ -146,8 +146,12 @@
   <li><b>Interaktivität:</b> Fundament ist AGT-2520 (Checkboxen + Freitext). Darauf: Varianten-Bilder als umschaltbare Vergleiche (ui-heavy), einklappbare Beleg-Blöcke (concept-heavy). Alles progressive enhancement — ohne Studio bleibt es ein lesbarer Artikel.</li>
 </ol>
 
-<h2><span class="no">07</span>Nav-Einbindung</h2>
+<h2><span class="no">07</span>Nav-Einbindung, Projektebene, Echtzeit</h2>
 <p>Heute: Unterpunkt je Projekt, ohne Hervorhebung, ohne Zustand (AGT-2509 fixt Hervorhebung + Expansion). Darüber hinaus: Der Listen-Eintrag trägt künftig Pattern-Icon, Status-Punkt und — bei decision-pending — die Zahl offener Entscheidungen („Nav-Konsistenz · 4 offen"). Damit wird die Nav vom Ablageort zur Arbeitsliste.</p>
+<h3>Projektebene: eigene Listen-Seite</h3>
+<p>Zusätzlich zur zentralen Seite (Abschnitt 08) bekommt <b>jedes Projekt seine Workbench-Liste als eigene Seite</b> — gleiche Sortierung und Entscheiden-aus-der-Liste wie zentral, nur projektgefiltert. Die Nav-Kinder unter „Workbenches" bleiben als Schnellzugriff; die Seite ist der Arbeitsort. (Analog Board vs. Karten-Links.)</p>
+<h3>Echtzeit statt Reload: SignalR</h3>
+<p>Heutiger Beleg aus der Praxis: Vier neue Workbenches waren per API sofort gelistet, im Nav-Tree aber unsichtbar, bis der Operator neu lädt — der Tree pollt nicht und bekommt nichts gepusht. Da das System mehrbenutzerfähig werden soll, gehören Workbench-Ereignisse auf die vorhandene SignalR-Strecke (das Studio betreibt bereits Hubs unter <code>/hubs</code>): <code>created</code>, <code>updated</code>, <code>decisionRecorded</code>, <code>statusChanged</code>. Konsumenten: Nav-Tree (Kinder + Zähler), Projekt-Liste, zentrale Seite, geöffneter Viewer (fremde Entscheidungen erscheinen live, mit Entscheider-Attribution aus AGT-2520). Kein neues Transport-Konzept — dieselbe Mechanik, mit der Board-Lanes aktuell bleiben.</p>
 
 <h2><span class="no">08</span>Verwandtschaft mit Epics — und die zentrale Seite</h2>
 <p>Epics und Workbenches sind Geschwister: Beide bündeln Arbeit oberhalb der einzelnen Karte. Der Unterschied liegt im Aggregatzustand — das <b>Epic bündelt beschlossene Arbeit</b> (Karten, die es schon gibt), die <b>Workbench bündelt werdende Arbeit</b> (Entscheidungen, aus denen Karten erst entstehen). Sie ist damit zu einem gewissen Teil das Backlog des Operators: Was hier liegt, ist ernst gemeint, aber noch nicht geschnitten.</p>
@@ -163,6 +167,8 @@
   <li>Live-Task-Block + Entscheidungs-Stand im Viewer-Kopf: GO?</li>
   <li>Refresh-Mechanik als vorbefüllte Update-Karte (kein stiller Selbst-Umbau): GO?</li>
   <li>Zentrale projektübergreifende Seite (analog Epics) mit Entscheiden-ohne-Seitenwechsel: GO?</li>
+  <li>Projektebenen-Liste als eigene Seite (gleiches Muster, projektgefiltert): GO?</li>
+  <li>SignalR-Ereignisse für Workbench-Änderungen (Tree/Listen/Viewer live, Mehrbenutzer-Grundlage): GO?</li>
   <li>Lebenszyklus-Endzustand „Doku": eigene Stufe <code>documented</code> oder archived mit Unterscheidung verworfen/abgeschlossen?</li>
   <li>Erklärung des Arbeitsmodells auf agent-orchestrator.dev (zentrale Seite): GO? (Karte liegt im AOW-Backlog, wartet auf die Namens-Entscheidung.)</li>
 </ul>
@@ -170,7 +176,7 @@
 <h2><span class="no">10</span>Slice-Plan (nach GO)</h2>
 <ol>
   <li><b>Slice 1 — Viewer-Kopf:</b> Live-Task-Block + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
-  <li><b>Slice 2 — Zentrale Seite:</b> projektübergreifende Übersicht analog Epics — decision-pending mit Offen-Zähler zuerst, Entscheiden direkt aus der Liste; History getrennt nach verworfen/dokumentiert.</li>
+  <li><b>Slice 2 — Zentrale Seite + Projektebenen-Liste:</b> projektübergreifende Übersicht analog Epics — decision-pending mit Offen-Zähler zuerst, Entscheiden direkt aus der Liste; History getrennt nach verworfen/dokumentiert; dieselbe Seite projektgefiltert je Projekt. Inklusive SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) für Tree, Listen und offenen Viewer.</li>
   <li><b>Slice 3 — Template v2:</b> kanonisches Artikel-Stylesheet + Autoren-Doku + <code>pattern</code>-Feld; bestehende aktive Workbenches migrieren nur bei Anfassen.</li>
   <li><b>Slice 4 — Lebenszyklus bis Doku:</b> Tracking-Abschluss + <code>documented</code>-Stufe + Übergangs-Mechanik (alle relatedTaskKeys terminal ⇒ Vorschlag „als Doku abschließen").</li>
   <li><b>Slice 5 — Refresh-Karte:</b> „Aktualisieren"-Aktion erzeugt vorbefüllte Update-Karte mit Dokument-Kontext.</li>
