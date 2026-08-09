@@ -27,6 +27,7 @@ public static class ConceptWorkbenchContract
     public const string OperationsPrefix = "docs/operations/";
     public const string DescriptorFileName = "workbench.json";
     public const string EntryFileName = "index.html";
+    private const string ArticleTemplateResource = "AgentStudio.Templates.ArticleDocumentV2";
 
     private static readonly string[] RequiredSections =
         ["alternatives", "recommendation", "evidence", "open-decisions"];
@@ -49,7 +50,8 @@ public static class ConceptWorkbenchContract
         string topic,
         string title,
         string summary,
-        string sourceTaskKey)
+        string sourceTaskKey,
+        string pattern = ArticlePatterns.Concept)
     {
         var safeTopic = NormalizeTopic(topic);
         var target = Path.Combine(repositoryRoot, "docs", "operations", safeTopic);
@@ -60,6 +62,7 @@ public static class ConceptWorkbenchContract
             Id = safeTopic,
             Title = title.Trim(),
             Summary = summary.Trim(),
+            Pattern = ArticlePatterns.Normalize(pattern),
             SourceTaskKeys = string.IsNullOrWhiteSpace(sourceTaskKey) ? [] : [sourceTaskKey.Trim()],
         };
         File.WriteAllText(
@@ -187,8 +190,8 @@ public static class ConceptWorkbenchContract
                 findings.Add("index.html must include its house-style CSS.");
             foreach (var section in RequiredSections)
             {
-                if (!html.Contains($"data-concept-section=\"{section}\"", StringComparison.OrdinalIgnoreCase)
-                    && !html.Contains($"data-concept-section='{section}'", StringComparison.OrdinalIgnoreCase))
+                if (!HasSection(html, "data-document-section", section)
+                    && !HasSection(html, "data-concept-section", section))
                     findings.Add($"index.html is missing the {section} concept section.");
             }
         }
@@ -237,33 +240,20 @@ public static class ConceptWorkbenchContract
     {
         var title = WebUtility.HtmlEncode(descriptor.Title);
         var summary = WebUtility.HtmlEncode(descriptor.Summary);
-        return $$"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>{{title}} | Concept Workbench</title>
-              <style>
-                :root { color-scheme: light dark; --bg: #fcfcfb; --surface: #f2f1ee; --ink: #151515; --muted: #62615d; --line: #d8d6cf; }
-                @media (prefers-color-scheme: dark) { :root { --bg: #191918; --surface: #242423; --ink: #f5f5f2; --muted: #b8b7af; --line: #3d3d39; } }
-                * { box-sizing: border-box; } body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; }
-                main { max-width: 72rem; margin: auto; padding: 3rem 2rem 6rem; } header { border-bottom: 1px solid var(--line); padding-bottom: 1.5rem; }
-                h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.05; } h2 { margin-top: 3rem; } p { max-width: 72ch; }
-                section { background: var(--surface); border: 1px solid var(--line); border-radius: .75rem; padding: 1.25rem; margin-top: 1rem; }
-                .lede { color: var(--muted); font-size: 1.125rem; }
-              </style>
-            </head>
-            <body><main>
-              <header><p>Concept Workbench</p><h1>{{title}}</h1><p class="lede">{{summary}}</p></header>
-              <section data-concept-section="alternatives"><h2>Alternatives</h2><p>Document the credible alternatives and tradeoffs.</p></section>
-              <section data-concept-section="recommendation"><h2>Recommendation</h2><p>State the recommended default and why.</p></section>
-              <section data-concept-section="evidence"><h2>Evidence</h2><p>Link observations, measurements, and constraints.</p></section>
-              <section data-concept-section="open-decisions"><h2>Open decisions</h2><p>List the choices that require human sight review.</p></section>
-            </main></body>
-            </html>
-            """;
+        var pattern = ArticlePatterns.Normalize(descriptor.Pattern);
+        using var stream = typeof(ConceptWorkbenchContract).Assembly
+            .GetManifestResourceStream(ArticleTemplateResource)
+            ?? throw new InvalidOperationException("The canonical article document template is unavailable.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd()
+            .Replace("{{title}}", title, StringComparison.Ordinal)
+            .Replace("{{summary}}", summary, StringComparison.Ordinal)
+            .Replace("{{pattern}}", pattern, StringComparison.Ordinal);
     }
+
+    private static bool HasSection(string html, string attribute, string section) =>
+        html.Contains($"{attribute}=\"{section}\"", StringComparison.OrdinalIgnoreCase)
+        || html.Contains($"{attribute}='{section}'", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeTopic(string topic)
     {

@@ -21,7 +21,7 @@ export type IsolatedHtmlNavigation =
  */
 export function buildIsolatedHtmlSrcdoc(
   html: string,
-  options: { workbenchDecisions?: boolean } = {},
+  options: { workbenchDecisions?: boolean; documentPattern?: 'ui' | 'concept' } = {},
 ): string {
   if (!html) return '';
   const parser = new DOMParser();
@@ -43,6 +43,10 @@ export function buildIsolatedHtmlSrcdoc(
   wrapper.head.append(policy, base);
 
   copyAttributes(artifact.documentElement, wrapper.documentElement);
+  // The descriptor is authoritative for the article variant. Existing HTML
+  // without v2 template selectors is unaffected by this neutral data hook.
+  wrapper.documentElement.setAttribute(
+    'data-document-pattern', options.documentPattern === 'ui' ? 'ui' : 'concept');
   copyAttributes(artifact.head, wrapper.head);
   copyAttributes(artifact.body, wrapper.body);
   for (const node of Array.from(artifact.head.childNodes))

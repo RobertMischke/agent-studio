@@ -51,6 +51,23 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     [Fact]
+    public void List_ProjectsUiPatternAndTolerantlyDefaultsMissingOrUnknownValues()
+    {
+        WriteWorkbench("visual", "Visual", "active", "2026-07-12T10:00:00Z", "ui");
+        WriteWorkbench("reasoning", "Reasoning", "active", "2026-07-11T10:00:00Z", "concept");
+        WriteWorkbench("legacy", "Legacy", "active", "2026-07-10T10:00:00Z");
+        WriteWorkbench("future", "Future", "active", "2026-07-09T10:00:00Z", "spatial");
+
+        var items = Service().List("Project")!.Items;
+
+        Assert.All(items, item => Assert.True(item.Valid, item.Error));
+        Assert.Equal("ui", items.Single(item => item.Id == "visual").Pattern);
+        Assert.Equal("concept", items.Single(item => item.Id == "reasoning").Pattern);
+        Assert.Equal("concept", items.Single(item => item.Id == "legacy").Pattern);
+        Assert.Equal("concept", items.Single(item => item.Id == "future").Pattern);
+    }
+
+    [Fact]
     public void List_SchemaTwoUsesSharedLifecycleAsItsOnlyStoredState()
     {
         var dir = Path.Combine(_root, "docs", "workbenches", "shared-lifecycle");
@@ -353,13 +370,19 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.Contains("Uncommitted bytes", dirty.Html);
     }
 
-    private void WriteWorkbench(string id, string title, string status, string updatedAt)
+    private void WriteWorkbench(
+        string id,
+        string title,
+        string status,
+        string updatedAt,
+        string? pattern = null)
     {
         var dir = Path.Combine(_root, "docs", "workbenches", id);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "index.html"), $"<h1>{title}</h1>");
+        var patternProperty = pattern == null ? "" : $",\"pattern\":\"{pattern}\"";
         File.WriteAllText(Path.Combine(dir, "workbench.json"), $$"""
-          {"schemaVersion":1,"id":"{{id}}","title":"{{title}}","summary":"Question", "entrypoint":"index.html","status":"{{status}}","phase":"testing","updatedAt":"{{updatedAt}}"}
+          {"schemaVersion":1,"id":"{{id}}","title":"{{title}}","summary":"Question", "entrypoint":"index.html","status":"{{status}}","phase":"testing","updatedAt":"{{updatedAt}}"{{patternProperty}}}
           """);
     }
 

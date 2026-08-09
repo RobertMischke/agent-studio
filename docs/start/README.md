@@ -72,6 +72,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
 | Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
 | Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
+| Article-style decision and evidence documents | [authoring contract](../operations/article-document-authoring.md) · [copyable template](../app/templates/article-document-v2.html) |
 | Board status model, lane-transition map, and integration/archive guard decisions (AGT-2424) | [interactive Workbench](../operations/board-statusmodell-ist-soll/index.html) |
 | Deck icon alternatives for a multi-faceted project console (AGT-2355, Round 2) | [interactive Workbench](../operations/deck-icon-exploration/index.html) · [standalone SVG proof](../operations/deck-icon-exploration/results/deck-icon-options-round-2.svg) |
 | Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Workbench](../operations/installer-story/index.html) |

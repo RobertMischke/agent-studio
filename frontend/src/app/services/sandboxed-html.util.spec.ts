@@ -29,6 +29,23 @@ describe('sandboxed HTML navigation', () => {
     expect(workbench).toContain('data-studio-decision-control');
   });
 
+  it('uses the descriptor pattern as the authoritative article variant', () => {
+    const ui = new DOMParser().parseFromString(
+      buildIsolatedHtmlSrcdoc(
+        '<html data-document-pattern="concept"><body></body></html>',
+        { documentPattern: 'ui' },
+      ),
+      'text/html',
+    );
+    const fallback = new DOMParser().parseFromString(
+      buildIsolatedHtmlSrcdoc('<html data-document-pattern="ui"><body></body></html>'),
+      'text/html',
+    );
+
+    expect(ui.documentElement.dataset['documentPattern']).toBe('ui');
+    expect(fallback.documentElement.dataset['documentPattern']).toBe('concept');
+  });
+
   it('resolves docs-relative targets and rejects paths that escape docs', () => {
     expect(resolveIsolatedHtmlNavigation(
       'docs/operations/nordstern/index.html',

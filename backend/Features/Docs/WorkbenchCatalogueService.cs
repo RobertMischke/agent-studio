@@ -344,6 +344,7 @@ public sealed class WorkbenchCatalogueService
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
                     updated.UtcDateTime, repoRel, true, null, DescriptorTaskKeys(obj))
                 {
+                    Pattern = ArticlePatterns.Normalize(OptionalString(obj, "pattern")),
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
                     LifecycleHistory = lifecycleHistory,
@@ -742,6 +743,7 @@ public record WorkbenchCatalogue(string ProjectName, bool IncludesHistory, int C
 public record WorkbenchListItem(string Id, string Title, string Summary, string Status, string? Phase,
     DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
 {
+    public string Pattern { get; init; } = ArticlePatterns.Concept;
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
