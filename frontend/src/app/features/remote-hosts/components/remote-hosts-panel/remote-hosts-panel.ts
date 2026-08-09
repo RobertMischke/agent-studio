@@ -43,6 +43,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly hosts = this.service.hosts;
   readonly loading = this.service.loading;
   readonly error = this.service.error;
+  readonly identityDiagnostics = this.service.identityDiagnostics;
   readonly wizardOpen = signal(false);
   readonly setupHost = signal<RemoteHost | null>(null);
   readonly pendingConfirmation = signal<{ kind: 'retire' | 'delete'; host: RemoteHost } | null>(null);

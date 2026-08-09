@@ -91,12 +91,18 @@ public class ClientIdentityMiddleware
 
         if (!_store.IsRegistered(clientId))
         {
+            var diagnostic = _store.FindDiagnostic(clientId);
             if (isWrite)
             {
-                await Reject(context, "client-unknown", $"X-Client-Id '{clientId}' is not registered");
+                await Reject(
+                    context,
+                    diagnostic is null ? "client-unknown" : "identity-file-corrupt",
+                    diagnostic?.Message ?? $"X-Client-Id '{clientId}' is not registered",
+                    diagnostic?.RestoreHint);
                 return;
             }
-            _logger.LogWarning("Unknown clientId '{ClientId}' on read {Method} {Path}", clientId, method, path);
+            if (diagnostic is null)
+                _logger.LogWarning("Unknown clientId '{ClientId}' on read {Method} {Path}", clientId, method, path);
             await _next(context);
             return;
         }
@@ -121,7 +127,7 @@ public class ClientIdentityMiddleware
                || path.StartsWith("/api/v1/reviews", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task Reject(HttpContext context, string code, string message)
+    private static async Task Reject(HttpContext context, string code, string message, string? hint = null)
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.ContentType = "application/json";
@@ -129,7 +135,7 @@ public class ClientIdentityMiddleware
         {
             error = code,
             message,
-            hint = "Register an identity at POST /api/clients/register, then send the returned id as X-Client-Id."
+            hint = hint ?? "Register an identity at POST /api/clients/register, then send the returned id as X-Client-Id."
         });
     }
 }

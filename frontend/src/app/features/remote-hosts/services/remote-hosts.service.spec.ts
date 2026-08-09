@@ -79,6 +79,41 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
+  it('surfaces a corrupt identity and does not request telemetry for it', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      emoji: null,
+      colour: null,
+      kind: 'service',
+      registeredAt: '2026-08-05T14:35:00Z',
+      lastSeenAt: null,
+      tokenBudgetMonthly: null,
+      notes: null,
+      identityFileError: 'identity file corrupt: agent-runner-01.json',
+      identityFileName: 'agent-runner-01.json',
+      identityFileModifiedAt: '2026-08-05T14:35:00Z',
+      identityRestoreHint: 'Restore a valid file or re-register with POST /api/clients/register.',
+    }]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    expect(svc.identityDiagnostics()).toHaveLength(1);
+    expect(svc.hosts().find(host => host.clientId === 'agent-runner-01')).toMatchObject({
+      status: 'offline',
+      identityFileError: 'identity file corrupt: agent-runner-01.json',
+      telemetryLoading: false,
+    });
+    http.expectNone('/api/clients/agent-runner-01/telemetry?window=14d');
+    http.verify();
+  });
+
   it('preserves a loaded 14-day series and replaces an updated active finding', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],

@@ -24,7 +24,9 @@ export class ClientService {
   refresh(): void {
     this.http.get<ClientSummary[]>('/api/clients/').subscribe({
       next: list => {
-        this.clients.set(list ?? []);
+        // Corrupt-file diagnostics share the registry response so operator
+        // surfaces can show them, but they are not assignable task owners.
+        this.clients.set((list ?? []).filter(client => !client.identityFileError));
         this.loaded.set(true);
       },
       error: () => {

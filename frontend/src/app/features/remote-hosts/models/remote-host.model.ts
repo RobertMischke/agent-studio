@@ -223,6 +223,9 @@ export interface RemoteHost {
   taskServerConnection?: TaskServerConnectionTelemetry | null;
   /** Freshness of the client/daemon projection requested for this mount. */
   liveDataState?: HostLiveDataState;
+  /** Acute registry failure projected from a synthetic /api/clients row. */
+  identityFileError?: string | null;
+  identityRestoreHint?: string | null;
   /** Telemetry has a separate request so runtime truth never waits on history. */
   telemetryLoading?: boolean;
   /** Latest daemon startup proof of contents and workflow write access. */

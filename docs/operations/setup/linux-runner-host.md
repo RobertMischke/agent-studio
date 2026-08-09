@@ -951,6 +951,24 @@ proof.
 
 ## Troubleshooting
 
+- **`identity-file-corrupt` or a runner identity that used to return `404`** -
+  inspect the Execution Hosts diagnostic and the backend log for the exact file
+  under `<TaskRepository>/identities/`. Restore that JSON file from a known-good
+  backup or Git revision when one exists. For the local security profile, the
+  bounded fallback is to re-register the original display name through the open
+  registration route:
+
+  ```bash
+  curl -fsS -X POST "$RUNNER_SERVER_URL/api/clients/register" \
+    -H 'Content-Type: application/json' \
+    -d '{"displayName":"agent-runner-01","kind":"service"}'
+  ```
+
+  Registration is idempotent on `displayName`; verify that the returned `id`
+  matches `RUNNER_CLIENT_ID`. A restored file is picked up by the next targeted
+  `GET /api/clients/{id}` or Clients-list reload, so the backend does not need a
+  restart. Networked Task Servers keep open registration disabled; restore the
+  server-owned identity or repeat the owner-authorized enrollment flow instead.
 - **No task is claimed** - confirm the project's `executionRunner` exactly
   matches `RUNNER_NAME` or `RUNNER_ID`, `remoteExecutionEnabled` is true, and
   the card is pickup-eligible in `2-ready`. Also inspect the backend log for

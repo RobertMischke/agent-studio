@@ -103,6 +103,45 @@ test.describe('Execution Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
   });
 
+  test('shows a corrupt identity with its restore path in both themes', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'local-default', displayName: 'operator-workstation', kind: 'human',
+          registeredAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
+        },
+        {
+          id: 'agent-runner-01',
+          displayName: 'agent-runner-01',
+          kind: 'service',
+          registeredAt: '2026-08-05T14:35:00Z',
+          lastSeenAt: null,
+          identityFileError: 'identity file corrupt: agent-runner-01.json',
+          identityFileName: 'agent-runner-01.json',
+          identityFileModifiedAt: '2026-08-05T14:35:00Z',
+          identityFileSizeBytes: 4481,
+          identityRestoreHint: 'Restore this file from a known-good backup or Git revision, or re-register the original displayName with POST /api/clients/register.',
+        },
+      ]),
+    }));
+    await page.goto('/#/workspace/settings/remote-hosts');
+
+    const diagnostic = page.getByTestId('remote-hosts-identity-errors');
+    await expect(diagnostic).toBeVisible();
+    await expect(diagnostic).toContainText('identity file corrupt: agent-runner-01.json');
+    await expect(diagnostic).toContainText('POST /api/clients/register');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-status')).toContainText('Offline');
+
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-identity-corrupt-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-identity-corrupt-dark--mocked.png'), fullPage: false });
+  });
+
   test('first mount waits for live status and then paints the daemon without reload', async ({ page }) => {
     let releaseResponse!: () => void;
     const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
