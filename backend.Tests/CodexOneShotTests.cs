@@ -5,6 +5,36 @@ namespace AgentStudio.Tests;
 public sealed class CodexOneShotTests
 {
     [Fact]
+    public void BuildStartInfo_OrchestratorChatOutsideGit_AddsSkipGitRepoCheck()
+    {
+        var nonRepository = Path.Combine(Path.GetTempPath(), "codex-chat-non-repo");
+        var request = new CliOneShotRequest("codex", "gpt-5.5", "hello")
+        {
+            WorkingDirectory = nonRepository,
+            Source = "orchestrator-chat",
+        };
+
+        var startInfo = CodexOneShot.BuildStartInfo("codex", request);
+
+        Assert.Equal(nonRepository, startInfo.WorkingDirectory);
+        Assert.Contains("--skip-git-repo-check", startInfo.ArgumentList);
+        Assert.Contains("read-only", startInfo.ArgumentList);
+    }
+
+    [Fact]
+    public void BuildStartInfo_NonChatSource_KeepsGitRepoCheck()
+    {
+        var request = new CliOneShotRequest("codex", "gpt-5.5", "hello")
+        {
+            Source = "review-decision",
+        };
+
+        var startInfo = CodexOneShot.BuildStartInfo("codex", request);
+
+        Assert.DoesNotContain("--skip-git-repo-check", startInfo.ArgumentList);
+    }
+
+    [Fact]
     public void ParseOutput_ExtractsFinalReplyAndSparkUsage()
     {
         const string stdout = """

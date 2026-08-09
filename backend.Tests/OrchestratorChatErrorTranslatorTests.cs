@@ -128,14 +128,68 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
     [Fact]
     public void Translate_Unknown_ShapesStillProduceFriendlyEnvelope()
     {
-        // The whole point of this test: even shapes we have not catalogued
-        // must not leak the raw .NET text as the primary user-facing
-        // message. The raw detail is preserved separately.
+        // Unknown non-CLI shapes keep a friendly primary message and preserve
+        // the raw detail separately.
         const string raw = "Some weird new failure we have not seen before.";
         var t = OrchestratorChatErrorTranslator.Translate(raw);
         Assert.NotEqual(raw, t.FriendlyMessage);
         Assert.Contains("could not produce a reply", t.FriendlyMessage);
         Assert.Equal(raw, t.RawDetail);
+    }
+
+    [Fact]
+    public void Translate_UnknownCodexStderr_AddsOneLineCliCause()
+    {
+        const string raw = "Not inside a trusted directory and --skip-git-repo-check was not specified.\nAdditional detail.";
+
+        var t = OrchestratorChatErrorTranslator.Translate(raw, "codex");
+
+        Assert.Contains("could not produce a reply", t.FriendlyMessage);
+        Assert.Contains(
+            "codex: Not inside a trusted directory and --skip-git-repo-check was not specified. Additional detail.",
+            t.FriendlyMessage);
+        Assert.Equal(2, t.FriendlyMessage.Split('\n').Length);
+        Assert.Equal(raw, t.RawDetail);
+    }
+
+    [Fact]
+    public async Task SendAsync_RunnerReturnsUnknownCodexStderr_PersistsVisibleCliCause()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _root,
+                ["WatchPaths:0:Name"] = "project-a",
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _watchPath
+            })
+            .Build();
+        var sessionStore = new GlobalOrchestratorSessionStore(
+            config, NullLogger<GlobalOrchestratorSessionStore>.Instance);
+        var summary = new AgentStudio.Review.SummaryGenerationService(
+            NullLogger<AgentStudio.Review.SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var runner = new PipeClosedRunner(
+            "Not inside a trusted directory and --skip-git-repo-check was not specified.");
+        var bootstrap = new GlobalOrchestratorBootstrap(
+            NullLogger<GlobalOrchestratorBootstrap>.Instance,
+            sessionStore, runner, scanner, config);
+        var chat = new OrchestratorChat(NullLogger<OrchestratorChat>.Instance);
+        var service = new OrchestratorChatService(
+            chat, runner, sessionStore, bootstrap, scanner, config,
+            NullLogger<OrchestratorChatService>.Instance);
+
+        var reply = await service.SendAsync(
+            "project-a", _watchPath,
+            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            CancellationToken.None);
+
+        Assert.Contains("codex: Not inside a trusted directory", reply.ErrorMessage);
+        Assert.Equal(
+            "Not inside a trusted directory and --skip-git-repo-check was not specified.",
+            reply.ErrorDetail);
+        var persisted = chat.Read(_watchPath).Single(t => t.Role == OrchestratorChatRoles.Orchestrator);
+        Assert.Contains("codex: Not inside a trusted directory", persisted.ErrorMessage);
     }
 
     [Fact]
