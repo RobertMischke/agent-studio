@@ -15,9 +15,9 @@ public interface IConceptWorkbenchPublisher
 }
 
 /// <summary>
-/// The Workbench-placement step for concept cards. It validates that the
+/// The Dossier-placement step for concept cards. It validates that the
 /// isolated task worktree changed exactly one docs/operations topic, then copies
-/// that Workbench through the platform-owned managed project commit/push
+/// that Dossier through the platform-owned managed project commit/push
 /// boundary. Product code is never merged from the task branch.
 /// </summary>
 public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
@@ -44,7 +44,7 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
         if (!TaskModes.IsConcept(task.Mode))
         {
             var notConcept = new ConceptWorkbenchReview(
-                false, null, null, null, ["Workbench placement applies only to concept cards."]);
+                false, null, null, null, ["Dossier placement applies only to concept cards."]);
             return new ConceptWorkbenchPublishResult(false, notConcept.Summary, notConcept);
         }
         if (string.IsNullOrWhiteSpace(worktreeRoot) || !Directory.Exists(worktreeRoot))
@@ -72,7 +72,7 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
             var noRepo = review with
             {
                 IsComplete = false,
-                Findings = [.. review.Findings, "Managed project repository is unavailable for Workbench placement."],
+                Findings = [.. review.Findings, "Managed project repository is unavailable for Dossier placement."],
             };
             return new ConceptWorkbenchPublishResult(false, noRepo.Summary, noRepo);
         }
@@ -97,7 +97,7 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
             var failed = review with
             {
                 IsComplete = false,
-                Findings = [.. review.Findings, durable.Error ?? "Managed Workbench commit failed."],
+                Findings = [.. review.Findings, durable.Error ?? "Managed Dossier commit failed."],
             };
             return new ConceptWorkbenchPublishResult(false, failed.Summary, failed, durable.CommitSha);
         }
@@ -114,7 +114,7 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
         {
             return new ConceptWorkbenchPublishResult(
                 false,
-                "Workbench was committed, but its task metadata reference could not be persisted.",
+                "Dossier was committed, but its task metadata reference could not be persisted.",
                 review,
                 durable.CommitSha);
         }

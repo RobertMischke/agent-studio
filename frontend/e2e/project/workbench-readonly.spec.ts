@@ -30,7 +30,7 @@ async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false):
       return json({ at: new Date().toISOString(), sessions: [] });
     if (url.pathname === '/api/crash-recovery/pending')
       return json({ pending: [] });
-    // This spec verifies the real Workbench catalogue and Pulse lifecycle, not
+    // This spec verifies the real Dossier catalogue and viewer, not
     // Wiki tree caching. Keep the unrelated tree ETag path out of the setup so
     // a malformed cache header cannot blank the lifecycle surface.
     if (url.pathname.endsWith('/wiki/tree'))
@@ -111,7 +111,7 @@ async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false):
   });
 }
 
-test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real repository artifacts in both themes', async ({ page, devBackend }, testInfo) => {
+test('Dossier Explorer and isolated viewer use real repository artifacts in both themes', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(180_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
@@ -177,28 +177,44 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
 
   const workbenchesRow = page.getByTestId(`studio-explorer-project-workbenches-${project.name}`);
   await expect(workbenchesRow).toBeVisible();
+  await expect(workbenchesRow).toContainText('Dossiers');
   await workbenchesRow.click();
-  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-pipeline-workbench`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-mockup-family`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-app-survey`)).toBeVisible();
-  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-decoupled-lifecycles`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-history-${project.name}`)).toBeVisible();
 
+  const dossierList = page.getByTestId(`studio-explorer-workbench-list-${project.name}`);
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await page.screenshot({ path: evidencePath(testInfo, `workbench-explorer-${theme}.png`), fullPage: true });
+    await workbenchesRow.scrollIntoViewIfNeeded();
+    await page.getByTestId('studio-sidebar').screenshot({
+      path: evidencePath(testInfo, `dossier-nav-${theme}--real.png`),
+    });
+    await dossierList.screenshot({
+      path: evidencePath(testInfo, `dossier-list-${theme}--real.png`),
+    });
   }
 
-  await page.getByTestId(`studio-explorer-workbench-${project.name}-decoupled-lifecycles`).click();
+  await page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-mockup-family`).click();
   const frame = page.getByTestId('workbench-viewer-frame');
   await expect(frame).toBeVisible();
+  await expect(page.getByText('Dossiers / open experiment', { exact: true })).toBeVisible();
+  await expect(frame).toHaveAttribute('title', /^Dossier artifact:/);
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
-  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/concepts/mockups/decoupled-lifecycles.html');
+  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/concepts/mockups/experimentier-workbench.html');
   await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
-    .getByRole('heading', { name: 'The screen is a guest, not the owner.' })).toBeVisible();
+    .getByRole('heading', { name: 'Project state at a glance' })).toBeVisible();
+  // SignalR can refresh the catalogue once immediately after opening the real
+  // artifact. Let that bounded reload settle before recording visual evidence.
+  await page.waitForTimeout(500);
+  await expect(page.getByText('Loading Dossier…')).toBeHidden();
+  await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
+    .getByRole('heading', { name: 'Project state at a glance' })).toBeVisible();
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await page.screenshot({ path: evidencePath(testInfo, `workbench-decoupled-${theme}.png`), fullPage: true });
+    await page.getByTestId('workbench-viewer').screenshot({
+      path: evidencePath(testInfo, `dossier-viewer-${theme}--real.png`),
+    });
   }
 
   let escapedNetworkRequests = 0;
@@ -244,32 +260,6 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
   await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/quality/design/app-survey-2026-07-11.html');
   await expect(page.getByTestId('workbench-viewer-working-tree')).toContainText('uncommitted');
 
-  await page.getByTestId(`studio-explorer-project-wiki-${project.name}`).click();
-  const pipelineLifecycleRow = page.getByTestId(
-    'project-wiki-lifecycle-open-docs/system/domains/pipeline.md.report.html');
-  const surveyLifecycleRow = page.getByTestId(
-    'project-wiki-lifecycle-open-docs/quality/design/app-survey-2026-07-11.html');
-  const lifecycle = page.getByTestId('project-wiki-pulse-lifecycle');
-  await expect(lifecycle).toBeVisible();
-  await expect(pipelineLifecycleRow).toBeVisible();
-  await expect(surveyLifecycleRow).toBeVisible();
-  const firstCuratedSection = page.locator('[data-testid^="wiki-home-section-"]').first();
-  await expect(firstCuratedSection).toBeVisible();
-  const lifecycleBox = await lifecycle.boundingBox();
-  const curatedBox = await firstCuratedSection.boundingBox();
-  expect(lifecycleBox, 'The lifecycle surface must participate in dashboard layout.').not.toBeNull();
-  expect(curatedBox, 'The curated home surface must participate in dashboard layout.').not.toBeNull();
-  expect(lifecycleBox!.y, 'Fresh concepts must appear before the ordinary curated entry cards.')
-    .toBeLessThan(curatedBox!.y);
-  await page.getByTestId('project-wiki-toggle-nav').click();
-  await page.getByTestId('project-wiki-meta-toggle').click();
-  for (const theme of ['light', 'dark'] as const) {
-    await setTheme(page, theme);
-    await page.screenshot({ path: evidencePath(testInfo, `workbench-pulse-${theme}.png`), fullPage: true });
-  }
-
-  await pipelineLifecycleRow.click();
-  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/system/domains/pipeline.md.report.html');
   } finally {
     if (createdProjectId) await fetch(`${devBackend.baseUrl}/api/projects/${createdProjectId}`, {
       method: 'DELETE', headers: { 'X-Client-Id': clientId ?? '' },
@@ -280,7 +270,7 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
   }
 });
 
-test('Nordstern Workbench links, maximize, and Wiki jump stay in the Studio', async ({ page, devBackend }, testInfo) => {
+test('Nordstern Dossier links, maximize, and Wiki jump stay in the Studio', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(120_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
@@ -297,7 +287,7 @@ test('Nordstern Workbench links, maximize, and Wiki jump stay in the Studio', as
       break;
     }
   }
-  expect(projectName, 'The real backend must expose the Nordstern Workbench.').not.toBeNull();
+  expect(projectName, 'The real backend must expose the Nordstern Dossier.').not.toBeNull();
 
   await proxyBackend(page, devBackend.baseUrl, true);
   await page.goto('/');
@@ -317,7 +307,7 @@ test('Nordstern Workbench links, maximize, and Wiki jump stay in the Studio', as
   await expect(landkarte).toBeVisible();
   await landkarte.scrollIntoViewIfNeeded();
   await page.screenshot({
-    path: evidencePath(testInfo, 'nordstern-landkarte-after.png'),
+    path: evidencePath(testInfo, 'dossier-nordstern-landkarte--real.png'),
     fullPage: true,
   });
 

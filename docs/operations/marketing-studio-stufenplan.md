@@ -4,7 +4,7 @@
 
 ## 1. Ist-Stand Stufe 1
 
-- **Wiki-Doc** `docs/operations/marketing-studio/index.html` existiert (6 Ausbaustufen) — **Defekt: kein workbench.json**, taucht in der Workbench-Liste nicht auf (Ein-Datei-Fix).
+- **Wiki-Doc** `docs/operations/marketing-studio/index.html` existiert (6 Ausbaustufen) — **Defekt: kein workbench.json**, taucht in der Dossier-Liste nicht auf (Ein-Datei-Fix).
 - **Marketing Cockpit als lauffähige App** (`agent-studio-marketing/app`, Angular 21 + ASP.NET 10): 3 Flächen (Impulse, Ziele, Lead-Pipeline), Side Sheet, Wiki-Integration (73 Seiten), Playwright-Capture, `npm run check`-Gate. **Grenze: alle Daten sind Seed-Konstanten, keine Persistenz, kein Schreibpfad.**
 - **Inhaltsbestand:** 05-marketing-strategie (16 Docs, 15-Maßnahmen-Landkarte), 06-website-planung (~40 Docs), Positionierungs-Framework (MKT-14/15), Claim-Hierarchie (MKT-13).
 

@@ -21,12 +21,12 @@ identity elsewhere. The shared page action bar is that backchannel:
   excerpt, remain editable, and the resulting Git change is shared with every
   operator and with agents that use the Overview for grounding. **Unpin from
   Home** removes only that curated entry.
-- Page types can add one bounded action. A Workbench adds **Build as feature**;
+- Page types can add one bounded action. A Dossier adds **Build as feature**;
   an incident or history page adds **Create follow-up**.
 
 The four standard actions always remain in that order. Type-specific actions
 come after them. This makes the position learnable across Wiki documents, concepts,
-reports, incidents, and Workbenches.
+reports, incidents, and Dossiers.
 
 ## Personal star versus shared pin
 
@@ -98,9 +98,9 @@ path from all sections. The endpoint commits only
 ## Visual pattern
 
 The variants and light/dark token behavior are captured in the
-[Visual StyleGuide page action Workbench](../quality/visual-styleguide-workbench-wiki/index.html).
+[Visual StyleGuide page action Dossier](../quality/visual-styleguide-workbench-wiki/index.html).
 The production component is
 `frontend/src/app/features/project-detail/components/page-action-bar/`.
 
-This contract connects the Visual StyleGuide Workbench direction with AIP-4:
+This contract connects the Visual StyleGuide Dossier direction with AIP-4:
 the action bar is the visible return path from knowledge to coordinated action.

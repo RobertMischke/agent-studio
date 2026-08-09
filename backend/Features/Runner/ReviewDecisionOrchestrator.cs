@@ -1301,7 +1301,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     /// <summary>
-    /// Concept-specific post-processing. A complete, published Workbench is a
+    /// Concept-specific post-processing. A complete, published Dossier is a
     /// successful outcome even when the core run ended in NeedsInput: the
     /// question is precisely what the sight-review gate exists to answer.
     /// Review is deterministic and document-focused; build/test and code aspects
@@ -1324,7 +1324,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             review = new ConceptWorkbenchReview(
                 false, null, null, null,
-                ["Workbench placement did not publish a source document."]);
+                ["Dossier placement did not publish a source document."]);
         }
         else if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot))
         {
@@ -1369,7 +1369,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(
                 current,
                 "escalate",
-                $"Concept review found an incomplete or uncontained Workbench. {review.Summary} Promoted to {TaskStates.Escalated}.");
+                $"Concept review found an incomplete or uncontained Dossier. {review.Summary} Promoted to {TaskStates.Escalated}.");
             var failedMove = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (failedMove.Status != MoveJobStatus.Success)
             {
@@ -1384,7 +1384,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             WaitStartedAt = now,
             Kind = SteerPendingKinds.ConceptSightReview,
-            Question = "Review the concept Workbench, then promote its implementation cards or finish with no implementation.",
+            Question = "Review the concept Dossier, then promote its implementation cards or finish with no implementation.",
             CliType = current.CliType,
         }, _logger);
         _pipelineLog?.RecordStep(current.FolderPath, new PipelineStepExecution

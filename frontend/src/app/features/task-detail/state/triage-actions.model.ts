@@ -176,7 +176,7 @@ export function needsPlanningAcceptWarning(info: TaskInfo, targetState: string):
 }
 
 /**
- * Temporary archive guard while the Status Workbench is still being decided.
+ * Temporary archive guard while the Status Dossier is still being decided.
  * Only the Delivered -> Archive transition is covered. An unknown integration
  * projection is treated as not integrated because archiving would otherwise
  * hide the unresolved delivery state without operator acknowledgement.

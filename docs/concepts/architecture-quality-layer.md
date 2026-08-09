@@ -16,10 +16,10 @@ lifecycleHistory:
 Status: operator-vision concept, 2026-07-13. This document is the umbrella
 contract for the read-only Project Graph slice (AGT-2127) and the mapped
 Style-Guide slice (AGT-2128). The accompanying
-[interactive Workbench](../quality/architecture-quality-layer/index.html)
+[interactive Dossier](../quality/architecture-quality-layer/index.html)
 shows the four Project Hub views with illustrative contract data.
 
-The Workbench is the umbrella vision, not a claim that all four views land in
+The Dossier is the umbrella vision, not a claim that all four views land in
 the first two slices. AGT-2127 adds the Project Graph surface; AGT-2128 adds the
 applicable-guide surface through the existing Project Wiki/Hub navigation.
 Run inventory, grading, and their eventual shared shell remain later slices.
@@ -399,7 +399,7 @@ five boundaries that are easy to miss when the slices are built separately:
   rejected before they can enter DTOs, generated evidence, or prompts;
 - prompt selection has one aggregate budget and a deterministic omissions
   trace;
-- the illustrative Workbench shows discovered facts separately from authored
+- the illustrative Dossier shows discovered facts separately from authored
   intent and demonstrates only the lean v1 selectors (`projects`,
   `technologies`, and `taskAreas`).
 

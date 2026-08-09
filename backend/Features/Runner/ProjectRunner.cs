@@ -5911,7 +5911,7 @@ public class ProjectRunner
             // movedToReview was computed up-front for the circuit breaker.
 
             // Concept cards never merge their task branch. Once the core run has
-            // produced a reviewable docs-only Workbench, copy that single
+            // produced a reviewable docs-only Dossier, copy that single
             // directory through the managed project-artifact commit/push
             // boundary. The subsequent concept review reads the published
             // document and routes it to the human sight-review marker.
@@ -6169,7 +6169,7 @@ public class ProjectRunner
         {
             var review = new ConceptWorkbenchReview(
                 false, null, null, null,
-                ["Concept Workbench publisher is unavailable."]);
+                ["Concept Dossier publisher is unavailable."]);
             result = new ConceptWorkbenchPublishResult(false, review.Summary, review);
         }
         else

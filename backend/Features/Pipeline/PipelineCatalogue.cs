@@ -826,7 +826,7 @@ public static class PipelineCatalogue
         return new TaskPipeline
         {
             Id = ConceptPipelineId,
-            DisplayName = "Concept Workbench pipeline",
+            DisplayName = "Concept Dossier pipeline",
             Version = 1,
             Core =
             [
@@ -845,7 +845,7 @@ public static class PipelineCatalogue
                 new PipelineStep
                 {
                     Id = ConceptWorkbenchPlacementStepId,
-                    DisplayName = "Workbench placement",
+                    DisplayName = "Dossier placement",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [CoreAgentRunStepId],

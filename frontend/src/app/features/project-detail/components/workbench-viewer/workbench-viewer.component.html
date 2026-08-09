@@ -1,12 +1,12 @@
 <section class="workbench-viewer" data-testid="workbench-viewer">
   @if (loading()) {
-    <div class="workbench-viewer__state" data-testid="workbench-viewer-loading">Loading Workbench…</div>
+    <div class="workbench-viewer__state" data-testid="workbench-viewer-loading">Loading Dossier…</div>
   } @else if (error(); as message) {
     <div class="workbench-viewer__state workbench-viewer__state--error" role="alert">{{ message }}</div>
   } @else if (document(); as doc) {
     <header class="workbench-viewer__header">
       <div class="workbench-viewer__identity">
-        <span class="workbench-viewer__eyebrow">Workbenches / open experiment</span>
+        <span class="workbench-viewer__eyebrow">Dossiers / open experiment</span>
         <h1>{{ doc.workbench.title }}</h1>
         <p>{{ doc.workbench.summary }}</p>
       </div>
@@ -58,7 +58,7 @@
       <iframe class="workbench-viewer__frame"
               #workbenchFrame
               data-testid="workbench-viewer-frame"
-              title="Workbench artifact: {{ doc.workbench.title }}"
+              title="Dossier artifact: {{ doc.workbench.title }}"
               sandbox="allow-scripts"
               referrerpolicy="no-referrer"></iframe>
     </div>

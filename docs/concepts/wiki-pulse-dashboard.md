@@ -137,15 +137,15 @@ bar above stays unchanged; the LLM grade *supplements* it. See
 
 ## 5.1 Lifecycle pages
 
-Pulse gives lifecycle-aware designs, concepts, explorations, and Workbenches a
+Pulse gives lifecycle-aware designs, concepts, explorations, and Dossiers a
 full-width decision surface above the ordinary recency feed. Items are grouped
 in review-first order: `review-requested`, `in-progress`, `decided`, then
-`done`. Each row opens the actual Wiki page or Workbench directly and shows its
+`done`. Each row opens the actual Wiki page or Dossier directly and shows its
 page kind plus last lifecycle editor and timestamp.
 
 Markdown state comes only from the shared frontmatter contract in the
 [Wiki tree contract](../system/contracts/wiki-tree.md#page-lifecycle-frontmatter).
-Workbench state comes only from `workbench.json`; Pulse maps it into the same
+Dossier state comes only from `workbench.json`; Pulse maps it into the same
 four values. Companion metadata is not a third lifecycle source.
 
 ## v1.1 (operator, 2026-07-10): LLM-graded page reports on top

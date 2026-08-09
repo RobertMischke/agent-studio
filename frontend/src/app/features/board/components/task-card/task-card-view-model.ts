@@ -53,7 +53,7 @@ export interface ModeBadge {
 const MODE_TOOLTIP: Record<Exclude<TaskMode, 'coding'>, string> = {
   planning: 'Planning mode: read-only. The agent investigates and produces a plan without writing source.',
   research: 'Research mode: read-only with web access. The agent gathers information and reports findings.',
-  concept: 'Concept mode: docs-only. The agent delivers a Workbench and waits for human sight review.',
+  concept: 'Concept mode: docs-only. The agent delivers a Dossier and waits for human sight review.',
 };
 
 /**

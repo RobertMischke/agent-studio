@@ -10,7 +10,7 @@ namespace AgentStudio.Runner;
 /// never run with its working directory pointed at it (that is the
 /// cross-contamination bug ASS-1732). Report-only modes (planning / research)
 /// and epic planning runs write nothing, so they may run in-place. Concept runs
-/// need isolation because they author a bounded docs-only Workbench.
+/// need isolation because they author a bounded docs-only Dossier.
 ///
 /// <para>
 /// This is intentionally separate from <see cref="ParallelSlotPolicy"/>: that

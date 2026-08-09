@@ -179,7 +179,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(groups[0].projects.map(p => p.name)).toEqual(['Alpha', 'Beta']);
   });
 
-  it('reveals the workspace path that owns the active Workbench', () => {
+  it('reveals the workspace path that owns the active Dossier', () => {
     const fixture = mount();
     const sections = TestBed.inject(ExplorerSectionsService);
     fixture.componentRef.setInput('registryWorkspaces', [

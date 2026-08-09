@@ -12,7 +12,7 @@ const HOME: WikiHome = {
       title: 'Start',
       links: [
         { relPath: 'concepts/overview.md', label: 'Konzept-Überblick', note: 'Der Einstieg', exists: true },
-        { relPath: 'workbench/overview.html', label: 'Workbench', note: null, exists: true },
+        { relPath: 'workbench/overview.html', label: 'Dossier', note: null, exists: true },
         { relPath: 'missing/gone.md', label: 'Verschollen', note: 'alte Seite', exists: false },
       ],
     },

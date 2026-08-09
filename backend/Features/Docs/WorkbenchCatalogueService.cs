@@ -6,9 +6,9 @@ using System.Text.Json.Nodes;
 namespace AgentStudio.Docs;
 
 /// <summary>
-/// Read-only repository discovery for experiment Workbenches. Canonical items
+/// Read-only repository discovery for experiment Dossiers. Canonical items
 /// are folders that carry a <c>workbench.json</c> descriptor and live anywhere
-/// under docs/ (each Workbench sits with its own theme, e.g.
+/// under docs/ (each Dossier sits with its own theme, e.g.
 /// docs/operations/&lt;id&gt;/ or docs/quality/&lt;id&gt;/); the recursive scan
 /// skips dot-directories and node_modules-like folders. The small legacy list
 /// is an explicit migration bridge for named, already-existing artifacts, never
@@ -35,9 +35,9 @@ public sealed class WorkbenchCatalogueService
 
     private static readonly LegacyWorkbench[] LegacyPilot =
     [
-        // "Pipeline workbench" removed 2026-07-24: idea discarded by the operator.
-        new("workbench-mockup-family", "Workbench mockup family",
-            "Shape the Workbench host, list, viewer, and later decision surfaces.",
+        // "Pipeline Dossier" removed 2026-07-24: idea discarded by the operator.
+        new("workbench-mockup-family", "Dossier mockup family",
+            "Shape the Dossier host, list, viewer, and later decision surfaces.",
             "docs/concepts/mockups/experimentier-workbench.html", "testing", ["AGT-2122"]),
         new("app-survey", "Application survey",
             "Understand the current product surfaces through the visual survey findings.",
@@ -70,7 +70,7 @@ public sealed class WorkbenchCatalogueService
             {
                 Valid = false,
                 Status = "invalid",
-                Error = "Workbench id is duplicated by another canonical descriptor.",
+                Error = "Dossier id is duplicated by another canonical descriptor.",
             };
         }
         var ids = items.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
@@ -84,7 +84,7 @@ public sealed class WorkbenchCatalogueService
                 items.Add(new WorkbenchListItem(
                     legacy.Id, legacy.Title, legacy.Summary, "invalid", legacy.Phase,
                     File.GetLastWriteTimeUtc(full), legacy.RepoRelPath, false,
-                    $"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Workbench limit.",
+                    $"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Dossier limit.",
                     legacy.SourceTaskKeys));
                 continue;
             }
@@ -221,7 +221,7 @@ public sealed class WorkbenchCatalogueService
             }
             catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException)
             {
-                SilentCatch.Note(ex, "Workbench operation-id ownership scan skipped an invalid descriptor.");
+                SilentCatch.Note(ex, "Dossier operation-id ownership scan skipped an invalid descriptor.");
             }
         }
         return false;
@@ -263,7 +263,7 @@ public sealed class WorkbenchCatalogueService
             }
             catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException)
             {
-                SilentCatch.Note(ex, "Workbench Wiki-classification ownership scan skipped an invalid descriptor.");
+                SilentCatch.Note(ex, "Dossier Wiki-classification ownership scan skipped an invalid descriptor.");
             }
         }
         return false;
@@ -286,7 +286,7 @@ public sealed class WorkbenchCatalogueService
             var safeDir = ContainedPath(root, Path.GetRelativePath(root, dir));
             if (safeDir == null)
             {
-                result.Add(Invalid(folder, "Workbench folder is a symbolic link or reparse point.", descriptorRel));
+                result.Add(Invalid(folder, "Dossier folder is a symbolic link or reparse point.", descriptorRel));
                 continue;
             }
             var descriptor = ContainedPath(root,
@@ -337,9 +337,9 @@ public sealed class WorkbenchCatalogueService
                     && !extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("entrypoint must be HTML.");
                 var full = ContainedPath(safeDir, entrypoint);
-                if (full == null || !File.Exists(full)) throw new InvalidDataException("entrypoint is missing or escapes its Workbench folder.");
+                if (full == null || !File.Exists(full)) throw new InvalidDataException("entrypoint is missing or escapes its Dossier folder.");
                 if (!IsHtmlWithinLimit(full))
-                    throw new InvalidDataException($"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Workbench limit.");
+                    throw new InvalidDataException($"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Dossier limit.");
                 var repoRel = Path.GetRelativePath(root, full).Replace('\\', '/');
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
                     updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))

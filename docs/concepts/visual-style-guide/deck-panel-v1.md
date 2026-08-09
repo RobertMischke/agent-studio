@@ -1,7 +1,7 @@
 # Deck-Panel v1
 
 Status: recommended for Deck convergence, 2026-07-23.  
-Decision owner: Visual Style Guide Workbench, AGT-2337.  
+Decision owner: Visual Style Guide Dossier, AGT-2337.\
 Delivery consumer: Deck page unification, AGT-2280.
 
 The [Deck Audit](deck-audit.html) compares the current Project Deck sections,

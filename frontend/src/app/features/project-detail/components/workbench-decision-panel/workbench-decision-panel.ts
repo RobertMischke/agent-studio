@@ -89,7 +89,7 @@ export class WorkbenchDecisionPanelComponent {
       const workbench = this.document().workbench;
       this.title.set(`Implement ${workbench.title}`);
       this.goal.set(workbench.summary);
-      this.acceptanceCriteria.set('Implement the confirmed Workbench decision and verify the resulting behavior.');
+      this.acceptanceCriteria.set('Implement the confirmed Dossier decision and verify the resulting behavior.');
       this.evidenceLinks.set(workbench.entryPath);
     }
   }
@@ -149,7 +149,7 @@ export class WorkbenchDecisionPanelComponent {
 
   outcomeLabel(decision: WorkbenchDecisionProjection | null = this.persistedDecision()): string {
     const outcome = decision?.outcome ?? this.activeOutcome();
-    return outcome === 'archive' ? 'Archive Workbench' : 'Build as feature';
+    return outcome === 'archive' ? 'Archive Dossier' : 'Build as feature';
   }
 
   stageLabel(): string {

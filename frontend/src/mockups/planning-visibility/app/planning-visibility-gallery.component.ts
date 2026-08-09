@@ -73,7 +73,7 @@ const CARD_SCENARIOS: readonly CardScenario[] = [
     note: 'A read-only planning run. The loud violet "PLANNING" pill says "hier wird GEPLANT" before the card is ever opened.',
     job: makeTask({
       mode: 'planning',
-      title: 'Plan: Pipeline-Workbench Phase 3 zuschneiden',
+      title: 'Plan: Pipeline Dossier Phase 3 zuschneiden',
     }),
   },
   {
@@ -138,7 +138,7 @@ const PANEL_SCENARIOS: readonly PanelScenario[] = [
       planningSpawn: summary({
         spawned: [
           { targetKey: 'AGT-2067', targetJobId: 'agt-2067', targetProject: 'AGT', reason: 'Implement the 1915 concept', at: '2026-07-10T18:00:00Z' },
-          { targetKey: 'AGT-2062', targetJobId: 'agt-2062', targetProject: 'AGT', reason: 'Workbench plan phase 2', at: '2026-07-10T18:05:00Z' },
+          { targetKey: 'AGT-2062', targetJobId: 'agt-2062', targetProject: 'AGT', reason: 'Dossier plan phase 2', at: '2026-07-10T18:05:00Z' },
         ],
         spawnedCount: 2,
         contractSatisfied: true,

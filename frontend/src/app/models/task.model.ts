@@ -108,7 +108,7 @@ export type TaskKind = 'task' | 'epic';
 /**
  * Task execution mode. Mirrors backend `TaskModes`. `coding` is the default
  * read-write mode; `planning` and `research` produce read-only reports;
- * `concept` authors one docs-only Workbench; and `research` permits web access
+ * `concept` authors one docs-only Dossier; and `research` permits web access
  * by default.
  */
 export type TaskMode = 'coding' | 'planning' | 'research' | 'concept';
@@ -1205,7 +1205,7 @@ export interface ConceptSourceDocument {
   title: string;
 }
 
-/** Validated implementation-card proposals from a published concept Workbench. */
+/** Validated implementation-card proposals from a published concept Dossier. */
 export interface PromoteConceptResponse {
   source: ConceptSourceDocument;
   items: ConceptImplementationTask[];

@@ -4,7 +4,7 @@
   <header class="decision-panel__header">
     <div>
       <span class="decision-panel__eyebrow">Sichtblick gate</span>
-      <h2>Workbench decision</h2>
+      <h2>Dossier decision</h2>
       <p>A human decision is required before this experiment creates work or closes.</p>
     </div>
     <span class="decision-panel__stage"><i aria-hidden="true"></i>{{ stageLabel() }}</span>
@@ -12,11 +12,11 @@
 
   @if (mutationBlocked() && !settled()) {
     <p class="decision-panel__notice" role="status" data-testid="workbench-decision-blocked">
-      Decisions require a clean, Git-backed Workbench revision. Commit the descriptor and artifact changes first.
+      Decisions require a clean, Git-backed Dossier revision. Commit the descriptor and artifact changes first.
     </p>
   } @else if (!gateReady()) {
     <p class="decision-panel__notice">
-      This Workbench is still in {{ document().workbench.phase || 'shaping' }}. Move it to decision-ready before Sichtblick.
+      This Dossier is still in {{ document().workbench.phase || 'shaping' }}. Move it to decision-ready before Sichtblick.
     </p>
   } @else if (persistedDecision(); as decision) {
     <div class="decision-panel__receipt" data-testid="workbench-decision-receipt">
@@ -56,7 +56,7 @@
       <div class="decision-panel__confirm">
         <p>
           Confirming is the visible human gate. It
-          {{ activeOutcome() === 'archive' ? 'archives the Workbench with its recorded reason' : 'creates the feature card from the prepared draft' }}.
+          {{ activeOutcome() === 'archive' ? 'archives the Dossier with its recorded reason' : 'creates the feature card from the prepared draft' }}.
         </p>
         <button type="button"
                 data-testid="workbench-decision-confirm"
@@ -67,7 +67,7 @@
     }
   } @else if (settled()) {
     <p class="decision-panel__notice" data-testid="workbench-decision-settled">
-      This Workbench is {{ document().workbench.status }}. The decision lives in its
+      This Dossier is {{ document().workbench.status }}. The decision lives in its
       <code>workbench.json</code>, which is what the catalogue and the Wiki read.
     </p>
   } @else if (result()) {
@@ -168,7 +168,7 @@
               [disabled]="mutationBlocked()"
               (click)="choose('feature-spawn')">
         <strong>Build as feature</strong>
-        <span>Prepare one implementation card from this Workbench.</span>
+        <span>Prepare one implementation card from this Dossier.</span>
       </button>
       <button type="button"
               data-testid="workbench-decision-archive"

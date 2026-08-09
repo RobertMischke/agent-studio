@@ -53,7 +53,7 @@ pipeline view.
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly
-  one `docs/operations/<topic>/` Workbench, publishes it through the managed
+  one `docs/operations/<topic>/` Dossier, publishes it through the managed
   project-artifact commit boundary, reviews document completeness and evidence,
   waits for human sight review, then creates coding cards from the descriptor.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`,
@@ -628,11 +628,11 @@ operator changes cause the step to fail before its writer runs.
 - The concept pipeline is distinct from the report-only pipeline. It runs in an
   isolated worktree, permits a diff only inside one
   `docs/operations/<topic>/` directory, and never merges that task branch.
-  Workbench placement publishes `workbench.json` plus `index.html` through the
+  Dossier placement publishes `workbench.json` plus `index.html` through the
   managed project-artifact commit boundary. Concept review checks alternatives,
   recommendation, evidence, open decisions, and implementation-card source
   data. It deliberately does not run build, test, code aspects, or integration.
-  A complete Workbench moves to `5-human-review` with a durable
+  A complete Dossier moves to `5-human-review` with a durable
   `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
   successful delivery at this gate. Sight-review acceptance completes the
   source card; `POST /api/tasks/{id}/promote-concept` additionally creates the

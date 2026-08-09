@@ -769,7 +769,7 @@ public class TaskRunnerPromptTests
     {
         var framing = Prompts().RenderModeFraming("concept", allowWebAccess: false);
 
-        Assert.Contains("docs-only Workbench delivery", framing);
+        Assert.Contains("docs-only Dossier delivery", framing);
         Assert.Contains("docs/operations/<topic>/", framing);
         Assert.Contains("workbench.json", framing);
         Assert.Contains("index.html", framing);

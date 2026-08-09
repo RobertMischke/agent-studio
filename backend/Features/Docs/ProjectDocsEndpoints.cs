@@ -77,7 +77,7 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(catalogue);
         });
 
-        // Repository-owned experiment Workbenches. The catalogue is discovered by
+        // Repository-owned experiment Dossiers. The catalogue is discovered by
         // scanning docs/ recursively for workbench.json descriptors (post-2026-07
         // migration the workbench folders are theme-distributed, e.g. under
         // operations/ and quality/); HTML is returned as data and is never
@@ -94,13 +94,13 @@ public static class ProjectDocsEndpoints
         {
             var document = workbenches.Read(projectName, id);
             return document == null
-                ? Results.NotFound(new { error = "Workbench not found, invalid, or path rejected" })
+                ? Results.NotFound(new { error = "Dossier not found, invalid, or path rejected" })
                 : Results.Ok(document);
         });
 
         // The Sichtblick gate (AGT-2375). Prepare validates the decision against
         // the exact revision/fingerprint and writes nothing; confirm is the
-        // single durable write and lands in the Workbench's own workbench.json.
+        // single durable write and lands in the Dossier's own workbench.json.
         app.MapPost("/api/projects/{projectName}/workbenches/{id}/decisions/prepare",
             (string projectName, string id, PrepareWorkbenchDecisionRequest body,
                 WorkbenchDecisionService decisions) =>
@@ -258,12 +258,12 @@ public static class ProjectDocsEndpoints
                 var rel = Normalize(relPath);
                 if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
                 // Generic Wiki classification writes a .meta.json sidecar, which
-                // a Workbench's visibility does not read (AGT-2375). Canonical
-                // Workbenches archive only through their decision endpoint.
+                // a Dossier's visibility does not read (AGT-2375). Canonical
+                // Dossiers archive only through their decision endpoint.
                 if (workbenches.OwnsCanonicalPath(projectName, rel))
                     return Results.Conflict(new
                     {
-                        error = "Canonical Workbenches must use the explicit decision endpoint; Wiki classification cannot archive them.",
+                        error = "Canonical Dossiers must use the explicit decision endpoint; Wiki classification cannot archive them.",
                     });
                 var status = body.Status?.Trim().ToLowerInvariant();
                 if (status is not ("archived" or "aktuell"))

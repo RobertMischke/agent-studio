@@ -83,7 +83,7 @@ internal static class PromptUsageCatalog
         },
         ["mode-framing-concept.md"] = new[]
         {
-            new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Docs-only Workbench framing injected for concept mode."),
+            new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Docs-only Dossier framing injected for concept mode."),
         },
         ["mode-framing-web.md"] = new[]
         {

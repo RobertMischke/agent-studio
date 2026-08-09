@@ -13,7 +13,7 @@ auto-single revert orphan, review double-claim after lease death, AGT-2423 salva
 `docs/concepts/orchestrator-drive-to-conclusion.html` (incident log),
 `docs/operations/car-migration-plan.md` (T0b RunSpec transport).
 
-This document diagnoses and points; it does not design. Decisions belong to the Status-Workbench.
+This document diagnoses and points; it does not design. Decisions belong to the Status-Dossier.
 
 ---
 
@@ -133,7 +133,7 @@ Severity scale:
 - **S3** — churn, availability, throughput; annoying but honest.
 
 Each breakpoint: scenario as a step sequence (attacker or chance), broken end state, code
-anchors, and 1–2 hardening *directions* (not designs — the Status-Workbench decides).
+anchors, and 1–2 hardening *directions* (not designs — the Status-Dossier decides).
 
 ### S1 — silently wrong
 
@@ -189,7 +189,7 @@ anchors, and 1–2 hardening *directions* (not designs — the Status-Workbench 
    complete green receipt whose expected and tested SHA equal the integration tip; otherwise it
    runs the missing gate. The pipeline step remains pending and no push request is released while
    that gate runs. A red recovery gate records `GateFailed` and releases no push. The broader
-   Workbench target, merge intent plus isolated candidate promotion, remains separate work.
+   Dossier target, merge intent plus isolated candidate promotion, remains separate work.
 
 **BP-03 · Stale `review-subject.json` outlives its attempt and re-targets integration.**
 1. Card T runs remotely; completion writes `review-subject.json` (ResultRef = runner ref R1,
@@ -496,7 +496,7 @@ winners, as implemented:
 
 The doctrine "the task is the truth" is currently aspirational: the task *folder* is one of
 five planes, its file writes are the least protected of the five (BP-04), and two sidecars
-(review-subject, integrationBranch) override fresher evidence. The Status-Workbench decision
+(review-subject, integrationBranch) override fresher evidence. The Status-Dossier decision
 should name, per field, the single derivation source and demote everything else to hint.
 
 ---

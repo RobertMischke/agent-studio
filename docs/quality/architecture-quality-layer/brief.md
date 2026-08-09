@@ -1,6 +1,6 @@
-# Architecture and quality layer Workbench
+# Architecture and quality layer Dossier
 
-This self-contained Workbench is the visual decision surface for
+This self-contained Dossier is the visual decision surface for
 [the umbrella concept](../../concepts/architecture-quality-layer.md). It uses
 illustrative contract data, not a live project scan or a real grading result.
 

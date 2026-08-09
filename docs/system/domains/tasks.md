@@ -19,7 +19,7 @@ or commit attribution.
   linked from that HTML. See the
   [Research task delivery convention](../../operations/research-deliverables/index.html).
 - `concept` is document-first. It uses an isolated worktree but may change only
-  one `docs/operations/<topic>/` Workbench. The published document, not
+  one `docs/operations/<topic>/` Dossier. The published document, not
   `status.md`, is the promotion source.
 - A delivered concept waits in `5-human-review` with a
   `concept-sight-review` marker. This is a successful delivery state, including
@@ -229,8 +229,8 @@ content is fetched through the existing task-file endpoint and
 rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
 of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
-or controlled network integration belong to the Workbench viewer described in
-[Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
+or controlled network integration belong to the Dossier viewer described in
+[Experimentier-Dossier](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
 ## Parked-card blocker and recall
 

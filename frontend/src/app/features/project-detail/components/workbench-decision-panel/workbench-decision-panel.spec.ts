@@ -140,7 +140,7 @@ describe('WorkbenchDecisionPanelComponent', () => {
     fixture.detectChanges();
 
     const receipt = fixture.nativeElement.querySelector('[data-testid="workbench-decision-receipt"]');
-    expect(receipt.textContent).toContain('Archive Workbench');
+    expect(receipt.textContent).toContain('Archive Dossier');
     expect(receipt.textContent).toContain('The experiment disproved the direction.');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-confirm"]')).toBeNull();
   });

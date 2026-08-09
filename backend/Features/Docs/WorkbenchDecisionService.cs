@@ -153,7 +153,7 @@ public sealed class WorkbenchDecisionService
         try { full = Path.GetFullPath(descriptorPath); }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
         {
-            SilentCatch.Note(ex, "Workbench descriptor path could not be normalized for the write gate.");
+            SilentCatch.Note(ex, "Dossier descriptor path could not be normalized for the write gate.");
             full = descriptorPath;
         }
         full = full.Replace('\\', '/').TrimEnd('/');
@@ -170,7 +170,7 @@ public sealed class WorkbenchDecisionService
         var snapshot = gate.Snapshot!;
         if (snapshot.Revision == null && snapshot.Fingerprint == null)
             return Failure(id, body.OperationId, "validation",
-                "The Workbench has no readable revision or fingerprint provenance.");
+                "The Dossier has no readable revision or fingerprint provenance.");
 
         var archive = body.Outcome == "archive";
         var now = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -245,12 +245,12 @@ public sealed class WorkbenchDecisionService
             || WorkbenchCatalogueService.ComputeDescriptorFingerprint(currentText)
                 != snapshot.DescriptorFingerprint)
             return Failure(id, body.OperationId, "stale-revision",
-                "The Workbench descriptor changed while the decision was being confirmed.");
+                "The Dossier descriptor changed while the decision was being confirmed.");
         if (body.ExpectedFingerprint != null
             && WorkbenchCatalogueService.ComputeWorkbenchFingerprint(
                 snapshot.DescriptorPath, snapshot.EntryPath) != body.ExpectedFingerprint)
             return Failure(id, body.OperationId, "stale-revision",
-                "The Workbench content changed while the decision was being confirmed.");
+                "The Dossier content changed while the decision was being confirmed.");
 
         try
         {
@@ -260,7 +260,7 @@ public sealed class WorkbenchDecisionService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Failure(id, body.OperationId, "write-failed",
-                $"The Workbench descriptor could not be written: {ex.Message}");
+                $"The Dossier descriptor could not be written: {ex.Message}");
         }
 
         // Best effort: the durable decision is the file itself. A failing commit
@@ -342,7 +342,7 @@ public sealed class WorkbenchDecisionService
         var snapshot = _catalogue.ResolveCanonicalForMutation(projectName, id);
         if (snapshot == null)
             return new(Failure(id, operationId, "not-canonical",
-                "No single canonical Workbench descriptor owns this id."));
+                "No single canonical Dossier descriptor owns this id."));
 
         var stored = snapshot.Item.Decision;
         if (stored is { State: "succeeded" })
@@ -360,25 +360,25 @@ public sealed class WorkbenchDecisionService
                     Idempotent = true,
                 })
                 : new(Failure(id, operationId, "already-settled",
-                    "This Workbench already carries a settled decision."));
+                    "This Dossier already carries a settled decision."));
         if (snapshot.Item.Status is "decided" or "archived")
             return new(Failure(id, operationId, "already-settled",
-                "This Workbench is already decided or archived."));
+                "This Dossier is already decided or archived."));
         if (_catalogue.OperationIdOwnedByAnotherWorkbench(projectName, operationId, id))
             return new(Failure(id, operationId, "operation-id-conflict",
-                "This operationId belongs to a different Workbench."));
+                "This operationId belongs to a different Dossier."));
         if (snapshot.Dirty)
             return new(Failure(id, operationId, "dirty-descriptor",
-                "Commit the Workbench descriptor and artifact before deciding."));
+                "Commit the Dossier descriptor and artifact before deciding."));
         if (expectedRevision == null && expectedFingerprint == null)
             return new(Failure(id, operationId, "stale-revision",
                 "A decision must name the revision or fingerprint it was taken on."));
         if (expectedRevision != null && expectedRevision != snapshot.Revision)
             return new(Failure(id, operationId, "stale-revision",
-                "The Workbench moved since the decision was taken."));
+                "The Dossier moved since the decision was taken."));
         if (expectedFingerprint != null && expectedFingerprint != snapshot.Fingerprint)
             return new(Failure(id, operationId, "stale-revision",
-                "The Workbench content changed since the decision was taken."));
+                "The Dossier content changed since the decision was taken."));
 
         return new(null, snapshot, draft);
     }
@@ -391,7 +391,7 @@ public sealed class WorkbenchDecisionService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SilentCatch.Note(ex, "Workbench descriptor could not be re-read before the decision write.");
+            SilentCatch.Note(ex, "Dossier descriptor could not be re-read before the decision write.");
             return null;
         }
     }
@@ -399,7 +399,7 @@ public sealed class WorkbenchDecisionService
     private static void WriteDescriptor(string descriptorPath, string content)
     {
         var directory = Path.GetDirectoryName(descriptorPath)
-            ?? throw new IOException("The Workbench descriptor has no parent directory.");
+            ?? throw new IOException("The Dossier descriptor has no parent directory.");
         var temporary = Path.Combine(directory, $".workbench.json.{Guid.NewGuid():N}.tmp");
         try
         {
@@ -411,7 +411,7 @@ public sealed class WorkbenchDecisionService
             try { if (File.Exists(temporary)) File.Delete(temporary); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                SilentCatch.Note(ex, "Workbench descriptor temp file could not be removed.");
+                SilentCatch.Note(ex, "Dossier descriptor temp file could not be removed.");
             }
         }
     }

@@ -10,7 +10,7 @@ namespace AgentStudio.Shared;
 /// <item><c>research</c> - read-only; broader fact-finding, web access on by
 ///   default; the deliverable is a report.</item>
 /// <item><c>concept</c> - product-source-read-only; authors one reviewable
-///   Workbench under <c>docs/operations/&lt;topic&gt;/</c> and waits for a
+///   Dossier under <c>docs/operations/&lt;topic&gt;/</c> and waits for a
 ///   human sight review before implementation cards are promoted.</item>
 /// </list>
 /// Report-only modes skip worktree and git steps. Concept uses an isolated
@@ -47,7 +47,7 @@ public static class TaskModes
     /// <summary>
     /// Product-source-read-only modes never modify implementation files.
     /// Planning/research produce reports; concept may write only its bounded
-    /// <c>docs/operations/&lt;topic&gt;/</c> Workbench.
+    /// <c>docs/operations/&lt;topic&gt;/</c> Dossier.
     /// </summary>
     public static bool IsReadOnly(string? value) => Normalize(value) is Planning or Research or Concept;
 

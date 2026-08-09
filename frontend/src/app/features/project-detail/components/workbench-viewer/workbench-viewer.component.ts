@@ -119,7 +119,7 @@ export class WorkbenchViewerComponent {
         this.loading.set(false);
       },
       error: () => {
-        this.error.set('Workbench could not be loaded.');
+        this.error.set('Dossier could not be loaded.');
         this.loading.set(false);
       },
     });

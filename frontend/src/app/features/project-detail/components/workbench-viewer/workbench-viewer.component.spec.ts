@@ -57,6 +57,8 @@ describe('WorkbenchViewerComponent', () => {
 
     const frame = fixture.nativeElement.querySelector('[data-testid="workbench-viewer-frame"]') as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('title')).toBe('Dossier artifact: Boundary probe');
+    expect(fixture.nativeElement.textContent).toContain('Dossiers / open experiment');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)

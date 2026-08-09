@@ -38,7 +38,7 @@ export interface HubTab {
   pipelineStepId?: string;
 }
 
-/** Isolated read-only Workbench viewer, one tab per project + Workbench id. */
+/** Isolated read-only Dossier viewer, one tab per project + Dossier id. */
 export interface WorkbenchTab { kind: 'workbench'; projectName: string; workbenchId: string; title?: string; }
 
 /** Full-screen diff tab; key `diff:<commitSha>`. */

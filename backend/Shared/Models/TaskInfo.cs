@@ -85,7 +85,7 @@ public record TaskInfo
     /// <summary>
     /// Execution mode (orthogonal to <see cref="Kind"/>): <c>coding</c> (default,
     /// mutates source) | <c>planning</c> | <c>research</c> (read-only reports) |
-    /// <c>concept</c> (docs-only Workbench). See <see cref="TaskModes"/>.
+    /// <c>concept</c> (docs-only Dossier). See <see cref="TaskModes"/>.
     /// </summary>
     public string Mode { get; init; } = TaskModes.Coding;
     /// <summary>
