@@ -180,15 +180,27 @@ public static class ReviewSubjectStore
 
     private static string? ReadTaskKey(string taskFolder)
     {
+        // Flat task storage makes the folder name the stable task key:
+        // <root>/tasks/<bucket>/<KEY>. Resolve that authority before opening
+        // task.json so repository-embedded task stores remain valid while a
+        // concurrent metadata rewrite temporarily makes the JSON unreadable.
+        // The bucket check prevents an arbitrary legacy slug folder from being
+        // mistaken for a stable key.
+        var flatStorageKey = ReadFlatStorageTaskKey(taskFolder);
+        if (!string.IsNullOrWhiteSpace(flatStorageKey)) return flatStorageKey;
+
         try
         {
             var path = Path.Combine(taskFolder, "task.json");
             if (!File.Exists(path)) return null;
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var root = document.RootElement;
-            foreach (var property in new[] { "key", "taskKey", "id" })
+            foreach (var propertyName in new[] { "key", "taskKey", "id" })
             {
-                if (root.TryGetProperty(property, out var value)
+                var property = root.EnumerateObject().FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+                var value = property.Value;
+                if (value.ValueKind != JsonValueKind.Undefined
                     && value.ValueKind == JsonValueKind.String
                     && !string.IsNullOrWhiteSpace(value.GetString()))
                 {
@@ -201,5 +213,36 @@ public static class ReviewSubjectStore
             SilentCatch.Note(ex, "ReviewSubjectStore: task key read failed");
         }
         return null;
+    }
+
+    private static string? ReadFlatStorageTaskKey(string taskFolder)
+    {
+        try
+        {
+            var taskDirectory = new DirectoryInfo(Path.GetFullPath(taskFolder));
+            var bucketDirectory = taskDirectory.Parent;
+            var tasksDirectory = bucketDirectory?.Parent;
+            if (bucketDirectory is null
+                || tasksDirectory is null
+                || !string.Equals(
+                    tasksDirectory.Name,
+                    TaskStorageLayout.JobsDirName,
+                    StringComparison.OrdinalIgnoreCase)
+                || !TaskStorageLayout.TryParseKeyNumber(taskDirectory.Name, out var keyNumber)
+                || !string.Equals(
+                    bucketDirectory.Name,
+                    TaskStorageLayout.Bucket(keyNumber),
+                    StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return taskDirectory.Name;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "ReviewSubjectStore: flat-storage task key resolution failed");
+            return null;
+        }
     }
 }

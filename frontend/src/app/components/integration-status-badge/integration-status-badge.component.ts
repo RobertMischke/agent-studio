@@ -58,6 +58,15 @@ export class IntegrationStatusBadgeComponent {
     return s === 'partial' || s === 'pending' || s === 'conflict-skipped';
   });
 
+  readonly recoveryAvailable = computed(() => {
+    const value = this.integration();
+    if (value?.status !== 'conflict-skipped') return false;
+    // Legacy payloads did not carry a classification and represented only
+    // merge conflicts. Preserve their recovery action while new payloads use
+    // the explicit capability bit.
+    return value.failure?.rebaseRecoveryAvailable ?? true;
+  });
+
   readonly label = computed(() => {
     const value = this.integration();
     if (!value) return '';
@@ -65,7 +74,7 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
       case 'partial': return 'teilweise integriert';
       case 'pending': return 'NICHT integriert';
-      case 'conflict-skipped': return 'Integration failed';
+      case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
       default: return 'kein Branch';
     }
   });
@@ -95,12 +104,14 @@ export class IntegrationStatusBadgeComponent {
         case 'pending':
           return `Accepted, but NOT integrated into ${branch}`;
         case 'conflict-skipped':
-          return `Integration into ${branch} failed; the work is NOT integrated`;
+          return value.failure?.label
+            ? `${value.failure.label}; the work is NOT integrated into ${branch}`
+            : `Integration into ${branch} failed; the work is NOT integrated`;
         default:
           return 'No task branch or commit to integrate';
       }
     })();
-    return [head, value.detail].filter(Boolean).join('\n');
+    return [...new Set([head, value.failure?.reason, value.detail].filter(Boolean))].join('\n');
   });
 
   readonly ariaLabel = computed(() => {
@@ -111,7 +122,7 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return `Integrated into ${branch}`;
       case 'partial': return `Partially integrated into ${branch}`;
       case 'pending': return `Not integrated into ${branch}`;
-      case 'conflict-skipped': return `Integration failed; not integrated into ${branch}`;
+      case 'conflict-skipped': return `${value.failure?.label ?? 'Integration failed'}; not integrated into ${branch}`;
       default: return 'No branch to integrate';
     }
   });

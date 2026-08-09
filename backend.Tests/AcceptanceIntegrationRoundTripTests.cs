@@ -878,12 +878,61 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(intent);
         Assert.Equal(ContinueModes.Steer, intent!.Mode);
-        Assert.Equal("integration-conflict", intent.SavedReason);
+        Assert.Equal(AcceptedIntegrationFailureCodes.MergeConflict, intent.SavedReason);
         Assert.Contains(DeliveryRef, intent.Prompt, StringComparison.Ordinal);
         Assert.Contains("rebase", intent.Prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
             TimelineEventKinds.IntegrationRecoveryQueued,
             File.ReadAllText(TaskPaths.TimelineLog(readyFolder)));
+    }
+
+    [Fact]
+    public async Task SourceNeedsRebaseRecovery_QueuesFocusedSteerRound()
+    {
+        var deliverySha = PublishDelivery("behind-main.txt", "delivery version\n");
+        var deps = Build(deliverySha);
+        var job = deps.Scanner.FindJob(Slug, _watchPath)!;
+        deps.Pipeline.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "error",
+            Reason = "Release source 'origin/result' must be rebased onto 'develop' before the full-suite gate.",
+            FailureCode = AcceptedIntegrationFailureCodes.SourceNeedsRebase,
+        });
+
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["TaskRepository"] = _tempDir,
+                        ["WatchPaths:0:Name"] = Project,
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _repo,
+                        ["WatchPaths:0:RepositoryPath"] = _repo,
+                    });
+                });
+                builder.ConfigureTestServices(services => services.RemoveAll<IHostedService>());
+            });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var response = await client.PostAsync(
+            $"/api/tasks/{Slug}/integration/rebase?watchPath={Uri.EscapeDataString(_watchPath)}",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, Slug);
+        var intent = JsonSerializer.Deserialize<PendingIntent>(
+            File.ReadAllText(Path.Combine(readyFolder, "pending-intent.json")),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(AcceptedIntegrationFailureCodes.SourceNeedsRebase, intent?.SavedReason);
+        Assert.Contains("rebase", intent?.Prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

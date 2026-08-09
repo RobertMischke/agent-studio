@@ -167,6 +167,18 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   queue and gate, while local/remote divergence becomes a failed integration
   record instead of being overwritten. The `integrationpending` tag is an
   internal recovery marker, not a second UI status.
+- A current integration failure is projected as typed card state from the
+  durable merge step. `integration.failure` carries a stable code, concise
+  label, operator-facing reason, and whether focused rebase recovery applies.
+  This distinguishes a merge conflict, a delivery that needs rebasing, a build
+  gate failure, unavailable task-key validation, an invalid review subject,
+  and a generic integration error without changing the legacy top-level
+  `conflict-skipped` compatibility status.
+- The immutable current review subject selects the authoritative delivery
+  generation for integration membership. When a reissue rebases an accepted
+  commit to a replacement object id, target-branch ancestry of that reviewed
+  result proves integration; attributed SHAs from superseded review epochs
+  remain history and do not force a permanent `partial` card state.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

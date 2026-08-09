@@ -948,6 +948,11 @@ public sealed class MergeIntoDevelopRunner
         var completedAt = DateTime.UtcNow;
         var (status, verdict, reason, summary) = Project(
             result, integrationBranch, preMainResult, preDevelopResult);
+        var failure = AcceptedIntegrationFailurePolicy.Classify(
+            status,
+            verdict,
+            reason,
+            summary);
 
         _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
         {
@@ -960,6 +965,7 @@ public sealed class MergeIntoDevelopRunner
             Verdict = verdict,
             VerdictSummary = summary,
             Reason = reason,
+            FailureCode = failure?.Code,
         });
     }
 
