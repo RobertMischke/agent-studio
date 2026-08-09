@@ -17,7 +17,6 @@ import {
 } from '../../../../components/task-reference-microcard/task-reference-microcard';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
-import { TooltipDirective } from 'coding-agent-chat/shared';
 
 interface ReferenceStatusResponse {
   items: TaskReferenceStatus[];
@@ -30,27 +29,30 @@ interface ReferenceStatusResponse {
  * <ul>
  *   <li>follow-ups exist -> renders each as an AGT-2050 reference microcard
  *       ("spawnt: AGT-xxxx");</li>
- *   <li>none, not declared -> a loud warning ("no follow-up cards created") plus
- *       a "declare no follow-up intended" action;</li>
+ *   <li>none, not declared -> a compact warning with promote and declaration
+ *       actions;</li>
  *   <li>declared -> shows the deliberate no-follow-up declaration + an undo.</li>
  * </ul>
- * The contract line mirrors the accept-dialog guard: an unsatisfied contract is
- * the AGT-1915 trap the operator wanted made visible. Self-contained: it fetches
- * the spawned cards' reference status itself and writes the declaration through
- * the planning-closure endpoint, holding a local summary override so the panel
- * updates instantly; it also emits {@link changed} so the parent re-fetches the
- * detail (keeping the header accept-gate in sync).
+ * The unresolved status mirrors the accept-dialog guard for the AGT-1915 trap.
+ * Self-contained: it fetches the spawned cards' reference status itself and
+ * writes the declaration through the planning-closure endpoint, holding a local
+ * summary override so the panel updates instantly; it also emits {@link changed}
+ * so the parent re-fetches the detail (keeping the header accept-gate in sync).
  */
 @Component({
   selector: 'app-planning-spawn-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TaskReferenceMicrocardComponent, TooltipDirective],
+  imports: [FormsModule, TaskReferenceMicrocardComponent],
   templateUrl: './planning-spawn-panel.component.html',
   styleUrl: './planning-spawn-panel.component.scss',
 })
 export class PlanningSpawnPanelComponent {
   readonly job = input.required<TaskInfo>();
+  /** Presentation-only bridge to the Overview-owned promote flow. */
+  readonly promoteAvailable = input(false);
+  readonly promotePending = input(false);
+  readonly promoteRequested = output<void>();
   /** Emitted after a declaration write so the parent re-fetches the detail. */
   readonly changed = output<void>();
 
@@ -72,8 +74,6 @@ export class PlanningSpawnPanelComponent {
   readonly hasSpawns = computed<boolean>(() => this.spawned().length > 0);
   readonly noFollowUpDeclared = computed<boolean>(() => this.summary()?.noFollowUpDeclared ?? false);
   readonly noFollowUpReason = computed<string | null>(() => this.summary()?.noFollowUpReason ?? null);
-  readonly contractSatisfied = computed<boolean>(() => this.summary()?.contractSatisfied ?? false);
-
   /** True when this planning task risks the AGT-1915 trap: nothing spawned, nothing declared. */
   readonly atRisk = computed<boolean>(() => !this.hasSpawns() && !this.noFollowUpDeclared());
 

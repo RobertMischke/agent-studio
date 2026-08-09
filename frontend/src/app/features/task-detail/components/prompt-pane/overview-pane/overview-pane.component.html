@@ -47,7 +47,7 @@
       }
     </div>
 
-    @if (canPromote()) {
+    @if (canPromote() && !job().planningSpawn) {
       <div class="ov-promote" data-testid="overview-promote">
         <button type="button" class="ov-promote__btn"
                 data-testid="overview-promote-btn"
@@ -60,7 +60,12 @@
       </div>
     }
 
-    <app-planning-spawn-panel [job]="job()" (changed)="referencesChanged.emit()" />
+    <app-planning-spawn-panel
+      [job]="job()"
+      [promoteAvailable]="canPromote()"
+      [promotePending]="promoting()"
+      (promoteRequested)="promote()"
+      (changed)="referencesChanged.emit()" />
     <app-concept-dossier-notice [job]="job()" (changed)="referencesChanged.emit()" />
   </section>
 

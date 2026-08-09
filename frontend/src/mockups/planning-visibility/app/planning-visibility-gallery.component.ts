@@ -20,10 +20,8 @@ import type { PlanningSpawnSummary, TaskInfo } from '../../../app/models/task.mo
  *     "spawnt: AGT-xxxx" chip a planning task shows for each follow-up it
  *     created. Requirement B.
  *  3. Planning spawn panel (real `PlanningSpawnPanelComponent`) in its three
- *     spawn-contract states — follow-ups spawned (contract met), the loud "No
- *     follow-up cards created" warning (the AGT-1915 trap made visible), and a
- *     deliberate "no follow-up intended" declaration. Requirements B + spawn
- *     contract.
+ *     spawn-contract states: follow-ups spawned, the compact unresolved status
+ *     with both resolution actions, and a deliberate no-follow-up declaration.
  *
  * The badges and panel are pure functions of the seeded `TaskInfo.mode` /
  * `TaskInfo.planningSpawn`, so no live backend is needed — the precedent set by
@@ -132,7 +130,7 @@ const PANEL_SCENARIOS: readonly PanelScenario[] = [
   {
     id: 'spawned',
     label: 'Follow-ups spawned — contract met',
-    note: 'The planning run created concrete follow-up cards. The panel lists them as "spawnt: AGT-xxxx" microcards and the contract reads "✓ contract met".',
+    note: 'The planning run created concrete follow-up cards. The panel lists them as "spawnt: AGT-xxxx" microcards, so the outcome needs no extra contract badge.',
     job: makeTask({
       mode: 'planning',
       planningSpawn: summary({
@@ -148,7 +146,7 @@ const PANEL_SCENARIOS: readonly PanelScenario[] = [
   {
     id: 'at-risk',
     label: 'No follow-ups, none declared — the AGT-1915 trap',
-    note: 'Nothing spawned and nothing declared: the loud red "No follow-up cards created" warning and the "! no follow-ups" contract badge. This is exactly the plan-only-approval trap made un-missable.',
+    note: 'Nothing spawned and nothing declared: one quiet warning status and the two available resolution actions, without a duplicate header badge or teaching box.',
     job: makeTask({
       mode: 'planning',
       planningSpawn: summary({ contractSatisfied: false }),

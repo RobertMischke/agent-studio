@@ -19,8 +19,8 @@
     "Hier wird GEPLANT" made visible. A planning/research task carries a prominent
     mode badge on its board card and detail header; the detail's spawn panel shows
     whether the plan produced follow-up cards ("spawnt: AGT-xxxx" microcards) or
-    warns loudly when it did not — the spawn contract that guards against the
-    AGT-1915 plan-only-approval trap.
+    offers a compact resolution row when it did not. The spawn contract still
+    guards against the AGT-1915 plan-only-approval trap.
   </p>
 
   <section class="harness__section">
@@ -57,7 +57,9 @@
       @for (s of panelScenarios; track s.id) {
         <div class="harness__col harness__col--wide" [attr.data-scenario]="s.id">
           <span class="harness__label">{{ s.label }}</span>
-          <app-planning-spawn-panel [job]="s.job"></app-planning-spawn-panel>
+          <app-planning-spawn-panel
+            [job]="s.job"
+            [promoteAvailable]="true"></app-planning-spawn-panel>
           <span class="harness__note">{{ s.note }}</span>
         </div>
       }
