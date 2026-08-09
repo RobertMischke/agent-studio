@@ -85,11 +85,16 @@ public sealed class WorkbenchDecisionService
 
     private readonly WorkbenchCatalogueService _catalogue;
     private readonly GitService _git;
+    private readonly WorkbenchChangeNotifier? _notifier;
 
-    public WorkbenchDecisionService(WorkbenchCatalogueService catalogue, GitService git)
+    public WorkbenchDecisionService(
+        WorkbenchCatalogueService catalogue,
+        GitService git,
+        WorkbenchChangeNotifier? notifier = null)
     {
         _catalogue = catalogue;
         _git = git;
+        _notifier = notifier;
     }
 
     public WorkbenchDecisionResult Prepare(
@@ -268,6 +273,8 @@ public sealed class WorkbenchDecisionService
         var commit = _git.CommitPaths(snapshot.Root,
             $"workbench: {(archive ? "archive" : "decide")} {id}", [snapshot.DescriptorRelPath]);
         var revision = commit.Success ? commit.Sha : snapshot.Revision;
+        var currentStatus = archive ? "archived" : "decided";
+        _notifier?.PublishDecisionRecorded(projectName, id, snapshot.Item.Status, currentStatus);
 
         return new WorkbenchDecisionResult
         {

@@ -1,0 +1,141 @@
+<section class="workbench-overview" data-testid="workbench-overview">
+  <header class="workbench-overview__header">
+    <div>
+      <h1>Workbench overview</h1>
+      <p class="workbench-overview__subtitle">
+        @if (projectName(); as project) {
+          <span data-testid="workbench-overview-scope">{{ project }}</span>
+        } @else {
+          <span>All projects</span>
+        }
+        @if (overview(); as value) {
+          <span aria-hidden="true">·</span>
+          <strong data-testid="workbench-overview-current-count">{{ value.currentCount }} open</strong>
+        }
+      </p>
+    </div>
+    <p class="workbench-overview__context">
+      Items needing a decision come first. Other active items follow by latest movement.
+    </p>
+  </header>
+
+  @if (loading() && !overview()) {
+    <p class="workbench-overview__state" data-testid="workbench-overview-loading">Loading overview…</p>
+  } @else if (error()) {
+    <p class="workbench-overview__state" role="alert">The overview could not be loaded.</p>
+  } @else if (overview(); as value) {
+    @if (value.count === 0) {
+      <div class="workbench-overview__empty" data-testid="workbench-overview-empty">
+        <strong>No items yet</strong>
+        <span>Repository-owned entries appear here when a descriptor is added.</span>
+      </div>
+    } @else {
+      <div class="workbench-overview__body">
+        @if (decisionPending().length > 0) {
+          <section class="workbench-overview__section" data-testid="workbench-overview-decision-pending">
+            <header class="workbench-overview__section-head">
+              <div>
+                <h2>Needs a decision</h2>
+                <p>Open gates ordered by decision count, then latest movement.</p>
+              </div>
+              <span>{{ decisionPending().length }}</span>
+            </header>
+            <div class="workbench-overview__list">
+              @for (item of decisionPending(); track item.projectName + ':' + item.workbench.id) {
+                <article class="workbench-overview__card workbench-overview__card--acute"
+                         [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
+                  <div class="workbench-overview__card-main">
+                    <div class="workbench-overview__card-meta">
+                      <span class="workbench-overview__project">{{ item.projectName }}</span>
+                      <span class="workbench-overview__status" data-status="decision-pending">{{ statusLabel(item) }}</span>
+                      <span class="workbench-overview__open-count">{{ openDecisionCount(item) }} open</span>
+                    </div>
+                    <h3>{{ item.workbench.title }}</h3>
+                    <p>{{ item.workbench.summary }}</p>
+                  </div>
+                  <div class="workbench-overview__card-actions">
+                    <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                    <button type="button"
+                            [attr.data-testid]="'workbench-overview-open-' + item.projectName + '-' + item.workbench.id"
+                            (click)="open(item)">Open decisions</button>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        }
+
+        @if (active().length > 0 || invalid().length > 0) {
+          <section class="workbench-overview__section" data-testid="workbench-overview-active">
+            <header class="workbench-overview__section-head">
+              <div><h2>Active</h2><p>Most recently changed first.</p></div>
+              <span>{{ active().length + invalid().length }}</span>
+            </header>
+            <div class="workbench-overview__list">
+              @for (item of active().concat(invalid()); track item.projectName + ':' + item.workbench.id) {
+                <article class="workbench-overview__card"
+                         [class.workbench-overview__card--invalid]="!item.workbench.valid"
+                         [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
+                  <div class="workbench-overview__card-main">
+                    <div class="workbench-overview__card-meta">
+                      <span class="workbench-overview__project">{{ item.projectName }}</span>
+                      <span class="workbench-overview__status" [attr.data-status]="item.workbench.status">{{ statusLabel(item) }}</span>
+                    </div>
+                    <h3>{{ item.workbench.title }}</h3>
+                    <p>{{ item.workbench.error || item.workbench.summary }}</p>
+                  </div>
+                  <div class="workbench-overview__card-actions">
+                    <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                    <button type="button" [disabled]="!item.workbench.valid" (click)="open(item)">Open</button>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        }
+
+        <section class="workbench-overview__history" data-testid="workbench-overview-history">
+          <h2>History</h2>
+          <div class="workbench-overview__history-groups">
+            <section>
+              <button type="button" class="workbench-overview__history-toggle"
+                      data-testid="workbench-overview-discarded-toggle"
+                      [attr.aria-expanded]="discardedOpen()"
+                      (click)="toggleDiscarded()">
+                <span>Discarded</span><strong>{{ discarded().length }}</strong><i aria-hidden="true">›</i>
+              </button>
+              @if (discardedOpen()) {
+                <div class="workbench-overview__history-list" data-testid="workbench-overview-discarded-list">
+                  @for (item of discarded(); track item.projectName + ':' + item.workbench.id) {
+                    <button type="button" (click)="open(item)">
+                      <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                      <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                    </button>
+                  } @empty { <p>No discarded items.</p> }
+                </div>
+              }
+            </section>
+            <section>
+              <button type="button" class="workbench-overview__history-toggle"
+                      data-testid="workbench-overview-completed-toggle"
+                      [attr.aria-expanded]="completedOpen()"
+                      (click)="toggleCompleted()">
+                <span>Completed</span><strong>{{ completed().length }}</strong><i aria-hidden="true">›</i>
+              </button>
+              @if (completedOpen()) {
+                <div class="workbench-overview__history-list" data-testid="workbench-overview-completed-list">
+                  @for (item of completed(); track item.projectName + ':' + item.workbench.id) {
+                    <button type="button" (click)="open(item)">
+                      <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                      <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                    </button>
+                  } @empty { <p>No completed items.</p> }
+                </div>
+              }
+            </section>
+          </div>
+        </section>
+      </div>
+    }
+  }
+</section>

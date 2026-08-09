@@ -30,6 +30,7 @@ import {
   WikiTree,
   WorkbenchCatalogue,
   WorkbenchDocument,
+  WorkbenchOverview,
 } from '../models/project-docs.model';
 
 export interface WikiConditionalResponse<T> {
@@ -190,6 +191,13 @@ export class ProjectDocsService {
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches`,
       { params: history ? { history: 'true' } : {} },
     );
+  }
+
+  /** Shared workspace-wide/project-scoped Workbench queue projection. */
+  getWorkbenchOverview(projectName: string | null = null) {
+    return this.http.get<WorkbenchOverview>(`${this.baseUrl}/workbenches`, {
+      params: projectName ? { project: projectName } : {},
+    });
   }
 
   getWorkbench(projectName: string, id: string) {

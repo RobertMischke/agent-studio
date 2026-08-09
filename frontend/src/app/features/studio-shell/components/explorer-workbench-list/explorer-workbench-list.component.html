@@ -1,8 +1,10 @@
 <app-tree-row level="child" glyph="eye" label="Workbenches"
               [chevron]="expanded() ? 'expanded' : 'collapsed'"
               [count]="catalogue()?.count ?? null"
+              [active]="overviewActive()"
+              [ariaCurrent]="overviewActive() ? 'page' : null"
               [testid]="'studio-explorer-project-workbenches-' + projectName()"
-              (chevronClick)="toggle()" (selectRequest)="toggle()" />
+              (chevronClick)="toggle()" (selectRequest)="openOverviewPage()" />
 @if (expanded()) {
   <div class="studio-workbench-topics" [attr.data-testid]="'studio-explorer-workbench-list-' + projectName()">
     @if (loading()) {
@@ -20,6 +22,7 @@
           <span class="studio-workbench-topic__meta">
             @if (isAcute(workbench)) { <i [attr.data-status]="workbench.status"></i> }
             {{ secondaryMeta(workbench) }}
+            @if (openCount(workbench) > 0) { <strong>{{ openCount(workbench) }} open</strong> }
           </span>
         </button>
       } @empty { <span class="studio-workbench-topics__state">No open Workbenches</span> }

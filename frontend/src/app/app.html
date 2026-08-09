@@ -443,6 +443,15 @@
                 }
               }
             }
+            @case ('workbenches') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'workbenches') {
+                  <app-workbench-overview
+                    [projectName]="tab.projectName"
+                    (openWorkbench)="onWorkbenchOverviewOpen($event)" />
+                }
+              }
+            }
             @case ('diff') {
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'diff') {

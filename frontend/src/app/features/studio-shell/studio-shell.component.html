@@ -136,7 +136,8 @@
       [badgeCounts]="activityBarBadgeCounts()"
       [hasEpics]="hasEpics()"
       (panelToggle)="togglePanel($event)"
-      (openEpicsRequest)="onActivityBarOpenEpics()" />
+      (openEpicsRequest)="onActivityBarOpenEpics()"
+      (openWorkbenchesRequest)="openWorkbenches(null)" />
 
     <!-- Sidebar host -->
     @if (sidebarVisible()) {
@@ -217,6 +218,7 @@
                   (openHubRequest)="openHub($event)"
                   (openUrlPreviewRequest)="openUrlPreview($event)"
                   (openWikiRequest)="openWiki($event)"
+                  (openWorkbenchesRequest)="openWorkbenches($event)"
                   (openWorkbenchRequest)="openWorkbench($event)"
                   (openEpicsRequest)="openProjectEpics($event)"
                   (onboardProjectRequest)="onAddProjectToWorkspace($event)"

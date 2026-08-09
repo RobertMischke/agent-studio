@@ -31,6 +31,7 @@ export { ProjectTestRunsPanelComponent } from './components/project-test-runs-pa
 export { ProjectUrlsPanelComponent } from './components/project-urls-panel/project-urls-panel.component';
 export { ProjectUrlPreviewTabComponent } from './components/project-url-preview-tab/project-url-preview-tab.component';
 export { WorkbenchViewerComponent } from './components/workbench-viewer/workbench-viewer.component';
+export { WorkbenchOverviewComponent } from './components/workbench-overview/workbench-overview.component';
 export { WorkbenchDecisionPanelComponent } from './components/workbench-decision-panel/workbench-decision-panel';
 export { WorkbenchDecisionStore } from './state/workbench-decision.store';
 export { PageActionBarComponent } from './components/page-action-bar/page-action-bar';

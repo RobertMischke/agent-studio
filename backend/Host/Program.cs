@@ -651,6 +651,7 @@ builder.Services.AddSingleton<WikiSearchService>();
 builder.Services.AddSingleton<ProjectStyleGuideService>();
 builder.Services.AddSingleton<PromptEnrichmentService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
+builder.Services.AddSingleton<WorkbenchChangeNotifier>();
 builder.Services.AddSingleton<WorkbenchDecisionService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
@@ -715,6 +716,7 @@ builder.Services.AddSignalR();
 // jobsBulkChanged). Resolved + move-source-attached during startup wiring
 // below so the notifier subscriptions are live before the first mutation.
 builder.Services.AddSingleton<AgentStudio.Host.TaskHubBroadcaster>();
+builder.Services.AddSingleton<AgentStudio.Host.WorkbenchHubBroadcaster>();
 if (!SecurityProfiles.IsNetworked(builder.Configuration))
 {
     builder.Services.AddCors(options =>
@@ -1070,6 +1072,10 @@ IClientProxy TaskEventClients(string jobId)
 // transition service's move event. See backend/Hubs/TaskHubBroadcaster.cs.
 var jobHubBroadcaster = app.Services.GetRequiredService<AgentStudio.Host.TaskHubBroadcaster>();
 jobHubBroadcaster.AttachMoveSource(app.Services.GetRequiredService<TaskTransitionService>());
+var workbenchHubBroadcaster = app.Services.GetRequiredService<AgentStudio.Host.WorkbenchHubBroadcaster>();
+workbenchHubBroadcaster.Attach(
+    watcher,
+    app.Services.GetRequiredService<WorkbenchChangeNotifier>());
 
 // Cycle 1: bind the in-memory snapshot cache. TaskScannerService.ScanAllJobs
 // now serves from cache; TaskWatcherService.OnJobChanged invalidates it on

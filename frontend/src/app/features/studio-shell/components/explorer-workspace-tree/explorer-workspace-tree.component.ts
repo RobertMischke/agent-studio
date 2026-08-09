@@ -48,7 +48,7 @@ export type {
   ExplorerWorkspaceGroup,
 } from './explorer-workspace-groups';
 
-export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'workbench' | 'epics';
+export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'workbenches' | 'workbench' | 'epics';
 export interface ActiveExplorerWorkbench {
   projectName: string;
   workbenchId: string;
@@ -99,6 +99,7 @@ export class ExplorerWorkspaceTreeComponent {
   readonly openUrlPreviewRequest = output<{ projectName: string; urlId: string }>();
   readonly openWikiRequest = output<string>();
   readonly openWorkbenchRequest = output<{ projectName: string; workbench: WorkbenchListItem }>();
+  readonly openWorkbenchesRequest = output<string>();
   readonly openEpicsRequest = output<string>();
   readonly onboardProjectRequest = output<string>();
   /** Open the create-workspace dialog from the Workspaces section header. */

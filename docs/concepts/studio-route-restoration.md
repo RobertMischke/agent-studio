@@ -66,6 +66,8 @@ such as `AGT-2291`. Values are percent encoded.
 | Wiki Overview | `#/projects/<project>/wiki` | Project Hub, Wiki rail, Wiki landing | Tree expansion, scroll, search draft, hover state |
 | Wiki page | `#/projects/<project>/wiki?page=<relative-path>` | Exact repository-relative Wiki document | Reading scroll, history flyout, editor draft, lightbox |
 | Wiki folder | `#/projects/<project>/wiki?folder=<relative-path>` | Exact Wiki folder overview | Folder scroll, transient selection and hover |
+| Workspace Workbenches | `#/workbenches` | Workspace-wide ordered overview | History disclosures, scroll, hover state |
+| Project Workbenches | `#/projects/<project>/workbenches` | Project-scoped ordered overview | History disclosures, scroll, hover state |
 | Workbench | `#/projects/<project>/workbenches/<workbench-id>` | Project, exact Workbench, repository HTML artifact | iframe scroll, in-artifact anchor, runtime script state |
 | Task detail | `#/tasks/<task>` | Exact task and default Overview / Result tabs | Pane sizes, visible pane set, maximized pane, edit drafts, open menus, poll cache |
 | Task detail with active tabs | `#/tasks/<task>?view=<detail-tab>:<inspector-tab>` | Exact task, left detail tab (`overview`, `timeline`, `evidence`, `code-review`, `description`) and right inspector tab (`protocol`, `activity`) | Activity subview, selected run, source viewer, splitter positions, composer draft |
@@ -145,3 +147,5 @@ review screenshots under the managed task's `results/` directory.
 - **2026-07-30:** Promoted the workspace Activity Feed to the embedded
   `#/feed` main route. Kept the existing project modal as a quick-access
   compatibility surface rather than a second primary route.
+- **2026-08-09:** Added workspace-wide and project-scoped Workbench overview
+  routes while retaining the existing item route for the viewer.

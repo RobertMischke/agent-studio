@@ -169,8 +169,15 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   and archived cards. Readiness and last-start diagnosis remain independent, so
   a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
-  read-only Workbench host. Explorer discovery is lazy per expanded project;
-  Pulse reuses the same catalogue as a thinking inbox. An active Workbench is
+  read-only Workbench host. The workspace-wide `#/workbenches` overview and
+  project-scoped `#/projects/<project>/workbenches` overview share one ordered
+  projection: decision-pending items sort by open gate count, active items sort
+  by latest movement, and discarded and completed history remain separate.
+  Explorer project children stay available as quick links. Created, updated,
+  decision-recorded, and status-changed events travel over the existing jobs
+  hub and converge the Explorer catalogue, both overview scopes, and an open
+  viewer without a page reload. Pulse reuses the same catalogue as a thinking
+  inbox. An active Workbench is
   the selected leaf in the Explorer rather than making its Workbenches disclosure
   parent current. Opening one expands the owning workspace, project, and
   project-specific Workbenches section, persists that section state, and scrolls

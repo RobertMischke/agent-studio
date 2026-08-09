@@ -38,7 +38,24 @@ public sealed class WorkbenchCatalogueTests : IDisposable
 
         Assert.Equal(3, catalogue.Count);
         Assert.Equal(new[] { "newer", "older" }, catalogue.Items.Where(x => x.Valid).Select(x => x.Id));
+        Assert.Equal(1, catalogue.Items.Single(x => x.Id == "newer").OpenDecisionCount);
         Assert.Contains(catalogue.Items, x => x.Id == "broken" && !x.Valid && x.Error != null);
+    }
+
+    [Fact]
+    public void Overview_UsesOneProjectionForWorkspaceAndProjectScopes()
+    {
+        WriteWorkbench("current", "Current", "active", "2026-07-12T10:00:00Z");
+        WriteWorkbench("discarded", "Discarded", "archived", "2026-07-11T10:00:00Z");
+        var service = Service();
+
+        var overview = service.ListOverview(["Project"], "Project");
+
+        Assert.Equal("Project", overview.ProjectName);
+        Assert.Equal(2, overview.Count);
+        Assert.Equal(1, overview.CurrentCount);
+        Assert.Equal(1, overview.HistoryCount);
+        Assert.All(overview.Items, item => Assert.Equal("Project", item.ProjectName));
     }
 
     [Fact]

@@ -94,12 +94,54 @@ public sealed class WorkbenchCatalogueService
                 legacy.SourceTaskKeys));
         }
 
-        var visible = items
-            .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
-            .OrderByDescending(x => x.UpdatedAtUtc)
-            .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+        var visible = WorkbenchOverviewPolicy.Sort(items
+                .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
+                .Select(item => new WorkbenchOverviewItem(projectName, item)))
+            .Select(item => item.Workbench)
             .ToList();
         return new WorkbenchCatalogue(projectName, includeHistory, visible.Count, visible);
+    }
+
+    /// <summary>
+    /// Returns every configured, non-archived project handle that can own a
+    /// Workbench. Registry records are authoritative when present; WatchPaths
+    /// remain the compatibility source for local and test configurations.
+    /// </summary>
+    public IReadOnlyList<string> ListProjectNames()
+    {
+        var names = _registry.List()
+            .Where(project => !project.Archived)
+            .Select(project => project.DisplayName)
+            .Concat(_scanner.GetWatchPaths().Select(entry => entry.Name))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return names;
+    }
+
+    /// <summary>
+    /// One read model shared by the workspace-wide and project-scoped list
+    /// pages. History is included so the client can render discarded and
+    /// completed groups independently without issuing a second request.
+    /// </summary>
+    public WorkbenchOverview ListOverview(IEnumerable<string> projectNames, string? projectName = null)
+    {
+        var items = new List<WorkbenchOverviewItem>();
+        foreach (var name in projectNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var catalogue = List(name, includeHistory: true);
+            if (catalogue == null) continue;
+            items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)));
+        }
+
+        var sorted = WorkbenchOverviewPolicy.Sort(items);
+        return new WorkbenchOverview(
+            ProjectName: projectName,
+            Count: sorted.Count,
+            CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
+            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "decided"),
+            Items: sorted);
     }
 
     public WorkbenchDocument? Read(string projectName, string id)
@@ -349,6 +391,7 @@ public sealed class WorkbenchCatalogueService
                     LifecycleHistory = lifecycleHistory,
                     Decision = decision,
                     DecisionStage = DecisionStage(decision),
+                    OpenDecisionCount = status == "decision-pending" ? 1 : 0,
                 });
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
@@ -722,7 +765,21 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
     public WorkbenchDecisionProjection? Decision { get; init; }
     public string? DecisionStage { get; init; }
+    /// <summary>
+    /// Open operator decisions projected by the current contract. Until inline
+    /// decision points land, decision-pending represents one Workbench-level
+    /// gate; the field lets the UI adopt the future detailed count without a
+    /// list-contract change.
+    /// </summary>
+    public int OpenDecisionCount { get; init; }
 }
+public sealed record WorkbenchOverviewItem(string ProjectName, WorkbenchListItem Workbench);
+public sealed record WorkbenchOverview(
+    string? ProjectName,
+    int Count,
+    int CurrentCount,
+    int HistoryCount,
+    List<WorkbenchOverviewItem> Items);
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
     bool WorkingTreeModified, string? Fingerprint);
 

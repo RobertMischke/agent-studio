@@ -6,7 +6,7 @@ import type { StudioPanelKind, StudioTabKind } from '../../studio-shell.types';
  * that own their own rail button (`epics`). `settings` is shared:
  * it is both a sidebar panel and the target of the workspace-settings tab.
  */
-export type StudioActivityItemKey = StudioPanelKind | 'epics';
+export type StudioActivityItemKey = StudioPanelKind | 'epics' | 'workbenches';
 
 /**
  * The bug (AGT-2042): the ActivityBar drew its active marker from two
@@ -37,6 +37,8 @@ export function resolveActiveActivityKey(state: {
       return 'activity';
     case 'epics':
       return 'epics';
+    case 'workbenches':
+      return 'workbenches';
     case 'workspace-settings':
       return 'settings';
   }

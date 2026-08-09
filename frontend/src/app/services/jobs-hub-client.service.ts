@@ -5,6 +5,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 import type { TaskInfo } from '../models/task.model';
+import type { WorkbenchHubEvent } from '../models/project-docs.model';
 
 /**
  * Callbacks the {@link TaskService} registers for the fine-grained task
@@ -48,6 +49,8 @@ export interface JobsHubHandlers {
 export class JobsHubClient {
   /** True while the hub socket is up. The poll cadence does not depend on this — it is exposed for diagnostics / tests. */
   readonly connected = signal(false);
+  /** Latest Workbench change on the same shared hub connection. */
+  readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
 
   private connection: HubConnection | null = null;
   private handlers: JobsHubHandlers | null = null;
@@ -81,10 +84,16 @@ export class JobsHubClient {
     if (handlers.runnerStatusChanged) conn.on('runnerStatusChanged', handlers.runnerStatusChanged);
     if (handlers.cliStarted) conn.on('cliStarted', handlers.cliStarted);
     if (handlers.cliFinished) conn.on('cliFinished', handlers.cliFinished);
+    const workbenchEvent = (event: WorkbenchHubEvent) => this.workbenchEvent.set(event);
+    conn.on('workbenchCreated', workbenchEvent);
+    conn.on('workbenchUpdated', workbenchEvent);
+    conn.on('workbenchDecisionRecorded', workbenchEvent);
+    conn.on('workbenchStatusChanged', workbenchEvent);
 
     conn.onreconnecting(() => this.connected.set(false));
     conn.onreconnected(() => {
       this.connected.set(true);
+      this.publishWorkbenchReconnect();
       this.handlers?.reconnected?.();
     });
     // Final close (initial-connect failure or back-off exhausted): keep trying
@@ -118,6 +127,7 @@ export class JobsHubClient {
       .start()
       .then(() => {
         this.connected.set(true);
+        this.publishWorkbenchReconnect();
         // Initial convergence pull: the board may have changed between the
         // last poll and the socket coming up.
         this.handlers?.reconnected?.();
@@ -128,6 +138,17 @@ export class JobsHubClient {
         this.connected.set(false);
         this.scheduleColdRetry();
       });
+  }
+
+  private publishWorkbenchReconnect(): void {
+    this.workbenchEvent.set({
+      type: 'reconnected',
+      projectName: null,
+      workbenchId: null,
+      workbench: null,
+      previousStatus: null,
+      occurredAtUtc: new Date().toISOString(),
+    });
   }
 
   private scheduleColdRetry(): void {
