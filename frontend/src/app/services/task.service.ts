@@ -656,10 +656,17 @@ export class TaskService {
     watchPath?: string,
     targetIndex?: number,
     reason?: string,
+    operatorOverride = false,
   ) {
-    const body: { targetState: string; targetIndex?: number; reason?: string } = { targetState };
+    const body: {
+      targetState: string;
+      targetIndex?: number;
+      reason?: string;
+      operatorOverride?: boolean;
+    } = { targetState };
     if (typeof targetIndex === 'number') body.targetIndex = targetIndex;
     if (reason?.trim()) body.reason = reason.trim();
+    if (operatorOverride) body.operatorOverride = true;
     return this.http.post(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move`,
       body,

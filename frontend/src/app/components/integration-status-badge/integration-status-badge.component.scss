@@ -5,6 +5,10 @@
   min-width: 0;
 }
 
+:host.integration-status-badge--failure {
+  flex: 1 1 100%;
+}
+
 .integration-badge {
   display: inline-flex;
   align-items: center;

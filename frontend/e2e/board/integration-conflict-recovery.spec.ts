@@ -39,7 +39,27 @@ function task(queued: boolean) {
       status: 'conflict-skipped',
       sha: null,
       integrationBranch: 'develop',
+      failureOutcome: 'Conflict',
       detail: 'Conflicted: shared.txt. Start the integration recovery action to run a steer round.',
+    },
+  };
+}
+
+function noTaskBranchTask() {
+  return {
+    ...task(false),
+    id: 'missing-delivery-branch',
+    taskKey: `${WATCH_PATH}::missing-delivery-branch`,
+    key: 'AGT-2543',
+    title: 'Returned after NoTaskBranch',
+    state: '5-human-review',
+    folderPath: `${WATCH_PATH}/5-human-review/missing-delivery-branch`,
+    integration: {
+      status: 'conflict-skipped',
+      sha: null,
+      integrationBranch: 'develop',
+      failureOutcome: 'NoTaskBranch',
+      detail: 'The accepted coding card had no delivery branch to integrate.',
     },
   };
 }
@@ -60,6 +80,7 @@ async function installRoutes(
   await page.route('**/api/**', route => {
     const url = route.request().url();
     const current = task(queued());
+    const missingBranch = noTaskBranchTask();
     if (url.includes('/api/tasks/archive')) {
       return json(route, { items: [], total: 0, offset: 0, limit: 50 });
     }
@@ -83,13 +104,13 @@ async function installRoutes(
         codeNotComplete: [],
         review: [],
         autoReview: [],
-        humanReview: [],
+        humanReview: [missingBranch],
         escalated: [],
         completed: queued() ? [] : [current],
         archive: [],
       });
     }
-    if (/\/api\/tasks(\?|$)/.test(url)) return json(route, [current]);
+    if (/\/api\/tasks(\?|$)/.test(url)) return json(route, [current, missingBranch]);
     if (url.includes('/api/watch-paths')) {
       return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
     }
@@ -145,9 +166,16 @@ test('conflict card queues the focused rebase steer round', async ({ page }, tes
     hasText: 'Accepted delivery with merge conflict',
   });
   await expect(card).toBeVisible();
-  await expect(card.getByTestId('integration-status-badge')).toContainText('Konflikt');
+  await expect(card.getByTestId('integration-status-badge')).toContainText('Failed: Conflict');
   const action = card.getByTestId('task-card-integration-recovery');
   await expect(action).toHaveAccessibleName(/queue a steer round/i);
+
+  const missingBranch = page.locator('[data-testid="task-card"]', {
+    hasText: 'Returned after NoTaskBranch',
+  });
+  await expect(missingBranch).toBeVisible();
+  await expect(missingBranch.getByTestId('integration-status-badge')).toContainText('Failed: NoTaskBranch');
+  await expect(missingBranch.getByTestId('task-card-integration-recovery')).toHaveCount(0);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
@@ -155,6 +183,12 @@ test('conflict card queues the focused rebase steer round', async ({ page }, tes
     await card.screenshot({ path });
     await testInfo.attach(`integration-conflict-recovery--${theme}.png`, {
       path,
+      contentType: 'image/png',
+    });
+    const missingBranchPath = testInfo.outputPath(`integration-no-task-branch--${theme}.png`);
+    await missingBranch.screenshot({ path: missingBranchPath });
+    await testInfo.attach(`integration-no-task-branch--${theme}.png`, {
+      path: missingBranchPath,
       contentType: 'image/png',
     });
   }

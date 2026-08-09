@@ -129,8 +129,7 @@ public sealed class TaskIntegrationStatusService
         foreach (var job in noRepo)
             result[job.TaskKey] = ClassifyNotIntegrated(
                 job,
-                ConfiguredIntegrationBranch(job),
-                repoResolved: false);
+                ConfiguredIntegrationBranch(job));
 
         var reaches = new ConcurrentDictionary<RepoBranchKey, RepoIntegration>();
         Parallel.ForEach(
@@ -203,6 +202,14 @@ public sealed class TaskIntegrationStatusService
         TaskIntegrationStatus? status)
     {
         var lastMerge = ReadLatestMergeStep(job);
+        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(job)
+            || string.Equals(lastMerge?.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AcceptedIntegrationRecoveryDecision(
+                AcceptedIntegrationRecoveryAction.Ignore,
+                "This acceptance explicitly expects no integration.",
+                lastMerge);
+        }
         if (status?.Status == IntegrationStatuses.Integrated
             && lastMerge?.Status != PipelineStepStatus.Pending)
         {
@@ -216,7 +223,7 @@ public sealed class TaskIntegrationStatusService
         // exact-SHA gate verdict is still pending. That state must resume the
         // runner rather than treating ancestry as proof that the gate ran.
 
-        if (IsDecidedIntegrationAttempt(lastMerge, job))
+        if (IsDecidedIntegrationAttempt(lastMerge))
         {
             return new AcceptedIntegrationRecoveryDecision(
                 AcceptedIntegrationRecoveryAction.ReturnToReview,
@@ -251,7 +258,7 @@ public sealed class TaskIntegrationStatusService
         // runner lifecycle markers are metadata, not delivery expectations.
         var attributed = AttributedCommits(job, reach.DevelopAncestors);
         if (attributed.Count == 0)
-            return ClassifyNotIntegrated(job, branchName, deliveryRef, repoResolved: true);
+            return ClassifyNotIntegrated(job, branchName, deliveryRef);
 
         var missing = new List<string>();
         foreach (var sha in attributed)
@@ -260,7 +267,7 @@ public sealed class TaskIntegrationStatusService
         // NONE of the attributed commits landed → conflict-skipped / pending
         // (no-branch is impossible here: there IS attributed work).
         if (missing.Count == attributed.Count)
-            return ClassifyNotIntegrated(job, branchName, deliveryRef, repoResolved: true);
+            return ClassifyNotIntegrated(job, branchName, deliveryRef);
 
         var newest = attributed[^1];
 
@@ -293,20 +300,20 @@ public sealed class TaskIntegrationStatusService
     private TaskIntegrationStatus ClassifyNotIntegrated(
         TaskInfo job,
         string branchName,
-        string? deliveryRef = null,
-        bool repoResolved = false)
+        string? deliveryRef = null)
     {
         deliveryRef ??= DeliveryRefFor(job);
         var anchor = AnchorFor(job);
         var hasWork = anchor != null || deliveryRef != null;
 
-        if (repoResolved && ReadMergeConflict(job, branchName) is { } conflictDetail)
+        if (ReadIntegrationFailure(job, branchName) is { } failure)
             return new TaskIntegrationStatus
             {
                 Status = IntegrationStatuses.ConflictSkipped,
                 DeliveryRef = deliveryRef,
                 IntegrationBranch = branchName,
-                Detail = conflictDetail,
+                FailureOutcome = failure.Outcome,
+                Detail = failure.Detail,
             };
 
         if (!hasWork)
@@ -379,32 +386,48 @@ public sealed class TaskIntegrationStatusService
     /// merge was recorded conflicted / errored, else null. Local file read only (no
     /// git spawn); best-effort - any failure reads as "no recorded conflict".
     /// </summary>
-    private string? ReadMergeConflict(TaskInfo job, string integrationBranch)
+    private IntegrationFailure? ReadIntegrationFailure(TaskInfo job, string integrationBranch)
     {
         var step = ReadLatestMergeStep(job);
         if (step is null) return null;
+        if (string.Equals(step.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase)
+            || !AcceptanceIntegrationPolicy.IsIntegrationRequired(job))
+        {
+            return null;
+        }
         if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
         {
             var evidence = step.VerdictSummary ?? step.Reason
                 ?? $"Merge into {integrationBranch} hit a conflict; not merged.";
             var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
                 ?? WorktreeTaskLifecycle.BranchFor(job.Id);
-            return $"{evidence} Start the integration recovery action to run a steer round: "
-                   + $"rebase '{delivery}' onto the current integration branch '{integrationBranch}', "
-                   + "resolve the conflicts, and deliver the updated branch.";
+            return new IntegrationFailure(
+                MergeIntoIntegrationOutcome.Conflict.ToString(),
+                $"{evidence} Start the integration recovery action to run a steer round: "
+                + $"rebase '{delivery}' onto the current integration branch '{integrationBranch}', "
+                + "resolve the conflicts, and deliver the updated branch.");
         }
         // The pre-develop build gate found the merge result red and rolled the
         // integration branch back: the work is genuinely not in develop, so the
         // card must read as not-integrated with the gate's reason attached.
         if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
-            return step.Reason ?? $"The build gate blocked the merge into {integrationBranch}; not merged.";
+            return new IntegrationFailure(
+                MergeIntoIntegrationOutcome.GateFailed.ToString(),
+                step.Reason ?? $"The build gate blocked the merge into {integrationBranch}; not merged.");
         if (step.Status == PipelineStepStatus.Failed
             && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
-            return step.Reason ?? $"Merge into {integrationBranch} failed; not merged.";
+            return new IntegrationFailure(
+                MergeIntoIntegrationOutcome.Error.ToString(),
+                step.Reason ?? $"Merge into {integrationBranch} failed; not merged.");
+        if (string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
+            return new IntegrationFailure(
+                MergeIntoIntegrationOutcome.NoTaskBranch.ToString(),
+                step.Reason ?? step.VerdictSummary
+                    ?? "The accepted coding card had no delivery branch to integrate.");
         return null;
     }
 
-    private PipelineStepExecution? ReadLatestMergeStep(TaskInfo job)
+    internal PipelineStepExecution? ReadLatestMergeStep(TaskInfo job)
     {
         try
         {
@@ -425,20 +448,19 @@ public sealed class TaskIntegrationStatusService
         }
     }
 
-    private static bool IsDecidedIntegrationAttempt(
-        PipelineStepExecution? step,
-        TaskInfo job)
+    private static bool IsDecidedIntegrationAttempt(PipelineStepExecution? step)
     {
         if (step is null) return false;
         if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase)
             || string.Equals(step.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        return string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase)
-               && ReviewSubjectStore.Read(job.FolderPath) is null;
+        return false;
     }
 
     /// <summary>
@@ -562,10 +584,13 @@ public sealed class TaskIntegrationStatusService
         bool Succeeded);
 
     private sealed record RepoBranchKey(string Root, string Branch);
+
+    private sealed record IntegrationFailure(string Outcome, string Detail);
 }
 
 internal enum AcceptedIntegrationRecoveryAction
 {
+    Ignore,
     Finalize,
     ReturnToReview,
     Retry,

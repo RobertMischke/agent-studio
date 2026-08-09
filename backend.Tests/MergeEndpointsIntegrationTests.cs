@@ -202,8 +202,14 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         var commitJson = commitSha == null
             ? ""
             : $",\"commits\":[{{\"sha\":\"{commitSha}\",\"message\":\"work\",\"authorEmail\":\"x@y\",\"at\":\"2026-05-29T12:00:00Z\",\"fileCount\":1}}]";
+        // These endpoint fixtures have no repository delivery. Terminal cards
+        // declare that fact so the production integration backstop does not
+        // reinterpret test setup as a silently accepted coding delivery.
+        var noBranchJson = state is TaskStates.Completed or TaskStates.Archive
+            ? ",\"noBranchExpected\":true"
+            : "";
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"{commitJson}}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"{commitJson}{noBranchJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "status.md"), statusBody);
     }

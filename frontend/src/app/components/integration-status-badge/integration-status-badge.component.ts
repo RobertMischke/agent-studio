@@ -29,6 +29,9 @@ import { TaskService } from '../../services/task.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './integration-status-badge.component.html',
   styleUrl: './integration-status-badge.component.scss',
+  host: {
+    '[class.integration-status-badge--failure]': "kind() === 'conflict'",
+  },
 })
 export class IntegrationStatusBadgeComponent {
   readonly integration = input<TaskIntegrationStatus | null | undefined>(null);
@@ -65,7 +68,9 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
       case 'partial': return 'teilweise integriert';
       case 'pending': return 'NICHT integriert';
-      case 'conflict-skipped': return 'Integration failed';
+      case 'conflict-skipped': return value.failureOutcome
+        ? `Failed: ${value.failureOutcome}`
+        : 'Integration failed';
       default: return 'kein Branch';
     }
   });
@@ -111,9 +116,17 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return `Integrated into ${branch}`;
       case 'partial': return `Partially integrated into ${branch}`;
       case 'pending': return `Not integrated into ${branch}`;
-      case 'conflict-skipped': return `Integration failed; not integrated into ${branch}`;
+      case 'conflict-skipped': return value.failureOutcome
+        ? `Integration failed with ${value.failureOutcome}; not integrated into ${branch}`
+        : `Integration failed; not integrated into ${branch}`;
       default: return 'No branch to integrate';
     }
+  });
+
+  readonly canQueueRecovery = computed(() => {
+    const value = this.integration();
+    return value?.status === 'conflict-skipped'
+      && (!value.failureOutcome || value.failureOutcome === 'Conflict');
   });
 
   queueRecovery(event: Event): void {

@@ -139,13 +139,23 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - Human acceptance is transactional. A coding card remains in
   `5-human-review` with phase `integrating` until the delivery reaches `Merged`
   or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
-  to ordinary Human Review with an Integration failed badge and timeline
-  evidence. Before the already-integrated decision, acceptance fetches the
+  to ordinary Human Review, including when a legacy path already moved it to
+  `6-completed`. The Integration failed badge names the worker outcome and an
+  owned `## Acceptance integration` section in `status.md` stores the same
+  outcome and reason. Before the already-integrated decision, acceptance fetches the
   configured origin integration ref and evaluates refreshed local plus remote
   ancestry. A remote-only out-of-band integration therefore skips the merge
   queue and gate, while local/remote divergence becomes a failed integration
   record instead of being overwritten. The `integrationpending` tag is an
   internal recovery marker, not a second UI status.
+- A move may set `operatorOverride: true` only when targeting `6-completed`.
+  This is an explicit, one-shot operator waiver, never a default. Pipeline
+  history and `status.md` retain the override and reason. Concept and other
+  no-branch cards are exempt through their mode, kind, `taskType=concept|decision`,
+  or the explicit `noBranchExpected: true` card field.
+- The read-only startup `AcceptedIntegrationInventorySweep` lists historical
+  Completed and archived coding cards whose integration fact is absent, Error,
+  or NoTaskBranch. It does not mutate historical cards.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

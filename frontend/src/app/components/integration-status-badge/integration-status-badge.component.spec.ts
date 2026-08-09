@@ -17,6 +17,7 @@ function integration(
     deliveryRef: null,
     sha: status === 'integrated' ? 'abc1234' : null,
     integrationBranch: 'develop',
+    failureOutcome: null,
     detail: null,
     ...overrides,
   };
@@ -70,12 +71,16 @@ describe('IntegrationStatusBadgeComponent', () => {
   });
 
   it('renders conflict-skipped as a hard red integration-failed badge', () => {
-    const fixture = render(integration('conflict-skipped', { detail: 'Conflicted: a.txt' }));
+    const fixture = render(integration('conflict-skipped', {
+      failureOutcome: 'NoTaskBranch',
+      detail: 'No reviewed delivery branch exists.',
+    }));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('Integration failed');
+    expect(badge.textContent).toContain('Failed: NoTaskBranch');
     expect(badge.dataset['kind']).toBe('conflict');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
-    expect(fixture.componentInstance.tooltip()).toContain('Conflicted: a.txt');
+    expect(fixture.componentInstance.tooltip()).toContain('No reviewed delivery branch exists.');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-integration-recovery"]')).toBeNull();
   });
 
   it('queues a focused rebase steer round from a conflict card', () => {
@@ -85,7 +90,7 @@ describe('IntegrationStatusBadgeComponent', () => {
     const fixture = TestBed.createComponent(IntegrationStatusBadgeComponent);
     fixture.componentRef.setInput(
       'integration',
-      integration('conflict-skipped', { detail: 'Conflicted: shared.txt' }),
+      integration('conflict-skipped', { failureOutcome: 'Conflict', detail: 'Conflicted: shared.txt' }),
     );
     fixture.componentRef.setInput('jobId', 'task-1');
     fixture.componentRef.setInput('watchPath', '/tmp/watch');

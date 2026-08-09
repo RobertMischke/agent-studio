@@ -606,6 +606,7 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // it to ordinary Human Review with durable evidence. Both queues are latency
 // optimizations; the backstops recover from phase and pipeline facts.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
+builder.Services.AddSingleton<AcceptedIntegrationInventorySweep>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
@@ -910,6 +911,18 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("ResultDocumentBackfill", ex);
+}
+
+// One-time read-only inventory for legacy accepted coding cards that lack an
+// integration decision or ended with Error / NoTaskBranch. Findings are logged
+// individually so silent historical completions are visible to operators.
+try
+{
+    app.Services.GetRequiredService<AcceptedIntegrationInventorySweep>().Run();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("AcceptedIntegrationInventorySweep", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

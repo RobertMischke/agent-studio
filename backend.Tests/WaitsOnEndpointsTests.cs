@@ -397,9 +397,14 @@ public sealed class WaitsOnEndpointsTests : IDisposable
             ? $",\"references\":{{\"dependsOn\":[{string.Join(",", dependsOn.Select(k => releaseGate ? $"{{\"key\":\"{k}\",\"releaseGate\":true}}" : $"\"{k}\""))}]}}"
             : "";
         var release = released ? ",\"released\":true" : "";
+        // Dependency fixtures have no repository delivery. Keep terminal lane
+        // setup explicit under the acceptance-integration invariant.
+        var noBranch = state is TaskStates.Completed or TaskStates.Archive
+            ? ",\"noBranchExpected\":true"
+            : "";
         var json =
             $"{{\"id\":\"{slug}\",\"key\":\"{key}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
-            $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{release}{refs}}}";
+            $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{release}{refs}{noBranch}}}";
         File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 

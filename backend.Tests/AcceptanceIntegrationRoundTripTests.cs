@@ -408,6 +408,87 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public async Task LegacyCompletedAccept_NoTaskBranch_ReturnsToHumanReviewWithVisibleReason()
+    {
+        var deliverySha = PublishDelivery("orphaned-delivery.txt", "fenced work\n");
+        var deps = Build(
+            deliverySha,
+            backgroundIntegration: true,
+            writeReviewSubject: false);
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        File.WriteAllText(
+            Path.Combine(reviewed.FolderPath, "status.md"),
+            "# Status\n\n- Result: Success\n");
+
+        // Reproduce the 09 August incident: the old accept path moved the card
+        // before the queued worker discovered that task/<slug> did not exist.
+        var legacyAccept = deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, legacyAccept.Status);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath)!;
+
+        var worker = new AcceptedIntegrationWorker(
+            deps.AcceptedQueue!,
+            deps.Merge,
+            deps.Scanner,
+            deps.Mutations,
+            deps.Provenance,
+            NullLogger<AcceptedIntegrationWorker>.Instance,
+            deps.Transitions,
+            deps.Timeline);
+        var result = await worker.ProcessAsync(new AcceptedIntegrationRequest(
+            Project,
+            Slug,
+            completed.FolderPath,
+            _watchPath,
+            "develop",
+            IntegrationStrategies.DirectMerge));
+
+        Assert.Equal(MergeIntoIntegrationOutcome.NoTaskBranch, result.Outcome);
+        var returned = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(returned);
+        Assert.Equal(TaskStates.HumanReview, returned!.State);
+        Assert.Null(returned.Phase);
+        var integration = deps.Integration.BuildLookup([returned])[returned.TaskKey];
+        Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
+        Assert.Equal(MergeIntoIntegrationOutcome.NoTaskBranch.ToString(), integration.FailureOutcome);
+        var status = File.ReadAllText(Path.Combine(returned.FolderPath, "status.md"));
+        Assert.Contains("## Acceptance integration", status);
+        Assert.Contains("- Outcome: `NoTaskBranch`", status);
+        Assert.Contains("task/remote-delivery", status);
+    }
+
+    [Fact]
+    public async Task OperatorOverride_CompletesWithoutStartingIntegration_AndRecordsAuditReason()
+    {
+        var deliverySha = PublishDelivery("override.txt", "operator accepted\n");
+        var deps = Build(deliverySha, backgroundIntegration: true);
+
+        var result = await deps.Transitions.MoveAsync(
+            Slug,
+            TaskStates.Completed,
+            _watchPath,
+            reason: "Concept outcome has no branch to merge.",
+            operatorOverride: true);
+
+        Assert.Equal(MoveJobStatus.Success, result.Status);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Equal(TaskStates.Completed, completed!.State);
+        Assert.False(deps.AcceptedQueue!.Reader.TryRead(out _));
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal("operator-override", mergeStep!.Verdict);
+        Assert.Contains(
+            deps.Timeline.ReadAll(completed.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationOverridden
+                     && entry.Details?.GetValueOrDefault("outcome") == "OperatorOverride");
+        var status = File.ReadAllText(Path.Combine(completed.FolderPath, "status.md"));
+        Assert.Contains("- Outcome: `OperatorOverride`", status);
+        Assert.Contains("Concept outcome has no branch to merge.", status);
+    }
+
+    [Fact]
     public async Task AcceptOutOfBandIntegratedCard_CompletesWithoutOwnMergeAttempt()
     {
         var deliverySha = PublishDelivery("out-of-band.txt", "already integrated\n");

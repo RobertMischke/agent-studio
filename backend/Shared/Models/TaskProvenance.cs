@@ -264,6 +264,13 @@ public record TaskIntegrationStatus
     public string IntegrationBranch { get; init; } = "develop";
 
     /// <summary>
+    /// Concrete terminal integration outcome when <see cref="Status"/> is
+    /// <see cref="IntegrationStatuses.ConflictSkipped"/>, for example
+    /// <c>NoTaskBranch</c>, <c>Error</c>, or <c>Conflict</c>.
+    /// </summary>
+    public string? FailureOutcome { get; init; }
+
+    /// <summary>
     /// Membership evidence, or the reason a non-integrated card is pending,
     /// conflicted, or branch-less. Free-form, for tooltip and audit only.
     /// </summary>

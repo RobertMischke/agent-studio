@@ -501,6 +501,8 @@ public static class TaskCrudEndpoints
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
+            if (req.OperatorOverride && req.TargetState != TaskStates.Completed)
+                return Results.BadRequest(new { error = "operatorOverride is valid only for a move to 6-completed." });
 
             // T2b: these two routes are the operator-initiated move (board drag /
             // detail-view lane button), so the lane-change ledger trigger is the
@@ -508,7 +510,8 @@ public static class TaskCrudEndpoints
             // MoveJob without a cause and are recorded as system.
             return MoveResult(await transitions.MoveAsync(
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
-                cause: OperatorActor(ctx), reason: req.Reason));
+                cause: OperatorActor(ctx), reason: req.Reason,
+                operatorOverride: req.OperatorOverride));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
@@ -520,10 +523,13 @@ public static class TaskCrudEndpoints
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
+            if (req.OperatorOverride && req.TargetState != TaskStates.Completed)
+                return Results.BadRequest(new { error = "operatorOverride is valid only for a move to 6-completed." });
 
             return MoveResult(await transitions.MoveAsync(
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
-                cause: OperatorActor(ctx), reason: req.Reason));
+                cause: OperatorActor(ctx), reason: req.Reason,
+                operatorOverride: req.OperatorOverride));
         });
 
         // Lift a folder out of 3a-failed-pickup back into 2-ready and

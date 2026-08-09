@@ -30,7 +30,8 @@ public sealed class TaskReferenceStatusEndpointTests : IDisposable
             state = TaskStates.Completed,
             order = 1,
             agent = "codex",
-            tags = new[] { "code-review:grade-a" }
+            tags = new[] { "code-review:grade-a" },
+            noBranchExpected = true
         }));
     }
 

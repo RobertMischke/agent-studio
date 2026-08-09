@@ -71,6 +71,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             {
                 statusByKey.TryGetValue(job.TaskKey, out var status);
                 var decision = _integrationStatus.ResolveAcceptedIntegrationRecovery(job, status);
+                if (decision.Action == AcceptedIntegrationRecoveryAction.Ignore)
+                    continue;
                 if (decision.Action == AcceptedIntegrationRecoveryAction.Finalize)
                 {
                     FinalizeTransactionalAccept(job);
@@ -81,7 +83,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 {
                     ReturnTransactionalAcceptToReview(
                         job,
-                        decision.LastMergeAttempt?.Verdict ?? "integration-failed",
+                        NormalizeOutcome(decision.LastMergeAttempt?.Verdict),
                         decision.LastMergeAttempt?.Reason ?? decision.LastMergeAttempt?.VerdictSummary);
                     continue;
                 }
@@ -214,6 +216,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         var completed = _scanner.FindJob(job.Id, job.WatchPath) ?? job;
         _mutations.SetJobPhase(completed.FolderPath, null);
         completed = _scanner.FindJob(job.Id, job.WatchPath) ?? completed;
+        TryClearAcceptanceIntegrationStatus(completed);
         _timeline?.Append(
             completed.FolderPath,
             TimelineEventKinds.IntegrationSucceeded,
@@ -226,12 +229,38 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         string outcome,
         string? detail)
     {
-        if (job.State != TaskStates.HumanReview
-            || !string.Equals(job.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal))
-            return;
+        if (job.State == TaskStates.Completed && _transitions != null)
+        {
+            var moveReason = $"Acceptance integration ended with {outcome}: "
+                             + (detail ?? "The delivery was not integrated.");
+            var moved = _transitions.MoveAsync(
+                    job.Id,
+                    TaskStates.HumanReview,
+                    job.WatchPath,
+                    CancellationToken.None,
+                    cause: TimelineActors.System,
+                    reason: moveReason,
+                    expectedSourceState: TaskStates.Completed,
+                    suppressIntegrationTrigger: true)
+                .GetAwaiter()
+                .GetResult();
+            if (moved.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "Backstop integration failed for {JobId}, but returning to Human Review failed with {Status}: {Message}",
+                    job.Id,
+                    moved.Status,
+                    moved.Message);
+                return;
+            }
+            job = _scanner.FindJob(job.Id, job.WatchPath) ?? job;
+        }
+
+        if (job.State != TaskStates.HumanReview) return;
 
         _mutations.SetJobPhase(job.FolderPath, null);
         var reviewed = _scanner.FindJob(job.Id, job.WatchPath) ?? job;
+        TryWriteAcceptanceIntegrationFailure(reviewed, outcome, detail);
         _timeline?.Append(
             reviewed.FolderPath,
             TimelineEventKinds.IntegrationFailed,
@@ -243,4 +272,54 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 ["detail"] = detail ?? string.Empty,
             });
     }
+
+    private void TryWriteAcceptanceIntegrationFailure(
+        TaskInfo job,
+        string outcome,
+        string? detail)
+    {
+        try
+        {
+            AcceptanceIntegrationStatusDocument.WriteFailure(
+                job.FolderPath,
+                outcome,
+                detail,
+                _settings.Get(job.ProjectName).IntegrationBranch);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "acceptance-integration-status-write-failed project={Project} job={JobId} outcome={Outcome}",
+                job.ProjectName,
+                job.Id,
+                outcome);
+        }
+    }
+
+    private void TryClearAcceptanceIntegrationStatus(TaskInfo job)
+    {
+        try
+        {
+            AcceptanceIntegrationStatusDocument.Clear(job.FolderPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "acceptance-integration-status-clear-failed project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+        }
+    }
+
+    private static string NormalizeOutcome(string? verdict) => verdict?.ToLowerInvariant() switch
+    {
+        "no-branch" => MergeIntoIntegrationOutcome.NoTaskBranch.ToString(),
+        "conflict" => MergeIntoIntegrationOutcome.Conflict.ToString(),
+        "gate-failed" => MergeIntoIntegrationOutcome.GateFailed.ToString(),
+        "error" => MergeIntoIntegrationOutcome.Error.ToString(),
+        "pushed-for-review" => MergeIntoIntegrationOutcome.PushedForReview.ToString(),
+        _ => verdict ?? "IntegrationFailed",
+    };
 }

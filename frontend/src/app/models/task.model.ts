@@ -317,6 +317,8 @@ export interface TaskInfo {
    * Older payloads may omit it, so callers treat absent as `coding`.
    */
   mode?: TaskMode;
+  /** Explicit declaration that this card expects no delivery branch. */
+  noBranchExpected?: boolean;
   /** Whether the agent may use the web during this task. Mirrors backend `AllowWebAccess`. */
   allowWebAccess?: boolean;
   useOwnSession: boolean | null;
@@ -1163,6 +1165,8 @@ export interface CreateTaskRequest {
   epicId?: string;
   /** Execution mode. Defaults to `coding` server-side. */
   mode?: TaskMode;
+  /** Explicitly declare that this task expects no delivery branch. */
+  noBranchExpected?: boolean;
   /** Web access. When omitted, defaults by mode (research = on, else off). */
   allowWebAccess?: boolean;
   /** Ownership-routing input. The backend resolves and validates the destination. */

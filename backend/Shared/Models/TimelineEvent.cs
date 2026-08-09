@@ -172,6 +172,11 @@ public static class TimelineEventKinds
     /// </summary>
     public const string IntegrationFailed = "integration_failed";
     /// <summary>
+    /// An operator explicitly completed acceptance without integration. The
+    /// event details and status.md retain the one-shot override reason.
+    /// </summary>
+    public const string IntegrationOverridden = "integration_overridden";
+    /// <summary>
     /// A human deliberately moved a task out of human review or escalation,
     /// opening a fresh review-attempt epoch. Details carry the operator reason,
     /// new epoch, and rotated artefact count.
@@ -261,7 +266,8 @@ public static class TimelineEventKinds
     /// AGT-2202 compatibility event for a non-transactional caller that observed
     /// accepted work outside the integration branch. Transactional acceptance
     /// instead emits <see cref="IntegrationStarted"/>,
-    /// <see cref="IntegrationSucceeded"/>, or <see cref="IntegrationFailed"/>
+    /// <see cref="IntegrationSucceeded"/>, <see cref="IntegrationFailed"/>,
+    /// or <see cref="IntegrationOverridden"/>
     /// while the task remains in Human Review until success.
     /// </summary>
     public const string IntegrationPendingWarning = "integration_pending_warning";

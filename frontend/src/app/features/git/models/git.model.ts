@@ -492,6 +492,8 @@ export interface TaskIntegrationStatus {
   sha: string | null;
   /** Integration branch the verdict was computed against (usually "develop"). */
   integrationBranch: string;
+  /** Concrete failed worker outcome, for example NoTaskBranch, Error, or Conflict. */
+  failureOutcome?: string | null;
   /** Membership evidence or the reason it is not integrated. Tooltip + audit only. */
   detail: string | null;
 }

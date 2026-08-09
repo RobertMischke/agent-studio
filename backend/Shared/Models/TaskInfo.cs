@@ -89,6 +89,12 @@ public record TaskInfo
     /// </summary>
     public string Mode { get; init; } = TaskModes.Coding;
     /// <summary>
+    /// Explicit declaration that this card has no delivery branch to integrate.
+    /// Coding cards default to false; the acceptance policy treats true as a
+    /// durable no-integration expectation rather than an operator override.
+    /// </summary>
+    public bool NoBranchExpected { get; init; }
+    /// <summary>
     /// Whether the agent may use web search / fetch for this run. Default off for
     /// coding/planning, on for research (set at create time). See decision 2 in
     /// docs/concepts/planning-research-task-kinds-2026-05.md.

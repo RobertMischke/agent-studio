@@ -1102,6 +1102,8 @@ public class TaskMutationService
         // (research on, else off) - see planning-research-task-kinds note.
         var effectiveMode = TaskModes.Normalize(req.Mode);
         jobJson["mode"] = effectiveMode;
+        if (req.NoBranchExpected || AcceptanceIntegrationPolicy.IsNoBranchTaskType(req.TaskType))
+            jobJson["noBranchExpected"] = true;
         jobJson["allowWebAccess"] = req.AllowWebAccess ?? (effectiveMode == TaskModes.Research);
         if (req.Fixture)
             jobJson["fixture"] = true;
