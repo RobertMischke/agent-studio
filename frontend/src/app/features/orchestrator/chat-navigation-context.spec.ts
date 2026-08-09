@@ -14,12 +14,14 @@ describe('buildChatNavigationContext', () => {
   it('marks task-detail when a job id is active and forwards id + title', () => {
     const ctx = buildChatNavigationContext({
       activeJobId: 'bug-auto-review-reorder-drops-card',
+      activeTaskKey: 'AGT-2517',
       activeJobTitle: 'Bug: reordering a card inside auto-review drops it from the lane',
       now: fixedNow
     });
 
     expect(ctx.currentPage).toBe('task-detail');
     expect(ctx.currentTaskId).toBe('bug-auto-review-reorder-drops-card');
+    expect(ctx.currentTaskKey).toBe('AGT-2517');
     expect(ctx.currentTaskTitle).toBe(
       'Bug: reordering a card inside auto-review drops it from the lane'
     );
@@ -46,8 +48,22 @@ describe('buildChatNavigationContext', () => {
     });
     expect(ctx.currentPage).toBe('kanban-board');
     expect(ctx.currentTaskId).toBeUndefined();
+    expect(ctx.currentTaskKey).toBeUndefined();
     expect(ctx.currentTaskTitle).toBeUndefined();
     expect(ctx.viewportTimestamp).toBe('2026-05-09T08:42:00.000Z');
+  });
+
+  it('uses the stable task key to retain task scope before detail hydration catches up', () => {
+    const ctx = buildChatNavigationContext({
+      activeJobId: null,
+      activeTaskKey: 'QS-54',
+      activeJobTitle: null,
+      now: fixedNow,
+    });
+
+    expect(ctx.currentPage).toBe('task-detail');
+    expect(ctx.currentTaskKey).toBe('QS-54');
+    expect(ctx.currentTaskId).toBeUndefined();
   });
 
   it('treats whitespace-only ids as absent', () => {

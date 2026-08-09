@@ -122,4 +122,29 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect((fixture.nativeElement as HTMLElement)
       .querySelector('[data-testid="chat-composer-context-detail"]')?.textContent?.trim()).toBe('AGT-2162');
   });
+
+  it('shows the persisted context receipt for the latest orchestrator answer', async () => {
+    const fixture = await makeFixture();
+    fixture.componentInstance.turns.set([{
+      id: 'answer-1',
+      ts: '2026-08-08T10:00:00Z',
+      role: 'orchestrator',
+      text: 'status.md records the task result.',
+      contextReceipt: {
+        scope: 'task',
+        contextKey: 'task:Quality Studio/QS-54',
+        taskKey: 'QS-54',
+        includedBlocks: ['task metadata', 'prompt.md', 'status.md', 'last run outcome'],
+        capturedAt: '2026-08-08T09:59:58Z',
+      },
+    }]);
+
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[data-testid="orch-answer-context-receipt"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="orch-answer-context-scope"]')?.textContent?.trim()).toBe('QS-54');
+    expect(root.querySelector('[data-testid="orch-answer-context-blocks"]')?.textContent)
+      .toContain('status.md');
+  });
 });

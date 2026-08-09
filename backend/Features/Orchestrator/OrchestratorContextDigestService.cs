@@ -150,7 +150,7 @@ public sealed class OrchestratorContextDigestService
         focusTask = tasks.FirstOrDefault(task =>
             string.Equals(task.Key, context.TaskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(task.Id, context.TaskKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(task.TaskKey, context.TaskKey, StringComparison.Ordinal));
+            || string.Equals(task.TaskKey, context.TaskKey, StringComparison.OrdinalIgnoreCase));
         if (focusTask == null)
             throw new KeyNotFoundException($"Unknown task '{context.TaskKey}' in project '{context.ProjectId}'.");
         return tasks;

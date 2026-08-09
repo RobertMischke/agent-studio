@@ -304,6 +304,11 @@ public record OrchestratorChatTurn
     public string? Model { get; init; }
     public OrchestratorTokenUsage? TokenUsage { get; init; }
     public string? ErrorMessage { get; init; }
+    /// <summary>
+    /// Persisted transparency receipt for the context composed into this
+    /// reply's request. Null on user turns and legacy replies.
+    /// </summary>
+    public OrchestratorContextReceipt? ContextReceipt { get; init; }
 
     /// <summary>
     /// Raw / technical error detail preserved alongside a friendly
@@ -318,6 +323,17 @@ public record OrchestratorChatTurn
 
     public List<OrchestratorChatAttachment>? Attachments { get; init; }
 }
+
+public sealed record OrchestratorContextReceipt(
+    string Scope,
+    string ContextKey,
+    string? TaskKey,
+    IReadOnlyList<string> IncludedBlocks,
+    DateTime CapturedAt);
+
+internal sealed record OrchestratorChatPromptComposition(
+    string Prompt,
+    OrchestratorContextReceipt ContextReceipt);
 
 /// <summary>
 /// Reference to a file attachment that was part of the user's message.
@@ -387,6 +403,7 @@ public sealed record SendOrchestratorChatRequest(
 public sealed record ChatNavigationContext(
     string? CurrentPage = null,
     string? CurrentTaskId = null,
+    string? CurrentTaskKey = null,
     string? CurrentTaskTitle = null,
     string? CurrentTaskState = null,
     string? CurrentLaneFilter = null,
@@ -423,6 +440,7 @@ public class OrchestratorChatService
     private readonly ProjectRegistry? _projects;
     private readonly RemoteChatWorkBroker? _remoteWork;
     private readonly GitService? _git;
+    private readonly OrchestratorTaskPromptContextComposer? _taskPromptContext;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls so multiple Codex
@@ -452,7 +470,8 @@ public class OrchestratorChatService
         ProjectSettingsService? projectSettings = null,
         ProjectRegistry? projects = null,
         RemoteChatWorkBroker? remoteWork = null,
-        GitService? git = null)
+        GitService? git = null,
+        OrchestratorTaskPromptContextComposer? taskPromptContext = null)
     {
         _chat = chat;
         _runner = runner;
@@ -466,6 +485,7 @@ public class OrchestratorChatService
         _projects = projects;
         _remoteWork = remoteWork;
         _git = git;
+        _taskPromptContext = taskPromptContext;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -532,7 +552,9 @@ public class OrchestratorChatService
         }
         try
         {
-            var prompt = await BuildPromptAsync(projectName, watchPath, req, clientId, context, ct).ConfigureAwait(false);
+            var promptComposition = await BuildPromptAsync(projectName, watchPath, req, clientId, context, ct).ConfigureAwait(false);
+            var prompt = promptComposition.Prompt;
+            var contextReceipt = promptComposition.ContextReceipt;
             var requestedModel = string.IsNullOrWhiteSpace(req.Model)
                 ? ModelMetadataRegistry.DefaultForCli(CliTypes.Codex) ?? ModelIds.Gpt55
                 : req.Model.Trim();
@@ -587,7 +609,8 @@ public class OrchestratorChatService
                     Role = OrchestratorChatRoles.Orchestrator,
                     Text = "",
                     ErrorMessage = translation.FriendlyMessage,
-                    ErrorDetail = translation.RawDetail
+                    ErrorDetail = translation.RawDetail,
+                    ContextReceipt = contextReceipt
                 };
                 _chat.Append(watchPath, failure, context);
                 return failure;
@@ -606,7 +629,8 @@ public class OrchestratorChatService
                     Model = result.Model,
                     TokenUsage = result.TokenUsage,
                     ErrorMessage = translation.FriendlyMessage,
-                    ErrorDetail = translation.RawDetail
+                    ErrorDetail = translation.RawDetail,
+                    ContextReceipt = contextReceipt
                 };
                 _chat.Append(watchPath, failure, context);
                 return failure;
@@ -617,7 +641,8 @@ public class OrchestratorChatService
                 Role = OrchestratorChatRoles.Orchestrator,
                 Text = result.ReplyText,
                 Model = result.Model,
-                TokenUsage = result.TokenUsage
+                TokenUsage = result.TokenUsage,
+                ContextReceipt = contextReceipt
             };
             _chat.Append(watchPath, reply, context);
             return reply;
@@ -628,7 +653,7 @@ public class OrchestratorChatService
         }
     }
 
-    private async Task<string> BuildPromptAsync(
+    private async Task<OrchestratorChatPromptComposition> BuildPromptAsync(
         string projectName,
         string watchPath,
         SendOrchestratorChatRequest req,
@@ -637,6 +662,7 @@ public class OrchestratorChatService
         CancellationToken ct)
     {
         var sb = new StringBuilder();
+        var includedBlocks = new List<string> { "active project" };
         sb.AppendLine("=== ACTIVE PROJECT CONTEXT ===");
         sb.AppendLine($"The user is currently looking at project: \"{projectName}\"");
         sb.AppendLine("This may be a different project than the one discussed earlier in this session.");
@@ -657,6 +683,7 @@ public class OrchestratorChatService
                     sb.AppendLine(digest.Digest);
                     sb.AppendLine();
                     digestAdded = true;
+                    includedBlocks.Add("context digest");
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -665,9 +692,10 @@ public class OrchestratorChatService
             }
             catch (Exception ex)
             {
+                includedBlocks.Add("context digest: unavailable");
                 _logger.LogWarning(
                     ex,
-                    "orchestrator_context_digest_injection_failed contextKey={ContextKey} project={Project}",
+                    "orchestrator_context_digest_injection_failed contextKey={ContextKey} project={Project} fallback=project-state-snapshot",
                     context?.Value ?? $"project:{projectName}",
                     projectName);
             }
@@ -681,6 +709,7 @@ public class OrchestratorChatService
                     .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
                 AppendProjectStateSnapshot(sb, projectName, tasks);
+                includedBlocks.Add("project state snapshot");
             }
             catch (Exception __ex)
             {
@@ -697,8 +726,49 @@ public class OrchestratorChatService
         // also names the X-Client-Id the orchestrator should forward when
         // hitting /api/tasks on the user's behalf.
         AppendCurrentUserPreferences(sb, clientId, _identityStore);
+        includedBlocks.Add("current user preferences");
 
         AppendNavigationContext(sb, req.NavigationContext);
+        includedBlocks.Add(req.NavigationContext == null ? "navigation context: none" : "navigation context");
+
+        OrchestratorTaskPromptContext? taskPromptContext = null;
+        try
+        {
+            if (_taskPromptContext != null)
+            {
+                taskPromptContext = _taskPromptContext.Compose(
+                    projectName,
+                    watchPath,
+                    req.NavigationContext,
+                    context);
+                if (taskPromptContext != null)
+                {
+                    sb.AppendLine(taskPromptContext.PromptBlock);
+                    sb.AppendLine();
+                    includedBlocks.AddRange(taskPromptContext.IncludedBlocks);
+                }
+            }
+            else if (context?.Kind == OrchestratorContextKey.TaskKind
+                     || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskKey)
+                     || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskId))
+            {
+                includedBlocks.Add("task context: unavailable");
+                _logger.LogError(
+                    "orchestrator_task_prompt_context_service_missing contextKey={ContextKey} project={Project}",
+                    context?.Value ?? "(navigation-only)",
+                    projectName);
+            }
+        }
+        catch (Exception ex)
+        {
+            includedBlocks.Add("task context: unavailable");
+            _logger.LogWarning(
+                ex,
+                "orchestrator_task_prompt_context_lookup_failed contextKey={ContextKey} taskKey={TaskKey} project={Project}; continuing with the explicitly marked degraded context",
+                context?.Value ?? "(navigation-only)",
+                req.NavigationContext?.CurrentTaskKey ?? context?.TaskKey ?? req.NavigationContext?.CurrentTaskId,
+                projectName);
+        }
 
         if (_componentRouting != null)
         {
@@ -717,7 +787,42 @@ public class OrchestratorChatService
                 projectName));
             sb.AppendLine(ComponentRoutingService.RenderCompact(route));
             sb.AppendLine();
+            includedBlocks.Add("component routing");
         }
+
+        var receiptScope = taskPromptContext != null
+            || context?.Kind == OrchestratorContextKey.TaskKind
+            || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskKey)
+            || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskId)
+            ? "task"
+            : "project";
+        var receiptTaskKey = taskPromptContext?.TaskKey
+            ?? req.NavigationContext?.CurrentTaskKey
+            ?? context?.TaskKey
+            ?? req.NavigationContext?.CurrentTaskId;
+        var receiptContextKey = context?.Value
+            ?? (receiptScope == "task" && !string.IsNullOrWhiteSpace(receiptTaskKey)
+                ? $"task:{projectName}/{receiptTaskKey}"
+                : $"project:{projectName}");
+        var receipt = new OrchestratorContextReceipt(
+            receiptScope,
+            receiptContextKey,
+            receiptTaskKey,
+            includedBlocks,
+            DateTime.UtcNow);
+
+        sb.AppendLine("=== CONTEXT INCLUDED WITH THIS REQUEST ===");
+        sb.AppendLine($"Scope: {receipt.Scope}");
+        sb.AppendLine($"Context key: {receipt.ContextKey}");
+        sb.AppendLine($"Blocks: {string.Join(", ", receipt.IncludedBlocks)}");
+        sb.AppendLine();
+
+        _logger.LogInformation(
+            "orchestrator_chat_prompt_composed contextKey={ContextKey} scope={Scope} taskKey={TaskKey} includedBlocks={IncludedBlocks}",
+            receipt.ContextKey,
+            receipt.Scope,
+            receipt.TaskKey,
+            string.Join(",", receipt.IncludedBlocks));
 
         sb.AppendLine("=== USER MESSAGE ===");
         sb.AppendLine(req.Text);
@@ -749,7 +854,7 @@ public class OrchestratorChatService
         sb.AppendLine("Use the word \"tasks\", not \"jobs\".");
         sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
         sb.AppendLine("Keep it short unless the user asked for depth.");
-        return sb.ToString();
+        return new OrchestratorChatPromptComposition(sb.ToString(), receipt);
     }
 
     /// <summary>
@@ -841,6 +946,7 @@ public class OrchestratorChatService
         if (nav == null
             || (string.IsNullOrWhiteSpace(nav.CurrentPage)
                 && string.IsNullOrWhiteSpace(nav.CurrentTaskId)
+                && string.IsNullOrWhiteSpace(nav.CurrentTaskKey)
                 && string.IsNullOrWhiteSpace(nav.CurrentTaskTitle)
                 && string.IsNullOrWhiteSpace(nav.CurrentTaskState)
                 && string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)
@@ -861,6 +967,7 @@ public class OrchestratorChatService
         sb.AppendLine("The operator's UI state when they sent this message:");
         if (!string.IsNullOrWhiteSpace(nav.CurrentPage)) sb.AppendLine($"  currentPage: {nav.CurrentPage}");
         if (!string.IsNullOrWhiteSpace(nav.CurrentTaskId)) sb.AppendLine($"  currentTaskId: {nav.CurrentTaskId}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentTaskKey)) sb.AppendLine($"  currentTaskKey: {nav.CurrentTaskKey}");
         if (!string.IsNullOrWhiteSpace(nav.CurrentTaskTitle)) sb.AppendLine($"  currentTaskTitle: {nav.CurrentTaskTitle}");
         if (!string.IsNullOrWhiteSpace(nav.CurrentTaskState)) sb.AppendLine($"  currentTaskState: {nav.CurrentTaskState}");
         if (!string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)) sb.AppendLine($"  currentLaneFilter: {nav.CurrentLaneFilter}");
@@ -872,7 +979,7 @@ public class OrchestratorChatService
         if (!string.IsNullOrWhiteSpace(nav.PageType)) sb.AppendLine($"  pageType: {nav.PageType}");
         if (!string.IsNullOrWhiteSpace(nav.PageExcerpt)) sb.AppendLine($"  pageExcerpt: {nav.PageExcerpt}");
         sb.AppendLine();
-        sb.AppendLine("Use this when interpreting context-dependent questions. When pageRef is set, the operator is asking from THAT repository page; use its title, type, path, and excerpt. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When neither pageRef nor currentTaskId is set, do NOT invent one; say no specific page or task is in scope and ask what they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
+        sb.AppendLine("Use this when interpreting context-dependent questions. When pageRef is set, the operator is asking from THAT repository page; use its title, type, path, and excerpt. When currentTaskKey or currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by key. When neither pageRef, currentTaskKey, nor currentTaskId is set, do NOT invent one; say no specific page or task is in scope and ask what they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
         sb.AppendLine();
     }
 

@@ -130,7 +130,17 @@ export interface OrchestratorChatTurn {
   model?: string | null;
   tokenUsage?: OrchestratorTokenUsage | null;
   errorMessage?: string | null;
+  contextReceipt?: OrchestratorContextReceipt | null;
   attachments?: OrchestratorChatAttachment[] | null;
+}
+
+/** Context blocks the backend composed into one orchestrator reply request. */
+export interface OrchestratorContextReceipt {
+  scope: 'project' | 'task' | string;
+  contextKey: string;
+  taskKey?: string | null;
+  includedBlocks: string[];
+  capturedAt: string;
 }
 
 export interface OrchestratorChatAttachment {
@@ -178,6 +188,7 @@ export interface ChatExecutionContext {
 export interface ChatNavigationContext {
   currentPage?: string | null;
   currentTaskId?: string | null;
+  currentTaskKey?: string | null;
   currentTaskTitle?: string | null;
   currentTaskState?: string | null;
   currentLaneFilter?: string | null;

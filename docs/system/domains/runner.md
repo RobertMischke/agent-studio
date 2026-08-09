@@ -620,6 +620,15 @@ state.
   Digest sections are capped and omit raw quota samples and full decision
   prompts/responses. Normal turns use cached quota; only the explicit refresh
   endpoint starts quota probes.
+- Every task-scoped side-sheet message also carries the stable task key from
+  the same synchronous active-tab projection shown in the composer footer.
+  Prompt composition resolves that task through `TaskScannerService` on every
+  turn and adds independently capped task metadata, `prompt.md`, `status.md`
+  when present, and the latest recorded run outcome. This task block is
+  independent of the ORCH-1 digest, so a failed digest lookup is logged and
+  marked as degraded without silently erasing task substance. Each reply
+  persists a context receipt naming the scope and included blocks; the chat UI
+  shows the latest receipt below the answer transcript.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this

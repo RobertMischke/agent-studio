@@ -1,0 +1,10 @@
+<div class="receipt"
+     role="status"
+     aria-label="Context used for the latest answer"
+     data-testid="orch-answer-context-receipt">
+  <span class="receipt__dot" aria-hidden="true"></span>
+  <strong>Context used</strong>
+  <span data-testid="orch-answer-context-scope">{{ receipt().taskKey || receipt().contextKey }}</span>
+  <span class="receipt__blocks"
+        data-testid="orch-answer-context-blocks">{{ receipt().includedBlocks.join(' · ') }}</span>
+</div>

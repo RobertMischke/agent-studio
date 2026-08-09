@@ -78,6 +78,13 @@ describe('orchestrator-side-sheet.util', () => {
         cacheReadTokens: 2,
         cacheCreationTokens: 1,
       },
+      contextReceipt: {
+        scope: 'task',
+        contextKey: 'task:Agent Studio/AGT-2235',
+        taskKey: 'AGT-2235',
+        includedBlocks: ['task metadata', 'status.md'],
+        capturedAt: '2026-07-23T11:59:58Z',
+      },
       attachments: [{
         alt: 'evidence',
         relativePath: 'chat-attachments/evidence.png',
@@ -99,6 +106,10 @@ describe('orchestrator-side-sheet.util', () => {
       expect(sameOrchestratorChatTurns([turn], [{
         ...turn,
         attachments: [{ ...turn.attachments![0], relativePath: 'changed.png' }],
+      }])).toBe(false);
+      expect(sameOrchestratorChatTurns([turn], [{
+        ...turn,
+        contextReceipt: { ...turn.contextReceipt!, includedBlocks: ['task metadata'] },
       }])).toBe(false);
       expect(sameOrchestratorChatTurns([turn], [turn, { ...turn, id: 'turn-2' }])).toBe(false);
     });

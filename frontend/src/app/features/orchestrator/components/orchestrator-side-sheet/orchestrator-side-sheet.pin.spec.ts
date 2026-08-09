@@ -60,6 +60,68 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     expect(c.effectiveJobState()).toBe('3-progress');
   });
 
+  it('uses the footer active-tab task while async detail inputs still describe the board', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+
+    c.activeProject.set('stale-project');
+    fixture.componentRef.setInput('activeJobId', null);
+    fixture.componentRef.setInput('activeJobKey', null);
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Quality Studio',
+      surface: 'Task',
+      detail: 'QS-54',
+      taskKey: 'QS-54',
+      taskId: 'qs-54-folder',
+      taskTitle: 'Explain status.md relevance',
+      taskState: '3-progress',
+      taskWatchPath: '/tasks/quality-studio',
+    });
+
+    expect(c.contextKey()).toBe('task:Quality Studio/QS-54');
+    expect(c.effectiveJobId()).toBe('qs-54-folder');
+    expect(c.effectiveJobTitle()).toBe('Explain status.md relevance');
+    expect(c.effectiveJobState()).toBe('3-progress');
+  });
+
+  it('sends the stable task key and full navigation context on every task follow-up', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+    const route = '/api/runner/task:Quality%20Studio/QS-54/orchestrator-chat';
+
+    c.activeProject.set('stale-project');
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Quality Studio',
+      surface: 'Task',
+      detail: 'QS-54',
+      taskKey: 'QS-54',
+      taskId: 'qs-54-folder',
+      taskTitle: 'Explain status.md relevance',
+      taskState: '3-progress',
+    });
+
+    for (const text of ['Why is status.md relevant?', 'What does it say now?']) {
+      await c.onSubmit({ text, attachments: [] } as never);
+      const send = http.expectOne(route);
+      expect(send.request.method).toBe('POST');
+      expect(send.request.body.navigationContext).toMatchObject({
+        currentPage: 'task-detail',
+        currentTaskId: 'qs-54-folder',
+        currentTaskKey: 'QS-54',
+        currentTaskTitle: 'Explain status.md relevance',
+        currentTaskState: '3-progress',
+      });
+      send.flush({ project: 'Quality Studio', reply: { id: 'reply', role: 'orchestrator', text: 'ok' } });
+
+      const read = http.expectOne(route);
+      expect(read.request.method).toBe('GET');
+      read.flush({ project: 'Quality Studio', turns: [] });
+    }
+
+    http.verify();
+  });
+
   it('pin freezes the context so later navigation does not switch it', async () => {
     const fixture = await makeFixture();
     const c = fixture.componentInstance;

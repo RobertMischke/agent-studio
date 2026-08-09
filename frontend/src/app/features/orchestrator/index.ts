@@ -25,6 +25,7 @@ export type {
   OrchestratorContextDigestSource,
   OrchestratorContextDigestSourceName,
   OrchestratorChatTurn,
+  OrchestratorContextReceipt,
   OrchestratorChatAttachment,
   OrchestratorChatResponse,
   ChatExecutionContext,

@@ -62,7 +62,11 @@ Three principles (sharpened by operator feedback 2026-07-08):
    (task page → task context; project board → project context). There is
    **no "create context" affordance anywhere** — sessions come into being
    lazily on first open of a place. A pin toggle freezes the sheet on a
-   context; that is the only manual control.
+   context; that is the only manual control. The active-tab projection is the
+   single source for both the visible composer location and the request. A task
+   request carries its stable key on every message, including follow-ups, and
+   the latest answer shows a persisted receipt for the context blocks the
+   backend actually composed.
 2. **The switcher rail is extremely optional.** Default state: collapsed —
    the sheet simply *is* the chat of the current place, full width. A small
    "☰ n aktiv" chip in the header expands the rail on demand (sessions
