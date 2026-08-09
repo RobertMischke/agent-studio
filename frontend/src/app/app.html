@@ -251,6 +251,7 @@
           }
         </div>
         <div studioContent class="studio-projected-content">
+          <app-workspace-banner [projects]="bannerProjects()" />
           @switch (studioTabState.activeTab()?.kind) {
             @case ('feed') {
               <app-orchestrator-feed
@@ -483,7 +484,7 @@
           }
         </div>
       </app-studio-shell>
-      <!-- Dialogs / overlays / banners follow regardless of the active shell. -->
+      <!-- Dialogs and overlays follow regardless of the active shell. -->
 <!-- <app-update-banner /> moved into <app-notification-stack> in F40 so
            the update strip docks alongside other banner notifications. -->
       <app-update-center />
@@ -541,7 +542,6 @@
         <app-tag-manager-dialog
           (closed)="onTagManagerClosed()" />
       }
-      <app-workspace-banner [projects]="bannerProjects()" />
       <app-project-overlays
         (securityFollowUp)="onSecurityFollowUp($event)"
         (securityOpenEvidence)="onSecurityOpenEvidence($event)"

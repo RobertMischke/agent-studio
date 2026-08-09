@@ -36,6 +36,15 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
+  await page.route('**/api/runner/queue-starvation', json({
+    active: false,
+    waitingTaskCount: 0,
+    availableSlots: 0,
+    thresholdMinutes: 30,
+    observedAt: new Date().toISOString(),
+    oldestEnteredLaneAt: null,
+    items: [],
+  }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   const now = new Date().toISOString();
   await page.route('**/api/clients', json([
@@ -605,7 +614,7 @@ test.describe('Execution Hosts settings section', () => {
     await expect(operatorAdmission).not.toContainText('Automatic');
   });
 
-  test('shows a failed project delivery preflight and its claim refusal reason', async ({ page }) => {
+  test('shows the missing repository URL claim refusal in Remote Hosts', async ({ page }) => {
     await page.unroute('**/api/clients');
     await page.route('**/api/clients', route => route.fulfill({
       status: 200,
@@ -616,10 +625,9 @@ test.describe('Execution Hosts settings section', () => {
         runnerGitStatus: 'ready',
         runnerProjectPreflights: [{
           projectId: 'PROJ-042', projectName: 'Payments', registrationFingerprint: 'a'.repeat(64),
-          repositoryUrl: 'https://github.com/example/payments.git',
-          fetchUrl: 'https://github.com/example/payments.git',
-          pushUrl: 'https://github.com/example/payments.git', status: 'failed',
-          detail: 'write probe failed (128): permission denied', checkedAt: '2026-07-22T10:01:00Z',
+          repositoryUrl: null, fetchUrl: null, pushUrl: null, status: 'failed',
+          detail: 'Remote execution is not claimable: repositoryUrl is missing; repository URL is not configured.',
+          checkedAt: '2026-08-08T10:01:00Z',
         }],
       }]),
     }));
@@ -628,8 +636,13 @@ test.describe('Execution Hosts settings section', () => {
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     const failure = remote.getByTestId('remote-host-project-preflight-failures');
     await expect(failure).toContainText('Payments');
-    await expect(failure).toContainText('permission denied');
-    await remote.screenshot({ path: join(SHOT_DIR, 'remote-host-project-preflight-failed--mocked.png') });
+    await expect(failure).toContainText('repositoryUrl is missing');
+    for (const theme of ['dark', 'light'] as const) {
+      await setTheme(page, theme);
+      await remote.screenshot({
+        path: join(SHOT_DIR, `remote-host-repository-warning-${theme}--mocked.png`),
+      });
+    }
   });
 
   test('shows persisted performance history, slot context, and a throttling finding', async ({ page }) => {

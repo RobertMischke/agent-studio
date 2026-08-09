@@ -1796,6 +1796,27 @@
             <span class="lane">5e-escalated</span>.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-08</td>
+          <td><code>AGT-2521</code><br><span class="small">remote Ready fleet starvation with free host capacity</span></td>
+          <td>
+            Twenty-one remote-routed cards remained in <span class="lane">2-ready</span> for hours while a healthy daemon
+            reported eight free slots. The last successful claim was five hours old. The Runner refused every affected
+            project because its registry record had no <code>repositoryUrl</code>, but the reason existed only in the backend
+            log. The board continued to present an ordinary queued-remote state.
+          </td>
+          <td>
+            Claim admission treated missing repository registration as a poll-local rejection. It cached a host preflight
+            and logged the failure, but did not persist the refusal on the card. Registry settings exposed no remote
+            claimability invariant, and no watchdog compared Ready age with reported free capacity.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> remote refusals are durable per-card state rendered on the board and
+            task detail; remotely assigned projects without <code>repositoryUrl</code> warn in project settings and Execution
+            Hosts before a claim; a 30-minute starvation watchdog emits a board banner and WRN event whenever old remote
+            Ready work coexists with fresh free Runner capacity.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -783,6 +783,22 @@ Run timeline context events retain exact source members so count disclosures
 are inspectable. Terminal run events retain status and duration as structured
 details; the frontend owns their compact, non-redundant sentence projection.
 
+A remote claim refusal is durable task state, not log-only evidence. Claim
+admission records the Runner identity, a stable reason code, readable detail,
+and timestamp in `task.json.remoteDispatchRejection`. Task reads expose the
+current Ready-lane value as `executionLocation.lastRejection`; the card and
+detail header render it inline. Successful dispatch clears it, and a later lane
+generation cannot inherit it. Missing repository registration is also projected
+as a failed project preflight in Execution Hosts before a Runner polls.
+
+`RemoteQueueStarvationWatchdog` independently detects remotely routed Ready
+cards older than `RemoteQueueStarvation:ThresholdMinutes` (30 by default) while
+a live Runner reports free slots. It publishes
+`GET /api/runner/queue-starvation`, emits the rate-limited
+`remote-ready-starvation` warning event, and clears the acute signal when the
+queue or capacity condition recovers. This guard does not depend on recognizing
+the claim refusal reason.
+
 ## Verification
 
 - Outcome and grammar changes need focused unit tests for analyzer, policy,

@@ -203,6 +203,36 @@ public sealed class RunnerBadgeProjectionTests
         Assert.Equal(TaskExecutionStates.QueuedRemote, queued.State);
     }
 
+    [Fact]
+    public void ExecutionProjection_ReadyRemote_ProjectsCurrentRejectionOnly()
+    {
+        var current = new RemoteDispatchRejection
+        {
+            Code = "repository-url-missing",
+            RunnerId = "agent-runner-01",
+            RunnerName = "agent-runner-01",
+            Reason = "project has no repositoryUrl",
+            RejectedAtUtc = Now.AddMinutes(-1),
+        };
+        var task = ProgressTask() with
+        {
+            State = TaskStates.Ready,
+            EnteredLaneAt = Now.AddMinutes(-2),
+            RemoteDispatchRejection = current,
+        };
+
+        var projected = TaskRunnerService.ProjectExecutionLocation(
+            task, null, null, new RunLeaseInspection("none", null),
+            "agent-runner-01", LocalIdentity(), null, Now);
+        var staleGeneration = TaskRunnerService.ProjectExecutionLocation(
+            task with { EnteredLaneAt = Now }, null, null,
+            new RunLeaseInspection("none", null),
+            "agent-runner-01", LocalIdentity(), null, Now);
+
+        Assert.Equal(current, projected.LastRejection);
+        Assert.Null(staleGeneration.LastRejection);
+    }
+
     private static RunLeaseInfoDto Lease(string runnerId, string runnerName, string host)
         => new(
             TaskKey: "PT-578",

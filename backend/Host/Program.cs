@@ -399,6 +399,9 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 builder.Services.AddSingleton<AttemptAuthorityService>();
 builder.Services.AddSingleton<ReviewAttemptTaskLifecycleService>();
 builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
+builder.Services.AddSingleton<RemoteDispatchRejectionStore>();
+builder.Services.AddSingleton<RemoteQueueStarvationWatchdog>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
     sp.GetRequiredService<AttemptAuthorityService>()));

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { catchError, forkJoin, of } from 'rxjs';
 import { ProjectBasicsFormComponent } from '../../../../components/project-basics-form';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
 import {
@@ -52,6 +53,7 @@ export class ProjectBasicsCardComponent {
   readonly repositoryPath = signal('');
   readonly rootPath = signal('');
   readonly repositoryUrl = signal('');
+  readonly remoteExecutionLocation = signal<string | null>(null);
   readonly agentOverrideEnabled = signal(false);
   readonly cliDefault = signal<CliType>('claude');
   readonly modelDefault = signal('');
@@ -92,6 +94,11 @@ export class ProjectBasicsCardComponent {
   });
   readonly canSave = computed(() =>
     !this.loading() && !this.saving() && this.dirty() && projectBasicsAreValid(this.validation()),
+  );
+  readonly remoteRepositoryWarning = computed(() =>
+    !!this.remoteExecutionLocation()
+    && this.remoteExecutionLocation()!.toLowerCase() !== 'local'
+    && !this.repositoryUrl().trim(),
   );
 
   constructor() {
@@ -154,8 +161,11 @@ export class ProjectBasicsCardComponent {
   private load(projectName: string): void {
     this.loading.set(true);
     this.loadError.set(null);
-    this.tasks.getRegistryWorkspaces({ includeArchived: true }).subscribe({
-      next: (workspaces) => {
+    forkJoin({
+      workspaces: this.tasks.getRegistryWorkspaces({ includeArchived: true }),
+      settings: this.tasks.getAllProjectSettings().pipe(catchError(() => of({}))),
+    }).subscribe({
+      next: ({ workspaces, settings }) => {
         this.workspaces.set(workspaces ?? []);
         this.lookup.setWorkspaces(workspaces ?? []);
         const display = this.lookup.getProjectDisplay(projectName);
@@ -167,6 +177,10 @@ export class ProjectBasicsCardComponent {
           this.loadError.set('Project basics could not be resolved from the registry.');
           return;
         }
+        const projectSettings = Object.entries(settings).find(([name]) =>
+          name.toLowerCase() === project.displayName.toLowerCase(),
+        )?.[1];
+        this.remoteExecutionLocation.set(projectSettings?.executionLocation ?? null);
         this.seed(project);
         this.loading.set(false);
       },

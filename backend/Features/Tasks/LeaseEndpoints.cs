@@ -153,11 +153,19 @@ public static class LeaseEndpoints
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
             PromptEnrichmentService promptEnrichment,
+            RemoteDispatchRejectionStore dispatchRejections,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
             var remoteClaimFailures = new RemoteClaimFailureBudget(
                 loggerFactory.CreateLogger<RemoteClaimFailureBudget>());
+            void RecordRejection(TaskInfo task, string code, string? reason) =>
+                dispatchRejections.Record(
+                    task,
+                    req.RunnerId,
+                    req.RunnerName,
+                    code,
+                    reason);
             if (string.IsNullOrWhiteSpace(req.RunnerId) || string.IsNullOrWhiteSpace(req.RunnerName))
                 return Results.BadRequest(new RunnerClaimResponse(RunnerClaimStatus.Invalid, Message: "runnerId and runnerName are required."));
             if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
@@ -573,6 +581,7 @@ public static class LeaseEndpoints
                     if (!capabilityAdmission.Eligible)
                     {
                         capabilityMismatch ??= capabilityAdmission.Message;
+                        RecordRejection(task, "capability-mismatch", capabilityAdmission.Message);
                         logger.LogInformation(
                             "remote-runner-coding-claim-skipped-capability runner={Runner} task={TaskKey} cli={CliType} reason={Reason}",
                             req.RunnerName,
@@ -598,6 +607,10 @@ public static class LeaseEndpoints
                             && ProjectDeliveryPreflightPolicy.IsFresh(cached, now)
                             && !string.Equals(cached.Status, "ready", StringComparison.OrdinalIgnoreCase))
                         {
+                            RecordRejection(
+                                task,
+                                "project-preflight-failed",
+                                $"project delivery preflight failed: {cached.Detail}");
                             failedPreflightCandidate ??= task;
                             failedPreflightRepository ??= repository;
                             failedProjectPreflight ??= cached;
@@ -609,6 +622,10 @@ public static class LeaseEndpoints
                     }
 
                     nonRemoteCapableProject = task.ProjectName;
+                    RecordRejection(
+                        task,
+                        "repository-url-missing",
+                        "project has no repositoryUrl");
                     if (registryProject is not null && !string.IsNullOrWhiteSpace(clientId))
                     {
                         var missingRepositoryDetail =
@@ -644,6 +661,10 @@ public static class LeaseEndpoints
                     && failedPreflightRepository is not null
                     && failedProjectPreflight is not null)
                 {
+                    RecordRejection(
+                        failedPreflightCandidate,
+                        "project-preflight-failed",
+                        $"project delivery preflight failed: {failedProjectPreflight.Detail}");
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightFailed,
                         ProjectName: failedPreflightCandidate.ProjectName,
@@ -727,6 +748,10 @@ public static class LeaseEndpoints
 
                 if (!string.Equals(projectPreflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
                 {
+                    RecordRejection(
+                        candidate,
+                        "project-preflight-failed",
+                        $"project delivery preflight failed: {projectPreflight.Detail}");
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightFailed,
                         ProjectName: candidate.ProjectName,
@@ -762,6 +787,10 @@ public static class LeaseEndpoints
                         "remote-runner-prompt-enrichment-blocked project={Project} task={TaskKey}",
                         candidate.ProjectName,
                         taskKey);
+                    RecordRejection(
+                        candidate,
+                        "dispatch-preparation-failed",
+                        $"prompt enrichment blocked dispatch: {ex.Message}");
                     return Results.Ok(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
                         Message: $"Prompt enrichment blocked dispatch: {ex.Message}"));
@@ -784,6 +813,7 @@ public static class LeaseEndpoints
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome)));
 
+                dispatchRejections.Clear(candidate);
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
                     cause: $"remote-runner:{req.RunnerName.Trim()}",
@@ -801,6 +831,10 @@ public static class LeaseEndpoints
                     logger.LogWarning(
                         "remote-runner-claim-move-failed project={Project} task={TaskKey} runner={Runner} status={Status} message={Message}",
                         candidate.ProjectName, taskKey, req.RunnerName, move.Status, move.Message);
+                    RecordRejection(
+                        candidate,
+                        "dispatch-transition-failed",
+                        $"claim move refused: {move.Status} {move.Message}");
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty, Message: $"claim move refused: {move.Status} {move.Message}")));
                 }

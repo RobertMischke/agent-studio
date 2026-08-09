@@ -49,6 +49,9 @@ export class ExecutionLocationBadgeComponent {
       value.worktreePath ? `Worktree: ${value.worktreePath}` : null,
       value.processId ? `Process: ${value.processId}` : null,
       value.sessionId ? `Session: ${value.sessionId}` : null,
+      value.lastRejection
+        ? `Latest rejection: Runner ${value.lastRejection.runnerName || value.lastRejection.runnerId} rejected: ${value.lastRejection.reason}`
+        : null,
       `Connection: ${value.connectionState}; lease: ${value.leaseState}`,
       `Trusted because: ${value.trustReason}`,
     ];

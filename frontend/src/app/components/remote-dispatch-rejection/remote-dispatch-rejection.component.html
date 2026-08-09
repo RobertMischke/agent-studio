@@ -1,0 +1,10 @@
+@if (rejection(); as value) {
+  <div class="remote-rejection"
+       [class.remote-rejection--compact]="compact()"
+       [attr.data-rejection-code]="value.code"
+       data-testid="remote-dispatch-rejection"
+       role="status">
+    <span class="remote-rejection__dot" aria-hidden="true"></span>
+    <span><strong>Runner {{ runnerLabel() }} rejected:</strong> {{ value.reason }}</span>
+  </div>
+}
