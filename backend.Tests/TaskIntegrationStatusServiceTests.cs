@@ -489,7 +489,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
-    public void BuildLookup_OnlyAcceptedLanes_GetAVerdict()
+    public void BuildLookup_OnlyDeliveredLanes_GetAVerdict()
     {
         var repo = SeedDevelopMainRepo();
         RunGit(repo, "checkout -q develop");
@@ -499,11 +499,13 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         var svc = BuildService(repo, out var project, out var log);
         var inProgress = Job("wip", "AGT-3004", project, repo, log, commits: new[] { Commit(sha) }) with { State = TaskStates.Progress };
+        var autoReview = Job("reviewing", "AGT-3006", project, repo, log, commits: new[] { Commit(sha) }) with { State = TaskStates.AutoReview };
         var completed = Job("done", "AGT-3005", project, repo, log, commits: new[] { Commit(sha) }) with { State = TaskStates.Completed };
 
-        var lookup = svc.BuildLookup(new[] { inProgress, completed });
+        var lookup = svc.BuildLookup(new[] { inProgress, autoReview, completed });
 
         Assert.False(lookup.ContainsKey(inProgress.TaskKey));
+        Assert.Equal(IntegrationStatuses.Integrated, lookup[autoReview.TaskKey].Status);
         Assert.True(lookup.ContainsKey(completed.TaskKey));
         Assert.Equal(IntegrationStatuses.Integrated, lookup[completed.TaskKey].Status);
     }

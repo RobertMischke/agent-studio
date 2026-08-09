@@ -84,16 +84,22 @@ pipeline view.
   host, state, result, duration, and derived card attachments through
   `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
   step telemetry.
-- `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
-  operator-triggered `post-merge-into-develop` post-step. Performs the real
-  delivery merge when the operator accepts a done-green task.
-  `TaskTransitionService` keeps the card in Human Review with phase
-  `integrating`, stamps the internal `integrationpending` recovery marker, and
-  enqueues `AcceptedIntegrationQueue`; `AcceptedIntegrationWorker` performs the
-  serialized merge, pre-develop build gate, rollback, and push hand-off outside
-  the HTTP request. Only `Merged` or `AlreadyMerged` moves the card to Completed.
-  Failures clear the phase, retain the card in Human Review, and append a hard
-  integration-failed journal event.
+- `backend/Features/Pipeline/RemoteDeliveryIntegration.cs` and
+  `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the immediate Remote
+  admission policy, per-project delivery-order queue, and common
+  `post-merge-into-develop` mutation boundary. A settled immutable Result
+  Envelope whose Remote Review is `Pass` enters the queue when build/test is
+  passed or explicitly not applicable. A frozen plan that requires build/test
+  cannot omit that verdict. The report endpoint awaits the result before moving
+  Auto Review to Human Review. The common runner performs serialized merge,
+  containment checks, the pre-develop build gate, rollback, conflict evidence,
+  and push hand-off. Human acceptance remains a retry path for a failed
+  immediate or legacy delivery: `TaskTransitionService` keeps the card in Human
+  Review with phase `integrating`, stamps the internal `integrationpending`
+  recovery marker, and enqueues `AcceptedIntegrationQueue` for
+  `AcceptedIntegrationWorker`. Only `Merged` or `AlreadyMerged` completes that
+  acceptance transaction; failures clear the phase, retain the card in Human
+  Review, and append a hard integration-failed journal event.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
@@ -173,11 +179,14 @@ pipeline view.
   directories older than 72 hours once per hour. Active resource namespaces,
   the reusable `.baseline-cache`, reparse points, and unrelated directories are
   never deletion candidates.
-- `AcceptedIntegrationBackstopHostedService` re-drives accepted remote
-  and local deliveries after a backend restart when the durable Human Review
-  `integrating` phase landed but the queued merge did not complete. The channel
-  is only a latency optimization; phase, pending marker, pipeline record, and
-  timeline are the durability boundary. Recovery consumes the same
+- `AcceptedIntegrationBackstopHostedService` is the acceptance safety net, not
+  the normal Remote integration path. It re-drives accepted remote and local
+  deliveries after a backend restart when the durable Human Review `integrating`
+  phase landed but the queued merge did not complete, including acceptance
+  after a failed immediate attempt. It orders recovered deliveries by project
+  and original delivery time. The channel is only a latency optimization;
+  phase, pending marker, pipeline record, and timeline are the durability
+  boundary. Recovery consumes the same
   `TaskIntegrationStatusService` target-branch verdict as the board, so a stale
   Passed step cannot overrule missing Git presence. The backstop finalizes
   Completed only after successful integration and returns decided failures to
@@ -637,13 +646,14 @@ operator changes cause the step to fail before its writer runs.
   successful delivery at this gate. Sight-review acceptance completes the
   source card; `POST /api/tasks/{id}/promote-concept` additionally creates the
   selected coding cards from the published document.
-- A `Deferred` step (e.g. `post-merge-into-develop`) is fully implemented but
-  runs only on an external operator trigger, not automatically in the
-  post-bracket. It is distinct from a `Stub`: a stub has no implementation and
-  renders "planned", a deferred step renders "pending" until triggered. The
-  merge into develop runs on `AcceptedIntegrationWorker` while the card remains
-  in Human Review with phase `integrating`. It is the acceptance transaction's
-  gate: only `Merged` or `AlreadyMerged` commits the move to Completed. A
+- A `Deferred` step is fully implemented but is not executed by the ordinary
+  local post-bracket. It is distinct from a `Stub`: a stub has no implementation
+  and renders "planned", while a deferred step renders "pending" until a named
+  trigger runs it. For `post-merge-into-develop`, a green fenced Remote delivery
+  triggers the common runner before Human Review. A failed immediate attempt
+  remains visible on the card. Human acceptance resets the row for a fresh retry,
+  and `AcceptedIntegrationWorker` runs it while the card remains in Human Review
+  with phase `integrating`. Only `Merged` or `AlreadyMerged` commits the move to Completed. A
   conflict is a visible `Failed` outcome with conflicted files in the verdict
   summary; the phase clears, the card remains in Review, and the working tree is
   left clean. Once merge/gate/rollback starts, host cancellation

@@ -1030,6 +1030,12 @@ public sealed class TaskTransitionService
                 outcome: "AlreadyIntegrated").ConfigureAwait(false);
         }
 
+        // A failed pre-review Remote integration belongs to the delivered run,
+        // not to this new human-acceptance transaction. Reset the deferred row
+        // before queue hand-off so the accepted-integration backstop retries it
+        // if the volatile queue item is lost or the process restarts.
+        ResetIntegrationStepForAcceptedRetry(integrating);
+
         var queue = _acceptedIntegrationQueue;
         if (queue != null)
         {
@@ -1138,6 +1144,21 @@ public sealed class TaskTransitionService
             Verdict = "error",
             VerdictSummary = "Integration branch synchronization failed.",
             Reason = detail,
+        });
+    }
+
+    private void ResetIntegrationStepForAcceptedRetry(TaskInfo job)
+    {
+        var execution = _pipelineLog?.Read(job.FolderPath);
+        if (execution is null) return;
+        using var attempt = _pipelineLog!.EnterAttempt(job.FolderPath, execution.Attempt);
+        _pipelineLog.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Attempt = execution.Attempt,
+            Status = PipelineStepStatus.Pending,
+            Reason = "Human acceptance opened a fresh integration retry; the accepted-integration backstop may re-drive it.",
         });
     }
 
