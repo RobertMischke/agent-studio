@@ -36,11 +36,14 @@
           <h3 id="integration-queue-title">Accepted cards</h3>
           <p>Every accepted card has one integration outcome.</p>
         </div>
-        <div class="integration__counts" aria-label="Integration queue counts">
-          <span data-status="merged">{{ counts().merged }} merged</span>
-          <span data-status="waiting">{{ counts().waiting }} waiting</span>
-          <span data-status="conflict">{{ counts().conflict }} conflict</span>
-          <span data-status="skipped">{{ counts().skipped }} skipped</span>
+        <div class="integration__counts" aria-label="Filter integration queue by outcome">
+          <button type="button" data-status="all" data-testid="integration-filter-all" [attr.aria-pressed]="selectedStatus() === 'all'" (click)="selectStatus('all')">{{ counts().all }} all</button>
+          <button type="button" data-status="merged" data-testid="integration-filter-merged" [attr.aria-pressed]="selectedStatus() === 'merged'" (click)="selectStatus('merged')">{{ counts().merged }} merged</button>
+          <button type="button" data-status="waiting" data-testid="integration-filter-waiting" [attr.aria-pressed]="selectedStatus() === 'waiting'" (click)="selectStatus('waiting')">{{ counts().waiting }} waiting</button>
+          <button type="button" data-status="conflict" data-testid="integration-filter-conflict" [attr.aria-pressed]="selectedStatus() === 'conflict'" (click)="selectStatus('conflict')">{{ counts().conflict }} conflict</button>
+          <button type="button" data-status="skipped" data-testid="integration-filter-skipped" [attr.aria-pressed]="selectedStatus() === 'skipped'" (click)="selectStatus('skipped')">{{ counts().skipped }} skipped</button>
+          <button type="button" data-status="legacy-unverifiable" data-testid="integration-filter-legacy-unverifiable" [attr.aria-pressed]="selectedStatus() === 'legacy-unverifiable'" (click)="selectStatus('legacy-unverifiable')">{{ counts().legacyUnverifiable }} legacy unverifiable</button>
+          <button type="button" data-status="superseded" data-testid="integration-filter-superseded" [attr.aria-pressed]="selectedStatus() === 'superseded'" (click)="selectStatus('superseded')">{{ counts().superseded }} superseded</button>
         </div>
       </div>
 
@@ -48,7 +51,7 @@
         <div class="integration__table-head" role="row">
           <span role="columnheader">Card</span><span role="columnheader">State since</span><span role="columnheader">Status</span><span role="columnheader">Evidence</span>
         </div>
-        @for (item of data.queue; track item.taskId) {
+        @for (item of visibleQueue(); track item.taskId) {
           <div class="integration__row" role="row" [attr.data-status]="item.status" data-testid="integration-queue-row">
             <span class="integration__card" role="cell"><code>{{ item.taskKey }}</code><span>{{ item.title }}</span></span>
             <span role="cell">{{ when(item.stateSince) }}</span>
@@ -62,7 +65,7 @@
             </span>
           </div>
         } @empty {
-          <p class="integration__empty">No accepted cards are waiting for integration.</p>
+          <p class="integration__empty">No accepted cards match this outcome.</p>
         }
       </div>
     </section>

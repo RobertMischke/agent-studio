@@ -19,6 +19,8 @@ const INTEGRATION_VIEW = {
     { taskId: 'waiting', taskKey: 'AGT-2202', title: 'Merge queue visibility', lane: '6-completed', stateSince: '2026-07-22T10:00:00Z', status: 'waiting', mergeSha: null, reason: 'Accepted change is not present in origin/develop.' },
     { taskId: 'conflict', taskKey: 'AGT-2203', title: 'Resolve integration conflict', lane: '6-completed', stateSince: '2026-07-22T10:20:00Z', status: 'conflict', mergeSha: null, reason: 'Conflict in project-shell.config.ts.' },
     { taskId: 'skipped', taskKey: 'AGT-2204', title: 'Research note', lane: '6-completed', stateSince: '2026-07-22T10:30:00Z', status: 'skipped', mergeSha: null, reason: 'No task branch or attributed commit to integrate.' },
+    { taskId: 'legacy', taskKey: 'AGT-2205', title: 'Legacy review subject', lane: '7-archive', stateSince: '2026-07-22T10:40:00Z', status: 'legacy-unverifiable', mergeSha: null, reason: 'The archived review subject predates RunAttempt authority.' },
+    { taskId: 'superseded', taskKey: 'AGT-2206', title: 'Retired conflict', lane: '7-archive', stateSince: '2026-07-22T10:50:00Z', status: 'superseded', mergeSha: null, reason: 'The conflicting delivery belongs to an archived card.' },
   ],
   publisherMerges: [
     { taskKey: 'AGT-2198', title: 'Publisher durability', sha: 'd'.repeat(40), shortSha: 'd2198aa', integratedAt: '2026-07-22T11:15:00Z', publisher: 'auto-publisher', subject: 'merge(AGT-2198): publisher durability' },
@@ -80,8 +82,15 @@ test('Project Hub Integration shows queue, publisher merges, and promotion file 
   const panel = page.getByTestId('project-integration-panel');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('origin/develop');
-  await expect(page.getByTestId('integration-queue-row')).toHaveCount(4);
+  await expect(page.getByTestId('integration-queue-row')).toHaveCount(6);
   await expect(page.getByTestId('integration-queue')).toContainText('Conflict in project-shell.config.ts');
+  await expect(page.getByTestId('integration-filter-legacy-unverifiable')).toContainText('1 legacy unverifiable');
+  await expect(page.getByTestId('integration-filter-superseded')).toContainText('1 superseded');
+  await page.getByTestId('integration-filter-conflict').click();
+  await expect(page.getByTestId('integration-queue-row')).toHaveCount(1);
+  await expect(page.getByTestId('integration-queue')).toContainText('AGT-2203');
+  await page.getByTestId('integration-filter-all').click();
+  await expect(page.getByTestId('integration-queue-row')).toHaveCount(6);
   await expect(page.getByTestId('promotion-diff')).toContainText('3 files');
   await expect(page.getByTestId('promotion-diff')).toContainText('PublisherTests.cs');
   await expect(page.getByTestId('publisher-merges')).toContainText('AGT-2198');
