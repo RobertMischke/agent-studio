@@ -1,34 +1,60 @@
-<span class="task-ref" [class.task-ref--ghost]="!status().exists" [style.--task-ref-project]="color()"
-      data-testid="task-reference-microcard">
+<span
+  class="task-ref"
+  [class.task-ref--ghost]="!status().exists"
+  [class.task-ref--lane-dot]="variant() === 'lane-dot'"
+  [style.--task-ref-project]="color()"
+  [attr.data-testid]="testId()"
+>
   @if (status().exists) {
-    <a class="task-ref__link" [href]="'#task:' + status().key" (click)="open($event)"
-       [attr.aria-label]="'Open task ' + status().key + ': ' + status().title">
-      <i class="task-ref__project" aria-hidden="true"></i>
-      <strong>{{ status().key }}</strong>
-      @if (expanded()) {
-        <span class="task-ref__title">{{ status().title }}</span>
-        <span class="task-ref__lane-label">{{ laneLabel() }}</span>
-      }
-      <span class="task-ref__lane" [attr.data-tone]="laneTone()" aria-hidden="true">{{ laneIcon() }}</span>
-      @if (status().merge; as merge) {
-        <span class="task-ref__merge" role="img"
-              [attr.aria-label]="mergeLabel()">
-          <i [class.task-ref__merge-on]="merge.inIntegration" aria-hidden="true">d</i>
-          <i [class.task-ref__merge-on]="merge.inRelease" aria-hidden="true">m</i>
-        </span>
+    <a
+      class="task-ref__link"
+      [class.task-ref__link--lane-dot]="variant() === 'lane-dot'"
+      [href]="'#task:' + status().key"
+      (click)="open($event)"
+      [attr.aria-label]="'Open task ' + status().key + ': ' + status().title"
+    >
+      @if (variant() === 'lane-dot') {
+        <i class="task-ref__lane-dot" [attr.data-tone]="laneTone()" aria-hidden="true"></i>
+      } @else {
+        <i class="task-ref__project" aria-hidden="true"></i>
+        <strong>{{ status().key }}</strong>
+        @if (expanded()) {
+          <span class="task-ref__title">{{ status().title }}</span>
+          <span class="task-ref__lane-label">{{ laneLabel() }}</span>
+        }
+        <span class="task-ref__lane" [attr.data-tone]="laneTone()" aria-hidden="true">{{
+          laneIcon()
+        }}</span>
+        @if (status().merge; as merge) {
+          <span class="task-ref__merge" role="img" [attr.aria-label]="mergeLabel()">
+            <i [class.task-ref__merge-on]="merge.inIntegration" aria-hidden="true">d</i>
+            <i [class.task-ref__merge-on]="merge.inRelease" aria-hidden="true">m</i>
+          </span>
+        }
       }
     </a>
   } @else {
-    <span class="task-ref__link" aria-label="Unknown or deleted task reference">
-      <i class="task-ref__project" aria-hidden="true"></i><strong>{{ status().key }}</strong><span aria-hidden="true">◇</span>
+    <span
+      class="task-ref__link"
+      [class.task-ref__link--lane-dot]="variant() === 'lane-dot'"
+      [attr.aria-label]="'Unknown or deleted task ' + status().key"
+    >
+      @if (variant() === 'lane-dot') {
+        <i class="task-ref__lane-dot" data-tone="ghost" aria-hidden="true"></i>
+      } @else {
+        <i class="task-ref__project" aria-hidden="true"></i><strong>{{ status().key }}</strong
+        ><span aria-hidden="true">◇</span>
+      }
     </span>
   }
-  <span class="task-ref__popover" role="tooltip">
+  <span class="task-ref__popover" role="tooltip" [attr.data-testid]="testId() + '-tooltip'">
     <strong>{{ status().title || 'Unknown or deleted task' }}</strong>
     <span>{{ laneLabel() }} · {{ status().projectName }}</span>
     @if (status().merge) {
       <span>{{ mergePopoverLabel() }}</span>
     }
-    @if (status().reviewGrade) { <span>Review grade {{ status().reviewGrade }}</span> }
+    @if (status().reviewGrade) {
+      <span>Review grade {{ status().reviewGrade }}</span>
+    }
   </span>
 </span>

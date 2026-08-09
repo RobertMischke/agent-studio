@@ -1,4 +1,6 @@
-:host { display: inline; }
+:host {
+  display: inline;
+}
 
 .task-ref {
   position: relative;
@@ -22,19 +24,97 @@
   white-space: nowrap;
 }
 
-a.task-ref__link:hover { background: color-mix(in srgb, var(--task-ref-project) 18%, var(--studio-bg-elevated)); }
-a.task-ref__link:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
-.task-ref__project { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--task-ref-project); }
-.task-ref__title { overflow: hidden; max-width: 22rem; color: var(--studio-fg); text-overflow: ellipsis; }
-.task-ref__lane-label { color: var(--studio-fg-muted); }
-.task-ref__lane[data-tone='done'] { color: var(--studio-success); }
-.task-ref__lane[data-tone='active'] { color: var(--severity-info); }
-.task-ref__lane[data-tone='waiting'] { color: var(--studio-warn); }
-.task-ref__lane[data-tone='queued'] { color: var(--studio-fg-dim); }
-.task-ref__merge { display: inline-flex; gap: var(--studio-spacing-1); }
-.task-ref__merge i { display: inline-grid; place-items: center; width: 1rem; height: 1rem; border: 1px solid var(--studio-card-muted-border); border-radius: 4px; color: var(--studio-fg-dim); background: var(--studio-card-muted-bg); font-style: normal; font-weight: 800; }
-.task-ref__merge i.task-ref__merge-on { color: var(--studio-on-accent); background: var(--studio-accent-success-strong); border-color: var(--studio-accent-success); }
-.task-ref--ghost { opacity: 0.62; filter: grayscale(0.65); }
+.task-ref__link--lane-dot {
+  width: 18px;
+  height: 18px;
+  justify-content: center;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--task-ref-project) 34%, var(--studio-border));
+  background: color-mix(in srgb, var(--task-ref-project) 8%, var(--studio-bg-elevated));
+}
+
+.task-ref__lane-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--studio-fg-dim);
+}
+.task-ref__lane-dot[data-tone='done'] {
+  background: var(--studio-success);
+}
+.task-ref__lane-dot[data-tone='active'] {
+  background: var(--severity-info);
+}
+.task-ref__lane-dot[data-tone='waiting'] {
+  background: var(--studio-warn);
+}
+.task-ref__lane-dot[data-tone='queued'] {
+  background: var(--studio-fg-dim);
+}
+.task-ref__lane-dot[data-tone='ghost'] {
+  border: 1px solid var(--studio-fg-dim);
+  background: transparent;
+}
+
+a.task-ref__link:hover {
+  background: color-mix(in srgb, var(--task-ref-project) 18%, var(--studio-bg-elevated));
+}
+a.task-ref__link:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+.task-ref__project {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--task-ref-project);
+}
+.task-ref__title {
+  overflow: hidden;
+  max-width: 22rem;
+  color: var(--studio-fg);
+  text-overflow: ellipsis;
+}
+.task-ref__lane-label {
+  color: var(--studio-fg-muted);
+}
+.task-ref__lane[data-tone='done'] {
+  color: var(--studio-success);
+}
+.task-ref__lane[data-tone='active'] {
+  color: var(--severity-info);
+}
+.task-ref__lane[data-tone='waiting'] {
+  color: var(--studio-warn);
+}
+.task-ref__lane[data-tone='queued'] {
+  color: var(--studio-fg-dim);
+}
+.task-ref__merge {
+  display: inline-flex;
+  gap: var(--studio-spacing-1);
+}
+.task-ref__merge i {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: 4px;
+  color: var(--studio-fg-dim);
+  background: var(--studio-card-muted-bg);
+  font-style: normal;
+  font-weight: 800;
+}
+.task-ref__merge i.task-ref__merge-on {
+  color: var(--studio-on-accent);
+  background: var(--studio-accent-success-strong);
+  border-color: var(--studio-accent-success);
+}
+.task-ref--ghost {
+  opacity: 0.62;
+  filter: grayscale(0.65);
+}
 
 .task-ref__popover {
   position: absolute;
@@ -56,6 +136,15 @@ a.task-ref__link:focus-visible { outline: 2px solid var(--studio-accent); outlin
   line-height: 1.5;
   white-space: normal;
 }
-.task-ref__popover strong { color: var(--studio-tooltip-fg-strong); }
-.task-ref__popover span { display: block; margin-top: var(--studio-spacing-1); color: var(--studio-tooltip-fg-dim); }
-.task-ref:hover .task-ref__popover, .task-ref:focus-within .task-ref__popover { display: block; }
+.task-ref__popover strong {
+  color: var(--studio-tooltip-fg-strong);
+}
+.task-ref__popover span {
+  display: block;
+  margin-top: var(--studio-spacing-1);
+  color: var(--studio-tooltip-fg-dim);
+}
+.task-ref:hover .task-ref__popover,
+.task-ref:focus-within .task-ref__popover {
+  display: block;
+}

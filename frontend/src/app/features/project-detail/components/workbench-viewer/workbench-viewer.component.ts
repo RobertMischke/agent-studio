@@ -1,8 +1,23 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  HostListener,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
-import { WorkbenchDecisionResponse, WorkbenchDocument } from '../../../../models/project-docs.model';
+import {
+  WorkbenchDecisionResponse,
+  WorkbenchDocument,
+} from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
+import { WorkbenchViewerHeaderComponent } from '../workbench-viewer-header/workbench-viewer-header.component';
 import {
   ISOLATED_HTML_LINK_MESSAGE,
   WORKBENCH_DECISION_CHANGE_MESSAGE,
@@ -27,7 +42,7 @@ import {
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [StudioIconComponent, WorkbenchDecisionPanelComponent],
+  imports: [StudioIconComponent, WorkbenchViewerHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -45,10 +60,12 @@ export class WorkbenchViewerComponent {
   readonly maximized = signal(false);
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
 
-  readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(
-    this.document()?.html ?? '', { workbenchDecisions: true }));
+  readonly srcdoc = computed(() =>
+    buildIsolatedHtmlSrcdoc(this.document()?.html ?? '', { workbenchDecisions: true }),
+  );
   readonly decisionMarkup = computed(() =>
-    discoverWorkbenchDecisionMarkup(this.document()?.html ?? ''));
+    discoverWorkbenchDecisionMarkup(this.document()?.html ?? ''),
+  );
 
   constructor() {
     effect(() => {
@@ -86,7 +103,9 @@ export class WorkbenchViewerComponent {
     if (message?.type === WORKBENCH_DECISION_CHANGE_MESSAGE) {
       if (this.document()?.workbench.decision?.state === 'succeeded') return;
       const normalized = normalizeWorkbenchDecisionResponses(
-        message.responses, this.decisionMarkup().points);
+        message.responses,
+        this.decisionMarkup().points,
+      );
       if (normalized) this.decisionResponses.set(normalized);
       return;
     }
@@ -102,7 +121,7 @@ export class WorkbenchViewerComponent {
   }
 
   toggleMaximize(): void {
-    this.maximized.update(value => !value);
+    this.maximized.update((value) => !value);
   }
 
   @HostListener('document:keydown.escape')
@@ -120,11 +139,14 @@ export class WorkbenchViewerComponent {
 
   private hydrateFrame(): void {
     const decision = this.document()?.workbench.decision;
-    this.frame()?.nativeElement.contentWindow?.postMessage({
-      type: WORKBENCH_DECISION_HYDRATE_MESSAGE,
-      responses: this.decisionResponses(),
-      readonly: decision?.state === 'succeeded',
-    }, '*');
+    this.frame()?.nativeElement.contentWindow?.postMessage(
+      {
+        type: WORKBENCH_DECISION_HYDRATE_MESSAGE,
+        responses: this.decisionResponses(),
+        readonly: decision?.state === 'succeeded',
+      },
+      '*',
+    );
   }
 
   private loadDocument(project: string, id: string, clear = true): void {
@@ -132,7 +154,7 @@ export class WorkbenchViewerComponent {
     this.error.set(null);
     if (clear) this.document.set(null);
     this.docs.getWorkbench(project, id).subscribe({
-      next: document => {
+      next: (document) => {
         this.document.set(document);
         const discovered = discoverWorkbenchDecisionMarkup(document.html);
         this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);

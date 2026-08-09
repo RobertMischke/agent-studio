@@ -1,34 +1,47 @@
 <section class="workbench-viewer" data-testid="workbench-viewer">
   @if (loading()) {
-    <div class="workbench-viewer__state" data-testid="workbench-viewer-loading">Loading Workbench…</div>
+    <div class="workbench-viewer__state" data-testid="workbench-viewer-loading">
+      Loading Workbench…
+    </div>
   } @else if (error(); as message) {
-    <div class="workbench-viewer__state workbench-viewer__state--error" role="alert">{{ message }}</div>
+    <div class="workbench-viewer__state workbench-viewer__state--error" role="alert">
+      {{ message }}
+    </div>
   } @else if (document(); as doc) {
-    <app-workbench-decision-panel
-      [projectName]="projectName()"
-      [document]="doc"
-      [decisionPoints]="decisionMarkup().points"
-      [responses]="decisionResponses()"
-      (openWiki)="openCurrentPageInWiki()"
-      (decisionChanged)="refreshDecision()" />
-    <div class="workbench-viewer__frame-shell"
-         [class.workbench-viewer__frame-shell--maximized]="maximized()"
-         data-testid="workbench-viewer-frame-shell">
-      <button type="button"
-              class="workbench-viewer__maximize"
-              data-testid="workbench-viewer-maximize"
-              [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
-              [attr.title]="maximized() ? 'Restore (Esc)' : 'Maximize'"
-              (click)="toggleMaximize()">
+    @defer (on immediate) {
+      <app-workbench-viewer-header
+        [projectName]="projectName()"
+        [document]="doc"
+        [decisionPoints]="decisionMarkup().points"
+        [responses]="decisionResponses()"
+        (openWiki)="openCurrentPageInWiki()"
+        (decisionChanged)="refreshDecision()"
+      />
+    }
+    <div
+      class="workbench-viewer__frame-shell"
+      [class.workbench-viewer__frame-shell--maximized]="maximized()"
+      data-testid="workbench-viewer-frame-shell"
+    >
+      <button
+        type="button"
+        class="workbench-viewer__maximize"
+        data-testid="workbench-viewer-maximize"
+        [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
+        [attr.title]="maximized() ? 'Restore (Esc)' : 'Maximize'"
+        (click)="toggleMaximize()"
+      >
         <app-studio-icon [name]="maximized() ? 'collapse' : 'expand'" [size]="12" />
       </button>
-      <iframe class="workbench-viewer__frame"
-              #workbenchFrame
-              data-testid="workbench-viewer-frame"
-              title="Workbench artifact: {{ doc.workbench.title }}"
-              sandbox="allow-scripts"
-              referrerpolicy="no-referrer"
-              (load)="onFrameLoaded()"></iframe>
+      <iframe
+        class="workbench-viewer__frame"
+        #workbenchFrame
+        data-testid="workbench-viewer-frame"
+        title="Workbench artifact: {{ doc.workbench.title }}"
+        sandbox="allow-scripts"
+        referrerpolicy="no-referrer"
+        (load)="onFrameLoaded()"
+      ></iframe>
     </div>
   }
 </section>

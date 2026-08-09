@@ -33,9 +33,13 @@ export class TaskReferenceMicrocardComponent {
   readonly status = input.required<TaskReferenceStatus>();
   /** Show key, title, and lane together when the reference is the primary receipt. */
   readonly expanded = input(false);
+  readonly variant = input<'default' | 'lane-dot'>('default');
+  readonly testId = input('task-reference-microcard');
   private readonly navigation = inject(TaskReferenceNavigationService);
 
-  readonly color = computed(() => this.status().projectColor || projectIdentity(this.status().projectName).color);
+  readonly color = computed(
+    () => this.status().projectColor || projectIdentity(this.status().projectName).color,
+  );
   readonly laneIcon = computed(() => lanePresentation(this.status().lane).icon);
   readonly laneLabel = computed(() => lanePresentation(this.status().lane).label);
   readonly laneTone = computed(() => lanePresentation(this.status().lane).tone);
@@ -60,9 +64,16 @@ export class TaskReferenceMicrocardComponent {
 
 function lanePresentation(lane: string | null): { icon: string; label: string; tone: string } {
   if (!lane) return { icon: '◇', label: 'Deleted or unknown task', tone: 'ghost' };
-  if (lane === '6-completed' || lane === '7-archive') return { icon: '✓', label: lane === '7-archive' ? 'Archived' : 'Completed', tone: 'done' };
-  if (lane === '3-progress' || lane === '4-auto-review') return { icon: '●', label: lane === '3-progress' ? 'In progress' : 'Post processing', tone: 'active' };
-  if (lane === '5-human-review' || lane === '5e-escalated' || lane === '3b-code-not-complete') return { icon: '!', label: 'Waiting', tone: 'waiting' };
+  if (lane === '6-completed' || lane === '7-archive')
+    return { icon: '✓', label: lane === '7-archive' ? 'Archived' : 'Completed', tone: 'done' };
+  if (lane === '3-progress' || lane === '4-auto-review')
+    return {
+      icon: '●',
+      label: lane === '3-progress' ? 'In progress' : 'Post processing',
+      tone: 'active',
+    };
+  if (lane === '5-human-review' || lane === '5e-escalated' || lane === '3b-code-not-complete')
+    return { icon: '!', label: 'Waiting', tone: 'waiting' };
   if (lane === '0-backlog') return { icon: '○', label: 'Backlog', tone: 'queued' };
   if (lane === '1-preparation') return { icon: '○', label: 'Preparation', tone: 'queued' };
   if (lane === '2-ready') return { icon: '○', label: 'Ready', tone: 'queued' };
