@@ -15,6 +15,7 @@ import { FilesPaneComponent } from './files-pane/files-pane.component';
 import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
 import { TaskTimelinePaneComponent } from '../../../task-timeline/components/task-timeline-pane/task-timeline-pane.component';
 import type { ProtocolVerdict } from '../protocol-pane/protocol-verdict';
+import { TaskArtifactLinksDirective } from '../task-artifact-links/task-artifact-links.directive';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -89,7 +90,7 @@ export function buildPromptTabs(filesCount: number, visualEvidenceCount: number)
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent, TaskArtifactLinksDirective],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -116,6 +117,11 @@ export class PromptPaneComponent {
   /** Canonical route state supplied by the task-detail host. */
   readonly routeTab = input<PromptPaneTabId | null>(null);
   readonly runOutcome = input<ProtocolVerdict | null>(null);
+
+  readonly artifactLinkContext = computed(() => ({
+    jobId: this.jobId(),
+    watchPath: this.watchPath(),
+  }));
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();

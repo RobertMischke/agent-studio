@@ -199,6 +199,8 @@
       [cliOutput]="cliOutput()"
       [log]="detail().log"
       [isRunning]="isRunning()"
+      [jobId]="detail().info.id"
+      [watchPath]="detail().info.watchPath"
       (closeRequest)="showLogOverlay.set(false)" />
   }
 </div>

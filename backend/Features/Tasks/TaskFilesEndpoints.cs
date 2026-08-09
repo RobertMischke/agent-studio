@@ -11,8 +11,8 @@ namespace AgentStudio.Tasks;
 /// Read/write of files inside a job folder: <c>prompt.md</c> /
 /// <c>status.md</c> via <c>/files/{name}</c>, plus the
 /// <c>attachments/</c> upload/download surface used by the prompt
-/// editor and the read-only <c>results/</c> mirror that backs
-/// <c>status.md</c> image references. See
+/// editor and the read-only <c>results/</c> artifact route that backs
+/// linked reports plus <c>status.md</c> image references. See
 /// <c>docs/system/contracts/protocol-style.md</c> for the storage contract.
 /// </summary>
 public static class TaskFilesEndpoints
@@ -109,15 +109,25 @@ public static class TaskFilesEndpoints
             return path is null ? Results.NotFound() : Results.File(path, contentType);
         });
 
-        // Read-only mirror of /attachments/ for the job's `results/` folder — the
-        // place where agents drop screenshots that should survive past the next
-        // Playwright run. The protocol pane resolves `results/<name>` references
-        // in status.md against this URL. See docs/system/contracts/protocol-style.md.
-        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
+        // Read-only task-artifact route for the job's `results/` folder. It
+        // remains the image source used by protocol markdown, and also serves
+        // report HTML inline plus nested result artifacts linked from Activity,
+        // Task, Result, and Docs. Unknown types retain octet-stream/download
+        // behavior. ResolveResult confines every path to the current task.
+        group.MapGet("/{jobId}/results/{**path}", (string jobId, string path, string? project, string? watchPath, HttpResponse response, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
-            var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);
-            return path is null ? Results.NotFound() : Results.File(path, contentType);
+            var (resolved, contentType) = scanner.ResolveResult(jobId, path, watchPath);
+            if (resolved is null) return Results.NotFound();
+            if (contentType?.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                response.Headers.ContentDisposition = "inline";
+                response.Headers.ContentSecurityPolicy =
+                    "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; " +
+                    "style-src 'unsafe-inline'; img-src data: blob:; font-src data:";
+                response.Headers.XContentTypeOptions = "nosniff";
+            }
+            return Results.File(resolved, contentType, enableRangeProcessing: true);
         });
 
         // Ordered listing of every image under <job>/results/ (recursive),
@@ -135,10 +145,8 @@ public static class TaskFilesEndpoints
             });
         });
 
-        // Sub-path aware companion to /results/{fileName}. The flat endpoint
-        // above rejects path separators by design (see TaskScannerService);
-        // the screenshot listing returns nested paths under
-        // results/playwright/<spec>/... which need this dedicated server.
+        // Compatibility image endpoint used by screenshot listings. General
+        // result links now use the guarded, sub-path-aware /results route above.
         // Path traversal is rejected inside ResolveScreenshotFile.
         group.MapGet("/{jobId}/screenshot", (string jobId, string? path, string? project, string? watchPath, ScreenshotIndexService screenshots, AgentStudio.Registry.ProjectRegistry projects) =>
         {

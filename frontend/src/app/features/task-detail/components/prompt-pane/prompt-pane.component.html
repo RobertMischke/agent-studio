@@ -1,4 +1,7 @@
-<section class="pane pane--prompt" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-prompt">
+<section class="pane pane--prompt"
+         [style.flex]="maximized() ? '1 1 100%' : weight()"
+         [appTaskArtifactLinks]="artifactLinkContext()"
+         data-testid="pane-prompt">
   <app-pane-header
     [maximized]="maximized()"
     testid="pane-prompt-header"

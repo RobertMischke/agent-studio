@@ -257,6 +257,16 @@ read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
 or controlled network integration belong to the Workbench viewer described in
 [Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
+Task-authored links are resolved separately from the top-level Files manifest.
+Every task Markdown surface binds relative `results/*` and allowed `logs/*`
+links, plus absolute runner paths containing those folders, to the open card's
+task context. `GET /api/tasks/{id}/results/{**path}` serves nested result
+artifacts with traversal containment and type-aware responses. Self-contained
+HTML opens inline in a new tab under a response-level sandbox policy; known
+preview types keep their MIME type, and unknown binary types remain
+`application/octet-stream`. Allowed text log links use the existing
+workspace-scoped task file route.
+
 ## Parked-card blocker and recall
 
 Every move into `5-human-review` or `5e-escalated` writes a machine-readable

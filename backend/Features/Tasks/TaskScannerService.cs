@@ -1745,13 +1745,48 @@ public class TaskScannerService : ITaskScanner
         => ResolveJobBinaryFile(jobId, "attachments", fileName, watchPath);
 
     /// <summary>
-    /// Read-only counterpart to <see cref="ResolveAttachment"/> for the
-    /// <c>results/</c> folder where agents drop screenshots they want to keep
-    /// in the protocol. Same path-traversal guards, same image content-type
-    /// mapping. See <c>docs/system/contracts/protocol-style.md</c> for the folder contract.
+    /// Resolves a file below the task's <c>results/</c> folder for the guarded
+    /// artifact-serving route. Nested paths are allowed, but rooted paths,
+    /// traversal, and any resolved path outside the results root are rejected.
+    /// Known preview types keep an inline MIME type; unknown types retain the
+    /// previous octet-stream/download behavior.
     /// </summary>
-    public (string? Path, string? ContentType) ResolveResult(string jobId, string fileName, string? watchPath = null)
-        => ResolveJobBinaryFile(jobId, "results", fileName, watchPath);
+    public (string? Path, string? ContentType) ResolveResult(string jobId, string relativePath, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+            return (null, null);
+
+        var normalized = relativePath.Replace('\\', '/').Trim('/');
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(segment => segment is "." or ".."))
+            return (null, null);
+
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return (null, null);
+
+        var resultsRoot = Path.GetFullPath(Path.Combine(info.FolderPath, "results"));
+        var fullPath = Path.GetFullPath(Path.Combine(resultsRoot, Path.Combine(segments)));
+        var rootPrefix = resultsRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? resultsRoot
+            : resultsRoot + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+            return (null, null);
+
+        return (fullPath, ResultContentType(fullPath));
+    }
+
+    private static string ResultContentType(string path)
+    {
+        return Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".html" or ".htm" => "text/html; charset=utf-8",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+    }
 
     private (string? Path, string? ContentType) ResolveJobBinaryFile(string jobId, string subDir, string fileName, string? watchPath)
     {
