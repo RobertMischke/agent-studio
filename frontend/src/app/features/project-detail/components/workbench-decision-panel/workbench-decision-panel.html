@@ -33,14 +33,16 @@
         <span>{{ document().revision!.slice(0, 8) }}</span>
       }
     </span>
-    <button type="button"
-            class="decision-panel__wiki"
-            data-testid="workbench-viewer-open-wiki"
-            aria-label="Open Workbench in Wiki"
-            title="Open in Wiki"
-            (click)="openWiki.emit()">
-      <app-studio-icon name="book" [size]="13" />
-    </button>
+    @if (showWikiAction()) {
+      <button type="button"
+              class="decision-panel__wiki"
+              data-testid="workbench-viewer-open-wiki"
+              aria-label="Open Workbench in Wiki"
+              title="Open in Wiki"
+              (click)="openWiki.emit()">
+        <app-studio-icon name="book" [size]="13" />
+      </button>
+    }
   </header>
 
   @if (mutationBlocked() && !settled()) {

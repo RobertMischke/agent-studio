@@ -342,6 +342,8 @@ export interface WorkbenchListItem {
   lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
   decision?: WorkbenchDecisionProjection | null;
   decisionStage?: WorkbenchDecisionStage | null;
+  /** Workbench-level gate count until inline decision points extend it. */
+  openDecisionCount?: number;
 }
 
 export interface WorkbenchCatalogue {
@@ -349,6 +351,35 @@ export interface WorkbenchCatalogue {
   includesHistory: boolean;
   count: number;
   items: WorkbenchListItem[];
+}
+
+export interface WorkbenchOverviewItem {
+  projectName: string;
+  workbench: WorkbenchListItem;
+}
+
+export interface WorkbenchOverview {
+  projectName: string | null;
+  count: number;
+  currentCount: number;
+  historyCount: number;
+  items: WorkbenchOverviewItem[];
+}
+
+export type WorkbenchHubEventType =
+  | 'created'
+  | 'updated'
+  | 'decisionRecorded'
+  | 'statusChanged'
+  | 'reconnected';
+
+export interface WorkbenchHubEvent {
+  type: WorkbenchHubEventType;
+  projectName: string | null;
+  workbenchId: string | null;
+  workbench: WorkbenchListItem | null;
+  previousStatus: WorkbenchStatus | null;
+  occurredAtUtc: string;
 }
 
 export interface WorkbenchDocument {

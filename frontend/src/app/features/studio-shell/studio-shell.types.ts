@@ -9,7 +9,7 @@
  */
 
 /** Discrete tab kinds the editor area can host. */
-export type StudioTabKind = 'board' | 'feed' | 'epics' | 'epic' | 'task' | 'hub' | 'workbench' | 'diff' | 'activity' | 'url-preview' | 'workspace-settings' | 'welcome';
+export type StudioTabKind = 'board' | 'feed' | 'epics' | 'epic' | 'task' | 'hub' | 'workbenches' | 'workbench' | 'diff' | 'activity' | 'url-preview' | 'workspace-settings' | 'welcome';
 
 /** Sidebar panel kinds reachable from the ActivityBar. */
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'settings';
@@ -53,6 +53,9 @@ export interface HubTab {
   pipelineStepId?: string;
 }
 
+/** Shared overview, workspace-wide or filtered to one project. */
+export interface WorkbenchesTab { kind: 'workbenches'; projectName: string | null; }
+
 /** Isolated read-only Workbench viewer, one tab per project + Workbench id. */
 export interface WorkbenchTab { kind: 'workbench'; projectName: string; workbenchId: string; title?: string; }
 
@@ -76,7 +79,7 @@ export interface WorkspaceSettingsTab { kind: 'workspace-settings'; }
 /** Welcome screen — no real tab, no key. */
 export interface WelcomeTab { kind: 'welcome'; }
 
-export type StudioTab = BoardTab | FeedTab | EpicsTab | EpicTab | TaskTab | HubTab | WorkbenchTab | DiffTab | ActivityTab | UrlPreviewTab | WorkspaceSettingsTab | WelcomeTab;
+export type StudioTab = BoardTab | FeedTab | EpicsTab | EpicTab | TaskTab | HubTab | WorkbenchesTab | WorkbenchTab | DiffTab | ActivityTab | UrlPreviewTab | WorkspaceSettingsTab | WelcomeTab;
 
 /**
  * Build the stable target identity for a tab. Replaceable substate is omitted:
@@ -97,6 +100,7 @@ export function studioTabKey(tab: StudioTab): string {
       const path = target.relPath.trim().replace(/^docs\//i, '');
       return `hub:${tab.projectName}:wiki:${target.kind}:${encodeURIComponent(path)}`;
     }
+    case 'workbenches': return `workbenches:${tab.projectName ?? '__all__'}`;
     case 'workbench': return `workbench:${tab.projectName}:${tab.workbenchId}`;
     case 'diff':     return `diff:${tab.commitSha}`;
     case 'activity': return `activity:${tab.taskKey}`;

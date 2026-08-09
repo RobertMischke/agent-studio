@@ -70,6 +70,8 @@ export function buildComposerLocationContext(
       return taskContext('Task', tab.taskKey, tasks);
     case 'workbench':
       return { project: tab.projectName, surface: 'Workbench', detail: tab.title ?? tab.workbenchId };
+    case 'workbenches':
+      return { project: tab.projectName, surface: 'Workbench overview' };
     case 'activity':
       return taskContext('Activity', tab.taskKey, tasks);
     case 'epic':

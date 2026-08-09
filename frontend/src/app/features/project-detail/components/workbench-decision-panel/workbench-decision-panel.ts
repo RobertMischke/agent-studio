@@ -57,6 +57,7 @@ export class WorkbenchDecisionPanelComponent {
   readonly document = input.required<WorkbenchDocument>();
   readonly decisionPoints = input<readonly WorkbenchDecisionPoint[]>([]);
   readonly responses = input<readonly WorkbenchDecisionResponse[]>([]);
+  readonly showWikiAction = input(true);
   readonly decisionChanged = output<void>();
   readonly openWiki = output<void>();
 

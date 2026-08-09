@@ -61,7 +61,7 @@ import {
   ProjectOverlaysService,
   ProjectRailKey,
   ProjectUrlPreviewTabComponent,
-  WorkbenchViewerComponent,
+  WorkbenchTabHostComponent,
 } from './features/project-detail';
 import {
   AutoReviewIndicatorComponent,
@@ -198,7 +198,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     PendingButtonDirective,
     CostBreakdownDialogComponent,
     ProjectUrlPreviewTabComponent,
-    WorkbenchViewerComponent,
+    WorkbenchTabHostComponent,
     StudioIconComponent,
     AuthGateComponent,
     ExecutionLocationBadgeComponent,
@@ -996,6 +996,8 @@ export class App implements OnInit, OnDestroy {
         case 'feed':
           project = null;
           break;
+        case 'workbenches':
+        case 'workbench':
         case 'hub':
           project = tab.projectName;
           break;
@@ -2129,6 +2131,15 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  onWorkbenchOverviewOpen(event: { projectName: string; workbench: { id: string; title: string } }): void {
+    this.studioTabState.open({
+      kind: 'workbench',
+      projectName: event.projectName,
+      workbenchId: event.workbench.id,
+      title: event.workbench.title,
+    });
+  }
+
   private pickOrchFeedProject(): string | null {
     const detail = this.selectedJob();
     if (detail?.info?.projectName) return detail.info.projectName;
@@ -2200,6 +2211,9 @@ export class App implements OnInit, OnDestroy {
         break;
       case 'workbench':
         this.studioTabState.open({ kind: 'workbench', projectName: projectName!, workbenchId: route.workbenchId });
+        break;
+      case 'workbenches':
+        this.studioTabState.open({ kind: 'workbenches', projectName });
         break;
       case 'task':
         this.routeDetailTab.set(route.tab);

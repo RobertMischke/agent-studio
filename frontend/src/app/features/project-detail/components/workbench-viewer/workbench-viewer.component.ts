@@ -12,6 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import {
   WorkbenchDecisionResponse,
   WorkbenchDocument,
@@ -50,8 +51,10 @@ import {
 export class WorkbenchViewerComponent {
   readonly projectName = input.required<string>();
   readonly workbenchId = input.required<string>();
+  readonly showWikiAction = input(true);
   readonly openWiki = output<string>();
   private readonly docs = inject(ProjectDocsService);
+  private readonly hub = inject(JobsHubClient);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
 
   readonly document = signal<WorkbenchDocument | null>(null);
@@ -79,6 +82,15 @@ export class WorkbenchViewerComponent {
       const id = this.workbenchId();
       this.maximized.set(false);
       this.loadDocument(project, id);
+    });
+    effect(() => {
+      const event = this.hub.workbenchEvent();
+      if (!event) return;
+      const project = this.projectName();
+      const id = this.workbenchId();
+      if (event.projectName && event.projectName !== project) return;
+      if (event.workbenchId && event.workbenchId !== id) return;
+      this.loadDocument(project, id, false);
     });
   }
 

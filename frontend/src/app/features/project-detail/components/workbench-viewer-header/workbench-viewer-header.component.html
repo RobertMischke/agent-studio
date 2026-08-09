@@ -117,15 +117,17 @@
         </div>
       </dl>
 
-      <button
-        type="button"
-        class="viewer-details__wiki-link"
-        data-testid="workbench-viewer-open-wiki"
-        (click)="openWiki.emit()"
-      >
-        <app-studio-icon name="book" [size]="13" />
-        <span>Open in Wiki</span>
-      </button>
+      @if (showWikiAction()) {
+        <button
+          type="button"
+          class="viewer-details__wiki-link"
+          data-testid="workbench-viewer-open-wiki"
+          (click)="openWiki.emit()"
+        >
+          <app-studio-icon name="book" [size]="13" />
+          <span>Open in Wiki</span>
+        </button>
+      }
 
       @if (taskStatuses().length > 0) {
         <div class="viewer-details__tasks">
@@ -143,6 +145,7 @@
         [document]="document()"
         [decisionPoints]="decisionPoints()"
         [responses]="responses()"
+        [showWikiAction]="showWikiAction()"
         (openWiki)="openWiki.emit()"
         (decisionChanged)="decisionChanged.emit()"
       />

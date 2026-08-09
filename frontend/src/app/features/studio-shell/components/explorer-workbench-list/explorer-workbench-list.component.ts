@@ -14,6 +14,7 @@ import {
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
 
 const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expanded.v1';
@@ -29,10 +30,13 @@ const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expande
 export class ExplorerWorkbenchListComponent {
   readonly projectName = input.required<string>();
   readonly activeWorkbenchId = input<string | null>(null);
+  readonly overviewActive = input(false);
   readonly openWorkbench = output<WorkbenchListItem>();
+  readonly openOverview = output<void>();
   /** Jump to the project wiki (the workbench pages live there). */
   readonly openWiki = output<void>();
   private readonly docs = inject(ProjectDocsService);
+  private readonly hub = inject(JobsHubClient);
   readonly expanded = signal(false);
   readonly loading = signal(false);
   readonly catalogue = signal<WorkbenchCatalogue | null>(null);
@@ -58,7 +62,7 @@ export class ExplorerWorkbenchListComponent {
           this.historyCatalogue.set(null);
           this.historyOpen.set(false);
           this.expanded.set(readExpandedProjects().has(projectName));
-          if (this.expanded()) this.loadCatalogue();
+          this.loadCatalogue();
         });
       }
 
@@ -78,6 +82,12 @@ export class ExplorerWorkbenchListComponent {
     });
 
     effect(() => {
+      const event = this.hub.workbenchEvent();
+      if (!event || event.projectName && event.projectName !== this.projectName()) return;
+      untracked(() => this.refreshCatalogues());
+    });
+
+    effect(() => {
       const activeWorkbenchId = this.activeWorkbenchId();
       const activeTopic = this.topics()
         .map(topic => topic.nativeElement)
@@ -90,6 +100,12 @@ export class ExplorerWorkbenchListComponent {
   toggle(): void {
     this.setExpanded(!this.expanded());
     if (this.expanded()) this.loadCatalogue();
+  }
+
+  openOverviewPage(): void {
+    if (!this.expanded()) this.setExpanded(true);
+    this.loadCatalogue();
+    this.openOverview.emit();
   }
 
   private setExpanded(expanded: boolean): void {
@@ -128,6 +144,19 @@ export class ExplorerWorkbenchListComponent {
     });
   }
 
+  private refreshCatalogues(): void {
+    const projectName = this.projectName();
+    this.docs.getWorkbenches(projectName).subscribe({
+      next: value => this.catalogue.set(value),
+      error: () => undefined,
+    });
+    if (!this.historyOpen()) return;
+    this.docs.getWorkbenches(projectName, true).subscribe({
+      next: value => this.historyCatalogue.set(value),
+      error: () => undefined,
+    });
+  }
+
   isActive(item: WorkbenchListItem): boolean {
     return item.id === this.activeWorkbenchId();
   }
@@ -141,6 +170,10 @@ export class ExplorerWorkbenchListComponent {
     if (item.status === 'decision-pending') return 'Decision pending';
     if (item.status === 'active') return item.phase ?? 'Active';
     return item.status;
+  }
+
+  openCount(item: WorkbenchListItem): number {
+    return item.openDecisionCount ?? (item.status === 'decision-pending' ? 1 : 0);
   }
 
   accessibleMeta(item: WorkbenchListItem): string {

@@ -30,7 +30,7 @@ export { ProjectPipelinePanelComponent } from './components/project-pipeline-pan
 export { ProjectTestRunsPanelComponent } from './components/project-test-runs-panel/project-test-runs-panel';
 export { ProjectUrlsPanelComponent } from './components/project-urls-panel/project-urls-panel.component';
 export { ProjectUrlPreviewTabComponent } from './components/project-url-preview-tab/project-url-preview-tab.component';
-export { WorkbenchViewerComponent } from './components/workbench-viewer/workbench-viewer.component';
+export { WorkbenchTabHostComponent } from './components/workbench-tab-host/workbench-tab-host.component';
 export { WorkbenchDecisionPanelComponent } from './components/workbench-decision-panel/workbench-decision-panel';
 export { WorkbenchDecisionStore } from './state/workbench-decision.store';
 export { PageActionBarComponent } from './components/page-action-bar/page-action-bar';

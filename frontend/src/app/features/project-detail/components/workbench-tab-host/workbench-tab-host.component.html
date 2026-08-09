@@ -1,0 +1,22 @@
+@defer (when mode() === 'overview') {
+  @if (mode() === 'overview') {
+    <app-workbench-overview
+      [projectName]="projectName()"
+      (openWorkbench)="openWorkbench.emit($event)" />
+  }
+} @placeholder {
+  <app-loading-surface kind="list" label="Loading overview…" />
+}
+
+@defer (when mode() === 'viewer') {
+  @if (mode() === 'viewer' && projectName(); as project) {
+    @if (workbenchId(); as id) {
+      <app-workbench-viewer
+        [projectName]="project"
+        [workbenchId]="id"
+        (openWiki)="openWiki.emit($event)" />
+    }
+  }
+} @placeholder {
+  <app-loading-surface kind="list" label="Loading document…" />
+}

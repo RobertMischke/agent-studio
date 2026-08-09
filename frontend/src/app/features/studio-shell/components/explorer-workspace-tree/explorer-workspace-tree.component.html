@@ -201,8 +201,9 @@
                 <app-explorer-workbench-list
                   [projectName]="p.name"
                   [activeWorkbenchId]="activeWorkbenchIdFor(p.name)"
+                  [overviewActive]="p.isActive && activeProjectSurface() === 'workbenches'"
                   (openWorkbench)="openWorkbenchRequest.emit({ projectName: p.name, workbench: $event })"
-                  (openWiki)="openWikiRequest.emit(p.name)" />
+                  (openOverview)="openWorkbenchesRequest.emit(p.name)" (openWiki)="openWikiRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"

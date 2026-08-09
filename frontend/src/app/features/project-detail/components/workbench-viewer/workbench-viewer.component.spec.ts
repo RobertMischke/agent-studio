@@ -9,6 +9,7 @@ import {
   ISOLATED_HTML_LINK_MESSAGE,
   WORKBENCH_DECISION_CHANGE_MESSAGE,
 } from '../../../../services/sandboxed-html.util';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { TaskService } from '../../../../services/task.service';
 import { WorkbenchViewerComponent } from './workbench-viewer.component';
 
@@ -175,6 +176,31 @@ describe('WorkbenchViewerComponent', () => {
     expect(maximize.getAttribute('aria-label')).toBe('Restore');
     fixture.componentInstance.exitMaximized();
     expect(fixture.componentInstance.maximized()).toBe(false);
+
+    TestBed.inject(JobsHubClient).workbenchEvent.set({
+      type: 'updated',
+      projectName: 'Demo',
+      workbenchId: 'boundary',
+      workbench: null,
+      previousStatus: 'active',
+      occurredAtUtc: new Date().toISOString(),
+    });
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/workbenches/boundary').flush({
+      ...DOCUMENT,
+      workbench: { ...DOCUMENT.workbench, summary: 'Updated through the live viewer path.' },
+    });
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/workbenches/DEM-W4/references').flush({
+      projectName: 'Demo',
+      workbenchKey: 'DEM-W4',
+      workbenchId: 'boundary',
+      legacyTaskKeys: [],
+      items: [],
+    });
+    expect(fixture.componentInstance.document()?.workbench.summary).toBe(
+      'Updated through the live viewer path.',
+    );
     http.verify();
   });
 });

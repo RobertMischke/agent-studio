@@ -1,4 +1,6 @@
 
+using AgentStudio.Security;
+
 namespace AgentStudio.Docs;
 
 /// <summary>
@@ -88,6 +90,31 @@ public static class ProjectDocsEndpoints
             return catalogue == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
                 : Results.Ok(catalogue);
+        });
+
+        // Shared workspace-wide/project-scoped queue. Project filtering is a
+        // query because both UI variants intentionally consume the identical
+        // projection and ordering policy. Scoped network users only receive
+        // projects assigned to their account.
+        app.MapGet("/api/workbenches", (string? project, HttpContext context,
+            WorkbenchCatalogueService workbenches,
+            AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            var requested = string.IsNullOrWhiteSpace(project)
+                ? null
+                : projects.FindByIdOrDisplayName(project)?.DisplayName
+                    ?? projects.FindByShortCode(project)?.DisplayName
+                    ?? project;
+            var names = requested == null
+                ? workbenches.ListProjectNames()
+                : [requested];
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+            {
+                names = names
+                    .Where(name => ProjectAccessAuthorization.Allows(human.User, name, projects))
+                    .ToList();
+            }
+            return Results.Ok(workbenches.ListOverview(names, requested));
         });
 
         app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, WorkbenchCatalogueService workbenches) =>
