@@ -78,6 +78,50 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(fixture.componentInstance.tooltip()).toContain('Conflicted: a.txt');
   });
 
+  it('renders a classified task-key failure on the card and hides the unrelated rebase action', () => {
+    const fixture = TestBed.createComponent(IntegrationStatusBadgeComponent);
+    fixture.componentRef.setInput('integration', integration('conflict-skipped', {
+      detail: 'The task key could not be resolved while validating the reviewed delivery.',
+      failure: {
+        code: 'review-subject-task-key-unavailable',
+        label: 'Task key unavailable',
+        reason: 'The task key could not be resolved while validating the reviewed delivery.',
+        rebaseRecoveryAvailable: false,
+      },
+    }));
+    fixture.componentRef.setInput('jobId', 'task-1');
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector(
+      '[data-testid="integration-status-badge"]',
+    ) as HTMLElement;
+    expect(badge.textContent).toContain('Task key unavailable');
+    expect(badge.dataset['integrationFailureCode']).toBe('review-subject-task-key-unavailable');
+    expect(fixture.componentInstance.tooltip()).toContain('task key could not be resolved');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="task-card-integration-recovery"]',
+    )).toBeNull();
+  });
+
+  it('offers rebase recovery for the classified source-needs-rebase state', () => {
+    const fixture = TestBed.createComponent(IntegrationStatusBadgeComponent);
+    fixture.componentRef.setInput('integration', integration('conflict-skipped', {
+      failure: {
+        code: 'source-needs-rebase',
+        label: 'Rebase required',
+        reason: 'The reviewed delivery is behind the integration branch.',
+        rebaseRecoveryAvailable: true,
+      },
+    }));
+    fixture.componentRef.setInput('jobId', 'task-1');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Rebase required');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="task-card-integration-recovery"]',
+    )).toBeTruthy();
+  });
+
   it('queues a focused rebase steer round from a conflict card', () => {
     const tasks = TestBed.inject(TaskService);
     const refresh = vi.spyOn(tasks, 'refresh').mockImplementation(() => undefined);

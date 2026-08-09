@@ -2,6 +2,7 @@
   <span class="integration-badge"
         [class.integration-badge--acute]="acute()"
         [attr.data-integration-status]="value.status"
+        [attr.data-integration-failure-code]="value.failure?.code ?? null"
         [attr.data-kind]="kind()"
         data-testid="integration-status-badge"
         role="img"
@@ -10,7 +11,7 @@
     <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
     <span class="integration-badge__label">{{ label() }}</span>
   </span>
-  @if (value.status === 'conflict-skipped' && jobId()) {
+  @if (recoveryAvailable() && jobId()) {
     <button type="button"
             class="integration-recovery"
             data-testid="task-card-integration-recovery"

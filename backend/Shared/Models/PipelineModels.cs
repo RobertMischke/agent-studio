@@ -253,6 +253,12 @@ public sealed record PipelineStepExecution
     /// <summary>Short reason on failure / skip; null on success.</summary>
     public string? Reason { get; init; }
     /// <summary>
+    /// Stable machine-readable classification for a failed step. The reason
+    /// remains human evidence; consumers use this code for card state and
+    /// recovery eligibility without parsing prose.
+    /// </summary>
+    public string? FailureCode { get; init; }
+    /// <summary>
     /// Optional verdict token from the step (e.g. <c>pass</c>,
     /// <c>concerns</c>, <c>block</c> for aspect steps). Lets the UI
     /// render the right pill without re-reading the aspect MD.

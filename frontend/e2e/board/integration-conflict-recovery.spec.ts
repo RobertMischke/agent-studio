@@ -40,6 +40,12 @@ function task(queued: boolean) {
       sha: null,
       integrationBranch: 'develop',
       detail: 'Conflicted: shared.txt. Start the integration recovery action to run a steer round.',
+      failure: {
+        code: 'merge-conflict',
+        label: 'Merge conflict',
+        reason: 'Conflicted: shared.txt. Rebase the delivery onto the current integration branch.',
+        rebaseRecoveryAvailable: true,
+      },
     },
   };
 }
@@ -145,15 +151,17 @@ test('conflict card queues the focused rebase steer round', async ({ page }, tes
     hasText: 'Accepted delivery with merge conflict',
   });
   await expect(card).toBeVisible();
-  await expect(card.getByTestId('integration-status-badge')).toContainText('Konflikt');
+  await expect(card.getByTestId('integration-status-badge')).toContainText('Merge conflict');
+  await expect(card.getByTestId('integration-status-badge'))
+    .toHaveAttribute('data-integration-failure-code', 'merge-conflict');
   const action = card.getByTestId('task-card-integration-recovery');
   await expect(action).toHaveAccessibleName(/queue a steer round/i);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    const path = testInfo.outputPath(`integration-conflict-recovery--${theme}.png`);
+    const path = testInfo.outputPath(`integration-conflict-recovery--${theme}--mocked.png`);
     await card.screenshot({ path });
-    await testInfo.attach(`integration-conflict-recovery--${theme}.png`, {
+    await testInfo.attach(`integration-conflict-recovery--${theme}--mocked.png`, {
       path,
       contentType: 'image/png',
     });

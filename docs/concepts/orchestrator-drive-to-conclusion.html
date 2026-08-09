@@ -1817,6 +1817,32 @@
             Ready work coexists with fresh free Runner capacity.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-09</td>
+          <td><code>AGT-2532 / TE-38</code><br><span class="small">repository-embedded task key disappeared during accepted-integration recovery</span></td>
+          <td>
+            Token Economy task TE-38 remained in Human Review with a generic
+            <code>conflict-skipped</code> projection. Its latest recovery attempt said that the accepted task had no
+            stable key even though <code>.orchestrator/jobs/tasks/000/TE-38/task.json</code> contained
+            <code>key: TE-38</code>. TE-32 and TE-37 completed in the same storage.
+          </td>
+          <td>
+            Review-subject validation re-read <code>task.json</code> directly and collapsed an absent, locked, or
+            malformed read to a missing identity. The persisted key and a later successful re-accept rule out a durable
+            field-name or path mismatch. The caught read exception was not retained at the configured log level, so the
+            evidence bounds the cause to transient file availability without claiming a specific Windows exception.
+            Flat task storage already makes the bucketed folder name authoritative. TE-32 and TE-37 took the
+            already-integrated recovery shortcut; TE-38 first reached the distinct source-needs-rebase decision, then
+            the second recovery path exposed the fragile direct read. The pipeline collapsed both causes into one
+            generic integration status.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> validation resolves a bucket-checked flat-storage key before the
+            JSON fallback, and legacy JSON key fields are case-insensitive. Accepted-integration failures now persist a
+            stable class and project a concise card label plus correct recovery eligibility. Regression coverage includes
+            repository-embedded flat storage, the failure matrix, the card projection, and source-needs-rebase recovery.
+          </td>
+        </tr>
       </tbody>
     </table>
 

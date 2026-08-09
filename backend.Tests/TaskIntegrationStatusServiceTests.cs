@@ -13,9 +13,10 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// AGT-2202: the honest, git-derived integration verdict for an accepted card must
 /// resolve the "Accept != Merge" blind spot from target-branch commit membership,
-/// not remembered merge attempts. The verdict's anchor is the
-/// attributed <c>commits[]</c> the card widget shows, so badge and widget can never
-/// contradict (AGT-2171). Every test drives real git against a throwaway repo so
+/// not remembered merge attempts. The current immutable review result selects
+/// the authoritative delivery generation; without one, the verdict's anchor is
+/// the attributed <c>commits[]</c> the card widget shows. Every test drives real
+/// git against a throwaway repo so
 /// every <see cref="IntegrationStatuses"/> class is exercised end to end:
 ///   - remembered curated/provenance attempts cannot override missing commits,
 ///   - integrated via attributed-commit ancestry after an out-of-band merge,
@@ -117,6 +118,53 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Equal(IntegrationStatuses.Integrated, status.Status);
         Assert.Equal(anchor[..7], status.Sha);
         Assert.Equal("anchor-ancestor", status.Detail);
+    }
+
+    [Fact]
+    public void BuildLookup_RebasedReviewedResultSupersedesHistoricalAttemptSha()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/original-delivery");
+        File.WriteAllText(Path.Combine(repo, "rebased.txt"), "reviewed work");
+        Commit(repo, "feat: reviewed work");
+        var historicalSha = RunGit(repo, "rev-parse task/original-delivery").Out.Trim();
+
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "main-advance.txt"), "main advanced");
+        Commit(repo, "chore: advance integration branch");
+        RunGit(repo, $"cherry-pick {historicalSha}");
+        var rebasedSha = RunGit(repo, "rev-parse develop").Out.Trim();
+        Assert.NotEqual(historicalSha, rebasedSha);
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job(
+            "rebased-delivery",
+            "TE-38",
+            project,
+            repo,
+            log,
+            commits:
+            [
+                Commit(historicalSha) with { RunAttemptId = "run-original" },
+                Commit(rebasedSha) with { RunAttemptId = "run-recovery" },
+            ]);
+        ReviewSubjectStore.Write(job.FolderPath, new ReviewSubjectRecord
+        {
+            TaskKey = "TE-38",
+            RunAttemptId = "run-recovery",
+            Project = project,
+            Repository = repo,
+            ResultSha = rebasedSha,
+            AttemptChainId = "chain-recovery",
+            ResultRef = "refs/heads/agent-studio/results/recovery",
+        });
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(rebasedSha[..7], status.Sha);
+        Assert.Equal("reviewed-result-ancestor", status.Detail);
     }
 
     [Fact]
@@ -471,6 +519,60 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         Assert.Equal(IntegrationStatuses.ConflictSkipped, status.Status);
         Assert.Contains("conflict.txt", status.Detail);
+        Assert.Equal(AcceptedIntegrationFailureCodes.MergeConflict, status.Failure?.Code);
+        Assert.True(status.Failure?.RebaseRecoveryAvailable);
+    }
+
+    [Theory]
+    [InlineData(
+        "Release source 'origin/result' must be rebased onto 'main' before the full-suite gate.",
+        AcceptedIntegrationFailureCodes.SourceNeedsRebase,
+        "Rebase required",
+        true)]
+    [InlineData(
+        "The accepted task has no stable key for review-subject validation.",
+        AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,
+        "Task key unavailable",
+        false)]
+    public void BuildLookup_RecordedIntegrationError_ProjectsTypedCardFailure(
+        string pipelineReason,
+        string expectedCode,
+        string expectedLabel,
+        bool recoveryAvailable)
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/typed-failure");
+        File.WriteAllText(Path.Combine(repo, "typed-failure.txt"), "wip");
+        Commit(repo, "feat: typed integration failure");
+        var anchor = RunGit(repo, "rev-parse task/typed-failure").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job(
+            "typed-failure-" + expectedCode,
+            "AGT-2532",
+            project,
+            repo,
+            log,
+            commits: [Commit(anchor)],
+            prov: Prov(branch: "task/typed-failure"));
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "error",
+            Reason = pipelineReason,
+        });
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.ConflictSkipped, status.Status);
+        Assert.Equal(expectedCode, status.Failure?.Code);
+        Assert.Equal(expectedLabel, status.Failure?.Label);
+        Assert.Equal(recoveryAvailable, status.Failure?.RebaseRecoveryAvailable);
+        Assert.DoesNotContain("review-subject", status.Detail ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
