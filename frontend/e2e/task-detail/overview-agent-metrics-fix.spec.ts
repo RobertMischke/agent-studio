@@ -301,7 +301,30 @@ function multiRunTimeline() {
   };
 }
 
-async function installRoutes(page: Page, state: string): Promise<void> {
+function legacyMissingCloseoutTimeline() {
+  return {
+    runCount: 1,
+    firstStartedAt: '2026-08-08T16:08:43Z',
+    lastActivityAt: '2026-08-08T16:08:43Z',
+    hasActiveRun: false,
+    runs: [
+      {
+        ...runRecord(1, 'start', '2026-08-08T16:08:43Z', 0, { status: 'unknown' }),
+        endedAt: null,
+        result: null,
+        closeoutSource: 'legacy-missing',
+        durationSeconds: null,
+      },
+    ],
+  };
+}
+
+async function installRoutes(
+  page: Page,
+  state: string,
+  timeline: ReturnType<typeof multiRunTimeline> | ReturnType<typeof legacyMissingCloseoutTimeline>
+    = multiRunTimeline(),
+): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
 
@@ -418,7 +441,7 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(multiRunTimeline()),
+      body: JSON.stringify(timeline),
     }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/agent-work-summary(\\?|$)`), (route) =>
@@ -555,9 +578,36 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
 
     if (RESULTS_DIR) {
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'overview-agent-metrics-fix.png'),
+        path: path.join(RESULTS_DIR, 'overview-agent-metrics-fix--mocked.png'),
         fullPage: true,
       });
+    }
+  });
+
+  test('legacy run without terminal evidence is labelled honestly', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await installRoutes(page, '5-human-review', legacyMissingCloseoutTimeline());
+    await openDetail(page);
+
+    const runs = page.getByTestId('overview-runs');
+    await expect(runs.getByTestId('overview-runs-duration')).toHaveText('2m 5s total');
+    const row = runs.getByTestId('overview-run-row');
+    await expect(row.getByTestId('overview-run-result')).toContainText(
+      'Not recorded (legacy run)',
+    );
+    await expect(row.getByTestId('overview-run-duration')).toHaveText(
+      'Not recorded (legacy run)',
+    );
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+
+      if (RESULTS_DIR) {
+        await runs.screenshot({
+          path: path.join(RESULTS_DIR, `runs-panel-legacy-closeout-${theme}--mocked.png`),
+        });
+      }
     }
   });
 });

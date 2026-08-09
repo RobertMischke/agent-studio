@@ -82,10 +82,19 @@ state.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
   mapping.
 - `backend/Features/Runner/RunTimeline.cs`: additive projection from durable
-  `session-events.jsonl` rows and CLI output into the per-task Runs API.
+  `session-events.jsonl` rows, Attempt Authority, the unified timeline, and CLI
+  output into `GET /api/tasks/{id}/runs`. New local finishes and accepted
+  remote settlements close the matching session row with result, finish time,
+  exit code, and duration. This is a display receipt only: the remote
+  RunAttempt and its completion-envelope policy remain the terminal authority.
+  Legacy rows prefer a terminal RunAttempt, then `agent_run_finished`, then the
+  last bounded CLI activity. A terminal legacy row with no usable evidence is
+  explicitly marked `legacy-missing` instead of being presented as an
+  unexplained active or unknown run.
   Confirmed local process starts and remote claims persist the resolved model
-  and thinking level on the session event, and every new `RunRecord` carries
-  those values independently of optional CLI init frames or token summaries.
+  and thinking level on the session event; remote claims also persist their
+  fenced Attempt id. Every new `RunRecord` carries those values independently
+  of optional CLI init frames or token summaries.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
 - `backend/Features/Tasks/CliOutputLogFile.cs` and

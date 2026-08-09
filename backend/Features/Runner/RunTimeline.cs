@@ -26,8 +26,12 @@ public sealed record RunRecord
     public string Intent { get; init; } = "";
     public DateTime StartedAt { get; init; }
     public DateTime? EndedAt { get; init; }
-    /// <summary><c>running</c> | <c>completed</c> | <c>failed</c> | <c>cancelled</c> | <c>unknown</c>.</summary>
+    /// <summary><c>running</c>, <c>completed</c>, or a typed terminal result status such as <c>failed</c>, <c>blocked</c>, or <c>superseded</c>.</summary>
     public string Status { get; init; } = "unknown";
+    /// <summary>Canonical terminal outcome, for example done, failed, noop, or superseded.</summary>
+    public string? Result { get; init; }
+    /// <summary>Evidence used to close the row. See <see cref="RunCloseoutSources"/>.</summary>
+    public string? CloseoutSource { get; init; }
     public string? Cli { get; init; }
     /// <summary>Effective model resolved by the runner before this CLI process started.</summary>
     public string? Model { get; init; }
@@ -527,9 +531,54 @@ public static class PromptTokenEstimator
     }
 }
 
+/// <summary>Read-time terminal evidence available to the pure run projection.</summary>
+public sealed record RunTimelineFallbackContext(
+    IReadOnlyList<RunAttemptDto> RunAttempts,
+    IReadOnlyList<TimelineEvent> Ledger,
+    bool TaskMayHaveActiveRun);
+
+/// <summary>Stable wire values that explain how a projected run was closed.</summary>
+public static class RunCloseoutSources
+{
+    public const string SessionEvent = "session-event";
+    public const string AttemptAuthority = "attempt-authority";
+    public const string Timeline = "timeline";
+    public const string CliExit = "cli-exit";
+    public const string LegacyActivity = "legacy-activity";
+    public const string LegacyMissing = "legacy-missing";
+}
+
+/// <summary>Pure mapping from terminal outcome truth to the Runs-panel status.</summary>
+public static class RunCloseoutPolicy
+{
+    public static string StatusFor(string? result, string? recordedStatus)
+    {
+        var normalizedResult = Normalize(result);
+        var mapped = normalizedResult switch
+        {
+            "done" or "success" or "noop" or "committed-partial" or "completed" => "completed",
+            "failed" or "unverified" or "environmentfailure" => "failed",
+            "superseded" => "superseded",
+            "blocked" => "blocked",
+            "needsinput" or "needs-input" => "needs-input",
+            "cancelled" or "canceled" => "cancelled",
+            "interrupted" => "interrupted",
+            _ => null
+        };
+        if (mapped is not null) return mapped;
+
+        var normalizedStatus = Normalize(recordedStatus);
+        return string.IsNullOrWhiteSpace(normalizedStatus) ? "unknown" : normalizedStatus;
+    }
+
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+}
+
 /// <summary>
-/// Pure builder. Takes the raw session-events list + cli-output.log
-/// lines, returns a fully-populated <see cref="RunTimeline"/>. No I/O,
+/// Pure builder. Takes session events, CLI output, and optional terminal
+/// authority/timeline evidence, then returns a fully-populated
+/// <see cref="RunTimeline"/>. No I/O,
 /// no DI, no dates relative to "now" - the caller passes
 /// <paramref name="nowUtc"/> so the still-running tail's
 /// <c>EndedAt</c> stays deterministic in tests.
@@ -555,15 +604,18 @@ public static class RunTimelineBuilder
     /// <summary>
     /// Build the timeline. <paramref name="lines"/> is the parsed
     /// <c>cli-output.log</c>; <paramref name="events"/> is the parsed
-    /// <c>session-events.jsonl</c>. Both can be empty.
+    /// <c>session-events.jsonl</c>; <paramref name="fallback"/> supplies
+    /// terminal evidence for legacy rows. Every input can be empty.
     /// </summary>
     public static RunTimeline Build(
         IReadOnlyList<SessionEvent> events,
         IReadOnlyList<CliOutputLine> lines,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        RunTimelineFallbackContext? fallback = null)
     {
         events ??= [];
         lines ??= [];
+        fallback ??= new RunTimelineFallbackContext([], [], TaskMayHaveActiveRun: true);
 
         // Pre-index the log by [taskboard] marker so we can pair each
         // SessionEvent with the run boundary that came from the runner.
@@ -623,8 +675,17 @@ public static class RunTimelineBuilder
             // has the full text if the user wants to see it.
             var followup = FindLastUserBefore(lines, startedMarker?.LineIndex ?? FindLineNearTimestamp(lines, evt.Ts));
 
-            var status = exitMarker?.Status ?? (startedMarker.HasValue ? "running" : "unknown");
-            var endedAt = exitMarker?.Ts;
+            var closeout = ResolveCloseout(evt, upperBound, exitMarker, lines, fallback);
+            var isLatestRun = idx == events.Count - 1;
+            var hasLeasedAttempt = fallback.RunAttempts.Any(attempt =>
+                AttemptMatches(evt, upperBound, attempt)
+                && attempt.State == AttemptLifecycleState.Leased);
+            var status = closeout?.Status
+                         ?? ((isLatestRun && fallback.TaskMayHaveActiveRun
+                              && (startedMarker.HasValue || hasLeasedAttempt || IsRemote(evt)))
+                             ? "running"
+                             : "unknown");
+            var endedAt = closeout?.FinishedAt;
             var lineStart = startedMarker?.LineIndex is int li ? li + 1 : (int?)null;
             int? lineEnd;
             if (exitMarker.HasValue)
@@ -652,12 +713,15 @@ public static class RunTimelineBuilder
                 StartedAt = evt.Ts,
                 EndedAt = endedAt,
                 Status = status,
+                Result = closeout?.Result,
+                CloseoutSource = closeout?.Source
+                                 ?? (status == "running" ? null : RunCloseoutSources.LegacyMissing),
                 Cli = evt.Cli ?? startedMarker?.Cli,
                 Model = evt.Model,
                 ThinkingLevel = evt.ThinkingLevel,
                 ExecutionLocation = evt.ExecutionLocation is null ? null : evt.ExecutionLocation with { Historical = true },
-                ExitCode = exitMarker?.ExitCode,
-                DurationSeconds = exitMarker?.Duration,
+                ExitCode = closeout?.ExitCode,
+                DurationSeconds = closeout?.DurationSeconds,
                 InputSessionId = evt.InputSessionId,
                 CapturedSessionId = evt.CapturedSessionId,
                 Resumed = evt.Resumed,
@@ -685,6 +749,163 @@ public static class RunTimelineBuilder
             Runs = runs
         };
     }
+
+    private static ProjectedRunCloseout? ResolveCloseout(
+        SessionEvent evt,
+        DateTime upperBound,
+        (int LineIndex, DateTime Ts, string Cli, string Status, int? ExitCode, double? Duration)? exitMarker,
+        IReadOnlyList<CliOutputLine> lines,
+        RunTimelineFallbackContext fallback)
+    {
+        if (evt.FinishedAt is not null || evt.DurationSeconds is not null)
+        {
+            var finishedAt = evt.FinishedAt
+                             ?? (evt.DurationSeconds is double duration
+                                 ? evt.Ts.AddSeconds(Math.Max(0, duration))
+                                 : evt.Ts);
+            return NewCloseout(
+                evt.Ts,
+                finishedAt,
+                evt.Result,
+                evt.Status,
+                evt.ExitCode,
+                evt.DurationSeconds,
+                RunCloseoutSources.SessionEvent);
+        }
+
+        var attempt = fallback.RunAttempts
+            .Where(candidate => AttemptMatches(evt, upperBound, candidate))
+            .Where(candidate => candidate.TerminalAt is not null)
+            .OrderBy(candidate => Math.Abs((candidate.CreatedAt - evt.Ts).TotalSeconds))
+            .FirstOrDefault();
+        if (attempt?.TerminalAt is DateTime authorityFinish)
+        {
+            var authorityResult = attempt.TerminalOutcome ?? attempt.State.ToString().ToLowerInvariant();
+            return NewCloseout(
+                evt.Ts,
+                authorityFinish,
+                authorityResult,
+                recordedStatus: null,
+                exitCode: null,
+                durationSeconds: null,
+                RunCloseoutSources.AttemptAuthority);
+        }
+
+        var terminalEvent = fallback.Ledger
+            .Where(candidate => string.Equals(
+                candidate.Kind,
+                TimelineEventKinds.AgentRunFinished,
+                StringComparison.Ordinal))
+            .Where(candidate => candidate.Ts >= evt.Ts && candidate.Ts < upperBound)
+            .Where(candidate => TimelineMatches(evt, candidate))
+            .OrderBy(candidate => candidate.Ts)
+            .FirstOrDefault();
+        if (terminalEvent is not null)
+        {
+            var result = Detail(terminalEvent, "status") ?? Detail(terminalEvent, "outcome");
+            var exitCode = int.TryParse(Detail(terminalEvent, "exitCode"), out var parsedCode)
+                ? parsedCode
+                : (int?)null;
+            var duration = double.TryParse(
+                Detail(terminalEvent, "durationSeconds"),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsedDuration)
+                ? parsedDuration
+                : (double?)null;
+            return NewCloseout(
+                evt.Ts,
+                terminalEvent.Ts,
+                result,
+                recordedStatus: result,
+                exitCode,
+                duration,
+                RunCloseoutSources.Timeline);
+        }
+
+        if (exitMarker is { } marker)
+        {
+            return NewCloseout(
+                evt.Ts,
+                marker.Ts,
+                result: null,
+                marker.Status,
+                marker.ExitCode,
+                marker.Duration,
+                RunCloseoutSources.CliExit);
+        }
+
+        if (!fallback.TaskMayHaveActiveRun)
+        {
+            var lastActivity = lines
+                .Where(line => line.Timestamp > evt.Ts && line.Timestamp < upperBound)
+                .Select(line => (DateTime?)line.Timestamp)
+                .LastOrDefault();
+            if (lastActivity is DateTime activityAt)
+            {
+                return NewCloseout(
+                    evt.Ts,
+                    activityAt,
+                    result: null,
+                    recordedStatus: null,
+                    exitCode: null,
+                    durationSeconds: null,
+                    RunCloseoutSources.LegacyActivity);
+            }
+        }
+
+        return null;
+    }
+
+    private static ProjectedRunCloseout NewCloseout(
+        DateTime startedAt,
+        DateTime finishedAt,
+        string? result,
+        string? recordedStatus,
+        int? exitCode,
+        double? durationSeconds,
+        string source)
+    {
+        var duration = durationSeconds ?? Math.Max(0, (finishedAt - startedAt).TotalSeconds);
+        return new ProjectedRunCloseout(
+            finishedAt,
+            RunCloseoutPolicy.StatusFor(result, recordedStatus),
+            string.IsNullOrWhiteSpace(result) ? null : result.Trim().ToLowerInvariant(),
+            exitCode,
+            duration,
+            source);
+    }
+
+    private static bool AttemptMatches(SessionEvent evt, DateTime upperBound, RunAttemptDto attempt)
+    {
+        if (!string.IsNullOrWhiteSpace(evt.RunAttemptId))
+            return string.Equals(evt.RunAttemptId, attempt.AttemptId, StringComparison.OrdinalIgnoreCase);
+        return attempt.CreatedAt >= evt.Ts.AddSeconds(-2) && attempt.CreatedAt < upperBound;
+    }
+
+    private static bool TimelineMatches(SessionEvent evt, TimelineEvent candidate)
+    {
+        if (string.IsNullOrWhiteSpace(evt.RunAttemptId)) return true;
+        return string.Equals(evt.RunAttemptId, candidate.RunId, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(evt.RunAttemptId, Detail(candidate, "runAttemptId"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? Detail(TimelineEvent evt, string key)
+        => evt.Details is not null && evt.Details.TryGetValue(key, out var value)
+            ? value
+            : null;
+
+    private static bool IsRemote(SessionEvent evt)
+        => string.Equals(evt.Cli, "remote-runner", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(evt.ExecutionLocation?.ExecutionKind, "remote", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record ProjectedRunCloseout(
+        DateTime FinishedAt,
+        string Status,
+        string? Result,
+        int? ExitCode,
+        double DurationSeconds,
+        string Source);
 
     private static (int LineIndex, DateTime Ts, string Cli)? FindFirstAfter(
         List<(int LineIndex, DateTime Ts, string Cli)> markers,

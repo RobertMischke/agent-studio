@@ -1798,6 +1798,28 @@
         </tr>
         <tr>
           <td>2026-08-08</td>
+          <td><code>AGT-2515</code><br><span class="small">QS-54 finished remotely but its Runs row stayed unknown</span></td>
+          <td>
+            QS-54 reached Human Review with a passed pipeline and a total duration of 27m 59s, while Run #1 still showed
+            <code>unknown</code> and <code>Not recorded</code>. The timeline already contained a matching
+            <code>agent_run_finished</code> fact with outcome <code>done</code> exactly 27m 59s after the remote claim.
+          </td>
+          <td>
+            The Runs endpoint projected only <code>session-events.jsonl</code> and local CLI start/exit markers. Remote
+            claim wrote the start row but completion never closed it, and the projection ignored both Attempt Authority
+            and the unified timeline. The aggregate independently fell back to the pipeline CORE duration, creating the
+            contradictory header and row.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> accepted remote settlement and local CLI finalization now write one
+            idempotent terminal receipt onto the matching session row. The read projection prefers that receipt, then
+            terminal Attempt Authority and <code>agent_run_finished</code>, with bounded last CLI activity as a legacy
+            duration fallback. Missing terminal evidence is labelled <code>legacy-missing</code>. Envelope validation and
+            Attempt Authority settlement remain unchanged and canonical.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-08</td>
           <td><code>AGT-2521</code><br><span class="small">remote Ready fleet starvation with free host capacity</span></td>
           <td>
             Twenty-one remote-routed cards remained in <span class="lane">2-ready</span> for hours while a healthy daemon

@@ -4,10 +4,27 @@ using System.Text.Json;
 namespace AgentStudio.Tasks;
 
 /// <summary>
+/// Terminal facts copied onto one session-event row. The owning execution
+/// source remains authoritative: Attempt Authority for remote runs and the CLI
+/// execution result for local runs.
+/// </summary>
+public sealed record RunSessionCloseout
+{
+    public string? RunAttemptId { get; init; }
+    public DateTime? StartedAt { get; init; }
+    public DateTime FinishedAt { get; init; }
+    public string? Result { get; init; }
+    public string? Status { get; init; }
+    public int? ExitCode { get; init; }
+    public double? DurationSeconds { get; init; }
+}
+
+/// <summary>
 /// Everything that records "what happened to this job's CLI session":
 /// the persisted <c>sessionName</c> and full <c>sessionChain</c> in
 /// <c>task.json</c>, the JSONL event log under <c>logs/session-events.jsonl</c>
-/// that drives the "session continued / lost" chip, and the related
+/// that drives the run/session history and carries its terminal display
+/// receipt, plus the related
 /// usage snapshot writeback. Reads of the same data live in
 /// <see cref="TaskScannerService"/> alongside the rest of the read
 /// surface; this service owns the writes plus the JSONL append-line
@@ -132,6 +149,36 @@ public class TaskSessionLog
     }
 
     /// <summary>
+    /// Closes the matching durable run row. Remote runs match their fenced
+    /// Attempt Authority id; local runs match their confirmed process start.
+    /// Replaying the same close-out is idempotent.
+    /// </summary>
+    public bool CloseSessionEvent(string jobId, RunSessionCloseout closeout, string? watchPath = null)
+    {
+        return MutateSessionEvent(
+            jobId,
+            watchPath,
+            evt => MatchesCloseout(evt, closeout),
+            evt =>
+            {
+                var duration = closeout.DurationSeconds;
+                if (duration is null && closeout.FinishedAt >= evt.Ts)
+                    duration = (closeout.FinishedAt - evt.Ts).TotalSeconds;
+                if (duration is < 0) duration = 0;
+
+                return evt with
+                {
+                    RunAttemptId = closeout.RunAttemptId ?? evt.RunAttemptId,
+                    FinishedAt = closeout.FinishedAt,
+                    Result = closeout.Result ?? evt.Result,
+                    Status = closeout.Status ?? evt.Status,
+                    ExitCode = closeout.ExitCode ?? evt.ExitCode,
+                    DurationSeconds = duration ?? evt.DurationSeconds
+                };
+            });
+    }
+
+    /// <summary>
     /// Rewrites the last row in <c>session-events.jsonl</c> with the
     /// <paramref name="capturedSessionId"/>. Called from <c>OnCliFinished</c>
     /// after a CLI emits its session UUID. Best-effort: a missing or
@@ -197,6 +244,13 @@ public class TaskSessionLog
     }
 
     private bool MutateLatestSessionEvent(string jobId, string? watchPath, Func<SessionEvent, SessionEvent> mutate)
+        => MutateSessionEvent(jobId, watchPath, _ => true, mutate);
+
+    private bool MutateSessionEvent(
+        string jobId,
+        string? watchPath,
+        Func<SessionEvent, bool> matches,
+        Func<SessionEvent, SessionEvent> mutate)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
@@ -205,12 +259,18 @@ public class TaskSessionLog
         try
         {
             var lines = File.ReadAllLines(path).ToList();
-            var idx = lines.FindLastIndex(l => !string.IsNullOrWhiteSpace(l));
-            if (idx < 0) return false;
-            SessionEvent? evt;
-            try { evt = JsonSerializer.Deserialize<SessionEvent>(lines[idx], TaskJsonFile.ReadOpts); }
-            catch { return false; }
-            if (evt == null) return false;
+            var idx = -1;
+            SessionEvent? evt = null;
+            for (var candidate = lines.Count - 1; candidate >= 0; candidate--)
+            {
+                if (string.IsNullOrWhiteSpace(lines[candidate])) continue;
+                try { evt = JsonSerializer.Deserialize<SessionEvent>(lines[candidate], TaskJsonFile.ReadOpts); }
+                catch { continue; }
+                if (evt is null || !matches(evt)) continue;
+                idx = candidate;
+                break;
+            }
+            if (idx < 0 || evt == null) return false;
             lines[idx] = JsonSerializer.Serialize(mutate(evt), SessionEventJsonOpts);
             File.WriteAllLines(path, lines, Encoding.UTF8);
             return true;
@@ -220,6 +280,22 @@ public class TaskSessionLog
             _logger.LogWarning(ex, "Failed to mutate latest session event for job {JobId}", jobId);
             return false;
         }
+    }
+
+    private static bool MatchesCloseout(SessionEvent evt, RunSessionCloseout closeout)
+    {
+        if (!string.IsNullOrWhiteSpace(closeout.RunAttemptId))
+        {
+            return string.Equals(
+                evt.RunAttemptId,
+                closeout.RunAttemptId,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (closeout.StartedAt is DateTime startedAt)
+            return Math.Abs((evt.Ts - startedAt).TotalSeconds) <= 2;
+
+        return evt.FinishedAt is null;
     }
 
     /// <summary>

@@ -102,6 +102,40 @@ export class OverviewRunsComponent {
   }
 
   private resultLabel(run: RunRecord): string {
+    const result = run.result?.trim().toLowerCase() ?? '';
+    switch (result) {
+      case 'done':
+      case 'success':
+        return 'Done';
+      case 'completed':
+        return 'Completed';
+      case 'noop':
+        return 'No-op';
+      case 'failed':
+      case 'environmentfailure':
+        return 'Failed';
+      case 'unverified':
+        return 'Unverified';
+      case 'superseded':
+        return 'Superseded';
+      case 'blocked':
+        return 'Blocked';
+      case 'needsinput':
+      case 'needs-input':
+        return 'Needs input';
+      case 'stopped':
+      case 'cancelled':
+      case 'canceled':
+        return 'Stopped';
+      case 'interrupted':
+        return 'Interrupted';
+      case 'committed-partial':
+        return 'Partial';
+      case 'unknown':
+        return 'Unknown';
+    }
+    if (this.isLegacyUnrecorded(run)) return 'Not recorded (legacy run)';
+
     switch (run.status.trim().toLowerCase()) {
       case 'completed':
         return 'Completed';
@@ -120,11 +154,21 @@ export class OverviewRunsComponent {
   }
 
   private resultTone(run: RunRecord): RunResultTone {
-    switch (run.status.trim().toLowerCase()) {
+    switch ((run.result?.trim() || run.status.trim()).toLowerCase()) {
+      case 'done':
+      case 'success':
+      case 'noop':
       case 'completed':
         return 'success';
+      case 'environmentfailure':
+      case 'unverified':
       case 'failed':
         return 'danger';
+      case 'superseded':
+      case 'blocked':
+      case 'needsinput':
+      case 'needs-input':
+      case 'committed-partial':
       case 'stopped':
       case 'cancelled':
       case 'interrupted':
@@ -140,7 +184,12 @@ export class OverviewRunsComponent {
     if (run.durationSeconds != null && run.durationSeconds >= 0) {
       return formatDuration(run.durationSeconds);
     }
-    return run.status.trim().toLowerCase() === 'running' ? 'In progress' : 'Not recorded';
+    if (run.status.trim().toLowerCase() === 'running') return 'In progress';
+    return this.isLegacyUnrecorded(run) ? 'Not recorded (legacy run)' : 'Not recorded';
+  }
+
+  private isLegacyUnrecorded(run: RunRecord): boolean {
+    return !run.result?.trim() && run.closeoutSource?.startsWith('legacy-') === true;
   }
 
   private tokenLabel(run: RunRecord): string | null {
