@@ -137,4 +137,76 @@ describe('WorkbenchViewerComponent', () => {
     expect(fixture.componentInstance.maximized()).toBe(false);
     http.verify();
   });
+
+  it('offers the documented transition after every referenced card is terminal', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'boundary');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const ready: WorkbenchDocument = {
+      ...DOCUMENT,
+      workbench: {
+        ...DOCUMENT.workbench,
+        status: 'decided',
+        documentation: {
+          eligible: true,
+          totalCount: 2,
+          terminalCount: 2,
+          openCount: 0,
+          missingCount: 0,
+          references: [
+            { key: 'AGT-1', exists: true, terminal: true, lane: '6-completed' },
+            { key: 'AGT-2', exists: true, terminal: true, lane: '7-archive' },
+          ],
+        },
+      },
+      revision: 'a'.repeat(40),
+      workingTreeModified: false,
+      fingerprint: 'b'.repeat(64),
+    };
+    http.expectOne('/api/projects/Demo/workbenches/boundary').flush(ready);
+    fixture.detectChanges();
+
+    const notice = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-documentation-ready"]') as HTMLElement;
+    expect(notice.textContent).toContain('All referenced cards are terminal');
+    (notice.querySelector('[data-testid="workbench-documentation-confirm"]') as HTMLButtonElement).click();
+
+    const transition = http.expectOne('/api/projects/Demo/workbenches/boundary/document');
+    expect(transition.request.method).toBe('POST');
+    expect(transition.request.body).toEqual({
+      actor: 'Operator',
+      expectedRevision: 'a'.repeat(40),
+      expectedFingerprint: 'b'.repeat(64),
+    });
+    transition.flush({
+      success: true,
+      errorCode: null,
+      error: null,
+      workbenchId: 'boundary',
+      status: 'documented',
+      revision: 'c'.repeat(40),
+      fingerprint: 'd'.repeat(64),
+      idempotent: false,
+    });
+    http.expectOne('/api/projects/Demo/workbenches/boundary').flush({
+      ...ready,
+      workbench: { ...ready.workbench, status: 'documented', documentation: null },
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-documentation-ready"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.decision-panel__stage')?.textContent).toContain('Documented');
+    http.verify();
+  });
 });

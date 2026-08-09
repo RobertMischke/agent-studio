@@ -34,8 +34,9 @@
         {{ historyOpen() ? 'Hide history' : 'History' }}
       </button>
       @if (historyOpen()) {
-        <div class="studio-workbench-history__items">
-          @for (workbench of settledHistory(); track workbench.id) {
+        <div class="studio-workbench-history__items" data-testid="studio-explorer-workbench-documented-history">
+          <span class="studio-workbench-history__label">Documented</span>
+          @for (workbench of documentedHistory(); track workbench.id) {
             <button #workbenchTopic type="button" class="studio-workbench-topic studio-workbench-topic--settled"
                     [class.studio-workbench-topic--active]="isActive(workbench)"
                     [attr.aria-current]="isActive(workbench) ? 'page' : null"
@@ -46,7 +47,21 @@
               <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
               <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
             </button>
-          } @empty { <span class="studio-workbench-topics__state">No settled Workbenches</span> }
+          } @empty { <span class="studio-workbench-topics__state">No documented items</span> }
+        </div>
+        <div class="studio-workbench-history__items" data-testid="studio-explorer-workbench-archived-history">
+          <span class="studio-workbench-history__label">Archived</span>
+          @for (workbench of archivedHistory(); track workbench.id) {
+            <button #workbenchTopic type="button" class="studio-workbench-topic studio-workbench-topic--settled"
+                    [class.studio-workbench-topic--active]="isActive(workbench)"
+                    [attr.aria-current]="isActive(workbench) ? 'page' : null"
+                    [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
+                    [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
+                    (click)="openWorkbench.emit(workbench)">
+              <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+              <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
+            </button>
+          } @empty { <span class="studio-workbench-topics__state">No archived items</span> }
         </div>
       }
     }

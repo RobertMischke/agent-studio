@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { WorkbenchDecisionResponse, WorkbenchDocument } from '../../../../models/project-docs.model';
+import { PendingButtonDirective } from '../../../../components/async-feedback';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
 import {
@@ -27,7 +28,7 @@ import {
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [StudioIconComponent, WorkbenchDecisionPanelComponent],
+  imports: [PendingButtonDirective, StudioIconComponent, WorkbenchDecisionPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -44,6 +45,8 @@ export class WorkbenchViewerComponent {
   readonly error = signal<string | null>(null);
   readonly maximized = signal(false);
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
+  readonly documenting = signal(false);
+  readonly documentationError = signal<string | null>(null);
 
   readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(
     this.document()?.html ?? '', { workbenchDecisions: true }));
@@ -114,6 +117,32 @@ export class WorkbenchViewerComponent {
     this.loadDocument(this.projectName(), this.workbenchId(), false);
   }
 
+  documentationReady(): boolean {
+    const workbench = this.document()?.workbench;
+    return workbench?.status === 'decided' && workbench.documentation?.eligible === true;
+  }
+
+  documentCurrent(): void {
+    const document = this.document();
+    if (!document || !this.documentationReady() || this.documenting()) return;
+    this.documenting.set(true);
+    this.documentationError.set(null);
+    this.docs.documentWorkbench(this.projectName(), document.workbench.id, {
+      actor: 'Operator',
+      expectedRevision: document.revision,
+      expectedFingerprint: document.fingerprint,
+    }).subscribe({
+      next: () => {
+        this.documenting.set(false);
+        this.loadDocument(this.projectName(), this.workbenchId(), false);
+      },
+      error: error => {
+        this.documenting.set(false);
+        this.documentationError.set(error?.error?.error || 'The lifecycle could not be updated.');
+      },
+    });
+  }
+
   onFrameLoaded(): void {
     this.hydrateFrame();
   }
@@ -130,6 +159,7 @@ export class WorkbenchViewerComponent {
   private loadDocument(project: string, id: string, clear = true): void {
     this.loading.set(true);
     this.error.set(null);
+    this.documentationError.set(null);
     if (clear) this.document.set(null);
     this.docs.getWorkbench(project, id).subscribe({
       next: document => {

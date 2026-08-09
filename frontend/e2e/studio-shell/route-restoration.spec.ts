@@ -462,6 +462,68 @@ test.describe('Studio route restoration', () => {
     await expect(page.getByTestId('error-dialog')).toHaveCount(0);
   });
 
+  test('documented lifecycle suggestion stays visible in both themes', async ({ page }, testInfo) => {
+    const readyItem = {
+      id: 'route-lab',
+      title: 'Delivery record',
+      summary: 'Tracks implementation through its documented outcome.',
+      status: 'decided',
+      phase: 'decision-ready',
+      updatedAtUtc: '2026-08-09T10:00:00Z',
+      entryPath: 'docs/concepts/route-lab.html',
+      valid: true,
+      error: null,
+      sourceTaskKeys: [],
+      relatedTaskKeys: ['AGT-2291'],
+      documentation: {
+        eligible: true,
+        totalCount: 1,
+        terminalCount: 1,
+        openCount: 0,
+        missingCount: 0,
+        references: [{ key: 'AGT-2291', exists: true, terminal: true, lane: '6-completed' }],
+      },
+    };
+    await page.route('**/api/projects/*/workbenches**', async route => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const json = (body: unknown) => route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify(body),
+      });
+      if (url.pathname.endsWith('/workbenches/route-lab')) {
+        return json({
+          workbench: {
+            ...readyItem,
+          },
+          html: '<h1>Delivery record</h1><p>Implementation evidence remains readable.</p>',
+          branch: 'task/route',
+          revision: 'a'.repeat(40),
+          workingTreeModified: false,
+          fingerprint: 'b'.repeat(64),
+        });
+      }
+      if (url.pathname.endsWith('/workbenches')) {
+        return json({ projectName: PROJECT, includesHistory: false, count: 1, items: [readyItem] });
+      }
+      return route.fallback();
+    });
+
+    await page.goto(`/#/projects/${PROJECT_SLUG}/workbenches/route-lab`, { waitUntil: 'commit' });
+    const notice = page.getByTestId('workbench-documentation-ready');
+    await expect(notice).toContainText('All referenced cards are terminal');
+    await expect(page.getByTestId(`studio-explorer-workbench-${PROJECT}-route-lab`))
+      .toContainText('Ready to document');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(testInfo, `documented-lifecycle-ready--mocked-${theme}.png`),
+      });
+    }
+
+    await expect(page.getByTestId('error-dialog')).toHaveCount(0);
+  });
+
   test('Board and Hub routes restore project scope and survive reload', async ({ page }) => {
     await page.goto(`/#/projects/${PROJECT_SLUG}/board`, { waitUntil: 'commit' });
     await expect(page.getByTestId('studio-board')).toBeVisible();

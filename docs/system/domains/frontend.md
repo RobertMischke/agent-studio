@@ -190,8 +190,20 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   revision. Canonical entries expose their stable project reference key as a
   compact copyable mono chip in the viewer header and lifecycle lists; Explorer
   leaf tooltips include the same key. A task's `references.workbenches` entries
-  render as linked key chips that open the existing viewer tab. Chat pinning
-  and decision mutations are intentionally not mounted.
+  render as linked key chips that open the existing viewer tab. A decided item
+  remains current while its referenced cards are still moving. References are
+  derived from the Slice-1 `references.workbenches` index, with descriptor
+  `relatedTaskKeys` and decision receipts retained as compatibility bridges.
+  Once every referenced card is in `6-completed` or `7-archive`, the catalogue
+  projects a quiet `Ready to document` suggestion in the viewer header and list
+  surfaces. `POST /api/projects/{projectName}/workbenches/{id}/document`
+  revalidates that policy and atomically writes the canonical descriptor.
+  Schema v1 stores `status=documented`; schema v2 stores
+  `lifecycleState=documented` and appends lifecycle history. Documented results
+  and discarded `archived` results remain readable in separate history groups.
+  The archive decision and documented transition both follow the AGT-2375 rule:
+  lifecycle truth lives in `workbench.json`, never in a Wiki classification
+  sidecar. Chat pinning is intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

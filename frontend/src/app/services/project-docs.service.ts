@@ -31,6 +31,8 @@ import {
   WorkbenchCatalogue,
   WorkbenchDocument,
   WorkbenchTaskReferences,
+  DocumentWorkbenchRequest,
+  DocumentWorkbenchResult,
 } from '../models/project-docs.model';
 
 export interface WikiConditionalResponse<T> {
@@ -196,6 +198,13 @@ export class ProjectDocsService {
   getWorkbench(projectName: string, id: string) {
     return this.http.get<WorkbenchDocument>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(id)}`,
+    );
+  }
+
+  documentWorkbench(projectName: string, id: string, request: DocumentWorkbenchRequest) {
+    return this.http.post<DocumentWorkbenchResult>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(id)}/document`,
+      request,
     );
   }
 

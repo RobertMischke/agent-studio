@@ -126,6 +126,15 @@ public static class ProjectDocsEndpoints
                 return WorkbenchDecisionHttpResult(result);
             });
 
+        app.MapPost("/api/projects/{projectName}/workbenches/{id}/document",
+            (string projectName, string id, DocumentWorkbenchRequest body,
+                WorkbenchLifecycleService lifecycle, ProjectDocsService docs) =>
+            {
+                var result = lifecycle.Document(projectName, id, body);
+                if (result.Success) docs.InvalidateWikiContent(projectName);
+                return WorkbenchLifecycleHttpResult(result);
+            });
+
         // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
         // that backs the wiki navigation tree. No git is touched here, and a warm
         // cache serves it without opening a file (AGT-2013); the ETag lets a
@@ -461,6 +470,19 @@ public static class ProjectDocsEndpoints
             "not-canonical" => Results.NotFound(result),
             "stale-revision" or "dirty-descriptor" or "operation-id-conflict"
                 or "already-settled" => Results.Conflict(result),
+            "validation" => Results.BadRequest(result),
+            _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
+        };
+    }
+
+    private static IResult WorkbenchLifecycleHttpResult(DocumentWorkbenchResult result)
+    {
+        if (result.Success) return Results.Ok(result);
+        return result.ErrorCode switch
+        {
+            "not-canonical" => Results.NotFound(result),
+            "stale-revision" or "dirty-descriptor" or "invalid-transition"
+                or "references-not-terminal" => Results.Conflict(result),
             "validation" => Results.BadRequest(result),
             _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
         };
