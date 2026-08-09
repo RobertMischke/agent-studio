@@ -278,6 +278,13 @@ export class StudioShellComponent {
     return this.currentProjectName();
   });
 
+  readonly activeWorkbench = computed(() => {
+    const tab = this.activeTab();
+    return tab?.kind === 'workbench'
+      ? { projectName: tab.projectName, workbenchId: tab.workbenchId }
+      : null;
+  });
+
   readonly activeProjectInitial = computed<string>(() => {
     const name = this.activeProjectName();
     if (!name) return '';
@@ -471,6 +478,28 @@ export class StudioShellComponent {
       this._expandedProjects.update(set => {
         const next = new Set(set);
         next.add(name);
+        this.writeExpandedProjects(next);
+        return next;
+      });
+    });
+  });
+
+  private lastAutoExpandedWorkbench: string | null = null;
+  private readonly autoExpandActiveWorkbenchFx = effect(() => {
+    const activeWorkbench = this.activeWorkbench();
+    if (!activeWorkbench) {
+      this.lastAutoExpandedWorkbench = null;
+      return;
+    }
+
+    const revealKey = `${activeWorkbench.projectName}:${activeWorkbench.workbenchId}`;
+    if (this.lastAutoExpandedWorkbench === revealKey) return;
+    this.lastAutoExpandedWorkbench = revealKey;
+    untracked(() => {
+      if (this._expandedProjects().has(activeWorkbench.projectName)) return;
+      this._expandedProjects.update(projects => {
+        const next = new Set(projects);
+        next.add(activeWorkbench.projectName);
         this.writeExpandedProjects(next);
         return next;
       });

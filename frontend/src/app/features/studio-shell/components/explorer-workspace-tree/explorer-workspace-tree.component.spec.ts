@@ -12,6 +12,7 @@ import {
 import type { ProjectAutoPickupIndicator, ProjectAutoPickupState } from '../../studio-shell.auto-pickup';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
+import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 
 function project(displayName: string, workspaceId: string, storage: string): RegistryProjectSummary {
   return {
@@ -176,6 +177,26 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].id).toBe('__all__');
     expect(groups[0].projects.map(p => p.name)).toEqual(['Alpha', 'Beta']);
+  });
+
+  it('reveals the workspace path that owns the active Workbench', () => {
+    const fixture = mount();
+    const sections = TestBed.inject(ExplorerSectionsService);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    sections.setCollapsed('workspace', true);
+    sections.setCollapsed('ws:ws-default', true);
+
+    fixture.componentRef.setInput('activeWorkbench', {
+      projectName: 'Alpha',
+      workbenchId: 'routing-lab',
+    });
+    fixture.detectChanges();
+
+    expect(sections.isCollapsed('workspace')).toBe(false);
+    expect(sections.isCollapsed('ws:ws-default')).toBe(false);
   });
 
   it('renders Board lane counters with a descriptive aria label', () => {

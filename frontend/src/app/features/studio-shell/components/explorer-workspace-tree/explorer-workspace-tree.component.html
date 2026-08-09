@@ -198,7 +198,11 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
-                <app-explorer-workbench-list [projectName]="p.name" [active]="p.isActive && activeProjectSurface() === 'workbench'" (openWorkbench)="openWorkbenchRequest.emit({ projectName: p.name, workbench: $event })" (openWiki)="openWikiRequest.emit(p.name)" />
+                <app-explorer-workbench-list
+                  [projectName]="p.name"
+                  [activeWorkbenchId]="activeWorkbenchIdFor(p.name)"
+                  (openWorkbench)="openWorkbenchRequest.emit({ projectName: p.name, workbench: $event })"
+                  (openWiki)="openWikiRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"

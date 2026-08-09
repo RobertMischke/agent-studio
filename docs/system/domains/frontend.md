@@ -167,7 +167,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
   read-only Workbench host. Explorer discovery is lazy per expanded project;
-  Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
+  Pulse reuses the same catalogue as a thinking inbox. An active Workbench is
+  the selected leaf in the Explorer rather than making its Workbenches disclosure
+  parent current. Opening one expands the owning workspace, project, and
+  project-specific Workbenches section, persists that section state, and scrolls
+  the selected leaf into view. Settled Workbenches keep the same selection
+  semantics but are revealed under the existing History disclosure. Repository
+  HTML runs only
   in an opaque-origin `srcdoc` iframe with the Workbench CSP. A source-checked
   message boundary maps docs-relative links to the in-app Wiki and opens absolute
   HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
