@@ -12,6 +12,7 @@ const PRESENTATION: Record<ProjectUrlDiagnosisClass, ProjectUrlDiagnosisPresenta
   'command-unavailable': { status: 'Start failed', title: 'The start command is unavailable', primaryAction: 'settings' },
   'invalid-cwd': { status: 'Setup issue', title: 'The working directory is invalid', primaryAction: 'settings' },
   'process-exited': { status: 'Start failed', title: 'The service exited during startup', primaryAction: 'retry' },
+  'port-in-use': { status: 'Port occupied', title: 'Another process owns the preview port', primaryAction: 'retry' },
   'port-never-opened': { status: 'Not ready', title: 'The configured port never opened', primaryAction: 'settings' },
   timeout: { status: 'Timed out', title: 'Readiness could not be confirmed', primaryAction: 'retry' },
   'http-error-response': { status: 'HTTP error', title: 'The server returned an error response', primaryAction: 'settings' },
@@ -37,6 +38,9 @@ export function diagnosticText(value: ProjectUrlDiagnostic): string {
     `Port reachable: ${value.portReachable}`,
     `HTTP status: ${value.httpStatus ?? '(none)'}`,
     `Content ready: ${value.contentReady}`,
+    value.occupyingProcessName && value.occupyingProcessId
+      ? `Port owner: ${value.occupyingProcessName} (PID ${value.occupyingProcessId})`
+      : '',
     `Iframe ready: ${value.iframeReady ?? '(not checked)'}`,
     value.framePolicy ? `Frame policy: ${value.framePolicy}` : '',
     value.stdoutTail ? `stdout (tail):\n${value.stdoutTail}` : '',

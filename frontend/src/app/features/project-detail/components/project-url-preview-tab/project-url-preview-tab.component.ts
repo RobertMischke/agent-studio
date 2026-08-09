@@ -534,7 +534,7 @@ export class ProjectUrlPreviewTabComponent {
 
   private loadSuggestionFor(result: ProjectUrlDiagnostic): void {
     const fixable: readonly ProjectUrlDiagnostic['classification'][] =
-      ['invalid-configuration', 'invalid-cwd', 'command-unavailable', 'port-never-opened', 'not-started'];
+      ['invalid-configuration', 'invalid-cwd', 'command-unavailable', 'port-in-use', 'port-never-opened', 'not-started'];
     if (!fixable.includes(result.classification)) return;
     const projectId = this.projectId();
     const url = this.urlRecord();

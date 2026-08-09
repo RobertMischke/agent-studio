@@ -294,6 +294,45 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(fixture.componentInstance.settingsOpen()).toBe(true);
   });
 
+  it('shows an occupied port with process name and PID in the readiness card', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process'))
+      .flush(null, { status: 204, statusText: 'No Content' });
+    fixture.detectChanges();
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic'))
+      .flush(diagnostic('not-started'));
+    http.expectOne(req => req.url.endsWith('/PROJ-001/url-suggestions')).flush([]);
+
+    fixture.componentInstance.start();
+    http.expectOne(req => req.method === 'POST').flush({
+      error: 'Port 4202 is already in use by marketing-app (PID 9123).',
+      command: 'npm run website',
+      cwd: 'c:/demo',
+      classification: 'port-in-use',
+      occupyingProcessId: 9123,
+      occupyingProcessName: 'marketing-app',
+    }, { status: 400, statusText: 'Bad Request' });
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic')).flush({
+      ...diagnostic('port-in-use'),
+      summary: 'Port 4202 is already in use by marketing-app (PID 9123).',
+      recommendedAction: 'Stop the occupying process or configure a different preview port, then Retry.',
+      startupFailureReason: 'port-in-use',
+      occupyingProcessId: 9123,
+      occupyingProcessName: 'marketing-app',
+      portReachable: true,
+    });
+    http.expectOne(req => req.url.endsWith('/PROJ-001/url-suggestions')).flush([]);
+    fixture.detectChanges();
+
+    const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
+    expect(failed?.textContent).toContain('Preview port is occupied');
+    expect(failed?.textContent).toContain('marketing-app (PID 9123)');
+    expect(failed?.textContent).toContain('Stop the occupying process');
+    expect(failed?.querySelector('[data-testid="url-preview-retry"]')).toBeTruthy();
+  });
+
   it('keeps waiting beyond the former 20-second limit while console output stays active', () => {
     vi.useFakeTimers();
     const { fixture, http, probe } = mount();

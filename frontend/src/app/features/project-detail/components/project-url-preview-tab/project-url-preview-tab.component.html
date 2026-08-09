@@ -1,9 +1,7 @@
 <div class="url-preview" data-testid="url-preview-tab" (contextmenu)="showMenu($event)" [attr.data-project]="projectName()" [attr.data-url-id]="urlId()">
   <div class="url-preview__chrome">
-    <button type="button" class="url-preview__nav"
-            data-testid="url-preview-reload"
-            cacTooltip="Reload"
-            aria-label="Reload"
+    <button type="button" class="url-preview__nav" data-testid="url-preview-reload"
+            cacTooltip="Reload" aria-label="Reload"
             [disabled]="!canReload()"
             (click)="reload()">
       <app-studio-icon name="refresh" [size]="14" />
@@ -29,11 +27,8 @@
             (click)="openExternal()">
       <app-studio-icon name="send" [size]="13" />
     </button>
-    <button type="button" class="url-preview__nav"
-            data-testid="url-preview-settings"
-            cacTooltip="Embed settings"
-            aria-label="Embed settings"
-            (click)="onSettings()">
+    <button type="button" class="url-preview__nav" data-testid="url-preview-settings" cacTooltip="Embed settings"
+            aria-label="Embed settings" (click)="onSettings()">
       <app-studio-icon name="settings" [size]="13" />
     </button>
     <button #menuTrigger type="button" class="url-preview__nav" data-testid="url-preview-menu"
@@ -131,7 +126,9 @@
                     {{ projectName() }} · {{ urlRecord()?.label }}
                   </p>
                   <h2 class="url-preview__state-heading">
-                    @if (startFailure()) {
+                    @if (diagnostic()?.classification === 'port-in-use') {
+                      Preview port is occupied
+                    } @else if (startFailure()) {
                       Preview could not start
                     } @else if (building()) {
                       {{ consoleActive() ? 'Starting · console active' : 'Starting · waiting for output' }}
@@ -201,7 +198,7 @@
                 </div>
               }
 
-              @if (!building() && !startFailure() && diagnostic(); as diag) {
+              @if (!building() && diagnostic(); as diag) {
                 <div class="url-preview__recommendation" data-testid="url-preview-recommendation">
                   <span class="url-preview__recommendation-label">{{ diagnosis().status }} — {{ diagnosis().title }}</span>
                   <p class="url-preview__recommendation-summary">{{ diag.summary }}</p>
@@ -232,39 +229,31 @@
               <div class="url-preview__state-actions">
                 @if (urlRecord()?.startRule && !building()) {
                   @if (startFailure()) {
-                    <button type="button" class="url-preview__btn url-preview__btn--primary"
-                            data-testid="url-preview-retry"
+                    <button type="button" class="url-preview__btn url-preview__btn--primary" data-testid="url-preview-retry"
                             (click)="start()">Retry</button>
                   } @else if (readiness().kind === 'http-error' || readiness().kind === 'frame-blocked') {
-                    <button type="button" class="url-preview__btn url-preview__btn--primary"
-                            data-testid="url-preview-restart"
+                    <button type="button" class="url-preview__btn url-preview__btn--primary" data-testid="url-preview-restart"
                             (click)="start()">Restart preview</button>
                   } @else {
-                    <button type="button" class="url-preview__btn url-preview__btn--primary"
-                            data-testid="url-preview-start"
+                    <button type="button" class="url-preview__btn url-preview__btn--primary" data-testid="url-preview-start"
                             (click)="start()">Start preview</button>
                   }
                 }
                 @if (!building()) {
-                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                          data-testid="url-preview-failure-reload"
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost" data-testid="url-preview-failure-reload"
                           (click)="reload()">Reload</button>
                 }
                 @if (!building() && detectedSuggestion()) {
-                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                          data-testid="url-preview-apply-setup"
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost" data-testid="url-preview-apply-setup"
                           (click)="applyDetectedSetup()">Apply detected setup</button>
                 }
                 @if (!building()) {
-                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                          data-testid="url-preview-open-setup"
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost" data-testid="url-preview-open-setup"
                           (click)="openQuickSetup()">Open Settings</button>
                 }
-                <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                        data-testid="url-preview-failure-open-external"
+                <button type="button" class="url-preview__btn url-preview__btn--ghost" data-testid="url-preview-failure-open-external"
                         (click)="openExternal()">Open externally</button>
-                <button type="button" class="url-preview__btn url-preview__btn--quiet"
-                        data-testid="url-preview-edit-settings"
+                <button type="button" class="url-preview__btn url-preview__btn--quiet" data-testid="url-preview-edit-settings"
                         (click)="onSettings()">Settings</button>
               </div>
 
@@ -278,14 +267,13 @@
                     <div><dt>Working directory</dt><dd><code>{{ detail.cwd ?? 'Project root' }}</code></dd></div>
                     <div><dt>Port</dt><dd>{{ detail.configuredPort ?? 'From URL' }}</dd></div>
                     <div><dt>Process</dt><dd>{{ detail.processCreated ? 'Created' : 'Not created' }} @if (detail.exitCode !== null) { · exit {{ detail.exitCode }} }</dd></div>
-                    <div><dt>Readiness</dt><dd>Port {{ detail.portReachable ? 'reachable' : 'not reachable' }} · HTTP {{ detail.httpStatus ?? 'none' }}</dd></div>
+                    <div><dt>Readiness</dt><dd>Port {{ detail.portReachable ? 'reachable' : 'not reachable' }} · HTTP {{ detail.httpStatus ?? 'none' }} @if (detail.occupyingProcessName && detail.occupyingProcessId) { · owner <code>{{ detail.occupyingProcessName }}</code> (PID {{ detail.occupyingProcessId }}) }</dd></div>
                     <div><dt>Embedded page</dt><dd>{{ detail.iframeReady === true ? 'Ready' : detail.iframeReady === false ? 'Blocked or not renderable' : 'Not checked' }}</dd></div>
                     @if (detail.framePolicy) { <div><dt>Frame policy</dt><dd><code>{{ detail.framePolicy }}</code></dd></div> }
                   </dl>
                   @if (detail.stdoutTail) { <pre class="url-preview__tail"><code>{{ detail.stdoutTail }}</code></pre> }
                   @if (detail.stderrTail) { <pre class="url-preview__tail url-preview__tail--error"><code>{{ detail.stderrTail }}</code></pre> }
-                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                          data-testid="url-preview-copy-diagnostics"
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost" data-testid="url-preview-copy-diagnostics"
                           (click)="copyDiagnostics()">{{ copied() ? 'Copied' : 'Copy diagnostics' }}</button>
                 </details>
               }

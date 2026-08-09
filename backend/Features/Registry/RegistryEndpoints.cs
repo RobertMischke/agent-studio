@@ -560,6 +560,7 @@ public static class RegistryEndpoints
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {
+                var diagnostic = procs.Latest(record, url);
                 string? cwd;
                 try { cwd = ProjectUrlProcessService.ResolveWorkingDirectory(record, url.StartRule); }
                 catch (InvalidOperationException) { cwd = url.StartRule.Cwd ?? record.RepositoryPath ?? record.RootPath; }
@@ -568,6 +569,9 @@ public static class RegistryEndpoints
                     error = ex.Message,
                     command = url.StartRule.Command,
                     cwd,
+                    classification = diagnostic?.Classification,
+                    occupyingProcessId = diagnostic?.OccupyingProcessId,
+                    occupyingProcessName = diagnostic?.OccupyingProcessName,
                 });
             }
         });

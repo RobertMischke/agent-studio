@@ -19,7 +19,7 @@ function diagnostic(classification: ProjectUrlDiagnosisClass): ProjectUrlDiagnos
 describe('URL Preview diagnosis presentation', () => {
   it.each([
     ['not-started', 'start'], ['starting', 'retry'], ['command-unavailable', 'settings'],
-    ['invalid-cwd', 'settings'], ['process-exited', 'retry'], ['port-never-opened', 'settings'],
+    ['invalid-cwd', 'settings'], ['process-exited', 'retry'], ['port-in-use', 'retry'], ['port-never-opened', 'settings'],
     ['timeout', 'retry'], ['http-error-response', 'settings'], ['content-not-renderable', 'external'],
     ['invalid-configuration', 'settings'], ['running', 'retry'],
   ] as const)('maps %s to its recovery action', (classification, action) => {
@@ -35,6 +35,13 @@ describe('URL Preview diagnosis presentation', () => {
     expect(text).toContain('Exit code: 127');
     expect(text).toContain('command not found');
     expect(text).toContain('X-Frame-Options: DENY');
+  });
+
+  it('includes the occupying process and PID in copied diagnostics', () => {
+    const text = diagnosticText({
+      ...diagnostic('port-in-use'), occupyingProcessName: 'marketing-app', occupyingProcessId: 9123,
+    });
+    expect(text).toContain('Port owner: marketing-app (PID 9123)');
   });
 
   it('redacts URL credentials and secret query values for chrome', () => {
