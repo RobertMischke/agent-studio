@@ -106,18 +106,74 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_HistoricalGpt56SolUsage_IsPriced()
+    {
+        var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with
+        {
+            Ts = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc),
+        };
+
+        var summary = TokenSummaryService.Summarize("MKT-20", [entry]);
+
+        Assert.True(summary.AllModelsPriced);
+        Assert.Equal(0, summary.UnknownModelCount);
+        Assert.True(summary.EstimatedApiCostUsd > 0m);
+        var model = Assert.Single(summary.ByModel);
+        Assert.True(model.ModelPriced);
+        Assert.True(model.ModelInCatalog);
+        Assert.True(model.EstimatedApiCostUsd > 0m);
+    }
+
+    [Fact]
     public void Summarize_UnknownModel_FlagsNotAllPriced()
     {
         var entries = new[]
         {
             Entry("claude-opus-4-7", 1_000, 100),
-            Entry("gpt-5", 1_000, 100)
+            Entry("unknown-catalog-model", 1_000, 100)
         };
         var s = TokenSummaryService.Summarize("Demo", entries);
         Assert.False(s.AllModelsPriced);
-        var unknown = s.ByModel.Single(m => m.Model == "gpt-5");
+        Assert.Equal(1, s.UnknownModelCount);
+        var unknown = s.ByModel.Single(m => m.Model == "unknown-catalog-model");
         Assert.False(unknown.ModelPriced);
+        Assert.False(unknown.ModelInCatalog);
         Assert.Equal(0m, unknown.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void Summarize_KnownModelWithoutPrice_IsUnpricedButNotCatalogDrift()
+    {
+        var entry = Entry("gpt-5-codex", 1_000, 100) with
+        {
+            Ts = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+
+        var summary = TokenSummaryService.Summarize("Demo", [entry]);
+
+        Assert.False(summary.AllModelsPriced);
+        Assert.Equal(0, summary.UnknownModelCount);
+        var model = Assert.Single(summary.ByModel);
+        Assert.False(model.ModelPriced);
+        Assert.True(model.ModelInCatalog);
+    }
+
+    [Fact]
+    public void DriftMonitor_UnknownActiveModel_LogsOneWarning()
+    {
+        var summary = TokenSummaryService.Summarize(
+            "Demo",
+            [Entry("unknown-catalog-model", 1_000, 100)]);
+        var logger = new LevelCapturingLogger<TokenPricingDriftMonitor>();
+        var monitor = new TokenPricingDriftMonitor(logger);
+
+        monitor.Observe(summary);
+        monitor.Observe(summary);
+
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains("unknown-catalog-model", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("Demo", warning.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -292,5 +348,21 @@ public class TokenSummaryTests
 
         Assert.Null(filled.LastModel);
         Assert.Null(filled.Entries[0].Model);
+    }
+
+    private sealed class LevelCapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 }

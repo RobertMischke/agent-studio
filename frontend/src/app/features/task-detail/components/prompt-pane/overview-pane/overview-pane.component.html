@@ -507,11 +507,7 @@
           <button type="button" class="ov-pl-total__cost ov-pl-total__cost-button ov-value--mono ov-value--strong" data-testid="overview-pipeline-total-cost" [cacTooltip]="total.costTooltip"
                 [appCostBreakdownTrigger]="pipelineRows()" costBreakdownTitle="Task pipeline cost calculation"
                 [costBreakdownRecordedAt]="pipelineStartedAt()">
-            {{ formatCost(total.totalCostUsd) }}
-            @if (total.anyModelUnknown) {
-              <span class="ov-dim"
-                    [cacTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
-            }
+            {{ formatAggregateCost(total.totalCostUsd, total.anyModelUnknown) }}
           </button>
         </div>
       }
@@ -519,6 +515,9 @@
       }
     </section>
   }
+
+  <app-pipeline-token-usage
+    [summary]="pipelinePoll.pipeline()?.tokensByModel ?? null" />
 
   @if (selectedTokenRow(); as tokenRow) {
     <app-dialog

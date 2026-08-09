@@ -147,12 +147,34 @@ describe('PipelineTokenUsageComponent', () => {
       anyModelUnknown: true,
     };
     const fixture = setup(summary);
-    // The lifetime cost carries the unknown-model asterisk even while collapsed.
-    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent).toContain('*');
+    // A fully unpriced lifetime aggregate is explicit and never renders $0.00.
+    const totalCost = one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent ?? '';
+    expect(totalCost).toContain('Unknown');
+    expect(totalCost).not.toContain('$0.00');
 
     fixture.componentInstance.toggleSummary();
     fixture.detectChanges();
     const modelRow = one(root(fixture), 'pipeline-token-usage-total-model');
     expect(modelRow?.textContent).toContain('n/a');
+  });
+
+  it('marks a mixed priced and unpriced lifetime aggregate as partial', () => {
+    const summary: PipelineModelUsageSummary = {
+      runs: [run(1, true, [
+        model('claude-haiku-4-5', 700, 0.25),
+        model('unpriced-test-model', 300, 0, false),
+      ])],
+      totalByModel: [
+        model('claude-haiku-4-5', 700, 0.25),
+        model('unpriced-test-model', 300, 0, false),
+      ],
+      totalTokens: 1_000,
+      totalCostUsd: 0.25,
+      anyModelUnknown: true,
+    };
+
+    const fixture = setup(summary);
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .toContain('$0.25 partial');
   });
 });

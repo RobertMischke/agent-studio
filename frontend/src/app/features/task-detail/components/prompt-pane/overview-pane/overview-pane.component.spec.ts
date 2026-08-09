@@ -477,6 +477,58 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(host.querySelector('[data-step-id="aspect-tests-and-evidence"]')).toBeNull();
   });
 
+  it('pipeline totals render Unknown instead of a silent zero when every used model is unpriced', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('future-unpriced-model');
+    pipe.execution!.steps[0] = {
+      ...pipe.execution!.steps[0],
+      status: 'passed',
+      inputTokens: 500,
+      outputTokens: 200,
+    };
+    pipe.cost = emptyCost({
+      steps: [stepCost({
+        stepId: 'core-agent-run', kind: 'core', model: 'future-unpriced-model',
+        modelKnown: false, inputTokens: 500, outputTokens: 200, totalTokens: 700,
+      })],
+      totalInputTokens: 500,
+      totalOutputTokens: 200,
+      totalTokens: 700,
+      totalCostUsd: 0,
+      anyModelUnknown: true,
+    });
+    pipe.tokensByModel = {
+      runs: [{
+        attempt: 1, current: true, startedAt: pipe.execution!.startedAt,
+        completedAt: pipe.execution!.completedAt,
+        models: [{
+          model: 'future-unpriced-model', modelKnown: false, steps: 1,
+          inputTokens: 500, outputTokens: 200, cacheReadTokens: 0,
+          cacheCreationTokens: 0, totalTokens: 700, costUsd: 0,
+        }],
+        totalTokens: 700, totalCostUsd: 0, anyModelUnknown: true,
+      }],
+      totalByModel: [{
+        model: 'future-unpriced-model', modelKnown: false, steps: 1,
+        inputTokens: 500, outputTokens: 200, cacheReadTokens: 0,
+        cacheCreationTokens: 0, totalTokens: 700, costUsd: 0,
+      }],
+      totalTokens: 700,
+      totalCostUsd: 0,
+      anyModelUnknown: true,
+    };
+
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const currentTotal = host.querySelector('[data-testid="overview-pipeline-total-cost"]');
+    const lifetimeTotal = host.querySelector('[data-testid="pipeline-token-usage-grand-total-cost"]');
+    expect(currentTotal?.textContent?.trim()).toBe('Unknown');
+    expect(lifetimeTotal?.textContent?.trim()).toBe('Unknown');
+    expect(host.textContent).not.toContain('$0.00');
+  });
+
   it('pipeline block: step rows surface a per-step prompt trigger fed from the step-prompts read-model', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe: TaskPipelineResponse = {

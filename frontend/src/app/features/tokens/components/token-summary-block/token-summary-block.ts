@@ -74,6 +74,11 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
     return '$' + n.toFixed(2);
   }
 
+  formatAggregateUsd(n: number, allModelsPriced: boolean): string {
+    if (!allModelsPriced && n <= 0) return 'Unknown';
+    return this.formatUsd(n);
+  }
+
   showTotalCalculation(summary: TokenSummary): void {
     this.costBreakdown.show(summary.byModel.map(model => this.priceItem(model)),
       `${summary.project} cost calculation`);

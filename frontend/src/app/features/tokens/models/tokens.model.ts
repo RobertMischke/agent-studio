@@ -43,6 +43,8 @@ export interface TokenSummaryByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  /** False only when the model id is absent from the pinned price catalog. */
+  modelInCatalog?: boolean;
 }
 
 export interface TokenSummaryByProject {
@@ -65,6 +67,8 @@ export interface TokenSummary {
   totalCacheCreationTokens: number;
   estimatedApiCostUsd: number;
   allModelsPriced: boolean;
+  /** Distinct actively used model ids absent from the pinned price catalog. */
+  unknownModelCount?: number;
   byModel: TokenSummaryByModel[];
   disclaimer: string;
 }
