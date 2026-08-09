@@ -43,4 +43,16 @@ public class RemoteRunnerDaemonFaultTests
     public void Unexpected_exceptions_are_not_transient()
         => Assert.False(RemoteRunnerDaemon.IsTransientServerFault(
             new InvalidOperationException("Git push capability is read-only")));
+
+    [Theory]
+    [InlineData("LeaseExpired")]
+    [InlineData("review-executor-not-registered")]
+    public void Expired_or_unregistered_review_claim_requires_full_registration(string errorCode)
+        => Assert.True(ReviewClaimRegistrationRecovery.IsRequired(
+            new TaskServerException(409, "claim rejected", errorCode)));
+
+    [Fact]
+    public void Other_claim_conflicts_do_not_trigger_registration_recovery()
+        => Assert.False(ReviewClaimRegistrationRecovery.IsRequired(
+            new TaskServerException(409, "claim rejected", "review-baseline-comparison-required")));
 }

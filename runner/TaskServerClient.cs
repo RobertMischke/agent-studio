@@ -1368,7 +1368,11 @@ public sealed class TaskServerClient : IDisposable
         if (!resp.IsSuccessStatusCode)
         {
             var text = await resp.Content.ReadAsStringAsync(ct);
-            throw new TaskServerException((int)resp.StatusCode, $"POST {url} -> {(int)resp.StatusCode}: {Trim(text)}");
+            var errorCode = TryReadApiErrorCode(text);
+            throw new TaskServerException(
+                (int)resp.StatusCode,
+                $"POST {url} -> {(int)resp.StatusCode}: {Trim(text)}",
+                errorCode);
         }
         return await resp.Content.ReadFromJsonAsync<TResp>(Json, ct);
     }
@@ -1400,11 +1404,24 @@ public sealed class TaskServerClient : IDisposable
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300] + "...";
 
+    private static string? TryReadApiErrorCode(string response)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Contract.ApiError>(response, TaskServerContractJson)?.Code;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public void Dispose() => _http.Dispose();
 }
 
 /// <summary>A non-success HTTP reply from the Task Server, carrying the status code for branching.</summary>
-public sealed class TaskServerException(int statusCode, string message) : Exception(message)
+public sealed class TaskServerException(int statusCode, string message, string? errorCode = null) : Exception(message)
 {
     public int StatusCode { get; } = statusCode;
+    public string? ErrorCode { get; } = errorCode;
 }

@@ -60,6 +60,68 @@ public sealed class RemoteReviewExecutorTests : IDisposable
         catch { /* best effort */ }
     }
 
+    [Fact]
+    public async Task Atomic_worker_state_write_is_cleanly_abandoned_after_cleanup_removes_directory()
+    {
+        var stateDirectory = Path.Combine(_reviewRoot, "removed-attempt-state");
+        Directory.CreateDirectory(stateDirectory);
+        var target = Path.Combine(stateDirectory, "review-result.json");
+        Directory.Delete(stateDirectory, recursive: true);
+
+        var written = await DurableReviewProcess.WriteAtomicAsync(target, "{}");
+
+        Assert.False(written);
+    }
+
+    [Fact]
+    public async Task Reattach_with_durable_result_reports_it_without_starting_a_worker()
+    {
+        var handler = new InterruptedArtifactHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = Options();
+        using var client = new TaskServerClient(
+            http,
+            options.RunnerId,
+            usesDurableTaskServer: true,
+            options: options);
+        var logs = new List<string>();
+        var state = new ReviewStateStore(options.StateDir);
+        var workspacePath = Path.Combine(_reviewRoot, "review-attempt-1-f17", "repository");
+        var slot = state.Create(Claim(), workspacePath);
+        await File.WriteAllTextAsync(
+            Path.Combine(slot.WorkerDirectory, "review-result.json"),
+            JsonSerializer.Serialize(
+                new DetachedReviewResult(
+                    new ReviewExecutionEvidence(
+                        "Pass",
+                        new ReviewWorkspaceProofDto(
+                            "example/repository",
+                            new string('a', 40),
+                            new string('a', 40),
+                            "main",
+                            false,
+                            false,
+                            new string('b', 64),
+                            "review-attempt-1-f17"),
+                        [],
+                        [],
+                        []),
+                    null,
+                    null,
+                    DateTime.UtcNow),
+                Json));
+
+        var exitCode = await new RemoteReviewExecutor(options, client, state, logs.Add)
+            .ReattachAsync(slot, CancellationToken.None);
+
+        Assert.Equal(3, exitCode); // The fixture acknowledges every report as ReviewInfra.
+        Assert.Equal("Pass", Assert.Single(handler.Reports).Outcome);
+        Assert.DoesNotContain(logs, line => line.Contains(
+            "detached review worker started",
+            StringComparison.Ordinal));
+        Assert.Empty(state.LoadAll());
+    }
+
     private RunnerOptions Options() => new()
     {
         ServerUrl = "http://task-server",
