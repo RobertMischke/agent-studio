@@ -275,6 +275,7 @@ export class StudioShellComponent {
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
     if (tab.kind === 'epics') return tab.projectName;
+    if (tab.kind === 'workbenches') return tab.projectName;
     return this.currentProjectName();
   });
 
@@ -583,6 +584,7 @@ export class StudioShellComponent {
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
     if (tab.kind === 'hub') return tab.section === 'wiki' ? 'wiki' : 'hub';
+    if (tab.kind === 'workbenches') return tab.projectName === null ? null : 'workbenches';
     if (tab.kind === 'workbench') return 'workbench';
     if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
@@ -599,6 +601,7 @@ export class StudioShellComponent {
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
     if (tab.kind === 'epics') return tab.projectName;
+    if (tab.kind === 'workbenches') return tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
     if (tab.kind === 'workbench') return tab.projectName;
     if (tab.kind === 'task' || tab.kind === 'activity') {
@@ -706,6 +709,10 @@ export class StudioShellComponent {
 
   openWorkbench(event: { projectName: string; workbench: { id: string; title: string } }): void {
     this.tabState.open({ kind: 'workbench', projectName: event.projectName, workbenchId: event.workbench.id, title: event.workbench.title });
+  }
+
+  openWorkbenches(projectName: string | null): void {
+    this.tabState.open({ kind: 'workbenches', projectName });
   }
 
   /**
@@ -1120,6 +1127,10 @@ export class StudioShellComponent {
         return 'Activity across projects';
       case 'epics':
         return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
+      case 'workbenches':
+        return tab.projectName === null
+          ? 'All projects · Overview'
+          : `${this.projectShortLabel(tab.projectName)} · Overview`;
       case 'epic': {
         const labelKey = tab.viewTaskKey ?? tab.epicKey;
         const job = this.findJob(labelKey);
@@ -1188,6 +1199,7 @@ export class StudioShellComponent {
       return this.railItemForSection(tab.section).railIcon ?? null;
     }
     if (tab.kind === 'url-preview') return 'link';
+    if (tab.kind === 'workbenches') return 'eye';
     if (tab.kind === 'workbench') return 'eye';
     return null;
   }
@@ -1204,6 +1216,7 @@ export class StudioShellComponent {
       case 'board':
         return tab.projectName === '__all__' ? null : tab.projectName;
       case 'epics':
+      case 'workbenches':
       case 'hub':
       case 'workbench':
       case 'url-preview':

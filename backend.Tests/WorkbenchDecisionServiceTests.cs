@@ -78,7 +78,10 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
     public void Confirm_WritesTheDecisionIntoWorkbenchJsonWithLifecycleHistory()
     {
         WriteSchemaTwo("routing-policy");
-        var (catalogue, decisions) = Services();
+        var notifier = new WorkbenchChangeNotifier(NullLogger<WorkbenchChangeNotifier>.Instance);
+        WorkbenchDecisionRecordedEvent? recorded = null;
+        notifier.DecisionRecorded += evt => recorded = evt;
+        var (catalogue, decisions) = Services(notifier);
         var fingerprint = catalogue.Read("Project", "routing-policy")!.Fingerprint;
 
         var result = decisions.Confirm("Project", "routing-policy", new ConfirmWorkbenchDecisionRequest
@@ -125,6 +128,9 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
         Assert.Equal("direct", Assert.Single(item.Decision!.Responses).SelectedOptionIds.Single());
         Assert.Contains("AGT-2527", item.SourceTaskKeys);
         Assert.False(File.Exists(Descriptor("routing-policy") + ".meta.json"));
+        Assert.True(recorded.HasValue);
+        Assert.Equal(new WorkbenchDecisionRecordedEvent(
+            "Project", "routing-policy", "active", "decided"), recorded.Value);
     }
 
     [Fact]
@@ -346,7 +352,8 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
           """);
     }
 
-    private (WorkbenchCatalogueService Catalogue, WorkbenchDecisionService Decisions) Services()
+    private (WorkbenchCatalogueService Catalogue, WorkbenchDecisionService Decisions) Services(
+        WorkbenchChangeNotifier? notifier = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -359,6 +366,6 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
         var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var catalogue = new WorkbenchCatalogueService(scanner, registry, git);
-        return (catalogue, new WorkbenchDecisionService(catalogue, git));
+        return (catalogue, new WorkbenchDecisionService(catalogue, git, notifier: notifier));
     }
 }

@@ -444,6 +444,16 @@
                 }
               }
             }
+            @case ('workbenches') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'workbenches') {
+                  <app-workbench-tab-host
+                    mode="overview"
+                    [projectName]="tab.projectName"
+                    (openWorkbench)="onWorkbenchOverviewOpen($event)" />
+                }
+              }
+            }
             @case ('diff') {
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'diff') {
@@ -469,7 +479,8 @@
               }
             }
             @case ('workbench') { @if (studioTabState.activeTab(); as tab) { @if (tab.kind === 'workbench') {
-              <app-workbench-viewer
+              <app-workbench-tab-host
+                mode="viewer"
                 [projectName]="tab.projectName"
                 [workbenchId]="tab.workbenchId"
                 (openWiki)="onOpenWorkbenchWiki(tab.projectName, $event)" />

@@ -24,6 +24,8 @@ public sealed class WorkbenchCatalogueService
     private readonly ProjectRegistry _registry;
     private readonly GitService _git;
     private readonly IAtomicJsonFileWriter _fileWriter;
+    private readonly ConcurrentDictionary<string, DecisionCountSnapshot> _decisionCounts =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private static readonly ConcurrentDictionary<string, object> KeyAssignmentGates =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -38,6 +40,7 @@ public sealed class WorkbenchCatalogueService
     private sealed record LegacyWorkbench(
         string Id, string Title, string Summary, string RepoRelPath, string Phase,
         string[] SourceTaskKeys);
+    private sealed record DecisionCountSnapshot(long Length, DateTime LastWriteUtc, int Count);
 
     private static readonly LegacyWorkbench[] LegacyPilot =
     [
@@ -123,10 +126,10 @@ public sealed class WorkbenchCatalogueService
                 legacy.SourceTaskKeys));
         }
 
-        var visible = items
-            .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
-            .OrderByDescending(x => x.UpdatedAtUtc)
-            .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+        var visible = WorkbenchOverviewPolicy.Sort(items
+                .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
+                .Select(item => new WorkbenchOverviewItem(projectName, item)))
+            .Select(item => item.Workbench)
             .ToList();
         return new WorkbenchCatalogue(projectName, includeHistory, visible.Count, visible);
     }
@@ -157,6 +160,48 @@ public sealed class WorkbenchCatalogueService
             item.Id,
             item.RelatedTaskKeys,
             links);
+    }
+
+    /// <summary>
+    /// Returns every configured, non-archived project handle that can own a
+    /// Workbench. Registry records are authoritative when present; WatchPaths
+    /// remain the compatibility source for local and test configurations.
+    /// </summary>
+    public IReadOnlyList<string> ListProjectNames()
+    {
+        var names = _registry.List()
+            .Where(project => !project.Archived)
+            .Select(project => project.DisplayName)
+            .Concat(_scanner.GetWatchPaths().Select(entry => entry.Name))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return names;
+    }
+
+    /// <summary>
+    /// One read model shared by the workspace-wide and project-scoped list
+    /// pages. History is included so the client can render discarded and
+    /// completed groups independently without issuing a second request.
+    /// </summary>
+    public WorkbenchOverview ListOverview(IEnumerable<string> projectNames, string? projectName = null)
+    {
+        var items = new List<WorkbenchOverviewItem>();
+        foreach (var name in projectNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var catalogue = List(name, includeHistory: true);
+            if (catalogue == null) continue;
+            items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)));
+        }
+
+        var sorted = WorkbenchOverviewPolicy.Sort(items);
+        return new WorkbenchOverview(
+            ProjectName: projectName,
+            Count: sorted.Count,
+            CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
+            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "decided"),
+            Items: sorted);
     }
 
     public WorkbenchDocument? Read(string projectName, string id)
@@ -414,6 +459,7 @@ public sealed class WorkbenchCatalogueService
                     LifecycleHistory = lifecycleHistory,
                     Decision = decision,
                     DecisionStage = DecisionStage(decision),
+                    OpenDecisionCount = OpenDecisionCount(full, status),
                 });
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
@@ -617,6 +663,32 @@ public sealed class WorkbenchCatalogueService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
+        }
+    }
+
+    private int OpenDecisionCount(string entrypoint, string status)
+    {
+        if (status != "decision-pending") return 0;
+        try
+        {
+            var info = new FileInfo(entrypoint);
+            if (_decisionCounts.TryGetValue(entrypoint, out var cached)
+                && cached.Length == info.Length
+                && cached.LastWriteUtc == info.LastWriteTimeUtc)
+                return cached.Count;
+
+            var html = ReadHtmlWithinLimit(entrypoint);
+            // A pending legacy document without inline markup still represents
+            // one Workbench-level gate. Once points exist, expose their exact
+            // count so the queue can prioritize the operator's real workload.
+            var count = Math.Max(1, WorkbenchDecisionPointCounter.Count(html ?? ""));
+            _decisionCounts[entrypoint] = new(info.Length, info.LastWriteTimeUtc, count);
+            return count;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SilentCatch.Note(ex, "Workbench decision count fell back to its pending lifecycle gate.");
+            return 1;
         }
     }
 
@@ -906,6 +978,12 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
     public WorkbenchDecisionProjection? Decision { get; init; }
     public string? DecisionStage { get; init; }
+    /// <summary>
+    /// Open operator decisions discovered from valid inline decision-point
+    /// markup. Pending legacy documents without points retain one Workbench-
+    /// level gate so the queue never hides required operator action.
+    /// </summary>
+    public int OpenDecisionCount { get; init; }
 }
 public record WorkbenchTaskReferences(
     string ProjectName,
@@ -913,6 +991,13 @@ public record WorkbenchTaskReferences(
     string WorkbenchId,
     string[] LegacyTaskKeys,
     IReadOnlyList<TaskReferenceLink> Items);
+public sealed record WorkbenchOverviewItem(string ProjectName, WorkbenchListItem Workbench);
+public sealed record WorkbenchOverview(
+    string? ProjectName,
+    int Count,
+    int CurrentCount,
+    int HistoryCount,
+    List<WorkbenchOverviewItem> Items);
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
     bool WorkingTreeModified, string? Fingerprint);
 

@@ -40,7 +40,50 @@ public sealed class WorkbenchCatalogueTests : IDisposable
 
         Assert.Equal(3, catalogue.Count);
         Assert.Equal(new[] { "newer", "older" }, catalogue.Items.Where(x => x.Valid).Select(x => x.Id));
+        Assert.Equal(1, catalogue.Items.Single(x => x.Id == "newer").OpenDecisionCount);
         Assert.Contains(catalogue.Items, x => x.Id == "broken" && !x.Valid && x.Error != null);
+    }
+
+    [Fact]
+    public void Overview_UsesOneProjectionForWorkspaceAndProjectScopes()
+    {
+        WriteWorkbench("current", "Current", "active", "2026-07-12T10:00:00Z");
+        WriteWorkbench("discarded", "Discarded", "archived", "2026-07-11T10:00:00Z");
+        var service = Service();
+
+        var overview = service.ListOverview(["Project"], "Project");
+
+        Assert.Equal("Project", overview.ProjectName);
+        Assert.Equal(2, overview.Count);
+        Assert.Equal(1, overview.CurrentCount);
+        Assert.Equal(1, overview.HistoryCount);
+        Assert.All(overview.Items, item => Assert.Equal("Project", item.ProjectName));
+    }
+
+    [Fact]
+    public void List_CountsValidInlineDecisionPointsAndIgnoresMalformedDuplicates()
+    {
+        WriteWorkbench("decision-count", "Decision count", "decision-pending", "2026-07-12T10:00:00Z");
+        var entrypoint = Path.Combine(_root, "docs", "workbenches", "decision-count", "index.html");
+        File.WriteAllText(entrypoint, """
+          <section data-decision-id="route" data-decision-kind="single">
+            <span data-option-id="direct">Direct</span>
+          </section>
+          <section data-decision-id="checks" data-decision-kind="multi">
+            <span data-option-id="build">Build</span>
+            <span data-option-id="e2e">E2E</span>
+          </section>
+          <section data-decision-id="route" data-decision-kind="confirm">
+            <span data-option-id="duplicate">Duplicate</span>
+          </section>
+          <section data-decision-id="invalid id" data-decision-kind="single">
+            <span data-option-id="ignored">Ignored</span>
+          </section>
+          """);
+
+        var item = Assert.Single(Service().List("Project")!.Items);
+
+        Assert.Equal(2, item.OpenDecisionCount);
     }
 
     [Fact]

@@ -173,8 +173,17 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   and archived cards. Readiness and last-start diagnosis remain independent, so
   a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
-  read-only Workbench host. Explorer discovery is lazy per expanded project;
-  Pulse reuses the same catalogue as a thinking inbox. An active Workbench is
+  isolated Workbench host. The workspace-wide `#/workbenches` overview and
+  project-scoped `#/projects/<project>/workbenches` overview share one ordered
+  projection: decision-pending items sort by open gate count, active items sort
+  by latest movement, and discarded and completed history remain separate.
+  Pending overview cards expand the existing isolated viewer and inline decision
+  controls in place, while retaining a direct link to the full viewer.
+  Explorer project children stay available as quick links. Created, updated,
+  decision-recorded, and status-changed events travel over the existing jobs
+  hub and converge the Explorer catalogue, both overview scopes, and an open
+  viewer without a page reload. Pulse reuses the same catalogue as a thinking
+  inbox. An active Workbench is
   the selected leaf in the Explorer rather than making its Workbenches disclosure
   parent current. Opening one expands the owning workspace, project, and
   project-specific Workbenches section, persists that section state, and scrolls
@@ -190,8 +199,8 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   revision. Canonical entries expose their stable project reference key as a
   compact copyable mono chip in the viewer header and lifecycle lists; Explorer
   leaf tooltips include the same key. A task's `references.workbenches` entries
-  render as linked key chips that open the existing viewer tab. Chat pinning
-  and decision mutations are intentionally not mounted.
+  render as linked key chips that open the existing viewer tab. Decision
+  mutations use the two-phase decision gate; chat pinning is not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

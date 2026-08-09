@@ -235,6 +235,7 @@ export class StudioTabStateService {
       if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
+      if (t.kind === 'workbenches' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'workbench') return validNames.has(t.projectName);
       if (t.kind === 'url-preview') return validNames.has(t.projectName);
       return true;
@@ -258,6 +259,8 @@ export class StudioTabStateService {
         case 'epics':
           return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
         case 'hub':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'workbenches':
           return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
         case 'workbench':
           return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
@@ -364,6 +367,8 @@ export class StudioTabStateService {
             : {}),
           ...(tab.pipelineStepId ? { pipelineStepId: tab.pipelineStepId } : {}),
         };
+      case 'workbenches':
+        return { kind: 'workbenches', projectName: tab.projectName };
       case 'workbench':
         return { kind: 'workbench', projectName: tab.projectName, workbenchId: tab.workbenchId, title: tab.title };
       case 'diff':

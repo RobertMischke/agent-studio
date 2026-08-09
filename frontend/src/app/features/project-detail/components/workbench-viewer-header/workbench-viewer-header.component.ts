@@ -46,6 +46,7 @@ export class WorkbenchViewerHeaderComponent {
   readonly document = input.required<WorkbenchDocument>();
   readonly decisionPoints = input<readonly WorkbenchDecisionPoint[]>([]);
   readonly responses = input<readonly WorkbenchDecisionResponse[]>([]);
+  readonly showWikiAction = input(true);
   readonly openWiki = output<void>();
   readonly decisionChanged = output<void>();
 

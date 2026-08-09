@@ -71,6 +71,8 @@ describe('ExplorerWorkbenchListComponent', () => {
     const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
     fixture.componentRef.setInput('projectName', 'Demo');
     fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([], false));
     fixture.componentInstance.expanded.set(true);
     fixture.componentInstance.historyOpen.set(true);
     const archived = item('archived', 'archived');
@@ -85,6 +87,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="studio-explorer-workbench-Demo-active"]')).toBeNull();
     archivedButton.click();
     expect(opened).toEqual(archived);
+    http.verify();
   });
 
   it('selects and reveals the active Workbench while keeping its disclosure parent neutral', async () => {
@@ -144,6 +147,10 @@ describe('ExplorerWorkbenchListComponent', () => {
     fixture.componentRef.setInput('projectName', 'Other');
     fixture.detectChanges();
     expect(fixture.componentInstance.expanded()).toBe(false);
+    http.expectOne('/api/projects/Other/workbenches').flush({
+      ...catalogue([], false),
+      projectName: 'Other',
+    });
 
     fixture.componentRef.setInput('projectName', 'Demo');
     fixture.detectChanges();

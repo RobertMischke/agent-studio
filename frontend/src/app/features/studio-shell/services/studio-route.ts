@@ -16,6 +16,7 @@ export type StudioRoute =
   | { kind: 'board'; projectSlug: string | null }
   | { kind: 'feed' }
   | { kind: 'hub'; projectSlug: string; section: string; page: string | null; folder: string | null }
+  | { kind: 'workbenches'; projectSlug: string | null }
   | { kind: 'workbench'; projectSlug: string; workbenchId: string }
   | { kind: 'task'; reference: string; tab: TaskDetailRouteTab; inspector: TaskInspectorRouteTab }
   | { kind: 'epics'; projectSlug: string | null }
@@ -55,6 +56,9 @@ export function parseStudioRoute(hash: string): StudioRoute | null {
   if (segments.length === 1 && segments[0] === 'epics') {
     return { kind: 'epics', projectSlug: null };
   }
+  if (segments.length === 1 && segments[0] === 'workbenches') {
+    return { kind: 'workbenches', projectSlug: null };
+  }
   if (segments.length === 2 && segments[0] === 'epics' && segments[1]) {
     return { kind: 'epic', reference: segments[1] };
   }
@@ -87,6 +91,9 @@ export function parseStudioRoute(hash: string): StudioRoute | null {
   }
   if (segments.length === 3 && segments[2] === 'epics') {
     return { kind: 'epics', projectSlug };
+  }
+  if (segments.length === 3 && segments[2] === 'workbenches') {
+    return { kind: 'workbenches', projectSlug };
   }
   if (segments.length === 4 && segments[2] === 'workbenches' && segments[3]) {
     return { kind: 'workbench', projectSlug, workbenchId: segments[3] };
@@ -121,6 +128,10 @@ export function studioRouteForTab(
     }
     case 'workbench':
       return `/projects/${studioProjectSlug(tab.projectName)}/workbenches/${encodeURIComponent(tab.workbenchId)}`;
+    case 'workbenches':
+      return tab.projectName
+        ? `/projects/${studioProjectSlug(tab.projectName)}/workbenches`
+        : '/workbenches';
     case 'task':
       return publicTaskReference ? `/tasks/${encodeURIComponent(publicTaskReference)}` : null;
     case 'epics':
