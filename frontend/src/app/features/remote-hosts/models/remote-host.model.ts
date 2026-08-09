@@ -160,8 +160,8 @@ export type CapabilityHealthState = 'healthy' | 'suspect' | 'draining' | 'half-o
 
 export interface CapabilityRecoveryEvent {
   occurredAt: string;
-  fromState: CapabilityHealthState;
-  toState: CapabilityHealthState;
+  fromState: CapabilityHealthState | 'ready' | 'unavailable' | 'unknown';
+  toState: CapabilityHealthState | 'ready' | 'unavailable' | 'unknown';
   reason: string;
   claimId?: string | null;
 }
@@ -183,8 +183,48 @@ export interface RemoteHostCapabilityHealth {
   version?: string | null;
   identity?: string | null;
   detail?: string | null;
+  /** Optional provider-reported credential expiry. Older runners omit it. */
+  expiresAt?: string | null;
   affectedClaims: readonly string[];
   recoveryHistory: readonly CapabilityRecoveryEvent[];
+}
+
+export interface TaskServerTelemetrySnapshot {
+  observedAt: string;
+  cpuPercent: number | null;
+  memoryUsedBytes: number | null;
+  memoryTotalBytes: number | null;
+  cpuCores: number;
+  diskFreeBytes?: number | null;
+  diskTotalBytes?: number | null;
+  taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';
+  taskServerConnectionObservedAt?: string | null;
+  taskServerConnectionFailureStartedAt?: string | null;
+  taskServerConnectionConsecutiveFailures?: number;
+  taskServerConnectionEscalatedAt?: string | null;
+  taskServerConnectionLastError?: string | null;
+  taskServerConnectionLastRecoveredAt?: string | null;
+}
+
+/** Wire shape returned by GET /api/v1/management/remote-hosts. */
+export interface TaskServerRunnerCapabilitySnapshot {
+  runnerId: string;
+  name: string;
+  hostId: string;
+  instanceId: string;
+  runnerVersion: string;
+  protocolVersion: number;
+  status: string;
+  registeredAt: string;
+  lastSeenAt: string;
+  hostAdmission: RemoteHostAdmission;
+  capabilities: RemoteHostCapabilityHealth[];
+  telemetry?: TaskServerTelemetrySnapshot | null;
+  runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
+  effectiveMaxParallelism?: number | null;
+  runtimeCapacityAppliedAt?: string | null;
+  runtimeCapacityAppliedVersion?: number | null;
+  projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
 }
 
 export interface RemoteHostAdmission {

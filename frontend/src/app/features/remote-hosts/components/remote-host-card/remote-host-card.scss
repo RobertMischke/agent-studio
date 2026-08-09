@@ -101,6 +101,74 @@
 }
 .host__meta-sep { color: var(--studio-fg-muted); }
 
+.provider-auth {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg);
+}
+.provider-auth__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--studio-spacing-2);
+}
+.provider-auth__head strong { color: var(--studio-fg-strong); font-size: 12px; }
+.provider-auth__head span { color: var(--studio-fg-muted); font-size: 10px; }
+.provider-auth__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.provider-auth__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 999px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  cursor: help;
+}
+.provider-auth__badge strong { color: var(--studio-fg-strong); }
+.provider-auth__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--studio-fg-dim);
+}
+.provider-auth__badge[data-state='ok'] {
+  border-color: var(--notify-success-border);
+  background: var(--notify-success-tint);
+  color: var(--notify-success-icon-fg);
+}
+.provider-auth__badge[data-state='ok'] .provider-auth__dot { background: var(--severity-pass); }
+.provider-auth__badge[data-state='unavailable'] {
+  border-color: var(--notify-error-border);
+  background: var(--notify-error-tint);
+  color: var(--notify-error-icon-fg);
+}
+.provider-auth__badge[data-state='unavailable'] .provider-auth__dot { background: var(--severity-high); }
+.provider-auth__expiry {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: var(--notify-warning-tint);
+  color: var(--notify-warning-icon-fg);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.provider-auth__history {
+  margin: 0;
+  color: var(--studio-fg-dim);
+  font-size: 10px;
+}
+
 .activity {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

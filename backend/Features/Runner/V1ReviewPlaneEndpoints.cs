@@ -1195,6 +1195,36 @@ public sealed class V1ReviewExecutorRegistry
                     $"Capability generation {request.Generation} is older than {existing.Generation}.");
             }
 
+            if (existing is not null)
+            {
+                capabilities = capabilities
+                    .Select(capability =>
+                    {
+                        if (!capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal))
+                            return capability;
+                        var previous = existing.Capabilities.FirstOrDefault(item =>
+                            string.Equals(item.Key, capability.Key, StringComparison.Ordinal));
+                        if (previous is null) return capability;
+                        var history = previous.RecoveryHistory;
+                        if (!string.Equals(
+                                previous.AdvertisedStatus,
+                                capability.AdvertisedStatus,
+                                StringComparison.Ordinal))
+                        {
+                            history = history
+                                .Append(new Contract.CapabilityRecoveryEventDto(
+                                    advertisedAt,
+                                    previous.AdvertisedStatus,
+                                    capability.AdvertisedStatus,
+                                    $"Provider authentication probe changed from {previous.AdvertisedStatus} to {capability.AdvertisedStatus}."))
+                                .TakeLast(20)
+                                .ToArray();
+                        }
+                        return capability with { RecoveryHistory = history };
+                    })
+                    .ToArray();
+            }
+
             registration = registration with { LastSeenAt = now };
             _registrations[runnerId] = registration;
             _capabilityStates[runnerId] = new CapabilityState(

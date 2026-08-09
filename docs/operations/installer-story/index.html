@@ -482,8 +482,8 @@ Neue Fehlerbilder: gehoeren zurueck in dieses Dokument
   </tr>
   <tr>
     <td><b>Provider-Auth: Token oder API-Key als empfohlener Weg</b></td>
-    <td><code>claude setup-token</code> passt zum dokumentierten Verbot, Anmeldedateien zu kopieren. Offen bleibt die Auffrischung: der dokumentierte Host-Weg setzt darauf, dass die CLI ihre Anmeldedatei an Ort und Stelle erneuern kann. Ein Wert in <code>runner.env</code> kann das nicht.</td>
-    <td>Gehoert zur laufenden Karte "Provider-Auth first-class". Dieses Konzept legt sich bewusst nicht fest.</td>
+    <td>Decided on 2026-08-04: OAuth tokens and API keys share <code>/etc/agent-runner/provider-auth.env</code>, never <code>runner.env</code>. Studio provisions through SSH stdin only; both units load the file, and the probe sees only the process environment.</td>
+    <td>Implemented by Provider-Auth first-class. The installer must use the same contract.</td>
   </tr>
   <tr>
     <td><b>Windows: Repository zwingend in WSL2</b></td>

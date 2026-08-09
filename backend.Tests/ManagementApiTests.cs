@@ -4,8 +4,10 @@ using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
@@ -129,6 +131,64 @@ public sealed class ManagementApiTests : IDisposable
                           && capability.HealthState == Contract.CapabilityHealthStates.Suspect
                           && capability.ConsecutiveFailures == 1
                           && capability.FirstFailureAt is not null);
+    }
+
+    [Fact]
+    public async Task ProviderAuthProvisioning_RequiresOperator_AndDoesNotEchoTheSecret()
+    {
+        const string secret = "sk-ant-oat01-provider-secret-fixture";
+        var provisioner = new RecordingProviderAuthProvisioner();
+        await using var factory = BuildFactory(provisioner: provisioner);
+        using var client = factory.CreateClient();
+        var request = new ProviderAuthProvisioningRequest(
+            "agent@runner-01",
+            "agent-runner-01",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            secret);
+
+        var denied = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/provider-auth",
+            request);
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        Assert.Null(provisioner.LastRequest);
+
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var accepted = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/provider-auth",
+            request);
+
+        accepted.EnsureSuccessStatusCode();
+        Assert.Equal(secret, provisioner.LastRequest?.Secret);
+        var body = await accepted.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(secret, body, StringComparison.Ordinal);
+        Assert.Contains("awaiting-probe", body, StringComparison.Ordinal);
+        Assert.Contains("no-store", accepted.Headers.CacheControl?.ToString() ?? "");
+    }
+
+    [Theory]
+    [InlineData("runner;touch /tmp/x", "CLAUDE_CODE_OAUTH_TOKEN", "valid-provider-secret-fixture")]
+    [InlineData("agent@runner", "UNSUPPORTED_TOKEN", "valid-provider-secret-fixture")]
+    [InlineData("agent@runner", "ANTHROPIC_API_KEY", "secret with whitespace")]
+    public async Task ProviderAuthProvisioning_RejectsUnsafeInputBeforeTransport(
+        string sshTarget,
+        string environmentVariable,
+        string secret)
+    {
+        var provisioner = new RecordingProviderAuthProvisioner();
+        await using var factory = BuildFactory(provisioner: provisioner);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/provider-auth",
+            new ProviderAuthProvisioningRequest(
+                sshTarget,
+                "agent-runner-01",
+                environmentVariable,
+                secret));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(provisioner.LastRequest);
     }
 
     [Fact]
@@ -315,7 +375,9 @@ public sealed class ManagementApiTests : IDisposable
         Assert.Contains("/api/v1/management/status", html);
     }
 
-    private WebApplicationFactory<Program> BuildFactory(string environment = "Test") =>
+    private WebApplicationFactory<Program> BuildFactory(
+        string environment = "Test",
+        IProviderAuthProvisioner? provisioner = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);
@@ -329,7 +391,36 @@ public sealed class ManagementApiTests : IDisposable
             ["Supervisor:StuckResumeWindowMinutes"] = "0",
             ["CodexModels:WarmupOnBoot"] = "false",
         }));
+        if (provisioner is not null)
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IProviderAuthProvisioner>();
+                services.AddSingleton(provisioner);
+            });
+        }
     });
+
+    private sealed class RecordingProviderAuthProvisioner : IProviderAuthProvisioner
+    {
+        public ProviderAuthProvisioningRequest? LastRequest { get; private set; }
+
+        public Task<ProviderAuthProvisioningResponse> ProvisionAsync(
+            ProviderAuthProvisioningRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(new ProviderAuthProvisioningResponse(
+                "claude",
+                request.EnvironmentVariable,
+                request.SshTarget,
+                "awaiting-probe",
+                "Credential installed and daemon environment verified.",
+                DateTime.UtcNow,
+                ["agent-runner.service"],
+                true));
+        }
+    }
 
     private static string CreateServerDataDirectory()
     {
