@@ -3,10 +3,10 @@ using static AgentStudio.Tasks.TaskEndpointHelpers;
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// Operator action for an accepted delivery that failed to merge. It queues a
-/// focused steer round on the original remote-runner delivery branch instead
-/// of asking the operator to reconstruct the branch, target, and recovery
-/// prompt by hand.
+/// Operator action for an accepted delivery in a rebase-recoverable failure
+/// state. It queues a focused steer round on the original remote-runner
+/// delivery branch instead of asking the operator to reconstruct the branch,
+/// target, and recovery prompt by hand.
 /// </summary>
 public static class TaskIntegrationRecoveryEndpoints
 {
@@ -40,23 +40,34 @@ public static class TaskIntegrationRecoveryEndpoints
             }
 
             var status = integrationStatus.BuildLookup([job]).GetValueOrDefault(job.TaskKey);
-            if (status?.Status != IntegrationStatuses.ConflictSkipped)
+            if (status?.Status != IntegrationStatuses.ConflictSkipped
+                || status.Failure?.RebaseRecoveryAvailable != true)
             {
                 return Results.Conflict(new
                 {
-                    error = "Integration recovery is available only after a recorded merge conflict.",
+                    error = "Rebase recovery is not available for this integration failure.",
                     integrationStatus = status?.Status,
+                    failureCode = status?.Failure?.Code,
                 });
             }
 
             var mergeStep = pipeline.Read(job.FolderPath)?.Steps.LastOrDefault(
                 step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
-            if (!string.Equals(mergeStep?.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
+            var failure = mergeStep is null
+                ? null
+                : AcceptedIntegrationFailurePolicy.Classify(
+                    mergeStep.Status,
+                    mergeStep.Verdict,
+                    mergeStep.Reason,
+                    mergeStep.VerdictSummary,
+                    mergeStep.FailureCode);
+            if (failure?.RebaseRecoveryAvailable != true)
             {
                 return Results.Conflict(new
                 {
-                    error = "Integration recovery is available only after a recorded merge conflict.",
+                    error = "Rebase recovery is not available for this integration failure.",
                     mergeVerdict = mergeStep?.Verdict,
+                    failureCode = failure?.Code,
                 });
             }
 
@@ -81,7 +92,7 @@ public static class TaskIntegrationRecoveryEndpoints
                 job.Id,
                 ContinueModes.Steer,
                 prompt,
-                reason: "integration-conflict",
+                reason: failure.Code,
                 activeJobId: null,
                 watchPath: job.WatchPath);
             if (intent is null)

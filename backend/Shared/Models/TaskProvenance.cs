@@ -268,6 +268,24 @@ public record TaskIntegrationStatus
     /// conflicted, or branch-less. Free-form, for tooltip and audit only.
     /// </summary>
     public string? Detail { get; init; }
+
+    /// <summary>
+    /// Typed current failure projected from the durable integration pipeline
+    /// step. Null unless <see cref="Status"/> is
+    /// <see cref="IntegrationStatuses.ConflictSkipped"/>.
+    /// </summary>
+    public TaskIntegrationFailure? Failure { get; init; }
+}
+
+/// <summary>
+/// Card-visible classification of the latest accepted-integration failure.
+/// </summary>
+public sealed record TaskIntegrationFailure
+{
+    public string Code { get; init; } = "integration-error";
+    public string Label { get; init; } = "Integration failed";
+    public string Reason { get; init; } = "Integration failed without a diagnostic.";
+    public bool RebaseRecoveryAvailable { get; init; }
 }
 
 /// <summary>

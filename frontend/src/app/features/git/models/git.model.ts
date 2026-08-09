@@ -494,4 +494,17 @@ export interface TaskIntegrationStatus {
   integrationBranch: string;
   /** Membership evidence or the reason it is not integrated. Tooltip + audit only. */
   detail: string | null;
+  /** Typed current failure from the durable accepted-integration pipeline step. */
+  failure?: TaskIntegrationFailure | null;
+}
+
+export interface TaskIntegrationFailure {
+  /** Stable machine-readable failure class. */
+  code: string;
+  /** Concise card label. */
+  label: string;
+  /** Operator-facing explanation without raw exception wording. */
+  reason: string;
+  /** Whether the focused rebase recovery action can resolve this class. */
+  rebaseRecoveryAvailable: boolean;
 }

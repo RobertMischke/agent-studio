@@ -12,9 +12,11 @@ namespace AgentStudio.Tasks;
 /// happens.
 ///
 /// <para>
-/// The verdict's <b>anchor is the integrable subset of the attributed
-/// <c>commits[]</c> list</b>. Zero-file runner lifecycle markers are not delivery
-/// expectations; every commit that carries changed files remains an anchor. This
+/// The verdict's anchor is the current immutable review result when one exists,
+/// otherwise the integrable subset of the attributed <c>commits[]</c> list.
+/// Zero-file runner lifecycle markers are not delivery expectations; every
+/// commit that carries changed files remains an anchor within its current
+/// review generation. This
 /// keeps the badge aligned with delivered work (AGT-2171: the widget showed the
 /// attributed commits on develop while the badge, keying off the branch
 /// <em>tip</em> WIP snapshot, claimed "not integrated"). The signals are collapsed
@@ -27,7 +29,7 @@ namespace AgentStudio.Tasks;
 /// <item>SOME attributed commits are ancestors → <c>partial</c>, with the missing
 ///   short-SHAs in the detail;</item>
 /// <item>NONE are ancestors → <c>pending</c> (or <c>conflict-skipped</c> when a
-///   merge-into-develop conflict was recorded);</item>
+///   typed accepted-integration failure was recorded);</item>
 /// <item>no attributed commit and no evidenced delivery ref →
 ///   <c>no-branch</c>.</item>
 /// </list>
@@ -39,8 +41,10 @@ namespace AgentStudio.Tasks;
 /// ancestor SHA set, cached against the resolved target HEAD fingerprint, and
 /// answers every card in that repo with in-memory lookups. Provenance merge
 /// records, pipeline success, lane state, and curated merge subjects never
-/// override commit membership. This also detects out-of-band merges on the next
-/// read. Per-card local reads resolve the delivery ref from the same task card
+/// override commit membership. A current review subject only selects the
+/// authoritative delivery generation; target-branch ancestry still proves the
+/// result. This also detects out-of-band merges on the next read. Per-card local
+/// reads resolve the delivery ref from the same task card
 /// and review-subject truth as acceptance; the not-integrated subset also reads
 /// <c>pipeline-execution.json</c> best-effort (integration-failed vs. plain
 /// pending). Never throws: a git failure yields the conservative reading.
@@ -248,6 +252,23 @@ public sealed class TaskIntegrationStatusService
         var branchName = reach.IntegrationBranch;
         var deliveryRef = DeliveryRefFor(job);
 
+        // A reissue may replace a previously reviewed commit with a rebased
+        // object id while preserving the reviewed content. The immutable
+        // current review subject selects the authoritative delivery generation;
+        // target-branch ancestry still supplies the proof. Historical attributed
+        // SHAs from superseded review epochs must not leave a successfully
+        // accepted replacement looking partially integrated forever.
+        var reviewedResultSha = ReviewSubjectStore.Read(job.FolderPath)?.ResultSha;
+        if (!string.IsNullOrWhiteSpace(reviewedResultSha)
+            && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
+        {
+            return Integrated(
+                Short(reviewedResultSha),
+                branchName,
+                deliveryRef,
+                "reviewed-result-ancestor");
+        }
+
         // Anchor = integrable entries in the attributed commits[] list. Zero-file
         // runner lifecycle markers are metadata, not delivery expectations.
         var attributed = AttributedCommits(job, reach.DevelopAncestors);
@@ -301,14 +322,24 @@ public sealed class TaskIntegrationStatusService
         var anchor = AnchorFor(job);
         var hasWork = anchor != null || deliveryRef != null;
 
-        if (repoResolved && ReadMergeConflict(job, branchName) is { } conflictDetail)
+        if (repoResolved && ReadIntegrationFailure(job) is { } failure)
+        {
+            var visibleReason = VisibleFailureReason(job, branchName, failure);
             return new TaskIntegrationStatus
             {
                 Status = IntegrationStatuses.ConflictSkipped,
                 DeliveryRef = deliveryRef,
                 IntegrationBranch = branchName,
-                Detail = conflictDetail,
+                Detail = visibleReason,
+                Failure = new TaskIntegrationFailure
+                {
+                    Code = failure.Code,
+                    Label = failure.Label,
+                    Reason = visibleReason,
+                    RebaseRecoveryAvailable = failure.RebaseRecoveryAvailable,
+                },
             };
+        }
 
         if (!hasWork)
             return new TaskIntegrationStatus
@@ -375,34 +406,36 @@ public sealed class TaskIntegrationStatusService
     }
 
     /// <summary>
-    /// Reads the deferred merge-into-develop step outcome from the card's local
-    /// <c>pipeline-execution.json</c> and returns a conflict detail string when the
-    /// merge was recorded conflicted / errored, else null. Local file read only (no
-    /// git spawn); best-effort - any failure reads as "no recorded conflict".
+    /// Reads and classifies the deferred merge-into-develop step outcome from
+    /// the card's local <c>pipeline-execution.json</c>. Local file read only (no
+    /// git spawn); best-effort. Legacy steps without a persisted failure code
+    /// are classified from their stable verdict and reason vocabulary.
     /// </summary>
-    private string? ReadMergeConflict(TaskInfo job, string integrationBranch)
+    private AcceptedIntegrationFailure? ReadIntegrationFailure(TaskInfo job)
     {
         var step = ReadLatestMergeStep(job);
         if (step is null) return null;
-        if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
-        {
-            var evidence = step.VerdictSummary ?? step.Reason
-                ?? $"Merge into {integrationBranch} hit a conflict; not merged.";
-            var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
-                ?? WorktreeTaskLifecycle.BranchFor(job.Id);
-            return $"{evidence} Start the integration recovery action to run a steer round: "
-                   + $"rebase '{delivery}' onto the current integration branch '{integrationBranch}', "
-                   + "resolve the conflicts, and deliver the updated branch.";
-        }
-        // The pre-develop build gate found the merge result red and rolled the
-        // integration branch back: the work is genuinely not in develop, so the
-        // card must read as not-integrated with the gate's reason attached.
-        if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
-            return step.Reason ?? $"The build gate blocked the merge into {integrationBranch}; not merged.";
-        if (step.Status == PipelineStepStatus.Failed
-            && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
-            return step.Reason ?? $"Merge into {integrationBranch} failed; not merged.";
-        return null;
+        return AcceptedIntegrationFailurePolicy.Classify(
+            step.Status,
+            step.Verdict,
+            step.Reason,
+            step.VerdictSummary,
+            step.FailureCode);
+    }
+
+    private static string VisibleFailureReason(
+        TaskInfo job,
+        string branchName,
+        AcceptedIntegrationFailure failure)
+    {
+        if (failure.Code != AcceptedIntegrationFailureCodes.MergeConflict)
+            return failure.Reason;
+
+        var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
+            ?? WorktreeTaskLifecycle.BranchFor(job.Id);
+        return $"{failure.Reason} Start the integration recovery action to run a steer round: "
+               + $"rebase '{delivery}' onto the current integration branch '{branchName}', "
+               + "resolve the conflicts, and deliver the updated branch.";
     }
 
     private PipelineStepExecution? ReadLatestMergeStep(TaskInfo job)
