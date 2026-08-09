@@ -237,6 +237,39 @@ public sealed class TestRunServiceTests : IDisposable
         Assert.Equal("gate-42", source.Id);
     }
 
+    [Theory]
+    [InlineData("NotApplicable", "no verify commands derivable", "not-applicable", "not-applicable", "No build/test defined")]
+    [InlineData("Skipped", "no verify commands derivable", "not-applicable", "not-applicable", "No build/test defined")]
+    [InlineData("Skipped", "pipeline interrupted before command execution", "not-proven", "not-proven", "Build/test gate skipped at")]
+    public void CardEvidence_DistinguishesNotApplicableFromSkippedBuildGate(
+        string verdict,
+        string reason,
+        string expectedEvidenceState,
+        string expectedSourceResult,
+        string expectedSummary)
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.HumanReview, $"gate-{verdict}");
+        var postSteps = Path.Combine(folder, "post-steps");
+        Directory.CreateDirectory(postSteps);
+        File.WriteAllText(
+            Path.Combine(postSteps, "build-test-gate-1.log"),
+            $"verdict={verdict} exit=n/a signal=n/a durationMs=0\n"
+            + "gateId=post-build-test-gate failureKind=None failureFingerprint=n/a\n"
+            + "gateRunId=gate-42 startedAtUtc=2026-08-08T10:00:00Z completedAtUtc=2026-08-08T10:00:01Z\n"
+            + $"repository=demo expectedSha={commit} testedSha={commit}\n"
+            + $"reason={reason}\n");
+        var job = Task($"gate-{verdict}", stack.Storage, commit) with { FolderPath = folder };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(expectedEvidenceState, evidence.EvidenceState);
+        Assert.StartsWith(expectedSummary, evidence.Summary, StringComparison.Ordinal);
+        var source = Assert.Single(evidence.Sources);
+        Assert.Equal(expectedSourceResult, source.Result);
+    }
+
     [Fact]
     public void CardEvidence_DoesNotReuseTaskScopedGradeForDifferentCommit()
     {

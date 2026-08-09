@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { TaskState, type TaskInfo, type TaskTestRunEvidence } from '../../../../models/task.model';
 
-type TaskTestEvidenceContext = Pick<TaskInfo, 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
+type TestEvidenceContext = Pick<TaskInfo, 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
+export type TestEvidenceStatusVariant = 'card' | 'panel';
 
 const MISSING_EVIDENCE_RELEVANT_STATES = new Set<string>([
   TaskState.AutoReview,
@@ -17,13 +18,13 @@ function hasRecordedEvidence(evidence: TaskTestRunEvidence): boolean {
     || (evidence.sources?.length ?? 0) > 0;
 }
 
-function hasAttributedDelivery(task: TaskTestEvidenceContext): boolean {
+function hasAttributedDelivery(task: TestEvidenceContext): boolean {
   return (task.commits?.length ?? 0) > 0
     || !!task.commit
     || !!task.integration?.deliveryRef?.trim();
 }
 
-export function visibleTaskTestEvidence(task: TaskTestEvidenceContext): TaskTestRunEvidence | null {
+export function visibleTestEvidence(task: TestEvidenceContext): TaskTestRunEvidence | null {
   const evidence = task.testEvidence;
   if (!evidence) return null;
   if (hasRecordedEvidence(evidence)) return evidence;
@@ -33,16 +34,18 @@ export function visibleTaskTestEvidence(task: TaskTestEvidenceContext): TaskTest
 }
 
 @Component({
-  selector: 'app-task-test-evidence',
+  selector: 'app-test-evidence-status',
   standalone: true,
   imports: [AppTooltipDirective],
-  templateUrl: './task-test-evidence.html',
-  styleUrl: './task-test-evidence.scss',
+  templateUrl: './test-evidence-status.component.html',
+  styleUrl: './test-evidence-status.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TaskTestEvidenceComponent {
-  readonly task = input.required<TaskTestEvidenceContext>();
-  readonly evidence = computed(() => visibleTaskTestEvidence(this.task()));
+export class TestEvidenceStatusComponent {
+  readonly task = input.required<TestEvidenceContext>();
+  readonly variant = input<TestEvidenceStatusVariant>('card');
+  readonly testId = input('task-card-test-evidence');
+  readonly evidence = computed(() => visibleTestEvidence(this.task()));
 
   tooltipText(): string {
     const evidence = this.evidence();

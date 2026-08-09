@@ -1195,7 +1195,7 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     const aspect = fixture.componentInstance.pipelineRows()
       .find(row => row.id === 'aspect-code-quality');
-    expect(aspect?.status).toBe('skipped');
+    expect(aspect?.status).toBe('notApplicable');
     expect(aspect?.skipHint).toBe('executed remotely · not applicable');
     expect(aspect?.statusTooltip?.body).toContain('Executed remotely');
     const decision = fixture.componentInstance.pipelineRows()
@@ -1208,9 +1208,63 @@ describe('OverviewPaneComponent (smoke)', () => {
     const row = fixture.nativeElement.querySelector(
       '[data-step-id="aspect-code-quality"]',
     ) as HTMLElement | null;
-    expect(row?.getAttribute('data-status')).toBe('skipped');
+    expect(row?.getAttribute('data-status')).toBe('notApplicable');
     expect(row?.textContent).toContain('executed remotely · not applicable');
     expect(row?.textContent).not.toContain('not run:');
+  });
+
+  it('pipeline block: no verify commands is neutral while a required skipped build gate needs attention', async () => {
+    const fixture = await build(baseJob({ state: '5-human-review' }));
+    const poll = TestBed.inject(TaskPipelinePollService);
+    const response = (status: 'notApplicable' | 'skipped', reason: string): TaskPipelineResponse => ({
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: '2026-08-08T10:00:00Z', completedAt: '2026-08-08T10:00:01Z',
+        steps: [{
+          stepId: 'post-build-test-gate', kind: 'tool', model: null, status,
+          startedAt: '2026-08-08T10:00:00Z', completedAt: '2026-08-08T10:00:01Z', durationMs: 1,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          verdict: status === 'notApplicable' ? 'not-applicable' : 'skipped', reason,
+        }],
+      },
+      cost: emptyCost(),
+      config: {},
+    });
+
+    // Legacy AOW records persisted Skipped before NotApplicable existed. The
+    // exact old reason is projected into the new neutral class at read time.
+    poll.pipeline.set(response('skipped', 'no verify commands derivable'));
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+    let row = fixture.componentInstance.pipelineRows()[0];
+    expect(row.status).toBe('notApplicable');
+    expect(row.skipHint).toBe('no build/test defined');
+    expect(row.attentionRequired).toBe(false);
+    expect(row.statusTooltip).toEqual({
+      title: 'Build/test gate: Not applicable',
+      body: 'no verify commands derivable',
+    });
+    expect(fixture.nativeElement.querySelector('[data-step-id="post-build-test-gate"]')?.getAttribute('data-status'))
+      .toBe('notApplicable');
+
+    poll.pipeline.set(response('skipped', 'pipeline interrupted before command execution'));
+    fixture.detectChanges();
+    row = fixture.componentInstance.pipelineRows()[0];
+    expect(row.status).toBe('skipped');
+    expect(row.attentionRequired).toBe(true);
+    expect(row.statusTooltip).toEqual({
+      title: 'Build/test gate: Skipped',
+      body: 'pipeline interrupted before command execution',
+    });
+    expect(fixture.nativeElement.querySelector('[data-step-id="post-build-test-gate"]')?.getAttribute('data-attention-required'))
+      .toBe('true');
   });
 
   it('pipeline block: subset passes plus failed and skipped statuses expose their recorded reasons', async () => {

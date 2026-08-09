@@ -13,7 +13,8 @@ export type PipelineStepStatus =
   | 'passed'
   | 'failed'
   | 'skipped'
-  | 'planned';
+  | 'planned'
+  | 'notApplicable';
 
 /** Static metadata for one step in the pipeline catalogue. */
 export interface PipelineStep {

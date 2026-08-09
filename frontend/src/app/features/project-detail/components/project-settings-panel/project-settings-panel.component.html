@@ -12,6 +12,11 @@
 
   <section class="ps-settings__section" aria-label="Project basics">
     <app-project-basics-card [projectName]="projectName()" />
+    @if (buildProfileGate(); as gate) {
+      @if (!gate.gateApplicable) {
+        <app-project-build-profile-notice [summary]="gate" />
+      }
+    }
   </section>
 
   <section class="ps-settings__section ps-settings__section--preview"

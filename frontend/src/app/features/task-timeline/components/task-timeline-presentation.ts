@@ -88,12 +88,21 @@ export function timelineEventTitle(event: TaskTimelineEvent): string {
 
   if (isPipelineStep(event.kind)) {
     const phase = event.kind.startsWith('pre_') ? 'Pre-step' : 'Post-step';
+    const recordedReason = clean(event.details?.['reason'])?.toLowerCase();
+    const rawStatus = clean(event.details?.['status'])?.toLowerCase();
+    const recordedStatus = rawStatus === 'skipped' && recordedReason === 'no verify commands derivable'
+      ? 'notapplicable'
+      : rawStatus;
     const status = event.kind.endsWith('_started')
       ? 'started'
-      : clean(event.details?.['status']) === 'passed'
+      : recordedStatus === 'passed'
         ? 'passed'
-        : clean(event.details?.['status']) === 'failed'
+        : recordedStatus === 'failed'
           ? 'failed'
+          : recordedStatus === 'skipped'
+            ? 'skipped'
+            : recordedStatus === 'notapplicable' || recordedStatus === 'not-applicable'
+              ? 'not applicable'
           : 'finished';
     const subject = stepSummarySubject(event.summary);
     return `${phase} ${status}${subject ? ` · ${subject}` : ''}`;
@@ -259,7 +268,7 @@ function isPipelineStep(kind: string): boolean {
 }
 
 function stepSummarySubject(summary: string): string | null {
-  const match = clean(summary)?.match(/^(.+?)\s+(?:started|completed|finished|passed|failed)\.?$/i);
+  const match = clean(summary)?.match(/^(.+?)\s+(?:started|completed|finished|passed|failed|skipped|not applicable)\.?$/i);
   return match?.[1] ? sentenceCase(match[1]) : null;
 }
 

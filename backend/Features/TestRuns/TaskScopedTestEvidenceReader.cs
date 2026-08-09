@@ -119,6 +119,7 @@ internal static class TaskScopedTestEvidenceReader
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
 
         var verdict = ReadToken(text, "verdict");
+        var reason = ReadLineValue(text, "reason");
         var commit = ReadToken(text, "testedSha");
         if (string.IsNullOrWhiteSpace(commit) || commit.Equals("n/a", StringComparison.OrdinalIgnoreCase))
             commit = ReadToken(text, "expectedSha");
@@ -129,16 +130,25 @@ internal static class TaskScopedTestEvidenceReader
             return null;
         }
 
-        var result = verdict.ToLowerInvariant() switch
+        var normalizedVerdict = verdict.ToLowerInvariant();
+        var legacyNotApplicable = normalizedVerdict == "skipped"
+                                  && string.Equals(
+                                      reason,
+                                      "no verify commands derivable",
+                                      StringComparison.OrdinalIgnoreCase);
+        var result = normalizedVerdict switch
         {
             "ok" or "warn" => "passed",
             "fail" => "failed",
+            "notapplicable" or "not-applicable" => "not-applicable",
+            "skipped" when legacyNotApplicable => "not-applicable",
             _ => "not-proven",
         };
         var resultLabel = result switch
         {
             "passed" => "green",
             "failed" => "failed",
+            "not-applicable" => "not applicable",
             _ => "skipped",
         };
         var observedAt = ParseDate(ReadToken(text, "completedAtUtc"))
@@ -154,7 +164,9 @@ internal static class TaskScopedTestEvidenceReader
             Commit = commit,
             Result = result,
             ObservedAt = observedAt,
-            Summary = $"{label} {resultLabel} at {Short(commit)}",
+            Summary = result == "not-applicable" && kind == "build-test-gate"
+                ? "No build/test defined"
+                : $"{label} {resultLabel} at {Short(commit)}",
         };
     }
 
@@ -186,6 +198,17 @@ internal static class TaskScopedTestEvidenceReader
             var value = line[(index + marker.Length)..];
             var end = value.IndexOfAny([' ', '\r', '\n']);
             return (end >= 0 ? value[..end] : value).Trim();
+        }
+        return null;
+    }
+
+    private static string? ReadLineValue(string text, string key)
+    {
+        var marker = key + "=";
+        foreach (var line in text.Split('\n'))
+        {
+            if (!line.StartsWith(marker, StringComparison.OrdinalIgnoreCase)) continue;
+            return line[marker.Length..].Trim();
         }
         return null;
     }

@@ -337,6 +337,7 @@
                [attr.data-step-id]="row.id"
                [attr.data-phase]="row.phaseKey"
                [attr.data-status]="row.status"
+               [attr.data-attention-required]="row.attentionRequired || null"
                [attr.data-run-mode]="row.runMode"
                data-testid="overview-pipeline-step">
             <span class="ov-pl-step__status" data-testid="overview-pipeline-step-status"

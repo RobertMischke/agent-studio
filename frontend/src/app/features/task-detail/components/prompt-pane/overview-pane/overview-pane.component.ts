@@ -109,6 +109,8 @@ interface PipelineRowVm {
   skipHint: string | null;
   /** This local step is structurally absent from the remote execution route. */
   remoteNotApplicable: boolean;
+  /** A required build/test gate was skipped instead of reaching a verdict. */
+  attentionRequired: boolean;
   /** Remote Review Plane explanation when this is its projected decision row. */
   remoteReviewDetail: string | null;
   model: string | null;
@@ -301,11 +303,13 @@ function buildStepStatusTooltip(
   const body = detail?.trim();
   if (!body) return null;
   const passedTestCoverage = status === 'passed' && /(?:^|;\s*)test-level=/i.test(body);
-  if (status !== 'failed' && status !== 'skipped' && status !== 'not-run' && !passedTestCoverage) return null;
+  if (status !== 'failed' && status !== 'skipped' && status !== 'notApplicable' && status !== 'not-run' && !passedTestCoverage) return null;
   const title = status === 'failed'
     ? 'Failed'
     : status === 'skipped'
       ? 'Skipped'
+      : status === 'notApplicable'
+        ? 'Not applicable'
       : status === 'not-run' ? 'Not run' : 'Passed';
   return { title: `${label}: ${title}`, body };
 }
@@ -902,8 +906,12 @@ export class OverviewPaneComponent {
         ?? (status === 'not-run'
           ? 'This attempt used a lightweight pipeline or escalated before this step ran.'
           : null);
+      const legacyNoVerifyCommands =
+        status === 'skipped' && e?.reason?.trim().toLowerCase() === 'no verify commands derivable';
       const remoteNotApplicable =
         status === 'skipped' && e?.reason?.startsWith('Executed remotely;') === true;
+      if (legacyNoVerifyCommands || remoteNotApplicable) status = 'notApplicable';
+      const attentionRequired = step.id === 'post-build-test-gate' && status === 'skipped';
       const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
       const costTooltip = buildPipelineStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
@@ -931,12 +939,15 @@ export class OverviewPaneComponent {
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
         skipHint: status === 'not-run'
           ? 'not run: lightweight pipeline or escalation'
+          : status === 'notApplicable' && legacyNoVerifyCommands
+            ? 'no build/test defined'
           : remoteNotApplicable
             ? 'executed remotely · not applicable'
           : status === 'skipped' && chainEndedByEarlyEscalate
             ? 'skipped: chain ended by early escalate'
             : null,
         remoteNotApplicable,
+        attentionRequired,
         remoteReviewDetail: e?.reason?.startsWith('Remote Review Plane verdict')
           ? e.reason
           : null,
@@ -1271,7 +1282,7 @@ export class OverviewPaneComponent {
       ([stepId]) => stepId.toLowerCase() === row.id.toLowerCase(),
     )?.[1] ?? null;
     if (!fileName) return null;
-    if (row.status !== 'passed' && row.status !== 'failed' && row.status !== 'skipped') return null;
+    if (row.status !== 'passed' && row.status !== 'failed' && row.status !== 'skipped' && row.status !== 'notApplicable') return null;
 
     return {
       fileName,
@@ -1320,7 +1331,7 @@ export class OverviewPaneComponent {
       const n = this.agentRunCount();
       if (n > 0) return n === 1 ? '1 agent run' : `${n} agent runs`;
     }
-    if (row.status === 'passed' || row.status === 'failed' || row.status === 'skipped') {
+    if (row.status === 'passed' || row.status === 'failed' || row.status === 'skipped' || row.status === 'notApplicable') {
       return '1 step execution';
     }
     return 'Not reported';

@@ -3613,6 +3613,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildTestGateVerdict.Warn => PipelineStepStatus.Passed,
             BuildTestGateVerdict.Fail => PipelineStepStatus.Failed,
             BuildTestGateVerdict.Skipped => PipelineStepStatus.Skipped,
+            BuildTestGateVerdict.NotApplicable => PipelineStepStatus.NotApplicable,
             _ => PipelineStepStatus.Skipped,
         };
         var verdictToken = result.Verdict switch
@@ -3621,6 +3622,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildTestGateVerdict.Warn => "warn",
             BuildTestGateVerdict.Fail => "fail",
             BuildTestGateVerdict.Skipped => "skipped",
+            BuildTestGateVerdict.NotApplicable => "not-applicable",
             _ => "skipped",
         };
         RecordBuildTestGateStep(current.FolderPath, status, result.DurationMs, verdictToken, result.Reason);

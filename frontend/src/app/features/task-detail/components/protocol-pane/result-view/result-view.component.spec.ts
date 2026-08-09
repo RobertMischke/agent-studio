@@ -73,6 +73,40 @@ describe('ResultViewComponent', () => {
     expect(el.querySelector('[data-testid="result-overview-solution"]')?.textContent).toContain('Re-toned');
   });
 
+  it.each([
+    ['not-applicable', 'No build/test defined'],
+    ['not-proven', 'Build/test gate skipped at d1649ce9'],
+  ] as const)('renders build gate evidence state %s consistently in Result', async (state, summary) => {
+    const fixture = await build(detail(HEAD_ONLY, {
+      state: '5-human-review',
+      testEvidence: {
+        runId: null,
+        runCommit: null,
+        runState: null,
+        runResult: null,
+        matchQuality: 'perfect',
+        direction: 'exact',
+        distance: 0,
+        diffContained: true,
+        evidenceState: state,
+        awaitingEvidence: false,
+        summary,
+        sources: [{
+          kind: 'build-test-gate',
+          id: 'gate-42',
+          commit: 'd1649ce9',
+          result: state,
+          observedAt: null,
+          summary,
+        }],
+      },
+    }), verdict());
+
+    const status = fixture.nativeElement.querySelector('[data-testid="result-test-evidence"]') as HTMLElement;
+    expect(status.dataset['evidenceState']).toBe(state);
+    expect(status.textContent).toContain(summary);
+  });
+
   it('renders one verdict plus grade, duration and tokens metrics', async () => {
     const fixture = await build(detail(HEAD_ONLY), verdict());
     const el = fixture.nativeElement as HTMLElement;

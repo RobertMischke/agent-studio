@@ -1783,13 +1783,13 @@ export interface TaskPublishSignal {
 }
 
 export type TestRunMatchQuality = 'none' | 'perfect' | 'contains-diff' | 'does-not-contain-diff';
-export type TestEvidenceState = 'unassigned' | 'pending' | 'proven' | 'failed' | 'not-proven';
+export type TestEvidenceState = 'unassigned' | 'pending' | 'proven' | 'failed' | 'not-proven' | 'not-applicable';
 
 export interface TaskTestEvidenceSource {
   kind: 'project-test-run' | 'review-build-tests' | 'build-test-gate' | 'pre-develop-build-gate' | 'pre-main-test-gate' | string;
   id: string;
   commit: string;
-  result: 'passed' | 'failed' | 'not-proven' | string;
+  result: 'passed' | 'failed' | 'not-proven' | 'not-applicable' | string;
   observedAt: string | null;
   summary: string;
 }

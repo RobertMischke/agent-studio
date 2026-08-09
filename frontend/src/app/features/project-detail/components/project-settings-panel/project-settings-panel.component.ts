@@ -28,6 +28,10 @@ import { ExecutionAssignmentCardComponent } from '../execution-assignment-card/e
 import { ParallelExecutionCardComponent } from '../parallel-execution-card/parallel-execution-card';
 import { ProjectBasicsCardComponent } from '../project-basics-card/project-basics-card.component';
 import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
+import {
+  ProjectBuildProfileNoticeComponent,
+  type BuildProfileGateSummary,
+} from '../project-build-profile-notice/project-build-profile-notice.component';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -92,6 +96,7 @@ interface WorkspaceListItemLite {
     ParallelExecutionCardComponent,
     ProjectBasicsCardComponent,
     ProjectUrlsPanelComponent,
+    ProjectBuildProfileNoticeComponent,
   ],
   templateUrl: './project-settings-panel.component.html',
   styleUrl: './project-settings-panel.component.scss',
@@ -116,6 +121,7 @@ export class ProjectSettingsPanelComponent implements OnInit {
   readonly wikiBranchOptions = signal<string[]>([]);
   readonly projectQuotaWait = signal<ProjectCliQuotaWaitPolicy | null>(null);
   readonly quotaWaitSaving = signal(false);
+  readonly buildProfileGate = signal<BuildProfileGateSummary | null>(null);
 
   // --- AGT-1812: editable workspace-default orchestrator settings ---------
   /** The workspace that owns this project; the tier these defaults write to. */
@@ -192,6 +198,12 @@ export class ProjectSettingsPanelComponent implements OnInit {
       error: () => { /* keep the default-cap fallback */ },
     });
     this.loadWorkspaceOrchestratorSettings();
+    this.http.get<BuildProfileGateSummary>(
+      `/api/projects/${encodeURIComponent(this.projectName())}/build-profile`,
+    ).subscribe({
+      next: summary => this.buildProfileGate.set(summary),
+      error: () => { /* Do not infer an empty gate when project discovery failed. */ },
+    });
     this.quotaApi.getProjectQuotaWaitPolicy(this.projectName()).subscribe({
       next: policy => this.projectQuotaWait.set(policy),
       error: () => { /* card keeps its safe inherited fallback */ },

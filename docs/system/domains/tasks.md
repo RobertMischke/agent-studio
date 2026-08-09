@@ -234,7 +234,11 @@ files. The corrected card copy names the source and SHA, for example
 `Build/test gate green at <sha>`. Truly unassigned cards use
 `No test evidence assigned` and say that no SHA-linked project run, build gate,
 or review grade is recorded. Only a matched planned or running project test
-run uses `Evidence pending`.
+run uses `Evidence pending`. A build/test gate log with verdict
+`NotApplicable` and reason `no verify commands derivable` projects the neutral
+`No build/test defined` state. A true `Skipped` gate remains `not-proven` and
+uses the red attention treatment, so the card cannot imply that an applicable
+gate passed without executing.
 
 ## Files-tab document projection
 
