@@ -529,6 +529,18 @@ operator changes cause the step to fail before its writer runs.
   ref, not the current project default. Otherwise the pipeline could test one
   revision, review another, omit earlier commits from a multi-commit delivery,
   or merge the reviewed result into the wrong line.
+- Review-subject task identity follows the flat-storage authority. For a task
+  under `tasks/<bucket>/<KEY>`, the validated key is the folder name when its
+  numeric bucket matches; this keeps repository-embedded `.orchestrator/jobs`
+  storage valid even if a concurrent `task.json` metadata rewrite prevents a
+  direct read. Legacy lane storage still reads `key`, `taskKey`, or `id` from
+  `task.json` case-insensitively.
+- Failed accepted-integration steps persist a machine-readable `failureCode`.
+  The board projects that code with concise operator copy and recovery
+  eligibility. `merge-conflict` and `source-needs-rebase` offer focused rebase
+  recovery; task-key or review-subject validation failures stay visible but do
+  not offer an unrelated rebase action. The raw pipeline reason and timeline
+  event remain the detailed evidence.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
