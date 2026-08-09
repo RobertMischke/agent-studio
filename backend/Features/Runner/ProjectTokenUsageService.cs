@@ -594,6 +594,7 @@ public sealed record ProjectTokenUsageSummary
     public string? FirstActivity { get; init; }
     public string? LastActivity { get; init; }
     public string FetchedAt { get; init; } = "";
+    public ProjectTokenDataFreshness Freshness { get; init; } = ProjectTokenDataFreshness.Empty;
     public string Disclaimer { get; init; } = "";
 }
 
@@ -604,6 +605,22 @@ public sealed record ProjectTokenHeatmap
     public IReadOnlyList<ProjectTokenHeatmapJob> Jobs { get; init; } = [];
     public bool HasData { get; init; }
     public string FetchedAt { get; init; } = "";
+    public ProjectTokenDataFreshness Freshness { get; init; } = ProjectTokenDataFreshness.Empty;
+}
+
+/// <summary>
+/// Read-health metadata for project token surfaces. <see cref="AsOf"/> is the
+/// newest usage timestamp successfully read, not the HTTP fetch time.
+/// </summary>
+public sealed record ProjectTokenDataFreshness
+{
+    public static ProjectTokenDataFreshness Empty { get; } = new();
+
+    /// <summary><c>complete</c>, <c>partial</c>, or <c>unavailable</c>.</summary>
+    public string Status { get; init; } = "complete";
+    public string? AsOf { get; init; }
+    public string? Warning { get; init; }
+    public IReadOnlyList<string> Sources { get; init; } = [];
 }
 
 public sealed record ProjectTokenHeatmapJob

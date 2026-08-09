@@ -398,7 +398,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `perf-frontend.spec.ts` | Frontend perceived latency |
 | `perf-stress.spec.ts` | Frontend stress: render perf at scale |
 
-### `project/` - 48 specs
+### `project/` - 49 specs
 
 | Spec | Summary |
 |------|---------|
@@ -435,6 +435,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-shell-rail.spec.ts` | opens the project shell from the kanban tab and lands on Overview |
 | `project-steering-docs.spec.ts` | Project detail - Agent Docs section |
 | `project-tab-tokens.spec.ts` | Per-project token total badge |
+| `project-token-usage-freshness.spec.ts` | current task receipt, source timestamp, partial-data warning, and both-theme screenshots |
 | `project-token-usage-panel.spec.ts` | empty state - no orchestrator entries renders explicit empty copy |
 | `project-url-preview-in-place.spec.ts` | keeps start, settings, live output, and stop in the embed in both themes |
 | `project-uxui-panel.spec.ts` | empty state - no design folder, all action buttons render |

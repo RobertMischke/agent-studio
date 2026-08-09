@@ -454,7 +454,7 @@ internal static class TaskEndpointHelpers
     /// <summary>
     /// Builds the per-project → per-job token lookup used by
     /// <c>WithRuntime</c> in the listing endpoints. Reads each unique
-    /// project bus projection at most once.
+    /// hybrid project projection at most once.
     /// </summary>
     internal static Dictionary<string, TaskTokenSummary> BuildTokenLookup(
         IEnumerable<TaskInfo> jobs,

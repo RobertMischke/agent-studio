@@ -2,6 +2,7 @@
 export { ProjectTokenUsagePanelComponent } from './components/project-token-usage-panel/project-token-usage-panel.component';
 export type {
   ProjectTokenCategory,
+  ProjectTokenDataFreshness,
   ProjectTokenUsageSummary,
   ProjectTokenHeatmapCell,
   ProjectTokenHeatmapJob,
