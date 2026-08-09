@@ -6,6 +6,7 @@ import { buildResultDocument } from '../result-document';
 import { RESULT_CASE_META } from '../result-case';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import type { GeneratedFileProvenanceView } from '../../generated-file-provenance.util';
+import { TestEvidenceStatusComponent } from '../../../../test-evidence';
 
 /**
  * The Result view (Protocol -> Result redesign).
@@ -32,7 +33,7 @@ import type { GeneratedFileProvenanceView } from '../../generated-file-provenanc
   selector: 'app-result-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective, BeautifulResultsComponent],
+  imports: [TooltipDirective, BeautifulResultsComponent, TestEvidenceStatusComponent],
   templateUrl: './result-view.component.html',
   styleUrl: './result-view.component.scss',
 })

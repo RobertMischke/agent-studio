@@ -1,10 +1,12 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 const PROJECT_ID = 'PROJ-900';
 const PROJECT_NAME = 'Durable Links';
 const RESULTS_DIR = process.env.PROJECT_HUB_DEEP_LINK_RESULTS_DIR
+  ?? process.env.JOB_RESULTS_DIR
   ?? path.resolve(__dirname, '..', '..', 'test-results', 'project-hub-deep-links');
 
 const project = {
@@ -72,6 +74,15 @@ async function installRoutes(page: Page): Promise<void> {
     queueHealth: {
       severity: 'ok', issueCount: 0, missingJobJson: [], duplicates: [], stateMismatches: [],
     },
+  }));
+  await page.route(/\/api\/projects\/Durable%20Links\/build-profile(?:\?|$)/, route => json(route, {
+    profile: null,
+    status: null,
+    pickupAllowed: true,
+    gateReason: 'No build profile declared',
+    plannedDryRun: null,
+    gateApplicable: false,
+    verifyPlan: { source: 'none', commands: [] },
   }));
   await page.route('**/api/cli/quota**', route => json(route, {
     at: '2026-07-22T12:00:00Z', ttlSeconds: 600, snapshots: [],
@@ -152,13 +163,38 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('an id-based Project Hub URL survives reload and rail history', async ({ page }) => {
+test('an id-based Project Hub URL survives reload and rail history', async ({ page }, testInfo) => {
   await page.goto(`/#/projects/${PROJECT_ID}/settings`);
   await expectRail(page, 'settings');
   await expectRoute(page, `/projects/${PROJECT_ID}/settings`);
 
   await page.reload();
   await expectRail(page, 'settings');
+  const noVerifyNotice = page.getByTestId('project-settings-no-verify-commands');
+  await expect(noVerifyNotice).toBeVisible();
+  await expect(noVerifyNotice).toContainText('No BuildProfile is declared');
+  await expect(noVerifyNotice.getByRole('link', { name: 'BuildProfile convention' }))
+    .toHaveAttribute('href', /contributor-setup\.md#onboarding-checklist/);
+  await setTheme(page, 'light');
+  const noticeScreenshot = path.join(
+    RESULTS_DIR,
+    'agt-2518--project-settings-no-verify-commands--mocked.png',
+  );
+  await noVerifyNotice.screenshot({ path: noticeScreenshot });
+  await testInfo.attach('project-settings-no-verify-commands', {
+    path: noticeScreenshot,
+    contentType: 'image/png',
+  });
+  await setTheme(page, 'dark');
+  const darkNoticeScreenshot = path.join(
+    RESULTS_DIR,
+    'agt-2518--project-settings-no-verify-commands--dark--mocked.png',
+  );
+  await noVerifyNotice.screenshot({ path: darkNoticeScreenshot });
+  await testInfo.attach('project-settings-no-verify-commands--dark', {
+    path: darkNoticeScreenshot,
+    contentType: 'image/png',
+  });
 
   await page.getByTestId('project-shell-rail-project-urls').click();
   await expectRail(page, 'project-urls');

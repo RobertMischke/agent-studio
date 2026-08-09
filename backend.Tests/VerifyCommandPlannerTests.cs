@@ -378,6 +378,21 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         AssertCommand(cmd, VerifyEcosystem.DotNet, kind, "", command);
         Assert.Equal(Path.GetFullPath(_root), BuildTestGateRunner.ResolveWorkingDirectory(_root, cmd));
     }
+
+    [Theory]
+    [InlineData(BuildTestGateVerdict.Ok, true)]
+    [InlineData(BuildTestGateVerdict.NotApplicable, true)]
+    [InlineData(BuildTestGateVerdict.Skipped, false)]
+    [InlineData(BuildTestGateVerdict.Warn, false)]
+    [InlineData(BuildTestGateVerdict.Fail, false)]
+    public void PreDevelopGate_GreenPolicy_DoesNotTreatSkippedAsVerified(
+        BuildTestGateVerdict verdict,
+        bool expectedGreen)
+    {
+        var result = new BuildTestGateResult(verdict, null, 0, "", "test", false, false);
+
+        Assert.Equal(expectedGreen, PreDevelopBuildGate.IsGreen(result));
+    }
 }
 
 /// <summary>
@@ -432,11 +447,11 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     }
 
     [Fact]
-    public async Task NoDerivableCommands_SkipsWithHonestReason()
+    public async Task NoDerivableCommands_IsNotApplicableWithHonestReason()
     {
         // Empty repo, no profile -> the gate runs without a build check and says so.
         var r = await Run(profile: null);
-        Assert.Equal(BuildTestGateVerdict.Skipped, r.Verdict);
+        Assert.Equal(BuildTestGateVerdict.NotApplicable, r.Verdict);
         Assert.Equal("no verify commands derivable", r.Reason);
         Assert.False(r.RanBackendBuild);
         Assert.False(r.RanFrontendBuild);
@@ -468,8 +483,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             CancellationToken.None);
         var second = await Run(profile: null);
 
-        Assert.Equal(BuildTestGateVerdict.Skipped, first.Verdict);
-        Assert.Equal(BuildTestGateVerdict.Skipped, second.Verdict);
+        Assert.Equal(BuildTestGateVerdict.NotApplicable, first.Verdict);
+        Assert.Equal(BuildTestGateVerdict.NotApplicable, second.Verdict);
     }
 
     [Fact]

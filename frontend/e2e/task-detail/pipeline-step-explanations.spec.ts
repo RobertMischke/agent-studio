@@ -20,7 +20,19 @@ const PROJECT = 'fixture';
 const WATCH_PATH = 'C:/fixtures/pipeline-step-explanations';
 const JOB_ID = 'pipeline-step-explanations-test';
 
-function makeDetail(state: string) {
+function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'skipped' = 'passed') {
+  const evidenceState =
+    gateStatus === 'notApplicable'
+      ? 'not-applicable'
+      : gateStatus === 'skipped'
+        ? 'not-proven'
+        : 'proven';
+  const evidenceSummary =
+    gateStatus === 'notApplicable'
+      ? 'No build/test defined'
+      : gateStatus === 'skipped'
+        ? 'Build/test gate skipped at d1649ce9'
+        : 'Build/test gate passed at d1649ce9';
   return {
     info: {
       id: JOB_ID,
@@ -40,9 +52,39 @@ function makeDetail(state: string) {
       commit: null,
       commits: [],
       ownerClientId: 'local-default',
+      testEvidence: {
+        runId: null,
+        runCommit: null,
+        runState: null,
+        runResult: null,
+        matchQuality: 'perfect',
+        direction: 'exact',
+        distance: 0,
+        diffContained: true,
+        evidenceState,
+        awaitingEvidence: false,
+        summary: evidenceSummary,
+        sources: [
+          {
+            kind: 'build-test-gate',
+            id: 'gate-d1649ce9',
+            commit: 'd1649ce9',
+            result: evidenceState,
+            observedAt: '2026-06-02T08:00:02Z',
+            summary: evidenceSummary,
+          },
+        ],
+      },
     },
     promptMarkdown: 'Test prompt.',
-    statusMarkdown: '',
+    statusMarkdown: `# Status
+
+- Result: Success
+
+## Overview
+- Problem: Build/test evidence must communicate whether the gate was applicable.
+- Solution: The result uses the same neutral or conspicuous state as the board and timeline.
+`,
     log: [],
     promptHistory: [],
     contextUsage: null,
@@ -80,7 +122,12 @@ function basePipeline() {
   };
 }
 
-function execStep(stepId: string, kind: string, status: string, extra: Record<string, unknown> = {}) {
+function execStep(
+  stepId: string,
+  kind: string,
+  status: string,
+  extra: Record<string, unknown> = {},
+) {
   return {
     stepId,
     kind,
@@ -96,7 +143,17 @@ function execStep(stepId: string, kind: string, status: string, extra: Record<st
   };
 }
 
-function pipelineBody() {
+function pipelineBody(gateStatus: 'passed' | 'notApplicable' | 'skipped' = 'passed') {
+  const gateExtra =
+    gateStatus === 'notApplicable'
+      ? { verdict: 'not-applicable', reason: 'no verify commands derivable' }
+      : gateStatus === 'skipped'
+        ? { verdict: 'skipped', reason: 'pipeline interrupted before command execution' }
+        : {
+            verdict: 'ok',
+            reason:
+              'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
+          };
   return {
     pipeline: basePipeline(),
     execution: {
@@ -111,10 +168,12 @@ function pipelineBody() {
         execStep('core-agent-run', 'core', 'passed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('post-git-commit-attribution', 'tool', 'passed'),
-        execStep('post-build-test-gate', 'tool', 'passed', {
-          verdict: 'ok',
-          reason: 'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
-        }),
+        execStep(
+          'post-build-test-gate',
+          'tool',
+          gateStatus === 'notApplicable' ? 'skipped' : gateStatus,
+          gateExtra,
+        ),
         execStep('post-orchestrator-decision', 'orchestrator', 'passed', { verdict: 'accept' }),
         execStep('post-drift-adr-code', 'drift', 'passed'),
       ],
@@ -124,9 +183,12 @@ function pipelineBody() {
   };
 }
 
-async function installRoutes(page: Page, state: string) {
+async function installRoutes(
+  page: Page,
+  state: string,
+  gateStatus: () => 'passed' | 'notApplicable' | 'skipped' = () => 'passed',
+) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {
@@ -153,9 +215,15 @@ async function installRoutes(page: Page, state: string) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        preparation: [], orchestratorPrep: [], ready: [],
-        progress: [], failedPickup: [], autoReview: [], humanReview: [],
-        completed: [], archive: [],
+        preparation: [],
+        orchestratorPrep: [],
+        ready: [],
+        progress: [],
+        failedPickup: [],
+        autoReview: [],
+        humanReview: [],
+        completed: [],
+        archive: [],
       }),
     }),
   );
@@ -197,7 +265,11 @@ async function installRoutes(page: Page, state: string) {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
   await page.route('**/api/cli/usage**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
+    }),
   );
   await page.route('**/api/cli/quota**', (route) =>
     route.fulfill({
@@ -228,7 +300,11 @@ async function installRoutes(page: Page, state: string) {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ runs: [] }),
+    }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/session-events(\\?|$)`), (route) =>
     route.fulfill({
@@ -241,11 +317,15 @@ async function installRoutes(page: Page, state: string) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(pipelineBody()),
+      body: JSON.stringify(pipelineBody(gateStatus())),
     }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(makeDetail(state, gateStatus())),
+    }),
   );
 }
 
@@ -265,9 +345,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
 }
 
 async function expandAllPipelineSections(page: Page): Promise<void> {
-  const collapsed = page.locator(
-    '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
-  );
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   await collapsed.evaluateAll((buttons) => {
     for (const button of buttons) {
       (button as HTMLButtonElement).click();
@@ -290,7 +368,9 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     });
   });
 
-  test('every step name opens an explanation tooltip with the step label as title', async ({ page }, testInfo) => {
+  test('every step name opens an explanation tooltip with the step label as title', async ({
+    page,
+  }, testInfo) => {
     await installRoutes(page, '4-auto-review');
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
@@ -308,51 +388,67 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     const tooltip = page.getByTestId('cac-tooltip');
 
     // CORE: hovering the agent-run step explains the single coding seat.
-    await page.locator('[data-step-id="core-agent-run"]')
-      .getByTestId('overview-pipeline-step-name').hover();
+    await page
+      .locator('[data-step-id="core-agent-run"]')
+      .getByTestId('overview-pipeline-step-name')
+      .hover();
     await expect(tooltip).toBeVisible();
     await expect(tooltip.locator('.cac-tooltip__title')).toHaveText('Agent execution');
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('coding seat');
 
     // PRE: the loop guard explanation mentions the loop guard.
-    await page.locator('[data-step-id="pre-loop-guard"]')
-      .getByTestId('overview-pipeline-step-name').hover();
+    await page
+      .locator('[data-step-id="pre-loop-guard"]')
+      .getByTestId('overview-pipeline-step-name')
+      .hover();
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('loop guard');
 
     // ASPECT: the requirement-fit aspect explanation mentions acceptance criteria.
-    await page.locator('[data-step-id="aspect-requirement-fit"]')
-      .getByTestId('overview-pipeline-step-name').hover();
+    await page
+      .locator('[data-step-id="aspect-requirement-fit"]')
+      .getByTestId('overview-pipeline-step-name')
+      .hover();
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('acceptance criteria');
 
     // TOOL: the commit-attribution step explanation mentions git commits.
-    await page.locator('[data-step-id="post-git-commit-attribution"]')
-      .getByTestId('overview-pipeline-step-name').hover();
+    await page
+      .locator('[data-step-id="post-git-commit-attribution"]')
+      .getByTestId('overview-pipeline-step-name')
+      .hover();
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('git commits');
 
     // A passed subset gate exposes the exact coverage scope from its green
     // status icon instead of implying that the full suite ran.
-    await page.locator('[data-step-id="post-build-test-gate"]')
-      .getByTestId('overview-pipeline-step-status').hover();
+    await page
+      .locator('[data-step-id="post-build-test-gate"]')
+      .getByTestId('overview-pipeline-step-status')
+      .hover();
     await expect(tooltip.locator('.cac-tooltip__title')).toHaveText('Build/test gate: Passed');
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('test-level=work-package');
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('full-suite=not-run');
 
     // DECISION: the orchestrator decision explanation mentions the final ruling.
-    await page.locator('[data-step-id="post-orchestrator-decision"]')
-      .getByTestId('overview-pipeline-step-name').hover();
+    await page
+      .locator('[data-step-id="post-orchestrator-decision"]')
+      .getByTestId('overview-pipeline-step-name')
+      .hover();
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('final ruling');
 
     // DRIFT: the drift step explanation flags that it is off by default.
-    await page.locator('[data-step-id="post-drift-adr-code"]')
-      .getByTestId('overview-pipeline-step-name').hover();
+    await page
+      .locator('[data-step-id="post-drift-adr-code"]')
+      .getByTestId('overview-pipeline-step-name')
+      .hover();
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('off by default');
 
     if (RESULTS_DIR) {
       for (const theme of ['dark', 'light'] as const) {
         await setTheme(page, theme);
         // Keep the subset-coverage proof open for each themed capture.
-        await page.locator('[data-step-id="post-build-test-gate"]')
-          .getByTestId('overview-pipeline-step-status').hover();
+        await page
+          .locator('[data-step-id="post-build-test-gate"]')
+          .getByTestId('overview-pipeline-step-status')
+          .hover();
         await expect(tooltip).toBeVisible();
         const pipelineBox = await pipeline.boundingBox();
         const tooltipBox = await tooltip.boundingBox();
@@ -360,14 +456,10 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
         expect(tooltipBox).not.toBeNull();
         const x = Math.max(0, Math.min(pipelineBox!.x, tooltipBox!.x) - 16);
         const y = Math.max(0, Math.min(pipelineBox!.y, tooltipBox!.y) - 16);
-        const right = Math.max(
-          pipelineBox!.x + pipelineBox!.width,
-          tooltipBox!.x + tooltipBox!.width,
-        ) + 16;
-        const bottom = Math.max(
-          pipelineBox!.y + pipelineBox!.height,
-          tooltipBox!.y + tooltipBox!.height,
-        ) + 16;
+        const right =
+          Math.max(pipelineBox!.x + pipelineBox!.width, tooltipBox!.x + tooltipBox!.width) + 16;
+        const bottom =
+          Math.max(pipelineBox!.y + pipelineBox!.height, tooltipBox!.y + tooltipBox!.height) + 16;
         const screenshotPath = path.join(
           RESULTS_DIR,
           `pipeline-subset-coverage-tooltip--${theme}.png`,
@@ -378,6 +470,92 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
         });
         await testInfo.attach(`pipeline-subset-coverage-tooltip--${theme}`, {
           path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+  });
+
+  test('build gate not-applicable stays neutral and a true skip stays conspicuous in task detail', async ({
+    page,
+  }, testInfo) => {
+    let status: 'notApplicable' | 'skipped' = 'notApplicable';
+    await installRoutes(page, '5-human-review', () => status);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await dismissErrorDialog(page);
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+    const gate = page.locator('[data-step-id="post-build-test-gate"]');
+    await expect(gate).toHaveAttribute('data-status', 'notApplicable');
+    await expect(gate).toContainText('no build/test defined');
+    await expect(gate).not.toHaveAttribute('data-attention-required', 'true');
+
+    await page.getByTestId('studio-pane-toggle-protocol').click();
+    await expect(page.getByTestId('pane-protocol')).toBeVisible();
+    await page.getByTestId('inspector-tab-protocol').click();
+    const resultEvidence = page.getByTestId('result-test-evidence');
+    await expect(resultEvidence).toHaveAttribute('data-evidence-state', 'not-applicable');
+    await expect(resultEvidence).toContainText('No build/test defined');
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2518--task-detail-build-test-gate--not-applicable--${theme}--mocked.png`,
+        );
+        await pipeline.screenshot({ path: screenshotPath });
+        await testInfo.attach(`task-detail-not-applicable--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+        const resultScreenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2518--task-result-build-test-gate--not-applicable--${theme}--mocked.png`,
+        );
+        await resultEvidence.screenshot({ path: resultScreenshotPath });
+        await testInfo.attach(`task-result-not-applicable--${theme}`, {
+          path: resultScreenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+
+    status = 'skipped';
+    await page.reload();
+    await dismissErrorDialog(page);
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+    await expect(gate).toHaveAttribute('data-status', 'skipped');
+    await expect(gate).toHaveAttribute('data-attention-required', 'true');
+    await page.getByTestId('studio-pane-toggle-protocol').click();
+    await expect(page.getByTestId('pane-protocol')).toBeVisible();
+    await page.getByTestId('inspector-tab-protocol').click();
+    await expect(resultEvidence).toHaveAttribute('data-evidence-state', 'not-proven');
+    await expect(resultEvidence).toContainText('Build/test gate skipped at d1649ce9');
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2518--task-detail-build-test-gate--skipped--${theme}--mocked.png`,
+        );
+        await pipeline.screenshot({ path: screenshotPath });
+        await testInfo.attach(`task-detail-skipped--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+        const resultScreenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2518--task-result-build-test-gate--skipped--${theme}--mocked.png`,
+        );
+        await resultEvidence.screenshot({ path: resultScreenshotPath });
+        await testInfo.attach(`task-result-skipped--${theme}`, {
+          path: resultScreenshotPath,
           contentType: 'image/png',
         });
       }

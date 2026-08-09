@@ -1,4 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const PROJECT = 'Lane Counter Project';
 const WATCH_PATH = 'C:/fixtures/lane-counter-project';
@@ -435,4 +437,83 @@ test('archived-card evidence incident renders honest before and SHA-linked after
   const after = test.info().outputPath('evidence-linked-after.png');
   await reviewLane.screenshot({ path: after });
   await test.info().attach('evidence-linked-after', { path: after, contentType: 'image/png' });
+});
+
+test('build gate not-applicable is neutral while a true skip stays red', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  let corrected = false;
+  const gateEvidence = (
+    state: 'not-applicable' | 'not-proven',
+    summary: string,
+  ): NonNullable<TaskFixture['testEvidence']> => ({
+    runId: null,
+    runCommit: null,
+    runState: null,
+    runResult: null,
+    matchQuality: 'perfect',
+    direction: 'exact',
+    distance: 0,
+    diffContained: true,
+    evidenceState: state,
+    awaitingEvidence: false,
+    summary,
+    sources: [{
+      kind: 'build-test-gate',
+      id: state === 'not-applicable' ? 'gate-aow-9' : 'gate-aow-10',
+      commit: 'a1b2c3d4',
+      result: state,
+      observedAt: '2026-08-08T10:00:00Z',
+      summary,
+    }],
+  });
+  const grouped = (): typeof GROUPED => ({
+    backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
+    failedPickup: [], codeNotComplete: [], review: [], autoReview: [],
+    humanReview: [
+      task('AOW-9', '5-human-review', 1, corrected
+        ? gateEvidence('not-applicable', 'No build/test defined')
+        : gateEvidence('not-proven', 'Build/test gate skipped at a1b2c3d4')),
+      task('AOW-10', '5-human-review', 2,
+        gateEvidence('not-proven', 'Build/test gate skipped at e5f6a7b8')),
+    ],
+    escalated: [], completed: [], archive: [],
+  });
+  const resultsDir = process.env['JOB_RESULTS_DIR']
+    ?? test.info().outputDir;
+  fs.mkdirSync(resultsDir, { recursive: true });
+
+  await boot(page, grouped);
+  const reviewLane = page.getByTestId('lane-5-human-review');
+  const aow9 = page.getByTestId('task-card').filter({ hasText: 'AOW-9' })
+    .getByTestId('task-card-test-evidence');
+  const aow10 = page.getByTestId('task-card').filter({ hasText: 'AOW-10' })
+    .getByTestId('task-card-test-evidence');
+  await expect(aow9).toHaveAttribute('data-evidence-state', 'not-proven');
+  await reviewLane.screenshot({
+    path: path.join(resultsDir, 'agt-2518--build-test-gate-skip-classes--before--mocked.png'),
+  });
+
+  corrected = true;
+  await page.reload();
+  await expect(page.getByTestId('studio-sidebar')).toBeVisible({ timeout: 15_000 });
+  await expect(aow9).toHaveAttribute('data-evidence-state', 'not-applicable');
+  await expect(aow9).toContainText('No build/test defined');
+  await expect(aow10).toHaveAttribute('data-evidence-state', 'not-proven');
+  await expect(aow10).toContainText('Build/test gate skipped at e5f6a7b8');
+
+  const [neutral, skipped] = await Promise.all([
+    aow9.evaluate(element => ({
+      color: getComputedStyle(element).color,
+      background: getComputedStyle(element).backgroundColor,
+    })),
+    aow10.evaluate(element => ({
+      color: getComputedStyle(element).color,
+      background: getComputedStyle(element).backgroundColor,
+    })),
+  ]);
+  expect(neutral.color).not.toBe(skipped.color);
+  expect(neutral.background).not.toBe(skipped.background);
+  await reviewLane.screenshot({
+    path: path.join(resultsDir, 'agt-2518--build-test-gate-skip-classes--after--mocked.png'),
+  });
 });

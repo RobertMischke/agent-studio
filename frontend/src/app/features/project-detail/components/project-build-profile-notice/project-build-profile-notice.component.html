@@ -1,0 +1,23 @@
+<aside class="verify-notice"
+       data-testid="project-settings-no-verify-commands"
+       aria-labelledby="project-settings-no-verify-title">
+  <span class="verify-notice__dot" aria-hidden="true"></span>
+  <span class="verify-notice__copy">
+    <span class="verify-notice__title-row">
+      <strong id="project-settings-no-verify-title">No build/test commands</strong>
+      <span class="verify-notice__badge">Not applicable</span>
+    </span>
+    <span>
+      @if (summary().profile === null) {
+        No BuildProfile is declared and no verify commands can be derived.
+      } @else {
+        The declared BuildProfile and repository layout provide no verify commands.
+      }
+      The build/test gate runs no checks for this project.
+      <a class="verify-notice__link"
+         href="https://github.com/agent-orc/agent-studio/blob/main/docs/operations/setup/contributor-setup.md#onboarding-checklist-registry--working-directory--build-profile-belong-together"
+         target="_blank"
+         rel="noreferrer">BuildProfile convention</a>
+    </span>
+  </span>
+</aside>

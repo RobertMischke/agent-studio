@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { TaskState, type TaskInfo, type TaskTestRunEvidence } from '../../../../models/task.model';
-import { TaskTestEvidenceComponent, visibleTaskTestEvidence } from './task-test-evidence';
+import { TestEvidenceStatusComponent, visibleTestEvidence } from './test-evidence-status.component';
 
 const missingEvidence: TaskTestRunEvidence = {
   runId: null,
@@ -27,7 +27,7 @@ function task(state: string, overrides: Partial<TaskInfo> = {}): TaskInfo {
   } as TaskInfo;
 }
 
-describe('TaskTestEvidenceComponent', () => {
+describe('TestEvidenceStatusComponent', () => {
   it.each([
     TaskState.Backlog,
     TaskState.Preparation,
@@ -37,7 +37,7 @@ describe('TaskTestEvidenceComponent', () => {
     TaskState.FailedPickup,
     TaskState.CodeNotComplete,
   ])('suppresses missing evidence in %s before a delivery exists', (state) => {
-    expect(visibleTaskTestEvidence(task(state))).toBeNull();
+    expect(visibleTestEvidence(task(state))).toBeNull();
   });
 
   it.each([
@@ -46,7 +46,7 @@ describe('TaskTestEvidenceComponent', () => {
     TaskState.Completed,
     TaskState.Archive,
   ])('shows missing evidence after the task reaches %s', (state) => {
-    expect(visibleTaskTestEvidence(task(state))).toBe(missingEvidence);
+    expect(visibleTestEvidence(task(state))).toBe(missingEvidence);
   });
 
   it.each([
@@ -54,7 +54,7 @@ describe('TaskTestEvidenceComponent', () => {
     ['a legacy attributed commit', { commit: { sha: 'abcdef12' } }],
     ['an attributed delivery ref', { integration: { deliveryRef: 'runner/host/TASK-1' } }],
   ] as const)('shows missing evidence in Ready when the task has %s', (_label, delivery) => {
-    expect(visibleTaskTestEvidence(task(TaskState.Ready, delivery as Partial<TaskInfo>))).toBe(missingEvidence);
+    expect(visibleTestEvidence(task(TaskState.Ready, delivery as Partial<TaskInfo>))).toBe(missingEvidence);
   });
 
   it('keeps recorded evidence visible before review', () => {
@@ -72,7 +72,7 @@ describe('TaskTestEvidenceComponent', () => {
       summary: 'Perfect match',
     };
 
-    expect(visibleTaskTestEvidence(task(TaskState.Ready, { testEvidence: recordedEvidence })))
+    expect(visibleTestEvidence(task(TaskState.Ready, { testEvidence: recordedEvidence })))
       .toBe(recordedEvidence);
   });
 
@@ -81,8 +81,8 @@ describe('TaskTestEvidenceComponent', () => {
     ['contains-diff', 'proven', '10 commit(s) after, diff included'],
     ['none', 'unassigned', 'No matching test run'],
   ] as const)('renders %s evidence honestly', async (quality, state, summary) => {
-    await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
-    const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
     const evidence = {
       ...missingEvidence,
       runId: quality === 'none' ? null : 'TR-42',
@@ -107,17 +107,49 @@ describe('TaskTestEvidenceComponent', () => {
   });
 
   it('removes the missing-evidence block from the DOM for a Ready task without delivery', async () => {
-    await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
-    const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
     fixture.componentRef.setInput('task', task(TaskState.Ready));
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]')).toBeNull();
   });
 
+  it.each([
+    ['not-applicable', 'No build/test defined', 'not-applicable'],
+    ['not-proven', 'Build/test gate skipped at d1649ce9', 'not-proven'],
+  ] as const)('keeps build gate state %s distinct on the card', async (state, summary, sourceResult) => {
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
+    const evidence = {
+      ...missingEvidence,
+      matchQuality: 'perfect',
+      direction: 'exact',
+      distance: 0,
+      diffContained: true,
+      evidenceState: state,
+      summary,
+      sources: [{
+        kind: 'build-test-gate',
+        id: 'gate-42',
+        commit: 'd1649ce9',
+        result: sourceResult,
+        observedAt: '2026-08-08T10:00:00Z',
+        summary,
+      }],
+    } satisfies TaskTestRunEvidence;
+    fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]') as HTMLElement;
+    expect(element.getAttribute('data-evidence-state')).toBe(state);
+    expect(element.textContent).toContain(summary);
+    expect(element.textContent).toContain('Build/test gate · gate-42');
+  });
+
   it('names SHA-linked review and gate evidence instead of the unassigned default', async () => {
-    await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
-    const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
     const evidence = {
       ...missingEvidence,
       matchQuality: 'perfect',

@@ -35,10 +35,11 @@
     <ol class="tl-list" data-testid="timeline-list">
       @for (event of displayEvents(); track eventIdentity(event)) {
         <li class="tl-item"
-            [class]="'tl-item--' + rowTone(event.kind)"
+            [class]="'tl-item--' + rowTone(event)"
             [class.tl-item--verdict]="isVerdictKind(event.kind)"
             data-testid="timeline-event"
-            [attr.data-kind]="event.kind">
+            [attr.data-kind]="event.kind"
+            [attr.data-status]="event.details?.['status'] ?? null">
           <span class="tl-item__rail" aria-hidden="true">
             <span class="tl-item__glyph" [cacTooltip]="event.actor">{{ actorGlyph(event.actor) }}</span>
           </span>

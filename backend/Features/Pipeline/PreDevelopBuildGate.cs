@@ -61,11 +61,11 @@ public sealed class PreDevelopBuildGate
 
     /// <summary>
     /// The gate is green on <see cref="BuildTestGateVerdict.Ok"/> and on
-    /// <see cref="BuildTestGateVerdict.Skipped"/> (nothing derivable to build -
-    /// then it must not invent a blocker). Everything else - including an
-    /// infrastructure failure - is fail-closed: an unverified merge never stays
-    /// on the integration branch.
+    /// <see cref="BuildTestGateVerdict.NotApplicable"/> (nothing derivable to
+    /// build, so it must not invent a blocker). A skipped run is not green:
+    /// where commands exist, an unverified merge never stays on the integration
+    /// branch. Infrastructure failures remain fail-closed as well.
     /// </summary>
     public static bool IsGreen(BuildTestGateResult result)
-        => result.Verdict is BuildTestGateVerdict.Ok or BuildTestGateVerdict.Skipped;
+        => result.Verdict is BuildTestGateVerdict.Ok or BuildTestGateVerdict.NotApplicable;
 }

@@ -281,4 +281,10 @@ public enum PipelineStepStatus
     /// follow-up task implements it) and was not executed.
     /// </summary>
     Planned,
+    /// <summary>
+    /// Step deliberately has no work because the project has no applicable
+    /// verification commands. Unlike <see cref="Skipped"/>, this is not an
+    /// interrupted or unexecuted required check.
+    /// </summary>
+    NotApplicable,
 }
