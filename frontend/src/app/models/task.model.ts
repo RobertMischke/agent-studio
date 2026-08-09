@@ -1402,7 +1402,7 @@ export type ProjectUrlStartResponse = ProjectUrlProcessSnapshot;
 /** AGT-2180 — stable classification vocabulary for URL Preview diagnostics. */
 export type ProjectUrlDiagnosisClass =
   | 'not-started' | 'starting' | 'command-unavailable' | 'invalid-cwd'
-  | 'process-exited' | 'port-never-opened' | 'timeout' | 'http-error-response'
+  | 'process-exited' | 'port-in-use' | 'port-never-opened' | 'timeout' | 'http-error-response'
   | 'content-not-renderable' | 'invalid-configuration' | 'running';
 
 /** AGT-2180 — bounded, redacted evidence snapshot behind the offline card. */
@@ -1422,7 +1422,9 @@ export interface ProjectUrlDiagnostic {
   portReachable: boolean;
   httpStatus: number | null;
   contentReady: boolean;
-  startupFailureReason?: 'process-exit' | 'silence-timeout' | 'startup-limit' | null;
+  startupFailureReason?: 'process-exit' | 'port-in-use' | 'silence-timeout' | 'startup-limit' | null;
+  occupyingProcessId?: number | null;
+  occupyingProcessName?: string | null;
   /** Browser embedding evidence when response headers or the iframe can decide it. */
   iframeReady?: boolean | null;
   /** Bounded blocking X-Frame-Options/CSP evidence, when present. */

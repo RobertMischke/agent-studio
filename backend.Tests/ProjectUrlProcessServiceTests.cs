@@ -63,7 +63,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Trait("Category", "MachineBound")]
     public void Start_ReturnsCommandAndEffectiveWorkingDirectory()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
+        using var service = Service();
         var url = new ProjectUrlRecord
         {
             Id = "url-1",
@@ -84,7 +84,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Trait("Category", "MachineBound")]
     public async Task Start_CapturesOutputAndCompletionInTheSessionSnapshot()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
+        using var service = Service();
         var started = service.Start(Project(repositoryPath: _root), Url("url-output", EchoCommand()));
 
         var settled = await WaitForAsync(service, started.UrlId, snapshot =>
@@ -100,9 +100,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Trait("Category", "MachineBound")]
     public async Task StartWithReadiness_ReturnsStartingAndPublishesSilenceFailureInSession()
     {
-        using var service = new ProjectUrlProcessService(
-            NullLogger<ProjectUrlProcessService>.Instance,
-            new PassiveHttpClientFactory());
+        using var service = Service();
         var candidate = Url("url-readiness", LongRunningCommand()) with
         {
             StartRule = Rule(LongRunningCommand()) with
@@ -128,10 +126,38 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     }
 
     [Fact]
+    public void StartWithReadiness_WhenTargetPortIsOccupied_DoesNotSpawnAndNamesOwner()
+    {
+        var inspector = new StubPortInspector(new ProjectUrlPortOccupant(9123, "marketing-app"));
+        using var service = new ProjectUrlProcessService(
+            NullLogger<ProjectUrlProcessService>.Instance,
+            new PassiveHttpClientFactory(),
+            inspector);
+        var candidate = Url("url-occupied", LongRunningCommand()) with
+        {
+            Url = "http://localhost:4200",
+            StartRule = Rule(LongRunningCommand()) with { Port = 4200 },
+        };
+        var project = Project(repositoryPath: _root);
+
+        var error = Assert.Throws<ProjectUrlPortOccupiedException>(() =>
+            service.StartWithReadiness(project, candidate));
+
+        Assert.Equal("Port 4200 is already in use by marketing-app (PID 9123).", error.Message);
+        Assert.Null(service.Get(project.Id, candidate.Id));
+        var diagnostic = Assert.IsType<ProjectUrlDiagnostic>(service.Latest(project, candidate));
+        Assert.Equal(ProjectUrlDiagnosisClasses.PortInUse, diagnostic.Classification);
+        Assert.Equal(ProjectUrlStartupFailureReasons.PortInUse, diagnostic.StartupFailureReason);
+        Assert.False(diagnostic.ProcessCreated);
+        Assert.Equal(9123, diagnostic.OccupyingProcessId);
+        Assert.Equal("marketing-app", diagnostic.OccupyingProcessName);
+    }
+
+    [Fact]
     [Trait("Category", "MachineBound")]
     public void Stop_TerminatesTheOwnedProcessTreeAndRetainsItsSnapshot()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
+        using var service = Service();
         var started = service.Start(Project(repositoryPath: _root), Url("url-stop", LongRunningCommand()));
 
         var stopped = service.Stop(started.ProjectId, started.UrlId);
@@ -151,7 +177,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Trait("Category", "MachineBound")]
     public void StopProject_TerminatesEveryOwnedUrlProcess()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
+        using var service = Service();
         var project = Project(repositoryPath: _root);
         service.Start(project, Url("url-one", LongRunningCommand()));
         service.Start(project, Url("url-two", LongRunningCommand()));
@@ -166,7 +192,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Trait("Category", "MachineBound")]
     public void Dispose_TerminatesOwnedProcessesSoHostShutdownCannotOrphanThem()
     {
-        var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
+        var service = Service();
         var started = service.Start(
             Project(repositoryPath: _root),
             Url("url-shutdown", LongRunningCommand()));
@@ -237,9 +263,19 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
         throw new TimeoutException("Process did not reach the expected state.");
     }
 
+    private static ProjectUrlProcessService Service() => new(
+        NullLogger<ProjectUrlProcessService>.Instance,
+        new PassiveHttpClientFactory(),
+        new StubPortInspector(null));
+
     /// <summary>The direct-lifecycle tests never issue HTTP probes.</summary>
     private sealed class PassiveHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
+    }
+
+    private sealed class StubPortInspector(ProjectUrlPortOccupant? occupant) : IProjectUrlPortInspector
+    {
+        public ProjectUrlPortOccupant? FindListener(int port) => occupant;
     }
 }
