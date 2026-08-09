@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "orchestrator-waechter",
+  "title": "Global Orchestrator Watcher",
+  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. It defines six trigger classes, the inspect-rescue-analyze-report capability ladder, a durable Problem and Decision projection into Activity across projects, uncertainty-based model routing with per-trigger planning costs, human and mechanical authority boundaries, a Control Plane plus Runner operating model, and an observe-first implementation plan with recipe-specific autonomy promotion.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-09T17:12:04Z",
+  "sourceTaskKeys": ["AGT-2557"],
+  "relatedTaskKeys": ["AGT-2543", "AGT-2544", "AGT-2545", "AGT-2555"]
+}
