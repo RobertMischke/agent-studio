@@ -442,7 +442,8 @@ public sealed class WaitsOnEndpointsTests : IDisposable
         var release = released ? ",\"released\":true" : "";
         var json =
             $"{{\"id\":\"{slug}\",\"key\":\"{key}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
-            $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{release}{refs}}}";
+            $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"," +
+            $"\"noBranchExpected\":true{release}{refs}}}";
         File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 

@@ -127,6 +127,13 @@ public record MoveJobRequest
 {
     public string TargetState { get; init; } = "";
     /// <summary>
+    /// Explicit one-shot operator decision to complete an accepted coding card
+    /// without integration. Valid only when <see cref="TargetState"/> is
+    /// <see cref="TaskStates.Completed"/> and never inferred by the server.
+    /// </summary>
+    public bool OperatorOverride { get; init; }
+
+    /// <summary>
     /// Optional operator rationale for the lane move. It is persisted on the
     /// timeline and, for a requeue out of a decision lane, on the fresh
     /// review-attempt epoch boundary.
@@ -292,6 +299,8 @@ public record CreateTaskRequest
     public string? Mode { get; init; }
     /// <summary>Allow web search/fetch for this run. When null, defaults by mode (research = on, else off).</summary>
     public bool? AllowWebAccess { get; init; }
+    /// <summary>Explicitly declare that the task is expected to have no delivery branch.</summary>
+    public bool NoBranchExpected { get; init; }
     /// <summary>
     /// Optional client identity that owns the new job. When omitted, the
     /// endpoint falls back to the X-Client-Id header on the incoming

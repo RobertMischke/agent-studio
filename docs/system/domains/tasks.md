@@ -172,13 +172,21 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   label, operator-facing reason, and whether focused rebase recovery applies.
   This distinguishes a merge conflict, a delivery that needs rebasing, a build
   gate failure, unavailable task-key validation, an invalid review subject,
-  and a generic integration error without changing the legacy top-level
-  `conflict-skipped` compatibility status.
+  a missing task branch, and a generic integration error without changing the
+  legacy top-level `conflict-skipped` compatibility status.
 - The immutable current review subject selects the authoritative delivery
   generation for integration membership. When a reissue rebases an accepted
   commit to a replacement object id, target-branch ancestry of that reviewed
   result proves integration; attributed SHAs from superseded review epochs
   remain history and do not force a permanent `partial` card state.
+- A move may set `operatorOverride: true` only when targeting `6-completed`.
+  This is an explicit, one-shot operator waiver, never a default. Pipeline
+  history and `status.md` retain the override and reason. Concept and other
+  no-branch cards are exempt through their mode, kind, `taskType=concept|decision`,
+  or the explicit `noBranchExpected: true` card field.
+- The read-only startup `AcceptedIntegrationInventorySweep` lists historical
+  Completed and archived coding cards whose integration fact is absent, Error,
+  or NoTaskBranch. It does not mutate historical cards.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

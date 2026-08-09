@@ -602,6 +602,7 @@ public class TaskScannerService : ITaskScanner
                 Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
                 EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,
                 Mode = TaskModes.Normalize(raw.TryGetProperty("mode", out var md0) ? md0.GetString() : null),
+                NoBranchExpected = ReadNoBranchExpected(raw),
                 AllowWebAccess = raw.TryGetProperty("allowWebAccess", out var awa) && awa.ValueKind == JsonValueKind.True,
                 UseOwnSession = raw.TryGetProperty("useOwnSession", out var uos) && uos.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? uos.GetBoolean()
@@ -1010,6 +1011,19 @@ public class TaskScannerService : ITaskScanner
         if (!raw.TryGetProperty("taskType", out var t)) return TaskTypes.Chore;
         if (t.ValueKind != JsonValueKind.String) return TaskTypes.Chore;
         return TaskTypes.Normalize(t.GetString());
+    }
+
+    internal static bool ReadNoBranchExpected(JsonElement raw)
+    {
+        if (raw.TryGetProperty("noBranchExpected", out var expected)
+            && expected.ValueKind == JsonValueKind.True)
+        {
+            return true;
+        }
+
+        return raw.TryGetProperty("taskType", out var taskType)
+               && taskType.ValueKind == JsonValueKind.String
+               && AcceptanceIntegrationPolicy.IsNoBranchTaskType(taskType.GetString());
     }
 
     /// <summary>

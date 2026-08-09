@@ -13,6 +13,7 @@ public static class AcceptedIntegrationFailureCodes
     public const string SourceNeedsRebase = "source-needs-rebase";
     public const string ReviewSubjectTaskKeyUnavailable = "review-subject-task-key-unavailable";
     public const string ReviewSubjectInvalid = "review-subject-invalid";
+    public const string NoTaskBranch = "no-task-branch";
     public const string IntegrationError = "integration-error";
 }
 
@@ -40,7 +41,11 @@ public static class AcceptedIntegrationFailurePolicy
         string? verdictSummary,
         string? persistedCode = null)
     {
-        if (status != PipelineStepStatus.Failed) return null;
+        var isNoTaskBranch = string.Equals(
+            verdict,
+            "no-branch",
+            StringComparison.OrdinalIgnoreCase);
+        if (status != PipelineStepStatus.Failed && !isNoTaskBranch) return null;
 
         var code = NormalizePersistedCode(persistedCode)
             ?? InferCode(verdict, reason);
@@ -77,6 +82,14 @@ public static class AcceptedIntegrationFailurePolicy
                 "Review subject invalid",
                 "The reviewed delivery no longer matches the task's current authoritative run.",
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.NoTaskBranch => new(
+                code,
+                "No task branch",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "The accepted coding card had no delivery branch to integrate."),
+                RebaseRecoveryAvailable: false),
             _ => new(
                 AcceptedIntegrationFailureCodes.IntegrationError,
                 "Integration failed",
@@ -91,6 +104,8 @@ public static class AcceptedIntegrationFailurePolicy
             return AcceptedIntegrationFailureCodes.MergeConflict;
         if (string.Equals(verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.BuildGateFailed;
+        if (string.Equals(verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
+            return AcceptedIntegrationFailureCodes.NoTaskBranch;
 
         var detail = reason ?? string.Empty;
         if (detail.Contains(
@@ -120,6 +135,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.SourceNeedsRebase => AcceptedIntegrationFailureCodes.SourceNeedsRebase,
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable => AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
+            AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
             _ => null,
         };
