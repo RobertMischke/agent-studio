@@ -39,12 +39,14 @@ public class TaskReferencesTests : IDisposable
         {
             DependsOn = new() { " ATP-1 ", "ATP-1", "atp-1", "", "  ", "ATP-2" },
             RelatedTo = new() { "ATP-3" },
+            Workbenches = new() { " ATP-W4 ", "atp-w4", "", "ATP-W5" },
         });
 
         Assert.Equal(new[] { "ATP-1", "ATP-2" }, norm.DependsOn.Select(edge => edge.Key).ToArray());
         Assert.Equal(new[] { "ATP-3" }, norm.RelatedTo.ToArray());
         Assert.Empty(norm.BlockedBy);
         Assert.Empty(norm.Supersedes);
+        Assert.Equal(new[] { "ATP-W4", "ATP-W5" }, norm.Workbenches);
     }
 
     [Fact]
@@ -169,6 +171,29 @@ public class TaskReferencesTests : IDisposable
     }
 
     [Fact]
+    public void Validate_WorkbenchReference_MustResolveInOwningProject()
+    {
+        var accepted = TaskReferenceValidator.Validate(
+            "ATP-1",
+            new TaskReferences { Workbenches = new() { "ATP-W4" } },
+            Keys("ATP-1"),
+            Graph(),
+            Keys("ATP-W4"));
+        Assert.True(accepted.IsValid);
+
+        var rejected = TaskReferenceValidator.Validate(
+            "ATP-1",
+            new TaskReferences { Workbenches = new() { "ATP-W9" } },
+            Keys("ATP-1"),
+            Graph(),
+            Keys("ATP-W4"));
+        var error = Assert.Single(rejected.Errors);
+        Assert.Equal(TaskReferenceErrorCode.UnknownWorkbenchKey, error.Code);
+        Assert.Equal(TaskReferenceKinds.Workbenches, error.Kind);
+        Assert.Equal("ATP-W9", error.Target);
+    }
+
+    [Fact]
     public void Normalize_DuplicateDependency_PreservesStrongestReleaseGate()
     {
         var norm = TaskReferenceValidator.Normalize(new TaskReferences
@@ -219,6 +244,20 @@ public class TaskReferencesTests : IDisposable
         var onlyDeps = index.Dependents("ATP-9", TaskReferenceKinds.DependsOn);
         var link = Assert.Single(onlyDeps);
         Assert.Equal("a", link.SourceJobId);
+    }
+
+    [Fact]
+    public void Index_Dependents_ResolvesWorkbenchReferences()
+    {
+        var index = TaskReferenceIndex.Build(new[]
+        {
+            Task("a", "ATP-1", workbenches: new[] { "ATP-W4" }),
+            Task("b", "ATP-2", workbenches: new[] { "ATP-W4", "ATP-W5" }),
+        });
+
+        var links = index.Dependents("atp-w4", TaskReferenceKinds.Workbenches);
+        Assert.Equal(new[] { "ATP-1", "ATP-2" }, links.Select(link => link.SourceKey).ToArray());
+        Assert.All(links, link => Assert.Equal(TaskReferenceKinds.Workbenches, link.Kind));
     }
 
     [Fact]
@@ -282,6 +321,7 @@ public class TaskReferencesTests : IDisposable
         {
             DependsOn = new() { infoB.Key!, infoB.Key! }, // duplicate collapses
             RelatedTo = new() { infoC.Key! },
+            Workbenches = new() { "DEM-W4" },
         }, _watchPath);
         Assert.True(ok);
 
@@ -289,6 +329,7 @@ public class TaskReferencesTests : IDisposable
         Assert.Equal(new[] { infoB.Key }, infoA.References.DependsOn.Select(edge => edge.Key).ToArray());
         Assert.Equal(new[] { infoC.Key }, infoA.References.RelatedTo.ToArray());
         Assert.Empty(infoA.References.BlockedBy);
+        Assert.Equal(new[] { "DEM-W4" }, infoA.References.Workbenches);
     }
 
     [Fact]
@@ -369,6 +410,7 @@ public class TaskReferencesTests : IDisposable
         string? key,
         string[]? deps = null,
         string[]? related = null,
+        string[]? workbenches = null,
         string state = TaskStates.Backlog) => new()
     {
         Id = id,
@@ -380,6 +422,7 @@ public class TaskReferencesTests : IDisposable
         {
             DependsOn = (deps ?? Array.Empty<string>()).Select(key => new TaskDependencyReference(key)).ToList(),
             RelatedTo = (related ?? Array.Empty<string>()).ToList(),
+            Workbenches = (workbenches ?? Array.Empty<string>()).ToList(),
         },
     };
 

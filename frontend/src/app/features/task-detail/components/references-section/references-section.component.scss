@@ -105,6 +105,10 @@
   opacity: 0.58;
   border-style: dashed;
 }
+.refs__chip--document .refs__chip-link {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
 
 .refs__chip-link {
   border: 0;

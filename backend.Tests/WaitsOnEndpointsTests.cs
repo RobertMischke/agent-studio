@@ -344,6 +344,49 @@ public sealed class WaitsOnEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task WorkbenchReference_ResolvesPersistsAndAppearsInReverseApi()
+    {
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1");
+        WriteWorkbench(_appWatch, "reference-source", relatedTaskKeys: new[] { "APP-LEGACY" });
+
+        using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var catalogue = JsonDocument.Parse(await client.GetStringAsync(
+            $"/api/projects/{App}/workbenches?history=true"));
+        var item = Assert.Single(catalogue.RootElement.GetProperty("items").EnumerateArray());
+        var key = item.GetProperty("key").GetString();
+        Assert.NotNull(key);
+        Assert.Contains("-W", key, StringComparison.Ordinal);
+
+        using var put = await client.PutAsJsonAsync(
+            $"/api/tasks/consumer/references?watchPath={Uri.EscapeDataString(_appWatch)}",
+            new { workbenches = new[] { key } });
+        put.EnsureSuccessStatusCode();
+        using var written = JsonDocument.Parse(await put.Content.ReadAsStringAsync());
+        Assert.Equal(key, Assert.Single(written.RootElement.GetProperty("references")
+            .GetProperty("workbenches").EnumerateArray()).GetString());
+
+        using var reverse = JsonDocument.Parse(await client.GetStringAsync(
+            $"/api/projects/{App}/workbenches/{Uri.EscapeDataString(key!)}/references"));
+        Assert.Equal(key, reverse.RootElement.GetProperty("workbenchKey").GetString());
+        Assert.Equal("APP-LEGACY", Assert.Single(reverse.RootElement.GetProperty("legacyTaskKeys")
+            .EnumerateArray()).GetString());
+        var link = Assert.Single(reverse.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("APP-1", link.GetProperty("sourceKey").GetString());
+        Assert.Equal("workbenches", link.GetProperty("kind").GetString());
+
+        using var rejected = await client.PutAsJsonAsync(
+            $"/api/tasks/consumer/references?watchPath={Uri.EscapeDataString(_appWatch)}",
+            new { workbenches = new[] { key![..key.LastIndexOf('W')] + "W999" } });
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        using var error = JsonDocument.Parse(await rejected.Content.ReadAsStringAsync());
+        Assert.Equal("UnknownWorkbenchKey", Assert.Single(error.RootElement.GetProperty("errors")
+            .EnumerateArray()).GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task PutRelease_ExplicitFlagUnblocksReleaseGatedDependency()
     {
         WriteJob(_libWatch, TaskStates.Completed, "dep", "LIB-1");
@@ -401,6 +444,25 @@ public sealed class WaitsOnEndpointsTests : IDisposable
             $"{{\"id\":\"{slug}\",\"key\":\"{key}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
             $"\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"{release}{refs}}}";
         File.WriteAllText(Path.Combine(dir, "task.json"), json);
+    }
+
+    private static void WriteWorkbench(string root, string id, string[] relatedTaskKeys)
+    {
+        var dir = Path.Combine(root, "docs", "operations", id);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), $"<h1>{id}</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            id,
+            title = "Reference source",
+            summary = "A source used by cards.",
+            entrypoint = "index.html",
+            status = "active",
+            phase = "testing",
+            updatedAt = "2026-08-09T10:00:00Z",
+            relatedTaskKeys,
+        }));
     }
 
     private WebApplicationFactory<Program> BuildFactory() =>

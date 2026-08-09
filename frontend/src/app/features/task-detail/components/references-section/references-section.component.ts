@@ -24,9 +24,11 @@ import { NotificationService } from '../../../../services/notification.service';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskSelectionService } from '../../state/task-selection.service';
 import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
+import { ProjectDocsService } from '../../../../services/project-docs.service';
+import type { WorkbenchListItem } from '../../../../models/project-docs.model';
 
 /**
- * F34 detail-view reference editor. Renders the four cross-reference rows
+ * F34 detail-view reference editor. Renders the typed cross-reference rows
  * (depends on / related to / blocked by / supersedes) as chip lists with an
  * inline add-input (autocomplete over every known stable key). Each chip is a
  * `KEY — short-title` link that routes to the target task.
@@ -49,6 +51,7 @@ export class ReferencesSectionComponent {
   private readonly selection = inject(TaskSelectionService);
   private readonly notifications = inject(NotificationService);
   private readonly tabs = inject(StudioTabStateService);
+  private readonly docs = inject(ProjectDocsService);
 
   readonly info = input.required<TaskInfo>();
 
@@ -61,6 +64,7 @@ export class ReferencesSectionComponent {
     relatedTo: 'Related to',
     blockedBy: 'Blocked by',
     supersedes: 'Supersedes',
+    workbenches: 'Sources',
   };
 
   /** Local working copy of the references; re-seeded whenever the job changes. */
@@ -77,7 +81,11 @@ export class ReferencesSectionComponent {
     relatedTo: '',
     blockedBy: '',
     supersedes: '',
+    workbenches: '',
   });
+
+  /** Stable document keys available in the task's owning project. */
+  private readonly workbenchIndex = signal(new Map<string, WorkbenchListItem>());
 
   /**
    * AGT-2029 reverse direction ("blocked-by-me"): the tasks that wait on THIS
@@ -103,6 +111,7 @@ export class ReferencesSectionComponent {
       this.lastSeededKey = info.taskKey;
       this.adding.set(false);
       this.loadBlocking(info);
+      this.loadWorkbenchIndex(info);
     }
     if (this.busyKind() === null) {
       this.localRefs.set(cloneRefs(refs));
@@ -121,6 +130,24 @@ export class ReferencesSectionComponent {
       },
       error: () => {
         if (this.lastSeededKey === forKey) this.blocking.set([]);
+      },
+    });
+  }
+
+  private loadWorkbenchIndex(info: TaskInfo): void {
+    this.workbenchIndex.set(new Map());
+    if (!info.projectName) return;
+    const forKey = info.taskKey;
+    this.docs.getWorkbenches(info.projectName, true).subscribe({
+      next: catalogue => {
+        if (this.lastSeededKey !== forKey) return;
+        const entries = catalogue.items
+          .filter(item => item.valid && item.key)
+          .map(item => [item.key!.toUpperCase(), item] as const);
+        this.workbenchIndex.set(new Map(entries));
+      },
+      error: () => {
+        if (this.lastSeededKey === forKey) this.workbenchIndex.set(new Map());
       },
     });
   }
@@ -158,29 +185,38 @@ export class ReferencesSectionComponent {
     return map;
   });
 
-  /** Total reference count across the four kinds (drives the collapsed badge). */
+  /** Total reference count across all kinds (drives the collapsed badge). */
   readonly totalCount = computed(() => {
     const r = this.localRefs();
-    return r.dependsOn.length + r.relatedTo.length + r.blockedBy.length + r.supersedes.length;
+    return r.dependsOn.length + r.relatedTo.length + r.blockedBy.length
+      + r.supersedes.length + (r.workbenches?.length ?? 0);
   });
 
-  /** Autocomplete candidates: every known key except this task's own. */
-  readonly candidateKeys = computed(() => {
+  /** Autocomplete candidates for the selected key namespace. */
+  candidateKeys(kind: TaskReferenceKind): string[] {
+    if (kind === 'workbenches') {
+      return [...this.workbenchIndex().values()]
+        .map(item => item.key)
+        .filter((key): key is string => Boolean(key))
+        .sort((a, b) => a.localeCompare(b));
+    }
     const self = this.selfKey().toUpperCase();
     return [...this.keyIndex().values()]
       .map((t) => (t.key ?? '').trim())
       .filter((k) => k && k.toUpperCase() !== self)
       .sort((a, b) => a.localeCompare(b));
-  });
+  }
 
-  /** Stable id for the shared <datalist> the add-inputs reference. */
-  readonly datalistId = computed(() => `task-ref-keys-${this.info().id}`);
+  /** Stable id for each relation's namespaced autocomplete list. */
+  datalistId(kind: TaskReferenceKind): string {
+    return `task-ref-keys-${this.info().id}-${kind}`;
+  }
 
   refsFor(kind: TaskReferenceKind): string[] {
     const refs = this.localRefs()[kind];
     return kind === 'dependsOn'
       ? this.localRefs().dependsOn.map(taskDependencyKey)
-      : refs as string[];
+      : [...((refs as string[] | undefined) ?? [])];
   }
 
   draftFor(kind: TaskReferenceKind): string {
@@ -193,7 +229,10 @@ export class ReferencesSectionComponent {
 
   /** Resolve a key to its short title, or null when the task isn't loaded. */
   titleFor(key: string): string | null {
-    return this.keyIndex().get(key.trim().toUpperCase())?.title ?? null;
+    const normalized = key.trim().toUpperCase();
+    return this.workbenchIndex().get(normalized)?.title
+      ?? this.keyIndex().get(normalized)?.title
+      ?? null;
   }
 
   chipLabel(key: string): string {
@@ -203,6 +242,9 @@ export class ReferencesSectionComponent {
 
   chipTooltip(key: string): string {
     const title = this.titleFor(key);
+    if (this.workbenchIndex().has(key.trim().toUpperCase())) {
+      return title ? `${key}: ${title}` : key;
+    }
     const releaseGate = this.releaseGateFor(key) ? ' · explicit release required' : '';
     return title ? `${key}: ${title}${releaseGate}` : `${key} (not loaded in this workspace view)${releaseGate}`;
   }
@@ -216,7 +258,18 @@ export class ReferencesSectionComponent {
   }
 
   navigate(key: string): void {
-    const target = this.keyIndex().get(key.trim().toUpperCase());
+    const normalized = key.trim().toUpperCase();
+    const workbench = this.workbenchIndex().get(normalized);
+    if (workbench) {
+      this.tabs.open({
+        kind: 'workbench',
+        projectName: this.info().projectName,
+        workbenchId: workbench.id,
+        title: workbench.title,
+      });
+      return;
+    }
+    const target = this.keyIndex().get(normalized);
     if (!target) {
       this.notifications.info(`${key} is not loaded in the current workspace view.`);
       return;
@@ -244,9 +297,12 @@ export class ReferencesSectionComponent {
       return;
     }
     const snapshot = this.localRefs();
+    const nextValues = kind === 'dependsOn'
+      ? [...snapshot.dependsOn, key]
+      : [...this.refsFor(kind), key];
     const next = {
       ...cloneRefs(snapshot),
-      [kind]: [...this.localRefs()[kind], key],
+      [kind]: nextValues,
     } as TaskReferences;
     this.setDraft(kind, '');
     this.persist(kind, next, snapshot);
@@ -259,7 +315,8 @@ export class ReferencesSectionComponent {
       ...cloneRefs(snapshot),
       [kind]: kind === 'dependsOn'
         ? snapshot.dependsOn.filter((dependency) => taskDependencyKey(dependency).toUpperCase() !== upper)
-        : (snapshot[kind] as string[]).filter((value) => value.toUpperCase() !== upper),
+        : ((snapshot[kind] as string[] | undefined) ?? [])
+          .filter((value) => value.toUpperCase() !== upper),
     };
     this.persist(kind, next as TaskReferences, snapshot);
   }
@@ -321,7 +378,7 @@ export class ReferencesSectionComponent {
 }
 
 function emptyRefs(): TaskReferences {
-  return { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] };
+  return { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [], workbenches: [] };
 }
 
 function cloneRefs(r: TaskReferences): TaskReferences {
@@ -330,6 +387,7 @@ function cloneRefs(r: TaskReferences): TaskReferences {
     relatedTo: [...r.relatedTo],
     blockedBy: [...r.blockedBy],
     supersedes: [...r.supersedes],
+    workbenches: [...(r.workbenches ?? [])],
   };
 }
 

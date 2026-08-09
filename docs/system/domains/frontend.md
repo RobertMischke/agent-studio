@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-24
+Version: 2026-08-09
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -187,7 +187,11 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   DOM parse moves artifact nodes into a fixed policy-first wrapper. Workbench
   pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
-  revision. Chat pinning and decision mutations are intentionally not mounted.
+  revision. Canonical entries expose their stable project reference key as a
+  compact copyable mono chip in the viewer header and lifecycle lists; Explorer
+  leaf tooltips include the same key. A task's `references.workbenches` entries
+  render as linked key chips that open the existing viewer tab. Chat pinning
+  and decision mutations are intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

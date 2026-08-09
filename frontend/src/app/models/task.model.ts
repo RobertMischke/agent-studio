@@ -142,6 +142,8 @@ export interface TaskReferences {
   relatedTo: string[];
   blockedBy: string[];
   supersedes: string[];
+  /** Stable project-scoped document reference keys. */
+  workbenches?: string[];
 }
 
 export interface RelatedWikiPage {
@@ -152,13 +154,14 @@ export interface RelatedWikiPage {
   exists?: boolean | null;
 }
 
-/** The four F34 relation kinds, in display order. */
-export type TaskReferenceKind = 'dependsOn' | 'relatedTo' | 'blockedBy' | 'supersedes';
+/** Task and document relation kinds, in display order. */
+export type TaskReferenceKind = 'dependsOn' | 'relatedTo' | 'blockedBy' | 'supersedes' | 'workbenches';
 export const TASK_REFERENCE_KINDS: TaskReferenceKind[] = [
   'dependsOn',
   'relatedTo',
   'blockedBy',
   'supersedes',
+  'workbenches',
 ];
 
 /**

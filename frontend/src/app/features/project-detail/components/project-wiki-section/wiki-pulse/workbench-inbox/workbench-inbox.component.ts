@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { StudioIconComponent } from '../../../../../../components/studio-icon/studio-icon.component';
+import { CopyableTaskKeyComponent } from '../../../../../../components/copyable-task-key/copyable-task-key.component';
 import type {
   WikiLifecycleItem,
   WikiLifecycleState,
@@ -24,7 +25,7 @@ const GROUPS: readonly { state: WikiLifecycleState; label: string }[] = [
 @Component({
   selector: 'app-workbench-inbox',
   standalone: true,
-  imports: [StudioIconComponent],
+  imports: [StudioIconComponent, CopyableTaskKeyComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-inbox.component.html',
   styleUrl: './workbench-inbox.component.scss',
@@ -52,6 +53,11 @@ export class WorkbenchInboxComponent {
       return;
     }
     if (item.valid) this.openPage.emit(item);
+  }
+
+  keyFor(item: WikiLifecycleItem): string | null {
+    if (!item.workbenchId) return null;
+    return this.catalogue()?.items.find(candidate => candidate.id === item.workbenchId)?.key ?? null;
   }
 
   stateTone(state: string): string {

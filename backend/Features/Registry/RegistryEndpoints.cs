@@ -249,6 +249,7 @@ public static class RegistryEndpoints
                 ModelDefault = string.IsNullOrWhiteSpace(body.ModelDefault) ? null : body.ModelDefault.Trim(),
                 SortOrder = allProjects.Count,
                 NextTaskKeySeq = 1,
+                NextWorkbenchKeySeq = 1,
                 StorageLocation = storage.Entry?.Path ?? "",
                 RepositoryPath = repositoryPath,
                 RootPath = rootPath,

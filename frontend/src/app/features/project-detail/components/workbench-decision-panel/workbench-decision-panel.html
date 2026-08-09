@@ -3,6 +3,13 @@
          [attr.data-stage]="stage()">
   <header class="decision-panel__header">
     <strong class="decision-panel__title">{{ document().workbench.title }}</strong>
+    @if (document().workbench.key; as key) {
+      <app-copyable-task-key
+        [key]="key"
+        variant="reference"
+        ariaLabel="Copy reference key"
+        testId="workbench-key-chip" />
+    }
     <span class="decision-panel__separator" aria-hidden="true">·</span>
     <span class="decision-panel__stage">
       <i aria-hidden="true"></i>{{ stageLabel() }}

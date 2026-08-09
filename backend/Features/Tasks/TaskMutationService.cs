@@ -560,7 +560,7 @@ public class TaskMutationService
 
     /// <summary>
     /// F34: replace-all write of the structured <c>references</c> object
-    /// (dependsOn / relatedTo / blockedBy / supersedes). The supplied set is
+    /// (dependsOn / relatedTo / blockedBy / supersedes / workbenches). The supplied set is
     /// normalised (trim, drop blanks, de-duplicate case-insensitively per kind)
     /// and written atomically. Validation that referenced keys exist, that the
     /// task does not reference itself, and that dependsOn stays a DAG is the
@@ -574,8 +574,9 @@ public class TaskMutationService
         var clean = TaskReferenceValidator.Normalize(references ?? new TaskReferences());
         TaskJsonFile.UpdateField(info.FolderPath, "references", clean, _logger);
         _logger.LogInformation(
-            "task-references-set job={JobId} dependsOn={DependsOn} relatedTo={RelatedTo} blockedBy={BlockedBy} supersedes={Supersedes}",
-            jobId, clean.DependsOn.Count, clean.RelatedTo.Count, clean.BlockedBy.Count, clean.Supersedes.Count);
+            "task-references-set job={JobId} dependsOn={DependsOn} relatedTo={RelatedTo} blockedBy={BlockedBy} supersedes={Supersedes} workbenches={Workbenches}",
+            jobId, clean.DependsOn.Count, clean.RelatedTo.Count, clean.BlockedBy.Count,
+            clean.Supersedes.Count, clean.Workbenches.Count);
         return Updated();
     }
 

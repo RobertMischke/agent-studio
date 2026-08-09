@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-03
+Version: 2026-08-09
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -89,8 +89,8 @@ fields are validated together before they are persisted. The runner value is
 delegated to `ProjectSettingsService`; it is not duplicated in the project
 registry. The Project Settings UI continues to edit runner assignment through
 the dedicated `PUT /api/projects/{projectName}/execution-runner` contract.
-Project id, source type, storage location, creation time, and the task-key
-counter are immutable and are never accepted as update fields.
+Project id, source type, storage location, creation time, and the task and
+document key counters are immutable and are never accepted as update fields.
 
 The project registry is fail-closed. If an existing
 `<TaskRepository>/.metadata/projects.json` is not deserializable, startup
@@ -443,6 +443,15 @@ cannot erase an operator decision.
   computed once for the batch, and the frontend hydrator also caches resolved
   keys for its lifetime. The reusable consumer contract and CAC-3 chat host
   wiring are documented in [frontend/AGENTS.md](../../../frontend/AGENTS.md#task-reference-microcards).
+- `references.workbenches` stores project-scoped document keys such as
+  `AGT-W4`. The task write validator resolves these keys against the owning
+  project's canonical descriptor catalogue and rejects an unknown key.
+  Discovery assigns missing keys from the project's independent
+  `NextWorkbenchKeySeq` counter and atomically writes the complete
+  `workbench.json`; existing keys survive folder and slug renames. The reverse
+  query `GET /api/projects/{projectName}/workbenches/{key}/references` returns
+  every referencing card. Descriptor `relatedTaskKeys` remain a separately
+  labelled legacy bridge and do not replace the derived keyed edges.
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

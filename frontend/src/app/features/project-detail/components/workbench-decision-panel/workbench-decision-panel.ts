@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { EMPTY, Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
+import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import {
   TaskReferenceMicrocardComponent,
   TaskReferenceStatus,
@@ -41,6 +42,7 @@ interface CreatedCard {
   selector: 'app-workbench-decision-panel',
   standalone: true,
   imports: [
+    CopyableTaskKeyComponent,
     DatePipe,
     PendingButtonDirective,
     StudioIconComponent,

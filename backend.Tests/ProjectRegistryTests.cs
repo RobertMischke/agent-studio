@@ -124,6 +124,7 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal("Agent Task Processor", p.DisplayName);
         Assert.Equal(DefaultWorkspace.Id, p.WorkspaceId);
         Assert.Equal(1, p.NextTaskKeySeq);
+        Assert.Equal(1, p.NextWorkbenchKeySeq);
         Assert.False(p.Archived);
     }
 
@@ -239,6 +240,23 @@ public class ProjectRegistryTests : IDisposable
     }
 
     [Fact]
+    public void IssueNextWorkbenchKey_IsMonotonicPerProject_AndFloorPersists()
+    {
+        var reg = Build();
+        var a = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "A", DefaultWorkspace.Id);
+        var b = reg.EnsureProjectForStorage(Path.Combine(_root, "p2"), "B", DefaultWorkspace.Id);
+
+        Assert.Equal(1, reg.IssueNextWorkbenchKey(a.Id));
+        reg.EnsureWorkbenchKeyFloor(a.Id, 8);
+        Assert.Equal(8, reg.IssueNextWorkbenchKey(a.Id));
+        Assert.Equal(1, reg.IssueNextWorkbenchKey(b.Id));
+
+        var reloaded = Build();
+        Assert.Equal(9, reloaded.FindById(a.Id)!.NextWorkbenchKeySeq);
+        Assert.Equal(2, reloaded.FindById(b.Id)!.NextWorkbenchKeySeq);
+    }
+
+    [Fact]
     public void State_RoundTrips_ThroughFreshInstance()
     {
         var reg = Build();
@@ -247,6 +265,7 @@ public class ProjectRegistryTests : IDisposable
         reg.IssueNextTaskKey(b.Id);
         reg.IssueNextTaskKey(b.Id);
         reg.IssueNextTaskKey(b.Id);
+        reg.IssueNextWorkbenchKey(b.Id);
 
         var reloaded = Build();
         var pa = reloaded.FindById("PROJ-001")!;
@@ -256,6 +275,7 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(1, pa.NextTaskKeySeq);
         Assert.Equal("B", pb.DisplayName);
         Assert.Equal(4, pb.NextTaskKeySeq);
+        Assert.Equal(2, pb.NextWorkbenchKeySeq);
     }
 
     // ------------------------------------------------------------------
@@ -458,6 +478,7 @@ public class ProjectRegistryTests : IDisposable
         var storage = Path.Combine(_root, "projects", "PROJ-001", "tasks");
         var project = reg.EnsureProjectForStorage(storage, "Initial Project", DefaultWorkspace.Id);
         reg.IssueNextTaskKey(project.Id);
+        reg.IssueNextWorkbenchKey(project.Id);
 
         var updated = reg.Update(project.Id, new UpdateProjectRequest
         {
@@ -477,6 +498,7 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(project.CreatedAt, updated.CreatedAt);
         Assert.Equal(storage, updated.StorageLocation);
         Assert.Equal(2, updated.NextTaskKeySeq);
+        Assert.Equal(2, updated.NextWorkbenchKeySeq);
         Assert.Equal("Edited Project", updated.DisplayName);
         Assert.Equal("EDT", updated.ShortCode);
         Assert.Equal("#123456", updated.Color);
