@@ -1844,6 +1844,35 @@
             fence still retains the checkout and uses <code>worktree-blocked</code>.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-09</td>
+          <td><code>AGT-2560</code><br><span class="small">CAC-19 gate cleanup reported an unexplained five-minute timeout</span></td>
+          <td>
+            After release <code>74be8f71a</code>, gate run
+            <code>75aef61d2f31401eab9f10cf06b46c8b</code> successfully materialized the exact workspace and prepared npm
+            dependencies, removing the earlier missing <code>ng</code> failure. The integration still failed after about
+            296 seconds with <code>exit=n/a</code> and <code>signal=timeout</code>. The durable gate receipt showed that
+            cleanup attempt 1 timed out after 30 seconds, then attempts 2 and 3 found a partially deleted worktree without
+            <code>.git</code>. CAC-19 remained in Human Review with integration pending.
+          </td>
+          <td>
+            This was not a five-minute run timer. Dependency preparation and Angular verification were already inside the
+            one-hour pre-main run budget. <code>BuildTestGateRunner.RunGitAsync</code> instead hardcoded
+            <code>GitNetworkProcessRunner.DefaultTimeout</code>, a 30-second per-process limit, for
+            <code>git worktree remove --force</code>. The disposable workspace still contained the cold
+            <code>node_modules</code> tree, so recursive cleanup crossed that hidden limit. Cleanup replacement then erased
+            the completed command duration and reduced the diagnosis to the generic timeout signal.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> local Git worktree operations now consume the remaining named
+            materialization or cleanup budget. Before cleanup, one repository-scoped cache moves
+            <code>node_modules</code>, <code>.angular</code>, and the existing <code>DepsState</code> marker out of the
+            disposable worktree; the next gate restores them and skips installation only when the lock hash is unchanged.
+            The local npm cache is explicitly shared. Timeout results and receipts name the violated budget, limit,
+            consumption, and phase while retaining the preceding command duration and output. Regressions prove cold to
+            warm reuse, Angular cache survival, lockfile invalidation, named run-budget failure, and exact workspace cleanup.
+          </td>
+        </tr>
       </tbody>
     </table>
 

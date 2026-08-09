@@ -122,6 +122,8 @@ public class TaskFolderAccessIsolationTest
                 "Boot-time recovery; runs before ITaskAccess could be available.",
             ["backend/Features/Runner/WorktreeTaskLifecycle.cs"] =
                 "Git worktree cleanup under configured worktree roots, not task storage.",
+            ["backend/Features/Pipeline/GateDependencyCache.cs"] =
+                "Moves and replaces dependency caches under the OS review-workspace temp root, never task storage.",
 
             // Re-added after the structure migration folded the src/ executor
             // projects back into backend/ (the scan covers them again):

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 
 using Xunit;
+using Xunit.Abstractions;
 
 namespace AgentStudio.Tests;
 
@@ -257,6 +258,7 @@ public sealed class VerifyCommandPlannerTests : IDisposable
     public void GatePreparation_AutoDiscoveredNode_RunsNpmCiPerSelectedPackage()
     {
         Write("frontend/package.json", """{ "scripts": { "build": "ng build" } }""");
+        Write("frontend/package-lock.json", """{ "lockfileVersion": 3 }""");
         var verify = VerifyCommandPlanner.Plan(_root, profile: null);
 
         var preparation = GatePreparationPlanner.Plan(_root, profile: null, verify.Commands);
@@ -266,6 +268,9 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         Assert.Equal("frontend", install.WorkingSubdir);
         Assert.Equal("npm ci", install.Command);
         Assert.Equal(VerifyCommandShell.Platform, install.Shell);
+        var dependency = Assert.Single(install.DependencyScopes);
+        Assert.Equal("frontend", dependency.WorkingSubdir);
+        Assert.Equal(["package-lock.json"], dependency.Lockfiles);
     }
 
     [Fact]
@@ -278,6 +283,7 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         var profile = new BuildProfile
         {
             InstallCmd = installCommand,
+            Lockfiles = ["frontend/package-lock.json"],
             BuildCmds =
             [
                 "if [ -f QualityStudio.slnx ]; then dotnet build QualityStudio.slnx --configuration Release; fi",
@@ -291,6 +297,9 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         var install = Assert.Single(preparation);
         Assert.Equal(installCommand, install.Command);
         Assert.Equal(VerifyCommandShell.Bash, install.Shell);
+        var dependency = Assert.Single(install.DependencyScopes);
+        Assert.Equal("frontend", dependency.WorkingSubdir);
+        Assert.Equal(["package-lock.json"], dependency.Lockfiles);
         Assert.All(verify.Commands, command => Assert.Equal(VerifyCommandShell.Bash, command.Shell));
     }
 
@@ -395,15 +404,25 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 {
     private readonly string _root;
     private readonly BuildTestGateRunner _runner = new(NullLogger<BuildTestGateRunner>.Instance);
+    private readonly ITestOutputHelper _output;
 
-    public BuildTestGateRunnerBehaviorTests()
+    public BuildTestGateRunnerBehaviorTests(ITestOutputHelper output)
     {
+        _output = output;
         _root = Path.Combine(Path.GetTempPath(), "verify-runner-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
     }
 
     public void Dispose()
     {
+        try
+        {
+            var cache = GateDependencyCacheSession.CachePath(
+                BuildTestGateRunner.ReviewWorkspaceRoot,
+                _root);
+            if (Directory.Exists(cache)) Directory.Delete(cache, recursive: true);
+        }
+        catch { /* best-effort */ }
         try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
     }
 
@@ -541,14 +560,14 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     }
 
     [Fact]
-    public async Task ExactSubjectNodeFixture_InstallsDependenciesWithSharedCacheBeforeBuild()
+    public async Task ExactSubjectNodeFixture_ReusesDependenciesAndAngularCacheOnSecondRun()
     {
         WriteFixtureFile("package.json", """
             {
               "name": "gate-node-fixture",
               "version": "1.0.0",
               "scripts": {
-                "build": "node -e \"if (!(process.env.NPM_CONFIG_CACHE || process.env.npm_config_cache)) process.exit(2); require('fixture-dep')\""
+                "build": "node -e \"const fs=require('fs'); if (!(process.env.NPM_CONFIG_CACHE || process.env.npm_config_cache)) process.exit(2); require('fixture-dep'); const warm=fs.existsSync('.angular/cache/warm'); fs.mkdirSync('.angular/cache',{recursive:true}); fs.writeFileSync('.angular/cache/warm','yes'); console.log(warm?'angular-cache=hit':'angular-cache=miss')\""
               },
               "dependencies": { "fixture-dep": "file:fixture-dep" }
             }
@@ -576,12 +595,20 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             """);
         var sha = InitializeGitRepository();
 
-        var result = await _runner.RunAsync(
-            new BuildTestGateRequest(_root, sha, "node-fixture")
-            {
-                RequiredTestLevel = TestExecutionLevels.BuildOnly,
-                InfrastructureTimeout = TimeSpan.FromSeconds(30),
-            },
+        var request = new BuildTestGateRequest(_root, sha, "node-fixture")
+        {
+            RequiredTestLevel = TestExecutionLevels.BuildOnly,
+            InfrastructureTimeout = TimeSpan.FromSeconds(30),
+        };
+        var first = await _runner.RunAsync(
+            request,
+            changedFiles: null,
+            profile: null,
+            PostStepMode.Fail,
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+        var second = await _runner.RunAsync(
+            request,
             changedFiles: null,
             profile: null,
             PostStepMode.Fail,
@@ -589,9 +616,12 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             CancellationToken.None);
 
         Assert.True(
-            result.Verdict == BuildTestGateVerdict.Ok,
-            $"{result.Reason}\n{result.Output}\n{string.Join("\n", result.Processes.Select(p => p.StandardError))}");
-        Assert.Collection(result.Processes,
+            first.Verdict == BuildTestGateVerdict.Ok,
+            $"{first.Reason}\n{first.Output}\n{string.Join("\n", first.Processes.Select(p => p.StandardError))}");
+        Assert.True(
+            second.Verdict == BuildTestGateVerdict.Ok,
+            $"{second.Reason}\n{second.Output}\n{string.Join("\n", second.Processes.Select(p => p.StandardError))}");
+        Assert.Collection(first.Processes,
             install =>
             {
                 Assert.Equal("preparation", install.Phase);
@@ -604,7 +634,78 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
                 Assert.Equal("npm run build", build.Command);
                 Assert.Equal(0, build.ExitCode);
             });
+        var secondBuild = Assert.Single(second.Processes);
+        Assert.Equal("verification", secondBuild.Phase);
+        Assert.Contains("angular-cache=hit", secondBuild.StandardOutput);
+        Assert.Contains(second.DependencyCache, cache =>
+            cache.State == "hit"
+            && cache.Reason == "lock-unchanged"
+            && !cache.InstallRan);
+        Assert.True(
+            second.DurationMs < first.DurationMs,
+            $"Expected warm gate to be faster; cold={first.DurationMs}ms warm={second.DurationMs}ms.");
+        _output.WriteLine(
+            $"dependency-cache benchmark coldMs={first.DurationMs} warmMs={second.DurationMs} " +
+            $"savedMs={first.DurationMs - second.DurationMs}");
+        Assert.NotEqual(first.Workspace, second.Workspace);
         Assert.True(Directory.Exists(BuildTestGateRunner.NpmCachePath));
+    }
+
+    [Fact]
+    public async Task ExactSubjectNodeFixture_LockfileChangeForcesReinstall()
+    {
+        WriteFixtureFile("package.json", """
+            {
+              "name": "gate-node-lock-fixture",
+              "version": "1.0.0",
+              "scripts": { "build": "node -e \"require('fixture-dep')\"" },
+              "dependencies": { "fixture-dep": "file:fixture-dep" }
+            }
+            """);
+        WriteFixtureFile("fixture-dep/package.json", """
+            { "name": "fixture-dep", "version": "1.0.0", "main": "index.js" }
+            """);
+        WriteFixtureFile("fixture-dep/index.js", "module.exports = 'installed';");
+        WriteFixtureFile("package-lock.json", NodeFixtureLock("1.0.0"));
+        var firstSha = InitializeGitRepository();
+
+        var first = await RunExactNodeGate(firstSha);
+        var warm = await RunExactNodeGate(firstSha);
+
+        WriteFixtureFile("package-lock.json", NodeFixtureLock("1.0.1"));
+        RunGit("add", "package-lock.json");
+        RunGit("commit", "-q", "-m", "change lockfile");
+        var changedSha = RunGit("rev-parse", "HEAD").Trim();
+        var changed = await RunExactNodeGate(changedSha);
+
+        Assert.Contains(first.DependencyCache, cache => cache.State == "miss" && cache.InstallRan);
+        Assert.Contains(warm.DependencyCache, cache => cache.State == "hit" && !cache.InstallRan);
+        Assert.Contains(changed.DependencyCache, cache =>
+            cache.State == "miss"
+            && cache.Reason == "lock-changed"
+            && cache.InstallRan);
+        Assert.Contains(changed.Processes, process =>
+            process.Phase == "preparation" && process.Command == "npm ci");
+    }
+
+    [Fact]
+    public async Task RunTimeoutNamesViolatedBudgetAndConsumption()
+    {
+        var result = await _runner.RunAsync(
+            new BuildTestGateRequest(_root, null, "timeout-budget", RequireExactSubject: false),
+            changedFiles: null,
+            new BuildProfile { InstallCmd = "sleep 1", BuildCmds = ["exit 0"] },
+            PostStepMode.Fail,
+            TimeSpan.FromMilliseconds(100),
+            CancellationToken.None);
+
+        Assert.Equal(BuildTestGateFailureKind.Timeout, result.FailureKind);
+        Assert.NotNull(result.ViolatedBudget);
+        Assert.Equal("gate-run", result.ViolatedBudget!.Name);
+        Assert.InRange(result.ViolatedBudget.LimitMs, 95, 105);
+        Assert.True(result.ViolatedBudget.ConsumedMs >= 90);
+        Assert.Contains("gate-run budget", result.Reason);
+        Assert.Contains("limit=100ms", result.Reason);
     }
 
     [Fact]
@@ -659,7 +760,7 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     }
 
     [Fact]
-    public async Task ThreeParallelExactSubjectGatesSerializeAndUseDistinctWorkspaces()
+    public async Task ThreeParallelExactSubjectGatesSerializeUseDistinctWorkspacesAndCleanEachOne()
     {
         var sha = InitializeGitRepository();
         var profile = new BuildProfile
@@ -691,7 +792,7 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal(3, results.Select(result => result.Workspace).Distinct().Count());
         Assert.True(results.Count(result => result.GateCollisionDetected) >= 2);
         Assert.True(results.Where(result => result.GateCollisionDetected).All(result => result.GateQueueWaitMs > 0));
-        Assert.Empty(Directory.EnumerateDirectories(BuildTestGateRunner.ReviewWorkspaceRoot));
+        Assert.All(results, result => Assert.False(Directory.Exists(result.Workspace)));
     }
 
     [Fact]
@@ -942,6 +1043,38 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, content);
     }
+
+    private Task<BuildTestGateResult> RunExactNodeGate(string sha)
+        => _runner.RunAsync(
+            new BuildTestGateRequest(_root, sha, "node-lock-fixture")
+            {
+                RequiredTestLevel = TestExecutionLevels.BuildOnly,
+                InfrastructureTimeout = TimeSpan.FromSeconds(30),
+            },
+            changedFiles: null,
+            profile: null,
+            PostStepMode.Fail,
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+
+    private static string NodeFixtureLock(string version)
+        => $$"""
+            {
+              "name": "gate-node-lock-fixture",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "requires": true,
+              "packages": {
+                "": {
+                  "name": "gate-node-lock-fixture",
+                  "version": "1.0.0",
+                  "dependencies": { "fixture-dep": "file:fixture-dep" }
+                },
+                "fixture-dep": { "name": "fixture-dep", "version": "{{version}}" },
+                "node_modules/fixture-dep": { "resolved": "fixture-dep", "link": true }
+              }
+            }
+            """;
 
     private string InitializeGitRepository()
     {
