@@ -84,6 +84,21 @@ describe('EpicOverviewScreenComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.completedEpics().map((e) => e.id)).toEqual(['done']);
     expect(testids(host, 'epic-overview-card')).toHaveLength(2);
+    expect(testid(host, 'epic-overview-active-list')?.querySelectorAll('[data-testid="epic-overview-card"]')).toHaveLength(1);
+    expect(testid(host, 'epic-overview-completed-list')?.querySelectorAll('[data-testid="epic-overview-card"]')).toHaveLength(1);
+    (testid(host, 'epic-overview-completed-toggle') as HTMLButtonElement).click();
+    (testid(host, 'epic-overview-completed-toggle') as HTMLButtonElement).click();
+    http.verify();
+  });
+
+  it('remembers an empty completed result after the first expansion', () => {
+    const { fixture, http } = mount(null, [rollup({ id: 'active' })]);
+    const host = { nativeElement: fixture.nativeElement as HTMLElement };
+    (testid(host, 'epic-overview-completed-toggle') as HTMLButtonElement).click();
+    http.expectOne((r) => r.url.endsWith('/epics') && r.params.get('status') === 'completed').flush([]);
+    fixture.detectChanges();
+    (testid(host, 'epic-overview-completed-toggle') as HTMLButtonElement).click();
+    (testid(host, 'epic-overview-completed-toggle') as HTMLButtonElement).click();
     http.verify();
   });
 

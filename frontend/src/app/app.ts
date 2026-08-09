@@ -1603,7 +1603,7 @@ export class App implements OnInit, OnDestroy {
           this.selectFetchedDetail(detail);
           return;
         }
-        this.openEpicAsTab(epic);
+        this.openEpicAsTab(epic, detail.info.taskKey);
         this.selectEpicTabSubTask(detail);
       },
       error: (err) => {

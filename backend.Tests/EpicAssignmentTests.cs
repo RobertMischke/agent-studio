@@ -149,11 +149,12 @@ public class EpicAssignmentTests : IDisposable
     public void BuildRollup_TreatsArchivedSubTasksAsCompletedHistory()
     {
         var epic = new TaskInfo { Id = "epic-history", Title = "Historical Epic", Kind = TaskKinds.Epic, State = TaskStates.Archive };
+        var completedAt = new DateTime(2026, 7, 9, 12, 0, 0, DateTimeKind.Utc);
         var all = new List<TaskInfo>
         {
             epic,
-            Sub("s-completed", epic.Id, TaskStates.Completed, 1),
-            Sub("s-archived", epic.Id, TaskStates.Archive, 2),
+            Sub("s-completed", epic.Id, TaskStates.Completed, 1) with { EnteredLaneAt = completedAt.AddHours(-1) },
+            Sub("s-archived", epic.Id, TaskStates.Archive, 2) with { EnteredLaneAt = completedAt },
         };
 
         var rollup = EpicEndpoints.BuildRollup(epic, all);
@@ -162,6 +163,7 @@ public class EpicAssignmentTests : IDisposable
         Assert.Equal(2, rollup.Completed);
         Assert.Equal(0, rollup.InProgress);
         Assert.Equal(0, rollup.Open);
+        Assert.Equal(completedAt, rollup.CompletedAt);
     }
 
     [Fact]

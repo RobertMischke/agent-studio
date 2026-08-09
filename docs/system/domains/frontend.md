@@ -82,16 +82,18 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   waiting, with machine-lock gate queueing remaining a distinct waiting state.
 - `frontend/src/app/features/board/components/epic-overview-screen/`: the
   read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
-  It fetches `GET /api/epics` (archive-inclusive) and splits rollups into
-  `Active` and `Completed` sections (`epic-overview-section-active` /
-  `epic-overview-section-completed`); a rollup counts as Completed only when
-  `subTaskTotal > 0` and every child is done. Archived zero-member cleanup
-  epics are hidden, while completed epics with historical children stay visible
-  as history. Each card shows an `x / y done` count, a done/in-progress/open
-  progress bar, and expands (`epic-overview-expand`) to child rows carrying
-  lane status and a project colour dot (`epic-overview-open-sub` /
-  `epic-overview-sub-project`). The screen only navigates (it emits `openTask`);
-  epic assignment stays on the board (create dialog + card context menu).
+  Its main list is the active list, without a redundant Active section header.
+  Completed history is collapsed by default and shows the lightweight
+  `GET /api/epics/completed/count` result in its header; full completed rollups
+  are fetched from `GET /api/epics?status=completed` only on first expansion.
+  A rollup counts as Completed only when `subTaskTotal > 0` and every child is
+  done. Archived zero-member cleanup epics are hidden, while completed epics
+  with historical children stay visible as quiet, dated history. Each card
+  shows an `x / y done` count, a done/in-progress/open progress bar, and expands
+  (`epic-overview-expand`) to child rows carrying lane status and a project
+  colour dot (`epic-overview-open-sub` / `epic-overview-sub-project`). The
+  screen only navigates (it emits `openTask`); epic assignment stays on the
+  board (create dialog + card context menu).
   `EpicCreateDialogComponent` requires a title and goal description before it
   posts. Contract locked by `e2e/board/epic-overview-history.spec.ts` (mocked
   routes, both themes) and `e2e/board/epic-overview-screen.spec.ts` (real
