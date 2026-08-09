@@ -36,6 +36,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [stable-release-contract.md](stable-release-contract.md) | Immutable Stable tags, build manifests, preflight comparison, rollback identity, and legacy migration. |
 | [develop-main-promotion.md](develop-main-promotion.md) | Operator checklist and command for exact-SHA `develop` to `main` promotion, full gate, annotated release marker, and deploy-cron handoff. |
 | [installer-story/](installer-story/index.html) | German concept Workbench for the guided all-Docker install on a fresh Linux or Windows machine: component matrix, per-step flow with failure modes, Compose and secrets state, test protocol template, and the cut into a Linux run, a Windows run, and the installer implementation (AGT-2503). |
+| [kontext-orchestrator-chats/](kontext-orchestrator-chats/index.html) | Decision dossier for context-aware project and task chats, including current evidence, context ownership, token budgets, UX sketches, and five delivery slices (AGT-2514). |
 
 Konvergenz-Probe 2026-07-30: develop ist der Arbeitsbranch.
 | [deck-icon-exploration/](deck-icon-exploration/index.html) | Round 2 Deck icon alternatives for the multi-faceted project console, with light and dark proofs, recommendation, rejected Round 1 direction, and implementation seam (AGT-2355). |
