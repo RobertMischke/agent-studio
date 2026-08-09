@@ -136,7 +136,10 @@ Capability probing tests binary presence and provider authentication for each
 configured provider before the first advertisement. A card requires the
 matching `cli-execution:<cliType>` and `provider-auth:<cliType>` keys. The CAR
 worker receives the matching provider path, so a Claude pin on a Codex-primary
-host cannot fall through to `codex -m <claude-model>`.
+host cannot fall through to `codex -m <claude-model>`. On headless Linux hosts,
+both runner units load `/etc/agent-runner/provider-auth.env`; the Claude worker
+explicitly admits `CLAUDE_CODE_OAUTH_TOKEN` from the process environment after
+clean-context preparation. The probe and worker do not read credential paths.
 
 ### 2.8 Execution context (read-only observability)
 

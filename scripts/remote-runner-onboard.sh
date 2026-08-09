@@ -248,6 +248,12 @@ remote_login_status() {
   "${ssh_base[@]}" -T "$host" bash -s <<'REMOTE_AUTH_STATUS'
 set -uo pipefail
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
+provider_auth_file=/etc/agent-runner/provider-auth.env
+if [[ -r "$provider_auth_file" ]]; then
+  set -a
+  . "$provider_auth_file"
+  set +a
+fi
 codex_ok=0
 claude_ok=0
 echo '[remote] Codex authentication status:'
@@ -265,10 +271,9 @@ if ! remote_login_status; then
   printf '[onboarding] oauth=codex Open the URL shown below in the operator browser and enter the one-time device code.\n'
   "${ssh_base[@]}" -tt "$host" "export PATH=\"\$HOME/.dotnet/tools:\$HOME/.local/bin:\$PATH\"; codex login status || codex login --device-auth; codex login status"
 
-  printf '[onboarding] oauth=claude Complete the URL/browser flow locally. Credentials remain on this host.\n'
-  "${ssh_base[@]}" -tt "$host" "export PATH=\"\$HOME/.dotnet/tools:\$HOME/.local/bin:\$PATH\"; claude auth status --text || claude auth login --claudeai; claude auth status --text"
+  printf '[onboarding] oauth=claude A headless setup token must already be provisioned through SSH stdin at /etc/agent-runner/provider-auth.env.\n'
 
-  remote_login_status || die "Authentication did not verify. Re-run setup; never copy credential files from another host."
+  remote_login_status || die "Authentication did not verify. Provision Claude through provider-auth.env as documented; never copy credential files from another host."
 fi
 
 printf '[onboarding] phase=systemd Writing configuration and enabling the OS-owned service.\n'
@@ -355,6 +360,9 @@ WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$env_file
+# One shared provider credential file for coding and review units. Keeping it
+# after the role-specific file gives the centrally rotated value precedence.
+EnvironmentFile=/etc/agent-runner/provider-auth.env
 ExecStart=$agent_host_root/current/$runner_command --poll
 Restart=always
 RestartSec=10s
@@ -380,6 +388,16 @@ if [[ "$role" == "review" ]]; then
   sudo install -d -m 0750 "$service_root/review-work"
 fi
 sudo chown -R "$runner_user:$runner_group" "$service_root"
+provider_auth_file=/etc/agent-runner/provider-auth.env
+if [[ ! -f "$provider_auth_file" ]]; then
+  provider_auth_tmp="$(mktemp)"
+  chmod 600 "$provider_auth_tmp"
+  sudo install -m 0640 -o root -g "$runner_group" "$provider_auth_tmp" "$provider_auth_file"
+  rm -f "$provider_auth_tmp"
+else
+  sudo chown root:"$runner_group" "$provider_auth_file"
+  sudo chmod 0640 "$provider_auth_file"
+fi
 sudo install -d -m 0755 "$agent_host_root"
 # Preserve the release boundary below the stable /opt path. The compatibility
 # command links point through current, never into files that an update mutates.
