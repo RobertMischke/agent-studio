@@ -121,6 +121,35 @@ describe('OverviewRunsComponent', () => {
     expect(testText(rows[2], 'overview-run-engine')).toBe('Codex');
   });
 
+  it('shows an identical agent once at panel level and keeps run rows compact', () => {
+    const fixture = setup([
+      run(1, { cli: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'xhigh' }),
+      run(2, { cli: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'xhigh' }),
+      run(3, { cli: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'xhigh' }),
+    ]);
+
+    expect(one(fixture, 'overview-runs-agent').textContent?.trim()).toBe(
+      'Codex · gpt-5.6-sol · xhigh',
+    );
+    expect(all(fixture, 'overview-run-engine')).toHaveLength(0);
+    expect(all(fixture, 'overview-run-row')[2].textContent).toContain('Run #1');
+  });
+
+  it('shows only an agent deviation on its affected run', () => {
+    const fixture = setup([
+      run(1, { cli: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'xhigh' }),
+      run(2, { cli: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'xhigh' }),
+      run(3, { cli: 'claude', model: 'claude-opus-4-1', thinkingLevel: 'high' }),
+    ]);
+
+    expect(one(fixture, 'overview-runs-agent').textContent?.trim()).toBe(
+      'Codex · gpt-5.6-sol · xhigh',
+    );
+    const deviations = all(fixture, 'overview-run-engine');
+    expect(deviations).toHaveLength(1);
+    expect(deviations[0].textContent?.trim()).toBe('Claude Code · opus 4.1 · high');
+  });
+
   it('omits the agent fact when the run recorded neither CLI nor model', () => {
     const fixture = setup([run(1, { cli: null })]);
 
@@ -141,12 +170,37 @@ describe('OverviewRunsComponent', () => {
   });
 
   it('uses the persisted CORE duration only when timeline rows have no duration', () => {
-    const fixture = setup([run(1, { status: 'interrupted', durationSeconds: null })], 125);
+    const fixture = setup([
+      run(1, {
+        status: 'unknown',
+        result: null,
+        closeoutSource: 'legacy-missing',
+        durationSeconds: null,
+      }),
+    ], 125);
 
     expect(one(fixture, 'overview-runs-duration').textContent?.trim()).toBe('2m 5s total');
-    expect(testText(all(fixture, 'overview-run-row')[0], 'overview-run-duration')).toBe(
-      'Not recorded',
+    expect(testText(all(fixture, 'overview-run-row')[0], 'overview-run-result')).toContain(
+      'Not recorded (legacy run)',
     );
+    expect(testText(all(fixture, 'overview-run-row')[0], 'overview-run-duration')).toBe(
+      'Not recorded (legacy run)',
+    );
+  });
+
+  it('shows the derived terminal result and duration for a legacy remote run', () => {
+    const fixture = setup([
+      run(1, {
+        status: 'completed',
+        result: 'done',
+        closeoutSource: 'timeline',
+        durationSeconds: 1_679,
+      }),
+    ]);
+    const row = all(fixture, 'overview-run-row')[0];
+
+    expect(testText(row, 'overview-run-result')).toContain('Done');
+    expect(testText(row, 'overview-run-duration')).toBe('27m 59s');
   });
 
   it('renders the fallback total without inventing a run row or count badge', () => {

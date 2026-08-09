@@ -288,6 +288,29 @@ follow-up contains the same normalized text. It adds no task files and no
 write-side contract. Legacy follow-ups that exist only as `[user]` log rows
 therefore remain visible without inventing a second persistence mechanism.
 
+## Runs projection
+
+`GET /api/tasks/{id}/runs` is built by `TaskReader`; `task.json.runs[]` is not
+its store. `TaskReader` loads `logs/session-events.jsonl`, bounded
+`logs/cli-output.log`, `logs/timeline.jsonl`, and the task's RunAttempts. The
+session event identifies one invocation and now carries an additive terminal
+display receipt for new runs. Appending a successor start first closes the
+previous open row as `superseded`, so one task never has more than one open Run
+record. Read-time fallback applies the same successor-start rule to legacy
+history, then closes rows from Attempt Authority or `agent_run_finished` before
+using bounded CLI activity.
+Rows with no terminal evidence expose `closeoutSource=legacy-missing`, which the
+Task Detail Runs panel renders as `Not recorded (legacy run)`.
+
+The Runs aggregate duration can fall back to the persisted CORE agent step in
+the task-folder `pipeline-execution.json` when no row has a duration. That aggregate
+fallback explains historical cases where the header knew the total while an
+individual row did not; it is not an alternative per-run store.
+
+The Task Detail panel lifts a common CLI/model/thinking-level value into the
+panel summary and renders only per-run deviations. The primary row keeps the
+full run number, trigger, result, and duration visible.
+
 ## Project proposals
 
 The Project Hub proposal queue is backed by dated Markdown generations under

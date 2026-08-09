@@ -148,6 +148,190 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void LegacyRemoteRun_DerivesTerminalResultAndDurationFromAttemptAuthority()
+    {
+        var events = new List<SessionEvent>
+        {
+            new()
+            {
+                Ts = T0,
+                Kind = "start",
+                Cli = "remote-runner",
+                RunAttemptId = "run-54"
+            }
+        };
+        var attempts = new List<RunAttemptDto>
+        {
+            new(
+                "run-54",
+                "QS-54",
+                "PROJ-016",
+                null,
+                AttemptLifecycleState.Completed,
+                null,
+                1,
+                1,
+                T0,
+                T0.AddSeconds(1_679),
+                "result-sha",
+                "done",
+                null,
+                [])
+        };
+
+        var run = Assert.Single(RunTimelineBuilder.Build(
+            events,
+            lines: [],
+            nowUtc: T0.AddHours(1),
+            fallback: new RunTimelineFallbackContext(attempts, [], TaskMayHaveActiveRun: false)).Runs);
+
+        Assert.Equal("completed", run.Status);
+        Assert.Equal("done", run.Result);
+        Assert.Equal(T0.AddSeconds(1_679), run.EndedAt);
+        Assert.Equal(1_679, run.DurationSeconds);
+        Assert.Equal(RunCloseoutSources.AttemptAuthority, run.CloseoutSource);
+    }
+
+    [Fact]
+    public void Qs54LegacyShape_DerivesCloseoutFromAgentRunFinishedTimeline()
+    {
+        var events = new List<SessionEvent>
+        {
+            new() { Ts = T0, Kind = "start", Cli = "remote-runner" }
+        };
+        var ledger = new List<TimelineEvent>
+        {
+            new()
+            {
+                Ts = T0.AddSeconds(1_679),
+                Kind = TimelineEventKinds.AgentRunFinished,
+                Actor = TimelineActors.Agent,
+                RunId = "run-54",
+                Summary = "remote run done on remote-runner",
+                Details = new Dictionary<string, string>
+                {
+                    ["status"] = "done",
+                    ["runAttemptId"] = "run-54"
+                }
+            }
+        };
+
+        var run = Assert.Single(RunTimelineBuilder.Build(
+            events,
+            lines: [],
+            nowUtc: T0.AddHours(1),
+            fallback: new RunTimelineFallbackContext([], ledger, TaskMayHaveActiveRun: false)).Runs);
+
+        Assert.Equal("completed", run.Status);
+        Assert.Equal("done", run.Result);
+        Assert.Equal(T0.AddSeconds(1_679), run.EndedAt);
+        Assert.Equal(1_679, run.DurationSeconds);
+        Assert.Equal(RunCloseoutSources.Timeline, run.CloseoutSource);
+    }
+
+    [Fact]
+    public void LegacyTerminalRunWithoutCloseout_IsMarkedHonestly()
+    {
+        var events = new List<SessionEvent>
+        {
+            new() { Ts = T0, Kind = "start", Cli = "remote-runner" }
+        };
+
+        var run = Assert.Single(RunTimelineBuilder.Build(
+            events,
+            lines: [],
+            nowUtc: T0.AddHours(1),
+            fallback: new RunTimelineFallbackContext([], [], TaskMayHaveActiveRun: false)).Runs);
+
+        Assert.Equal("unknown", run.Status);
+        Assert.Null(run.Result);
+        Assert.Null(run.EndedAt);
+        Assert.Null(run.DurationSeconds);
+        Assert.Equal(RunCloseoutSources.LegacyMissing, run.CloseoutSource);
+    }
+
+    [Fact]
+    public void LegacyTerminalRun_DerivesDurationFromLastBoundedCliActivity()
+    {
+        var events = new List<SessionEvent>
+        {
+            new() { Ts = T0, Kind = "start", Cli = "remote-runner" }
+        };
+        var lines = new List<CliOutputLine>
+        {
+            StdOut(120, "remote runner is working"),
+            StdOut(600, "remote runner emitted its last line")
+        };
+
+        var run = Assert.Single(RunTimelineBuilder.Build(
+            events,
+            lines,
+            nowUtc: T0.AddHours(1),
+            fallback: new RunTimelineFallbackContext([], [], TaskMayHaveActiveRun: false)).Runs);
+
+        Assert.Equal("unknown", run.Status);
+        Assert.Null(run.Result);
+        Assert.Equal(T0.AddSeconds(600), run.EndedAt);
+        Assert.Equal(600, run.DurationSeconds);
+        Assert.Equal(RunCloseoutSources.LegacyActivity, run.CloseoutSource);
+    }
+
+    [Fact]
+    public void Mkt21LegacyShape_SuccessorStartsCloseOrphanedRunsAsSuperseded()
+    {
+        var secondStart = T0.AddMinutes(26).AddSeconds(14);
+        var thirdStart = secondStart.AddSeconds(27);
+        var events = new List<SessionEvent>
+        {
+            new() { Ts = T0, Kind = "start", Cli = "codex" },
+            new() { Ts = secondStart, Kind = "continue", Cli = "codex" },
+            new()
+            {
+                Ts = thirdStart,
+                Kind = "continue",
+                Cli = "codex",
+                FinishedAt = thirdStart.AddMinutes(9),
+                Result = "done",
+                Status = "completed"
+            }
+        };
+
+        var timeline = RunTimelineBuilder.Build(
+            events,
+            lines: [],
+            nowUtc: thirdStart.AddHours(1),
+            fallback: new RunTimelineFallbackContext([], [], TaskMayHaveActiveRun: false));
+
+        Assert.False(timeline.HasActiveRun);
+        Assert.Equal(3, timeline.Runs.Count);
+        Assert.Equal("superseded", timeline.Runs[0].Status);
+        Assert.Equal("superseded", timeline.Runs[0].Result);
+        Assert.Equal(secondStart, timeline.Runs[0].EndedAt);
+        Assert.Equal(1_574, timeline.Runs[0].DurationSeconds);
+        Assert.Equal(RunCloseoutSources.SuccessorStart, timeline.Runs[0].CloseoutSource);
+        Assert.Equal("superseded", timeline.Runs[1].Status);
+        Assert.Equal(27, timeline.Runs[1].DurationSeconds);
+        Assert.Equal("completed", timeline.Runs[2].Status);
+        Assert.Equal(540, timeline.Runs[2].DurationSeconds);
+        Assert.DoesNotContain(timeline.Runs, run => run.Status == "running");
+    }
+
+    [Theory]
+    [InlineData("done", "completed")]
+    [InlineData("success", "completed")]
+    [InlineData("noop", "completed")]
+    [InlineData("failed", "failed")]
+    [InlineData("unverified", "failed")]
+    [InlineData("superseded", "superseded")]
+    [InlineData("blocked", "blocked")]
+    [InlineData("needsinput", "needs-input")]
+    [InlineData("cancelled", "cancelled")]
+    public void RunCloseoutPolicy_MapsTerminalOutcomeToDisplayStatus(string outcome, string expected)
+    {
+        Assert.Equal(expected, RunCloseoutPolicy.StatusFor(outcome, recordedStatus: null));
+    }
+
+    [Fact]
     public void ContextRef_IsCarriedFromEventOntoRunRecord()
     {
         // The per-run passed-context pointer travels on the SessionEvent so it

@@ -50,12 +50,13 @@ const CLAUDE_TOKEN_SUMMARY = {
   entries: [],
 };
 
-function makeDetail(state: string) {
+function makeDetail(state: string, key = 'FIXTURE-1', title = 'Agent-run metrics fixture') {
   return {
     info: {
       id: JOB_ID,
+      key,
       taskKey: `${WATCH_PATH}::${JOB_ID}`,
-      title: 'Agent-run metrics fixture',
+      title,
       state,
       agent: 'claude',
       cliType: 'claude',
@@ -248,6 +249,8 @@ function runRecord(
     endedAt: null,
     status: options.status ?? 'completed',
     cli: 'claude',
+    model: 'claude-opus-4-8',
+    thinkingLevel: 'high',
     exitCode: 0,
     durationSeconds,
     inputSessionId: null,
@@ -301,9 +304,64 @@ function multiRunTimeline() {
   };
 }
 
-async function installRoutes(page: Page, state: string): Promise<void> {
+function legacyMissingCloseoutTimeline() {
+  return {
+    runCount: 1,
+    firstStartedAt: '2026-08-08T16:08:43Z',
+    lastActivityAt: '2026-08-08T16:08:43Z',
+    hasActiveRun: false,
+    runs: [
+      {
+        ...runRecord(1, 'start', '2026-08-08T16:08:43Z', 0, { status: 'unknown' }),
+        endedAt: null,
+        result: null,
+        closeoutSource: 'legacy-missing',
+        durationSeconds: null,
+      },
+    ],
+  };
+}
+
+function mkt21HealedTimeline() {
+  return {
+    runCount: 3,
+    firstStartedAt: '2026-08-08T16:00:55Z',
+    lastActivityAt: '2026-08-08T16:36:36Z',
+    hasActiveRun: false,
+    runs: [
+      {
+        ...runRecord(1, 'start', '2026-08-08T16:00:55Z', 1_574, { status: 'superseded' }),
+        endedAt: '2026-08-08T16:27:09Z',
+        result: 'superseded',
+        closeoutSource: 'successor-start',
+      },
+      {
+        ...runRecord(2, 'continue', '2026-08-08T16:27:09Z', 27, { status: 'superseded' }),
+        endedAt: '2026-08-08T16:27:36Z',
+        result: 'superseded',
+        closeoutSource: 'successor-start',
+      },
+      {
+        ...runRecord(3, 'continue', '2026-08-08T16:27:36Z', 540),
+        endedAt: '2026-08-08T16:36:36Z',
+        result: 'done',
+        closeoutSource: 'session-event',
+      },
+    ],
+  };
+}
+
+async function installRoutes(
+  page: Page,
+  state: string,
+  timeline: ReturnType<typeof multiRunTimeline>
+    | ReturnType<typeof legacyMissingCloseoutTimeline>
+    | ReturnType<typeof mkt21HealedTimeline>
+    = multiRunTimeline(),
+  detailIdentity?: { key: string; title: string },
+): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const detail = makeDetail(state);
+  const detail = makeDetail(state, detailIdentity?.key, detailIdentity?.title);
 
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {
@@ -418,7 +476,7 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(multiRunTimeline()),
+      body: JSON.stringify(timeline),
     }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/agent-work-summary(\\?|$)`), (route) =>
@@ -532,6 +590,14 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     await expect(runRows.first().getByTestId('overview-run-duration')).toHaveText('55s');
     await expect(runRows.first().getByTestId('overview-run-tokens')).toHaveText('86.2k tokens');
     await expect(runRows.nth(3).getByTestId('overview-run-trigger')).toHaveText('User follow-up');
+    await expect(runs.getByTestId('overview-runs-agent')).toHaveText(
+      'Claude Code · opus 4.8 · high',
+    );
+    await expect(runs.getByTestId('overview-run-engine')).toHaveCount(0);
+    await expect(runRows.last().getByTestId('overview-run-id')).toHaveText('Run #1');
+    expect(await runRows.last().getByTestId('overview-run-id').evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    )).toBe(true);
 
     // Symptom 1 (direct): the CORE Agent-execution row now carries the claude
     // run's own token + cost values on the pipeline row, not "—".
@@ -555,9 +621,72 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
 
     if (RESULTS_DIR) {
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'overview-agent-metrics-fix.png'),
+        path: path.join(RESULTS_DIR, 'overview-agent-metrics-fix--mocked.png'),
         fullPage: true,
       });
+    }
+  });
+
+  test('legacy run without terminal evidence is labelled honestly', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await installRoutes(page, '5-human-review', legacyMissingCloseoutTimeline());
+    await openDetail(page);
+
+    const runs = page.getByTestId('overview-runs');
+    await expect(runs.getByTestId('overview-runs-duration')).toHaveText('2m 5s total');
+    const row = runs.getByTestId('overview-run-row');
+    await expect(row.getByTestId('overview-run-result')).toContainText(
+      'Not recorded (legacy run)',
+    );
+    await expect(row.getByTestId('overview-run-duration')).toHaveText(
+      'Not recorded (legacy run)',
+    );
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+
+      if (RESULTS_DIR) {
+        await runs.screenshot({
+          path: path.join(RESULTS_DIR, `runs-panel-legacy-closeout-${theme}--mocked.png`),
+        });
+      }
+    }
+  });
+
+  test('MKT-21 legacy successors are healed and the shared agent is not repeated', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await installRoutes(page, '6-completed', mkt21HealedTimeline(), {
+      key: 'MKT-21',
+      title: 'MKT-21 · Marketing Studio run-history close-out',
+    });
+    await openDetail(page);
+
+    const runs = page.getByTestId('overview-runs');
+    const rows = runs.getByTestId('overview-run-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0).getByTestId('overview-run-result')).toContainText('Done');
+    await expect(rows.nth(0).getByTestId('overview-run-duration')).toHaveText('9m');
+    await expect(rows.nth(1).getByTestId('overview-run-result')).toContainText('Superseded');
+    await expect(rows.nth(1).getByTestId('overview-run-duration')).toHaveText('27s');
+    await expect(rows.nth(2).getByTestId('overview-run-result')).toContainText('Superseded');
+    await expect(rows.nth(2).getByTestId('overview-run-duration')).toHaveText('26m 14s');
+    await expect(rows.getByText('Running', { exact: true })).toHaveCount(0);
+    await expect(runs.getByTestId('overview-runs-agent')).toHaveText(
+      'Claude Code · opus 4.8 · high',
+    );
+    await expect(runs.getByTestId('overview-run-engine')).toHaveCount(0);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+      if (RESULTS_DIR) {
+        await runs.screenshot({
+          path: path.join(RESULTS_DIR, `mkt-21-runs-healed-${theme}--mocked.png`),
+        });
+      }
     }
   });
 });

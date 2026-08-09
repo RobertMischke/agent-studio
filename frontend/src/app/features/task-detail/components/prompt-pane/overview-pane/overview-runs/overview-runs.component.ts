@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { RunRecord } from '../../../../../run-timeline';
 import type { CliType } from '../../../../../../models/task.model';
 import {
@@ -30,6 +31,7 @@ interface OverviewRunVm {
 @Component({
   selector: 'app-overview-runs',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './overview-runs.component.html',
   styleUrl: './overview-runs.component.scss',
@@ -64,6 +66,24 @@ export class OverviewRunsComponent {
 
   /** Aggregate count is always the sum of the visible card-scoped rows. */
   readonly runCount = computed(() => this.rows().length);
+
+  /**
+   * Lift the common agent/model out of repeated rows. A single-run panel also
+   * uses this summary; mixed panels retain only the per-run deviations.
+   */
+  readonly sharedEngine = computed<string | null>(() => {
+    const engines = this.rows()
+      .map((row) => row.engine)
+      .filter((engine): engine is string => engine !== null);
+    if (engines.length === 0) return null;
+
+    const counts = new Map<string, number>();
+    for (const engine of engines) counts.set(engine, (counts.get(engine) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort((left, right) => right[1] - left[1]);
+    if (ranked.length === 1) return ranked[0][0];
+    if (ranked[0][1] === ranked[1][1] || ranked[0][1] < 2) return null;
+    return ranked[0][0];
+  });
 
   readonly totalDurationSeconds = computed(() => {
     const recorded = this.rows().reduce(
@@ -102,6 +122,40 @@ export class OverviewRunsComponent {
   }
 
   private resultLabel(run: RunRecord): string {
+    const result = run.result?.trim().toLowerCase() ?? '';
+    switch (result) {
+      case 'done':
+      case 'success':
+        return 'Done';
+      case 'completed':
+        return 'Completed';
+      case 'noop':
+        return 'No-op';
+      case 'failed':
+      case 'environmentfailure':
+        return 'Failed';
+      case 'unverified':
+        return 'Unverified';
+      case 'superseded':
+        return 'Superseded';
+      case 'blocked':
+        return 'Blocked';
+      case 'needsinput':
+      case 'needs-input':
+        return 'Needs input';
+      case 'stopped':
+      case 'cancelled':
+      case 'canceled':
+        return 'Stopped';
+      case 'interrupted':
+        return 'Interrupted';
+      case 'committed-partial':
+        return 'Partial';
+      case 'unknown':
+        return 'Unknown';
+    }
+    if (this.isLegacyUnrecorded(run)) return 'Not recorded (legacy run)';
+
     switch (run.status.trim().toLowerCase()) {
       case 'completed':
         return 'Completed';
@@ -120,11 +174,21 @@ export class OverviewRunsComponent {
   }
 
   private resultTone(run: RunRecord): RunResultTone {
-    switch (run.status.trim().toLowerCase()) {
+    switch ((run.result?.trim() || run.status.trim()).toLowerCase()) {
+      case 'done':
+      case 'success':
+      case 'noop':
       case 'completed':
         return 'success';
+      case 'environmentfailure':
+      case 'unverified':
       case 'failed':
         return 'danger';
+      case 'superseded':
+      case 'blocked':
+      case 'needsinput':
+      case 'needs-input':
+      case 'committed-partial':
       case 'stopped':
       case 'cancelled':
       case 'interrupted':
@@ -140,7 +204,12 @@ export class OverviewRunsComponent {
     if (run.durationSeconds != null && run.durationSeconds >= 0) {
       return formatDuration(run.durationSeconds);
     }
-    return run.status.trim().toLowerCase() === 'running' ? 'In progress' : 'Not recorded';
+    if (run.status.trim().toLowerCase() === 'running') return 'In progress';
+    return this.isLegacyUnrecorded(run) ? 'Not recorded (legacy run)' : 'Not recorded';
+  }
+
+  private isLegacyUnrecorded(run: RunRecord): boolean {
+    return !run.result?.trim() && run.closeoutSource?.startsWith('legacy-') === true;
   }
 
   private tokenLabel(run: RunRecord): string | null {
