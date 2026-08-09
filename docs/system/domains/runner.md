@@ -692,16 +692,37 @@ state.
   retains the checkout instead of converting missing evidence into a normal
   completion.
 - The compatibility Remote completion boundary also fails closed when an older
-  Runner reports `Done` or `NoOp` without the complete `BaseSha`,
-  `ImmutableResultRef`, and `ArtifactManifestDigest` trio. The RunAttempt settles
-  as `Failed` with terminal outcome `unverified`, no ReviewAttempt or
-  ReviewSubject is created, and the card reaches Escalated with category
-  `unverified-delivery`. This closes the legacy path where an immutable-ref push
-  failure intentionally omitted the trio but the server still persisted `Done`
-  and waited for Review to discover the impossible subject. Epic planning and
-  report-only modes remain exempt because they do not produce a coding review
-  subject. The canonical protocol 2 Task Server continues to reject successful
-  coding completion until the matching envelope handoff is acknowledged.
+  Runner reports any coding terminal without a complete `ResultSha`, `BaseSha`,
+  `ImmutableResultRef`, and `ArtifactManifestDigest` envelope. This includes
+  `Blocked`, `NeedsInput`, and `Unknown`, not only `Done` and `NoOp`. The
+  RunAttempt settles as `Failed` with terminal outcome `delivery-failed`; no
+  ReviewAttempt or ReviewSubject is created. The first consecutive envelope
+  failure appends an idempotent status note with the published salvage-fence ref
+  and returns the card to Ready. The durable failure counter survives the lane
+  move and process restarts. A second consecutive failure reaches Escalated with
+  category `unverified-delivery`. A valid envelope or a non-coding completion
+  resets the counter. Epic planning, report-only modes, and repository or
+  environment preparation failures are exempt because they produce no coding
+  delivery. A failed salvage-fence push is not eligible for this retry: the
+  runner retains the worktree and keeps the existing `worktree-blocked`
+  escalation.
+- The July Marathon envelope repair restored best-effort emission of the trio,
+  and the AGT-2250 delivery probe showed that valid envelopes could reach Review.
+  It did not make the trio a teardown precondition: a legacy immutable-result-ref
+  push failure deliberately omitted all three additive fields after salvage.
+  The later server guard checked only `Done` and `NoOp` and escalated those cases
+  immediately. Consequently AGT-2531's `Blocked` outcome bypassed the guard,
+  while AGT-2541's `Done` outcome was detected but had no automatic recovery
+  path. The expanded completion policy and two-attempt delivery-failure budget
+  close both gaps.
+- For every generation-fenced compatibility coding run, `GitWorkspace` commits
+  local changes when present and publishes the generation-scoped salvage fence
+  before attempting the immutable result ref and before removing the worktree.
+  Clean runs publish the fence as well, so an envelope failure can always name a
+  durable recovery ref. If the fence cannot be published and verified, teardown
+  stops and retains the checkout.
+  The canonical protocol 2 Task Server continues to reject completion until the
+  matching envelope handoff is acknowledged.
 - The Task Server stores one result envelope per RunAttempt with repository ID
   and URL, base and result SHA, immutable ref or source-bundle digest,
   artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion
