@@ -37,9 +37,85 @@ internal static class GitNetworkProcessRunner
         string? stdin = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
-        => RunAsync(startInfo, stdin, timeout ?? DefaultTimeout, cancellationToken)
-            .GetAwaiter()
-            .GetResult();
+    {
+        ArgumentNullException.ThrowIfNull(startInfo);
+        var boundedTimeout = timeout ?? DefaultTimeout;
+        if (boundedTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), "Git process timeout must be positive.");
+        if (cancellationToken.IsCancellationRequested)
+            return Failed(GitProcessFailureKind.Cancelled, "git operation cancelled");
+
+        Process? process = null;
+        Task<string>? stdout = null;
+        Task<string>? stderr = null;
+        Task? input = null;
+        var elapsed = Stopwatch.StartNew();
+
+        try
+        {
+            process = Process.Start(startInfo);
+            if (process is null)
+                return Failed(GitProcessFailureKind.StartFailure, "git process did not start");
+
+            // GitService is predominantly synchronous. Blocking that path on
+            // RunAsync().GetResult() made process-exit and pipe continuations
+            // compete with parallel xUnit/Kestrel work for ThreadPool threads.
+            // Dedicated readers preserve concurrent pipe draining without any
+            // ThreadPool continuation dependency in the synchronous boundary.
+            stdout = StartDedicatedRead(process.StandardOutput);
+            stderr = StartDedicatedRead(process.StandardError);
+            if (stdin is not null)
+                input = StartDedicatedWrite(process.StandardInput, stdin);
+
+            while (!process.WaitForExit(WaitSliceMilliseconds))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    TerminateAndDrain(process, stdout, stderr, input);
+                    return Failed(GitProcessFailureKind.Cancelled, "git operation cancelled");
+                }
+                if (elapsed.Elapsed >= boundedTimeout)
+                {
+                    TerminateAndDrain(process, stdout, stderr, input);
+                    return Failed(
+                        GitProcessFailureKind.TimedOut,
+                        $"git operation timed out after {boundedTimeout.TotalSeconds:0.###} seconds");
+                }
+            }
+
+            var remaining = boundedTimeout - elapsed.Elapsed;
+            if (remaining <= TimeSpan.Zero
+                || !WaitForIo([stdout, stderr, input], remaining, cancellationToken))
+            {
+                TerminateAndDrain(process, stdout, stderr, input);
+                if (cancellationToken.IsCancellationRequested)
+                    return Failed(GitProcessFailureKind.Cancelled, "git operation cancelled");
+                return Failed(
+                    GitProcessFailureKind.TimedOut,
+                    $"git operation timed out after {boundedTimeout.TotalSeconds:0.###} seconds");
+            }
+
+            return new GitProcessResult(
+                process.ExitCode,
+                stdout.GetAwaiter().GetResult(),
+                stderr.GetAwaiter().GetResult(),
+                GitProcessFailureKind.None);
+        }
+        catch (Exception ex)
+        {
+            TerminateAndDrain(process, stdout, stderr, input);
+            var exhausted = IsResourceExhaustion(ex);
+            return Failed(
+                exhausted ? GitProcessFailureKind.ResourceExhaustion : GitProcessFailureKind.StartFailure,
+                exhausted
+                    ? $"git process resource exhaustion: {ex.Message}"
+                    : $"git process failed: {ex.Message}");
+        }
+        finally
+        {
+            process?.Dispose();
+        }
+    }
 
     internal static async Task<GitProcessResult> RunAsync(
         ProcessStartInfo startInfo,
@@ -113,6 +189,85 @@ internal static class GitNetworkProcessRunner
 
     private static GitProcessResult Failed(GitProcessFailureKind kind, string error)
         => new(-1, string.Empty, error, kind);
+
+    private const int WaitSliceMilliseconds = 25;
+
+    private static Task<string> StartDedicatedRead(StreamReader reader)
+        => Task.Factory.StartNew(
+            reader.ReadToEnd,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+    private static Task StartDedicatedWrite(StreamWriter writer, string value)
+        => Task.Factory.StartNew(
+            () =>
+            {
+                writer.Write(value);
+                writer.Close();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+    private static bool WaitForIo(
+        IEnumerable<Task?> tasks,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var pending = tasks.OfType<Task>().ToArray();
+        if (pending.Length == 0) return true;
+
+        var elapsed = Stopwatch.StartNew();
+        while (elapsed.Elapsed < timeout)
+        {
+            if (cancellationToken.IsCancellationRequested) return false;
+            var remainingMilliseconds = Math.Max(
+                1,
+                (int)Math.Ceiling(Math.Min(
+                    WaitSliceMilliseconds,
+                    (timeout - elapsed.Elapsed).TotalMilliseconds)));
+            if (Task.WaitAll(pending, remainingMilliseconds)) return true;
+        }
+        return false;
+    }
+
+    private static void TerminateAndDrain(
+        Process? process,
+        Task<string>? stdout,
+        Task<string>? stderr,
+        Task? input)
+    {
+        if (process is null) return;
+
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "GitNetworkProcessRunner: synchronous process-tree termination");
+        }
+
+        try
+        {
+            process.WaitForExit((int)TerminationDrainTimeout.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "GitNetworkProcessRunner: synchronous exit wait");
+        }
+
+        try
+        {
+            WaitForIo([stdout, stderr, input], TerminationDrainTimeout);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "GitNetworkProcessRunner: bounded synchronous post-termination drain");
+        }
+    }
 
     private static async Task TerminateAndDrainAsync(
         Process? process,

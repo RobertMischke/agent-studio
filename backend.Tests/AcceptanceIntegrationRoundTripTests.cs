@@ -637,7 +637,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Transitions,
             deps.Timeline);
         await worker.StartAsync(CancellationToken.None);
-        await gate.Entered.WaitAsync(TimeSpan.FromSeconds(5));
+        await gate.Entered.WaitAsync(AsyncTestDeadline);
         Assert.True(deps.Merge.IsMergeGateBusy);
 
         using var factory = new WebApplicationFactory<Program>()
@@ -671,7 +671,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.True(deps.Merge.IsMergeGateBusy);
 
         gate.Release();
-        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+        await stopTask.WaitAsync(AsyncTestDeadline);
         Assert.False(deps.Merge.IsMergeGateBusy);
         Assert.Equal("idle", await client.GetStringAsync("/healthz/drain"));
 
