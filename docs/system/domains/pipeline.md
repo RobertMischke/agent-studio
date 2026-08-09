@@ -336,6 +336,18 @@ pipeline view.
   rows, candidate inventory, chosen ids/commands, selector/model, and reasons.
   `FullSuiteRan` is execution evidence, not a planning claim: it becomes true
   only after every selected full-suite test command was attempted.
+- Disposable local and remote gate workspaces prepare dependencies before any
+  derived verification command runs. An explicit build profile `installCmd` is
+  authoritative. Otherwise a selected root .NET entry point gets `dotnet
+  restore`, and every selected Node package directory gets `npm ci`. Local npm
+  commands share a cache outside the disposable worktree; remote npm commands
+  use the executor user's shared Agent Studio cache. Explicit profile commands,
+  including `installCmd`, use the same `bash -lc` contract as build-profile
+  validation on every host. Convention-derived commands retain the host shell.
+- A failed preparation or verification command stores a bounded, single-line
+  stderr/stdout excerpt in the gate reason that flows into the durable pipeline
+  step record. Full streams remain in per-process evidence and the gate log, so
+  an exit code is never the only recorded diagnostic.
 - A failing continuous-baseline command during a work-package run creates a
   separate `post-steps/test-findings-*.json` record and a `warn` gate verdict.
   It does not block the card. Selected work-package tests still block. No

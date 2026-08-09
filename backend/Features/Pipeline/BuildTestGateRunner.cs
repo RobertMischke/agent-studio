@@ -82,6 +82,8 @@ public sealed record BuildTestGateRequest(
 
 public sealed record BuildTestGateProcessEvidence
 {
+    /// <summary><c>preparation</c> or <c>verification</c>.</summary>
+    public string Phase { get; init; } = "verification";
     public string Command { get; init; } = "";
     public string FileName { get; init; } = "";
     public IReadOnlyList<string> Arguments { get; init; } = [];
@@ -157,6 +159,7 @@ public interface IBuildTestGateRunner
 public sealed class BuildTestGateRunner : IBuildTestGateRunner
 {
     public const int MaxOutputLines = 300;
+    public const int MaxFailureExcerptChars = 2_000;
     internal const string FullOriginBranchesRefspec =
         "+refs/heads/*:refs/remotes/origin/*";
 
@@ -165,6 +168,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         Path.GetTempPath(), "agentstudio-build-test-gate.lock");
     internal static readonly string ReviewWorkspaceRoot = Path.Combine(
         Path.GetTempPath(), "agentstudio-review-gates");
+    internal static readonly string NpmCachePath = Path.Combine(
+        Path.GetTempPath(), "agentstudio-dependency-cache", "npm");
 
     private static readonly Regex SafeSha = new(
         "^[0-9a-fA-F]{40,64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -259,8 +264,11 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     : remotePlan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
                 if (remoteCommands.Count > 0)
                 {
+                    var remotePreparation = GatePreparationPlanner.Plan(
+                        repositoryPath, profile, remoteCommands);
                     var remote = await TryRunRemoteAsync(
-                        request.RemoteSshHost, remoteSha, gateRunId, remoteCommands,
+                        request.RemoteSshHost, remoteSha, gateRunId,
+                        remotePreparation, remoteCommands,
                         remotePlan.Source, mode, timeout, queueWaitTimeout,
                         infrastructureTimeout, ct).ConfigureAwait(false);
                     if (remote is not null)
@@ -370,10 +378,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                         }
                     }
                     var commands = staged.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
+                    var preparation = GatePreparationPlanner.Plan(workspace!, profile, commands);
                     completed = commands.Count == 0
                         ? Skipped($"no verify commands apply to the changed files ({plan.Source}); level={staged.Audit.Level}")
-                            with { TestSelection = staged.Audit }
-                        : await RunCommandsAsync(workspace!, commands, plan.Source, mode, timeout, ct)
+                            with
+                        {
+                            TestSelection = staged.Audit,
+                        }
+                        : await RunCommandsAsync(
+                            workspace!, preparation, commands, plan.Source, mode, timeout, ct)
                             .ConfigureAwait(false);
                     var completedAudit = CompleteAudit(staged.Audit, commands, completed.Processes);
                     completed = completed with
@@ -394,7 +407,10 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     completed = InfrastructureFailure(
                         cleanupError.FailureKind,
                         "exact review workspace cleanup failed after bounded retries",
-                        cleanupError.Evidence) with { Processes = completed.Processes };
+                        cleanupError.Evidence) with
+                    {
+                        Processes = completed.Processes,
+                    };
                 }
             }
 
@@ -493,6 +509,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string sshHost,
         string sha,
         string gateRunId,
+        IReadOnlyList<GatePreparationCommand> preparation,
         IReadOnlyList<VerifyCommand> commands,
         string planSource,
         PostStepMode mode,
@@ -568,6 +585,48 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             var ranFrontend = false;
             BuildTestGateResult result;
 
+            foreach (var command in preparation)
+            {
+                var remoteDir = string.IsNullOrWhiteSpace(command.WorkingSubdir) || command.WorkingSubdir == "."
+                    ? worktree
+                    : $"{worktree}/{command.WorkingSubdir.Replace('\\', '/')}";
+                output.AppendLine($"# dependency preparation: {sshHost}:{remoteDir}");
+
+                var remaining = Remaining(timeout, sw.Elapsed);
+                var script =
+                    $"export npm_config_cache=\"$HOME/.cache/agentstudio/npm\"; " +
+                    "mkdir -p \"$npm_config_cache\"; " +
+                    $"cd \"{remoteDir}\" && {command.Command}";
+                var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
+                var sshCommand = $"echo {b64} | base64 -d | timeout {(int)Math.Max(30, remaining.TotalSeconds)} bash -l";
+                var process = await RunProcessAsync(
+                    Path.GetTempPath(), command.Command, "ssh",
+                    ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", sshHost, sshCommand],
+                    remaining, output, ct, phase: "preparation").ConfigureAwait(false);
+                evidence.Add(process);
+                if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
+                {
+                    sw.Stop();
+                    var kind = ClassifyFailure(process);
+                    var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
+                        ? BuildTestGateVerdict.Warn
+                        : BuildTestGateVerdict.Fail;
+                    var reason = FailureReason(
+                        $"dependency preparation `{command.Command}`",
+                        process,
+                        $" [remote:{sshHost}]");
+                    result = WithFailure(new BuildTestGateResult(
+                        verdict, process.ExitCode, sw.ElapsedMilliseconds, output.Text,
+                        reason, ranBackend, ranFrontend)
+                    {
+                        Processes = evidence,
+                        TerminationSignal = process.TerminationSignal,
+                        SelfHealed = discovery.SelfHealed,
+                    }, kind);
+                    return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
+                }
+            }
+
             foreach (var command in commands)
             {
                 if (command.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
@@ -578,7 +637,10 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 output.AppendLine($"# working directory: {sshHost}:{remoteDir}");
 
                 var remaining = Remaining(timeout, sw.Elapsed);
-                var script = $"cd \"{remoteDir}\" && {command.Command}";
+                var script =
+                    $"export npm_config_cache=\"$HOME/.cache/agentstudio/npm\"; " +
+                    "mkdir -p \"$npm_config_cache\"; " +
+                    $"cd \"{remoteDir}\" && {command.Command}";
                 var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
                 // Remote-side `timeout` mirrors the local budget so an ssh kill
                 // never leaves an orphaned build burning the host.
@@ -586,7 +648,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 var process = await RunProcessAsync(
                     Path.GetTempPath(), command.Command, "ssh",
                     ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", sshHost, sshCommand],
-                    remaining, output, ct).ConfigureAwait(false);
+                    remaining, output, ct, phase: "verification").ConfigureAwait(false);
                 evidence.Add(process);
                 if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
                 {
@@ -595,7 +657,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
                         ? BuildTestGateVerdict.Warn
                         : BuildTestGateVerdict.Fail;
-                    var reason = $"{Describe(command)} exit {process.ExitCode?.ToString() ?? "n/a"} [remote:{sshHost}]";
+                    var reason = FailureReason(
+                        Describe(command), process, $" [remote:{sshHost}]");
                     result = WithFailure(new BuildTestGateResult(
                         verdict, process.ExitCode, sw.ElapsedMilliseconds, output.Text,
                         reason, ranBackend, ranFrontend)
@@ -740,6 +803,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
     private async Task<BuildTestGateResult> RunCommandsAsync(
         string repositoryPath,
+        IReadOnlyList<GatePreparationCommand> preparation,
         IReadOnlyList<VerifyCommand> commands,
         string planSource,
         PostStepMode mode,
@@ -753,6 +817,49 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         output.AppendLine($"# verify plan: {planSource} ({commands.Count} command(s))");
         var ranBackend = false;
         var ranFrontend = false;
+
+        foreach (var command in preparation)
+        {
+            var workingDirectory = ResolveWorkingDirectory(repositoryPath, command.WorkingSubdir);
+            if (!Directory.Exists(workingDirectory))
+            {
+                return WithFailure(new BuildTestGateResult(
+                    BuildTestGateVerdict.Fail, null, sw.ElapsedMilliseconds, output.Text,
+                    $"dependency preparation directory is missing: {workingDirectory}",
+                    ranBackend, ranFrontend)
+                {
+                    Processes = evidence,
+                }, BuildTestGateFailureKind.MissingSource);
+            }
+
+            output.AppendLine($"# dependency preparation: {workingDirectory}");
+            var process = await RunShellAsync(
+                workingDirectory,
+                command.Command,
+                command.Shell,
+                Remaining(timeout, sw.Elapsed),
+                output,
+                ct,
+                phase: "preparation").ConfigureAwait(false);
+            evidence.Add(process);
+            if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
+            {
+                sw.Stop();
+                var kind = ClassifyFailure(process);
+                var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
+                    ? BuildTestGateVerdict.Warn
+                    : BuildTestGateVerdict.Fail;
+                var reason = FailureReason($"dependency preparation `{command.Command}`", process);
+                return WithFailure(new BuildTestGateResult(
+                    verdict, process.ExitCode, sw.ElapsedMilliseconds, output.Text,
+                    reason, ranBackend, ranFrontend)
+                {
+                    Processes = evidence,
+                    Findings = findings,
+                    TerminationSignal = process.TerminationSignal,
+                }, kind);
+            }
+        }
 
         foreach (var command in commands)
         {
@@ -772,7 +879,13 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             output.AppendLine($"# working directory: {workingDirectory}");
 
             var process = await RunShellAsync(
-                workingDirectory, command.Command, Remaining(timeout, sw.Elapsed), output, ct)
+                workingDirectory,
+                command.Command,
+                command.Shell,
+                Remaining(timeout, sw.Elapsed),
+                output,
+                ct,
+                phase: "verification")
                 .ConfigureAwait(false);
             evidence.Add(process);
             if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
@@ -794,7 +907,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
                     ? BuildTestGateVerdict.Warn
                     : BuildTestGateVerdict.Fail;
-                var reason = $"{Describe(command)} exit {process.ExitCode?.ToString() ?? "n/a"}";
+                var reason = FailureReason(Describe(command), process);
                 return WithFailure(new BuildTestGateResult(
                     verdict, process.ExitCode, sw.ElapsedMilliseconds, output.Text,
                     reason, ranBackend, ranFrontend)
@@ -841,16 +954,19 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         // is known to have run. An empty declared test inventory is complete
         // after the remaining verify commands finish successfully; the verdict
         // still guards that case at the pre-main boundary.
-        var attemptedCount = Math.Min(commands.Count, processes.Count);
+        var verificationProcesses = processes
+            .Where(process => !string.Equals(process.Phase, "preparation", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var attemptedCount = Math.Min(commands.Count, verificationProcesses.Length);
         var allTestsAttempted = commands
             .Select((command, index) => (command, index))
             .Where(item => item.command.Kind == VerifyCommandKind.Test)
             .All(item => item.index < attemptedCount
-                && processes[item.index].LaunchError is null);
+                && verificationProcesses[item.index].LaunchError is null);
         var notRun = commands
             .Select((command, index) => (command, index))
             .Where(item => item.command.Kind == VerifyCommandKind.Test
-                && (item.index >= attemptedCount || processes[item.index].LaunchError is not null))
+                && (item.index >= attemptedCount || verificationProcesses[item.index].LaunchError is not null))
             .Select(item => TestSelectionPlanner.Describe(item.command));
         return audit with
         {
@@ -867,6 +983,43 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         var text = string.Join('\n', process.StandardOutput, process.StandardError);
         var lines = text.Replace("\r", string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries);
         return string.Join('\n', lines.TakeLast(40));
+    }
+
+    private static string FailureReason(
+        string commandDescription,
+        BuildTestGateProcessEvidence process,
+        string suffix = "")
+    {
+        var excerpt = FailureOutputExcerpt(process);
+        return $"{commandDescription} exit {process.ExitCode?.ToString() ?? "n/a"}{suffix}" +
+               (string.IsNullOrWhiteSpace(excerpt) ? string.Empty : $"; output: {excerpt}");
+    }
+
+    /// <summary>
+    /// Returns a single-line, bounded stdout/stderr excerpt suitable for the
+    /// durable gate reason stored in <c>pipeline-execution.json</c>. The detailed
+    /// streams remain available in process evidence and the gate log.
+    /// </summary>
+    internal static string FailureOutputExcerpt(BuildTestGateProcessEvidence process)
+    {
+        var parts = new List<string>();
+        Append("stderr", process.StandardError);
+        Append("stdout", process.StandardOutput);
+        Append("launch", process.LaunchError);
+        var excerpt = string.Join(" | ", parts);
+        return excerpt.Length <= MaxFailureExcerptChars
+            ? excerpt
+            : excerpt[..(MaxFailureExcerptChars - 3)].TrimEnd() + "...";
+
+        void Append(string label, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            var normalized = Whitespace.Replace(value, " ").Trim();
+            const int perStreamLimit = 900;
+            if (normalized.Length > perStreamLimit)
+                normalized = "..." + normalized[^perStreamLimit..];
+            parts.Add($"{label}: {normalized}");
+        }
     }
 
     /// <summary>
@@ -1257,14 +1410,19 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private Task<BuildTestGateProcessEvidence> RunShellAsync(
         string workingDirectory,
         string command,
+        VerifyCommandShell shell,
         TimeSpan timeout,
         RingOutput output,
-        CancellationToken ct)
+        CancellationToken ct,
+        string phase)
     {
-        var (fileName, args) = OperatingSystem.IsWindows()
-            ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
-            : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
-        return RunProcessAsync(workingDirectory, command, fileName, args, timeout, output, ct);
+        var (fileName, args) = shell == VerifyCommandShell.Bash
+            ? ("bash", (IReadOnlyList<string>)["-lc", command])
+            : OperatingSystem.IsWindows()
+                ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
+                : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
+        return RunProcessAsync(
+            workingDirectory, command, fileName, args, timeout, output, ct, phase);
     }
 
     private async Task<BuildTestGateProcessEvidence> RunProcessAsync(
@@ -1274,7 +1432,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         IReadOnlyList<string> args,
         TimeSpan timeout,
         RingOutput output,
-        CancellationToken ct)
+        CancellationToken ct,
+        string phase)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var psi = new ProcessStartInfo
@@ -1287,18 +1446,20 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             CreateNoWindow = true,
         };
         foreach (var arg in args) psi.ArgumentList.Add(arg);
+        psi.Environment["NPM_CONFIG_CACHE"] = NpmCachePath;
         output.AppendLine($"> {fileName} {string.Join(' ', args)}");
 
         Process? process;
         try
         {
+            Directory.CreateDirectory(NpmCachePath);
             process = Process.Start(psi);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "BuildTestGateRunner: Process.Start failed for {FileName}", fileName);
             output.AppendLine(ex.Message);
-            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory) with
+            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory, phase) with
             {
                 CompletedAtUtc = DateTimeOffset.UtcNow,
                 LaunchError = ex.Message,
@@ -1308,7 +1469,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         {
             const string error = "Process.Start returned null";
             output.AppendLine(error);
-            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory) with
+            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory, phase) with
             {
                 CompletedAtUtc = DateTimeOffset.UtcNow,
                 LaunchError = error,
@@ -1345,7 +1506,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             if (cancelled) output.AppendLine($"{fileName} was cancelled");
             int? exitCode = process.HasExited ? process.ExitCode : null;
             var signal = ResolveTerminationSignal(exitCode, timedOut, cancelled);
-            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory) with
+            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory, phase) with
             {
                 CompletedAtUtc = DateTimeOffset.UtcNow,
                 ExitCode = exitCode,
@@ -1363,9 +1524,11 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string command,
         string fileName,
         IReadOnlyList<string> args,
-        string workingDirectory)
+        string workingDirectory,
+        string phase)
         => new()
         {
+            Phase = phase,
             Command = command,
             FileName = fileName,
             Arguments = args.ToArray(),
@@ -1515,11 +1678,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     }
 
     internal static string ResolveWorkingDirectory(string repositoryPath, VerifyCommand command)
+        => ResolveWorkingDirectory(repositoryPath, command.WorkingSubdir);
+
+    internal static string ResolveWorkingDirectory(string repositoryPath, string workingSubdir)
     {
         var repositoryRoot = Path.GetFullPath(repositoryPath);
-        return string.IsNullOrEmpty(command.WorkingSubdir)
+        return string.IsNullOrEmpty(workingSubdir)
             ? repositoryRoot
-            : Path.GetFullPath(Path.Combine(repositoryRoot, command.WorkingSubdir));
+            : Path.GetFullPath(Path.Combine(repositoryRoot, workingSubdir));
     }
 
     // Retained as a diagnostic compatibility helper. Admission itself is now

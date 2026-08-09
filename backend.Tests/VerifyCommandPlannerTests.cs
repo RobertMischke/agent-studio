@@ -237,6 +237,94 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         Assert.All(plan.Commands, c => Assert.Equal(VerifyEcosystem.DotNet, c.Ecosystem));
     }
 
+    [Fact]
+    public void GatePreparation_AutoDiscoveredDotNet_RestoresBeforeVerification()
+    {
+        Write("QualityStudio.slnx", "<Solution><Project Path=\"src/App/App.csproj\" /></Solution>");
+        Write("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        var verify = VerifyCommandPlanner.Plan(_root, profile: null);
+
+        var preparation = GatePreparationPlanner.Plan(_root, profile: null, verify.Commands);
+
+        var restore = Assert.Single(preparation);
+        Assert.Equal(VerifyEcosystem.DotNet, restore.Ecosystem);
+        Assert.Equal("dotnet restore", restore.Command);
+        Assert.Equal("", restore.WorkingSubdir);
+        Assert.Equal(VerifyCommandShell.Platform, restore.Shell);
+    }
+
+    [Fact]
+    public void GatePreparation_AutoDiscoveredNode_RunsNpmCiPerSelectedPackage()
+    {
+        Write("frontend/package.json", """{ "scripts": { "build": "ng build" } }""");
+        var verify = VerifyCommandPlanner.Plan(_root, profile: null);
+
+        var preparation = GatePreparationPlanner.Plan(_root, profile: null, verify.Commands);
+
+        var install = Assert.Single(preparation);
+        Assert.Equal(VerifyEcosystem.Node, install.Ecosystem);
+        Assert.Equal("frontend", install.WorkingSubdir);
+        Assert.Equal("npm ci", install.Command);
+        Assert.Equal(VerifyCommandShell.Platform, install.Shell);
+    }
+
+    [Fact]
+    public void GatePreparation_ExplicitInstallCommand_IsAuthoritativeAndUsesBash()
+    {
+        Write("QualityStudio.slnx", "<Solution />");
+        Write("frontend/package.json", """{ "scripts": { "build": "ng build" } }""");
+        var installCommand =
+            "if [ -f QualityStudio.slnx ]; then dotnet restore QualityStudio.slnx && npm --prefix frontend ci; fi";
+        var profile = new BuildProfile
+        {
+            InstallCmd = installCommand,
+            BuildCmds =
+            [
+                "if [ -f QualityStudio.slnx ]; then dotnet build QualityStudio.slnx --configuration Release; fi",
+                "npm --prefix frontend run build",
+            ],
+        };
+        var verify = VerifyCommandPlanner.Plan(_root, profile);
+
+        var preparation = GatePreparationPlanner.Plan(_root, profile, verify.Commands);
+
+        var install = Assert.Single(preparation);
+        Assert.Equal(installCommand, install.Command);
+        Assert.Equal(VerifyCommandShell.Bash, install.Shell);
+        Assert.All(verify.Commands, command => Assert.Equal(VerifyCommandShell.Bash, command.Shell));
+    }
+
+    [Fact]
+    public void GatePreparation_ProfileWithoutInstall_DerivesRestoreAndNpmPrefix()
+    {
+        Write("QualityStudio.slnx", "<Solution />");
+        Write("frontend/package.json", """{ "scripts": { "build": "ng build" } }""");
+        var profile = new BuildProfile
+        {
+            BuildCmds =
+            [
+                "dotnet build QualityStudio.slnx --no-restore",
+                "npm --prefix frontend run build",
+            ],
+        };
+        var verify = VerifyCommandPlanner.Plan(_root, profile);
+
+        var preparation = GatePreparationPlanner.Plan(_root, profile, verify.Commands);
+
+        Assert.Collection(preparation,
+            restore =>
+            {
+                Assert.Equal("dotnet restore", restore.Command);
+                Assert.Equal(VerifyCommandShell.Bash, restore.Shell);
+            },
+            install =>
+            {
+                Assert.Equal("frontend", install.WorkingSubdir);
+                Assert.Equal("npm ci", install.Command);
+                Assert.Equal(VerifyCommandShell.Bash, install.Shell);
+            });
+    }
+
     // ---- Real case: this repo (agent-studio) ------------------------------
 
     [SkippableFact]
@@ -400,7 +488,7 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     [Fact]
     public async Task CommandExecution_CanonicalizesRelativeRepositoryPathAsCwd()
     {
-        var printWorkingDirectory = OperatingSystem.IsWindows() ? "cd" : "pwd";
+        const string printWorkingDirectory = "pwd";
         var relativeRoot = Path.GetRelativePath(Environment.CurrentDirectory, _root);
         var profile = new BuildProfile { BuildCmds = [printWorkingDirectory] };
 
@@ -438,17 +526,145 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task FailureReason_PersistsBoundedStderrExcerpt()
+    {
+        var profile = new BuildProfile
+        {
+            BuildCmds = ["echo 'exact gate cause' >&2; exit 9"],
+        };
+
+        var result = await Run(profile);
+
+        Assert.Equal(BuildTestGateVerdict.Fail, result.Verdict);
+        Assert.Contains("output: stderr: exact gate cause", result.Reason);
+        Assert.True(result.Reason.Length <= BuildTestGateRunner.MaxFailureExcerptChars + 500);
+    }
+
+    [Fact]
+    public async Task ExactSubjectNodeFixture_InstallsDependenciesWithSharedCacheBeforeBuild()
+    {
+        WriteFixtureFile("package.json", """
+            {
+              "name": "gate-node-fixture",
+              "version": "1.0.0",
+              "scripts": {
+                "build": "node -e \"if (!(process.env.NPM_CONFIG_CACHE || process.env.npm_config_cache)) process.exit(2); require('fixture-dep')\""
+              },
+              "dependencies": { "fixture-dep": "file:fixture-dep" }
+            }
+            """);
+        WriteFixtureFile("fixture-dep/package.json", """
+            { "name": "fixture-dep", "version": "1.0.0", "main": "index.js" }
+            """);
+        WriteFixtureFile("fixture-dep/index.js", "module.exports = 'installed';");
+        WriteFixtureFile("package-lock.json", """
+            {
+              "name": "gate-node-fixture",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "requires": true,
+              "packages": {
+                "": {
+                  "name": "gate-node-fixture",
+                  "version": "1.0.0",
+                  "dependencies": { "fixture-dep": "file:fixture-dep" }
+                },
+                "fixture-dep": { "name": "fixture-dep", "version": "1.0.0" },
+                "node_modules/fixture-dep": { "resolved": "fixture-dep", "link": true }
+              }
+            }
+            """);
+        var sha = InitializeGitRepository();
+
+        var result = await _runner.RunAsync(
+            new BuildTestGateRequest(_root, sha, "node-fixture")
+            {
+                RequiredTestLevel = TestExecutionLevels.BuildOnly,
+                InfrastructureTimeout = TimeSpan.FromSeconds(30),
+            },
+            changedFiles: null,
+            profile: null,
+            PostStepMode.Fail,
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+
+        Assert.True(
+            result.Verdict == BuildTestGateVerdict.Ok,
+            $"{result.Reason}\n{result.Output}\n{string.Join("\n", result.Processes.Select(p => p.StandardError))}");
+        Assert.Collection(result.Processes,
+            install =>
+            {
+                Assert.Equal("preparation", install.Phase);
+                Assert.Equal("npm ci", install.Command);
+                Assert.Equal(0, install.ExitCode);
+            },
+            build =>
+            {
+                Assert.Equal("verification", build.Phase);
+                Assert.Equal("npm run build", build.Command);
+                Assert.Equal(0, build.ExitCode);
+            });
+        Assert.True(Directory.Exists(BuildTestGateRunner.NpmCachePath));
+    }
+
+    [Fact]
+    public async Task ExactSubjectDotNetFixture_RestoresBeforeNoRestoreBuildUnderBash()
+    {
+        WriteFixtureFile("Fixture.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <OutputType>Exe</OutputType>
+              </PropertyGroup>
+            </Project>
+            """);
+        WriteFixtureFile("Program.cs", "System.Console.WriteLine(\"gate fixture\");");
+        WriteFixtureFile("Fixture.slnx", "<Solution><Project Path=\"Fixture.csproj\" /></Solution>");
+        var sha = InitializeGitRepository();
+        var profile = new BuildProfile
+        {
+            InstallCmd = "test -f Fixture.slnx && dotnet restore Fixture.slnx",
+            BuildCmds = ["test -f Fixture.slnx && dotnet build Fixture.slnx --no-restore"],
+        };
+
+        var result = await _runner.RunAsync(
+            new BuildTestGateRequest(_root, sha, "dotnet-fixture")
+            {
+                RequiredTestLevel = TestExecutionLevels.BuildOnly,
+                InfrastructureTimeout = TimeSpan.FromSeconds(30),
+            },
+            changedFiles: null,
+            profile,
+            PostStepMode.Fail,
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+
+        Assert.True(
+            result.Verdict == BuildTestGateVerdict.Ok,
+            $"{result.Reason}\n{result.Output}\n{string.Join("\n", result.Processes.Select(p => p.StandardError))}");
+        Assert.Collection(result.Processes,
+            restore =>
+            {
+                Assert.Equal("preparation", restore.Phase);
+                Assert.Equal("bash", restore.FileName);
+                Assert.Contains("dotnet restore Fixture.slnx", restore.Command);
+            },
+            build =>
+            {
+                Assert.Equal("verification", build.Phase);
+                Assert.Equal("bash", build.FileName);
+                Assert.Contains("--no-restore", build.Command);
+                Assert.Equal(0, build.ExitCode);
+            });
+    }
+
+    [Fact]
     public async Task ThreeParallelExactSubjectGatesSerializeAndUseDistinctWorkspaces()
     {
         var sha = InitializeGitRepository();
         var profile = new BuildProfile
         {
-            BuildCmds =
-            [
-                OperatingSystem.IsWindows()
-                    ? "ping 127.0.0.1 -n 2 > nul"
-                    : "sleep 1",
-            ],
+            BuildCmds = ["sleep 1"],
         };
         var tasks = Enumerable.Range(1, 3).Select(index => _runner.RunAsync(
             new BuildTestGateRequest(_root, sha, $"executor-{index}")
@@ -507,12 +723,7 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         const string activeFile = "machine-gate-sla-active.tmp";
         var leader = Run(new BuildProfile
         {
-            BuildCmds =
-            [
-                OperatingSystem.IsWindows()
-                    ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
-                    : $"touch {activeFile}; sleep 2; rm -f {activeFile}",
-            ],
+            BuildCmds = [$"touch {activeFile}; sleep 2; rm -f {activeFile}"],
         });
         var activePath = Path.Combine(_root, activeFile);
         for (var index = 0; index < 100 && !File.Exists(activePath); index++)
@@ -555,12 +766,7 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         const string activeFile = "queue-budget-active.tmp";
         var leader = Run(new BuildProfile
         {
-            BuildCmds =
-            [
-                OperatingSystem.IsWindows()
-                    ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
-                    : $"touch {activeFile}; sleep 2; rm -f {activeFile}",
-            ],
+            BuildCmds = [$"touch {activeFile}; sleep 2; rm -f {activeFile}"],
         });
         var activePath = Path.Combine(_root, activeFile);
         for (var index = 0; index < 100 && !File.Exists(activePath); index++)
@@ -592,9 +798,9 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     [Fact]
     public async Task LateLockEvidenceSurvivesRingBufferAndTimeoutTestNameIsNotMisclassified()
     {
-        var command = OperatingSystem.IsWindows()
-            ? "for /L %i in (1,1,350) do @echo line-%i & echo error MSB3027: file is locked 1>&2 & exit /b 1"
-            : "i=1; while [ $i -le 350 ]; do echo line-$i; i=$((i+1)); done; echo 'error MSB3027: file is locked' >&2; exit 1";
+        const string command =
+            "i=1; while [ $i -le 350 ]; do echo line-$i; i=$((i+1)); done; " +
+            "echo 'error MSB3027: file is locked' >&2; exit 1";
 
         var result = await Run(new BuildProfile { BuildCmds = [command] });
 
@@ -619,12 +825,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     {
         const string activeFile = "build-gate-active.tmp";
         const string overlapFile = "build-gate-overlap.tmp";
-        var holdCommand = OperatingSystem.IsWindows()
-            ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
-            : $"touch {activeFile}; sleep 2; rm -f {activeFile}";
-        var probeCommand = OperatingSystem.IsWindows()
-            ? $"if exist {activeFile} type nul > {overlapFile}"
-            : $"if [ -e {activeFile} ]; then touch {overlapFile}; fi";
+        var holdCommand = $"touch {activeFile}; sleep 2; rm -f {activeFile}";
+        var probeCommand = $"if [ -e {activeFile} ]; then touch {overlapFile}; fi";
 
         var first = Run(new BuildProfile { BuildCmds = [holdCommand] });
         var activePath = Path.Combine(_root, activeFile);
@@ -676,12 +878,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     {
         const string activeFile = "build-gate-queued-active.tmp";
         const string overlapFile = "build-gate-queued-overlap.tmp";
-        var holdCommand = OperatingSystem.IsWindows()
-            ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
-            : $"touch {activeFile}; sleep 2; rm -f {activeFile}";
-        var probeCommand = OperatingSystem.IsWindows()
-            ? $"if exist {activeFile} type nul > {overlapFile}"
-            : $"if [ -e {activeFile} ]; then touch {overlapFile}; fi";
+        var holdCommand = $"touch {activeFile}; sleep 2; rm -f {activeFile}";
+        var probeCommand = $"if [ -e {activeFile} ]; then touch {overlapFile}; fi";
 
         var leader = Run(new BuildProfile { BuildCmds = [holdCommand] });
         var activePath = Path.Combine(_root, activeFile);
@@ -735,13 +933,22 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             => null;
     }
 
+    private void WriteFixtureFile(string relativePath, string content)
+    {
+        var fullPath = Path.Combine(
+            _root,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllText(fullPath, content);
+    }
+
     private string InitializeGitRepository()
     {
         RunGit("init", "-q", "-b", "main");
         RunGit("config", "user.email", "test@example.invalid");
         RunGit("config", "user.name", "Gate Test");
         File.WriteAllText(Path.Combine(_root, "subject.txt"), "exact subject");
-        RunGit("add", "subject.txt");
+        RunGit("add", "--all");
         RunGit("commit", "-q", "-m", "exact subject");
         return RunGit("rev-parse", "HEAD").Trim();
     }

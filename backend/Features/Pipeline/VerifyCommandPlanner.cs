@@ -23,6 +23,19 @@ public enum VerifyCommandKind
     Lint,
 }
 
+/// <summary>Shell contract for a verification command.</summary>
+public enum VerifyCommandShell
+{
+    /// <summary>Use the host shell for convention-derived tool commands.</summary>
+    Platform,
+
+    /// <summary>
+    /// Use <c>bash -lc</c>. Explicit build-profile commands use the same shell
+    /// as the build-profile validation dry-run on every host.
+    /// </summary>
+    Bash,
+}
+
 /// <summary>
 /// One derived verify command: the shell command plus the repo-relative working
 /// directory it runs in. Deliberately a plain shell string so the same shape
@@ -35,6 +48,9 @@ public sealed record VerifyCommand(
     string WorkingSubdir,
     string Command)
 {
+    /// <summary>Shell used to execute the command.</summary>
+    public VerifyCommandShell Shell { get; init; } = VerifyCommandShell.Platform;
+
     /// <summary>Coverage scope stamped by the staged test selector.</summary>
     public string TestScope { get; init; } = "not-test";
 
@@ -144,11 +160,17 @@ public static class VerifyCommandPlanner
 
         foreach (var build in profile.BuildCmds ?? Array.Empty<string>())
             if (!string.IsNullOrWhiteSpace(build))
-                cmds.Add(new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Build, "", build.Trim()));
+                cmds.Add(new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Build, "", build.Trim())
+                {
+                    Shell = VerifyCommandShell.Bash,
+                });
 
         foreach (var test in profile.TestCmds ?? Array.Empty<string>())
             if (!string.IsNullOrWhiteSpace(test))
-                cmds.Add(new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", test.Trim()));
+                cmds.Add(new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", test.Trim())
+                {
+                    Shell = VerifyCommandShell.Bash,
+                });
 
         return cmds;
     }
@@ -193,7 +215,7 @@ public static class VerifyCommandPlanner
     /// files once and matches extensions explicitly to dodge the Windows
     /// <c>*.sln</c>-also-matches-<c>*.slnx</c> search-pattern quirk.
     /// </summary>
-    private static bool HasDotNetEntryPoint(string repoRoot)
+    internal static bool HasDotNetEntryPoint(string repoRoot)
     {
         try
         {
@@ -218,7 +240,7 @@ public static class VerifyCommandPlanner
     /// each immediate child directory (frontend/, web/, ...). Bounded to one level
     /// and skips dependency / build-output folders.
     /// </summary>
-    private static IReadOnlyList<string> NodePackageDirs(string repoRoot)
+    internal static IReadOnlyList<string> NodePackageDirs(string repoRoot)
     {
         var dirs = new List<string>();
         if (File.Exists(Path.Combine(repoRoot, "package.json")))
