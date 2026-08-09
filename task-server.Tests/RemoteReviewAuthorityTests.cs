@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace TaskServer.Tests;
@@ -39,7 +40,7 @@ public sealed class RemoteReviewAuthorityTests
     }
 
     [Fact]
-    public async Task Fenced_review_claim_report_cleanup_reaches_human_review_and_is_idempotent()
+    public async Task Fenced_review_cleanup_queues_full_envelope_decision_and_reaches_human_review_idempotently()
     {
         using var temp = new TempDirectory();
         var store = Store(temp.Path);
@@ -67,7 +68,7 @@ public sealed class RemoteReviewAuthorityTests
         var replay = await store.ReportReviewAsync(claim.Attempt.AttemptId, request, "review-a", default);
         Assert.Equal(report, replay);
         Assert.False(report.RetryScheduled);
-        Assert.Equal("5-human-review", report.TaskState);
+        Assert.Equal("4-auto-review", report.TaskState);
 
         var cleanupRequest = new ReviewCleanupRequest(
             "review-a", "review-instance-a", claim.Lease.LeaseId,
@@ -78,6 +79,25 @@ public sealed class RemoteReviewAuthorityTests
             claim.Attempt.AttemptId, cleanupRequest, "review-a", default);
         Assert.Equal("cleaned", cleanup.Status);
         Assert.Equal("duplicate", cleanupReplay.Status);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, source.TaskId)).State);
+        var orchestration = Assert.Single(await store.ListOrchestrationRunsAsync(
+            null, "pending", default));
+        Assert.Equal(source.TaskId, orchestration.TaskId);
+        var payload = JsonSerializer.Deserialize<ReviewOrchestrationPayloadDto>(
+            orchestration.PayloadJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(payload);
+        Assert.Equal(source.SourceRunId, payload.RunAttemptId);
+        Assert.Equal(source.SubjectId, payload.ReviewSubjectId);
+        Assert.Equal(claim.Attempt.AttemptId, payload.ReviewAttemptId);
+        Assert.Equal(ResultSha, payload.ResultSha);
+        Assert.Equal(source.ReviewPolicyHash, payload.ReviewPolicyHash);
+        Assert.Equal(report.ReportSha256, payload.ReviewReportSha256);
+        Assert.Equal("Pass", payload.ReviewOutcome);
+        Assert.All(payload.Verdicts, verdict => Assert.Equal("pass", verdict.Status));
+        Assert.All(payload.Gates, gate => Assert.Equal("passed", gate.Status));
+
+        await CompletePassingOrchestrationAsync(store, orchestration);
 
         var task = await TaskAsync(store, source.TaskId);
         Assert.Equal("5-human-review", task.State);
@@ -86,6 +106,126 @@ public sealed class RemoteReviewAuthorityTests
         Assert.Contains(audit, record => record.Action == "review.reported"
                                          && record.DetailJson.Contains(ResultSha, StringComparison.Ordinal));
         Assert.Contains(audit, record => record.Action == "review.cleaned");
+        Assert.Contains(audit, record => record.Action == "orchestration.run-created");
+    }
+
+    [Fact]
+    public async Task Product_failure_cleanup_preserves_the_full_envelope_and_reissues_server_side()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var source = await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "review-instance-a", "review-host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "review-instance-a"), "review-a", default);
+        var passing = PassingReport(claim);
+        var failedStep = passing.Commands[0].StepId;
+        var failedAspect = passing.Commands[0].Aspect;
+        var productFailure = passing with
+        {
+            Commands = passing.Commands.Select(command =>
+                command.StepId == failedStep
+                    ? command with { ExitCode = 1 }
+                    : command).ToArray(),
+            Verdicts = passing.Verdicts.Select(verdict =>
+                verdict.Aspect == failedAspect
+                    ? verdict with
+                    {
+                        Status = "block",
+                        Classification = "ReviewCommandFailed",
+                        Summary = "The declared command failed.",
+                    }
+                    : verdict).ToArray(),
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, productFailure, "review-a", default);
+        Assert.Equal("ProductFailure", report.Outcome);
+        Assert.Equal("4-auto-review", report.TaskState);
+        await store.CleanupReviewAsync(
+            claim.Attempt.AttemptId,
+            new ReviewCleanupRequest(
+                "review-a", "review-instance-a", claim.Lease!.LeaseId,
+                claim.Lease.Fence, "cleanup-product-failure", true),
+            "review-a",
+            default);
+
+        var orchestration = Assert.Single(await store.ListOrchestrationRunsAsync(
+            null, "pending", default));
+        var payload = JsonSerializer.Deserialize<ReviewOrchestrationPayloadDto>(
+            orchestration.PayloadJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(payload);
+        Assert.Equal(source.SourceRunId, payload.RunAttemptId);
+        Assert.Equal(source.SubjectId, payload.ReviewSubjectId);
+        Assert.Equal(claim.Attempt.AttemptId, payload.ReviewAttemptId);
+        Assert.Equal(ResultSha, payload.ResultSha);
+        Assert.Equal(report.ReportSha256, payload.ReviewReportSha256);
+        Assert.Equal("ProductFailure", payload.ReviewOutcome);
+        Assert.Equal("failed", Assert.Single(
+            payload.Gates,
+            gate => gate.StepId == failedStep).Status);
+
+        var engineClaim = await store.ClaimOrchestrationAsync(
+            new OrchestrationClaimRequest(
+                "engine-a", "engine-instance-a", [OrchestrationStage.ReviewDecision]),
+            "engine-a",
+            default);
+        var settled = await store.CompleteOrchestrationStageAsync(
+            orchestration.RunId,
+            new CompleteOrchestrationStageRequest(
+                "engine-a",
+                "engine-instance-a",
+                engineClaim.Lease!.LeaseId,
+                engineClaim.Lease.Fence,
+                OrchestrationStage.ReviewDecision,
+                OrchestrationAction.Reissue,
+                "{}",
+                "settle-product-failure"),
+            "engine-a",
+            default);
+
+        Assert.Equal("reissued", settled.Status);
+        Assert.Equal(1, settled.ReissueAttempts);
+        Assert.Equal("2-ready", (await TaskAsync(store, source.TaskId)).State);
+    }
+
+    [Fact]
+    public async Task Cleanup_does_not_reopen_an_operator_lane_move_or_leave_review_authority_active()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var source = await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "review-instance-a", "review-host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "review-instance-a"), "review-a", default);
+        await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, PassingReport(claim), "review-a", default);
+        var beforeMove = await TaskAsync(store, source.TaskId);
+        var project = Assert.Single(await store.ListProjectsAsync(null, default));
+        await store.UpdateTaskAsync(
+            project.ProjectId,
+            source.TaskId,
+            new UpdateTaskRequest(null, null, "5-human-review", beforeMove.Version),
+            "operator",
+            default);
+
+        var cleanup = await store.CleanupReviewAsync(
+            claim.Attempt.AttemptId,
+            new ReviewCleanupRequest(
+                "review-a", "review-instance-a", claim.Lease!.LeaseId,
+                claim.Lease.Fence, "cleanup-after-operator-move", true),
+            "review-a",
+            default);
+
+        Assert.Equal("cleaned", cleanup.Status);
+        Assert.Equal("5-human-review", (await TaskAsync(store, source.TaskId)).State);
+        Assert.Empty(await store.ListOrchestrationRunsAsync(null, null, default));
+        Assert.Contains(
+            await store.ListAuditAsync(0, default),
+            record => record.Action == "review.orchestration-superseded");
     }
 
     [Fact]
@@ -679,7 +819,19 @@ public sealed class RemoteReviewAuthorityTests
         var passed = await store.ReportReviewAsync(
             retry.Attempt!.AttemptId, PassingReport(retry), "review-a", default);
 
-        Assert.Equal("5-human-review", passed.TaskState);
+        Assert.Equal("4-auto-review", passed.TaskState);
+        var cleanup = await store.CleanupReviewAsync(
+            retry.Attempt.AttemptId,
+            new ReviewCleanupRequest(
+                "review-a", "instance-a", retry.Lease!.LeaseId, retry.Lease.Fence,
+                "cleanup-passing-retry", true),
+            "review-a",
+            default);
+        Assert.Equal("cleaned", cleanup.Status);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, subject.TaskId)).State);
+        var orchestration = Assert.Single(await store.ListOrchestrationRunsAsync(
+            null, "pending", default));
+        await CompletePassingOrchestrationAsync(store, orchestration);
         Assert.Equal("5-human-review", (await TaskAsync(store, subject.TaskId)).State);
         Assert.Equal(8, PassingReport(retry).Verdicts.Count);
         Assert.Equal(
@@ -1000,5 +1152,37 @@ public sealed class RemoteReviewAuthorityTests
     {
         var project = Assert.Single(await store.ListProjectsAsync(null, default));
         return (await store.GetTaskAsync(project.ProjectId, taskId, default))!;
+    }
+
+    private static async Task CompletePassingOrchestrationAsync(
+        TaskServerStore store,
+        OrchestrationRunDto run)
+    {
+        while (run.Status == "pending")
+        {
+            var claim = await store.ClaimOrchestrationAsync(
+                new OrchestrationClaimRequest(
+                    "engine-a", "engine-instance-a", [run.CurrentStage]),
+                "engine-a",
+                default);
+            var action = run.CurrentStage == OrchestrationStage.CompletionJudge
+                ? OrchestrationAction.Complete
+                : OrchestrationAction.Continue;
+            run = await store.CompleteOrchestrationStageAsync(
+                run.RunId,
+                new CompleteOrchestrationStageRequest(
+                    "engine-a",
+                    "engine-instance-a",
+                    claim.Lease!.LeaseId,
+                    claim.Lease.Fence,
+                    run.CurrentStage,
+                    action,
+                    "{}",
+                    $"settle:{run.RunId}:{run.CurrentStage}"),
+                "engine-a",
+                default);
+        }
+
+        Assert.Equal("completed", run.Status);
     }
 }

@@ -19,11 +19,52 @@ public sealed class StageHandlerTests
         Assert.Equal(expected, decision.Action);
     }
 
+    [Theory]
+    [InlineData("Pass", OrchestrationAction.Continue)]
+    [InlineData("ProductFailure", OrchestrationAction.Reissue)]
+    [InlineData("ReviewInfra", OrchestrationAction.Escalate)]
+    [InlineData("unknown", OrchestrationAction.Escalate)]
+    public void Review_decision_policy_maps_normalized_remote_review_verdicts(
+        string outcome,
+        OrchestrationAction expected)
+    {
+        Assert.Equal(expected, ReviewDecisionPolicy.Decide(outcome, null, null));
+    }
+
+    [Fact]
+    public async Task Review_decision_output_preserves_the_attempt_envelope()
+    {
+        var decision = await new ReviewDecisionOrchestratorLoop().ExecuteAsync(
+            Run("""
+                {
+                  "runAttemptId":"run-42",
+                  "reviewSubjectId":"subject-42",
+                  "reviewAttemptId":"review-42",
+                  "reviewOutcome":"Pass"
+                }
+                """),
+            default);
+
+        Assert.Equal(OrchestrationAction.Continue, decision.Action);
+        Assert.Contains("run-42", decision.OutputJson, StringComparison.Ordinal);
+        Assert.Contains("subject-42", decision.OutputJson, StringComparison.Ordinal);
+        Assert.Contains("review-42", decision.OutputJson, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Council_reissues_named_critical_findings()
     {
         var decision = await new CouncilLoop().ExecuteAsync(
             Run("""{"reviewFindings":[{"severity":"critical","summary":"unsafe"}]}"""),
+            default);
+        Assert.Equal(OrchestrationAction.Reissue, decision.Action);
+    }
+
+    [Fact]
+    public async Task Council_reissues_normalized_remote_review_concerns()
+    {
+        var decision = await new CouncilLoop().ExecuteAsync(
+            Run("""{"verdicts":[{"aspect":"requirements","status":"concerns"}]}"""),
             default);
         Assert.Equal(OrchestrationAction.Reissue, decision.Action);
     }

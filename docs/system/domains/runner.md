@@ -243,7 +243,11 @@ state.
 - `task-server/TaskServerOrchestrationStore.cs`: durable flow definitions,
   orchestration runs, stage results, leases, fences, and restart recovery.
   Expired Engine leases return the same run to `pending`; a replacement Engine
-  receives a higher fence and stale settlement is rejected.
+  receives a higher fence and stale settlement is rejected. Canonical Remote
+  Review cleanup creates the run atomically with the full RunAttempt,
+  ReviewSubject, ReviewAttempt, Result-SHA, policy, and report-hash envelope.
+  Task Server settlement applies the version-fenced reissue, escalation, or
+  Human Review lane transition; the Engine and Agent Host cannot move lanes.
 - `tools/remote-test-suite/`: repository-owned, isolated Remote Run
   infrastructure scenarios. The `reference-change` manifest drives the public
   v1 claim and attempt authority, durable immutable-result handoff, exact-SHA

@@ -11,9 +11,10 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 8 adds versioned host-to-project admission. The migration block is
-    // idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 8;
+    // 9 adds the task-version fence and code-owned default flow required for
+    // server-side Remote Review post-processing decisions. The migration block
+    // is idempotent; the number only guards downgrades.
+    public const int CurrentSchemaVersion = 9;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -219,8 +220,13 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 INSERT INTO projects(id, workspace_id, name, task_key_prefix, next_task_number, version, created_at, updated_at)
                 VALUES ($id, $workspace, $name, $prefix, 1, 1, $now, $now);
+                INSERT INTO flow_definitions(project_id, version, stages_json, max_reissue_attempts, updated_at)
+                VALUES ($id, 0, $stages, $max_reissues, $now);
                 """, ct, transaction,
-                ("$id", id), ("$workspace", request.WorkspaceId), ("$name", request.Name.Trim()), ("$prefix", prefix), ("$now", now));
+                ("$id", id), ("$workspace", request.WorkspaceId), ("$name", request.Name.Trim()),
+                ("$prefix", prefix), ("$now", now),
+                ("$stages", JsonSerializer.Serialize(OrchestrationDefaults.CreateStages())),
+                ("$max_reissues", OrchestrationDefaults.MaxReissueAttempts));
             await AuditAsync(connection, transaction, actorId, "project.created", "project", id,
                 JsonSerializer.Serialize(new { request.WorkspaceId, request.Name, taskKeyPrefix = prefix }), ct);
         }, ct);
@@ -2173,6 +2179,7 @@ public sealed partial class TaskServerStore
                 id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL REFERENCES projects(id),
                 task_id TEXT NOT NULL REFERENCES tasks(id),
+                task_version INTEGER NOT NULL,
                 definition_version INTEGER NOT NULL,
                 stages_json TEXT NOT NULL,
                 max_reissue_attempts INTEGER NOT NULL,
@@ -2312,6 +2319,7 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_version", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "orchestration_runs", "task_version", "INTEGER NOT NULL DEFAULT 0", ct);
         await ExecuteAsync(connection, """
             INSERT INTO runtime_capacity_settings(
                 host_id, max_parallelism, target_load_percent, ramp_strategy,
@@ -2322,6 +2330,17 @@ public sealed partial class TaskServerStore
              GROUP BY host_id
             ON CONFLICT(host_id) DO NOTHING;
             """, ct, ("$now", Iso(UtcNow)));
+        await ExecuteAsync(connection, """
+            INSERT INTO flow_definitions(
+                project_id, version, stages_json, max_reissue_attempts, updated_at)
+            SELECT id, 0, $stages, $max_reissues, $now
+              FROM projects
+             WHERE 1 = 1
+            ON CONFLICT(project_id) DO NOTHING;
+            """, ct,
+            ("$stages", JsonSerializer.Serialize(OrchestrationDefaults.CreateStages())),
+            ("$max_reissues", OrchestrationDefaults.MaxReissueAttempts),
+            ("$now", Iso(UtcNow)));
         await ExecuteAsync(connection, """
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;

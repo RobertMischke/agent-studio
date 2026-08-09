@@ -189,6 +189,134 @@ public sealed class EngineContractTests
     }
 
     [Fact]
+    public async Task Generic_orchestration_reissues_are_bounded_across_attempts()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path, TimeProvider.System);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Reissue", "wsp-reissue"), "test", default);
+        var project = await store.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Reissue", "REI", "prj-reissue"),
+            "test",
+            default);
+        var task = await store.CreateTaskAsync(
+            project.ProjectId,
+            new CreateTaskRequest("Bound remote reissue", State: "4-auto-review", TaskId: "tsk-reissue"),
+            "test",
+            default);
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            if (attempt > 1)
+            {
+                task = (await store.UpdateTaskAsync(
+                    project.ProjectId,
+                    task.TaskId,
+                    new UpdateTaskRequest(null, null, "4-auto-review", task.Version),
+                    "coding-run",
+                    default))!;
+            }
+
+            var run = await store.CreateOrchestrationRunAsync(
+                project.ProjectId,
+                new CreateOrchestrationRunRequest(
+                    task.TaskId,
+                    """{"agentOutcome":"needs-input"}""",
+                    $"review-{attempt}"),
+                "review-executor",
+                default);
+            var claim = await store.ClaimOrchestrationAsync(
+                new OrchestrationClaimRequest(
+                    "engine-a", $"instance-{attempt}", [OrchestrationStage.ReviewDecision]),
+                "engine-a",
+                default);
+            run = await store.CompleteOrchestrationStageAsync(
+                run.RunId,
+                new CompleteOrchestrationStageRequest(
+                    "engine-a",
+                    $"instance-{attempt}",
+                    claim.Lease!.LeaseId,
+                    claim.Lease.Fence,
+                    OrchestrationStage.ReviewDecision,
+                    OrchestrationAction.Reissue,
+                    "{}",
+                    $"reissue-{attempt}"),
+                "engine-a",
+                default);
+            task = (await store.GetTaskAsync(project.ProjectId, task.TaskId, default))!;
+
+            Assert.Equal(attempt, run.ReissueAttempts);
+            if (attempt <= OrchestrationDefaults.MaxReissueAttempts)
+            {
+                Assert.Equal("reissued", run.Status);
+                Assert.Equal("2-ready", task.State);
+            }
+            else
+            {
+                Assert.Equal("escalated", run.Status);
+                Assert.Equal("5e-escalated", task.State);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Task_version_change_supersedes_stale_decision_without_overwriting_the_operator()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path, TimeProvider.System);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Supersede", "wsp-supersede"), "test", default);
+        var project = await store.CreateProjectAsync(
+            new CreateProjectRequest(
+                workspace.WorkspaceId, "Supersede", "SUP", "prj-supersede"),
+            "test",
+            default);
+        var task = await store.CreateTaskAsync(
+            project.ProjectId,
+            new CreateTaskRequest(
+                "Original review subject", State: "4-auto-review", TaskId: "tsk-supersede"),
+            "test",
+            default);
+        var run = await store.CreateOrchestrationRunAsync(
+            project.ProjectId,
+            new CreateOrchestrationRunRequest(task.TaskId, "{}", "supersede-run"),
+            "review-executor",
+            default);
+        task = (await store.UpdateTaskAsync(
+            project.ProjectId,
+            task.TaskId,
+            new UpdateTaskRequest("Changed while decision was pending", null, null, task.Version),
+            "operator",
+            default))!;
+        var claim = await store.ClaimOrchestrationAsync(
+            new OrchestrationClaimRequest(
+                "engine-a", "instance-a", [OrchestrationStage.ReviewDecision]),
+            "engine-a",
+            default);
+
+        run = await store.CompleteOrchestrationStageAsync(
+            run.RunId,
+            new CompleteOrchestrationStageRequest(
+                "engine-a",
+                "instance-a",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence,
+                OrchestrationStage.ReviewDecision,
+                OrchestrationAction.Continue,
+                "{}",
+                "superseded-settlement"),
+            "engine-a",
+            default);
+
+        Assert.Equal("superseded", run.Status);
+        var preserved = (await store.GetTaskAsync(project.ProjectId, task.TaskId, default))!;
+        Assert.Equal("4-auto-review", preserved.State);
+        Assert.Equal("Changed while decision was pending", preserved.Title);
+    }
+
+    [Fact]
     public void Engine_project_is_a_pure_contract_api_client()
     {
         var root = RepositoryRoot();

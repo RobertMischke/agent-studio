@@ -519,7 +519,7 @@ public sealed partial class TaskServerStore
             var received = UtcNow;
             var reportId = $"rrpt_{Guid.NewGuid():N}";
             var retry = string.Equals(classified.Outcome, "ReviewInfra", StringComparison.Ordinal);
-            var taskState = retry ? "4-auto-review" : "5-human-review";
+            const string taskState = "4-auto-review";
             await ExecuteAsync(connection, """
                 UPDATE review_attempts
                    SET status = 'reported', report_id = $report, report_json = $json,
@@ -640,6 +640,12 @@ public sealed partial class TaskServerStore
                  WHERE id = $attempt;
                 """, ct, transaction, ("$key", request.IdempotencyKey), ("$now", Iso(now)), ("$attempt", attemptId));
             await RecordDeliveryAsync(connection, transaction, attemptId, "cleanup", request.IdempotencyKey, payloadHash, ct);
+            if (!string.IsNullOrWhiteSpace(attempt.ReportId)
+                && !string.Equals(attempt.Outcome, "ReviewInfra", StringComparison.Ordinal))
+            {
+                await QueueReviewOrchestrationAsync(
+                    connection, transaction, attempt, actorId, ct);
+            }
             await AuditAsync(connection, transaction, actorId, "review.cleaned", "review-attempt", attemptId,
                 JsonSerializer.Serialize(new { request.WorkspaceRemoved, retry, request.FailureClassification }), ct);
             result = new ReviewCleanupResponse("cleaned", attemptId, now, retry);
@@ -1062,9 +1068,122 @@ public sealed partial class TaskServerStore
             row.ReportId!, row.AttemptId, row.SubjectId, row.Outcome!,
             row.FailureClassification, row.Summary, row.ReportSha256!, row.ReportedAt!.Value,
             string.Equals(row.Outcome, "ReviewInfra", StringComparison.Ordinal),
-            string.Equals(row.Outcome, "ReviewInfra", StringComparison.Ordinal)
-                ? "4-auto-review"
-                : "5-human-review");
+            "4-auto-review");
+
+    private async Task QueueReviewOrchestrationAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ReviewAuthorityRow attempt,
+        string actorId,
+        CancellationToken ct)
+    {
+        string? projectId = null;
+        string? reportJson = null;
+        string? taskState = null;
+        string? latestResultRunId = null;
+        await using (var command = Command(connection, """
+            SELECT task.project_id,
+                   review.report_json,
+                   task.state,
+                   (
+                       SELECT run.id
+                         FROM runs run
+                        WHERE run.task_id = task.id
+                          AND run.result_sha IS NOT NULL
+                        ORDER BY coalesce(run.finished_at, run.created_at) DESC, run.rowid DESC
+                        LIMIT 1
+                   )
+              FROM review_attempts review
+              JOIN tasks task ON task.id = review.task_id
+             WHERE review.id = $attempt;
+            """, transaction, ("$attempt", attempt.AttemptId)))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            if (await reader.ReadAsync(ct))
+            {
+                projectId = reader.GetString(0);
+                reportJson = reader.IsDBNull(1) ? null : reader.GetString(1);
+                taskState = reader.GetString(2);
+                latestResultRunId = reader.IsDBNull(3) ? null : reader.GetString(3);
+            }
+        }
+        if (string.IsNullOrWhiteSpace(projectId)
+            || string.IsNullOrWhiteSpace(reportJson)
+            || string.IsNullOrWhiteSpace(attempt.Outcome)
+            || string.IsNullOrWhiteSpace(attempt.ReportSha256))
+        {
+            throw new TaskServerConflictException(
+                "review-report-incomplete",
+                "A cleaned review needs a complete stored report before orchestration can start.");
+        }
+
+        var report = JsonSerializer.Deserialize<ReviewReportRequest>(reportJson, ReviewJson)
+                     ?? throw new TaskServerConflictException(
+                         "review-report-incomplete",
+                         "The stored review report cannot be read for orchestration.");
+        var subject = await ReadReviewSubjectAsync(connection, transaction, attempt.SubjectId, ct)
+                      ?? throw new KeyNotFoundException("Review subject was not found.");
+        if (!string.Equals(taskState, "4-auto-review", StringComparison.Ordinal)
+            || !string.Equals(latestResultRunId, subject.SourceRunId, StringComparison.Ordinal))
+        {
+            await AuditAsync(
+                connection,
+                transaction,
+                actorId,
+                "review.orchestration-superseded",
+                "review-attempt",
+                attempt.AttemptId,
+                JsonSerializer.Serialize(new
+                {
+                    taskState,
+                    subject.SourceRunId,
+                    latestResultRunId,
+                }),
+                ct);
+            return;
+        }
+        var gates = report.Commands.Select(command =>
+        {
+            var planned = subject.Plan.Commands.Single(item =>
+                string.Equals(item.StepId, command.StepId, StringComparison.Ordinal));
+            var failed = command.Signal is not null
+                         || command.ExitCode is null or < 0
+                         || (planned.CompareToBaseline
+                             && command.NewFailures is { Count: > 0 })
+                         || (command.ExitCode != 0
+                             && (!planned.CompareToBaseline
+                                 || command.BaselineSha is null
+                                 || command.NewFailures is null
+                                 || command.NewFailures is { Count: > 0 }));
+            return new ReviewOrchestrationGateDto(
+                command.StepId,
+                command.Aspect,
+                failed ? "failed" : "passed",
+                failed ? attempt.FailureClassification ?? "ReviewCommandFailed" : null);
+        }).ToArray();
+        var payload = new ReviewOrchestrationPayloadDto(
+            subject.SourceRunId,
+            subject.SubjectId,
+            attempt.AttemptId,
+            subject.ExpectedResultSha,
+            subject.ReviewPolicyHash,
+            attempt.ReportSha256,
+            attempt.Outcome,
+            attempt.FailureClassification,
+            attempt.Summary,
+            report.Verdicts,
+            gates);
+        await CreateOrchestrationRunCoreAsync(
+            connection,
+            transaction,
+            projectId,
+            new CreateOrchestrationRunRequest(
+                attempt.TaskId,
+                JsonSerializer.Serialize(payload, ReviewJson),
+                $"review-orchestration:{attempt.AttemptId}"),
+            actorId,
+            ct);
+    }
 
     private static async Task<bool> DeliveryExistsAsync(
         SqliteConnection connection,
