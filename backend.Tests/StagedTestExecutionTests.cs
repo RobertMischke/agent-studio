@@ -310,9 +310,7 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
     public async Task FailingContinuousTestBecomesSeparateFindingAndDoesNotBlockWorkPackage()
     {
         var marker = Path.Combine(_root, "work-package-ran.txt");
-        var writeMarker = OperatingSystem.IsWindows()
-            ? $"type nul > \"{marker}\""
-            : $"touch \"{marker}\"";
+        var writeMarker = $"touch \"{marker}\"";
         var policy = new TestExecutionPolicy
         {
             ContinuousCommands = ["exit 9"],
@@ -345,9 +343,7 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
     public async Task ContinuousBaselineStillRunsForDocumentationOnlyDiff()
     {
         var marker = Path.Combine(_root, "continuous-ran.txt");
-        var writeMarker = OperatingSystem.IsWindows()
-            ? $"type nul > \"{marker}\""
-            : $"touch \"{marker}\"";
+        var writeMarker = $"touch \"{marker}\"";
         var request = new BuildTestGateRequest(_root, null, "test", RequireExactSubject: false)
         {
             TestExecution = new TestExecutionPolicy
@@ -373,9 +369,7 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
     public async Task RequiredFullSuiteCannotBeSkippedByDocumentationOnlyDiff()
     {
         var marker = Path.Combine(_root, "full-ran.txt");
-        var writeMarker = OperatingSystem.IsWindows()
-            ? $"type nul > \"{marker}\""
-            : $"touch \"{marker}\"";
+        var writeMarker = $"touch \"{marker}\"";
         var request = new BuildTestGateRequest(_root, null, "release", RequireExactSubject: false)
         {
             RequiredTestLevel = TestExecutionLevels.Full,
@@ -433,9 +427,7 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
     public async Task FullSuiteEvidence_RemainsFalseWhenBuildStopsBeforeTests()
     {
         var testMarker = Path.Combine(_root, "full-test-ran.txt");
-        var writeMarker = OperatingSystem.IsWindows()
-            ? $"type nul > \"{testMarker}\""
-            : $"touch \"{testMarker}\"";
+        var writeMarker = $"touch \"{testMarker}\"";
         var request = new BuildTestGateRequest(_root, null, "release", RequireExactSubject: false)
         {
             RequiredTestLevel = TestExecutionLevels.Full,
@@ -462,7 +454,5 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
     }
 
     private static string WaitCommand(int milliseconds)
-        => OperatingSystem.IsWindows()
-            ? $"ping 127.0.0.1 -n {Math.Max(2, milliseconds / 1000 + 2)} > nul"
-            : $"sleep {milliseconds / 1000d:0.000}";
+        => FormattableString.Invariant($"sleep {milliseconds / 1000d:0.000}");
 }
