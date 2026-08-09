@@ -718,6 +718,14 @@
   --studio-accent-teal:           var(--color-teal-700);
 
   // Darker pigments preserve the same model-family hues on white surfaces.
+  // CAC owns the compact CLI-family indicators used by conversation surfaces.
+  // Its published defaults target dark surfaces, so the Studio host supplies
+  // the audited Candidate A pigments only inside the light-theme scope.
+  --model-family-claude: #c2410c;
+  --model-family-codex:  #0369a1;
+  --model-family-gemini: #6d28d9;
+  --model-family-openai: #0f766e;
+
   --studio-model-sol:     var(--color-blue-700);
   --studio-model-ter:     var(--color-teal-700);
   --studio-model-opus:    var(--color-violet-700);
