@@ -233,8 +233,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     {
         const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
         SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
+        File.Delete(Path.Combine(_watchPath, TaskStates.Progress, TaskKey, "status.md"));
 
-        using var factory = BuildFactory();
+        using var factory = BuildFactory(summaryOneShot: new StubSummaryOneShot());
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         var ct = CancellationToken.None;
@@ -257,6 +258,36 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             Fence: lease.Lease.FencingToken,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "remote-done-logs"), ct);
+
+        var artifactUpload = await client.UploadArtifactsAsync(new RArtifactIngest(TaskKey,
+        [
+            new RArtifact(
+                "deliverables.md",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("# Remote deliverables\n"))),
+            new RArtifact(
+                "nested/proof.txt",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("remote proof"))),
+        ],
+            RunnerId: lease.Lease.RunnerId,
+            LeaseId: lease.Lease.LeaseId,
+            FencingToken: lease.Lease.FencingToken,
+            AttemptId: lease.Lease.AttemptId,
+            Fence: lease.Lease.FencingToken,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "remote-done-artifacts",
+            FinalizeResult: true), ct);
+        Assert.NotNull(artifactUpload);
+        Assert.Equal(2, artifactUpload!.Uploaded);
+        Assert.True(artifactUpload.ResultDocumentGenerated, artifactUpload.ResultDocumentStatus);
+        Assert.Equal("generated", artifactUpload.ResultDocumentStatus);
+        Assert.Equal(
+            ["results/deliverables.md", "results/nested/proof.txt"],
+            artifactUpload.Files);
+        var activeFolder = Assert.Single(Directory.GetDirectories(
+            _watchPath, TaskKey, SearchOption.AllDirectories));
+        var progressStatus = File.ReadAllText(Path.Combine(activeFolder, "status.md"));
+        Assert.Contains("Done and verified by the remote result fixture.", progressStatus);
+        Assert.DoesNotContain(TaskTransitionService.ResultScaffoldMarker, progressStatus);
 
         var completionRequest = new RRemoteComplete(
             TaskKey,
@@ -387,6 +418,101 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("\"idempotencyKey\":\"lane-completion:remote-done-completion\"", timeline, StringComparison.Ordinal);
         Assert.DoesNotContain("external_completion", timeline);
         Assert.Equal(1, timeline.Split("agent_run_finished", StringSplitOptions.None).Length - 1);
+        var status = File.ReadAllText(Path.Combine(moved, "status.md"));
+        Assert.Contains("Done and verified by the remote result fixture.", status);
+        Assert.DoesNotContain(TaskTransitionService.ResultScaffoldMarker, status);
+        Assert.Equal(
+            "# Remote deliverables\n",
+            File.ReadAllText(Path.Combine(moved, "results", "deliverables.md")));
+        Assert.Equal(
+            "remote proof",
+            File.ReadAllText(Path.Combine(moved, "results", "nested", "proof.txt")));
+        Assert.Equal(
+            0,
+            factory.Services.GetRequiredService<TaskTransitionService>().ResultScaffoldCreatedCount);
+    }
+
+    [Fact]
+    public async Task Remote_result_finalization_uses_scaffold_only_when_summary_is_actually_missing()
+    {
+        const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        SeedTask(TaskStates.Progress, TaskKey, "Remote summary gap", "Make a trivial change.");
+        File.Delete(Path.Combine(_watchPath, TaskStates.Progress, TaskKey, "status.md"));
+
+        using var factory = BuildFactory(summaryOneShot: new StubSummaryOneShot(succeed: false));
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        await client.IngestLogsAsync(new RLogIngest(TaskKey,
+        [
+            new RCliLine(DateTime.UtcNow, "stdout", "Implemented and verified."),
+            new RCliLine(DateTime.UtcNow, "stdout", "[[TASK_DONE]]"),
+        ],
+            RunnerId: lease.Lease!.RunnerId,
+            LeaseId: lease.Lease.LeaseId,
+            FencingToken: lease.Lease.FencingToken,
+            AttemptId: lease.Lease.AttemptId,
+            Fence: lease.Lease.FencingToken,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "remote-missing-summary-logs"), ct);
+        var artifactUpload = await client.UploadArtifactsAsync(new RArtifactIngest(TaskKey,
+        [
+            new RArtifact(
+                "proof.txt",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("remote proof"))),
+        ],
+            RunnerId: lease.Lease.RunnerId,
+            LeaseId: lease.Lease.LeaseId,
+            FencingToken: lease.Lease.FencingToken,
+            AttemptId: lease.Lease.AttemptId,
+            Fence: lease.Lease.FencingToken,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "remote-missing-summary-artifacts",
+            FinalizeResult: true), ct);
+        Assert.NotNull(artifactUpload);
+        Assert.False(artifactUpload!.ResultDocumentGenerated);
+        Assert.Contains("summary fixture failed", artifactUpload.ResultDocumentStatus);
+        var activeFolder = Assert.Single(Directory.GetDirectories(
+            _watchPath, TaskKey, SearchOption.AllDirectories));
+        Assert.False(File.Exists(Path.Combine(activeFolder, "status.md")));
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            ExitCode: 0,
+            ResultSha: resultSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            Repository: "https://example.invalid/agent-studio.git",
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "remote-missing-summary-completion",
+            BaseSha: "4136f00d4136f00d4136f00d4136f00d4136f00d",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            IntegrationBranch: "refs/heads/main"), ct);
+
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        var status = File.ReadAllText(Path.Combine(moved, "status.md"));
+        Assert.Contains(TaskTransitionService.ResultScaffoldMarker, status);
+        Assert.Equal("remote proof", File.ReadAllText(Path.Combine(moved, "results", "proof.txt")));
+        Assert.Equal(
+            1,
+            factory.Services.GetRequiredService<TaskTransitionService>().ResultScaffoldCreatedCount);
     }
 
     [Fact]
@@ -2209,7 +2335,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         IAtomicJsonFileWriter? writer = null,
         int? remoteRequeueGraceSeconds = null,
         string? additionalProjectName = null,
-        string? additionalWatchPath = null) =>
+        string? additionalWatchPath = null,
+        ICliOneShot? summaryOneShot = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -2237,12 +2364,66 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     }
                     cfg.AddInMemoryCollection(values);
                 });
-                if (writer is not null)
+                if (writer is not null || summaryOneShot is not null)
                 {
                     b.ConfigureTestServices(services =>
-                        services.AddSingleton<IAtomicJsonFileWriter>(writer));
+                    {
+                        if (writer is not null)
+                            services.AddSingleton<IAtomicJsonFileWriter>(writer);
+                        if (summaryOneShot is not null)
+                        {
+                            services.AddSingleton(
+                                new CliOneShotRegistry([summaryOneShot]));
+                        }
+                    });
                 }
             });
+
+    private sealed class StubSummaryOneShot(bool succeed = true) : ICliOneShot
+    {
+        public string CliType => CliTypes.Claude;
+
+        public Task<CliOneShotResult> RunAsync(
+            CliOneShotRequest request,
+            CancellationToken ct = default)
+        {
+            const string markdown = """
+                # Status
+
+                - Result: Success
+                - Case: bugfix
+
+                ## Overview
+
+                - Problem: The remote task needed a durable result protocol.
+                - Solution: Done and verified by the remote result fixture.
+
+                ## What Was Done
+
+                - Uploaded all remote evidence before teardown.
+
+                ## Open Items
+
+                - None.
+                """;
+            var requestedAt = DateTime.UtcNow;
+            var completedAt = requestedAt.AddMilliseconds(1);
+            return Task.FromResult(new CliOneShotResult(
+                Ok: succeed,
+                ExitCode: succeed ? 0 : 1,
+                Stdout: succeed ? markdown : string.Empty,
+                Stderr: succeed ? string.Empty : "summary fixture failed",
+                Duration: completedAt - requestedAt,
+                ParsedText: succeed ? markdown : string.Empty,
+                Usage: null,
+                RichUsage: null,
+                Latency: new AgentMessageLatency(
+                    RequestedAt: requestedAt,
+                    CompletedAt: completedAt,
+                    TotalMs: 1),
+                Error: succeed ? null : "summary fixture failed"));
+        }
+    }
 
     private ReviewAttemptDto SeedReviewAttempt(
         IServiceProvider services,

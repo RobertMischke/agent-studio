@@ -163,6 +163,15 @@ state.
   origin are generation-scoped salvage and immutable result refs described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `runner/RemoteTaskRunner.cs` and
+  `backend/Features/Diagnostics/ArtifactIngestionEndpoints.cs`: the compatibility
+  coding result-return boundary. After the final log flush, the runner uploads
+  every file below its external `JOB_RESULTS_DIR` recursively and requests the
+  application-owned `status.md` projection from `SummaryGenerationService`.
+  The server acknowledges the exact result-path set and summary state before
+  worktree teardown. An incomplete or absent acknowledgement retains the
+  worktree. A genuine summary failure is allowed through so the marked
+  `TaskTransitionService` scaffold remains the honest terminal backstop.
 - `runner/ReviewStateStore.cs`, `runner/DurableReviewProcess.cs`,
   `runner/RemoteReviewDaemon.cs`, and `runner/RemoteReviewExecutor.cs`: durable
   Remote Review handoff. The daemon persists the immutable ReviewAttempt,
@@ -653,6 +662,13 @@ state.
   A process restart replays the original outbox before new claims and never
   starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
   worktree, and consumes no coding or completion budget.
+- Compatibility remote teardown is fail-closed at the older artifact-upload
+  boundary too. Git salvage protects source changes only; it does not collect
+  the runner's external `JOB_RESULTS_DIR` or the Studio task folder. Therefore
+  the final recursive result upload, exact path acknowledgement, and server-side
+  `status.md` generation all precede `GitWorkspace` teardown. A transfer error
+  retains the checkout instead of converting missing evidence into a normal
+  completion.
 - The compatibility Remote completion boundary also fails closed when an older
   Runner reports `Done` or `NoOp` without the complete `BaseSha`,
   `ImmutableResultRef`, and `ArtifactManifestDigest` trio. The RunAttempt settles

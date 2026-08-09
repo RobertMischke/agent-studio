@@ -9,7 +9,7 @@ namespace AgentStudio.Tasks;
 /// </summary>
 public sealed class TaskTransitionService
 {
-    private const string ResultScaffoldMarker = "<!-- agent-studio:result-scaffold -->";
+    internal const string ResultScaffoldMarker = "<!-- agent-studio:result-scaffold -->";
     private const string OperatorBackfillMarker = "<!-- agent-studio:operator-result-backfill -->";
     private static readonly HashSet<string> ResultRequiredStates = new(StringComparer.Ordinal)
     {
@@ -40,6 +40,15 @@ public sealed class TaskTransitionService
     private readonly AgentStudio.Pipeline.AcceptedIntegrationQueue? _acceptedIntegrationQueue;
     private readonly AttemptAuthorityService? _attemptAuthority;
     private readonly ReviewAttemptTaskLifecycleService? _reviewAttemptLifecycle;
+    private long _resultScaffoldCreatedCount;
+
+    /// <summary>
+    /// Process-local recurrence counter for honest result scaffolds. Each
+    /// successful creation is also written to the structured application log
+    /// with its provenance so operators can spot a transport regression.
+    /// Refreshing an already-owned scaffold does not increment the counter.
+    /// </summary>
+    public long ResultScaffoldCreatedCount => Interlocked.Read(ref _resultScaffoldCreatedCount);
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -745,6 +754,7 @@ public sealed class TaskTransitionService
         var path = Path.Combine(task.FolderPath, "status.md");
         try
         {
+            var refreshingOwnedScaffold = false;
             if (File.Exists(path))
             {
                 var existing = File.ReadAllText(path);
@@ -755,6 +765,8 @@ public sealed class TaskTransitionService
                     error = null;
                     return true;
                 }
+                refreshingOwnedScaffold = !string.IsNullOrWhiteSpace(existing)
+                    && existing.Contains(ResultScaffoldMarker, StringComparison.Ordinal);
             }
 
             Directory.CreateDirectory(task.FolderPath);
@@ -767,6 +779,30 @@ public sealed class TaskTransitionService
                     atUtc,
                     integrationReferenceOverride),
                 new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            if (refreshingOwnedScaffold)
+            {
+                _logger.LogDebug(
+                    "result-scaffold-refreshed project={Project} job={JobId} state={State}",
+                    task.ProjectName,
+                    task.Id,
+                    targetState);
+            }
+            else
+            {
+                var provenance = operatorBackfill
+                    ? "operator-backfill"
+                    : string.Equals(task.State, targetState, StringComparison.Ordinal)
+                        ? "transition-landed"
+                        : "transition-preflight";
+                var count = Interlocked.Increment(ref _resultScaffoldCreatedCount);
+                _logger.LogWarning(
+                    "result-scaffold-created project={Project} job={JobId} state={State} provenance={Provenance} count={Count}",
+                    task.ProjectName,
+                    task.Id,
+                    targetState,
+                    provenance,
+                    count);
+            }
             error = null;
             return true;
         }
