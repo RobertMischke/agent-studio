@@ -1,3 +1,5 @@
+using AgentStudio.Runner;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>The authority action for a Remote coding completion's immutable result envelope.</summary>
@@ -5,23 +7,24 @@ public enum RemoteCompletionEnvelopeDisposition
 {
     NotRequired,
     Persist,
-    EscalateUnverified,
+    FailDelivery,
 }
 
 /// <summary>A pure completion-boundary decision made before attempt settlement.</summary>
 public sealed record RemoteCompletionEnvelopeDecision(
     RemoteCompletionEnvelopeDisposition Disposition,
     string AuthorityOutcome,
-    string? Reason = null)
+    string? Reason = null,
+    IReadOnlyList<string>? MissingFacts = null)
 {
     public bool ShouldPersist => Disposition == RemoteCompletionEnvelopeDisposition.Persist;
-    public bool ShouldEscalate => Disposition == RemoteCompletionEnvelopeDisposition.EscalateUnverified;
+    public bool ShouldFailDelivery => Disposition == RemoteCompletionEnvelopeDisposition.FailDelivery;
 }
 
 /// <summary>
-/// Prevents a successful coding RunAttempt from becoming reviewable unless the
-/// server can persist the complete immutable result envelope used to materialize
-/// its ReviewSubject.
+/// Prevents any terminal coding RunAttempt from being treated as delivered
+/// unless the server can persist its complete immutable result envelope.
+/// Environment-preparation failures are exempt because no coding checkout ran.
 /// </summary>
 public static class RemoteCompletionEnvelopePolicy
 {
@@ -29,12 +32,13 @@ public static class RemoteCompletionEnvelopePolicy
         bool requiresEnvelope,
         string? reportedOutcome,
         bool runAttemptKnown,
+        bool hasResultSha,
         bool hasBaseSha,
         bool hasImmutableResultRef,
         bool hasArtifactManifestDigest)
     {
         var outcome = reportedOutcome?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (!requiresEnvelope || outcome is not ("done" or "noop"))
+        if (!requiresEnvelope || outcome == "environmentfailure")
         {
             return new RemoteCompletionEnvelopeDecision(
                 RemoteCompletionEnvelopeDisposition.NotRequired,
@@ -43,6 +47,7 @@ public static class RemoteCompletionEnvelopePolicy
 
         var missing = new List<string>(4);
         if (!runAttemptKnown) missing.Add("RunAttemptAuthority");
+        if (!hasResultSha) missing.Add("ResultSha");
         if (!hasBaseSha) missing.Add("BaseSha");
         if (!hasImmutableResultRef) missing.Add("ImmutableResultRef");
         if (!hasArtifactManifestDigest) missing.Add("ArtifactManifestDigest");
@@ -54,10 +59,10 @@ public static class RemoteCompletionEnvelopePolicy
         }
 
         return new RemoteCompletionEnvelopeDecision(
-            RemoteCompletionEnvelopeDisposition.EscalateUnverified,
-            "unverified",
-            "Remote coding completion reported success without a complete immutable result envelope "
-            + $"(missing: {string.Join(", ", missing)}). The delivery is unverified and no ReviewSubject "
-            + "was created. Requeue the card on a runner that can publish and persist the immutable result handoff.");
+            RemoteCompletionEnvelopeDisposition.FailDelivery,
+            RemoteDeliveryFailurePolicy.DeliveryFailed,
+            "Remote coding completion did not carry a complete immutable result envelope "
+            + $"(missing: {string.Join(", ", missing)}). The delivery failed and no ReviewSubject was created.",
+            missing);
     }
 }

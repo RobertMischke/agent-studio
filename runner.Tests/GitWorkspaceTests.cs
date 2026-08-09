@@ -510,6 +510,72 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Fenced_teardown_publishes_the_salvage_fence_before_removing_the_worktree()
+    {
+        await SeedOriginAsync();
+        const string runId = "run_delivery_failure_recovery";
+        var logs = new List<string>();
+        var workspace = CreateWorkspace(
+            logs.Add,
+            sourceRunAttemptId: runId,
+            fencingToken: 24);
+        await workspace.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(
+            workspace.RepoPath,
+            "recoverable.txt",
+            "recover from this fence",
+            "recoverable result");
+
+        var result = await workspace.TeardownAsync(
+            "Blocked",
+            runId,
+            CancellationToken.None);
+
+        Assert.True(result.SecuredWork);
+        Assert.Contains($"/{runId}/fence-24/", result.Branch);
+        Assert.Equal(
+            result.ResultSha,
+            (await GitAsync(
+                _origin,
+                "rev-parse",
+                $"refs/heads/{result.Branch}")).StdOut);
+        Assert.False(Directory.Exists(workspace.RepoPath));
+        var fencePublished = logs.FindIndex(line => line.Contains(
+            "worktree-salvage-reconciled kind=generation-scoped",
+            StringComparison.Ordinal));
+        var teardownCompleted = logs.FindIndex(line => line.Contains(
+            "worktree-teardown-completed",
+            StringComparison.Ordinal));
+        Assert.True(fencePublished >= 0 && teardownCompleted > fencePublished);
+    }
+
+    [Fact]
+    public async Task Fenced_clean_teardown_still_publishes_the_salvage_fence_before_removal()
+    {
+        await SeedOriginAsync();
+        const string runId = "run_clean_delivery_recovery";
+        var workspace = CreateWorkspace(
+            sourceRunAttemptId: runId,
+            fencingToken: 25);
+        await workspace.PrepareAsync(CancellationToken.None);
+
+        var result = await workspace.TeardownAsync(
+            "NoOp",
+            runId,
+            CancellationToken.None);
+
+        Assert.False(result.SecuredWork);
+        Assert.Contains($"/{runId}/fence-25/", result.Branch);
+        Assert.Equal(
+            result.ResultSha,
+            (await GitAsync(
+                _origin,
+                "rev-parse",
+                $"refs/heads/{result.Branch}")).StdOut);
+        Assert.False(Directory.Exists(workspace.RepoPath));
+    }
+
+    [Fact]
     public async Task Fenced_out_generation_publishes_only_a_quarantine_ref()
     {
         await SeedOriginAsync();

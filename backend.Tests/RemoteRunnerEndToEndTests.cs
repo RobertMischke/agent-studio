@@ -516,9 +516,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
-    public async Task Coding_done_without_result_envelope_escalates_as_unverified_before_review_is_created()
+    public async Task Coding_done_without_base_sha_requeues_with_the_salvage_fence_before_review_is_created()
     {
         const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        const string fenceBranch = "agent-studio/salvage/runner-e2e/AGT-RUNNER-E2E/run-1/fence-1/589c462f";
         SeedTask(TaskStates.Progress, TaskKey, "Remote done without envelope", "Make a trivial change.");
 
         using var factory = BuildFactory();
@@ -540,44 +541,182 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "Done",
             Source: ProjectName,
             ExitCode: 0,
+            SalvageBranch: fenceBranch,
+            SalvageCommitSha: resultSha,
+            SalvageBranchUrl: "https://example.invalid/fence/run-1",
             ResultSha: resultSha,
             AttemptChainId: lease.Lease.LeaseId,
             Repository: "https://example.invalid/agent-studio.git",
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
-            IdempotencyKey: "remote-done-without-envelope"), ct);
+            IdempotencyKey: "remote-done-without-base-sha",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), ct);
 
         Assert.NotNull(completion);
-        Assert.Equal("Unverified", completion!.Outcome);
-        Assert.Equal(TaskStates.Escalated, completion.TargetState);
-        Assert.Contains("result envelope", completion.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("delivery-failed", completion!.Outcome);
+        Assert.Equal(TaskStates.Ready, completion.TargetState);
+        Assert.Contains("BaseSha", completion.Message, StringComparison.Ordinal);
 
         var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
             $"/api/attempts/tasks/{TaskKey}", ApiJson, ct);
         Assert.NotNull(projection);
         Assert.Equal(AttemptLifecycleState.Failed, projection.CurrentRunAttempt!.State);
-        Assert.Equal("unverified", projection.CurrentRunAttempt.TerminalOutcome);
+        Assert.Equal("delivery-failed", projection.CurrentRunAttempt.TerminalOutcome);
         Assert.Contains("result envelope", projection.CurrentRunAttempt.TerminalReason, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(resultSha, projection.CurrentRunAttempt.ResultSha);
         Assert.Null(projection.CurrentRunAttempt.ResultEnvelope);
         Assert.Null(projection.CurrentReviewSubject);
         Assert.Empty(projection.ReviewAttempts);
 
-        var escalated = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
-        Assert.True(Directory.Exists(escalated));
-        var status = File.ReadAllText(Path.Combine(escalated, "status.md"));
-        Assert.Contains("unverified-delivery", status);
+        var ready = Path.Combine(_watchPath, TaskStates.Ready, TaskKey);
+        Assert.True(Directory.Exists(ready));
+        var status = File.ReadAllText(Path.Combine(ready, "status.md"));
+        Assert.Contains("Delivery status: `delivery-failed`", status);
+        Assert.Contains("Envelope attempt: 1/2", status);
+        Assert.Contains(fenceBranch, status);
+        Assert.Contains("automatically requeued to `2-ready`", status);
         Assert.DoesNotContain("cannot be materialized", status, StringComparison.OrdinalIgnoreCase);
-        var timeline = File.ReadAllText(Path.Combine(escalated, "logs", "timeline.jsonl"));
-        Assert.Contains("\"status\":\"unverified\"", timeline);
+        var retryPrompt = File.ReadAllText(Path.Combine(ready, "prompt.md"));
+        Assert.Contains("Automatic remote delivery retry", retryPrompt);
+        Assert.Contains(fenceBranch, retryPrompt);
+        Assert.Contains("BaseSha", retryPrompt);
+        using var taskJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(ready, "task.json")));
+        var failureState = taskJson.RootElement.GetProperty("remoteDeliveryFailure");
+        Assert.Equal("delivery-failed", failureState.GetProperty("status").GetString());
+        Assert.Equal(1, failureState.GetProperty("consecutiveAttempts").GetInt32());
+        Assert.Equal(fenceBranch, failureState.GetProperty("fenceBranch").GetString());
+        var timeline = File.ReadAllText(Path.Combine(ready, "logs", "timeline.jsonl"));
+        Assert.Contains("\"status\":\"delivery-failed\"", timeline);
+        Assert.Contains("\"deliveryAction\":\"requeue\"", timeline);
         Assert.DoesNotContain("\"status\":\"done\"", timeline);
         Assert.Empty(factory.Services.GetRequiredService<AttemptAuthorityService>()
             .TerminalizeLegacyReviewSubjectsWithoutResultEnvelope());
     }
 
     [Fact]
+    public async Task Second_consecutive_envelope_failure_escalates_as_unverified_delivery()
+    {
+        const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        const string firstFence = "agent-studio/salvage/runner-e2e/AGT-RUNNER-E2E/run-1/fence-1/589c462f";
+        const string secondFence = "agent-studio/salvage/runner-e2e/AGT-RUNNER-E2E/run-2/fence-2/589c462f";
+        SeedTask(TaskStates.Progress, TaskKey, "Repeated envelope failure", "Make a trivial change.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var firstLease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"),
+            CancellationToken.None);
+        Assert.True(firstLease.Granted);
+        var first = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            firstLease.Lease!.LeaseId,
+            firstLease.Lease.FencingToken,
+            RunnerId,
+            "Blocked",
+            Reason: "Stable still runs the pre-fix binary.",
+            Source: ProjectName,
+            SalvageBranch: firstFence,
+            SalvageCommitSha: resultSha,
+            ResultSha: resultSha,
+            AttemptChainId: firstLease.Lease.LeaseId,
+            Repository: "https://example.invalid/agent-studio.git",
+            AttemptId: firstLease.Lease.AttemptId,
+            AuthorityEpoch: firstLease.Lease.AuthorityEpoch,
+            IdempotencyKey: "first-envelope-failure",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                firstLease.Lease.AttemptId!,
+                firstLease.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            CancellationToken.None);
+        Assert.Equal(TaskStates.Ready, first!.TargetState);
+
+        var release = await client.ReleaseLeaseAsync(new RRelease(
+            TaskKey,
+            firstLease.Lease.LeaseId,
+            firstLease.Lease.FencingToken,
+            RunnerId,
+            firstLease.Lease.AttemptId,
+            firstLease.Lease.AuthorityEpoch,
+            "release-after-first-envelope-failure"), CancellationToken.None);
+        Assert.Equal("Released", release.Outcome);
+
+        var secondLease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"),
+            CancellationToken.None);
+        Assert.True(secondLease.Granted);
+        var moved = await factory.Services.GetRequiredService<TaskTransitionService>().MoveAsync(
+            TaskKey,
+            TaskStates.Progress,
+            _watchPath,
+            CancellationToken.None,
+            cause: "remote-runner:test-second-envelope-attempt",
+            authorityWrite: new AttemptWriteReference(
+                secondLease.Lease!.AttemptId!,
+                secondLease.Lease.FencingToken,
+                secondLease.Lease.AuthorityEpoch,
+                "lane-claim:second-envelope-attempt"),
+            suppressProductExecution: true);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+
+        var second = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            secondLease.Lease.LeaseId,
+            secondLease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            SalvageBranch: secondFence,
+            SalvageCommitSha: resultSha,
+            ResultSha: resultSha,
+            AttemptChainId: secondLease.Lease.LeaseId,
+            Repository: "https://example.invalid/agent-studio.git",
+            AttemptId: secondLease.Lease.AttemptId,
+            AuthorityEpoch: secondLease.Lease.AuthorityEpoch,
+            IdempotencyKey: "second-envelope-failure",
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                secondLease.Lease.AttemptId!,
+                secondLease.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            CancellationToken.None);
+
+        Assert.NotNull(second);
+        Assert.Equal("delivery-failed", second!.Outcome);
+        Assert.Equal(TaskStates.Escalated, second.TargetState);
+        var escalated = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
+        var status = File.ReadAllText(Path.Combine(escalated, "status.md"));
+        Assert.Contains(firstFence, status);
+        Assert.Contains(secondFence, status);
+        Assert.Contains("Envelope attempt: 2/2", status);
+        Assert.Contains("category `unverified-delivery`", status);
+        using var taskJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(escalated, "task.json")));
+        Assert.Equal(
+            2,
+            taskJson.RootElement
+                .GetProperty("remoteDeliveryFailure")
+                .GetProperty("consecutiveAttempts")
+                .GetInt32());
+        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, ProjectName));
+        Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
+        Assert.Contains("[unverified-delivery]", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Remote_blocked_without_reason_goes_to_escalated_with_a_stated_diagnostic()
     {
+        const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
+        const string baseSha = "4136f00d4136f00d4136f00d4136f00d4136f00d";
         SeedTask(TaskStates.Progress, TaskKey, "Remote blocked", "Try the requested operation.");
 
         using var factory = BuildFactory();
@@ -597,9 +736,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "Blocked",
             Reason: null,
             Source: ProjectName,
+            ResultSha: resultSha,
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
-            IdempotencyKey: "blocked-without-reason"), CancellationToken.None);
+            IdempotencyKey: "blocked-without-reason",
+            BaseSha: baseSha,
+            ImmutableResultRef: Contract.FencedGitRefs.ImmutableResult(
+                lease.Lease.AttemptId!,
+                lease.Lease.FencingToken,
+                resultSha),
+            ArtifactManifestDigest:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), CancellationToken.None);
 
         Assert.NotNull(completion);
         Assert.Equal(TaskStates.Escalated, completion!.TargetState);
