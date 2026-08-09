@@ -83,14 +83,13 @@ public sealed record RawSourceEvent
 }
 
 /// <summary>
-/// Per-projection context: which job + which project the events belong to.
+/// Per-projection context for the task whose events are being rendered.
 /// Carries enough to resolve relative image paths against the right API URL.
 /// </summary>
 public sealed record ImageContext
 {
     public string JobId { get; init; } = "";
     public string? WatchPath { get; init; }
-    public string? ProjectName { get; init; }
 }
 
 /// <summary>

@@ -9,7 +9,6 @@ namespace AgentStudio.Cli;
 /// Rules (matches the F22 prompt):
 /// <list type="bullet">
 /// <item>relative path under <c>attachments/</c> → <c>/api/tasks/{jobId}/attachments/...</c></item>
-/// <item>relative path under <c>chat-attachments/</c> → <c>/api/runner/{project}/orchestrator-chat/attachments/...</c></item>
 /// <item>top-level relative path under <c>results/</c> → <c>/api/tasks/{jobId}/results/...</c></item>
 /// <item>nested relative path under <c>results/</c> → <c>/api/tasks/{jobId}/screenshot?path=...</c></item>
 /// <item>absolute <c>http(s)://</c> URLs are passed through (sanitizer enforces scheme)</item>
@@ -95,13 +94,6 @@ public static partial class ImageUrlRewriter
             }
             return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/screenshot?path={Uri.EscapeDataString(rest)}{WatchPathQuery(ctx, '&')}";
         }
-        if (trimmed.StartsWith("chat-attachments/", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(ctx.ProjectName)) return null;
-            var rest = trimmed["chat-attachments/".Length..];
-            return $"/api/runner/{Uri.EscapeDataString(ctx.ProjectName)}/orchestrator-chat/attachments/{EscapePath(rest)}";
-        }
-
         // Bare filename (no folder prefix): assume it belongs to the job
         // attachments folder. That matches how the activity-log parser has
         // emitted screenshot paths historically.

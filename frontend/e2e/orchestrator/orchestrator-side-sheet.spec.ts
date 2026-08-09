@@ -68,8 +68,11 @@ test.describe('Orchestrator side sheet', () => {
     await expect(composer).toBeEnabled();
     await expect(composer).toHaveAttribute(
       'placeholder',
-      /Ask the orchestrator/
+      /Ask a question/
     );
+    await expect(sheet.getByRole('heading', { name: 'Chat' })).toBeVisible();
+    await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+    await expect(page.getByTestId('chat-toolbar-routing')).toHaveCount(0);
 
     // Studio uses the standard CAC composer/footer with no host-only task
     // conversion controls or duplicate /task button.

@@ -115,7 +115,7 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
             NullLogger<OrchestratorChatService>.Instance);
 
         var req = new SendOrchestratorChatRequest(
-            "Hi", Attachments: null, Model: "gpt-5.4-mini", ThinkingLevel: "low");
+            "Hi", Model: "gpt-5.4-mini", ThinkingLevel: "low");
 
         // Act
         var reply = await service.SendAsync("project-a", _watchPath, req, CancellationToken.None);

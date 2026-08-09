@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import * as path from 'node:path';
-import { setTheme } from '../helpers/theme';
+import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 const PROJECT = 'model-picker-project';
 const TASK_KEY = 'AGT-2163';
@@ -117,6 +117,71 @@ async function choose(page: Page, model: string, reasoning: string) {
   await expect(trigger).toContainText(reasoning);
 }
 
+test('attachment-free composer collapses its toolbar and keeps the model selector', async ({ page }, testInfo) => {
+  await stubWorkspace(page);
+  await page.addInitScript(({ project }) => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1,
+    tabs: [{ kind: 'board', projectName: project }],
+    activeKey: `board:${project}`,
+  })), { project: PROJECT });
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.addStyleTag({
+    content: [
+      '[data-testid="error-dialog-overlay"],',
+      '[data-testid="offline-banner"],',
+      'app-notification-stack,',
+      'app-notification-stack * { pointer-events: none !important; display: none !important; }',
+    ].join('\n'),
+  });
+  await dismissDevErrorDialog(page);
+  await page.getByTestId('orch-side-sheet-toggle').click();
+
+  const sheet = page.getByTestId('orch-side-sheet');
+  const input = page.getByTestId('chat-input');
+  await expect(sheet.getByRole('heading', { name: 'Chat' })).toBeVisible();
+  await expect(input).toHaveAttribute('placeholder', /Ask a question/);
+  await expect(page.getByTestId('chat-toolbar-routing')).toHaveCount(0);
+  await expect(page.getByTestId('chat-toolbar-reference')).toHaveCount(0);
+  await expect(page.getByTestId('chat-toolbar-mention')).toHaveCount(0);
+  await expect(page.getByTestId('chat-toolbar-fork')).toHaveCount(0);
+  await expect(page.getByTestId('chat-toolbar-search')).toHaveCount(0);
+  await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+  await expect(sheet.locator('input[type="file"]')).toHaveCount(0);
+  await expect(page.getByTestId('cac-model-selector-trigger')).toBeVisible();
+
+  let attachmentRequests = 0;
+  page.on('request', request => {
+    if (request.url().includes('/orchestrator-chat/attachments')) attachmentRequests += 1;
+  });
+  await input.evaluate(element => {
+    const clipboard = new DataTransfer();
+    clipboard.items.add(new File(['clipboard image'], 'clipboard.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: clipboard,
+    }));
+  });
+  await sheet.evaluate(element => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['dropped image'], 'dropped.png', { type: 'image/png' }));
+    element.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: transfer,
+    }));
+  });
+  await expect(page.getByTestId('chat-drafts')).toHaveCount(0);
+  expect(attachmentRequests).toBe(0);
+
+  const results = process.env.JOB_RESULTS_DIR ?? testInfo.outputPath('evidence');
+  mkdirSync(results, { recursive: true });
+  await setTheme(page, 'light');
+  await sheet.screenshot({ path: path.join(results, 'chat-composer-no-upload-light--mocked.png') });
+  await setTheme(page, 'dark');
+  await sheet.screenshot({ path: path.join(results, 'chat-composer-no-upload-dark--mocked.png') });
+});
+
 test('full live GPT picker persists across Board and Task contexts', async ({ page }, testInfo) => {
   await stubWorkspace(page);
   await page.addInitScript(({ project }) => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
@@ -135,29 +200,24 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   // letting it intercept unrelated tab and context-picker interactions.
   await page.addStyleTag({
     content: [
+      '[data-testid="error-dialog-overlay"],',
       '[data-testid="offline-banner"],',
       'app-notification-stack,',
-      'app-notification-stack * { pointer-events: none !important; }',
+      'app-notification-stack * { pointer-events: none !important; display: none !important; }',
     ].join('\n'),
   });
-  await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
+  await dismissDevErrorDialog(page);
   await page.getByTestId('orch-side-sheet-toggle').click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
   await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
-  await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Inherited Codex default');
+  await expect(page.getByTestId('chat-toolbar-routing')).toHaveCount(0);
+  await expect(page.getByTestId('chat-attach')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-draft-actions')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-make-task')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-make-task-from-yours')).toHaveCount(0);
 
   const input = page.getByTestId('chat-input');
   await input.fill('/bug preserved picker draft');
-  await page.getByTestId('chat-attach').click();
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'picker-proof.png', mimeType: 'image/png', buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-      'base64'),
-  });
-  await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
 
   await page.getByTestId('cac-model-selector-trigger').click();
   await expect(page.getByTestId('cac-model-selector-picker-cli-claude')).toBeDisabled();
@@ -188,13 +248,11 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   expect(modelListLayout.maskImage).toContain('linear-gradient');
   await page.getByTestId('cac-model-selector-picker-cancel').click();
   await expect(input).toHaveValue('/bug preserved picker draft');
-  await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
   await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
   await input.fill('');
-  await page.getByTestId('chat-drafts').getByRole('button').click();
 
   await choose(page, 'gpt-5.6-sol', 'xhigh');
-  await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Operator choice');
+  await expect(page.getByTestId('chat-toolbar-routing')).toHaveCount(0);
   await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
   await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Deck');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');

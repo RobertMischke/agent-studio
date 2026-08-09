@@ -339,7 +339,7 @@ test.describe('Orchestrator context header · where am I', () => {
     expect(unexpectedRequests).toEqual([]);
   });
 
-  test('standard footer receives Board context and keeps canonical keyboard order in light theme', async ({ page }) => {
+  test('standard footer receives Board context and keeps attachment-free keyboard order in light theme', async ({ page }) => {
     await seedActiveTab(page, { kind: 'board', projectName: PROJECT }, `board:${PROJECT}`, 'light');
     const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
     await openSideSheet(page, false);
@@ -357,12 +357,10 @@ test.describe('Orchestrator context header · where am I', () => {
 
     const input = page.getByTestId('chat-input');
     await input.fill('Keyboard order draft');
+    await expect(page.getByTestId('cac-model-selector-trigger')).toBeVisible();
+    await expect(page.getByTestId('chat-toolbar-search')).toHaveCount(0);
+    await expect(page.getByTestId('chat-attach')).toHaveCount(0);
     await input.focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
-    await input.focus();
-    await page.keyboard.press('Tab');
-    await expect(page.getByTestId('chat-attach')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('chat-send')).toBeFocused();
 

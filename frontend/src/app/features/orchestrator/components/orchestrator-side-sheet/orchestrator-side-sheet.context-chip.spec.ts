@@ -96,6 +96,21 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect(root.querySelector('[data-testid="chat-toolbar-task"]')).toBeNull();
   });
 
+  it('keeps the model selector interactive while upload and toolbar controls stay absent', async () => {
+    const fixture = await makeFixture();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[data-testid="chat-attach"]')).toBeNull();
+    expect(root.querySelector('[data-testid="chat-toolbar-routing"]')).toBeNull();
+    expect(root.querySelector('[data-testid="chat-toolbar-reference"]')).toBeNull();
+
+    (root.querySelector('[data-testid="cac-model-selector-trigger"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="cac-model-selector-picker"]')).not.toBeNull();
+  });
+
   it('forwards live active-tab context without remounting CAC or losing its draft', async () => {
     const fixture = await makeFixture();
     fixture.componentRef.setInput('composerContext', { project: 'Agent Studio', surface: 'Board' });

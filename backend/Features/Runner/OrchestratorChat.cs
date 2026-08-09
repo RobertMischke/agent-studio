@@ -76,13 +76,7 @@ public class OrchestratorChat
             var path = ResolveContextPath(watchPath, context);
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
-            // Strip inline-base64 / mime before persisting: the jsonl log is
-            // the long-lived audit trail and embedding multi-MB base64 blobs
-            // in it makes every subsequent read O(N) over the image bytes.
-            // The frontend can still render the picture via RelativePath
-            // through the existing GET attachments route.
-            var persisted = StripInlineBytes(turn);
-            var line = JsonSerializer.Serialize(persisted, WriteOpts) + Environment.NewLine;
+            var line = JsonSerializer.Serialize(turn, WriteOpts) + Environment.NewLine;
             File.AppendAllText(path, line, Encoding.UTF8);
 
             // Slice D mirror: also write the per-turn markdown file so the
@@ -92,7 +86,7 @@ public class OrchestratorChat
             // is per-project, so folding task-context turns into it would
             // cross-contaminate the board's history.
             if (!IsTaskContext(context))
-                MirrorToProjectChat(watchPath, persisted);
+                MirrorToProjectChat(watchPath, turn);
             return true;
         }
         catch (Exception ex)
@@ -100,22 +94,6 @@ public class OrchestratorChat
             _logger.LogWarning(ex, "Failed to append orchestrator chat turn under {WatchPath}", watchPath);
             return false;
         }
-    }
-
-    /// <summary>
-    /// Drop the in-flight inline base64 / mime fields so the on-disk audit
-    /// log stays small. Returns the input unchanged when no attachment
-    /// carries inline bytes (the common case before the multimodal path).
-    /// </summary>
-    internal static OrchestratorChatTurn StripInlineBytes(OrchestratorChatTurn turn)
-    {
-        if (turn.Attachments == null || turn.Attachments.Count == 0) return turn;
-        var hasInline = turn.Attachments.Any(a => !string.IsNullOrEmpty(a.InlineBase64));
-        if (!hasInline) return turn;
-        var stripped = turn.Attachments
-            .Select(a => new OrchestratorChatAttachment { Alt = a.Alt, RelativePath = a.RelativePath })
-            .ToList();
-        return turn with { Attachments = stripped };
     }
 
     private void MirrorToProjectChat(string watchPath, OrchestratorChatTurn turn)
@@ -211,82 +189,6 @@ public class OrchestratorChat
         return Path.Combine(watchPath, ".orchestrator", "context-chats", context!.Encode() + ".jsonl");
     }
 
-    /// <summary>
-    /// Persist a chat-composer image under
-    /// <c>&lt;watchPath&gt;/.orchestrator/chat-attachments/&lt;id&gt;.&lt;ext&gt;</c>.
-    /// Mirrors the per-job <c>attachments/</c> conventions (10 MB cap,
-    /// PNG / JPG / GIF / WEBP only) so the user's chat drafts and task
-    /// drafts behave the same way.
-    /// </summary>
-    public (string? FileName, string? RelativePath, string? Error) SaveAttachment(
-        string watchPath,
-        byte[] content,
-        string? originalFileName,
-        string? contentType)
-    {
-        if (string.IsNullOrWhiteSpace(watchPath)) return (null, null, "Missing watch path");
-        if (content.Length == 0) return (null, null, "Empty file");
-        if (content.Length > 10 * 1024 * 1024) return (null, null, "File too large (max 10 MB)");
-
-        var ext = ResolveImageExtension(originalFileName, contentType);
-        if (ext == null) return (null, null, "Unsupported file type - only png, jpg, gif, webp allowed");
-
-        var dir = Path.Combine(watchPath, ".orchestrator", "chat-attachments");
-        Directory.CreateDirectory(dir);
-
-        string fileName;
-        string fullPath;
-        do
-        {
-            fileName = $"{Guid.NewGuid():N}"[..8] + ext;
-            fullPath = Path.Combine(dir, fileName);
-        } while (File.Exists(fullPath));
-
-        File.WriteAllBytes(fullPath, content);
-        return (fileName, $"chat-attachments/{fileName}", null);
-    }
-
-    /// <summary>
-    /// Resolve a previously-saved chat attachment for serving back to the
-    /// frontend. Returns null if the file is gone or escapes the chat
-    /// attachments directory.
-    /// </summary>
-    public (string? Path, string? ContentType) ResolveAttachment(string watchPath, string fileName)
-    {
-        if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(fileName)) return (null, null);
-        if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\')) return (null, null);
-
-        var dir = Path.Combine(watchPath, ".orchestrator", "chat-attachments");
-        var full = Path.Combine(dir, fileName);
-        if (!File.Exists(full)) return (null, null);
-        var ct = Path.GetExtension(fileName).ToLowerInvariant() switch
-        {
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            _ => "application/octet-stream"
-        };
-        return (full, ct);
-    }
-
-    private static string? ResolveImageExtension(string? originalFileName, string? contentType)
-    {
-        var ext = string.IsNullOrWhiteSpace(originalFileName)
-            ? null
-            : Path.GetExtension(originalFileName).ToLowerInvariant();
-
-        if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp") return ext == ".jpeg" ? ".jpg" : ext;
-
-        return contentType?.ToLowerInvariant() switch
-        {
-            "image/png" => ".png",
-            "image/jpeg" or "image/jpg" => ".jpg",
-            "image/gif" => ".gif",
-            "image/webp" => ".webp",
-            _ => null
-        };
-    }
 }
 
 /// <summary>
@@ -321,7 +223,6 @@ public record OrchestratorChatTurn
     /// </summary>
     public string? ErrorDetail { get; init; }
 
-    public List<OrchestratorChatAttachment>? Attachments { get; init; }
 }
 
 public sealed record OrchestratorContextReceipt(
@@ -335,42 +236,6 @@ internal sealed record OrchestratorChatPromptComposition(
     string Prompt,
     OrchestratorContextReceipt ContextReceipt);
 
-/// <summary>
-/// Reference to a file attachment that was part of the user's message.
-/// Today the only carrier is an image stored in the watch path's
-/// <c>.orchestrator/attachments/</c> folder; <see cref="RelativePath"/> is
-/// the path the frontend resolves through the existing image-serving route.
-///
-/// <para>
-/// <see cref="InlineBase64"/> + <see cref="MimeType"/> are the multimodal
-/// fast path: when the frontend ships the raw image bytes, the backend
-/// hands them straight to the CLI as a Claude image content block via the
-/// <c>--input-format stream-json</c> envelope, so the model sees the image
-/// in the same message it sees the text - no Read tool call required.
-/// These fields are stripped before the turn is appended to the per-project
-/// chat jsonl so the audit log stays text-only and small; the persisted
-/// <see cref="RelativePath"/> (when present) remains the long-lived
-/// reference.
-/// </para>
-/// </summary>
-public record OrchestratorChatAttachment
-{
-    public string Alt { get; init; } = "";
-    public string RelativePath { get; init; } = "";
-
-    /// <summary>
-    /// Base64-encoded image bytes for the multimodal fast path. Set by the
-    /// frontend when an image is pasted into the composer. Not persisted.
-    /// </summary>
-    public string? InlineBase64 { get; init; }
-
-    /// <summary>
-    /// MIME type of <see cref="InlineBase64"/> (e.g. <c>image/png</c>). Not
-    /// persisted; only meaningful in flight.
-    /// </summary>
-    public string? MimeType { get; init; }
-}
-
 public static class OrchestratorChatRoles
 {
     public const string User = "user";
@@ -379,7 +244,6 @@ public static class OrchestratorChatRoles
 
 public sealed record SendOrchestratorChatRequest(
     string Text,
-    List<OrchestratorChatAttachment>? Attachments,
     ChatNavigationContext? NavigationContext = null,
     string? Model = null,
     string? ThinkingLevel = null,
@@ -531,8 +395,7 @@ public class OrchestratorChatService
         var userTurn = new OrchestratorChatTurn
         {
             Role = OrchestratorChatRoles.User,
-            Text = req.Text,
-            Attachments = req.Attachments
+            Text = req.Text
         };
         _chat.Append(watchPath, userTurn, context);
 
@@ -828,28 +691,6 @@ public class OrchestratorChatService
         sb.AppendLine(req.Text);
         sb.AppendLine();
 
-        if (req.Attachments != null && req.Attachments.Count > 0)
-        {
-            var inlineCount = req.Attachments.Count(a => !string.IsNullOrEmpty(a.InlineBase64));
-            if (inlineCount > 0)
-            {
-                // Inline images travel as Anthropic content blocks alongside
-                // the text in the same user message - the model has the
-                // pixels in context already. Telling it that explicitly
-                // avoids a wasted Read tool call against the archived copy.
-                sb.AppendLine($"User attached {req.Attachments.Count} image(s); {inlineCount} delivered as inline content block(s) above this text. The archived copies (for reference) are:");
-            }
-            else
-            {
-                sb.AppendLine($"User attached {req.Attachments.Count} image(s):");
-            }
-            foreach (var a in req.Attachments)
-            {
-                sb.AppendLine($"- {a.Alt} ({a.RelativePath})");
-            }
-            sb.AppendLine();
-        }
-
         sb.AppendLine("Reply directly to the user about \"" + projectName + "\". Be concrete and specific.");
         sb.AppendLine("Use the word \"tasks\", not \"jobs\".");
         sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
@@ -1059,26 +900,4 @@ public class OrchestratorChatService
             repository.DefaultBranch);
     }
 
-    /// <summary>
-    /// Lift the inline-base64 attachments out of the request and into the
-    /// shape <see cref="OrchestratorRunner"/> hands to the Claude one-shot
-    /// driver. Returns null when no attachment carried inline bytes, so
-    /// the caller can pass null through to the existing text-only path.
-    /// Strips entries that look malformed (empty base64 / non-image mime)
-    /// rather than passing them through and letting the CLI fail later.
-    /// </summary>
-    internal static IReadOnlyList<CliOneShotImage>? ExtractInlineImages(
-        IEnumerable<OrchestratorChatAttachment>? attachments)
-    {
-        if (attachments == null) return null;
-        var result = new List<CliOneShotImage>();
-        foreach (var a in attachments)
-        {
-            if (string.IsNullOrWhiteSpace(a.InlineBase64)) continue;
-            var mime = string.IsNullOrWhiteSpace(a.MimeType) ? "image/png" : a.MimeType!;
-            if (!mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) continue;
-            result.Add(new CliOneShotImage(a.InlineBase64!, mime));
-        }
-        return result.Count == 0 ? null : result;
-    }
 }

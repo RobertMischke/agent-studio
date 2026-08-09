@@ -181,7 +181,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         var reply = await service.SendAsync(
             "project-a", _watchPath,
-            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            new SendOrchestratorChatRequest("Hi"),
             CancellationToken.None);
 
         Assert.Contains("codex: Not inside a trusted directory", reply.ErrorMessage);
@@ -239,7 +239,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
         // Act
         var reply = await service.SendAsync(
             "project-a", _watchPath,
-            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            new SendOrchestratorChatRequest("Hi"),
             CancellationToken.None);
 
         // Assert: the persisted turn carries the friendly message; the
@@ -305,7 +305,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         var reply = await service.SendAsync(
             "project-a", _watchPath,
-            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            new SendOrchestratorChatRequest("Hi"),
             CancellationToken.None);
 
         Assert.NotNull(reply.ErrorMessage);

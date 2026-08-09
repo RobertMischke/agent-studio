@@ -131,7 +131,6 @@ export interface OrchestratorChatTurn {
   tokenUsage?: OrchestratorTokenUsage | null;
   errorMessage?: string | null;
   contextReceipt?: OrchestratorContextReceipt | null;
-  attachments?: OrchestratorChatAttachment[] | null;
 }
 
 /** Context blocks the backend composed into one orchestrator reply request. */
@@ -141,21 +140,6 @@ export interface OrchestratorContextReceipt {
   taskKey?: string | null;
   includedBlocks: string[];
   capturedAt: string;
-}
-
-export interface OrchestratorChatAttachment {
-  alt: string;
-  relativePath: string;
-  /**
-   * Base64-encoded image bytes for the multimodal fast path. When set, the
-   * backend hands the bytes straight to Claude as an image content block in
-   * the same user message as the text - no Read tool call needed. Optional;
-   * the field is dropped before the turn is persisted so the audit log
-   * stays text-only.
-   */
-  inlineBase64?: string | null;
-  /** MIME type of {@link inlineBase64}, e.g. `image/png`. */
-  mimeType?: string | null;
 }
 
 export interface OrchestratorChatResponse {

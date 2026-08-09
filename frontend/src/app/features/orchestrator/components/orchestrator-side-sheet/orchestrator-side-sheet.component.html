@@ -8,7 +8,7 @@
        (mousedown)="startResize($event)"></div>
 }
 
-<app-sidesheet title="Orchestrator"
+<app-sidesheet title="Chat"
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
@@ -169,9 +169,8 @@
               emptyState=""
               [pending]="sending()"
               [disabled]="sending()"
-              [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
-              [toolbarStart]="composerToolbarStart"
-              [routingLabel]="composerRoutingLabel()"
+              [allowAttachments]="false"
+              [placeholder]="'Ask a question... try /bug &lt;description&gt; to file a bug'"
               [modelControl]="composerModel.control()"
               (submitMessage)="onSubmit($event)"
               (modelCommit)="onModelCommit($event)"
