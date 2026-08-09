@@ -49,6 +49,25 @@ const HEAD_ONLY = `# Status
 - Solution: Re-toned the surface.
 `;
 
+const SCAFFOLD = `<!-- agent-studio:result-scaffold -->
+# Status
+
+- Result: Success
+- Case: generic
+- Deliverables: [results/report.html](results/report.html)
+- Provenance: Synthesized by Agent Studio because no generated status.md was available.
+
+## Overview
+- Problem: \`status.md\` was missing for \`C:\\Projects\\workspace::raw-job-id\`.
+- Solution: This honest scaffold exposes the recorded outcome and existing evidence.
+
+## What Was Done
+- The task reached \`5-human-review\`.
+
+## Open Items
+- None recorded in this synthesized scaffold.
+`;
+
 async function build(d: TaskDetail, v: ProtocolVerdict) {
   await TestBed.configureTestingModule({
     imports: [ResultViewComponent],
@@ -152,5 +171,42 @@ describe('ResultViewComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     // HEAD_ONLY has no body beyond the overview, so the blurb leads.
     expect(el.querySelector('[data-testid="result-overview-blurb"]')).not.toBeNull();
+  });
+
+  it('renders one scaffold origin notice and keeps only the evidence detail', async () => {
+    const fixture = await build(detail(SCAFFOLD, {
+      key: 'AGT-2514',
+      taskKey: 'C:\\Projects\\workspace::raw-job-id',
+      lastActivity: '2026-08-08T21:59:26.180Z',
+    }), verdict());
+    const el = fixture.nativeElement as HTMLElement;
+
+    const notice = el.querySelector('[data-testid="result-scaffold-notice"]');
+    expect(notice?.textContent).toContain(
+      'The run did not write status.md. This report was generated automatically from task.json and the artifacts.',
+    );
+    expect(notice?.textContent).toContain('2026-08-08 21:59Z');
+    expect(notice?.textContent).toContain('AGT-2514');
+    expect(el.querySelector('[data-testid="result-overview"]')).toBeNull();
+    expect(el.querySelector('[data-testid="result-detail"]')?.textContent).toContain('What Was Done');
+    expect(el.querySelector('[data-testid="result-detail"]')?.textContent).toContain('Open Items');
+    expect(el.textContent).not.toContain('C:\\Projects');
+    expect(el.textContent).not.toContain('This honest scaffold exposes');
+    expect(el.textContent).not.toContain('agent-studio:result-scaffold');
+  });
+
+  it('opens the scaffold deliverable from the artifacts link', async () => {
+    const fixture = await build(detail(SCAFFOLD, {
+      key: 'AGT-2514',
+      lastActivity: '2026-08-08T21:59:26.180Z',
+    }), verdict());
+    let opened: { path: string; line: number | null } | null = null;
+    fixture.componentInstance.openSource.subscribe((ref) => opened = ref);
+
+    const link = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLAnchorElement>('[data-testid="result-scaffold-artifacts"]');
+    link?.click();
+
+    expect(opened).toEqual({ path: 'results/report.html', line: null });
   });
 });

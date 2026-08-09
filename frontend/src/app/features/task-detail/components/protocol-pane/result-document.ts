@@ -42,9 +42,21 @@ export interface ResultOverview {
   synthesized: boolean;
 }
 
+/** Presentation-only provenance for an application-owned fallback Result. */
+export interface ResultScaffoldNotice {
+  /** Stable card key when the payload carries one, never the composite task id. */
+  cardKey: string | null;
+  /** Best available timestamp for the scaffold file's creation or refresh. */
+  generatedAt: string | null;
+  /** Recorded deliverable linked from the scaffold header, when present. */
+  primaryArtifact: string | null;
+}
+
 export interface ResultDocument {
   case: ResultCaseResult;
   overview: ResultOverview;
+  /** Present only for the marked deterministic fallback status.md. */
+  scaffold: ResultScaffoldNotice | null;
   metrics: ResultMetric[];
   /** Markdown for the detail layer: `# Status` + `## Overview` stripped out. */
   detailMarkdown: string;
@@ -57,6 +69,8 @@ export interface ResultDocument {
 }
 
 const CODE_REVIEW_GRADE_RE = /^code-review:grade-([abcd])$/i;
+const RESULT_SCAFFOLD_MARKER_RE = /<!--\s*agent-studio:result-scaffold\s*-->/i;
+const CARD_KEY_RE = /^[A-Z][A-Z0-9]{1,9}-\d+$/i;
 
 /**
  * Pull an optional `# Status` header metric line (`- Files: 5`, `- Tests: 12
@@ -212,6 +226,29 @@ function synthesizeOverview(detail: TaskDetail, markdown: string): ResultOvervie
   return { problem: title, solution, synthesized: true };
 }
 
+function parseScaffoldNotice(detail: TaskDetail, markdown: string): ResultScaffoldNotice | null {
+  if (!RESULT_SCAFFOLD_MARKER_RE.test(markdown)) return null;
+
+  const info = detail.info;
+  const cardKey = [info.key, info.displayKey, info.taskKey]
+    .map((value) => value?.trim() ?? '')
+    .find((value) => CARD_KEY_RE.test(value))
+    ?.toUpperCase() ?? null;
+  const generatedAt = info.lastActivity?.trim()
+    || info.enteredLaneAt?.trim()
+    || info.createdAt?.trim()
+    || null;
+  const deliverables = parseHeaderMetric(markdown, 'Deliverables') ?? '';
+  const link = /\[[^\]]+\]\(([^)]+)\)/.exec(deliverables)?.[1]?.trim() ?? '';
+  const normalizedLink = link.replace(/\\/g, '/').replace(/^\.\//, '');
+  const primaryArtifact = /^(?:results|attachments)\/[^?#]+$/i.test(normalizedLink)
+    && !normalizedLink.split('/').includes('..')
+    ? normalizedLink
+    : null;
+
+  return { cardKey, generatedAt, primaryArtifact };
+}
+
 /** Drop the `# Status` block and the `## Overview` block from the detail markdown. */
 function stripHeaderAndOverview(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
@@ -231,7 +268,10 @@ function stripHeaderAndOverview(markdown: string): string {
   }
   let start = 0;
   while (start < out.length && out[start].trim() === '') start++;
-  return out.slice(start).join('\n').trimEnd();
+  return out.slice(start)
+    .join('\n')
+    .replace(RESULT_SCAFFOLD_MARKER_RE, '')
+    .trim();
 }
 
 function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: string): ResultMetric[] {
@@ -319,7 +359,10 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
  */
 export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict): ResultDocument {
   const markdown = detail.statusMarkdown ?? '';
-  const overview = parseOverviewSection(markdown) ?? synthesizeOverview(detail, markdown);
+  const scaffold = parseScaffoldNotice(detail, markdown);
+  const overview = scaffold
+    ? { problem: null, solution: null, synthesized: false }
+    : parseOverviewSection(markdown) ?? synthesizeOverview(detail, markdown);
   const detailMarkdown = stripHeaderAndOverview(markdown);
   const caseResult = classifyResultCase({
     hint: parseCaseHint(markdown),
@@ -333,6 +376,7 @@ export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict
   return {
     case: caseResult,
     overview,
+    scaffold,
     metrics: buildMetrics(detail, verdict, markdown),
     detailMarkdown,
     openItemsCount: countBullets(sectionBody(markdown, 'Open Items')),

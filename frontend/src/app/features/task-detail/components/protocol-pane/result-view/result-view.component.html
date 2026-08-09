@@ -58,6 +58,34 @@
       </div>
     </header>
 
+    @if (d.scaffold; as scaffold) {
+      <aside class="result__scaffold" data-testid="result-scaffold-notice">
+        <span class="result__scaffold-dot" aria-hidden="true"></span>
+        <div class="result__scaffold-content">
+          <p class="result__scaffold-message">
+            The run did not write <code>status.md</code>. This report was generated automatically from
+            <code>task.json</code> and the artifacts.
+          </p>
+          <div class="result__scaffold-meta">
+            @if (scaffold.generatedAt) {
+              <time [attr.datetime]="scaffold.generatedAt">
+                Generated {{ formatScaffoldTime(scaffold.generatedAt) }}
+              </time>
+            }
+            @if (scaffold.cardKey) {
+              <span class="result__scaffold-separator" aria-hidden="true">·</span>
+              <code data-testid="result-scaffold-card-key">{{ scaffold.cardKey }}</code>
+            }
+            <span class="result__scaffold-separator" aria-hidden="true">·</span>
+            <a class="result__scaffold-link"
+               data-testid="result-scaffold-artifacts"
+               [attr.href]="scaffold.primaryArtifact ? '#source:' + scaffold.primaryArtifact : '#artifacts'"
+               (click)="openScaffoldArtifacts($event, scaffold.primaryArtifact)">Open artifacts</a>
+          </div>
+        </div>
+      </aside>
+    }
+
     <!-- 2. Overview: the shareable "problem -> solution", laid out per case.
          data-layout drives visibly distinct arrangements (concept doc §8.3):
          sequence (arrow flow), before-after (two columns), blocker (warn

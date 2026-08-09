@@ -440,6 +440,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   onResultMetricNavigate(metricId: string): void {
     if (metricId === 'grade') this.layout.openPromptTab('description', 'codeReview');
+    if (metricId === 'artifacts') this.layout.openPromptTab('description');
   }
 
   /**

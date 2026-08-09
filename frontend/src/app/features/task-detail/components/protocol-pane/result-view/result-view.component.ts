@@ -6,6 +6,7 @@ import { buildResultDocument } from '../result-document';
 import { RESULT_CASE_META } from '../result-case';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import type { GeneratedFileProvenanceView } from '../../generated-file-provenance.util';
+import { formatDateTimeUtc } from '../../../../../services/format.util';
 
 /**
  * The Result view (Protocol -> Result redesign).
@@ -68,5 +69,18 @@ export class ResultViewComponent {
 
   onOpenSource(ref: { path: string; line: number | null }): void {
     this.openSource.emit(ref);
+  }
+
+  formatScaffoldTime(value: string | null): string {
+    return formatDateTimeUtc(value);
+  }
+
+  openScaffoldArtifacts(event: Event, path: string | null): void {
+    event.preventDefault();
+    if (path) {
+      this.openSource.emit({ path, line: null });
+      return;
+    }
+    this.navigateMetric.emit('artifacts');
   }
 }

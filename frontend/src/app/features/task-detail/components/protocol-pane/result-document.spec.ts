@@ -87,6 +87,30 @@ const STATUS_LEGACY = `# Status
 - None.
 `;
 
+const STATUS_SCAFFOLD = `<!-- agent-studio:result-scaffold -->
+# Status
+
+- Result: Success
+- Case: generic
+- Grade: Not recorded
+- Deliverables: [results/report.html](results/report.html)
+- Integration: \`no-branch\` on \`develop\`
+- Provenance: Synthesized by Agent Studio after entering \`5-human-review\` because no generated status.md was available.
+
+## Overview
+
+- Problem: \`status.md\` was missing when task \`C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard::raw-job-id\` reached \`5-human-review\`.
+- Solution: This honest scaffold exposes the recorded outcome and existing evidence for a planning task.
+
+## What Was Done
+
+- The task reached \`5-human-review\`.
+
+## Open Items
+
+- None recorded in this synthesized scaffold.
+`;
+
 describe('codeReviewGradeFromTags', () => {
   it('reads the A-D grade from the code-review grade tag', () => {
     expect(codeReviewGradeFromTags(['x', 'code-review:grade-b', 'y'])).toBe('B');
@@ -222,5 +246,28 @@ describe('buildResultDocument', () => {
   it('leads with the blocked case when the verdict is a problem', () => {
     const doc = buildResultDocument(detail({ taskType: 'feature' }), verdict({ kind: 'problem', label: 'Blocked' }));
     expect(doc.case.case).toBe('blocked');
+  });
+
+  it('projects a marked transition scaffold as compact provenance without internal overview text', () => {
+    const d = detail({ statusMarkdown: STATUS_SCAFFOLD, title: 'Planning task' });
+    Object.assign(d.info, {
+      key: 'AGT-2514',
+      taskKey: 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard::raw-job-id',
+      lastActivity: '2026-08-08T21:59:26.180Z',
+    });
+
+    const doc = buildResultDocument(d, verdict());
+
+    expect(doc.scaffold).toEqual({
+      cardKey: 'AGT-2514',
+      generatedAt: '2026-08-08T21:59:26.180Z',
+      primaryArtifact: 'results/report.html',
+    });
+    expect(doc.overview).toEqual({ problem: null, solution: null, synthesized: false });
+    expect(doc.detailMarkdown).toContain('## What Was Done');
+    expect(doc.detailMarkdown).toContain('## Open Items');
+    expect(doc.detailMarkdown).not.toContain('agent-studio:result-scaffold');
+    expect(doc.detailMarkdown).not.toContain('C:\\Projects');
+    expect(doc.detailMarkdown).not.toContain('This honest scaffold exposes');
   });
 });

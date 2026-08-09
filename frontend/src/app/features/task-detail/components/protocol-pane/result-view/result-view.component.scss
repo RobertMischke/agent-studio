@@ -146,6 +146,69 @@
   }
 }
 
+// Application-owned fallback Results need one understandable provenance note.
+// The source status.md remains unchanged; only its marked internal overview is
+// replaced here. A quiet background and dot encode the informational state.
+.result__scaffold {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-3) 34%, var(--studio-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-accent-3) 7%, var(--studio-bg-elevated));
+  color: var(--studio-fg);
+}
+
+.result__scaffold-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: var(--studio-spacing-1);
+  border-radius: 50%;
+  background: var(--studio-accent-3);
+}
+
+.result__scaffold-content {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.result__scaffold-message {
+  margin: 0;
+  color: var(--studio-fg-strong, var(--studio-fg));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.result__scaffold-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-dim);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.result__scaffold-separator {
+  color: var(--studio-fg-muted);
+}
+
+.result__scaffold-link {
+  color: var(--studio-accent-3);
+  font-weight: 600;
+  text-underline-offset: 2px;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--studio-fg-strong);
+  }
+}
+
 // --- 2. Overview ------------------------------------------------------------
 // One card, four per-case arrangements (concept doc §8.3). The tone accent and
 // the outer card are shared; `data-layout` reshapes the inner flow so a bugfix
