@@ -142,6 +142,14 @@ test('screenshot tour — task detail + activity chat composer', async ({ page }
   await expect(compose.getByTestId('activity-chat-send')).toBeVisible();
   await page.waitForTimeout(400);
   await captureBoth(page, testInfo, 'task-detail-activity-chat-composer');
+
+  const gallery = page.getByTestId('conversation-artifact-gallery');
+  await expect(gallery).toBeVisible({ timeout: 10_000 });
+  await expect(gallery.getByTestId('artifact-gallery-thumbnail')).toHaveCount(8);
+  await expect(gallery.getByTestId('artifact-document-diff')).toBeVisible();
+  await expect(gallery.getByTestId('artifact-document-markdown')).toBeVisible();
+  await gallery.scrollIntoViewIfNeeded();
+  await captureBoth(page, testInfo, 'task-detail-activity-artifact-gallery');
 });
 
 test('screenshot tour — orchestrator chat (composer + conversation)', async ({ page }, testInfo) => {

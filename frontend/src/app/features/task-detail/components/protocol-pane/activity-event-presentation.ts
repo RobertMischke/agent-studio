@@ -1,5 +1,4 @@
 import type {
-  ArtifactImageEvent,
   ConversationEvent,
   SystemParserWarningEvent,
   SystemStatusEvent,
@@ -9,8 +8,14 @@ import type {
 } from 'coding-agent-chat/core';
 import type { CliOutputLine } from '../../../../models/task.model';
 import { resolveProtocolImageSrc } from './protocol-image-resolver';
+import {
+  artifactFromPath,
+  classifyArtifactPath,
+  groupPresentedArtifacts,
+  promoteMessageArtifactLines,
+  type PresentedArtifactEvent,
+} from './artifact-gallery/artifact-gallery.model';
 
-const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const TOKEN_TOTAL = /\bTurn completed\s*\(tokens:\s*([\d,_]+)\)/i;
 const FREE_COMPLETION_LINE = /^\s*(?:Session|Turn) completed(?:\s*\(tokens:\s*[\d,_]+\))?[.!]?\s*$/i;
 const REPOSITORY_SEGMENT = /(?:^|\/)(\.agents|backend(?:\.Tests)?|docs|frontend|prompts|runner|scripts)(\/.*)?$/i;
@@ -82,6 +87,11 @@ export function presentActivityEvents(
   const presented: ConversationEvent[] = [];
 
   for (const event of events) {
+    if (event.kind.startsWith('message.')) {
+      presented.push(...promoteMessageArtifactLines(event, jobId, watchPath));
+      continue;
+    }
+
     // projectConversation appends the open task itself as a final marker.
     // In a task-local Activity feed that repeats the surrounding card title
     // without representing a transition, which made it look like an
@@ -107,10 +117,10 @@ export function presentActivityEvents(
         capturedWorktreeRoot ?? watchPath,
         jobId,
       );
-      const imageArtifacts = (event.artifacts ?? []).filter((path) => IMAGE_EXTENSION.test(path));
-      const otherArtifacts = (event.artifacts ?? []).filter((path) => !IMAGE_EXTENSION.test(path));
+      const recognizedArtifacts = (event.artifacts ?? []).filter((path) => classifyArtifactPath(path));
+      const otherArtifacts = (event.artifacts ?? []).filter((path) => !classifyArtifactPath(path));
       presented.push({ ...toolBurst, artifacts: otherArtifacts.length > 0 ? otherArtifacts : undefined });
-      presented.push(...imageArtifacts.map((path, index) => artifactImage(event, path, index, jobId, watchPath)));
+      presented.push(...recognizedArtifacts.map((path, index) => artifactEvent(event, path, index, jobId, watchPath)));
       continue;
     }
 
@@ -131,7 +141,7 @@ export function presentActivityEvents(
     presented.push(event);
   }
 
-  return presented;
+  return groupPresentedArtifacts(presented, jobId, watchPath);
 }
 
 export function isPresentedToolBurstEvent(
@@ -338,18 +348,22 @@ function attachParserDetail(burst: ToolBurstEvent, warning: SystemParserWarningE
   };
 }
 
-function artifactImage(
+function artifactEvent(
   burst: ToolBurstEvent,
   path: string,
   index: number,
   jobId: string,
   watchPath: string | null | undefined,
-): ArtifactImageEvent {
+): PresentedArtifactEvent {
   const normalized = path.replace(/\\/g, '/');
   const fileName = normalized.split('/').pop() || normalized;
   const folder = normalized.slice(0, Math.max(0, normalized.lastIndexOf('/'))) || 'results';
+  const kind = classifyArtifactPath(normalized) ?? 'image';
+  const id = `${burst.id}:artifact:${index}`;
+  const groupId = `${burst.id}:artifacts`;
+  const presentation = artifactFromPath(id, normalized, fileName, kind, jobId, watchPath);
   return {
-    id: `${burst.id}:artifact:${index}`,
+    id,
     kind: 'artifact.image',
     timestamp: burst.timestamp,
     runId: burst.runId,
@@ -360,7 +374,9 @@ function artifactImage(
     sourcePath: normalized,
     durablePath: normalized.startsWith('results/') ? normalized : null,
     sourceTool: 'agent',
-    url: resolveProtocolImageSrc(normalized, jobId, watchPath),
+    url: kind === 'image' ? resolveProtocolImageSrc(normalized, jobId, watchPath) : null,
+    artifactPresentation: presentation,
+    artifactGroupId: groupId,
   };
 }
 

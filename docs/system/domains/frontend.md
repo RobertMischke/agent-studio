@@ -107,7 +107,14 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   input-cost estimate, exact expandable blocks, and warnings/errors. The report
   stacks below the prompt on narrow panes and uses background tint, badge, and
   dot status treatment without a coloured left accent line. Activity and Result
-  retain their existing live and settled-run defaults.
+  retain their existing live and settled-run defaults. Activity groups each
+  contiguous run of task-result artifacts in an agent message into one mixed
+  block. Multiple PNG, JPEG, WebP, or GIF results use lazy WebP thumbnails from
+  `GET /api/tasks/{jobId}/thumbnail` and open their full sources in the shared
+  keyboard-navigable lightbox; a single image keeps the established inline
+  treatment. Diff, patch, Markdown, JSON, and log results have typed on-demand
+  previews, while HTML delegates to the shared task artifact viewer route and
+  unknown extensions keep the canonical chat row.
   Escalated tasks render a borderless, collapsible decision section that
   keeps one bounded essence line visible: typed review-round count, latest
   grade, open-finding count, and escalation-reason class. Markdown bodies never

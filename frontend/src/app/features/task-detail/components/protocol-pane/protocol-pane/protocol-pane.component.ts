@@ -63,6 +63,7 @@ import {
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
 import { ActivityEventPresentationDirective } from '../activity-event-presentation.directive';
+import { omitMessageReferencedScreenshots } from '../artifact-gallery/artifact-gallery.model';
 import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
 import { projectStructuredActivityContent } from '../structured-activity-projection';
@@ -793,7 +794,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     const replay = this.runnerReplay();
     const typedLifecycle = this.runnerEvents().some(event => event.kind === 'turn.completed');
     const structured = projectStructuredActivityContent(filtered, info.id);
-    const projected = projectConversation({
+    const projected = omitMessageReferencedScreenshots(projectConversation({
       source: info.id,
       // Strip transport frames before the library classifies them. See sanitizeProjectionLines.
       lines: sanitizeProjectionLines(stripLegacyCompletionLines(structured.projectionLines, typedLifecycle)),
@@ -806,7 +807,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       emitWorkbenchPreviews: false,
       emitTraceLink: false,
       emitDebugAggregate: false,
-    });
+    }));
     const worktreeRootsByRun = new Map<number, string>();
     for (const run of this.runTimeline()?.runs ?? []) {
       const root = run.executionLocation?.worktreePath;

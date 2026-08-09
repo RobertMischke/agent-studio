@@ -102,6 +102,25 @@ function outputBuffer(): OutLine[] {
       stream: 'stderr',
       text: 'The concept and its navigation entry are ready for review.',
     },
+    {
+      timestamp: at(39.5),
+      stream: 'stdout',
+      text: [
+        'The pinned gallery evidence is ready:',
+        '- [Dashboard light](results/gallery-dashboard-light.png)',
+        '- [Dashboard dark](results/gallery-dashboard-dark.png)',
+        '- [Export dialog](results/gallery-export-dialog.png)',
+        '- [Empty state](results/gallery-empty-state.png)',
+        '- [Filter panel](results/gallery-filter-panel.png)',
+        '- [Mobile table](results/gallery-mobile-table.png)',
+        '- [Review light](results/gallery-review-light.png)',
+        '- [Review dark](results/gallery-review-dark.png)',
+        '- [Delivery diff](results/delivery.diff)',
+        '- [Gallery notes](results/gallery-notes.md)',
+        '- [Gallery metrics](results/gallery-metrics.json)',
+        '- [Capture log](results/gallery-run.log)',
+      ].join('\n'),
+    },
     { timestamp: at(40), stream: 'stderr', text: '[[TASK_DONE]]' },
     {
       timestamp: at(41),
@@ -320,10 +339,43 @@ async function installRoutes(page: Page): Promise<void> {
       contentType: 'application/json',
       body: JSON.stringify(detail()),
     }));
+  await page.route(`**/api/tasks/${encodedId}/thumbnail?**`, (route) => {
+    const fileName = new URL(route.request().url()).searchParams.get('path') ?? 'artifact';
+    return route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="450" viewBox="0 0 720 450"><rect width="720" height="450" fill="#18202d"/><rect x="24" y="24" width="672" height="48" rx="8" fill="#2d3a50"/><rect x="24" y="96" width="170" height="330" rx="8" fill="#243044"/><rect x="218" y="96" width="478" height="330" rx="8" fill="#243044"/><rect x="248" y="130" width="320" height="18" rx="5" fill="#76a8ff"/><text x="248" y="200" fill="#dce8ff" font-family="sans-serif" font-size="24">${fileName}</text></svg>`,
+    });
+  });
+  await page.route(`**/api/tasks/${encodedId}/screenshot?**`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900"><rect width="1440" height="900" fill="#18202d"/><rect x="64" y="64" width="1312" height="772" rx="24" fill="#2d3a50"/></svg>',
+    }));
+  await page.route(`**/api/tasks/${encodedId}/files/results/**`, (route) => {
+    const url = route.request().url();
+    if (url.includes('delivery.diff')) {
+      return route.fulfill({ status: 200, contentType: 'text/plain', body: '@@ -1 +1 @@\n-old export\n+typed gallery export' });
+    }
+    if (url.includes('gallery-notes.md')) {
+      return route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Gallery notes\n\nPinned demo evidence.' });
+    }
+    if (url.includes('gallery-metrics.json')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"images":8,"pinned":true}' });
+    }
+    return route.fulfill({ status: 200, contentType: 'text/plain', body: 'capture light: ok\ncapture dark: ok' });
+  });
 }
 
 for (const theme of ['light', 'dark'] as const) {
 test(`Activity renders structured tool payloads and runner events quietly in ${theme} theme`, async ({ page }) => {
+  const fullImageRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes(`/api/tasks/${encodeURIComponent(TARGET.id)}/screenshot?`)) {
+      fullImageRequests.push(request.url());
+    }
+  });
   await page.addInitScript(() => {
     localStorage.setItem('atp.flag.nextGenChat', '1');
   });
@@ -344,6 +396,40 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
     await runtimeDialog.getByRole('button').first().click();
   }
   await expect(panel.getByTestId('conversation-view')).toBeVisible();
+
+  const gallery = panel.getByTestId('conversation-artifact-gallery');
+  await expect(gallery).toBeVisible();
+  const thumbnails = gallery.getByTestId('artifact-gallery-thumbnail');
+  await expect(thumbnails).toHaveCount(8);
+  await expect(thumbnails.first().locator('img')).toHaveAttribute('loading', 'lazy');
+  await expect(thumbnails.first().locator('img')).toHaveAttribute('src', /\/thumbnail\?/);
+  await expect(gallery.getByTestId('artifact-document-diff')).toBeVisible();
+  await expect(gallery.getByTestId('artifact-document-markdown')).toBeVisible();
+  await expect(gallery.getByTestId('artifact-document-json')).toBeVisible();
+  await expect(gallery.getByTestId('artifact-document-log')).toBeVisible();
+  await gallery.screenshot({
+    path: path.join(SHOTS_DIR, `AGT-2558--artifact-gallery-${theme}--mocked.png`),
+  });
+  expect(fullImageRequests, 'the thumbnail grid must not fetch full-size images').toHaveLength(0);
+
+  await thumbnails.first().click();
+  const lightbox = page.getByTestId('media-lightbox');
+  await expect(lightbox).toBeVisible();
+  await expect(page.getByTestId('media-lightbox-position')).toHaveText('Image 1 / 8');
+  await expect(page.getByTestId('media-lightbox-caption')).toHaveText(
+    'gallery-dashboard-light.png · results/gallery-dashboard-light.png',
+  );
+  await expect(page.getByTestId('media-lightbox-action-open-new-tab')).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('media-lightbox-position')).toHaveText('Image 2 / 8');
+  await expect(page.getByTestId('media-lightbox-caption')).toHaveText(
+    'gallery-dashboard-dark.png · results/gallery-dashboard-dark.png',
+  );
+  await page.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+
+  await gallery.getByTestId('artifact-document-toggle-diff').click();
+  await expect(gallery.getByTestId('artifact-document-preview')).toContainText('typed gallery export');
 
   const tools = panel.getByTestId('tool-burst-chip');
   await expect(tools).toHaveCount(4);
