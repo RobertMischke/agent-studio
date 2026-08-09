@@ -247,6 +247,7 @@
         "src/app/features/shell/components/accepted-integration-alert-banner/accepted-integration-alert-banner.scss",
         "src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.scss",
         "src/app/features/studio-shell/components/explorer-auto-pickup-indicator/explorer-auto-pickup-indicator.component.scss",
+        "src/app/features/studio-shell/components/explorer-workbench-history/explorer-workbench-history.component.scss",
         "src/app/features/studio-shell/components/studio-empty-state/studio-empty-state.component.scss",
         "src/app/features/studio-shell/components/explorer-workbench-list/explorer-workbench-list.component.scss",
         "src/app/features/studio-shell/components/studio-welcome/studio-welcome.component.scss",

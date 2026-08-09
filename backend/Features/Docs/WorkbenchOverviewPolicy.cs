@@ -22,9 +22,10 @@ public static class WorkbenchOverviewPolicy
     {
         "decision-pending" => 0,
         "active" => 1,
-        "invalid" => 2,
-        "archived" => 3,
-        "decided" => 4,
-        _ => 5,
+        "decided" => 2,
+        "invalid" => 3,
+        "archived" => 4,
+        "documented" => 5,
+        _ => 6,
     };
 }

@@ -8,17 +8,41 @@
       {{ message }}
     </div>
   } @else if (document(); as doc) {
-    @defer (on immediate) {
-      <app-workbench-viewer-header
-        [projectName]="projectName()"
-        [document]="doc"
-        [decisionPoints]="decisionMarkup().points"
-        [responses]="decisionResponses()"
-        [showWikiAction]="showWikiAction()"
-        (openWiki)="openCurrentPageInWiki()"
-        (decisionChanged)="refreshDecision()"
-      />
-    }
+    <div class="workbench-viewer__head">
+      @defer (on immediate) {
+        <app-workbench-viewer-header
+          [projectName]="projectName()"
+          [document]="doc"
+          [decisionPoints]="decisionMarkup().points"
+          [responses]="decisionResponses()"
+          [showWikiAction]="showWikiAction()"
+          (openWiki)="openCurrentPageInWiki()"
+          (decisionChanged)="refreshDecision()"
+        />
+      }
+      @if (documentationReady()) {
+        <div
+          class="workbench-viewer__documentation-ready"
+          data-testid="workbench-documentation-ready"
+          role="status"
+        >
+          <span>All referenced cards are terminal. This item can now be finalized as documentation.</span>
+          <button
+            type="button"
+            data-testid="workbench-documentation-confirm"
+            [disabled]="doc.workingTreeModified"
+            [appPendingButton]="documenting()"
+            pendingLabel="Updating…"
+            (click)="documentCurrent()"
+          >
+            Mark documented
+          </button>
+        </div>
+      }
+      @if (documentationError(); as message) {
+        <p class="workbench-viewer__documentation-error" role="alert">{{ message }}</p>
+      }
+    </div>
     <div
       class="workbench-viewer__frame-shell"
       [class.workbench-viewer__frame-shell--maximized]="maximized()"
