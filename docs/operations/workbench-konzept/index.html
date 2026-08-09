@@ -68,9 +68,14 @@
   <p class="lede">Der Operator hält das Arbeitsmuster für fast ideal — Analyse reift zu Entscheidungen, Entscheidungen zu Tasks. Was stört: der Name, die Nav-Einbindung, die statische Natur. Dieses Dokument ordnet den Bestand und legt die Entscheidungen vor. Es demonstriert dabei selbst den vorgeschlagenen Artikel-Stil.</p>
   <div class="meta">
     <span><b>Datum</b> 2026-08-09</span>
-    <span><b>Status</b> decision-pending · shaping</span>
+    <span><b>Status</b> in Umsetzung · Name in Runde 2</span>
   </div>
 </header>
+
+<div class="box" style="background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line))">
+  <h4>Entschieden (Operator, 09.08.): "Sonst TOP — kann man so machen und loslegen."</h4>
+  <p>GO für die Umsetzung: <b>04 Muster-Feld ja · 05 Artikel-Stil ja</b> (und der Artikel-Stil wird zusätzlich zentrales Element auf der Agent-Studio-Website) · 08 korrigiert (Workbench bündelt den gesamten Lebenszyklus) · Viewer-Kopf: <b>sehr kompakt</b>. Offen bleibt nur der <b>Name</b> (Runde 2 unten, Richtung Task-*/Epic-Familie). Slices laufen als Karten: siehe relatedTaskKeys.</p>
+</div>
 
 <h2><span class="no">01</span>These</h2>
 <p>Die Workbench ist die <b>Vorstufe zum Task</b>. Hier wird analysiert, verglichen und entschieden; erst danach entstehen Karten. Dass sie im Wiki liegt (versioniert, verlinkbar, ohne Studio lesbar), ist richtig und bleibt. Was fehlt, ist die App-Schicht darüber: Entscheidungen erfassen (kommt mit AGT-2520), Status halten, die entstandenen Tasks live zeigen, Inhalte aktuell halten.</p>
@@ -95,8 +100,22 @@
     <tr><td><b>Workbench (behalten)</b></td><td>eingeführt, im Code überall; Umbenennung kostet</td><td>der Operator ist unsicher; beschreibt Werkzeug statt Zweck</td></tr>
   </tbody>
 </table>
+<div class="box warn">
+  <h4>Namens-Runde 2 (Operator 09.08.: "anderen Namen finden", Richtung Task-* / Epic-Familie)</h4>
+  <table>
+    <thead><tr><th>Kandidat</th><th>Dafür</th><th>Dagegen</th></tr></thead>
+    <tbody>
+      <tr><td><b>Dossier / Task Dossier</b></td><td>Akte über den GESAMTEN Lebenszyklus (Analyse → Entscheidung → Karten → Doku); nüchtern; deutsch = englisch; key-tauglich</td><td>leicht bürokratischer Klang</td></tr>
+      <tr><td><b>Charter / Task Charter</b></td><td>Gründungsdokument eines Arbeitsstrangs — die Epic-Verwandtschaft im Namen; aus dem Charter entstehen Karten</td><td>betont den Anfang, weniger die Doku-Endphase</td></tr>
+      <tr><td><b>Initiative</b></td><td>klassische Epic-Familien-Sprache (bündelt werdende + laufende Arbeit)</td><td>generisch, in PM-Tools abgenutzt</td></tr>
+      <tr><td><b>Task Docs</b> (Operator-Idee)</td><td>schlicht, Task-Bezug direkt</td><td>kollidiert mit docs/-Wiki-Begriff; klingt nach Ablage statt Entscheidung</td></tr>
+      <tr><td><b>Task Companion</b> (Operator-Idee)</td><td>Begleiter über den Lebenszyklus — trifft die Mechanik</td><td>leicht verspielt; im Deutschen sperrig</td></tr>
+    </tbody>
+  </table>
+  <p><b>Empfehlung: Dossier.</b> Es trägt die Lebenszyklus-Korrektur aus Abschnitt 08 im Namen (eine Akte, die von der Analyse bis zur Doku alles sammelt) und bleibt nüchtern. Zweitplatz: Charter, wenn die Epic-Nähe im Vordergrund stehen soll.</p>
+</div>
 <div class="box accent">
-  <p><b>Empfehlung: „Concepts" / „Konzepte".</b> Funktionstreu genug, nüchtern, ohne Kunstbegriff. Wichtig: NICHT „Decisions" — AGT-2520 benennt gerade die Entscheidungs-<i>Punkte</i> im Dokument so; zwei Ebenen mit demselben Wort wären schlimmer als der heutige Zustand. Umbenennung nur an der UI-Oberfläche + Doku; Code-Bezeichner (<code>workbench.json</code>, Services) bleiben — ein Datei-Format umzubenennen kauft nichts.</p>
+  <p><b>Empfehlung Runde 1 (überholt): „Concepts" / „Konzepte".</b> Funktionstreu genug, nüchtern, ohne Kunstbegriff. Wichtig: NICHT „Decisions" — AGT-2520 benennt gerade die Entscheidungs-<i>Punkte</i> im Dokument so; zwei Ebenen mit demselben Wort wären schlimmer als der heutige Zustand. Umbenennung nur an der UI-Oberfläche + Doku; Code-Bezeichner (<code>workbench.json</code>, Services) bleiben — ein Datei-Format umzubenennen kauft nichts.</p>
 </div>
 
 <h2><span class="no">04</span>Zwei Muster als erste Klasse</h2>
@@ -154,7 +173,7 @@
 <p>Heutiger Beleg aus der Praxis: Vier neue Workbenches waren per API sofort gelistet, im Nav-Tree aber unsichtbar, bis der Operator neu lädt — der Tree pollt nicht und bekommt nichts gepusht. Da das System mehrbenutzerfähig werden soll, gehören Workbench-Ereignisse auf die vorhandene SignalR-Strecke (das Studio betreibt bereits Hubs unter <code>/hubs</code>): <code>created</code>, <code>updated</code>, <code>decisionRecorded</code>, <code>statusChanged</code>. Konsumenten: Nav-Tree (Kinder + Zähler), Projekt-Liste, zentrale Seite, geöffneter Viewer (fremde Entscheidungen erscheinen live, mit Entscheider-Attribution aus AGT-2520). Kein neues Transport-Konzept — dieselbe Mechanik, mit der Board-Lanes aktuell bleiben.</p>
 
 <h2><span class="no">08</span>Verwandtschaft mit Epics — und die zentrale Seite</h2>
-<p>Epics und Workbenches sind Geschwister: Beide bündeln Arbeit oberhalb der einzelnen Karte. Der Unterschied liegt im Aggregatzustand — das <b>Epic bündelt beschlossene Arbeit</b> (Karten, die es schon gibt), die <b>Workbench bündelt werdende Arbeit</b> (Entscheidungen, aus denen Karten erst entstehen). Sie ist damit zu einem gewissen Teil das Backlog des Operators: Was hier liegt, ist ernst gemeint, aber noch nicht geschnitten.</p>
+<p>Epics und Workbenches sind Geschwister: Beide bündeln Arbeit oberhalb der einzelnen Karte. Der Unterschied liegt im Aggregatzustand — das <b>Epic bündelt beschlossene Arbeit</b> (Karten, die es schon gibt), die <b>Workbench bündelt den gesamten Lebenszyklus</b>: werdende Arbeit (Entscheidungen, aus denen Karten entstehen) UND deren Verfolgung bis zum dokumentierten Abschluss (Operator-Korrektur 09.08.). Sie ist damit zu einem gewissen Teil das Backlog des Operators: Was hier liegt, ist ernst gemeint, aber noch nicht geschnitten.</p>
 <p>Daraus folgt direkt die Forderung nach einer <b>zentralen Seite analog zur Epics-Seite</b>: alle Workbenches aller Projekte an einem Ort, unter dem neuen Namen, sortiert nach Handlungsbedarf — decision-pending mit Zähler offener Entscheidungen zuerst, dann active nach letzter Bewegung, History dahinter. Auf dieser Seite wird <i>entschieden</i>, nicht nur gelesen: Die Inline-Entscheidungspunkte (AGT-2520) sind direkt von der Übersicht aus erreichbar, idealerweise als aufklappbare Karte ohne Seitenwechsel. Der Operator sieht auf einen Blick, wo er gebraucht wird.</p>
 <h3>Der vollständige Lebenszyklus: am Ende Doku</h3>
 <p>Die entscheidende Ergänzung: Eine Workbench, die nicht verworfen wurde, endet nicht mit der Entscheidung. Sie <b>trackt die entstandenen Karten bis zum Abschluss</b> (Slice-Plan-Zeile für Zeile) und kippt dann in ihren Endzustand: <b>Dokumentation</b>. Aus dem Entscheidungsdokument wird das Sachstands-Dokument — was gebaut wurde, warum, mit welchen Belegen. Der heutige status-Wert <code>decided</code> ist dafür zu früh gedacht; der Lebenszyklus braucht die Stufe <code>documented</code> (oder: archived behält die Doppelrolle, aber die Liste unterscheidet „verworfen" von „abgeschlossen und dokumentiert"). Verworfene Workbenches bleiben als verworfene Historie sichtbar — auch das ist Wissen.</p>
@@ -188,7 +207,7 @@
 <h2><span class="no">11</span>Slice-Plan (nach GO)</h2>
 <ol>
   <li><b>Slice 1 — Schlüssel & Referenzen:</b> Key-Vergabe (Projekt-Sequenz, atomarer Descriptor-Write), Klick-Kopier-Chip in Viewer/Listen/Nav, Karten-Referenzfeld + verlinkter Chip im Task-Detail. Früh, weil es die abgeleitete Task-Verfolgung für alle weiteren Slices freischaltet.</li>
-  <li><b>Slice 2 — Viewer-Kopf:</b> Live-Task-Block (abgeleitet aus Key-Referenzen, relatedTaskKeys als Alt-Brücke) + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
+  <li><b>Slice 2 — Viewer-Kopf (Operator: SEHR kompakt — eine Zeile):</b> Live-Task-Block (abgeleitet aus Key-Referenzen, relatedTaskKeys als Alt-Brücke) + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
   <li><b>Slice 3 — Zentrale Seite + Projektebenen-Liste:</b> projektübergreifende Übersicht analog Epics — decision-pending mit Offen-Zähler zuerst, Entscheiden direkt aus der Liste; History getrennt nach verworfen/dokumentiert; dieselbe Seite projektgefiltert je Projekt. Inklusive SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) für Tree, Listen und offenen Viewer.</li>
   <li><b>Slice 4 — Template v2:</b> kanonisches Artikel-Stylesheet + Autoren-Doku + <code>pattern</code>-Feld; bestehende aktive Workbenches migrieren nur bei Anfassen.</li>
   <li><b>Slice 5 — Lebenszyklus bis Doku:</b> Tracking-Abschluss + <code>documented</code>-Stufe + Übergangs-Mechanik (alle referenzierenden Karten terminal ⇒ Vorschlag „als Doku abschließen").</li>
