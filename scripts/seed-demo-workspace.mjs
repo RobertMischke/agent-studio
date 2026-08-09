@@ -159,7 +159,10 @@ function writeTask(root, task, index) {
     : `# ${task.title}\n\nPinned demo task seeded by scripts/seed-demo-workspace.mjs for the slim DEV demo store (ADR-0056). The data is sanitized and safe to reset; a re-seed restores the exact captured state.\n`);
 
   if (task.history) writeHistory(dir, task, id, index);
-  if (task.key === 'DEMO-5') writeReviewEvidence(dir);
+  if (task.key === 'DEMO-5') {
+    writeReviewEvidence(dir);
+    writeArtifactGalleryScene(dir);
+  }
   if (task.decision) writeDecisionState(dir, task, id);
 }
 
@@ -187,6 +190,78 @@ tag: code-review:grade-b
 - **Medium:** Add an assertion for exporting an empty report table.
 - **Verified:** CSV escaping and timezone formatting have deterministic coverage.
 `
+  );
+}
+
+function writeArtifactGalleryScene(dir) {
+  const images = [
+    ['gallery-dashboard-light.png', 0],
+    ['gallery-dashboard-dark.png', 1],
+    ['gallery-export-dialog.png', 2],
+    ['gallery-empty-state.png', 3],
+    ['gallery-filter-panel.png', 4],
+    ['gallery-mobile-table.png', 5],
+    ['gallery-review-light.png', 6],
+    ['gallery-review-dark.png', 7],
+  ];
+  for (const [fileName, variant] of images) {
+    writeBuffer(join(dir, 'results', fileName), createGalleryPng(720, 450, variant));
+  }
+
+  writeText(
+    join(dir, 'results', 'delivery.diff'),
+    `diff --git a/frontend/src/app/reports/export.ts b/frontend/src/app/reports/export.ts
+index 6a70b17..d3e0c9f 100644
+--- a/frontend/src/app/reports/export.ts
++++ b/frontend/src/app/reports/export.ts
+@@ -18,0 +19,5 @@
++export function escapeCsvCell(value: string): string {
++  const normalized = value.replaceAll('"', '""');
++  return /[",\\n]/.test(normalized) ? '"' + normalized + '"' : normalized;
++}
+`
+  );
+  writeText(
+    join(dir, 'results', 'gallery-notes.md'),
+    `# Gallery review notes
+
+The CSV export scene is pinned for the ADR-0056 presentation flow.
+
+- Light and dark views use the same deterministic report fixture.
+- The dialog, empty state, filter panel, and mobile table are included.
+- The delivery diff below the image grid is ready for operator review.
+`
+  );
+  writeJson(join(dir, 'results', 'gallery-metrics.json'), {
+    scene: 'activity-artifact-gallery',
+    pinned: true,
+    imageCount: images.length,
+    themes: ['light', 'dark'],
+    generatedAt: iso(260),
+  });
+  writeText(
+    join(dir, 'results', 'gallery-run.log'),
+    `[12:20:00.000] capture light theme: ok
+[12:20:04.000] capture dark theme: ok
+[12:20:05.000] artifact manifest: pinned
+`
+  );
+
+  const artifactMessage = [
+    'The pinned report-gallery evidence is ready for presentation:',
+    ...images.map(([fileName]) => `- [${fileName}](results/${fileName})`),
+    '- [Delivery diff](results/delivery.diff)',
+    '- [Gallery notes](results/gallery-notes.md)',
+    '- [Gallery metrics](results/gallery-metrics.json)',
+    '- [Capture log](results/gallery-run.log)',
+  ].join('\n');
+  const frame = JSON.stringify({
+    type: 'item.completed',
+    item: { id: 'demo-artifact-gallery', type: 'agent_message', text: artifactMessage },
+  });
+  writeText(
+    join(dir, 'logs', 'cli-output.log'),
+    `[12:20:06.000] [stdout] ${frame}\n[12:20:07.000] [stdout] [[TASK_DONE]]\n`,
   );
 }
 
@@ -419,6 +494,53 @@ function createEvidencePng(width, height) {
     pngChunk('IHDR', ihdr),
     pngChunk('IDAT', deflateSync(raw, { level: 9 })),
     pngChunk('IEND', Buffer.alloc(0))
+  ]);
+}
+
+function createGalleryPng(width, height, variant) {
+  const rowSize = width * 4 + 1;
+  const raw = Buffer.alloc(rowSize * height);
+  const palettes = [
+    [[241, 244, 249, 255], [255, 255, 255, 255], [62, 99, 221, 255]],
+    [[20, 23, 31, 255], [31, 36, 48, 255], [119, 165, 255, 255]],
+    [[239, 243, 250, 255], [255, 255, 255, 255], [33, 161, 121, 255]],
+    [[24, 28, 38, 255], [36, 42, 56, 255], [238, 178, 70, 255]],
+  ];
+  const [background, surface, accent] = palettes[variant % palettes.length];
+  const fill = (x, y, w, h, color) => {
+    for (let yy = Math.max(0, y); yy < Math.min(height, y + h); yy++) {
+      for (let xx = Math.max(0, x); xx < Math.min(width, x + w); xx++) {
+        const offset = yy * rowSize + 1 + xx * 4;
+        raw[offset] = color[0];
+        raw[offset + 1] = color[1];
+        raw[offset + 2] = color[2];
+        raw[offset + 3] = color[3];
+      }
+    }
+  };
+  fill(0, 0, width, height, background);
+  fill(24, 22, width - 48, 42, surface);
+  fill(44, 37, 118 + variant * 7, 12, accent);
+  fill(24, 84, 164, height - 108, surface);
+  fill(208, 84, width - 232, height - 108, surface);
+  for (let row = 0; row < 5; row++) {
+    const tone = 90 + ((variant + row) % 4) * 18;
+    fill(228, 112 + row * 53, width - 316, 13, [tone, tone + 7, tone + 17, 255]);
+    fill(width - 72, 107 + row * 53, 30, 22, row === variant % 5 ? accent : [82, 91, 108, 255]);
+  }
+  fill(48, 112 + (variant % 5) * 53, 112, 13, accent);
+  for (let y = 0; y < height; y++) raw[y * rowSize] = 0;
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0)),
   ]);
 }
 

@@ -73,12 +73,12 @@
          (pointerdown)="$event.stopPropagation()">
       @if (lightbox.count() > 1) {
         <span class="media-lightbox__hint-pos" data-testid="media-lightbox-position"
-          >Bild {{ lightbox.position() }} / {{ lightbox.count() }}</span>
+          >Image {{ lightbox.position() }} / {{ lightbox.count() }}</span>
         <span class="media-lightbox__hint-sep" aria-hidden="true">·</span>
-        <span class="media-lightbox__hint-keys"><kbd>←</kbd> <kbd>→</kbd> blättern</span>
+        <span class="media-lightbox__hint-keys"><kbd>←</kbd> <kbd>→</kbd> browse</span>
         <span class="media-lightbox__hint-sep" aria-hidden="true">·</span>
       }
-      <span class="media-lightbox__hint-keys"><kbd>Esc</kbd> schließen</span>
+      <span class="media-lightbox__hint-keys"><kbd>Esc</kbd> close</span>
     </div>
   </div>
 }

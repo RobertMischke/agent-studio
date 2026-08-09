@@ -1,9 +1,19 @@
-import { AfterViewChecked, Directive, ElementRef, inject, input } from '@angular/core';
+import {
+  AfterViewChecked,
+  ApplicationRef,
+  Directive,
+  ElementRef,
+  EnvironmentInjector,
+  OnDestroy,
+  inject,
+  input,
+} from '@angular/core';
 import type { ConversationEvent } from 'coding-agent-chat/core';
 import {
   isPresentedToolBurstEvent,
   type PresentedToolBurstEvent,
 } from './activity-event-presentation';
+import type { ArtifactGalleryMountController } from './artifact-gallery/artifact-gallery.lazy';
 
 /**
  * Compatibility adapter for compact metadata that coding-agent-chat 0.3.2
@@ -14,14 +24,30 @@ import {
   selector: 'cac-conversation-view[appActivityEventPresentation]',
   standalone: true,
 })
-export class ActivityEventPresentationDirective implements AfterViewChecked {
+export class ActivityEventPresentationDirective implements AfterViewChecked, OnDestroy {
   readonly events = input.required<readonly ConversationEvent[]>({
     alias: 'appActivityEventPresentation',
   });
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly applicationRef = inject(ApplicationRef);
+  private readonly environmentInjector = inject(EnvironmentInjector);
+  private galleryController: ArtifactGalleryMountController | null = null;
+  private galleryControllerPromise: Promise<typeof import('./artifact-gallery/artifact-gallery.lazy')> | null = null;
+  private destroyed = false;
 
   ngAfterViewChecked(): void {
+    this.syncToolBursts();
+    void this.syncArtifactBlocks();
+  }
+
+  ngOnDestroy(): void {
+    this.destroyed = true;
+    this.galleryController?.destroy();
+    this.galleryController = null;
+  }
+
+  private syncToolBursts(): void {
     const events = this.events().filter(isPresentedToolBurstEvent);
     const chips = this.host.nativeElement.querySelectorAll<HTMLElement>(
       '[data-testid="tool-burst-chip"]',
@@ -31,6 +57,30 @@ export class ActivityEventPresentationDirective implements AfterViewChecked {
       const event = events[index];
       if (event) this.syncChip(chip, event);
     });
+  }
+
+  private async syncArtifactBlocks(): Promise<void> {
+    const hasPresentedArtifacts = this.events().some((event) =>
+      event.kind === 'artifact.image' && 'artifactPresentation' in event);
+    if (!hasPresentedArtifacts) {
+      this.galleryController?.destroy();
+      this.galleryController = null;
+      return;
+    }
+
+    const { ArtifactGalleryMountController } = await this.loadGalleryController();
+    if (this.destroyed) return;
+    this.galleryController ??= new ArtifactGalleryMountController(
+      this.host.nativeElement,
+      this.applicationRef,
+      this.environmentInjector,
+    );
+    this.galleryController.sync(this.events());
+  }
+
+  private loadGalleryController(): Promise<typeof import('./artifact-gallery/artifact-gallery.lazy')> {
+    this.galleryControllerPromise ??= import('./artifact-gallery/artifact-gallery.lazy');
+    return this.galleryControllerPromise;
   }
 
   private syncChip(chip: HTMLElement, event: PresentedToolBurstEvent): void {

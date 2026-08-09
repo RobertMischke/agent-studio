@@ -1,0 +1,86 @@
+<article class="artifact-block" data-testid="conversation-artifact-gallery">
+  <header class="artifact-block__head">
+    <span class="artifact-block__title">{{ heading() }}</span>
+  </header>
+
+  @if (images().length > 0) {
+    <div class="artifact-grid" role="list" aria-label="Image artifacts">
+      @for (artifact of images(); track artifact.id) {
+        <figure class="artifact-thumb" role="listitem">
+          <button type="button"
+                  class="artifact-thumb__open"
+                  data-testid="artifact-gallery-thumbnail"
+                  [attr.aria-label]="'Open image ' + artifact.path"
+                  [cacTooltip]="artifact.path"
+                  (click)="openImage(artifact)">
+            <img class="artifact-thumb__image"
+                 [src]="artifact.thumbnailUrl || artifact.url"
+                 [alt]="artifact.label"
+                 loading="lazy"
+                 decoding="async" />
+          </button>
+          <figcaption class="artifact-thumb__caption">
+            <span class="artifact-thumb__name">{{ artifact.fileName }}</span>
+            <span class="artifact-thumb__path">{{ artifact.path }}</span>
+          </figcaption>
+        </figure>
+      }
+    </div>
+  }
+
+  @if (documents().length > 0) {
+    <div class="artifact-documents" aria-label="Document artifacts">
+      @for (artifact of documents(); track artifact.id) {
+        <section class="artifact-document"
+                 [attr.data-artifact-kind]="artifact.kind"
+                 [attr.data-expanded]="isExpanded(artifact.id)"
+                 [attr.data-testid]="'artifact-document-' + artifact.kind">
+          <div class="artifact-document__row">
+            <button type="button"
+                    class="artifact-document__main"
+                    [attr.data-testid]="'artifact-document-toggle-' + artifact.kind"
+                    [attr.aria-expanded]="artifact.kind === 'html' ? null : isExpanded(artifact.id)"
+                    (click)="toggleDocument(artifact)">
+              <span class="artifact-document__type">{{ typeLabel(artifact) }}</span>
+              <span class="artifact-document__identity">
+                <span class="artifact-document__name">{{ artifact.fileName }}</span>
+                <span class="artifact-document__path">{{ artifact.path }}</span>
+              </span>
+              <span class="artifact-document__action">{{ rowActionLabel(artifact) }}</span>
+            </button>
+            @if (artifact.kind === 'json' || artifact.kind === 'log') {
+              <button type="button"
+                      class="artifact-document__copy"
+                      [attr.data-testid]="'artifact-document-copy-' + artifact.kind"
+                      (click)="copyDocument(artifact, $event)">{{ copyLabel(artifact.id) }}</button>
+            }
+            <button type="button"
+                    class="artifact-document__new-tab"
+                    [attr.aria-label]="'Open ' + artifact.path + ' in a new tab'"
+                    [cacTooltip]="'Open in new tab'"
+                    (click)="openInNewTab(artifact, $event)">↗</button>
+          </div>
+
+          @if (isExpanded(artifact.id)) {
+            <div class="artifact-document__preview" data-testid="artifact-document-preview">
+              @if (isLoading(artifact.id)) {
+                <span class="artifact-document__state">Loading preview...</span>
+              } @else if (contentFor(artifact.id) === null) {
+                <span class="artifact-document__state artifact-document__state--error">Preview unavailable.</span>
+              } @else if (artifact.kind === 'markdown') {
+                <cac-markdown class="artifact-document__markdown"
+                              [source]="displayContent(artifact)"
+                              [dense]="true" />
+              } @else if (artifact.kind === 'diff') {
+                <pre class="artifact-document__code artifact-document__code--diff"><code>@for (line of diffLines(artifact); track line.id) {<span class="artifact-diff-line" [attr.data-line-kind]="line.kind">{{ line.text }}
+</span>}</code></pre>
+              } @else {
+                <pre class="artifact-document__code"><code>{{ displayContent(artifact) }}</code></pre>
+              }
+            </div>
+          }
+        </section>
+      }
+    </div>
+  }
+</article>

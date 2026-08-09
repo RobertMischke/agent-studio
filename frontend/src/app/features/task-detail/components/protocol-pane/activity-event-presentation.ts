@@ -1,5 +1,4 @@
 import type {
-  ArtifactImageEvent,
   ConversationEvent,
   SystemParserWarningEvent,
   SystemStatusEvent,
@@ -8,9 +7,7 @@ import type {
   ToolFamily,
 } from 'coding-agent-chat/core';
 import type { CliOutputLine } from '../../../../models/task.model';
-import { resolveProtocolImageSrc } from './protocol-image-resolver';
 
-const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const TOKEN_TOTAL = /\bTurn completed\s*\(tokens:\s*([\d,_]+)\)/i;
 const FREE_COMPLETION_LINE = /^\s*(?:Session|Turn) completed(?:\s*\(tokens:\s*[\d,_]+\))?[.!]?\s*$/i;
 const REPOSITORY_SEGMENT = /(?:^|\/)(\.agents|backend(?:\.Tests)?|docs|frontend|prompts|runner|scripts)(\/.*)?$/i;
@@ -71,7 +68,7 @@ export function stripLegacyCompletionLines(
 /**
  * Product-specific cleanup between the shared conversation projector and the
  * embedded Activity view. It keeps parser diagnostics attached to the tool
- * operation they describe and promotes result images to renderable evidence.
+ * operation they describe; task-scoped artifacts join at the lazy host seam.
  */
 export function presentActivityEvents(
   events: readonly ConversationEvent[],
@@ -107,10 +104,7 @@ export function presentActivityEvents(
         capturedWorktreeRoot ?? watchPath,
         jobId,
       );
-      const imageArtifacts = (event.artifacts ?? []).filter((path) => IMAGE_EXTENSION.test(path));
-      const otherArtifacts = (event.artifacts ?? []).filter((path) => !IMAGE_EXTENSION.test(path));
-      presented.push({ ...toolBurst, artifacts: otherArtifacts.length > 0 ? otherArtifacts : undefined });
-      presented.push(...imageArtifacts.map((path, index) => artifactImage(event, path, index, jobId, watchPath)));
+      presented.push(toolBurst);
       continue;
     }
 
@@ -335,32 +329,6 @@ function attachParserDetail(burst: ToolBurstEvent, warning: SystemParserWarningE
     ...burst,
     rawRange: { ...burst.rawRange, end: Math.max(burst.rawRange.end, warning.rawRange.end) },
     commands: [...(burst.commands ?? []), detail],
-  };
-}
-
-function artifactImage(
-  burst: ToolBurstEvent,
-  path: string,
-  index: number,
-  jobId: string,
-  watchPath: string | null | undefined,
-): ArtifactImageEvent {
-  const normalized = path.replace(/\\/g, '/');
-  const fileName = normalized.split('/').pop() || normalized;
-  const folder = normalized.slice(0, Math.max(0, normalized.lastIndexOf('/'))) || 'results';
-  return {
-    id: `${burst.id}:artifact:${index}`,
-    kind: 'artifact.image',
-    timestamp: burst.timestamp,
-    runId: burst.runId,
-    model: burst.model,
-    thinkingLevel: burst.thinkingLevel,
-    rawRange: burst.rawRange,
-    caption: `${folder} / ${fileName}`,
-    sourcePath: normalized,
-    durablePath: normalized.startsWith('results/') ? normalized : null,
-    sourceTool: 'agent',
-    url: resolveProtocolImageSrc(normalized, jobId, watchPath),
   };
 }
 

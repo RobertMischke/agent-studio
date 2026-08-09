@@ -273,3 +273,17 @@ test('presentation still 08 - landing task decision detail', async ({ page }, te
   await expect(page.getByTestId('decision-surface-title')).toContainText('Release the reports export?');
   await captureBoth(page, testInfo, '08', 'landing-task-detail', TASK_DETAIL_ANNOTATIONS);
 });
+
+// AGT-2530 owns the ADR-0056 shot sequence. This focused hook captures the
+// gallery scene without changing the existing board and decision shots.
+test('presentation still 08c - activity artifact gallery', async ({ page }, testInfo) => {
+  await openDemoTask(page);
+  await page.getByTestId('inspector-tab-activity').click();
+  const gallery = page.getByTestId('conversation-artifact-gallery');
+  await expect(gallery).toBeVisible();
+  await expect(gallery.getByTestId('artifact-gallery-thumbnail')).toHaveCount(8);
+  await expect(gallery.getByTestId('artifact-document-diff')).toBeVisible();
+  await expect(gallery.getByTestId('artifact-document-markdown')).toBeVisible();
+  await gallery.scrollIntoViewIfNeeded();
+  await captureBoth(page, testInfo, '08c', 'activity-artifact-gallery');
+});
