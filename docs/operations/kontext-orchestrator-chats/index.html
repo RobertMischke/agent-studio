@@ -1,0 +1,1316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orchestrator Chat as the Context Workspace</title>
+  <style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch identity: develop */
+    --taskbr: #4a3aa7;       /* Branch identity: task/<slug> */
+    --salvage: #eb6834;      /* Branch identity: runner/<id>/<key> (salvage) */
+    --rescue: #b58500;       /* Branch identity: rescue/WIP */
+    --ok: #008300;           /* Good status, always paired with icon and text */
+    --bad: #c93736;          /* Problem status, always paired with icon and text */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+
+  /* Dossier-specific composition on the reference document system. */
+  html { scroll-behavior: smooth; }
+  strong { font-weight: 700; }
+  .hero { padding-bottom: 34px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; margin: 0 0 10px;
+    color: var(--ink-3); font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .eyebrow::before { width: 7px; height: 7px; border-radius: 50%; background: var(--develop); content: ""; }
+  .meta-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+  .pill, .status {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 26px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
+    padding: 3px 9px; font: 700 .72rem/1 ui-monospace, Consolas, monospace;
+  }
+  .pill::before, .status::before {
+    width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--ink-3); content: "";
+  }
+  .status.exists { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+  .status.partial { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+  .status.pending { color: var(--taskbr); background: var(--accent-soft); border-color: transparent; }
+  .status.gap { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
+  .pill.blue { color: var(--develop); background: var(--accent-soft); border-color: transparent; }
+  .decision {
+    display: grid; grid-template-columns: 1.4fr .8fr; gap: 18px; margin: 24px 0 30px;
+  }
+  .panel, .callout, .decision-card, .slice, .sketch, details {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+  }
+  .decision-card { padding: 18px 22px; }
+  .decision-card.primary {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--develop) 30%, var(--line));
+  }
+  .decision-card p, .panel p { color: var(--ink-2); }
+  .decision-card.primary p { color: var(--ink-1); }
+  .decision-card .label, .section-kicker {
+    display: block; margin-bottom: 9px; color: var(--develop);
+    font: 700 .7rem/1 ui-monospace, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase;
+  }
+  .decision-card h2, .decision-card h3 { margin-top: 0; }
+  nav.toc {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 46px;
+  }
+  nav.toc a {
+    display: grid; min-height: 68px; align-content: center; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--surface-2); padding: 12px; color: var(--ink-1); text-decoration: none;
+  }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--develop); }
+  nav.toc span {
+    color: var(--ink-3); font: 700 .68rem/1.2 ui-monospace, Consolas, monospace; text-transform: uppercase;
+  }
+  nav.toc b { margin-top: 4px; font-size: .88rem; }
+  section.report-section { margin: 0 0 54px; scroll-margin-top: 18px; }
+  .section-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 380px);
+    gap: 28px; align-items: end; margin-bottom: 20px;
+  }
+  .section-head h2 { margin: 0 0 6px; }
+  .section-head p { margin-bottom: 0; color: var(--ink-2); }
+  .callout { margin: 16px 0; padding: 17px 19px; background: var(--surface-2); }
+  .callout strong { display: block; margin-bottom: 4px; }
+  .callout.blue {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--develop) 30%, var(--line));
+  }
+  .callout.amber {
+    background: var(--warn-soft);
+    border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+  }
+  .callout.teal {
+    background: var(--ok-soft);
+    border-color: color-mix(in srgb, var(--ok) 30%, var(--line));
+  }
+  .callout.rose {
+    background: var(--bad-soft);
+    border-color: color-mix(in srgb, var(--bad) 30%, var(--line));
+  }
+  .grid-2, .grid-3 { display: grid; gap: 14px; }
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .panel { padding: 18px; }
+  .panel h3 { margin-top: 0; }
+  .metric {
+    font: 760 1.7rem/1.1 ui-monospace, Consolas, monospace;
+    letter-spacing: -.04em; font-variant-numeric: tabular-nums;
+  }
+  .metric-label { color: var(--ink-2); font-size: .79rem; }
+  .table-wrap {
+    overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1);
+  }
+  .table-wrap table { min-width: 820px; }
+  caption { padding: 13px 12px; color: var(--ink-2); text-align: left; font-size: .78rem; }
+  thead th {
+    color: var(--ink-3); font: 700 .7rem/1.3 ui-monospace, Consolas, monospace;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  tbody th { width: 155px; font-weight: 700; }
+  .small { color: var(--ink-2); font-size: .81rem; }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  code { overflow-wrap: anywhere; }
+  .nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .diagram {
+    position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 28px; min-height: 180px; margin: 20px 0; padding: 28px 24px;
+    overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1);
+  }
+  .diagram svg, .dependency > svg {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+  }
+  .diagram path, .dependency > svg path {
+    fill: none; stroke: var(--ink-3); stroke-width: 1.4; marker-end: url(#arrow);
+  }
+  .dependency > svg path { marker-end: url(#arrow2); }
+  .diagram-node {
+    position: relative; z-index: 1; align-self: center; min-height: 104px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 14px;
+  }
+  .diagram-node.control { background: var(--accent-soft); }
+  .diagram-node.execution { background: var(--ok-soft); }
+  .diagram-node h3 { margin-top: 0; font-size: .9rem; }
+  .diagram-node p { margin: 0; color: var(--ink-2); font-size: .78rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; color: var(--ink-2); font-size: .78rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; background: var(--surface-3); }
+  .legend .control { background: var(--accent-soft); border: 1px solid var(--develop); }
+  .legend .execution { background: var(--ok-soft); border: 1px solid var(--ok); }
+  .rule-list { display: grid; gap: 10px; counter-reset: rule; padding: 0; list-style: none; }
+  .rule-list li {
+    display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start;
+    margin: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 14px;
+  }
+  .rule-list li::before {
+    counter-increment: rule; content: counter(rule); display: grid; width: 30px; height: 30px;
+    place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--develop);
+    font: 750 .8rem/1 ui-monospace, Consolas, monospace;
+  }
+  .budget-bar {
+    display: grid; grid-template-columns: 1fr 2fr 1.5fr 1fr; min-height: 46px;
+    margin: 16px 0 8px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px;
+  }
+  .budget-bar span {
+    display: grid; place-items: center; padding: 6px 8px; border-right: 1px solid var(--line);
+    font: 700 .68rem/1.2 ui-monospace, Consolas, monospace; text-align: center;
+  }
+  .budget-bar span:last-child { border-right: 0; }
+  .budget-bar .base { background: var(--accent-soft); }
+  .budget-bar .surface { background: var(--ok-soft); }
+  .budget-bar .history { background: var(--warn-soft); }
+  .budget-bar .reserve { background: var(--surface-3); }
+  .wireframes { display: grid; grid-template-columns: 1.15fr .85fr; gap: 16px; }
+  .sketch { margin: 0; padding: 16px; }
+  .sketch figcaption {
+    display: flex; justify-content: space-between; gap: 10px; align-items: center;
+    margin: 0 0 12px; color: var(--ink-1); font: 700 .75rem/1 ui-monospace, Consolas, monospace;
+  }
+  .sketch svg { background: var(--surface-1); }
+  .ux-frame { fill: var(--surface-1); stroke: var(--line); }
+  .ux-panel { fill: var(--surface-2); stroke: var(--line); }
+  .ux-soft { fill: var(--surface-3); stroke: var(--line); }
+  .ux-accent { fill: var(--accent-soft); stroke: var(--develop); }
+  .ux-ok { fill: var(--ok-soft); stroke: var(--ok); }
+  .ux-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .ux-primary { fill: var(--develop); stroke: var(--develop); }
+  .ux-line { stroke: var(--line); stroke-width: 1; }
+  .ux-placeholder { stroke: var(--ink-3); stroke-width: 8; stroke-linecap: round; opacity: .55; }
+  .s-label { fill: var(--ink-1); font: 600 15px system-ui, "Segoe UI", sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 13px system-ui, "Segoe UI", sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 12px system-ui, "Segoe UI", sans-serif; }
+  .s-action { fill: var(--develop); font: 600 12px system-ui, "Segoe UI", sans-serif; }
+  .s-button { fill: #fff; font: 700 12px system-ui, "Segoe UI", sans-serif; }
+  .slice-plan { display: grid; gap: 14px; }
+  .slice { display: grid; grid-template-columns: 82px minmax(0, 1fr); overflow: hidden; }
+  .slice-id {
+    display: grid; align-content: start; justify-items: center; gap: 8px;
+    background: var(--surface-3); padding: 18px 10px; color: var(--develop);
+    font: 760 .9rem/1 ui-monospace, Consolas, monospace;
+  }
+  .slice-id span {
+    display: grid; width: 35px; height: 35px; place-items: center;
+    border-radius: 10px; background: var(--accent-soft);
+  }
+  .slice-body { padding: 18px; }
+  .slice-body h3 { margin-top: 0; font-size: 1.08rem; }
+  .slice-meta { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 13px; }
+  .slice-meta span {
+    border-radius: 999px; background: var(--surface-3); padding: 3px 8px; color: var(--ink-2);
+    font: 700 .68rem/1.3 ui-monospace, Consolas, monospace;
+  }
+  .slice-columns { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }
+  .slice-columns h4 { margin-top: 0; }
+  .slice-columns ul { margin-bottom: 0; }
+  .dependency {
+    position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 20px; min-height: 170px; margin: 18px 0; padding: 26px 18px;
+    overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1);
+  }
+  .dep-node {
+    position: relative; z-index: 1; align-self: center; min-height: 84px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+    padding: 11px; font-size: .76rem;
+  }
+  .dep-node strong { display: block; margin-bottom: 4px; }
+  .dep-node.gate { background: var(--warn-soft); }
+  .dep-node.recommended { background: var(--accent-soft); }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; padding: 13px 16px; font-weight: 700; }
+  details > div { padding: 0 16px 16px; color: var(--ink-2); }
+  .evidence-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; padding: 0; list-style: none; }
+  .evidence-list li {
+    min-width: 0; margin: 0; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 11px 13px;
+  }
+  .evidence-list code { display: inline; }
+  footer { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: .82rem; }
+  .print-only { display: none; }
+  @media (max-width: 900px) {
+    main { padding-top: 26px; }
+    .decision, .section-head, .wireframes, .slice-columns { grid-template-columns: 1fr; }
+    nav.toc { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr; }
+    .diagram, .dependency { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .diagram svg, .dependency > svg { display: none; }
+  }
+  @media (max-width: 620px) {
+    .grid-2, .grid-3, .diagram, .dependency { grid-template-columns: 1fr; }
+    .slice { grid-template-columns: 58px minmax(0, 1fr); }
+    .slice-id { padding: 15px 7px; }
+    .budget-bar { grid-template-columns: 1fr 1fr; }
+    .budget-bar span { min-height: 38px; border-bottom: 1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
+  }
+  @media print {
+    :root { color-scheme: light; }
+    body { background: #fff; }
+    main { width: 100%; padding: 0; }
+    nav.toc { display: none; }
+    .panel, .callout, .decision-card, .slice, .sketch, details, .table-wrap, .diagram { break-inside: avoid; }
+    .print-only { display: block; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">AGT-2514 · Planning report · 8 August 2026</div>
+    <h1>Orchestrator Chat as the Context Workspace</h1>
+    <p class="lede">A context model and delivery plan for making project chat the primary working surface, giving task questions an implicit task scope, and showing the operator exactly what evidence reached the model.</p>
+    <div class="meta-line" aria-label="Report scope">
+      <span class="pill blue">Decision brief</span>
+      <span class="pill">Read-only investigation</span>
+      <span class="pill">Repository and live task evidence</span>
+      <span class="pill">No implementation</span>
+    </div>
+  </header>
+
+  <div class="decision">
+    <article class="decision-card primary">
+      <span class="label">Recommended product cut</span>
+      <h2>Single Chat System with Three Context Concepts</h2>
+      <p>Keep the existing project and task transcript scopes. Add a typed, per-turn context envelope made from the current surface plus explicit references. Reuse the task transcript inside a new task-detail Chat tab. Every model turn returns and persists a context receipt.</p>
+    </article>
+    <article class="decision-card">
+      <span class="label">Recommended rollout</span>
+      <h3>Foundation, Project UX, Task Chat, and Default Entry</h3>
+      <p>Ship slices 1, 2, and 3 before making Chat the standard project entry. The Git-rich adapter can proceed after the foundation without blocking the core switch.</p>
+    </article>
+  </div>
+
+  <nav class="toc" aria-label="Report sections">
+    <a href="#reality"><span>01</span><b>Current reality</b></a>
+    <a href="#model"><span>02</span><b>Context model</b></a>
+    <a href="#budget"><span>03</span><b>Prompt and token policy</b></a>
+    <a href="#task-chat"><span>04</span><b>Task Chat</b></a>
+    <a href="#ux"><span>05</span><b>Fast reference UX</b></a>
+    <a href="#slices"><span>06</span><b>Slice plan</b></a>
+    <a href="#decisions"><span>07</span><b>Operator decisions</b></a>
+    <a href="#evidence"><span>08</span><b>Evidence</b></a>
+  </nav>
+
+  <section id="reality" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">01 · Current reality</span>
+        <h2>Existing Foundation and Missing Context Contract</h2>
+      </div>
+      <p>The app already selects project and task chat threads from navigation. It does not yet resolve the full task or surface evidence into each model turn, and its visible transcript is not currently conversation memory for the Codex side-sheet path.</p>
+    </div>
+
+    <div class="grid-3">
+      <article class="panel">
+        <div class="metric">2</div>
+        <div class="metric-label">durable transcript scopes today: project and task</div>
+      </article>
+      <article class="panel">
+        <div class="metric">~1.5k</div>
+        <div class="metric-label">rough tokens in the measured current project digest before boot framing</div>
+      </article>
+      <article class="panel">
+        <div class="metric">0</div>
+        <div class="metric-label">previous transcript turns injected into the visible Codex chat request</div>
+      </article>
+    </div>
+
+    <div class="table-wrap" style="margin-top:16px">
+      <table>
+        <caption>Delivered capability, verified source behavior, and the remaining gap</caption>
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Status</th>
+            <th>Verified behavior</th>
+            <th>Consequence for this plan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Project chat side sheet</th>
+            <td><span class="status exists">Exists</span></td>
+            <td>The resizable right-side sheet hosts <code>cac-conversation-view</code> and a composer-only <code>cac-chat</code>. The header contains a project picker and a <strong>Contexts</strong> menu.</td>
+            <td>Reuse this as the project conversation surface. Do not create a separate global chat window.</td>
+          </tr>
+          <tr>
+            <th>Per-context transcripts</th>
+            <td><span class="status exists">Exists</span></td>
+            <td><code>project:&lt;project&gt;</code> uses <code>.orchestrator/orchestrator-chat.jsonl</code>. <code>task:&lt;project&gt;/&lt;key&gt;</code> uses <code>.orchestrator/context-chats/&lt;encoded&gt;.jsonl</code>. Navigation swaps the visible transcript.</td>
+            <td>Task Chat needs no new history store. Wiki, Workbench, board, file, and diff should remain context inputs, not new transcript owners.</td>
+          </tr>
+          <tr>
+            <th>Chat switcher</th>
+            <td><span class="status exists">Exists</span></td>
+            <td>The Contexts menu groups global, project, and task sessions, supports pin/follow navigation, unread state, refresh, and context switching. Global currently has no transcript.</td>
+            <td>Keep its thread-switching role, but rename it to <strong>Chats</strong> or <strong>Scopes</strong> once composer context attachments ship. This removes a three-way use of “context”.</td>
+          </tr>
+          <tr>
+            <th><code>ComposerLocationContext</code></th>
+            <td><span class="status partial">Presentational</span></td>
+            <td><code>{ project, surface, detail }</code> is derived from the active Studio tab and rendered in the composer footer. It maps Board, Task, Workbench, Deck/Wiki, URL preview, Diff, and other tabs.</td>
+            <td>It is a useful label, not a model contract. It lacks stable typed references, board selection, revision, and a project identity for Diff.</td>
+          </tr>
+          <tr>
+            <th>Navigation context</th>
+            <td><span class="status partial">Partial</span></td>
+            <td>A separate <code>ChatNavigationContext</code> can carry task fields or a repository page reference, title, type, and a 480-character excerpt. The frontend sends it only on the first turn for an unchanged context signature.</td>
+            <td>The current footer label and model payload can diverge. A stateless turn must receive the bounded active context every time, not only once.</td>
+          </tr>
+          <tr>
+            <th>ORCH-1 application digest</th>
+            <td><span class="status exists">Exists</span></td>
+            <td>Every side-sheet turn gets lanes, up to eight transitions, up to eight progress runs, cached quota, publish targets, health, up to eight decisions, and ownership routes. Task scope adds only one focused metadata row.</td>
+            <td>Retain it as an operational layer. Add evidence layers for project memory, task files, surface content, commits, and bounded transcript continuity.</td>
+          </tr>
+          <tr>
+            <th>Conversation continuity</th>
+            <td><span class="status gap">Gap</span></td>
+            <td>The visible side-sheet path calls a GPT-only <code>CodexOneShot</code>. It returns no session id, does not resume a session, and <code>BuildPromptAsync</code> does not read prior transcript turns.</td>
+            <td>A primary chat must inject a bounded recent-turn window or rebuildable summary from the existing JSONL. UI persistence alone is not model memory.</td>
+          </tr>
+          <tr>
+            <th>AGT-2506 context references</th>
+            <td><span class="status pending">Not delivered</span></td>
+            <td>The card is in <code>2-ready</code> and release-gated by CAC-20. Its planned contract is <code>contextAttachments</code> in the library plus a host <code>ContextReferences</code> request resolved by task key, Wiki page, or validated repository file.</td>
+            <td>Treat AGT-2506 as a dependency and contract input, not as current capability. The plan below extends it instead of duplicating it.</td>
+          </tr>
+          <tr>
+            <th>AGT-2512 execution fix</th>
+            <td><span class="status pending">Not integrated</span></td>
+            <td>The card is in <code>2-ready</code>. A candidate worktree change adds repository fallback, Codex <code>--skip-git-repo-check</code> for read-only chat, and visible CLI stderr, but current <code>develop</code> still falls back directly to the temp directory.</td>
+            <td>Make it a rollout gate. A chat-first entry cannot be the default while projects without <code>rootPath</code> can fail before answering.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout amber">
+      <strong>Documentation drift worth correcting in the implementation slice</strong>
+      <p>The current Orchestrator Chat concept still describes shared Claude session memory for the side sheet. The source path is now GPT-only and stateless. The report treats source as current reality and recommends updating the concept when behavior changes.</p>
+    </div>
+
+    <div class="callout rose">
+      <strong>Scope leak and cost risk in the current prompt preamble</strong>
+      <p>Each project turn prepends <code>GlobalOrchestratorBootstrap.BuildBootPrompt()</code>, which lists all watched projects and task-count snapshots, before adding the project-scoped ORCH-1 digest. A project context should receive a project-scoped preamble. The global inventory is unnecessary repeated input and weakens the stated project-isolation contract.</p>
+    </div>
+  </section>
+
+  <section id="model" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">02 · Context model</span>
+        <h2>Conversation Scope, Ambient Surface, and Explicit References</h2>
+      </div>
+      <p>The active tab can change what a question means without creating a new conversation. A task is the one surface that also owns a durable task transcript.</p>
+    </div>
+
+    <div class="grid-3">
+      <article class="panel">
+        <h3>1. Conversation scope</h3>
+        <p>Where history is persisted: project or task. Selected by navigation, a chat switcher, or pinning.</p>
+      </article>
+      <article class="panel">
+        <h3>2. Ambient surface</h3>
+        <p>What the operator is looking at now: board, Wiki page, Workbench, task, file, or diff. Recomputed per send.</p>
+      </article>
+      <article class="panel">
+        <h3>3. Explicit references</h3>
+        <p>What the operator deliberately adds: cards, pages, files, commits, or selected text. Removable before send.</p>
+      </article>
+    </div>
+
+    <div class="diagram" aria-label="Context request pipeline">
+      <svg viewBox="0 0 1000 180" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" style="fill:var(--line-strong);stroke:none"></path>
+          </marker>
+        </defs>
+        <path d="M210 90 C250 90, 260 90, 300 90"></path>
+        <path d="M455 90 C495 90, 505 90, 545 90"></path>
+        <path d="M700 90 C740 90, 750 90, 790 90"></path>
+      </svg>
+      <article class="diagram-node">
+        <h3>Studio state</h3>
+        <p>Active tab, project, task, board selection, page ref, Workbench selection, commit identity.</p>
+      </article>
+      <article class="diagram-node control">
+        <h3>Typed request</h3>
+        <p>Scope key, surface descriptor, explicit reference ids, and one bounded budget policy.</p>
+      </article>
+      <article class="diagram-node execution">
+        <h3>Backend resolver</h3>
+        <p>Validates scope, resolves sources, deduplicates, caps content, records revision and omissions.</p>
+      </article>
+      <article class="diagram-node control">
+        <h3>Prompt + receipt</h3>
+        <p>One structured context block reaches the model. The same source ledger returns to the UI.</p>
+      </article>
+    </div>
+    <div class="legend" aria-label="Diagram legend">
+      <span><i></i> host state</span>
+      <span><i class="control"></i> control-plane contract</span>
+      <span><i class="execution"></i> backend resolution</span>
+    </div>
+
+    <div class="table-wrap" style="margin-top:20px">
+      <table>
+        <caption>Recommended context ownership and automatic payload</caption>
+        <thead>
+          <tr>
+            <th>Context type</th>
+            <th>Transcript owner</th>
+            <th>Automatic input</th>
+            <th>Explicit expansion</th>
+            <th>Boundary</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Project</th>
+            <td><code>project:&lt;project-id&gt;</code></td>
+            <td>Project identity, compact purpose/memory snapshot, current board pulse, recent accepted decisions, and the last 3 integrated commit subjects.</td>
+            <td>Tasks, Wiki pages, Workbenches, files, commits, reports.</td>
+            <td>Never include another project's facts. Replace the current global boot preamble with scoped framing.</td>
+          </tr>
+          <tr>
+            <th>Task</th>
+            <td><code>task:&lt;project-id&gt;/&lt;task-key&gt;</code></td>
+            <td>Card metadata, authored intent from <code>prompt.md</code>, latest <code>status.md</code>, last 2 run summaries with acute error excerpts, and the last 5 entries from <code>commits[]</code>.</td>
+            <td>Older runs, exact log ranges, result artifacts, full diff, related tasks or pages.</td>
+            <td>Task questions implicitly mean this task. This is orchestrator Q&amp;A, not a hidden <code>continueJob</code> call.</td>
+          </tr>
+          <tr>
+            <th>Board selection</th>
+            <td>Project transcript, unless task detail is open</td>
+            <td>Active filters plus metadata for up to 5 selected cards: key, title, lane, phase, last activity, blocker.</td>
+            <td>Selected cards' status, prompt, runs, and commits.</td>
+            <td>No new board-selection transcript. Zero selection means board summary only. Overflow is counted and disclosed.</td>
+          </tr>
+          <tr>
+            <th>Wiki page</th>
+            <td>Project transcript</td>
+            <td>Stable page ref, title, type, revision/mtime, and a compact excerpt. The existing 480-character excerpt is a good low-cost start.</td>
+            <td>Selected section or bounded full page.</td>
+            <td>Do not create one chat per page. Preserve the project conversation and attach page context per turn.</td>
+          </tr>
+          <tr>
+            <th>Workbench</th>
+            <td>Project transcript</td>
+            <td>Workbench id, title, summary, status/phase, current selection, and pending decision state.</td>
+            <td>Chosen evidence rows or selected report sections.</td>
+            <td>Never inject the complete HTML shell, CSS, or script. Resolve the semantic document and current selection.</td>
+          </tr>
+          <tr>
+            <th>Diff or commit</th>
+            <td>Owning project transcript</td>
+            <td>Project/repository id, full SHA, subject, parents, file stats, changed paths, and a compact hunk summary.</td>
+            <td>Selected files or exact hunk ranges, bounded by the explicit attachment budget.</td>
+            <td>The current Diff tab has no project identity. Add it to the tab contract; never guess a repository from a short SHA.</td>
+          </tr>
+          <tr>
+            <th>Repository file</th>
+            <td>Current project or task transcript</td>
+            <td>None by default, except the currently open file's path and selection when a file surface exists.</td>
+            <td>Validated repo-relative path plus selected lines or a bounded text excerpt.</td>
+            <td>Backend path canonicalization, project isolation, no traversal, text-only first, and a size cap. Unresolved is visible, not a model-generated warning.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:24px">Active-context rules</h3>
+    <ol class="rule-list">
+      <li><div><strong>Snapshot at submit.</strong> Capture scope, active surface, selection, and explicit chips once when Send is pressed. A navigation change during resolution cannot alter the in-flight turn.</div></li>
+      <li><div><strong>Follow mode derives automatically.</strong> Task detail selects the task transcript. All other project surfaces select the project transcript and add their surface as ambient input.</div></li>
+      <li><div><strong>Pinning freezes the conversation scope.</strong> A newly visited tab becomes a one-click suggestion instead of silently replacing a pinned task's automatic context. Cross-project suggestions always require an explicit switch or attach action.</div></li>
+      <li><div><strong>Explicit references are additive, not authoritative.</strong> They get priority within the budget but cannot bypass project isolation or path validation.</div></li>
+      <li><div><strong>Every stateless turn gets the bounded envelope.</strong> Do not rely on the current first-send-only navigation cache. If resumable execution returns later, context deltas may optimize cost, but receipts remain per turn.</div></li>
+    </ol>
+  </section>
+
+  <section id="budget" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">03 · Prompt and token policy</span>
+        <h2>Intent and Current Evidence within the Token Budget</h2>
+      </div>
+      <p>The budget below is a model-independent planning envelope. It does not change model routing or correctness floors. Exact provider usage remains telemetry, while the pre-send count can be an estimate.</p>
+    </div>
+
+    <div class="callout blue">
+      <strong>Recommended budget contract</strong>
+      <p><strong>4,000-token soft cap</strong> for automatic context, <strong>6,000-token hard cap</strong> for automatic context, and up to <strong>8,000 total tokens</strong> when the operator explicitly attaches sources. An explicit source that cannot fit is never silently dropped: include a deterministic excerpt and state the omission, or ask the operator to narrow it.</p>
+    </div>
+
+    <div class="budget-bar" aria-label="Automatic context budget allocation">
+      <span class="base">Scope and project base<br>~800</span>
+      <span class="surface">Active surface or task bundle<br>~2,000</span>
+      <span class="history">Recent conversation<br>~1,200</span>
+      <span class="reserve">Headers and reserve</span>
+    </div>
+    <p class="small">Illustrative soft-cap allocation. Unused space flows to the active surface before older history.</p>
+
+    <div class="table-wrap" style="margin-top:18px">
+      <table>
+        <caption>Per-source token economics and recommended caps</caption>
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Default budget</th>
+            <th>Benefit</th>
+            <th>Cost or risk</th>
+            <th>Policy</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Current ORCH-1 digest</th>
+            <td class="nowrap">1,200 to 1,700</td>
+            <td>High operational awareness with fixed row caps.</td>
+            <td>Repeated every one-shot; includes sections irrelevant to many local questions.</td>
+            <td>Measured at 6,147 to 6,363 characters, roughly 1,537 to 1,591 tokens using a four-characters-per-token planning estimate. Keep, then make question-aware sections optional.</td>
+          </tr>
+          <tr>
+            <th>Project memory</th>
+            <td>500 to 900</td>
+            <td>Purpose, current priorities, accepted decisions, recent integration state.</td>
+            <td>Can become stale or duplicate README/ROADMAP prose.</td>
+            <td>Use a rebuildable summary with source hashes and freshness. Do not load full project docs every turn.</td>
+          </tr>
+          <tr>
+            <th>Task metadata</th>
+            <td>100 to 220</td>
+            <td>Cheap identity, lane, phase, blocker, references.</td>
+            <td>Insufficient by itself for “why” questions.</td>
+            <td>Always include in task scope.</td>
+          </tr>
+          <tr>
+            <th><code>prompt.md</code></th>
+            <td>600 to 1,200</td>
+            <td>Highest-value statement of operator intent and acceptance criteria.</td>
+            <td>Long enriched prompts can dominate every turn.</td>
+            <td>Prefer authored sections and acceptance criteria. Include an exact, heading-aware excerpt when over cap; expose truncation.</td>
+          </tr>
+          <tr>
+            <th><code>status.md</code></th>
+            <td>300 to 700</td>
+            <td>Best compact account of outcome, gaps, and verification.</td>
+            <td>May be absent, synthesized, or stale during an active run.</td>
+            <td>Include latest content plus provenance and generated-at state. Label missing or synthesized.</td>
+          </tr>
+          <tr>
+            <th>Recent runs</th>
+            <td>300 to 800</td>
+            <td>Explains current execution state and latest failure.</td>
+            <td>Raw activity can be tens of thousands of tokens.</td>
+            <td>Use the last 2 run summaries. Add only acute error or needs-input excerpts. Full logs are explicit only.</td>
+          </tr>
+          <tr>
+            <th><code>commits[]</code></th>
+            <td>150 to 400</td>
+            <td>Shows what changed and where the task landed.</td>
+            <td>Full patches are high cost and can bury intent.</td>
+            <td>Include up to 5 SHA, subject, attribution, and file counts. Attach diff or hunks explicitly.</td>
+          </tr>
+          <tr>
+            <th>Board selection</th>
+            <td>80 to 140 per card</td>
+            <td>Efficient comparison across a few tasks.</td>
+            <td>Unbounded multi-select becomes a board dump.</td>
+            <td>Cap automatic cards at 5; show “+N omitted”. Expand selected cards explicitly.</td>
+          </tr>
+          <tr>
+            <th>Wiki page</th>
+            <td>120 to 300 auto<br>up to 1,500 explicit</td>
+            <td>Gives the question its exact design or incident frame.</td>
+            <td>Full long-form docs crowd out conversation.</td>
+            <td>Auto-load identity and excerpt. Explicitly attach a section or bounded page body.</td>
+          </tr>
+          <tr>
+            <th>Workbench</th>
+            <td>250 to 600</td>
+            <td>Captures decision state and the operator's current analytical focus.</td>
+            <td>Raw HTML, CSS, and scripts are mostly noise.</td>
+            <td>Resolve semantic summary, selection, evidence ids, and decision state only.</td>
+          </tr>
+          <tr>
+            <th>Diff or file</th>
+            <td>400 to 900 auto summary<br>up to 2,500 explicit</td>
+            <td>Answers implementation-specific questions accurately.</td>
+            <td>Large diffs and generated files are the fastest way to exhaust the envelope.</td>
+            <td>Default to stats, paths, and selected hunks. Deny binaries; cap text by lines and bytes; disclose all omissions.</td>
+          </tr>
+          <tr>
+            <th>Recent chat</th>
+            <td>800 to 1,500</td>
+            <td>Makes follow-up questions coherent in the current stateless runtime.</td>
+            <td>Replaying the entire JSONL grows without bound.</td>
+            <td>Use the latest 4 to 8 semantic turns plus a rebuildable rolling summary. Keep raw JSONL as source of truth.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:24px">Prompt assembly order</h3>
+    <ol class="rule-list">
+      <li><div><strong>Scoped chat preamble.</strong> Role, project isolation, read-only authority, and the exact conversation scope. Do not prepend the all-project global boot prompt to a project turn.</div></li>
+      <li><div><strong>Context ledger.</strong> Stable source refs, revisions, freshness, inclusion state, and budget. This is the same ledger shown in the UI receipt.</div></li>
+      <li><div><strong>Automatic evidence.</strong> Project base, task bundle or active surface, deduplicated by canonical source id.</div></li>
+      <li><div><strong>Explicit attachments.</strong> User-selected sources receive priority after safety checks. Their content cannot silently disappear.</div></li>
+      <li><div><strong>Conversation continuity and message.</strong> Add the bounded recent transcript, then the new user message. Keep the message last and unambiguous.</div></li>
+    </ol>
+
+    <div class="callout teal">
+      <strong>Degradation must be useful</strong>
+      <p>If <code>status.md</code> is absent, a file changed after the operator viewed it, or a task key cannot resolve, the host records that state in the receipt and the prompt. The turn may continue with the remaining evidence. Scope violations, traversal, and ambiguous repositories are blocked before model invocation.</p>
+    </div>
+  </section>
+
+  <section id="task-chat" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">04 · Task Chat</span>
+        <h2>Boundary between Task Questions and Agent Continuation</h2>
+      </div>
+      <p>The task detail already has an Activity composer that calls <code>continueJob</code>, starts or queues a CLI run, and pause-then-sends while running. The new Task Chat must not reuse that mutation path.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <caption>Boundary between the two task-detail conversations</caption>
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Task Chat: new orchestrator Q&amp;A</th>
+            <th>Activity: existing task-agent control</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Meaning</th>
+            <td>Questions implicitly refer to the open task and its evidence.</td>
+            <td>Text is a continuation or intervention for the task agent.</td>
+          </tr>
+          <tr>
+            <th>Side effect</th>
+            <td>Read-only answer by default. Typed actions may be proposed separately.</td>
+            <td>Starts, queues, or interrupts a CLI run through existing task APIs.</td>
+          </tr>
+          <tr>
+            <th>Transcript</th>
+            <td>Existing <code>task:&lt;project&gt;/&lt;key&gt;</code> orchestrator transcript.</td>
+            <td>Task CLI output, run timeline, user follow-ups, and orchestrator events.</td>
+          </tr>
+          <tr>
+            <th>Automatic context</th>
+            <td>Metadata, <code>prompt.md</code>, <code>status.md</code>, recent run summaries/error excerpts, <code>commits[]</code>, recent task-chat turns.</td>
+            <td>The task execution runtime and its own session/context rules.</td>
+          </tr>
+          <tr>
+            <th>UI label</th>
+            <td><strong>Chat</strong>, with “Ask about AGT-2514” composer copy and an Orchestrator actor label.</td>
+            <td><strong>Activity</strong>, with “Continue task agent” action copy when a send will run work.</td>
+          </tr>
+          <tr>
+            <th>Project chat relationship</th>
+            <td>A separate task thread. Project chat can attach the task and link into this tab, but does not merge histories.</td>
+            <td>Evidence remains within task detail and can be cited by the orchestrator through bounded resolvers.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-2" style="margin-top:18px">
+      <article class="panel">
+        <h3>Persistence recommendation</h3>
+        <p>Keep task chat under the project-level <code>.orchestrator/context-chats/</code> store. It survives lane moves and archive transitions without following the task folder. Store only transcript turns and compact context receipts there, not resolved source bodies.</p>
+      </article>
+      <article class="panel">
+        <h3>Continuity recommendation</h3>
+        <p>Read a bounded recent window from that JSONL on every stateless turn. A derived summary may be cached beside it, but it must be rebuildable and carry the last included turn id.</p>
+      </article>
+    </div>
+
+    <div class="callout amber">
+      <strong>Actor clarity is a safety feature</strong>
+      <p>The two composers can look related because both use chat. The UI must state who will answer and whether Send spends task-execution quota or changes runtime state. Color alone is not sufficient.</p>
+    </div>
+  </section>
+
+  <section id="ux" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">05 · Fast reference UX</span>
+        <h2>Single-Click References and Evidence Inspection</h2>
+      </div>
+      <p>CAC-20 deliberately keeps the library path-agnostic. The app host owns the picker, source resolution, and receipt. This is the correct separation.</p>
+    </div>
+
+    <div class="wireframes">
+      <figure class="sketch">
+        <figcaption><span>Project chat composer</span><span class="small">Concept sketch</span></figcaption>
+        <svg viewBox="0 0 680 520" role="img" aria-labelledby="project-chat-title project-chat-desc">
+          <title id="project-chat-title">Project chat composer</title>
+          <desc id="project-chat-desc">Project chat with visible context receipt, automatic Wiki context, an AGT-2506 reference, and the Add context action.</desc>
+          <rect class="ux-frame" x="10" y="10" width="660" height="500" rx="12"/>
+          <rect class="ux-panel" x="10" y="10" width="660" height="52" rx="12"/>
+          <path class="ux-line" d="M10 62H670"/>
+          <text class="s-label" x="30" y="42">Chat · Agent Studio</text>
+          <rect class="ux-frame" x="570" y="24" width="78" height="26" rx="13"/>
+          <text class="s-sub" x="585" y="42">Chats 4</text>
+
+          <path class="ux-placeholder" d="M34 92H510"/>
+          <path class="ux-placeholder" d="M34 116H620"/>
+          <path class="ux-placeholder" d="M34 140H365"/>
+
+          <rect class="ux-panel" x="30" y="168" width="620" height="170" rx="10"/>
+          <text class="s-label" x="48" y="196">Used context · 5 sources · ~3.1k tokens</text>
+          <path class="ux-line" d="M48 210H632 M48 252H632 M48 294H632"/>
+          <text class="s-sub" x="48" y="237">Project pulse</text>
+          <text class="s-tiny" x="470" y="237">current</text>
+          <text class="s-tiny" x="586" y="237">full</text>
+          <text class="s-sub" x="48" y="279">Wiki · orchestrator-chat.md</text>
+          <text class="s-tiny" x="470" y="279">755aaeab</text>
+          <text class="s-tiny" x="586" y="279">excerpt</text>
+          <text class="s-sub" x="48" y="321">Task · AGT-2506</text>
+          <text class="s-tiny" x="470" y="321">live</text>
+          <text class="s-tiny" x="586" y="321">full</text>
+
+          <rect class="ux-accent" x="10" y="356" width="660" height="54"/>
+          <rect class="ux-ok" x="28" y="370" width="132" height="28" rx="14"/>
+          <text class="s-sub" x="43" y="389">Auto · Wiki page</text>
+          <rect class="ux-frame" x="170" y="370" width="112" height="28" rx="14"/>
+          <text class="s-sub" x="185" y="389">AGT-2506 ×</text>
+          <rect class="ux-frame" x="292" y="370" width="122" height="28" rx="14"/>
+          <text class="s-action" x="307" y="389">+ Add context</text>
+
+          <rect class="ux-panel" x="28" y="430" width="526" height="58" rx="9"/>
+          <text class="s-sub" x="44" y="462">Ask a question about the page or project…</text>
+          <rect class="ux-primary" x="568" y="443" width="80" height="32" rx="8"/>
+          <text class="s-button" x="593" y="464">Send</text>
+        </svg>
+      </figure>
+
+      <figure class="sketch">
+        <figcaption><span>Task detail</span><span class="small">Concept sketch</span></figcaption>
+        <svg viewBox="0 0 680 520" role="img" aria-labelledby="task-chat-title task-chat-desc">
+          <title id="task-chat-title">Task detail Chat</title>
+          <desc id="task-chat-desc">Task detail with a separate Chat tab, automatic AGT-2514 context, and an Orchestrator actor note explaining the read-only boundary.</desc>
+          <rect class="ux-frame" x="10" y="10" width="660" height="500" rx="12"/>
+          <rect class="ux-panel" x="10" y="10" width="660" height="58" rx="12"/>
+          <rect class="ux-frame" x="28" y="24" width="74" height="28" rx="14"/>
+          <text class="s-sub" x="50" y="43">Task</text>
+          <rect class="ux-frame" x="112" y="24" width="82" height="28" rx="14"/>
+          <text class="s-sub" x="132" y="43">Result</text>
+          <rect class="ux-frame" x="204" y="24" width="92" height="28" rx="14"/>
+          <text class="s-sub" x="223" y="43">Activity</text>
+          <rect class="ux-ok" x="306" y="24" width="74" height="28" rx="14"/>
+          <text class="s-label" x="326" y="43">Chat</text>
+
+          <text class="s-label" x="34" y="108">Chat about AGT-2514</text>
+          <text class="s-sub" x="34" y="135">Automatic: task brief, latest status, 2 runs, 0 commits</text>
+          <path class="ux-placeholder" d="M34 172H510"/>
+          <path class="ux-placeholder" d="M34 196H620"/>
+
+          <rect class="ux-warn" x="30" y="232" width="620" height="78" rx="9"/>
+          <text class="s-label" x="48" y="261">Orchestrator</text>
+          <text class="s-sub" x="48" y="287">Answers about evidence. Sending here does not continue the task agent.</text>
+
+          <rect class="ux-accent" x="10" y="356" width="660" height="54"/>
+          <rect class="ux-ok" x="28" y="370" width="138" height="28" rx="14"/>
+          <text class="s-sub" x="43" y="389">Auto · AGT-2514</text>
+          <rect class="ux-frame" x="176" y="370" width="122" height="28" rx="14"/>
+          <text class="s-action" x="191" y="389">+ Add context</text>
+
+          <rect class="ux-panel" x="28" y="430" width="526" height="58" rx="9"/>
+          <text class="s-sub" x="44" y="462">Ask about this task…</text>
+          <rect class="ux-primary" x="568" y="443" width="80" height="32" rx="8"/>
+          <text class="s-button" x="593" y="464">Send</text>
+        </svg>
+      </figure>
+    </div>
+
+    <h3 style="margin-top:24px">Add context flow</h3>
+    <div class="grid-3">
+      <article class="panel">
+        <h3>Current Tab Priority</h3>
+        <p><code>contextAttachmentAddRequested</code> opens a host popover with one recommended row: the current tab's stable typed reference and a short estimate of what will be included.</p>
+      </article>
+      <article class="panel">
+        <h3>Known-Source Search</h3>
+        <p>Sections for Tasks, Wiki and Workbenches, Files, and Commits. Task references reuse live task-key validation and microcard semantics. File and commit results must carry project identity.</p>
+      </article>
+      <article class="panel">
+        <h3>Send-Time Resolution</h3>
+        <p>Chips hold ids and labels only. The backend resolves content at the execution checkout, records the exact revision and truncation, and returns the receipt.</p>
+      </article>
+    </div>
+
+    <div class="table-wrap" style="margin-top:18px">
+      <table>
+        <caption>Transparency contract before and after Send</caption>
+        <thead>
+          <tr>
+            <th>Moment</th>
+            <th>Operator sees</th>
+            <th>Backend truth</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Before Send</th>
+            <td>Automatic context chip, explicit removable chips, estimated source count and token cost, plus a single Exclude automatic context action.</td>
+            <td>Only stable refs and the context budget request. No frontend-supplied repository content is trusted.</td>
+          </tr>
+          <tr>
+            <th>While resolving</th>
+            <td>Quiet pending state. A slow source names itself instead of freezing the entire workspace.</td>
+            <td>Project isolation, canonical path checks, revision capture, size caps, and deduplication.</td>
+          </tr>
+          <tr>
+            <th>After response</th>
+            <td>A compact “Used context” row with source count, total estimate/actual input usage, and an Inspect disclosure.</td>
+            <td>Append-only receipt linked to the user turn id: source ref, kind, revision/hash, freshness, included characters/tokens, status, and reason.</td>
+          </tr>
+          <tr>
+            <th>Failure or omission</th>
+            <td>Host-rendered row: unresolved, blocked, changed since viewed, excerpted, or omitted by budget. The model is not asked to confess infrastructure failures.</td>
+            <td>The request continues only when remaining context is safe and sufficient. Scope or traversal violations fail before invocation.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout blue">
+      <strong>Vocabulary recommendation</strong>
+      <p>Use <strong>Chats</strong> for the current header switcher, <strong>Context</strong> for per-message evidence chips, and <strong>Usage</strong> for the token ring. The underlying contracts already distinguish these concepts; the UI should do the same.</p>
+    </div>
+  </section>
+
+  <section id="slices" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">06 · Slice plan</span>
+        <h2>Five Workflow-Sized Follow-up Slices</h2>
+      </div>
+      <p>Each slice has one operator-visible outcome and a bounded backend contract. Slices 1 through 3 form the recommended minimum cut. Slice 5 makes the product switch prominent.</p>
+    </div>
+
+    <div class="dependency" aria-label="Slice dependency graph">
+      <svg viewBox="0 0 1000 170" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <marker id="arrow2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" style="fill:var(--line-strong);stroke:none"></path>
+          </marker>
+        </defs>
+        <path d="M145 65 C190 65, 190 65, 235 65"></path>
+        <path d="M145 110 C190 110, 190 110, 235 110"></path>
+        <path d="M355 85 C400 85, 405 65, 450 65"></path>
+        <path d="M355 85 C400 85, 405 115, 450 115"></path>
+        <path d="M565 65 C610 65, 615 65, 660 65"></path>
+        <path d="M565 115 C610 115, 615 105, 660 105"></path>
+        <path d="M775 85 C820 85, 825 85, 870 85"></path>
+      </svg>
+      <div class="dep-node gate"><strong>CAC-20 / AGT-2506</strong>Published chips and app reference contract</div>
+      <div class="dep-node gate"><strong>AGT-2512</strong>Reliable all-project chat execution</div>
+      <div class="dep-node recommended"><strong>Slice 1</strong>Context envelope and receipts</div>
+      <div class="dep-node recommended"><strong>Slices 2 + 3</strong>Project UX and Task Chat</div>
+      <div class="dep-node"><strong>Slice 5</strong>Standard project entry</div>
+    </div>
+    <p class="small">Slice 4, the Git-rich adapter, branches from Slice 1 and can run alongside Slices 2 and 3. It is intentionally not a hard gate for the default project-chat entry.</p>
+
+    <div class="slice-plan">
+      <article class="slice">
+        <div class="slice-id"><span>1</span>CTX-1</div>
+        <div class="slice-body">
+          <h3>Typed context envelope, bounded continuity, and persisted receipts</h3>
+          <div class="slice-meta">
+            <span>Depends: AGT-2506 + CAC-20 release</span>
+            <span>Rollout gate: AGT-2512</span>
+            <span>Backend + host contract</span>
+          </div>
+          <div class="slice-columns">
+            <div>
+              <h4>Outcome</h4>
+              <ul>
+                <li>Extend AGT-2506's <code>ContextReferences</code> into one typed request containing conversation scope, active surface, explicit refs, and budget.</li>
+                <li>Build a single backend resolver that adds project/task evidence and a bounded recent transcript on every stateless side-sheet turn.</li>
+                <li>Use a project-scoped chat preamble instead of the all-project global boot prompt.</li>
+                <li>Return and append a context receipt event linked to the user turn. Store metadata and hashes, not resolved bodies.</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Acceptance and evidence</h4>
+              <ul>
+                <li>Unit tests pin budget priority, deduplication, scope isolation, path validation, missing files, and receipt persistence.</li>
+                <li>Prompt-capture test proves the second unchanged-context message still receives task or page context and bounded prior turns.</li>
+                <li>Unknown or cross-project refs produce typed host-visible failures, not crashes or wider fallback.</li>
+                <li>Update Orchestrator Chat and ORCH-1 docs because prompt and memory contracts change.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slice">
+        <div class="slice-id"><span>2</span>CTX-2</div>
+        <div class="slice-body">
+          <h3>Project chat: current-tab chip, source picker, and context inspector</h3>
+          <div class="slice-meta">
+            <span>Depends: Slice 1</span>
+            <span>Project chat UX</span>
+            <span>CAC host wiring</span>
+          </div>
+          <div class="slice-columns">
+            <div>
+              <h4>Outcome</h4>
+              <ul>
+                <li>Wire <code>contextAttachments</code>, remove, and <code>contextAttachmentAddRequested</code> from the released library into the side sheet.</li>
+                <li>Open a compact host popover with Current tab first, then Tasks, Wiki/Workbenches, Files, and Commits.</li>
+                <li>Support board filters and up to five selected cards, Wiki page identity/excerpt, and Workbench semantic state.</li>
+                <li>Render pre-send estimate and per-turn “Used context” disclosure. Rename the transcript switcher from Contexts to Chats or Scopes.</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Acceptance and evidence</h4>
+              <ul>
+                <li>One click attaches the current tab; navigation during resolution cannot change the sent ref.</li>
+                <li>Remove, exclude-once, unresolved, excerpted, and over-budget states are keyboard accessible.</li>
+                <li>Playwright covers project board, Wiki, Workbench, pin/follow, light/dark, narrow/wide side sheet, and reload persistence of receipts.</li>
+                <li>Reuse <code>cac-chat</code>, existing menu/overlay primitives, task microcards, and central spacing/theme tokens.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slice">
+        <div class="slice-id"><span>3</span>CTX-3</div>
+        <div class="slice-body">
+          <h3>Task-detail Chat backed by the existing task transcript</h3>
+          <div class="slice-meta">
+            <span>Depends: Slices 1 + 2</span>
+            <span>Task workflow</span>
+            <span>No new storage owner</span>
+          </div>
+          <div class="slice-columns">
+            <div>
+              <h4>Outcome</h4>
+              <ul>
+                <li>Add a Chat tab to task detail using <code>task:&lt;project&gt;/&lt;key&gt;</code> and the reusable orchestrator chat component.</li>
+                <li>Automatically load card metadata, authored prompt intent, latest status, last two run summaries with acute excerpts, commits, and recent task-chat turns.</li>
+                <li>Keep Activity as the task-agent execution surface. Clarify actor and side-effect copy in both composers.</li>
+                <li>Project-chat task references open this Chat tab; histories remain separate and linkable.</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Acceptance and evidence</h4>
+              <ul>
+                <li>“What failed?” answers from the open task without a manual chip and cites the included status/run evidence.</li>
+                <li>Sending in Chat never calls start, stop, or continue task endpoints. Sending in Activity retains existing pause-then-continue behavior.</li>
+                <li>Transcript survives reload and lane/archive movement.</li>
+                <li>Playwright proves tab semantics, actor labels, no side effects, receipt inspection, and both themes.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slice">
+        <div class="slice-id"><span>4</span>CTX-4</div>
+        <div class="slice-body">
+          <h3>Git-rich context for files, commits, and diffs</h3>
+          <div class="slice-meta">
+            <span>Depends: Slice 1</span>
+            <span>Can run in parallel</span>
+            <span>Backend git ownership</span>
+          </div>
+          <div class="slice-columns">
+            <div>
+              <h4>Outcome</h4>
+              <ul>
+                <li>Add owning project/repository identity to Diff tabs and global-search commit navigation.</li>
+                <li>Resolve commit metadata, file stats, paths, and bounded selected hunks through backend Git services.</li>
+                <li>Resolve repository files with canonical project-relative paths, selected line ranges, text/size caps, and revision hashes.</li>
+                <li>Expose generated/binary/oversize omissions in the same receipt contract.</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Acceptance and evidence</h4>
+              <ul>
+                <li>A short SHA is never enough to resolve across projects; ambiguous refs stop before model invocation.</li>
+                <li>Worktree and Git artifact handling stays in backend orchestration, never the chat CLI.</li>
+                <li>Tests cover traversal, symlinks/out-of-root paths, missing commits, large diffs, generated files, and remote execution checkout identity.</li>
+                <li>Playwright covers Add current diff and selected-file/hunk receipts.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slice">
+        <div class="slice-id"><span>5</span>ENTRY</div>
+        <div class="slice-body">
+          <h3>Orchestrator Chat as the Standard Project Entry</h3>
+          <div class="slice-meta">
+            <span>Depends: Slices 1 + 2 + 3</span>
+            <span>Hard gate: AGT-2512 integrated</span>
+            <span>Prominent app switch</span>
+          </div>
+          <div class="slice-columns">
+            <div>
+              <h4>Outcome</h4>
+              <ul>
+                <li>Opening a project reveals its project chat in the existing resizable side sheet by default while the selected project surface remains visible.</li>
+                <li>Make Chat the primary action on Welcome and project entry surfaces. Preserve a direct Board action and the current status-bar toggle.</li>
+                <li>Add one visible preference, “Open project Chat on project entry”, with the default and rationale inline. Persist the operator's later choice.</li>
+                <li>Do not autofocus on passive restore. An explicit Open Chat action may focus the composer.</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Acceptance and evidence</h4>
+              <ul>
+                <li>Every configured project can open and answer from its correct checkout, including projects without legacy <code>rootPath</code>.</li>
+                <li>Project switch changes scope, transcript, context receipt, and execution identity atomically with no foreign-project flash.</li>
+                <li>Playwright covers first visit, saved preference, project switching, task deep link, light/dark, narrow viewport, and keyboard focus.</li>
+                <li>No new global chat window, no overlay regression, and no hidden task mutation from project Q&amp;A.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div class="callout teal">
+      <strong>Recommended operator cut</strong>
+      <p>Approve Slices 1 to 3 as one coherent product increment. Schedule Slice 5 immediately after acceptance evidence from those slices. Run Slice 4 after Slice 1 when Git and diff questions are important enough; it does not need to delay the main project/task chat switch if unsupported Diff context is shown transparently.</p>
+    </div>
+  </section>
+
+  <section id="decisions" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">07 · Operator decisions</span>
+        <h2>Operator Choices for Cut and Rollout</h2>
+      </div>
+      <p>The recommendations below keep context inspectable and preserve the existing separation between orchestrator conversation and task execution.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <caption>Decision matrix</caption>
+        <thead>
+          <tr>
+            <th>Decision</th>
+            <th>Recommended</th>
+            <th>Alternative</th>
+            <th>Tradeoff</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Automatic context depth</th>
+            <td>Compact, every turn; full sources only on explicit attach.</td>
+            <td>Only explicit context.</td>
+            <td>Automatic compact context delivers the operator vision with bounded repeat cost. Explicit-only is cheaper but makes “this task/page” unreliable.</td>
+          </tr>
+          <tr>
+            <th>Task Chat role</th>
+            <td>Separate orchestrator Q&amp;A tab.</td>
+            <td>Merge with Activity composer.</td>
+            <td>Separation prevents an innocent question from starting or interrupting task work. A merge saves chrome but creates side-effect ambiguity.</td>
+          </tr>
+          <tr>
+            <th>Transcript model</th>
+            <td>Project + task only.</td>
+            <td>One transcript per page, Workbench, or diff.</td>
+            <td>Two durable scopes preserve continuity. Per-surface threads fragment memory and multiply switcher noise.</td>
+          </tr>
+          <tr>
+            <th>Default entry</th>
+            <td>Project surface plus side-sheet Chat open by default.</td>
+            <td>New full-screen Chat route.</td>
+            <td>The side sheet keeps software and board visible and follows established design doctrine. A new route duplicates navigation and hides the project surface.</td>
+          </tr>
+          <tr>
+            <th>Header vocabulary</th>
+            <td>Rename Contexts to Chats; reserve Context for message evidence.</td>
+            <td>Keep Contexts.</td>
+            <td>Renaming removes ambiguity with CAC <code>contextAttachments</code> and token context usage. Keeping it avoids copy change but makes receipts harder to explain.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <details open>
+      <summary>Proposed decision record</summary>
+      <div>
+        <p><strong>Decision:</strong> Orchestrator Chat becomes the primary project conversation. Conversation scope remains project or task; the active surface is a per-turn context input; explicit references are additive. Task-detail Chat is read-only orchestrator Q&amp;A and remains separate from Activity. Every model turn persists a source receipt. The project opens with the existing side sheet visible after the execution and context foundations are accepted.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="evidence" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">08 · Evidence</span>
+        <h2>Source anchors and live-state checks</h2>
+      </div>
+      <p>The AGT-2514 investigation used repository source and the stable Task API in read-only mode. No source file, task, lane, branch, or remote was modified during that investigation.</p>
+    </div>
+
+    <ul class="evidence-list">
+      <li><strong>Composer location mapping:</strong> <code>frontend/src/app/features/orchestrator/composer-location-context.ts:16-80</code>. Confirms the presentational <code>{project, surface, detail}</code> contract and projectless Diff mapping.</li>
+      <li><strong>Side-sheet context and composer UI:</strong> <code>frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html:39-197</code>. Confirms Contexts menu, context freshness, switcher, transcript, footer label, and composer host.</li>
+      <li><strong>Scope following, pinning, and first-send context cache:</strong> <code>orchestrator-side-sheet.component.ts:187-274</code>, <code>:318-353</code>, and <code>:688-797</code>.</li>
+      <li><strong>Repository page context:</strong> <code>frontend/src/app/features/orchestrator/chat-navigation-context.ts:38-66</code> and <code>frontend/src/app/models/page-context.model.ts:8-88</code>. Confirms page ref/title/type/excerpt and 480-character default excerpt cap.</li>
+      <li><strong>Project and task transcript storage:</strong> <code>backend/Features/Runner/OrchestratorChat.cs:59-212</code>. Confirms project JSONL, encoded task context files, and project-only FTS mirror.</li>
+      <li><strong>Current request and prompt assembly:</strong> <code>backend/Features/Runner/OrchestratorChat.cs:364-399</code>, <code>:501-624</code>, and <code>:631-752</code>. Confirms no <code>ContextReferences</code> field and no transcript read during prompt construction.</li>
+      <li><strong>Stateless Codex execution:</strong> <code>backend/Features/Runner/OrchestratorRunner.cs:104-141</code>. Confirms <code>CodexOneShot</code>, no resume id, and null captured session id.</li>
+      <li><strong>ORCH-1 digest scope and caps:</strong> <code>backend/Features/Orchestrator/OrchestratorContextDigestService.cs:14-18</code>, <code>:57-114</code>, and <code>:406-524</code>.</li>
+      <li><strong>All-project boot preamble:</strong> <code>backend/Features/Runner/GlobalOrchestratorBootstrap.cs:101-160</code>, prepended by <code>OrchestratorChat.cs:548</code>.</li>
+      <li><strong>Existing task-agent composer semantics:</strong> <code>frontend/src/app/features/task-detail/task-detail.ts:822-910</code> and <code>frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html:464-493</code>.</li>
+      <li><strong>Product placement doctrine:</strong> <code>docs/quality/design-principles.md</code>, “Chat is a multi-actor conversation”. It places task-scoped conversation in task detail and project-scoped conversation in the resizable side sheet.</li>
+      <li><strong>Live Task API snapshot, 8 August 2026:</strong> AGT-2506 was <code>2-ready</code>, blocked by CAC-20 in <code>5-human-review</code> and not released. AGT-2512 was <code>2-ready</code> with no attributed App commit. CAC-20 had result commit <code>928ebeb</code> but remained unintegrated/unpublished.</li>
+      <li><strong>Live digest measurement:</strong> stable <code>project:Agent Studio</code> returned 6,147 characters; task scopes AGT-2506 and AGT-2512 returned 6,363 and 6,358 characters. Rough token values use a planning estimate of four characters per token, not provider billing telemetry.</li>
+    </ul>
+
+    <div class="callout blue">
+      <strong>Verification for this read-only report</strong>
+      <p>The standalone HTML is intended to render without external fonts, scripts, network requests, or source-tree links. It supports light/dark color schemes, responsive layouts, reduced motion, printable tables, selectable text, and inline SVG connection wires.</p>
+    </div>
+  </section>
+
+  <footer>
+    AGT-2514 planning deliverable, canonically republished as a dossier by AGT-2551. The original artifact remains unchanged at <code>results/report.html</code> on the AGT-2514 card.
+  </footer>
+</main>
+</body>
+</html>
