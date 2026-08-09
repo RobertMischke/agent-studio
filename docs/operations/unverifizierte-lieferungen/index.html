@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unverifizierte Lieferungen | Operations-Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch-Identität: develop */
+    --taskbr: #4a3aa7;       /* Branch-Identität: task/<slug> */
+    --salvage: #eb6834;      /* Branch-Identität: runner/<id>/<key> (Salvage) */
+    --rescue: #b58500;       /* Branch-Identität: rescue/WIP */
+    --ok: #008300;           /* Status gut (immer mit Icon+Text) */
+    --bad: #c93736;          /* Status Problem (immer mit Icon+Text) */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Operations-Dossier · Postmortem</p>
+  <h1>Unverifizierte Lieferungen</h1>
+  <p class="lede">Zwei Lieferungen existierten nur auf Salvage-Branches, eine davon wurde trotzdem als abgeschlossen verbucht. Die Folgen: falsch-rote Gates in drei Projekten, eine rote Baseline, zwei Eskalationen, ein blockierter Release-Zug. Dieses Dossier rekonstruiert den Hergang, benennt die Bruchstellen und die Invarianten, die den Wiederholungsfall ausschließen.</p>
+  <div class="meta">
+    <span><b>Stand</b> 09.08.2026, abends</span>
+    <span><b>Anlass</b> Vorfall 09.08. (AGT-2531 / AGT-2541)</span>
+    <span><b>Status</b> Sofortmaßnahmen umgesetzt, Härtung getaktet, 2 Entscheidungen offen</span>
+  </div>
+</header>
+
+<nav class="box">
+  <b>Inhalt</b>
+  <ul class="toc">
+    <li><a href="#s1">§1 Hergang</a></li>
+    <li><a href="#s2">§2 Bruchstellen</a></li>
+    <li><a href="#s3">§3 Rettungsmechanik</a></li>
+    <li><a href="#s4">§4 Sofortmaßnahmen</a></li>
+    <li><a href="#s5">§5 Härtung</a></li>
+    <li><a href="#s6">§6 Entscheidungskriterien</a></li>
+    <li><a href="#s7">§7 Offene Arbeiten</a></li>
+  </ul>
+</nav>
+
+<div class="box accent">
+  <b>Kernaussagen</b>
+  <ul>
+    <li>Der Schaden entstand nicht durch verlorene Arbeit, sondern durch <b>falsche Zustandsaussagen</b>: Eine Karte stand auf „completed", ohne dass ihre Lieferung develop je erreicht hatte.</li>
+    <li>Zwei unabhängige Bruchstellen mussten zusammenkommen: der <b>Envelope-Ausfall</b> am Runner-Abschluss und die <b>stille Abnahme</b> (Worker-Outcome <code>NoTaskBranch</code> ohne Rückmeldung an die Karte).</li>
+    <li>Der <b>Salvage-Fence-Push</b> hat beide Arbeiten vollständig gesichert; AGT-2544 macht ihn zum Kontraktbestandteil.</li>
+    <li>Die Telemetrie hat den Zustand <b>verdeckt statt gezeigt</b>: Der Backstop meldete im 15-Minuten-Takt „integrated", während er dieselben Fehlschläge wiederholte.</li>
+    <li>Härtung in drei Karten: <b>AGT-2543</b> (Abnahme-Invariante), <b>AGT-2544</b> (Envelope-Pflicht mit Auto-Requeue), <b>AGT-2545</b> (ehrliche Telemetrie + Alarm).</li>
+  </ul>
+</div>
+
+<h2 id="s1"><span class="no">§1</span>Hergang</h2>
+<p class="stx stx-ok">Vollständig rekonstruiert aus Task-Ordnern, Backend-Log und Git-Historie.</p>
+<p class="dim">Alle Zeiten lokal (UTC+2). Belege: <code>tasks/002/AGT-25xx/</code> (task.json, parked-blocker.json, results/), <code>.api.log.out</code> der Stable-App, <code>AGT-2531/results/gate-incident-evidence.md</code>, Git-Historie von <code>develop</code>.</p>
+<table>
+  <thead><tr><th>Zeit</th><th>Ereignis</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">~11:10</td><td>Erste Welle falsch-roter Integrationen: Der Abnahme-Gate-Workspace stellt keine Dependencies her. CAC: <code>'ng' is not recognized</code> (kein <code>npm ci</code>); QS: POSIX-<code>if [ -f … ]</code> läuft durch cmd.exe. Sieben Karten (CAC-18/19/20, QS-53…56) enden mit Outcome <b>Error</b>.</td></tr>
+    <tr><td class="mono">12:10</td><td><b>AGT-2531</b> angelegt (Gate-Fix: Dependency-Vorbereitung im Gate-Workspace). Remote-Lauf startet unmittelbar danach.</td></tr>
+    <tr><td class="mono">13:01</td><td><b>AGT-2536</b> und <b>AGT-2537</b> (Workbench-Slices) starten remote von derselben Basis.</td></tr>
+    <tr><td class="mono">13:31</td><td>AGT-2531 schließt ab: Fix implementiert und lokal verifiziert (40 Regressionstests, 2 Fresh-Workspace-Fixtures). Der Runner meldet Outcome <b>Blocked</b> (Rollout-Grenze: Stable fährt das Vor-Fix-Binary) — der Result-Envelope ist unvollständig, die Arbeit liegt ausschließlich auf dem Salvage-Fence. Die Karte wird auf <b>6-completed</b> gesetzt.</td></tr>
+    <tr><td class="mono">13:39 / 13:43</td><td>AGT-2537 (<code>unrelated-dotnet-race-test</code>) und AGT-2536 (<code>baseline-dotnet-test-failure</code>) eskalieren nach <b>5e</b>: rote Baseline — die zwei Full-Suite-Brüche, die später AGT-2541 fixt. Beide Fence-Stände enthalten fertige Teilarbeit inkl. Screenshots.</td></tr>
+    <tr><td class="mono">13:41</td><td>Der Accepted-Integration-Worker verarbeitet AGT-2531: Outcome <b>NoTaskBranch</b> (1 075 ms) — kein Lieferbranch vorhanden. <b>Keine Rückmeldung an die Karte</b>: Sie bleibt completed, <code>integration=null</code>. Der Gate-Fix existiert für das System nicht.</td></tr>
+    <tr><td class="mono">15:06</td><td><b>AGT-2541</b> angelegt: Promotion-Full-Gate rot mit exakt den zwei Baseline-Tests. Remote-Lauf startet.</td></tr>
+    <tr><td class="mono">15:42</td><td>AGT-2541 eskaliert als <b>unverified-delivery</b>: Completion „Done" gemeldet, aber Envelope unvollständig (BaseSha, ImmutableResultRef, ArtifactManifestDigest fehlen), kein ReviewSubject. Die Arbeit — ein echter Produktfix im synchronen Git-Prozess-Pfad — liegt vollständig auf dem Fence.</td></tr>
+    <tr><td class="mono">~16:45</td><td>Orchestrator-Recovery: Beide Fences card-scoped nach develop gemerged (<code>6ea7f7978</code> für AGT-2541, <code>720129404</code> für AGT-2531), Zielklassen lokal grün verifiziert, Baseline-Gegenlauf beweist: keine neuen Brüche (§4). Push auf origin/develop.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s2"><span class="no">§2</span>Bruchstellen</h2>
+<p class="stx stx-ok">Beide Bruchstellen sind identifiziert und je einer Härtungs-Karte zugeordnet.</p>
+<p>Keine der beiden Bruchstellen hätte allein diesen Schaden angerichtet. Der Envelope-Ausfall ohne stille Abnahme wäre eine sichtbare Eskalation gewesen (wie bei AGT-2541). Die stille Abnahme ohne Envelope-Ausfall hätte einen Branch vorgefunden und normal integriert. Erst die Kombination erzeugte eine Karte, die <i>abgeschlossen aussah und nichts geliefert hatte</i>.</p>
+
+<figure>
+<svg viewBox="0 0 980 400" role="img" aria-label="Lieferpfad einer Remote-Karte mit den zwei Bruchstellen und dem Rettungspfad über den Salvage-Fence">
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <!-- Hauptpfad -->
+  <rect class="s-node" x="20" y="60" width="150" height="64" rx="8"/>
+  <text class="s-label" x="95" y="87" text-anchor="middle">Remote-Lauf</text>
+  <text class="s-sub" x="95" y="106" text-anchor="middle">agent-runner-01</text>
+
+  <rect class="s-node" x="230" y="60" width="170" height="64" rx="8"/>
+  <text class="s-label" x="315" y="82" text-anchor="middle">Result-Envelope</text>
+  <text class="s-tiny" x="315" y="99" text-anchor="middle">BaseSha · ImmutableResultRef</text>
+  <text class="s-tiny" x="315" y="113" text-anchor="middle">ArtifactManifestDigest</text>
+
+  <rect class="s-node" x="460" y="60" width="150" height="64" rx="8"/>
+  <text class="s-label" x="535" y="87" text-anchor="middle">ReviewSubject</text>
+  <text class="s-sub" x="535" y="106" text-anchor="middle">+ Task-Branch</text>
+
+  <rect class="s-node" x="670" y="60" width="130" height="64" rx="8"/>
+  <text class="s-label" x="735" y="87" text-anchor="middle">Abnahme</text>
+  <text class="s-sub" x="735" y="106" text-anchor="middle">6-completed</text>
+
+  <rect class="s-node" x="850" y="60" width="110" height="64" rx="8" style="stroke: var(--develop); stroke-width: 2"/>
+  <text class="s-label" x="905" y="87" text-anchor="middle">develop</text>
+  <text class="s-sub" x="905" y="106" text-anchor="middle">Integration</text>
+
+  <line class="s-flow" x1="170" y1="92" x2="228" y2="92" marker-end="url(#arr)"/>
+  <line class="s-flow" x1="400" y1="92" x2="458" y2="92" marker-end="url(#arr)"/>
+  <line class="s-flow" x1="610" y1="92" x2="668" y2="92" marker-end="url(#arr)"/>
+  <line class="s-flow" x1="800" y1="92" x2="848" y2="92" marker-end="url(#arr)"/>
+
+  <!-- Bruch 1 -->
+  <rect class="badge-bad" x="240" y="150" width="360" height="52" rx="8"/>
+  <text class="t-bad" x="255" y="171">✗ Bruch 1: Envelope unvollständig, trotzdem</text>
+  <text class="t-bad" x="255" y="189">„Done" gemeldet (AGT-2541) bzw. „Blocked" (AGT-2531)</text>
+  <line class="s-flow" x1="315" y1="148" x2="315" y2="126" marker-end="url(#arr)" style="stroke: var(--bad)"/>
+
+  <!-- Bruch 2 -->
+  <rect class="badge-bad" x="605" y="150" width="355" height="52" rx="8"/>
+  <text class="t-bad" x="620" y="171">✗ Bruch 2: Worker NoTaskBranch, Karte bleibt</text>
+  <text class="t-bad" x="620" y="189">completed, integration=null, ohne Hinweis</text>
+  <line class="s-flow" x1="735" y1="148" x2="735" y2="126" marker-end="url(#arr)" style="stroke: var(--bad)"/>
+
+  <!-- Fence-Pfad -->
+  <rect x="20" y="250" width="240" height="64" rx="8" style="fill: var(--surface-1); stroke: var(--salvage); stroke-width: 2"/>
+  <text class="s-label" x="140" y="277" text-anchor="middle" style="fill: var(--salvage)">Salvage-Fence-Branch</text>
+  <text class="s-sub" x="140" y="296" text-anchor="middle">Push vor Teardown — vollständig</text>
+  <path class="s-flow" d="M 95 124 C 95 180, 100 220, 120 248" marker-end="url(#arr)" style="stroke: var(--salvage)"/>
+
+  <path class="s-flow" d="M 260 282 C 560 282, 850 240, 900 128" marker-end="url(#arr)" style="stroke: var(--salvage); stroke-dasharray: 6 5"/>
+  <text class="s-sub" x="560" y="268" text-anchor="middle" style="fill: var(--salvage)">Recovery: card-scoped Salvage-Merge (Hand, §4)</text>
+
+  <!-- Legende -->
+  <text class="s-tiny" x="20" y="368">Durchgezogene Pfeile: Soll-Pfad. Orange: tatsächlicher Pfad der beiden Lieferungen am 09.08.</text>
+</svg>
+<figcaption><b>Abb. 1: Lieferpfad und Bruchstellen.</b> Der Soll-Pfad verläuft oben. Beide Vorfalls-Lieferungen nahmen den orangen Pfad: Arbeit auf dem Fence, Envelope unvollständig (Bruch 1). Bei AGT-2531 kam Bruch 2 hinzu — die Abnahme verbuchte die Karte trotz <code>NoTaskBranch</code> als abgeschlossen.</figcaption>
+</figure>
+
+<h3>Verdeckung durch Telemetrie</h3>
+<p class="stx stx-part">Der Backstop lief korrekt, seine Meldung war irreführend — Korrektur in AGT-2545.</p>
+<p>Der Accepted-Integration-Backstop wiederholte die fehlgeschlagenen Integrationen im 15-Minuten-Takt und meldete dabei durchgehend <code>integrated N accepted delivery(s)</code>, mit auf 10 steigendem Zähler. „Integrated" zählte auch <code>AlreadyMerged</code>-Wiederholungen und Fehlversuche. Wer das Log las, sah Normalbetrieb. Gleiches Muster wie bei AGT-2521 (Registry-Claim-Block) und AGT-2542 (Token-Usage-Seite): Fehlzustände ohne sichtbares Symptom bleiben unentdeckt.</p>
+
+<h2 id="s3"><span class="no">§3</span>Rettungsmechanik</h2>
+<p class="stx stx-ok">Der Fence-Push hat in allen vier Fällen die vollständige Arbeit gesichert.</p>
+<p>Funktionierende Mechanik im Vorfall:</p>
+<ul>
+  <li><b>Der Salvage-Fence-Push vor Teardown</b> sicherte alle vier Arbeitsstände (AGT-2531, AGT-2536, AGT-2537, AGT-2541) verlustfrei auf origin — inklusive des Produktfixes im Git-Prozess-Pfad und der kompletten Gate-Vorbereitung. Ohne ihn wären zwei substanzielle Implementierungen verloren gewesen.</li>
+  <li><b>Die Eskalations-Kategorien waren präzise:</b> <code>unverified-delivery</code> benannte exakt die fehlenden Envelope-Felder; <code>baseline-dotnet-test-failure</code> zeigte auf die richtige Ursache außerhalb der Karte.</li>
+  <li><b>Die Blocked-Begründung von AGT-2531 war fachlich richtig:</b> Der Agent erkannte die Rollout-Grenze (Stable fährt das Vor-Fix-Binary; Re-Accept vor Rollout erzeugte nur den nächsten Fehlschlag) und dokumentierte den korrekten Recovery-Weg in <code>results/reintegration-status.md</code>.</li>
+</ul>
+<p class="dim">Fence-Branches des Vorfalls (Schema <code>agent-studio/salvage/&lt;runner&gt;/&lt;key&gt;/&lt;run&gt;/fence-N/&lt;sha&gt;</code>): AGT-2531 <code>f995383</code>, AGT-2536 <code>ff313af</code>, AGT-2537 <code>9d443cd</code>, AGT-2541 <code>a67f20b</code>.</p>
+
+<h2 id="s4"><span class="no">§4</span>Sofortmaßnahmen</h2>
+<p class="stx stx-ok">Abgeschlossen am 09.08. abends. develop enthält beide Fixes, verifiziert.</p>
+<ul>
+  <li><b>Card-scoped Salvage-Merges:</b> AGT-2541 → <code>6ea7f7978</code> (GitNetworkProcessRunner: dedizierte Reader-Threads statt sync-over-async; behebt die ThreadPool-Starvation hinter beiden „flaky" Full-Suite-Tests). AGT-2531 → <code>720129404</code> (GatePreparationPlanner: <code>npm ci</code>/<code>dotnet restore</code> im Gate-Workspace, explizite Profil-Kommandos unter <code>bash -lc</code>).</li>
+  <li><b>Verifikation mit Baseline-Gegenlauf:</b> Zielklassen nach Merge grün (149 Tests, die zwei Promotion-Blocker fixiert). Sechs verbleibende Failures wurden gegen origin/develop <i>vor</i> den Merges gegengeprüft: identisch rot plus ein siebter: vorbestehende Windows-Fixture-Brüche (cmd-Idiome wie <code>type nul</code> unter <code>bash -lc</code>), keine Regression der Merges. Das Linux-Promotion-Gate ist davon unberührt; die Fixture-Bereinigung ist getaktet (§7).</li>
+  <li><b>Requeues mit Fence-Referenz:</b> AGT-2536/2537 (Baseline geheilt, Weiterarbeit vom eigenen Fence) und AGT-2528/2530/2532 (Rebase-Runden auf den neuen develop-Stand).</li>
+</ul>
+
+<h2 id="s5"><span class="no">§5</span>Härtung</h2>
+<p class="stx stx-part">Drei Karten angelegt, Umsetzung getaktet. Danach ist jeder Einzelbruch sichtbar und selbstheilend.</p>
+<p>Leitinvariante: <b>„Completed" ist eine beweispflichtige Aussage.</b> Eine Karte darf diesen Zustand nur tragen, wenn ihre Lieferung nachweislich integriert ist — oder ein Mensch die Ausnahme ausdrücklich verfügt hat.</p>
+<table>
+  <thead><tr><th>Karte</th><th>Invariante</th><th>Bricht die Kette an</th></tr></thead>
+  <tbody>
+    <tr><td><b>AGT-2543</b> <span class="pill queued">getaktet</span></td><td>Abnahme-Invariante: Worker-Outcome <code>NoTaskBranch</code>/<code>Error</code>/<code>Conflict</code> wirft die Karte sichtbar nach 5-human-review zurück (Grund als Chip + status.md); Abschluss ohne Integration nur als expliziter Operator-Override. Einmaliger Sweep findet stille Altfälle.</td><td>Bruch 2 — stille Abnahme</td></tr>
+    <tr><td><b>AGT-2544</b> <span class="pill queued">getaktet</span></td><td>Envelope-Pflicht: Completion ohne vollständigen Envelope ist <code>delivery-failed</code> → Auto-Requeue mit Fence-Referenz; Eskalation erst nach zwei Fehlversuchen. Klärt zugleich, warum die bestehende Envelope-Heilung beide Fälle nicht abdeckte. Der Fence-Push wird Kontraktbestandteil.</td><td>Bruch 1 — Envelope-Ausfall</td></tr>
+    <tr><td><b>AGT-2545</b> <span class="pill queued">getaktet</span></td><td>Ehrliche Telemetrie: Backstop zählt <code>merged</code>/<code>alreadyMerged</code>/<code>failed</code> getrennt; bleibt eine akzeptierte Karte &gt;30 min ohne erfolgreiche Integration, erscheint ein Board-Hinweis am Projekt (AGT-2521-Linie) statt stillem Dauer-Retry.</td><td>Verdeckung — unsichtbarer Dauerfehler</td></tr>
+  </tbody>
+</table>
+<p>Warum das den Wiederholungsfall ausschließt: Der Vorfall brauchte <i>beide</i> Brüche plus Verdeckung. Nach der Härtung requeut Bruch 1 automatisch (statt zu eskalieren oder still zu passieren), Bruch 2 kann keine Karte mehr still schließen, und sollte dennoch je ein Fall durchrutschen, schlägt nach 30 Minuten der Alarm an.</p>
+
+<h2 id="s6"><span class="no">§6</span>Entscheidungskriterien</h2>
+<p class="stx stx-open">Zwei Ausbaustufen offen — Operator-Entscheidung.</p>
+<p class="evidence-link">Beide sind Ausbau über die Härtung in §5 hinaus; keine ist Voraussetzung dafür, dass der Vorfall sich nicht wiederholt.</p>
+<table>
+  <thead><tr><th>Frage</th><th>Bauen</th><th>Nicht bauen</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Fence-Sichtbarkeit im Board:</b> Sollen nicht-integrierte Salvage-Fences als Chip an der Karte erscheinen („Lieferung liegt auf Fence")?</td>
+      <td>Recovery ohne Log-Archäologie; der heutige Vorfall wäre auf einen Blick sichtbar gewesen.</td>
+      <td>Nach AGT-2543/2544 sind Fences ohne Integration ein Übergangszustand von Minuten; der Chip zeigt dann fast nie etwas.</td>
+    </tr>
+    <tr>
+      <td><b>Auto-Reintegration vom Fence:</b> Darf der Worker bei fehlendem Task-Branch, aber vorhandenem Fence, direkt vom Fence integrieren (Gate läuft normal)?</td>
+      <td>Die heutigen Hand-Merges wären automatisch passiert; kein Orchestrator-Eingriff nötig.</td>
+      <td>Fence ist per Definition unverifizierter Stand („wip … before teardown"); AGT-2544 requeut ohnehin automatisch — der reguläre Weg bleibt sauber.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="s7"><span class="no">§7</span>Offene Arbeiten</h2>
+<p class="stx stx-part">Rollout-Kette läuft; Reihenfolge fest.</p>
+<ul>
+  <li><span class="pill queued">läuft</span> <b>Promotion-Zug:</b> develop → main mit vollem Gate auf dem Linux-Host, danach <code>update-stable.sh</code> + Verifikation (healthz, Runner-Claims). Bringt Gate-Fix und Git-Prozess-Fix in die Stable-App.</li>
+  <li><span class="pill queued">danach</span> <b>Re-Accepts als Gate-Probe:</b> CAC-18/19/20/21, QS-53…56, TE-33/35/36 (betroffen von den falsch-roten Gates); dazu TE-39/40. Erwartung: Outcome Merged statt Error.</li>
+  <li><span class="pill queued">getaktet</span> <b>Härtung:</b> AGT-2543, AGT-2544, AGT-2545 (§5).</li>
+  <li><span class="pill queued">requeued</span> <b>Vorfalls-Karten:</b> AGT-2536/2537 (Weiterarbeit vom Fence), AGT-2528/2530/2532 (Rebase-Runden), AGT-2541-Karte wird nach Rollout mit Status-Note geschlossen.</li>
+  <li><span class="pill new">neu</span> <b>Windows-Fixture-Parität:</b> Staged-Gate-Testfixtures ersetzen cmd-Idiome durch bash-kompatible Kommandos (7 vorbestehend rote Tests auf Windows; Linux-Gate unberührt).</li>
+  <li><span class="pill open">Operator</span> <b>Entscheidungen:</b> §6 (Fence-Chip, Auto-Reintegration) sowie unabhängig vom Vorfall: MKT-20 Runde 4, AIP-18 History-Rewrite, AGT-2278 Phase B.</li>
+</ul>
+
+</main>
+</body>
+</html>
