@@ -29,6 +29,21 @@ describe('TaskReferenceMicrocardComponent', () => {
     expect(openTaskKey).toHaveBeenCalledWith('PROJ-001::task');
   });
 
+  it('shows key, title, and lane together for a primary reference receipt', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskReferenceMicrocardComponent],
+      providers: [{ provide: TaskReferenceNavigationService, useValue: { openTaskKey: vi.fn() } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskReferenceMicrocardComponent);
+    fixture.componentRef.setInput('status', { ...status, lane: '1-preparation' });
+    fixture.componentRef.setInput('expanded', true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('a').textContent).toContain('AGT-2050');
+    expect(fixture.nativeElement.querySelector('a').textContent).toContain('Living references');
+    expect(fixture.nativeElement.querySelector('a').textContent).toContain('Preparation');
+  });
+
   it('renders an unknown registry key as a non-link ghost', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskReferenceMicrocardComponent],

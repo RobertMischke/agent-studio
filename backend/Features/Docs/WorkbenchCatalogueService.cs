@@ -342,7 +342,7 @@ public sealed class WorkbenchCatalogueService
                     throw new InvalidDataException($"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Workbench limit.");
                 var repoRel = Path.GetRelativePath(root, full).Replace('\\', '/');
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
-                    updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))
+                    updated.UtcDateTime, repoRel, true, null, DescriptorTaskKeys(obj))
                 {
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
@@ -564,11 +564,30 @@ public sealed class WorkbenchCatalogueService
         var reason = OptionalString(value, "reason");
         var failure = OptionalString(value, "failure");
         var spawned = StringArray(value, "spawnedTaskKeys");
+        List<WorkbenchDecisionResponse> responses = [];
+        if (value.TryGetProperty("responses", out var responsesValue))
+        {
+            if (responsesValue.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("decision responses must be an array.");
+            try
+            {
+                responses = responsesValue.Deserialize<List<WorkbenchDecisionResponse>>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException("decision responses are malformed.", ex);
+            }
+            var responseError = WorkbenchDecisionContracts.ValidateResponses(responses);
+            if (responseError != null)
+                throw new InvalidDataException($"Decision {responseError}");
+        }
 
         if (outcome == "archive" && string.IsNullOrWhiteSpace(reason))
             throw new InvalidDataException("Archive decision reason is required.");
         if (outcome == "archive" && value.TryGetProperty("taskDraft", out _))
             throw new InvalidDataException("Archive decisions cannot carry a task draft.");
+        WorkbenchTaskDraft? parsedTaskDraft = null;
         if (outcome == "feature-spawn")
         {
             if (value.TryGetProperty("reason", out _))
@@ -576,19 +595,18 @@ public sealed class WorkbenchCatalogueService
             if (!value.TryGetProperty("taskDraft", out var taskDraft)
                 || taskDraft.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("Feature decision taskDraft is required.");
-            WorkbenchTaskDraft? parsedDraft;
             try
             {
-                parsedDraft = taskDraft.Deserialize<WorkbenchTaskDraft>(
+                parsedTaskDraft = taskDraft.Deserialize<WorkbenchTaskDraft>(
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
             catch (JsonException ex)
             {
                 throw new InvalidDataException("Feature decision taskDraft is malformed.", ex);
             }
-            var draftError = parsedDraft == null
+            var draftError = parsedTaskDraft == null
                 ? "task draft is missing."
-                : WorkbenchDecisionContracts.ValidateTaskDraft(parsedDraft);
+                : WorkbenchDecisionContracts.ValidateTaskDraft(parsedTaskDraft);
             if (draftError != null)
                 throw new InvalidDataException($"Feature decision {draftError}");
         }
@@ -618,8 +636,15 @@ public sealed class WorkbenchCatalogueService
         return new WorkbenchDecisionProjection(
             outcome, state, operationId, sourceRevision, sourceFingerprint,
             preparedAt, preparedBy, confirmedAt, confirmedBy, decidedAt,
-            reason, failure, spawned);
+            reason, failure, spawned, responses, parsedTaskDraft);
     }
+
+    private static string[] DescriptorTaskKeys(JsonElement descriptor) =>
+        StringArray(descriptor, "sourceTaskKeys")
+            .Concat(StringArray(descriptor, "relatedTaskKeys"))
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static string StatusFromDecision(
         string lifecycleState, WorkbenchDecisionProjection? decision)
@@ -739,7 +764,9 @@ public sealed record WorkbenchDecisionProjection(
     string? DecidedAt,
     string? Reason,
     string? Failure,
-    string[] SpawnedTaskKeys);
+    string[] SpawnedTaskKeys,
+    List<WorkbenchDecisionResponse> Responses,
+    WorkbenchTaskDraft? TaskDraft);
 
 internal sealed record WorkbenchMutationSnapshot(
     string Root,
