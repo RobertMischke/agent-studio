@@ -59,6 +59,21 @@ async function stubHostLoad(
       acquiredAt: now,
     },
   }));
+  const activeProjectNames = [...local, ...remote].map(task => task.projectName);
+  const projectNames = Array.from(
+    { length: 16 },
+    (_, index) => activeProjectNames[index] ?? `idle-project-${index + 1}`,
+  );
+  const runnerProjects = Object.fromEntries(projectNames.map((projectName, index) => [
+    projectName,
+    {
+      projectName,
+      mode: index < 8 ? 'auto-continuous' : 'manual',
+      activeJobId: null,
+      activeExecution: null,
+      queuedJobIds: [],
+    },
+  ]));
 
   await page.route('**/api/auth/status', json({
     profile: 'local',
@@ -67,7 +82,11 @@ async function stubHostLoad(
     user: null,
   }));
   await page.route('**/api/environment**', json({ isDev: false, devTools: {} }));
-  await page.route('**/api/watch-paths', json([]));
+  await page.route('**/api/watch-paths', json(projectNames.map((name, index) => ({
+    name,
+    path: `/mock/project-${index + 1}`,
+    rootPath: `/mock/project-${index + 1}`,
+  }))));
   await page.route('**/api/tasks/grouped', json({
     preparation: [],
     ready: [],
@@ -77,7 +96,7 @@ async function stubHostLoad(
     archive: [],
   }));
   await page.route('**/api/tasks', json([]));
-  await page.route('**/api/runner/status', json({ projects: {} }));
+  await page.route('**/api/runner/status', json({ projects: runnerProjects }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
     displayName: 'agent-runner-01',
@@ -141,19 +160,29 @@ test.describe('Status bar execution-host load companion signal', () => {
 
     const running = page.getByTestId('status-bar-running');
     await expect(running).toContainText('1 local · 3 remote');
+    await expect(page.getByTestId('status-bar').getByText('8/16 auto')).toBeVisible();
     await expect(running).toHaveAttribute('data-signal-tone', 'working');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText('Open execution hosts');
     await expect(page.getByTestId('cac-tooltip')).toContainText('Execution host load 7.2 / 12 cores (60%)');
     await expect(page.getByTestId('cac-tooltip')).toContainText('3 active execution slots');
+
+    await setTheme(page, 'light');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'status-bar-runners-both-positive-light--mocked.png'),
+      fullPage: false,
+    });
   });
 
   test('click opens Execution Hosts management', async ({ page }) => {
     await stubHostLoad(page, 2, 0, 0, 3.6);
     await page.goto('/');
 
-    await page.getByTestId('status-bar-running').click();
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('2 local');
+    await expect(running).not.toContainText('remote');
+    await running.click();
 
     await expect(page).toHaveURL(/#\/workspace\/settings\/execution-hosts(?:&|$)/);
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible();
@@ -166,7 +195,9 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('0 local · 0 remote');
+    await expect(running).toContainText('no runners');
+    await expect(running).not.toContainText('local');
+    await expect(running).not.toContainText('remote');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'load-without-runs');
     await running.hover();
@@ -176,30 +207,37 @@ test.describe('Status bar execution-host load companion signal', () => {
 
     await setTheme(page, 'dark');
     await page.screenshot({
-      path: join(RESULTS_DIR, 'status-bar-host-load-mismatch-dark--mocked.png'),
+      path: join(RESULTS_DIR, 'status-bar-runners-none-dark--mocked.png'),
       fullPage: false,
     });
 
     await setTheme(page, 'light');
     await running.hover();
     await page.screenshot({
-      path: join(RESULTS_DIR, 'status-bar-host-load-mismatch-light--mocked.png'),
+      path: join(RESULTS_DIR, 'status-bar-runners-none-light--mocked.png'),
       fullPage: false,
     });
   });
 
   test('several reported runs with almost no load become the inverse quiet hint', async ({ page }) => {
-    await stubHostLoad(page, 0, 3, 3, 0.3);
+    await stubHostLoad(page, 0, 5, 5, 0.3);
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('0 local · 3 remote');
+    await expect(running).toContainText('5 remote');
+    await expect(running).not.toContainText('local');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'runs-without-load');
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(
       'Quiet consistency hint: reported runs and host load may not correspond.',
     );
+
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'status-bar-runners-remote-only-dark--mocked.png'),
+      fullPage: false,
+    });
   });
 
   test('shows an explicit warning icon when telemetry and board leases diverge', async ({ page }) => {
@@ -207,7 +245,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('0 local · 2 remote');
+    await expect(running).toContainText('2 remote');
     await expect(page.getByTestId('status-bar-running-divergence')).toBeVisible();
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(
