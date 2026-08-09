@@ -36,7 +36,9 @@ public sealed class ProviderAuthProvisioningTests
         Assert.DoesNotContain(secret, standardInput, StringComparison.Ordinal);
         Assert.Contains(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(secret)), standardInput);
         Assert.Contains("/etc/agent-runner/provider-auth.env", standardInput);
+        Assert.Contains("getent group agent >/dev/null || groupadd --system agent", standardInput);
         Assert.Contains("install -m 0640 -o root -g agent", standardInput);
+        Assert.Contains("mv -fT -- \"$provider_auth_install_tmp\" \"$provider_auth_file\"", standardInput);
         Assert.Contains("units+=(agent-host.service)", standardInput);
         Assert.Contains("units+=(agent-runner-review.service)", standardInput);
         Assert.Contains("EnvironmentFile=%s", standardInput);

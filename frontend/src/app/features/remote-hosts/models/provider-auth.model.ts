@@ -97,28 +97,32 @@ export function providerAuthWaitReason(
   if (task.state !== '2-ready' || !task.cliType) return null;
   const configuredRunner = task.executionLocation?.configuredRunnerId
     ?? (task.executionLocation?.state === 'queued-remote' ? task.executionLocation.runnerId : null);
-  if (!configuredRunner) return null;
 
   const provider = task.cliType.trim().toLowerCase();
   const candidates = statuses.filter(status =>
     status.provider === provider
-    && status.aliases.some(alias => alias.toLowerCase() === configuredRunner.toLowerCase()));
+    && (!configuredRunner
+      || status.aliases.some(alias => alias.toLowerCase() === configuredRunner.toLowerCase())));
   if (candidates.some(status => status.state === 'ok' && status.reachable)) return null;
 
   const providerLabel = label(provider);
   const hostNames = [...new Set(candidates.map(status => status.hostName).filter(Boolean))];
-  const target = hostNames.length === 0 ? configuredRunner : hostNames.join(', ');
+  const target = hostNames.length > 0
+    ? hostNames.join(', ')
+    : configuredRunner ?? 'an execution host';
   const unavailable = candidates.filter(status => status.state === 'unavailable');
   const detail = unavailable.length > 0
     ? unavailable.map(status => `${status.hostName}: ${status.detail}`).join('\n')
     : candidates.length > 0
       ? candidates.map(status => `${status.hostName}: ${status.detail}`).join('\n')
-      : `No reachable ${configuredRunner} capability snapshot advertises provider-auth:${provider}.`;
+      : configuredRunner
+        ? `No reachable ${configuredRunner} capability snapshot advertises provider-auth:${provider}.`
+        : `No reachable runner capability snapshot advertises provider-auth:${provider}.`;
   return {
     provider,
     label: `Waiting for ${providerLabel} sign-in on ${target}`,
     tooltip: `${detail}\nThe task stays Ready until a fresh provider probe reports OK.`,
-    hostNames: hostNames.length > 0 ? hostNames : [configuredRunner],
+    hostNames: hostNames.length > 0 ? hostNames : configuredRunner ? [configuredRunner] : [],
   };
 }
 

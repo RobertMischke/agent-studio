@@ -80,13 +80,15 @@ public sealed class RunnerServiceUnitTests
             "# One shared provider credential file",
             onboarding.ReplaceLineEndings("\n"));
         Assert.Contains(
-            "sudo install -m 0640 -o root -g \"$runner_group\" \"$provider_auth_tmp\" \"$provider_auth_file\"",
+            "provider_auth_metadata=\"$(sudo stat -c '%U:%G:%a' \"$provider_auth_file\")\"",
             onboarding);
         Assert.True(
             onboarding.IndexOf(
-                "EnvironmentFile=/etc/agent-runner/provider-auth.env",
+                "EnvironmentFile=$provider_auth_file",
                 StringComparison.Ordinal) >
             onboarding.IndexOf("EnvironmentFile=$env_file", StringComparison.Ordinal));
+        Assert.Contains("root:agent:640", onboarding);
+        Assert.DoesNotContain("provider_auth_tmp", onboarding);
         Assert.DoesNotContain("claude auth login", onboarding);
     }
 

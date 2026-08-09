@@ -89,4 +89,43 @@ describe('RunnerSetupDialogComponent', () => {
     expect(component.request().prompt).toContain('/etc/agent-runner/provider-auth.env');
     expect(component.request().prompt).not.toContain(secret);
   });
+
+  it('keeps setup blocked while an active runner still owes a successful fresh probe', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunnerSetupDialogComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunnerSetupDialogComponent);
+    fixture.componentRef.setInput('host', HOST);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.setConnectionMode('tunnel');
+    component.gitRemote.set('git@github.com:example/agent-studio.git');
+    component.gitPushRemote.set('git@github.com:example/agent-studio.git');
+    component.providerAuthSecret.set('sk-ant-oat01-active-runner-fixture');
+    component.provisionProviderAuth();
+
+    TestBed.inject(HttpTestingController).expectOne(
+      '/api/v1/management/remote-hosts/provider-auth',
+    ).flush({
+      provider: 'claude',
+      environmentVariable: 'CLAUDE_CODE_OAUTH_TOKEN',
+      host: 'agent-runner',
+      state: 'awaiting-probe',
+      detail: 'The daemon received the provider variable. Waiting for the runner probe.',
+      requestedAt: '2026-08-04T12:00:00Z',
+      restartedServices: ['agent-runner.service'],
+      processEnvironmentVerified: true,
+    });
+
+    expect(component.providerAuthSecret()).toBe('');
+    expect(component.providerAuthBootstrapReady()).toBe(false);
+    expect(component.ready()).toBe(false);
+  });
 });

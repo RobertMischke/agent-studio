@@ -223,6 +223,8 @@ export interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
   effectiveMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
+  runtimeCapacityAppliedVersion?: number | null;
+  projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
 }
 
 export interface RemoteHostAdmission {

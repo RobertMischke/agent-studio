@@ -269,6 +269,7 @@ printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$claude_setup_token" |
     auth_tmp=$(mktemp)
     trap '\''rm -f "$auth_tmp"'\'' EXIT
     cat >"$auth_tmp"
+    getent group agent >/dev/null || sudo groupadd --system agent
     sudo install -d -m 0750 -o root -g agent /etc/agent-runner
     sudo install -m 0640 -o root -g agent "$auth_tmp" /etc/agent-runner/provider-auth.env
   '

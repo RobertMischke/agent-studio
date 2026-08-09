@@ -62,6 +62,25 @@ describe('provider auth projection', () => {
       .toBeNull();
     expect(providerAuthWaitReason({ ...task, state: '3-progress' }, unavailable)).toBeNull();
   });
+
+  it('holds an unassigned Ready card when no reachable runner has usable auth', () => {
+    const task = {
+      state: '2-ready',
+      cliType: 'claude',
+    } as TaskInfo;
+    const unavailable = providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 'Not logged in'),
+      NOW,
+    );
+
+    expect(providerAuthWaitReason(task, unavailable)).toMatchObject({
+      label: 'Waiting for Claude sign-in on runner-berlin',
+    });
+    expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true),
+      NOW,
+    ))).toBeNull();
+  });
 });
 
 function snapshot(

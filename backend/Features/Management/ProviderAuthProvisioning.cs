@@ -230,17 +230,16 @@ case "$environment_variable" in
   CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY) ;;
   *) echo '[provider-auth] Unsupported provider environment variable.' >&2; exit 32 ;;
 esac
-getent group agent >/dev/null || {
-  echo '[provider-auth] Required group agent does not exist on the host.' >&2
-  exit 33
-}
+getent group agent >/dev/null || groupadd --system agent
 
 umask 077
 token_tmp="$(mktemp)"
 env_tmp="$(mktemp)"
 dropin_tmp="$(mktemp)"
+provider_auth_install_tmp=''
 cleanup() {
   rm -f -- "$token_tmp" "$env_tmp" "$dropin_tmp"
+  [[ -z "$provider_auth_install_tmp" ]] || rm -f -- "$provider_auth_install_tmp"
 }
 trap cleanup EXIT
 printf '%s' "$payload_base64" | base64 --decode >"$token_tmp"
@@ -259,7 +258,10 @@ fi
 printf '%s=' "$environment_variable" >>"$env_tmp"
 cat "$token_tmp" >>"$env_tmp"
 printf '\n' >>"$env_tmp"
-install -m 0640 -o root -g agent "$env_tmp" "$provider_auth_file"
+provider_auth_install_tmp="$(mktemp /etc/agent-runner/.provider-auth.env.XXXXXX)"
+install -m 0640 -o root -g agent "$env_tmp" "$provider_auth_install_tmp"
+mv -fT -- "$provider_auth_install_tmp" "$provider_auth_file"
+provider_auth_install_tmp=''
 
 printf '[Service]\nEnvironmentFile=%s\n' "$provider_auth_file" >"$dropin_tmp"
 units=()

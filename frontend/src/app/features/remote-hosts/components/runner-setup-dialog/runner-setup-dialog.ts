@@ -42,7 +42,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
   readonly providerAuthSecret = signal('');
   readonly providerAuthPhase = signal<ProvisioningPhase>('idle');
   readonly providerAuthDetail = signal('No credential has been sent from this dialog.');
-  readonly providerAuthInstalled = signal(false);
+  readonly providerAuthBootstrapReady = signal(false);
   private readonly providerAuth = inject(ProviderAuthStatusService);
   private verificationSubscription: Subscription | null = null;
 
@@ -68,7 +68,8 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
       && status.aliases.some(alias => aliases.has(alias.toLowerCase()))) ?? null;
   });
   readonly providerAuthVerified = computed(() => this.currentProviderAuth()?.state === 'ok');
-  readonly providerAuthGateSatisfied = computed(() => this.providerAuthVerified() || this.providerAuthInstalled());
+  readonly providerAuthGateSatisfied = computed(() =>
+    this.providerAuthVerified() || this.providerAuthBootstrapReady());
   readonly ready = computed(() => this.issues().length === 0 && this.providerAuthGateSatisfied());
   readonly request = computed(() => buildRunnerSetupRequest(this.host(), this.config()));
   readonly loopbackBlocked = computed(() => this.issues().some(issue => issue.startsWith('A remote host cannot reach')));
@@ -100,7 +101,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
     if (value !== 'CLAUDE_CODE_OAUTH_TOKEN' && value !== 'ANTHROPIC_API_KEY') return;
     this.providerAuthEnvironmentVariable.set(value);
     this.providerAuthSecret.set('');
-    this.providerAuthInstalled.set(false);
+    this.providerAuthBootstrapReady.set(false);
     this.providerAuthPhase.set('idle');
     this.providerAuthDetail.set('No credential has been sent from this dialog.');
   }
@@ -122,7 +123,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: response => {
         this.providerAuthSecret.set('');
-        this.providerAuthInstalled.set(true);
+        this.providerAuthBootstrapReady.set(!response.processEnvironmentVerified);
         this.providerAuthPhase.set('waiting');
         this.providerAuthDetail.set(response.detail);
         if (!response.processEnvironmentVerified) return;
@@ -145,7 +146,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
       },
       error: error => {
         this.providerAuthSecret.set('');
-        this.providerAuthInstalled.set(false);
+        this.providerAuthBootstrapReady.set(false);
         this.providerAuthPhase.set('error');
         this.providerAuthDetail.set(
           error?.error?.message ?? 'Provider authentication could not be provisioned. No credential was retained by Studio.',
