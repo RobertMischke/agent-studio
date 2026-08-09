@@ -156,14 +156,18 @@ async function freezeBrowserClock(page: Page): Promise<void> {
 }
 
 async function dismissBlockingOverlays(page: Page): Promise<void> {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     const dismiss = page.getByTestId('crash-recovery-dismiss').first();
     if (await dismiss.isVisible().catch(() => false)) {
       await dismiss.click({ force: true }).catch(() => undefined);
+      await page.waitForTimeout(350);
       continue;
     }
-    if (i >= 3) break;
-    await settle(page);
+    if (i < 4) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+    break;
   }
 }
 
