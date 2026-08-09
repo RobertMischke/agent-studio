@@ -100,7 +100,23 @@ function outputBuffer(): OutLine[] {
     {
       timestamp: at(39),
       stream: 'stderr',
-      text: 'The concept and its navigation entry are ready for review.',
+      text: [
+        'The concept and its navigation entry are ready for review. Prose card ASS-4242 remains linked.',
+        '',
+        'diff --git a/docs/rendering-defense.md b/docs/rendering-defense.md',
+        'index 1111111..2222222 100644',
+        '--- a/docs/rendering-defense.md',
+        '+++ b/docs/rendering-defense.md',
+        '@@ -1,2 +1,8 @@',
+        '-| Old | ASS-4242 |',
+        '+| New | ASS-4242 |',
+        '+.result-card {',
+        '+  display: grid;',
+        '+}',
+        '+<header class="page">',
+        '+  <svg viewBox="0 0 24 24"></svg>',
+        '+</header>',
+      ].join('\n'),
     },
     { timestamp: at(40), stream: 'stderr', text: '[[TASK_DONE]]' },
     {
@@ -322,6 +338,13 @@ async function installRoutes(page: Page): Promise<void> {
     }));
 }
 
+async function dismissErrorDialog(page: Page): Promise<void> {
+  const runtimeDialog = page.getByTestId('error-dialog-overlay');
+  if (!await runtimeDialog.isVisible().catch(() => false)) return;
+  await runtimeDialog.getByRole('button').first().click();
+  await expect(runtimeDialog).toBeHidden();
+}
+
 for (const theme of ['light', 'dark'] as const) {
 test(`Activity renders structured tool payloads and runner events quietly in ${theme} theme`, async ({ page }) => {
   await page.addInitScript(() => {
@@ -339,11 +362,21 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
 
   const panel = page.getByTestId('activity-panel');
   await expect(panel).toBeVisible();
-  const runtimeDialog = page.getByTestId('error-dialog-overlay');
-  if (await runtimeDialog.isVisible()) {
-    await runtimeDialog.getByRole('button').first().click();
-  }
+  await dismissErrorDialog(page);
   await expect(panel.getByTestId('conversation-view')).toBeVisible();
+
+  const protectedMessage = panel.getByTestId('conversation-message-item')
+    .filter({ hasText: 'docs/rendering-defense.md' });
+  await expect(protectedMessage).toHaveCount(1);
+  const protectedDiff = protectedMessage.locator('pre[data-lang="diff"]');
+  await expect(protectedDiff).toHaveCount(1);
+  await expect(protectedDiff).toContainText('diff --git a/docs/rendering-defense.md');
+  await expect(protectedDiff).toContainText('<header class="page">');
+  await expect(protectedDiff).toContainText('<svg viewBox="0 0 24 24">');
+  await expect(protectedMessage.locator('table')).toHaveCount(0);
+  await expect(protectedMessage.locator('ul')).toHaveCount(0);
+  await expect(protectedDiff.locator('a, app-task-reference-microcard')).toHaveCount(0);
+  await expect(protectedMessage.getByRole('link', { name: 'ASS-4242' })).toHaveCount(1);
 
   const tools = panel.getByTestId('tool-burst-chip');
   await expect(tools).toHaveCount(4);
@@ -376,14 +409,14 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
         : `activity-density-${EVIDENCE_VARIANT}-${theme}.png`,
     ),
   });
-
+  await dismissErrorDialog(page);
   const diffTool = tools.nth(2);
   await diffTool.getByTestId('tool-burst-row').click();
   const diffOutput = diffTool.getByTestId('tool-burst-command-output');
   await expect(diffOutput).toContainText('diff --git a/docs/start/README.md');
   await expect(diffOutput).toContainText('"title": "Apply Robert\'s selected Deck icon"');
   expect((await panel.getByTestId('conversation-message-item').allTextContents()).join('\n'))
-    .not.toContain('diff --git');
+    .not.toContain('diff --git a/docs/start/README.md');
   await panel.screenshot({
     path: path.join(
       SHOTS_DIR,
@@ -391,6 +424,7 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
     ),
   });
 
+  await dismissErrorDialog(page);
   const markupTool = tools.nth(3);
   await expect(markupTool.getByTestId('tool-burst-row')).toHaveAttribute('aria-expanded', 'false');
   await markupTool.getByTestId('tool-burst-row').click();

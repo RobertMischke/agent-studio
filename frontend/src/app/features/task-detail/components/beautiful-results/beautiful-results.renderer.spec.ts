@@ -74,6 +74,56 @@ describe('renderResultsHtml', () => {
     expect(html.toLowerCase()).toContain('d2h-');
   });
 
+  it('protects an unfenced diff from markdown table and list parsing', () => {
+    const md = [
+      'Completed AGT-2355.',
+      '',
+      'diff --git a/docs/start/README.md b/docs/start/README.md',
+      'index 1111111..2222222 100644',
+      '--- a/docs/start/README.md',
+      '+++ b/docs/start/README.md',
+      '@@ -1,2 +1,2 @@',
+      '-| Deck | AGT-2355 |',
+      '+| Project facets | AGT-2355 |',
+      '+.card {',
+      '+  display: grid;',
+      '+}',
+      '+<header class="page">',
+      '+  <svg viewBox="0 0 24 24"></svg>',
+      '+</header>',
+    ].join('\n');
+
+    const { html } = renderResultsHtml(md, CTX);
+
+    expect(html).toContain('data-results-code');
+    expect(html).toContain('data-lang="diff"');
+    expect(html).not.toContain('<table');
+    expect(html).not.toContain('<ul>');
+    expect(html).not.toContain('data-results-task-key');
+    expect(html).toContain('&lt;header class="page"&gt;');
+    expect(html).toContain('&lt;svg viewBox="0 0 24 24"&gt;');
+  });
+
+  it('renders standalone raw HTML and SVG as escaped code', () => {
+    const md = [
+      '<header class="page">',
+      '  <h1>Title</h1>',
+      '</header>',
+      '',
+      '<svg viewBox="0 0 24 24">',
+      '  <path d="M1 1h2"/>',
+      '</svg>',
+    ].join('\n');
+
+    const { html } = renderResultsHtml(md, CTX);
+
+    expect(html.match(/data-results-code/g)).toHaveLength(2);
+    expect(html).not.toContain('<header class="page">');
+    expect(html).not.toContain('<svg viewBox="0 0 24 24">');
+    expect(html).toContain('&lt;header class="page"&gt;');
+    expect(html).toContain('&lt;svg viewBox="0 0 24 24"&gt;');
+  });
+
   it('decorates non-diff code blocks with a language label and copy button', () => {
     const md = '```typescript\nconst x: number = 1;\n```';
     const { html } = renderResultsHtml(md, CTX);

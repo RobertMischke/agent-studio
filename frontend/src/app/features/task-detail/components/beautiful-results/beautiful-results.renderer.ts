@@ -34,6 +34,7 @@
 import { Marked, type MarkedExtension, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { html as diff2htmlRender } from 'diff2html';
+import { protectTechnicalMarkdown } from 'coding-agent-chat/markdown';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 import { detectSourceRef } from './source-ref';
 
@@ -122,7 +123,7 @@ export function renderResultsHtml(markdown: string, context: BeautifulRendererCo
   const local = new Marked(extension);
   let raw: string;
   try {
-    const parsed = local.parse(cleaned);
+    const parsed = local.parse(protectTechnicalMarkdown(cleaned));
     raw = typeof parsed === 'string' ? parsed : '';
   } catch {
     // Defensive: a malformed token should never blow up the result view.
@@ -159,6 +160,8 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
       code(token: Tokens.Code): string {
         const lang = (token.lang || '').trim().toLowerCase();
         const text = token.text ?? '';
+        if (lang === 'diff-autodetected') return renderCodeBlock(text, 'diff');
+        if (lang === 'html-autodetected') return renderCodeBlock(text, 'html');
         if (lang === 'diff') return renderDiff(text);
         return renderCodeBlock(text, lang || null);
       },
