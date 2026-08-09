@@ -15,6 +15,39 @@ public interface IOrchestrationStageHandler
         CancellationToken ct);
 }
 
+internal static class ReviewDecisionPolicy
+{
+    internal static OrchestrationAction Decide(
+        string? reviewOutcome,
+        string? executionOutcome,
+        string? terminal)
+    {
+        if (!string.IsNullOrWhiteSpace(reviewOutcome))
+        {
+            return Normalize(reviewOutcome) switch
+            {
+                "pass" => OrchestrationAction.Continue,
+                "productfailure" => OrchestrationAction.Reissue,
+                "reviewinfra" => OrchestrationAction.Escalate,
+                _ => OrchestrationAction.Escalate,
+            };
+        }
+
+        return Normalize(executionOutcome ?? terminal) switch
+        {
+            "blocked" => OrchestrationAction.Escalate,
+            "needsinput" => OrchestrationAction.Reissue,
+            _ => OrchestrationAction.Continue,
+        };
+    }
+
+    private static string Normalize(string? value)
+        => new((value ?? string.Empty)
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+}
+
 public sealed class ReviewDecisionOrchestratorLoop : IOrchestrationStageHandler
 {
     public OrchestrationStage Stage => OrchestrationStage.ReviewDecision;
@@ -25,20 +58,21 @@ public sealed class ReviewDecisionOrchestratorLoop : IOrchestrationStageHandler
     {
         ct.ThrowIfCancellationRequested();
         using var payload = JsonDocument.Parse(run.PayloadJson);
-        var outcome = ReadString(payload.RootElement, "agentOutcome")
-                      ?? ReadString(payload.RootElement, "terminal");
-        var action = Normalize(outcome) switch
-        {
-            "blocked" => OrchestrationAction.Escalate,
-            "needsinput" => OrchestrationAction.Reissue,
-            _ => OrchestrationAction.Continue,
-        };
+        var reviewOutcome = ReadString(payload.RootElement, "reviewOutcome");
+        var executionOutcome = ReadString(payload.RootElement, "agentOutcome");
+        var terminal = ReadString(payload.RootElement, "terminal");
+        var observedOutcome = reviewOutcome ?? executionOutcome ?? terminal;
+        var action = ReviewDecisionPolicy.Decide(reviewOutcome, executionOutcome, terminal);
         return Task.FromResult(new OrchestrationStageDecision(
             action,
             JsonSerializer.Serialize(new
             {
                 component = nameof(ReviewDecisionOrchestratorLoop),
-                observedOutcome = outcome,
+                source = reviewOutcome is null ? "execution-terminal" : "remote-review",
+                runAttemptId = ReadString(payload.RootElement, "runAttemptId"),
+                reviewSubjectId = ReadString(payload.RootElement, "reviewSubjectId"),
+                reviewAttemptId = ReadString(payload.RootElement, "reviewAttemptId"),
+                observedOutcome,
                 decision = action.ToString(),
             })));
     }
@@ -48,8 +82,6 @@ public sealed class ReviewDecisionOrchestratorLoop : IOrchestrationStageHandler
             ? value.GetString()
             : null;
 
-    private static string Normalize(string? value)
-        => new((value ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 }
 
 public sealed class CouncilLoop : IOrchestrationStageHandler
@@ -74,6 +106,21 @@ public sealed class CouncilLoop : IOrchestrationStageHandler
                     && severity.ValueKind == JsonValueKind.String
                     && severity.GetString() is { } value
                     && value is "blocker" or "critical")
+                    blockerCount++;
+            }
+        }
+        if (payload.RootElement.TryGetProperty("verdicts", out var verdicts)
+            && verdicts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var verdict in verdicts.EnumerateArray())
+            {
+                if (!verdict.TryGetProperty("status", out var status)
+                    || status.ValueKind != JsonValueKind.String
+                    || status.GetString() is not { } value
+                    || value == "pass")
+                    continue;
+                findingCount++;
+                if (value is "concerns" or "block" or "fail")
                     blockerCount++;
             }
         }
@@ -106,7 +153,7 @@ public sealed class PostProcessingLoop : IOrchestrationStageHandler
             JsonSerializer.Serialize(new
             {
                 component = nameof(PostProcessingLoop),
-                status = "dispatched-through-task-server-api",
+                status = "decision-chain-running-remotely",
             })));
     }
 }

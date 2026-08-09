@@ -1428,7 +1428,11 @@ definition-snapshotted runs, stage results, leases, and fences. The separate
 `orchestrator-engine` binary executes ReviewDecision, Council, PostProcessing,
 GateDispatch, and CompletionJudge stages only through the public Task Server
 API. During migration, `Orchestration:ExecutionMode` selects exactly one loop
-owner: `Monolith` or `Engine`.
+owner: `Monolith` or `Engine`. A canonical Remote Review remains in Auto Review
+until workspace cleanup, then atomically queues the code-owned default flow
+with its RunAttempt, ReviewSubject, ReviewAttempt, Result-SHA, policy, and report
+digests. The Task Server alone applies bounded reissue, escalation, or Human
+Review lane effects under a task-version fence.
 
 **Context.** ADR-0063 separated durable authority from execution, and the
 signed-off distributable architecture requires control-plane flow execution to
@@ -1447,6 +1451,9 @@ failures that the Task Server boundary exists to remove.
   transition.
 - No lease-free settlement. A stage result requires the current Engine
   instance, lease id, and monotonic fence, and is idempotent.
+- No automatic integration from a post-processing verdict. Human Review remains
+  the acceptance boundary; later Remote integration uses a separate durable
+  command and Git-capable host executor.
 
 **Reasoning style.** Definitions are durable control-plane data; execution is a
 replaceable consumer. Snapshot the ordered definition onto each created run so

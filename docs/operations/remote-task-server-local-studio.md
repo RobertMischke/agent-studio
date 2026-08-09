@@ -1,8 +1,10 @@
 # Remote Task Server with local Agent Studio
 
-Status: Phase A concept, proposed for Robert's approval, 2026-07-28. This
-document makes no infrastructure change. Every deployment action belongs to a
-separate Phase B task after approval.
+Status: Phase A architecture delivered; Phase B deployment remains subject to
+Robert's approval. Updated 2026-08-09 with the Remote post-processing ownership
+and migration cut. This task changes no Phase B infrastructure; its delivered
+Task Server decision slice is described below. Every deployment action belongs
+to a separate Phase B task after approval.
 
 ## Purpose and scope
 
@@ -257,6 +259,173 @@ These are Phase B work, not assumptions that operations can work around:
 
 No API listener may open on `wg0` until gaps 3 and 5 pass their negative
 authentication tests.
+
+## Post-processing without an attached Studio
+
+### Concept decision
+
+Moving task state to the remote Task Server and moving post-step execution are
+two migrations. The former removes the Windows workspace as the task database.
+It does not make Git, build, test, lint, or model work executable on the Task
+Server. Repository work belongs on a fenced Agent Host. Pure verdict and lane
+policy belongs in the remote control plane.
+
+| Owner | Responsibilities |
+|---|---|
+| Task Server | Own task and RunAttempt state, immutable ReviewSubjects, post-step plans, review-cycle epochs, retry budgets, authoritative lane transitions, idempotency, and integration commands. It never starts a project process or reads a host checkout. |
+| Orchestrator Engine | Evaluate persisted, normalized facts through the public Task API and request one bounded action. It owns no task files, checkout, or attempt authority. |
+| Agent Host | Materialize the exact fenced subject, execute checkout-bound Git, build, test, lint, and model work, and report typed facts plus content hashes. It cannot move a lane or create a replacement coding run directly. |
+| Operator | Keep explicit acceptance, destructive override, unresolved conflict, credential, and break-glass decisions. Studio is one client for these decisions, not an execution dependency. |
+
+The Angular process is already irrelevant to execution. The compatibility
+dependency is the legacy `OrchestratorApi` process and its local
+`TaskRepository`. `AutoReviewPostProcessingWorker` reads a card from that
+filesystem, `ReviewDecisionOrchestrator` runs the chain, and the same process
+writes decision and lane state into task folders. Canonical Remote attempts
+must use Task Server records instead.
+
+### Placement rule and current dependency map
+
+A step is **host-capable** when every side effect can be scoped to an immutable
+repository subject, a disposable checkout, declared credentials, and a typed
+result envelope. A step is a **server decision** when it only combines persisted
+facts and chooses a transition. A step remains **backend-bound** when it reads
+the legacy workspace registry or mutates paths outside a fenced project
+checkout without an API contract. A deferred step may have an operator or Task
+Server trigger and still use a host executor.
+
+| Concern and affected steps | Current paths, services, and serialization |
+|---|---|
+| Catalogue and ordering | `backend/Features/Pipeline/PipelineCatalogue.cs` defines standard, UI, concept, drift, and abort steps. `PipelineExecutionLog.cs` writes card-local `pipeline-execution.json`. |
+| Coordinator and decision | `backend/Features/Runner/AutoReviewPostProcessingQueue.cs` owns the in-process worker and capacity semaphore. `ReviewDecisionOrchestrator.cs` owns `_tickGate`, `_postProcessingGitGate`, `GuardedMoveJob`, review-cycle files, and reads of `status.md`, `results/`, and `completion-acceptance.json`. `CompletionGate.cs` contains the completeness policy. |
+| Aspects and grade | `AspectRunnerService.cs` uses a per-card `SemaphoreSlim`, prompt and CLI services, and task-folder evidence. `backend/Features/Review/CodeReviewStepService.cs` writes the grade report. |
+| Build, lint, and radar | `BuildTestGateRunner.cs` owns static `ProcessGate`, machine `flock`, `RemoteGate`, and disposable review roots. `LintScssRunner.cs` starts stylelint below `<repo>/frontend`. `RegressionRadarService.cs` reads the repository SHA range. |
+| Worktree, integration, and conflict | `ProjectRunner.cs` owns `_integrateLock`; `WorktreeTaskLifecycle.cs` records containment; `runner/GitWorkspace.cs` owns process-wide `GitMetadataGate`. Inputs include the active checkout, task ref, integration ref, and pipeline log. |
+| Accepted integration | `TaskTransitionService.cs` calls `CommitAttributionService.cs` and `MergeIntoDevelopRunner.cs`. The latter owns `_mergeGate` and `_pushGate`; `IntegrationPushQueue.cs` and `IntegrationPushWorker.cs` own deferred retry. Evidence is under the card's `post-steps/`. |
+| Wiki producers | `WikiMaintenancePostStepRunner.cs`, `WikiLearningsPostStepRunner.cs`, and `AgentsWikiSyncPostStepRunner.cs` mutate managed repository documentation. `ManagedProjectArtifactCommitService.cs` serializes publication per repository. |
+| Task spawn | `TaskSpawnerPostStepRunner.cs` invokes a local one-shot model call and `TaskMutationService`; `SpawnedTaskLedger.cs` writes card metadata. |
+| Drift | `backend/Features/Drift/DriftPostStepRunner.cs` reads `TaskRepository/projects/<project>`, repository content, lanes, and prior `logs/drift/*.md`; dimension services and `DriftReportStore` remain workspace-bound. |
+
+File names without an explicit directory above are below
+`backend/Features/Pipeline/` or `backend/Features/Runner/` as indicated by the
+concern.
+
+### Standard post-step classification
+
+| Step | Current local dependencies and locks | Target and required contract | Order |
+|---|---|---|---:|
+| `post-orchestrator-review` | Card body, status, CLI tail, results inventory, completion acceptance, review-cycle counter, `CompletionGate`, and `PipelineExecutionLog`. | **Server decision.** For canonical Remote Review, the Task Server now accepts only normalized fenced report facts and keeps the card in Auto Review through cleanup. Legacy card completeness still needs a structured fact migration. | S1, Remote delivered |
+| `post-build-test-gate` | Watched repository path, exact SHA, `BuildProfile`, mode, timeouts, `ProcessGate`, machine `flock`, optional SSH bridge, and disposable review root. | **Host-capable.** Create an immutable GateSubject/GateAttempt with RunAttempt ID, repository source, Result-SHA, plan/policy digest, argv, working directory, environment allow-list, deadlines, resource class, and output bounds. Host reports tested HEAD/tree, exit/signal, classification, artifact hashes, and cleanup proof. | G1, first candidate |
+| `aspect-requirement-fit` | Prompt, task/status evidence, result inventory, branch diff, template, model routing, token budget, CLI, and exact checkout. | **Host-capable, already represented by Remote Review.** Keep immutable ReviewSubject, resolved model plan, typed verdict, usage, and exact-SHA workspace proof; Task Server owns effects. | R1 |
+| `aspect-code-quality` | Same checkout, evidence, prompt, model, CLI, and budget dependencies. | **Host-capable through Remote Review** with the same subject and report contract. | R1 |
+| `aspect-documentation-impact` | Same dependencies plus repository documentation inventory. | **Host-capable through Remote Review** with declared documentation inputs in the subject digest. | R1 |
+| `aspect-tests-and-evidence` | Same dependencies plus command and durable result evidence. | **Host-capable through Remote Review** with artifact references instead of card-folder reads. | R1 |
+| `post-worktree-containment` | Runner `GitWorkspace`, task worktree, result ref, process-wide `GitMetadataGate`, RunAttempt, lease, fence, base/result SHA, and manifest digest. | **Host-capable, delivered.** Host permit, durable journal, immutable handoff, cleanup proof, and `post_step_executions` completion already gate coding completion. | H0 |
+| `post-integrate-merge` | Mutable task worktree/branch, integration head, Git metadata, `_integrateLock`, containment result, and pipeline log. | **Host-capable, high authority.** Require fenced result ref, expected integration head, exclusive repository lease, and typed merged/already-merged/conflict/environment result. | I1 |
+| `post-conflict-resolution` | Non-idempotent model-guided mutation, conflict set, model/CLI credentials, Git state, and pipeline log. | **Host-capable, high risk.** New fenced checkout generation, conflict digest, bounded model plan, resolved tree hash, tests to rerun, no-push boundary, and stale-head rejection. | I2 |
+| `post-git-commit-attribution` | Run base/head and commit range; writes task-folder evidence before Auto Review. | **Host-capable analysis, server-owned record.** RunAttempt and Result-SHA identify the range; host reports ordered commits and Task Server stores them under the fence. | G0 |
+| `post-merge-into-develop` | Deferred acceptance calls `MergeIntoDevelopRunner`, `GitService`, settings, `_mergeGate`, and card-local outcome logs. | **Operator or Task Server trigger, host execution.** Durable integration command with accepted ReviewSubject, expected target head, repository lease, and typed result. | I1 |
+| `post-merge-into-develop-push` | `_pushGate`, `IntegrationPushQueue`, credentials, local and remote integration heads, environmental retry. | **Task Server trigger, host execution.** Follow one successful merge generation with scoped credentials, expected heads, idempotency key, and remote-head acknowledgement. | I1 |
+| `post-lint-scss` | Watched frontend path, `npx stylelint`, project warn/fail mode, timeout, task-folder log, and local lane policy. | **Host-capable GateAttempt.** Exact subject, Angular applicability, argv, toolchain digest, mode, timeout, bounded output; Task Server applies warn/fail policy. | G2 |
+| `post-regression-radar` | `GitService` diff over the run commit chain and card-local reporting row. | **Host-capable analysis.** Base/result SHA and repository source in; typed classification artifact and hash out; Task Server stores it. | G0 |
+| `post-wiki-maintenance` | Mutates `docs/<theme>/common-problems`, occurrence files, and index using watched-root and task data; later commit/push publication. | **Backend-bound for now.** Needs API task facts, producer-owned path manifest, fenced repository-write subject, per-project Git lease, attribution, and publication policy. | B1 |
+| `post-wiki-learnings` | Reads task outcome, status, aspect verdicts, diff, and results; writes `docs/operations/learnings/<task>.md` and index. | **Backend-bound for now.** Replace card reads with API facts, then use the fenced repository-write contract. | B1 |
+| `post-agents-wiki-sync` | Reads/writes `AGENTS.md`, designated-topic registry, current-state pages, and index; derives matches from paths and tags. | **Backend-bound for now.** Needs API facts, producer-owned paths, repository lease, link validation, commit, and push acknowledgement. | B1 |
+| `post-code-review-grade` | Local diff, task evidence, build result, prompt/model/CLI services, token ledger, and card-folder grade evidence. | **Host-capable through Remote Review.** Immutable subject and model plan in; typed grade, findings, usage, and artifact hashes out. Grade remains advisory to server policy. | R1 |
+| `post-task-spawner` | Model relevance decision, target project settings, local dedupe ledger, and local task service. | **Split.** Host returns a typed spawn proposal; Task Server validates scope, owns limit/dedupe, and creates the related task idempotently. | B2 |
+| `post-orchestrator-decision` | Combines gates, aspects, grade, lint, evidence, quality, and retry facts; writes journals and uses `GuardedMoveJob` for lane effects. | **Server decision.** Canonical Remote Review now queues a full-envelope Engine run after cleanup. Task Server applies shared reissue budget and one version-fenced lane transaction. Legacy filesystem decisions remain compatibility-only. | S2, Remote delivered |
+| `post-drift-adr-code` | Task repository, lanes, repository ADR/code/schema, prior drift reports, and model service. | **Backend-bound until snapshot API exists.** Versioned repository/workspace snapshot, model plan, and server report store. | B3 |
+| `post-drift-software-architecture` | Repository module/schema/test trees, architecture models, recent task folders, shared report store, and model. | **Backend-bound until snapshot API exists.** Same snapshot/report contract with explicit architecture inputs. | B3 |
+| `post-drift-docs-marketing` | Canonical docs, mockups, recent lanes, completed task folders, report history, and model. | **Backend-bound until snapshot API exists.** Docs/mockup snapshot with no live lane scan. | B3 |
+| `post-drift-spec-task-job` | Specifications and task folders across lanes, shared report store, and model. | **Backend-bound until task-history API exists.** Task Server history plus immutable repository snapshot and typed report. | B3 |
+| `post-drift-code-pattern` | Exact checkout, `docs/system/contracts/code-patterns.md`, and workspace report store; analysis is deterministic. | **Host-capable analysis.** Exact subject and rules digest in; typed findings out; Task Server stores the report. | G0 |
+
+### Triggered and specialised post-steps
+
+| Step | Current dependency | Target and order |
+|---|---|---|
+| `post-abort-review` | Local task contract, CLI output, prompt registry, rerun budget, and card report. | Host-capable ReviewAttempt plus server-owned abort policy and budget after typed abort facts exist. R1/S2. |
+| `post-ui-iteration-artifact` | Screenshots, Playwright evidence, task metadata, and pipeline log under the card. | Host uploads an evidence manifest; Task Server validates completeness and records the iteration. G0. |
+| `post-ui-human-review-gate` | Local marker plus lane move through `GuardedMoveJob` and `_postProcessingGitGate`. | Task Server decision. It remains an operator gate; Studio is optional. S2. |
+| `post-concept-workbench-placement` | Repository concept/Workbench paths and publication Git work. | Backend-bound until the repository-write contract exists. B1. |
+| `post-concept-review` | Concept artifact, card evidence, prompt/model/CLI services, and local review record. | Host-capable immutable-subject review with server-owned typed verdict. R1. |
+| `post-concept-sight-review` | Rendered concept evidence, local result inventory, and vision review. | Host-capable through the Remote Review vision plan; Task Server owns the gate. R1. |
+| `post-concept-promotion` | Operator acceptance, repository paths, commit/push, destination policy, and local task creation. | Operator or Task Server trigger with host Git execution after repository-write and integration contracts exist. B1/I1. |
+
+### Delivered decision slice
+
+Canonical Remote Review now keeps a valid non-infrastructure report in
+`4-auto-review` until cleanup proves the disposable workspace is gone. That
+cleanup atomically creates one idempotent orchestration run. Its immutable
+payload contains `RunAttemptId`, `ReviewSubjectId`, `ReviewAttemptId`,
+`ResultSha`, review policy hash, review report hash, normalized outcome,
+verdicts, and gate facts. This is not the legacy `review-subject.json` sidecar.
+
+Every project receives the code-owned default five-stage flow. The external
+Engine evaluates the payload through the public API. Task Server settlement
+snapshots the task resource version, rejects stale authority, and applies one
+of three unambiguous effects:
+
+- `Pass` continues to the final Human Review handoff;
+- `ProductFailure` consumes the task-wide budget and returns to `2-ready`, or
+  reaches `5e-escalated` when the budget is exhausted;
+- `ReviewInfra` never enters this flow in the normal path; it retries the same
+  immutable ReviewSubject. An unexpected payload fails closed.
+
+Lane mutation, audit, and lifecycle evidence are one Task Server transaction.
+Engine restart is safe because leases and fences are persisted. Studio and the
+legacy backend are absent from the path. Integration remains an explicit Human
+Review command and is not inferred from a passing post-processing verdict.
+
+### First execution migration candidate: `post-build-test-gate`
+
+The first high-value checkout-bound move is `post-build-test-gate`. The current
+target architecture uses a dedicated bounded GateSubject/GateAttempt contract,
+not another host-side orchestrator. `HostReport` remains the source of executor
+capability, capacity, and fault facts; the GateAttempt supplies work ownership.
+
+The interface cut is:
+
+1. Engine resolves a versioned plan from the pipeline definition and creates a
+   GateSubject bound to task, RunAttempt, repository, Result-SHA, immutable ref
+   or source bundle, pipeline definition version, policy hash, and plan digest.
+2. Task Server creates a GateAttempt and admits only a host with fresh
+   `executor:gate`, repository, Git, disk, and required toolchain capabilities.
+3. Host claims with lease, fence, authority epoch, and idempotency key;
+   materializes a fence-specific disposable checkout and proves
+   `HEAD == ResultSha` before executing ordered argv with declared working
+   directories, environment names, deadlines, resource class, and output caps.
+4. Host reports per-command exit/signal/duration, tested tree, classified
+   product or infrastructure failure, artifact hashes, toolchain digest, and
+   cleanup proof. It never chooses a lane.
+5. Task Server validates and persists the report. Engine consumes the terminal
+   gate result; Task Server applies retry or reissue policy. The existing SSH
+   bridge is removed only after parity and restart/loss canaries pass.
+
+### Migration sequence and completion condition
+
+1. **H0, delivered:** HostReport negotiation, permits, durable journal, replay,
+   and `post-worktree-containment`.
+2. **S1/S2 for canonical Remote Review, delivered here:** full-envelope review
+   cleanup handoff, durable Engine decision, task-wide reissue budget, lane
+   move, and lifecycle evidence.
+3. **G0:** commit attribution, regression radar, UI evidence manifest, and
+   code-pattern drift over immutable subjects.
+4. **G1/G2:** claimable `post-build-test-gate`, then lint, with a separate gate
+   pool and exact-subject evidence.
+5. **R1:** converge remaining aspect, grade, abort, concept, and vision calls on
+   immutable ReviewSubjects.
+6. **I1/I2:** durable integration commands, merge/push execution, and conflict
+   resolution under repository leases. Operator acceptance remains explicit.
+7. **B1-B3:** replace workspace registry, wiki, task-spawn, and drift filesystem
+   dependencies with history, snapshot, repository-write, and mutation APIs.
+
+Detached-Studio acceptance covers a full wave: finish coding, preserve the
+RunAttempt envelope, execute Remote Review, clean its workspace, run the Engine
+decision, exercise one bounded reissue, and reach Human Review with the Windows
+Studio connector and legacy backend stopped. The later integration slice adds
+an accepted integration command and host execution. No card may remain in
+`post-processing-running` solely because Studio is down.
 
 ## Migration runbook
 

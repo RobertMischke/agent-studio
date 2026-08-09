@@ -1692,6 +1692,28 @@
           </td>
         </tr>
         <tr>
+          <td>2026-08-09</td>
+          <td><code>AGT-2470</code><br><span class="small">Remote Review decision stalled without the local backend</span></td>
+          <td>
+            A canonical coding RunAttempt and Remote Review could finish while the Windows Studio and legacy backend were
+            stopped, but verdict evaluation, reissue, and lane movement had no production handoff into the API-only Engine.
+            The durable terminal was therefore missing and the card remained in
+            <code>4-auto-review</code>/<code>post-processing-running</code>.
+          </td>
+          <td>
+            The Task Server stored the fenced ReviewSubject, ReviewAttempt, and report but moved valid reports directly or
+            left compatibility work to the monolith. Successful cleanup did not create an orchestration run. Reissue also
+            restarted decision stages inside one run instead of returning the card to a new coding attempt.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> successful cleanup now queues one full-envelope flow carrying
+            RunAttempt, ReviewSubject, ReviewAttempt, Result-SHA, policy, and report identities. Fenced Engine settlement
+            reaches <span class="lane">2-ready</span>, <span class="lane">5-human-review</span>, or
+            <span class="lane">5e-escalated</span> under a task-wide budget and task-version guard. Integration remains an
+            explicit operator decision.
+          </td>
+        </tr>
+        <tr>
           <td>2026-08-04</td>
           <td><code>AGT-2499</code><br><span class="small">AGT-2458 completed without a persisted result envelope</span></td>
           <td>

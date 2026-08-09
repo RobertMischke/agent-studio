@@ -78,7 +78,9 @@ pipeline view.
   ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
   stages under bounded per-stage concurrency. A run snapshots the definition
   version and ordered stages at creation, so later definition edits do not
-  rewrite in-flight work.
+  rewrite in-flight work. The code-owned default definition is version zero;
+  the first project override becomes version one. Successful cleanup of a
+  canonical Remote Review report creates the decision run transactionally.
 - `backend/Features/TestRuns/`: the separate project test-run lifecycle. These
   runs belong to commits rather than cards and expose planned order, scope,
   host, state, result, duration, and derived card attachments through
@@ -451,6 +453,21 @@ definitions live in the Task Server, while execution lives in
 results only through the public API. Its `engine.env` contains bootstrap
 connectivity, identity/credential, lease timing, and concurrency caps, never
 project flow definitions, model routing, or gate policy.
+
+A valid Remote Review report is evidence, not a lane decision. Infrastructure
+outcomes stay in Auto Review and retry the same immutable subject. A valid
+product report also stays there until cleanup proves the disposable review
+workspace is gone. That cleanup atomically appends one idempotent orchestration
+run whose payload binds the coding RunAttempt, ReviewSubject, ReviewAttempt,
+Result-SHA, policy hash, report hash, verdicts, and gate facts. Only a fenced
+Engine settlement can request reissue, escalation, or Human Review handoff, and
+only the Task Server can apply the version-fenced lane mutation plus lifecycle
+evidence. Studio and its BFF are read and command surfaces, not loop owners.
+
+Integration remains a deferred operator decision. Its target Remote shape is a
+Task Server integration command plus execution on a Git-capable Agent Host. No
+automatic Post Processing verdict may bypass Human Review or mark a task
+Completed.
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**

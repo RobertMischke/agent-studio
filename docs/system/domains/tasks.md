@@ -383,6 +383,16 @@ cannot erase an operator decision.
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
+- A canonical Remote Review report does not perform a lane move. Infrastructure
+  outcomes retry the same immutable ReviewSubject. A non-infrastructure report
+  remains in `4-auto-review` through successful workspace cleanup, which
+  atomically creates a full-envelope Task Server orchestration run. Fenced
+  Engine settlement then moves the task to `2-ready`, `5-human-review`, or
+  `5e-escalated`. The bounded reissue count spans decision runs and coding
+  attempts for the task; it does not reset with Studio or Engine restart.
+- Integration remains an explicit operator decision after Human Review. The
+  Remote control plane may durably accept and schedule that command, but Post
+  Processing does not infer acceptance or move directly to `6-completed`.
 - Moving a task from `6-completed` to `7-archive` in task detail requires a
   second confirmation while `integration.status` is anything other than
   `integrated`. This is an operator warning, not a server-side hard block.
