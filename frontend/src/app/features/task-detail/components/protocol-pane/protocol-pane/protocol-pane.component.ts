@@ -61,7 +61,12 @@ import {
   rateLimitTooltip,
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
-import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
+import {
+  isActivitySummaryEvent,
+  presentActivityEvents,
+  stripLegacyCompletionLines,
+} from '../activity-event-presentation';
+import { ActivityEventPresentationDirective } from '../activity-event-presentation.directive';
 import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
 import { projectStructuredActivityContent } from '../structured-activity-projection';
@@ -129,6 +134,7 @@ interface InterimSummaryState {
     RunnerReplayMetadataComponent,
     TaskInspectorTabComponent,
     DecisionSurfaceComponent,
+    ActivityEventPresentationDirective,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -789,6 +795,12 @@ export class ProtocolPaneComponent implements OnDestroy {
       timestamp: s.timestampUtc,
     }));
     const replay = this.runnerReplay();
+    const runs = this.runTimeline()?.runs ?? [];
+    const worktreeRootsByRun = Object.fromEntries(runs.flatMap((run) =>
+      run.executionLocation?.worktreePath ? [[run.index, run.executionLocation.worktreePath]] : []));
+    const commitDiffRunIds = runs
+      .filter((run) => !!run.headShaBefore && !!run.headShaAfter)
+      .map((run) => run.index);
     const typedLifecycle = this.runnerEvents().some(event => event.kind === 'turn.completed');
     const structured = projectStructuredActivityContent(filtered, info.id);
     const projected = projectConversation({
@@ -807,11 +819,27 @@ export class ProtocolPaneComponent implements OnDestroy {
     });
     const presented = presentActivityEvents(projected, info.id, info.watchPath, {
       typedTurnCompletions: typedLifecycle,
+      worktreeRoot: info.executionLocation?.worktreePath,
+      worktreeRootsByRun,
+      commitDiffRunIds,
     });
     return mergeReplayEvents(mergeByTimestamp(presented, structured.events), replay.timelineEvents);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {
+    const editSummary = range === null ? undefined : this.nextGenChatEvents().find((event) =>
+      isActivitySummaryEvent(event)
+      && event.activityPresentation.action === 'commit-diff'
+      && event.rawRange.source === range.source
+      && event.rawRange.start === range.start
+      && event.rawRange.end === range.end);
+    if (editSummary?.runId !== undefined) {
+      const run = this.runTimeline()?.runs.find((candidate) => candidate.index === editSummary.runId);
+      if (run?.headShaBefore && run.headShaAfter) {
+        this.openGitViewer(run);
+        return;
+      }
+    }
     void range;
     this.setActivityView('trace');
   }

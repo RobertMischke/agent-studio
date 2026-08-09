@@ -321,4 +321,112 @@ public class PhaseAwareWatchdogTests
         Assert.Equal(WatchdogState.Hung,
             PhaseAwareWatchdog.DecideState(605, 700, RunPhase.SessionInitializing, Cfg));
     }
+
+    [Fact]
+    public void AnnouncementPolicy_FirstQuietAndMatchingResumeStayVisible()
+    {
+        var at = new DateTime(2026, 8, 9, 10, 0, 0, DateTimeKind.Utc);
+        var quiet = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Healthy, WatchdogState.Quiet,
+            silenceSeconds: 30, suspiciousBudgetSeconds: 180,
+            at, WatchdogAnnouncementState.Empty);
+        Assert.Equal(WatchdogAnnouncementKind.Transition, quiet.Kind);
+
+        var resumed = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Quiet, WatchdogState.Healthy,
+            silenceSeconds: 0, suspiciousBudgetSeconds: 180,
+            at.AddSeconds(5), quiet.State);
+        Assert.Equal(WatchdogAnnouncementKind.Transition, resumed.Kind);
+    }
+
+    [Fact]
+    public void AnnouncementPolicy_RepeatedQuietPairBelowHalfBudgetIsSuppressedTogether()
+    {
+        var at = new DateTime(2026, 8, 9, 10, 0, 0, DateTimeKind.Utc);
+        var firstQuiet = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Healthy, WatchdogState.Quiet, 30, 180,
+            at, WatchdogAnnouncementState.Empty);
+        var firstResume = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Quiet, WatchdogState.Healthy, 0, 180,
+            at.AddSeconds(5), firstQuiet.State);
+        var repeatedQuiet = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Healthy, WatchdogState.Quiet, 45, 180,
+            at.AddMinutes(1), firstResume.State);
+        var repeatedResume = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Quiet, WatchdogState.Healthy, 0, 180,
+            at.AddMinutes(1).AddSeconds(5), repeatedQuiet.State);
+
+        Assert.Equal(WatchdogAnnouncementKind.Suppress, repeatedQuiet.Kind);
+        Assert.Equal(WatchdogAnnouncementKind.Suppress, repeatedResume.Kind);
+    }
+
+    [Fact]
+    public void AnnouncementPolicy_RepeatedQuietAtHalfSuspiciousBudgetIsVisible()
+    {
+        var at = new DateTime(2026, 8, 9, 10, 0, 0, DateTimeKind.Utc);
+        var seen = WatchdogAnnouncementState.Empty with { HasSeenQuiet = true };
+
+        var below = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Healthy, WatchdogState.Quiet, 89.9, 180,
+            at, seen);
+        var boundary = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Healthy, WatchdogState.Quiet, 90, 180,
+            at, seen);
+
+        Assert.Equal(WatchdogAnnouncementKind.Suppress, below.Kind);
+        Assert.Equal(WatchdogAnnouncementKind.Transition, boundary.Kind);
+    }
+
+    [Fact]
+    public void AnnouncementPolicy_SixthQuietHealthyChangeEmitsOneFlappingSummary()
+    {
+        var at = new DateTime(2026, 8, 9, 10, 0, 0, DateTimeKind.Utc);
+        var state = WatchdogAnnouncementState.Empty;
+        WatchdogAnnouncementDecision decision = null!;
+
+        for (var index = 0; index < 8; index++)
+        {
+            var enteringQuiet = index % 2 == 0;
+            decision = WatchdogAnnouncementPolicy.Decide(
+                enteringQuiet ? WatchdogState.Healthy : WatchdogState.Quiet,
+                enteringQuiet ? WatchdogState.Quiet : WatchdogState.Healthy,
+                enteringQuiet ? 30 : 0,
+                suspiciousBudgetSeconds: 180,
+                at.AddMinutes(index),
+                state);
+            state = decision.State;
+
+            if (index < 5)
+                Assert.NotEqual(WatchdogAnnouncementKind.FlappingSummary, decision.Kind);
+            else if (index == 5)
+                Assert.Equal(WatchdogAnnouncementKind.FlappingSummary, decision.Kind);
+            else
+                Assert.NotEqual(WatchdogAnnouncementKind.FlappingSummary, decision.Kind);
+        }
+
+        Assert.Equal(8, decision.TransitionsInWindow);
+        Assert.True(decision.State.FlappingSummaryAnnounced);
+    }
+
+    [Theory]
+    [InlineData(WatchdogState.Suspicious)]
+    [InlineData(WatchdogState.Hung)]
+    public void AnnouncementPolicy_EscalationAndKillTransitionsAreNeverSuppressed(WatchdogState current)
+    {
+        var at = new DateTime(2026, 8, 9, 10, 0, 0, DateTimeKind.Utc);
+        var noisyState = WatchdogAnnouncementState.Empty with
+        {
+            HasSeenQuiet = true,
+            FlappingSummaryAnnounced = true,
+            QuietHealthyTransitions = Enumerable.Range(0, 8)
+                .Select(index => at.AddSeconds(-index))
+                .ToArray()
+        };
+
+        var decision = WatchdogAnnouncementPolicy.Decide(
+            WatchdogState.Quiet, current, 600, 180,
+            at, noisyState);
+
+        Assert.Equal(WatchdogAnnouncementKind.Transition, decision.Kind);
+    }
 }

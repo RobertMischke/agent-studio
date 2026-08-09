@@ -3107,6 +3107,18 @@ public class ProjectRunner
 
         cli.SetWatchdogState(jobKey, next);
 
+        var suspiciousAtSeconds = phase is null
+            ? _watchdogConfig.SuspiciousSeconds
+            : PhaseAwareWatchdog.EffectiveBudget(phase.Value, _phaseBudgets, longOpActive).SuspiciousSeconds;
+        var runAnnouncement = _watchdogAnnouncements.TryGetValue(jobKey, out var existingAnnouncement)
+            && existingAnnouncement.StartedAt == exec.StartedAt
+                ? existingAnnouncement
+                : new WatchdogRunAnnouncement(exec.StartedAt, WatchdogAnnouncementState.Empty);
+        var announcement = WatchdogAnnouncementPolicy.Decide(
+            prev, next, silence, suspiciousAtSeconds, now, runAnnouncement.State);
+        _watchdogAnnouncements[jobKey] = runAnnouncement with { State = announcement.State };
+        if (announcement.Kind == WatchdogAnnouncementKind.Suppress) return;
+
         var info = _scanner.FindJob(jobId, Entry.Path);
         if (info == null) return;
 
@@ -3116,6 +3128,13 @@ public class ProjectRunner
         var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence, _phaseBudgets, longOpActive)}]";
         var title = string.IsNullOrWhiteSpace(info.Title) ? info.Id : info.Title;
         var cliLabel = string.IsNullOrWhiteSpace(info.CliType) ? cliType : info.CliType;
+        if (announcement.Kind == WatchdogAnnouncementKind.FlappingSummary)
+        {
+            _chatLog.Append(info, OrchestratorMessageKind.WatchdogWarning,
+                $"\"{title}\" ({cliLabel}): output changed between quiet and streaming {announcement.TransitionsInWindow} times in 10 minutes. Further soft quiet/resumed notices are grouped; suspicious and timeout warnings stay immediate.{phaseTag}");
+            return;
+        }
+
         switch (next)
         {
             case WatchdogState.Quiet:
@@ -3176,6 +3195,13 @@ public class ProjectRunner
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RunPhaseSnapshot> _phaseByJob = new();
 
     /// <summary>
+    /// Per-run soft-announcement history. The run start timestamp fences a new
+    /// execution with the same job key even if an untyped CLI misses its
+    /// terminal event; typed terminal events remove the entry eagerly.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, WatchdogRunAnnouncement> _watchdogAnnouncements = new();
+
+    /// <summary>
     /// Last seen phase + UTC of last activity-classified event, plus the
     /// command of the tool currently in flight. <see cref="LastToolCommand"/>
     /// is set on <see cref="CliRunEvent.ToolStarted"/> and cleared on
@@ -3184,6 +3210,7 @@ public class ProjectRunner
     /// budget while that tool is a known long-op (ASS-665).
     /// </summary>
     private sealed record RunPhaseSnapshot(RunPhase Phase, DateTime LastActivityAt, string? LastToolCommand);
+    private sealed record WatchdogRunAnnouncement(DateTime StartedAt, WatchdogAnnouncementState State);
 
     /// <summary>Updates per-job phase + activity clock from a typed event.</summary>
     private void OnRunEventReceived(string jobKey, CliRunEvent evt)
@@ -3316,6 +3343,7 @@ public class ProjectRunner
         if (evt is CliRunEvent.RunEnded)
         {
             _phaseByJob.TryRemove(jobKey, out _);
+            _watchdogAnnouncements.TryRemove(jobKey, out _);
             _sentinelStopRequested.TryRemove(jobKey, out _);
         }
     }

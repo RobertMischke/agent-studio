@@ -336,3 +336,131 @@ public static class PhaseAwareWatchdog
         return $"phase={phase}{longOpTag} silence={silenceSeconds:F0}s allowed={budget.SuspiciousSeconds:F0}/{budget.HungSeconds:F0}s";
     }
 }
+
+/// <summary>
+/// Result of applying quiet/resumed announcement hysteresis. State transitions
+/// still happen in the watchdog; this policy only decides which transitions
+/// deserve a chat row.
+/// </summary>
+public enum WatchdogAnnouncementKind
+{
+    Suppress,
+    Transition,
+    FlappingSummary
+}
+
+/// <summary>
+/// Per-run memory needed by <see cref="WatchdogAnnouncementPolicy"/>. The
+/// transition timestamps form a rolling window, while the two booleans keep a
+/// suppressed quiet entry from producing an orphaned "streaming again" row.
+/// </summary>
+public sealed record WatchdogAnnouncementState(
+    bool HasSeenQuiet,
+    bool LastQuietAnnouncementVisible,
+    IReadOnlyList<DateTime> QuietHealthyTransitions,
+    bool FlappingSummaryAnnounced)
+{
+    public static WatchdogAnnouncementState Empty { get; } =
+        new(false, false, Array.Empty<DateTime>(), false);
+}
+
+/// <summary>Pure announcement decision plus the state for the next tick.</summary>
+public sealed record WatchdogAnnouncementDecision(
+    WatchdogAnnouncementKind Kind,
+    WatchdogAnnouncementState State,
+    int TransitionsInWindow);
+
+/// <summary>
+/// Hysteresis for soft watchdog chat rows. The first quiet/resumed pair stays
+/// visible. Later quiet entries are announced only after reaching half of the
+/// phase's Suspicious budget. More than five quiet/healthy changes inside ten
+/// minutes produce one aggregate warning instead of another pair. Suspicious
+/// and Hung transitions always pass through unchanged.
+/// </summary>
+public static class WatchdogAnnouncementPolicy
+{
+    public const int FlappingTransitionThreshold = 5;
+    public static readonly TimeSpan FlappingWindow = TimeSpan.FromMinutes(10);
+
+    public static WatchdogAnnouncementDecision Decide(
+        WatchdogState previous,
+        WatchdogState current,
+        double silenceSeconds,
+        double suspiciousBudgetSeconds,
+        DateTime nowUtc,
+        WatchdogAnnouncementState state)
+    {
+        var windowStart = nowUtc - FlappingWindow;
+        var transitions = state.QuietHealthyTransitions
+            .Where(at => at >= windowStart)
+            .ToList();
+        var summaryAnnounced = transitions.Count > FlappingTransitionThreshold
+            && state.FlappingSummaryAnnounced;
+        var quietHealthyChange =
+            (previous == WatchdogState.Healthy && current == WatchdogState.Quiet)
+            || (previous == WatchdogState.Quiet && current == WatchdogState.Healthy);
+        if (quietHealthyChange)
+            transitions.Add(nowUtc);
+
+        var nextState = state with
+        {
+            QuietHealthyTransitions = transitions,
+            FlappingSummaryAnnounced = summaryAnnounced
+        };
+
+        if (quietHealthyChange
+            && transitions.Count > FlappingTransitionThreshold
+            && !summaryAnnounced)
+        {
+            nextState = nextState with
+            {
+                HasSeenQuiet = state.HasSeenQuiet || current == WatchdogState.Quiet,
+                LastQuietAnnouncementVisible = false,
+                FlappingSummaryAnnounced = true
+            };
+            return new WatchdogAnnouncementDecision(
+                WatchdogAnnouncementKind.FlappingSummary,
+                nextState,
+                transitions.Count);
+        }
+
+        // These paths own escalation and process termination. Announcement
+        // hysteresis must never make them quiet.
+        if (current is WatchdogState.Suspicious or WatchdogState.Hung)
+        {
+            return new WatchdogAnnouncementDecision(
+                WatchdogAnnouncementKind.Transition,
+                nextState with { LastQuietAnnouncementVisible = false },
+                transitions.Count);
+        }
+
+        if (current == WatchdogState.Quiet)
+        {
+            var threshold = Math.Max(0, suspiciousBudgetSeconds * 0.5);
+            var announce = !state.HasSeenQuiet || silenceSeconds >= threshold;
+            nextState = nextState with
+            {
+                HasSeenQuiet = true,
+                LastQuietAnnouncementVisible = announce
+            };
+            return new WatchdogAnnouncementDecision(
+                announce ? WatchdogAnnouncementKind.Transition : WatchdogAnnouncementKind.Suppress,
+                nextState,
+                transitions.Count);
+        }
+
+        if (current == WatchdogState.Healthy && previous == WatchdogState.Quiet)
+        {
+            var announce = state.LastQuietAnnouncementVisible;
+            return new WatchdogAnnouncementDecision(
+                announce ? WatchdogAnnouncementKind.Transition : WatchdogAnnouncementKind.Suppress,
+                nextState with { LastQuietAnnouncementVisible = false },
+                transitions.Count);
+        }
+
+        return new WatchdogAnnouncementDecision(
+            WatchdogAnnouncementKind.Transition,
+            nextState with { LastQuietAnnouncementVisible = false },
+            transitions.Count);
+    }
+}
