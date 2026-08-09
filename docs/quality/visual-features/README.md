@@ -22,51 +22,46 @@ Each entry records:
 Feature pages under [`features/`](./features) are the human-readable docs. They
 must reference entries from the manifest, not invent separate image metadata.
 
-## Existing-data rule
+## Pinned-data rule
 
-This implementation uses existing product data from the current Agent Studio
-workspace. The images come from
-`frontend/e2e/visual-evidence/readme-screenshots.spec.ts`, which opens the
-board and selects an existing task with useful review and Git context. Do not
-introduce synthetic product states for this library just to make a prettier
-screenshot.
-
-If a feature needs a new visual state, first add or identify a real data state,
-then document the Playwright route to that state.
+Documentation and marketing images use the committed, sanitized snapshot in
+`scripts/presentation-capture/pinned-seed.json`. The snapshot may be derived
+from a real board and task, but capture never reads that workspace live. An
+operator updates the snapshot explicitly with
+`scripts/presentation-capture/export-pinned-seed.mjs`, reviews the anonymized
+diff, and commits the new fixed state. These images use the `--pinned` filename
+suffix. The `--real`, `--mocked`, and `--composite` suffixes remain the separate
+provenance grammar for task-run evidence.
 
 ## Regenerating screenshots
 
 Generate the current visual documentation set from the product repo root:
 
 ```sh
-./scripts/visual-docs/generate.sh
+npm --prefix frontend run docs:presentation
 ```
 
-The script runs the Playwright screenshot recipe and then validates the manifest.
+The command resets an isolated workspace, runs the presentation and visual
+library recipes, and then validates the manifest.
 It writes the generated PNG files to [`docs/assets/images/`](../../assets/images).
-By default it uses `PW_VISUAL_CAPTURE=marketing`, which hides local-only dev
-chrome such as the `DEV` banner and left-edge stripe before writing screenshots.
-Set `PW_VISUAL_CAPTURE=workspace` when you intentionally want the local checkout
-marker in debugging captures.
+It uses `PW_VISUAL_CAPTURE=marketing`, which hides local-only dev chrome and
+live quota widgets before writing screenshots.
 
-You can also run the Playwright recipe directly from the frontend folder:
+The compatibility wrapper delegates to the same command:
 
 ```sh
-cd frontend
-PW_TARGET=dev npm run docs:visual
+./scripts/visual-docs/generate.sh
 ```
 
 Preconditions:
 
-- the dev frontend is reachable at the configured Playwright target
-- the backend exposes at least one existing project with visible task cards
-- the spec can write to `../docs/assets/images/`
+- frontend dependencies and the .NET SDK are installed
+- the spec can write to `docs/assets/images/`
 - marketing capture mode is acceptable for public docs, so local-only DEV
   markers are hidden from generated product images
 
-The spec uses existing task data. Preferred task keys are kept in the spec so
-the generated set stays visually stable, but the run can fall back to the first
-visible task card.
+The spec selects pinned `DEMO-9`; there is no fallback to ambient workspace
+data.
 
 ## Validating the library
 

@@ -6,14 +6,14 @@ The Activity tab shows the operational side of a task: trace, conversation,
 run activity, and the follow-up composer. It is where a human can inspect what
 happened and steer the next step.
 
-![Task detail activity tab](../../../assets/images/detail-activity.png)
+![Task detail activity tab](../../../assets/images/detail-activity--pinned.png)
 
 ## Relevant State
 
 - Manifest id: `task-detail-activity`
-- Route: `/tasks/<existing-agent-studio-task>`
+- Route: `/tasks/DEMO-9`
 - Viewport: `1440x900`
-- Data state: existing Agent Software Studio task selected from the live board
+- Data state: pinned DEMO-9 task selected from the live board
 - Visible state: Activity tab in the protocol pane
 
 ## How To Recreate The Screenshot
@@ -22,8 +22,8 @@ happened and steer the next step.
 ./scripts/visual-docs/generate.sh
 ```
 
-The Playwright spec opens an existing task, clicks `inspector-tab-activity`,
-waits for `activity-panel`, and captures `docs/assets/images/detail-activity.png`.
+The Playwright spec opens a pinned DEMO-9 task, clicks `inspector-tab-activity`,
+waits for `activity-panel`, and captures `docs/assets/images/detail-activity--pinned.png`.
 
 ## Marketing Usage
 

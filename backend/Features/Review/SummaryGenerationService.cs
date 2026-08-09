@@ -537,6 +537,7 @@ public sealed class SummaryGenerationService
             ScreenshotSources.Composite => info.Parts.Count > 0
                 ? $" (source: composite of {string.Join(", ", info.Parts)})"
                 : " (source: composite)",
+            ScreenshotSources.Pinned => " (source: pinned)",
             _ => "" // unlabeled: do not claim a source
         };
     }

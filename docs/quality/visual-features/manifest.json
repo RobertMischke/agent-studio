@@ -1,15 +1,21 @@
 {
-  "version": 1,
-  "updatedAt": "2026-06-07",
+  "version": 2,
+  "updatedAt": "2026-08-09",
   "sourceOfTruth": "docs/quality/visual-features/manifest.json",
-  "existingDataOnly": true,
+  "capturePolicy": {
+    "sourceClass": "pinned",
+    "snapshot": "scripts/presentation-capture/pinned-seed.json",
+    "fixedTimeBase": "2026-08-09T08:00:00.000Z",
+    "updateCommand": "node scripts/presentation-capture/export-pinned-seed.mjs --source-root <workspace> --project <project-key> --task <task-key>",
+    "liveWorkspaceReadDuringCapture": false
+  },
   "captureSuite": {
     "tool": "Playwright",
-    "spec": "frontend/e2e/visual-evidence/readme-screenshots.spec.ts",
-    "command": "./scripts/visual-docs/generate.sh",
-    "dataState": "Existing task data from the current Agent Software Studio workspace exposed by /api/watch-paths.",
-    "captureMode": "marketing: hides local-only DEV chrome such as the banner and left-edge stripe before screenshots are written.",
-    "notes": "The spec prefers real Agent Software Studio tasks with Git and review context, then falls back to the first visible task card."
+    "spec": "frontend/e2e/visual-evidence/presentation-capture.spec.ts and frontend/e2e/visual-evidence/readme-screenshots.spec.ts",
+    "command": "npm --prefix frontend run docs:presentation",
+    "dataState": "Versioned, sanitized, deterministic Demo App snapshot seeded into an isolated workspace.",
+    "captureMode": "marketing: hides local-only DEV chrome and live quota widgets before screenshots are written.",
+    "notes": "Updating the snapshot from a real workspace is an explicit sanitization act. Capture reads only the committed pinned snapshot."
   },
   "images": [
     {
@@ -19,22 +25,23 @@
       "purpose": "Shows the board as the place where agent work becomes visible, grouped, and reviewable.",
       "featureDoc": "features/task-board.md",
       "image": {
-        "path": "../images/board-overview.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/board-overview--pinned.png",
         "alt": "Agent Studio board overview with project tree, task lanes, task cards, runner state, and usage summary.",
-        "caption": "Task board overview from the existing Agent Software Studio workspace."
+        "caption": "Task board overview from the pinned Demo App workspace."
       },
       "state": {
         "route": "/",
         "viewport": "1440x900",
-        "relevantState": "Board is loaded with visible task cards from the existing Agent Software Studio workspace.",
-        "dataSource": "Existing Agent Software Studio workspace; no synthetic route stubs."
+        "relevantState": "Board is loaded with visible task cards from the pinned Demo App workspace.",
+        "dataSource": "Pinned Demo App workspace; no synthetic route stubs."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
           "Open /.",
           "Wait for the first task card.",
-          "Capture docs/assets/images/board-overview.png."
+          "Capture docs/assets/images/board-overview--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -57,23 +64,24 @@
       "purpose": "Shows the first review surface for a task: status, agent setup, project identity, references, and pipeline progress.",
       "featureDoc": "features/task-detail-overview.md",
       "image": {
-        "path": "../images/detail-overview.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-overview--pinned.png",
         "alt": "Task detail overview tab with task status, agent configuration, references, and pipeline progress.",
-        "caption": "Task overview from an existing Agent Software Studio task."
+        "caption": "Task overview from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An existing task with pipeline and review context is open on the Overview tab.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "relevantState": "Pinned DEMO-9 with pipeline and review context is open on the Overview tab.",
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
           "Open /.",
-          "Open the preferred existing task card, such as ASS-847.",
+          "Open the pinned DEMO-9 task card.",
           "Wait for overview-tab.",
-          "Capture docs/assets/images/detail-overview.png."
+          "Capture docs/assets/images/detail-overview--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -96,23 +104,24 @@
       "purpose": "Shows rendered task outcomes before prompts and raw artifacts while keeping file details inspectable.",
       "featureDoc": "features/task-detail-files.md",
       "image": {
-        "path": "../images/detail-files.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-files--pinned.png",
         "alt": "Task detail Docs tab with rendered outcomes and task artifacts.",
-        "caption": "Outcome-first Docs tab from an existing Agent Software Studio task."
+        "caption": "Outcome-first Docs tab from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
         "relevantState": "The task detail is open and the Docs tab is selected.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the existing task detail.",
+          "Open pinned DEMO-9.",
           "Click prompt-tab-description.",
           "Wait for files-pane.",
-          "Capture docs/assets/images/detail-files.png."
+          "Capture docs/assets/images/detail-files--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -135,23 +144,24 @@
       "purpose": "Shows the chronological history of task events, verdicts, reopen loops, and operator-visible progress.",
       "featureDoc": "features/task-detail-timeline.md",
       "image": {
-        "path": "../images/detail-timeline.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-timeline--pinned.png",
         "alt": "Task detail Timeline tab with task events and verdict context.",
-        "caption": "Timeline tab from an existing Agent Software Studio task."
+        "caption": "Timeline tab from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
         "relevantState": "The task detail is open and the Timeline tab is selected.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the existing task detail.",
+          "Open pinned DEMO-9.",
           "Click prompt-tab-timeline.",
           "Wait for timeline-tab.",
-          "Capture docs/assets/images/detail-timeline.png."
+          "Capture docs/assets/images/detail-timeline--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -174,23 +184,24 @@
       "purpose": "Shows visual evidence and review findings collected on the task instead of scattered in separate tools.",
       "featureDoc": "features/task-detail-evidence.md",
       "image": {
-        "path": "../images/detail-evidence.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-evidence--pinned.png",
         "alt": "Task detail Evidence tab with visual evidence and review evidence areas.",
-        "caption": "Evidence tab from an existing Agent Software Studio task."
+        "caption": "Evidence tab from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
         "relevantState": "The task detail is open and the Evidence tab is selected.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the existing task detail.",
+          "Open pinned DEMO-9.",
           "Click prompt-tab-evidence.",
           "Wait for evidence-view.",
-          "Capture docs/assets/images/detail-evidence.png."
+          "Capture docs/assets/images/detail-evidence--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -213,23 +224,24 @@
       "purpose": "Shows the task-local code review surface where a reviewer can run or inspect review passes for the current task.",
       "featureDoc": "features/task-detail-code-review.md",
       "image": {
-        "path": "../images/detail-code-review.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-code-review--pinned.png",
         "alt": "Task detail Code Review tab with model selector and code review action.",
-        "caption": "Code Review tab from an existing Agent Software Studio task."
+        "caption": "Code Review tab from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
         "relevantState": "The task detail is open and the Code Review tab is selected.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the existing task detail.",
+          "Open pinned DEMO-9.",
           "Click prompt-tab-code-review.",
           "Wait for code-review-panel.",
-          "Capture docs/assets/images/detail-code-review.png."
+          "Capture docs/assets/images/detail-code-review--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -252,23 +264,24 @@
       "purpose": "Shows the live activity surface with protocol-adjacent trace, conversation, and follow-up controls.",
       "featureDoc": "features/task-detail-activity.md",
       "image": {
-        "path": "../images/detail-activity.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-activity--pinned.png",
         "alt": "Task detail Activity tab with run activity and follow-up composer.",
-        "caption": "Activity tab from an existing Agent Software Studio task."
+        "caption": "Activity tab from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
         "relevantState": "The task detail is open and the Activity tab is selected in the protocol pane.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the existing task detail.",
+          "Open pinned DEMO-9.",
           "Click inspector-tab-activity.",
           "Wait for activity-panel.",
-          "Capture docs/assets/images/detail-activity.png."
+          "Capture docs/assets/images/detail-activity--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -291,23 +304,24 @@
       "purpose": "Shows that one task keeps prompt, protocol status, and review evidence in one inspectable place.",
       "featureDoc": "features/task-detail-protocol.md",
       "image": {
-        "path": "../images/detail-protocol.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-protocol--pinned.png",
         "alt": "Task detail page with overview and protocol panes visible for one Agent Software Studio task.",
-        "caption": "Task detail protocol view from an existing Agent Software Studio task."
+        "caption": "Task detail protocol view from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An existing Agent Software Studio task is open and the protocol pane is visible.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "relevantState": "An pinned DEMO-9 task is open and the protocol pane is visible.",
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
           "Open /.",
-          "Open the preferred existing task card.",
+          "Open the pinned DEMO-9 task card.",
           "Wait for pane-protocol.",
-          "Capture docs/assets/images/detail-protocol.png."
+          "Capture docs/assets/images/detail-protocol--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -330,25 +344,26 @@
       "purpose": "Shows that implementation evidence, protocol status, and Git context can be reviewed together.",
       "featureDoc": "features/task-detail-three-panes.md",
       "image": {
-        "path": "../images/detail-three-panes.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-three-panes--pinned.png",
         "alt": "Task detail view with prompt, protocol, and Git panes visible side by side.",
         "caption": "Task detail view with prompt, protocol, and Git context open together."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An existing Agent Software Studio task is open and the Git pane has been toggled on.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "relevantState": "An pinned DEMO-9 task is open and the Git pane has been toggled on.",
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
           "Open /.",
-          "Open the preferred existing task card.",
+          "Open the pinned DEMO-9 task card.",
           "Wait for pane-protocol.",
           "Click pane-toggle-git.",
           "Wait for pane-git.",
-          "Capture docs/assets/images/detail-three-panes.png."
+          "Capture docs/assets/images/detail-three-panes--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -371,23 +386,24 @@
       "purpose": "Shows the Git evidence pane as a focused review state with commits and file tree visible.",
       "featureDoc": "features/task-detail-git-focus.md",
       "image": {
-        "path": "../images/detail-git-focus.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-git-focus--pinned.png",
         "alt": "Task detail focused on the Git pane with commits and changed files visible.",
-        "caption": "Git focus view from an existing Agent Software Studio task."
+        "caption": "Git focus view from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
         "relevantState": "The task detail is open with Git visible and the prompt and protocol panes hidden.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the existing task detail.",
+          "Open pinned DEMO-9.",
           "Enable the Git pane.",
           "Hide the prompt and protocol panes.",
-          "Capture docs/assets/images/detail-git-focus.png."
+          "Capture docs/assets/images/detail-git-focus--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -410,23 +426,24 @@
       "purpose": "Shows a review state where task evidence and quality-gate context are visible before a human decision.",
       "featureDoc": "features/quality-gate-review.md",
       "image": {
-        "path": "../images/detail-quality-gate.png",
+        "sourceClass": "pinned",
+        "path": "../../assets/images/detail-quality-gate--pinned.png",
         "alt": "Task detail view for a quality-gate task with protocol, Git evidence, and review context.",
-        "caption": "Quality-gate task detail from an existing Agent Software Studio task."
+        "caption": "Quality-gate task detail from a pinned DEMO-9 task."
       },
       "state": {
-        "route": "/tasks/<existing-agent-studio-task>",
+        "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An existing Agent Software Studio task with protocol, pipeline, and review context is visible.",
-        "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
+        "relevantState": "An pinned DEMO-9 task with protocol, pipeline, and review context is visible.",
+        "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
         "test": "readme screenshots - board and task detail states",
         "steps": [
-          "Open the preferred existing task card.",
+          "Open the pinned DEMO-9 task card.",
           "Restore prompt and protocol panes after the Git focus capture.",
           "Wait for pane-protocol.",
-          "Capture docs/assets/images/detail-quality-gate.png."
+          "Capture docs/assets/images/detail-quality-gate--pinned.png."
         ]
       },
       "marketingUsages": [
@@ -439,6 +456,86 @@
           "pages": ["/product", "/software-quality", "/patterns/angular-quality-rails"],
           "role": "Quality and review proof image",
           "copyIntent": "Show that quality checks and review state are part of one task detail."
+        }
+      ]
+    },
+    {
+      "id": "landing-board-hero",
+      "feature": "Task board",
+      "title": "Landing-page board hero",
+      "purpose": "Shows a populated cross-lane board with the bounded task and human-decision state called out in the rendered capture.",
+      "featureDoc": "features/task-board.md",
+      "image": {
+        "sourceClass": "pinned",
+        "path": "../../assets/images/presentation/07-landing-board-hero--dark--pinned.png",
+        "alt": "Pinned Agent Studio board with populated lifecycle lanes and three annotation labels.",
+        "caption": "Landing-page board hero from the pinned Demo App workspace."
+      },
+      "state": {
+        "route": "/",
+        "viewport": "1920x1080 CSS pixels at device scale factor 2",
+        "relevantState": "Demo App is selected and the visible lifecycle lanes carry meaningful pinned tasks, including DEMO-9 in Escalated.",
+        "dataSource": "scripts/presentation-capture/pinned-seed.json; no live workspace read."
+      },
+      "capture": {
+        "test": "presentation still 07 - landing board hero",
+        "steps": [
+          "Reset and start the isolated pinned workspace.",
+          "Open Demo App on the board.",
+          "Render at most three capture annotations.",
+          "Capture both themes at 3840x2160."
+        ]
+      },
+      "marketingUsages": [
+        {
+          "id": "landingBoardHeroPinned",
+          "repo": "agent-studio-for-software-website",
+          "assetPath": "04-angular-static-final/public/product-screenshots/landing-board-hero.png",
+          "publicPath": "/product-screenshots/landing-board-hero.png",
+          "component": "homeCapture",
+          "pages": ["/"],
+          "role": "Landing hero product proof",
+          "copyIntent": "Show a populated operating board with a bounded human decision."
+        }
+      ]
+    },
+    {
+      "id": "landing-task-decision-detail",
+      "feature": "Task evidence",
+      "title": "Landing-page task decision detail",
+      "purpose": "Shows the evidence, review verdict, diff, screenshot, and explicit operator decision together in one large task detail.",
+      "featureDoc": "features/task-detail-evidence.md",
+      "image": {
+        "sourceClass": "pinned",
+        "path": "../../assets/images/presentation/08-landing-task-detail--dark--pinned.png",
+        "alt": "Pinned task detail with review evidence, screenshot proof, escalation summary, and operator decision options.",
+        "caption": "Large task-decision detail from pinned DEMO-9."
+      },
+      "state": {
+        "route": "/tasks/DEMO-9",
+        "viewport": "1920x1080 CSS pixels at device scale factor 2",
+        "relevantState": "DEMO-9 is open in Escalated with Evidence and Result visible, including the Decision required surface.",
+        "dataSource": "scripts/presentation-capture/pinned-seed.json; no live workspace read."
+      },
+      "capture": {
+        "test": "presentation still 08 - landing task decision detail",
+        "steps": [
+          "Open pinned DEMO-9.",
+          "Select Evidence and Result.",
+          "Wait for the decision contract and attached screenshot.",
+          "Render at most three capture annotations and capture both themes at 3840x2160."
+        ]
+      },
+      "marketingUsages": [
+        {
+          "id": "landingTaskDecisionPinned",
+          "repo": "agent-studio-for-software-website",
+          "assetPath": "04-angular-static-final/public/product-screenshots/landing-task-decision.png",
+          "publicPath": "/product-screenshots/landing-task-decision.png",
+          "component": "homeCapture",
+          "pages": ["/", "/product"],
+          "role": "Landing task-evidence proof",
+          "copyIntent": "Support the claim that the operator sees the work and the evidence before deciding."
         }
       ]
     }

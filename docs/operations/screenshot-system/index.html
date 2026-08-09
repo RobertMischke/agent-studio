@@ -56,7 +56,7 @@
   <p class="lede">Der Operator will Screenshots mit identischem, gepinntem Zustand beliebig oft erzeugen können, um Aspekte hervorzuheben — statt einmaliger Produkt-Copy. Die Inventur zeigt: Das System existiert bereits. Es braucht Wiederbelebung, eine Shotliste für die neue Landing-Page und eine ehrliche Quell-Klassifikation.</p>
   <div class="meta">
     <span><b>Datum</b> 2026-08-09</span>
-    <span><b>Status</b> decision-pending</span>
+    <span><b>Status</b> operator-decision-recorded</span>
     <span><b>Anlass</b> WEB-16 Landing-Page-Rewrite</span>
   </div>
 </header>
@@ -66,7 +66,7 @@
   <thead><tr><th>Baustein</th><th>Repo</th><th>Zustand</th></tr></thead>
   <tbody>
     <tr><td><b>ADR-0056 Presentation-Pipeline:</b> <code>seed-demo-workspace.mjs</code> (deterministischer DEMO-*/PLAT-*-Workspace, fixe Zeitbasis ⇒ byte-identisches Re-Seeding, Produktions-Guard), <code>worktree-test-stack.sh up --demo</code> (isolierter Stack, dynamische Ports), <code>npm run docs:presentation</code> (Capture-Spec 3840×2160, Auf- und Abbau in einem Kommando), Runbook + Storyboard, 6 Shots × light/dark eingecheckt</td><td>agent-taskboard</td><td><b>Genau das Gewünschte — existiert, wird nur nicht genutzt</b></td></tr>
-    <tr><td><b>Visual Documentation Library:</b> Manifest + Feature-Doku + Validierung; Existing-Data-Regel (nur echte Workspace-Daten); Naming-Grammatik <code>--real / --mocked / --composite</code>, backend-geparst und als Label in der Produkt-UI sichtbar</td><td>agent-taskboard</td><td>Reif, gelebt, aber philosophisch das Gegenteil von Demo-Pinning</td></tr>
+    <tr><td><b>Visual Documentation Library:</b> Manifest + Feature-Doku + Validierung; pinned deterministic snapshot for documentation captures; Naming-Grammatik <code>--pinned</code> for documentation captures and <code>--real / --mocked / --composite</code> for task evidence</td><td>agent-taskboard</td><td>Resolved by the operator decision on 09.08.</td></tr>
     <tr><td><b>Website-Sync:</b> <code>prepare-capture-checkout.mjs</code> (dedizierter Capture-Worktree, Ports 5042/4042 — nie im aktiv bearbeiteten Checkout), <code>sync-from-product.mjs</code> (Manifest → public/product-screenshots + generierte Visual-Library-TS)</td><td>agent-studio-for-software-website</td><td><b>Kaputt:</b> sucht das Manifest am alten Pfad <code>docs/visual/</code>; heute <code>docs/quality/visual-features/</code> ⇒ Sync wirft sofort</td></tr>
     <tr><td>Marketing-Capture (turnkey webServer-Boot, URL-Param-Zustände, --real-Suffix)</td><td>agent-studio-marketing</td><td>funktioniert, eigener Stil</td></tr>
     <tr><td>QS-Evidence-Skripte (playwright-core, deterministische Inline-Mocks)</td><td>quality-studio</td><td>deterministisch, aber ohne geteilte Payload-Builder</td></tr>
@@ -77,30 +77,30 @@
 <h2><span class="no">02</span>Antwort auf „wohin gehört das?"</h2>
 <p><b>Ins Produkt-Repo — wo es schon liegt.</b> Seed, isolierter Stack, Capture-Specs und Runbook leben in agent-taskboard; Konsumenten (Website, Marketing, Deck) beziehen erzeugte PNGs über die Sync-Pipeline bzw. eingecheckte Assets. Es gibt keinen Grund für ein neues Repo oder Tooling — nur für Reparatur, Erweiterung und eine Regel-Entscheidung.</p>
 
-<div class="box bad">
-  <h4>Der eine Regelkonflikt, der zu entscheiden ist</h4>
-  <p>Die Visual Library verbietet synthetische Zustände („existing data only"), die Presentation-Pipeline lebt von ihnen. Für Marketing-/Landing-Shots ist der gepinnte Demo-Workspace klar überlegen: reproduzierbar, aspekt-genau, <b>keine privaten Projektdaten auf der öffentlichen Website</b>. Vorschlag: <b>dritte Quell-Klasse <code>--demo-pinned</code></b> in Grammatik, Parser und Manifest — ehrlich gekennzeichnet, vom Existing-Data-Pfad getrennt. Die Handoff-Caption „Captured from a working Agent Studio workspace — not a mockup" bleibt wahr: Es ist das laufende Produkt, nur mit gepinnten Demo-Inhalten.</p>
+<div class="box ok">
+  <h4>Operator decision recorded on 09.08.</h4>
+  <p>The existing-data-only rule is retired. Documentation and marketing captures use the sanitized, deterministic snapshot and the <code>--pinned</code> source class. Task evidence continues to use <code>--real</code>, <code>--mocked</code>, or <code>--composite</code> because those labels describe run evidence, not documentation capture data.</p>
 </div>
 
 <h2><span class="no">03</span>Was für WEB-16 konkret fehlt</h2>
 <ul>
   <li><b>Shotliste erweitern:</b> Das Handoff braucht (1) Board-Hero und (2) großes Task-Detail „every signal needed for a decision" — der Demo-Seed muss dafür einen Task mit Evidence, Review-Verdict und Entscheidungszustand enthalten (heute: 12 generische Tasks, ein Grade-File).</li>
   <li><b>Annotations-Overlays</b> (max. 3 Labels wie „Bounded task", „Evidence attached", „Human decision") als Teil des Capture-Specs — nicht als nachträgliche Bildbearbeitung.</li>
-  <li><b>Sync-Bug fixen</b> (Manifest-Pfad) und demo-pinned-Einträge im Sync zulassen.</li>
+  <li><b>Sync-Bug fixen</b> (Manifest-Pfad) und pinned-Einträge im Sync zulassen.</li>
 </ul>
 
 <h2><span class="no">04</span>Entscheidungen</h2>
 <ul>
-  <li>Quell-Klasse <code>--demo-pinned</code> einführen (Grammatik + Parser + Manifest + UI-Label): GO?</li>
-  <li>Demo-Seed um den WEB-16-Task (Evidence/Decision-Zustand) + Annotations-Mechanik erweitern: GO?</li>
+  <li>Quell-Klasse <code>--pinned</code> einführen (Grammatik + Parser + Manifest + UI-Label): GO.</li>
+  <li>Demo-Seed um den WEB-16-Task (Evidence/Decision-Zustand) + Annotations-Mechanik erweitern: GO.</li>
   <li>Sync-Reparatur im Website-Repo: GO?</li>
   <li>WEB-16 v1 nutzt vorhandene akkurate Screenshots; Shot-Refresh folgt als eigene Runde, sobald die neuen Captures existieren — einverstanden?</li>
 </ul>
 
 <h2><span class="no">05</span>Karten (Backlog, nach GO)</h2>
 <ul>
-  <li><b>K1 (AGT):</b> ADR-0056-Pipeline erweitern — WEB-16-Shotliste, Demo-Seed-Task mit Evidence/Decision, Annotations-Overlays, <code>--demo-pinned</code>-Klasse end-to-end (Grammatik, ScreenshotSourceParser, Manifest, UI-Label), Runbook nachziehen.</li>
-  <li><b>K2 (WEB, dependsOn K1):</b> sync-from-product Manifest-Pfad fixen, demo-pinned-Sync, Landing-Page-Shots austauschen.</li>
+  <li><b>K1 (AGT):</b> ADR-0056-Pipeline erweitern: WEB-16-Shotliste, Demo-Seed-Task mit Evidence/Decision, Annotations-Overlays, <code>--pinned</code>-Klasse end-to-end (Grammatik, ScreenshotSourceParser, Manifest, UI-Label), Runbook nachziehen.</li>
+  <li><b>K2 (WEB, dependsOn K1):</b> sync-from-product Manifest-Pfad fixen, pinned-Sync, Landing-Page-Shots austauschen.</li>
 </ul>
 
 <p class="dim">Quellen: Inventur-Workflow wf_dec26361-4fb (09.08.), ADR-0056, docs/operations/setup/presentation-capture.md, docs/quality/visual-features/. Alle Pfadangaben gegen den Stand 09.08.</p>
