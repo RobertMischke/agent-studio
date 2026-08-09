@@ -108,6 +108,8 @@ public record ProjectRecord
     public int SortOrder { get; init; }
     /// <summary>Next task key counter (monotonic, per project). Never re-used.</summary>
     public int NextTaskKeySeq { get; init; } = 1;
+    /// <summary>Next document reference key counter (monotonic, per project). Never re-used.</summary>
+    public int NextWorkbenchKeySeq { get; init; } = 1;
     /// <summary>
     /// Absolute path to the project's task folder on disk. For legacy
     /// auto-discovered projects this is the resolved <c>WatchPathEntry.Path</c>;

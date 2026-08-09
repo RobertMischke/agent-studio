@@ -7,7 +7,16 @@
     <header class="workbench-viewer__header">
       <div class="workbench-viewer__identity">
         <span class="workbench-viewer__eyebrow">Workbenches / open experiment</span>
-        <h1>{{ doc.workbench.title }}</h1>
+        <div class="workbench-viewer__title-row">
+          <h1>{{ doc.workbench.title }}</h1>
+          @if (doc.workbench.key) {
+            <app-copyable-task-key
+              [key]="doc.workbench.key"
+              variant="reference"
+              ariaLabel="Copy reference key"
+              testId="workbench-key-chip" />
+          }
+        </div>
         <p>{{ doc.workbench.summary }}</p>
       </div>
       <div class="workbench-viewer__header-actions">

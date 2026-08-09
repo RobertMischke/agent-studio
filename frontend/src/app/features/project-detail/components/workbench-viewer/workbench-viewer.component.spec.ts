@@ -10,6 +10,7 @@ import { WorkbenchViewerComponent } from './workbench-viewer.component';
 const DOCUMENT: WorkbenchDocument = {
   workbench: {
     id: 'boundary',
+    key: 'DEM-W4',
     title: 'Boundary probe',
     summary: 'Proves the isolated wrapper.',
     status: 'active',
@@ -19,6 +20,7 @@ const DOCUMENT: WorkbenchDocument = {
     valid: true,
     error: null,
     sourceTaskKeys: ['AGT-2123'],
+    relatedTaskKeys: [],
   },
   html: '<script id="early">document.body.dataset.ran="true"</script><html><head><base href="https://example.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body class="artifact"><meta http-equiv="refresh" content="0;url=https://example.invalid/"><h1>Probe</h1></body></html>',
   branch: 'develop',
@@ -29,6 +31,11 @@ const DOCUMENT: WorkbenchDocument = {
 
 describe('WorkbenchViewerComponent', () => {
   it('normalises artifact HTML behind a policy-first fixed wrapper', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -64,6 +71,12 @@ describe('WorkbenchViewerComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="page-action-archive"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="page-action-extra"]')).toBeNull();
+    const referenceChip = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-key-chip"]') as HTMLButtonElement;
+    expect(referenceChip.textContent).toContain('DEM-W4');
+    expect(referenceChip.getAttribute('aria-label')).toBe('Copy reference key DEM-W4');
+    referenceChip.click();
+    expect(writeText).toHaveBeenCalledWith('DEM-W4');
 
     const wikiTargets: string[] = [];
     fixture.componentInstance.openWiki.subscribe(path => wikiTargets.push(path));

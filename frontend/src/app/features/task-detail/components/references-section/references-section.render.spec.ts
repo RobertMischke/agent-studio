@@ -12,6 +12,8 @@ import { NotificationService } from '../../../../services/notification.service';
 import { TaskSelectionService } from '../../state/task-selection.service';
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo, TaskReferenceLink } from '../../../../models/task.model';
+import { ProjectDocsService } from '../../../../services/project-docs.service';
+import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 
 /**
  * AGT-2029 render-path coverage for the detail-view dependency line.
@@ -97,6 +99,7 @@ function makeFakeTaskService(dependents: TaskReferenceLink[]) {
 async function mount(info: TaskInfo, dependents: TaskReferenceLink[] = [BLOCKING_LINK]) {
   const tasks = makeFakeTaskService(dependents);
   const openDetail = vi.fn();
+  const openTab = vi.fn();
   await TestBed.configureTestingModule({
     imports: [ReferencesSectionComponent],
     providers: [
@@ -107,13 +110,38 @@ async function mount(info: TaskInfo, dependents: TaskReferenceLink[] = [BLOCKING
       { provide: TaskService, useValue: tasks },
       { provide: TaskSelectionService, useValue: { openDetail } },
       { provide: NotificationService, useValue: { info: vi.fn(), warning: vi.fn(), error: vi.fn() } },
+      {
+        provide: ProjectDocsService,
+        useValue: {
+          getWorkbenches: vi.fn().mockReturnValue(of({
+            projectName: 'AGT',
+            includesHistory: true,
+            count: 1,
+            items: [{
+              id: 'reference-source',
+              key: 'AGT-W4',
+              title: 'Reference source',
+              summary: 'A linked source.',
+              status: 'active',
+              phase: 'testing',
+              updatedAtUtc: '2026-08-09T10:00:00Z',
+              entryPath: 'docs/operations/reference-source/index.html',
+              valid: true,
+              error: null,
+              sourceTaskKeys: [],
+              relatedTaskKeys: [],
+            }],
+          })),
+        },
+      },
+      { provide: StudioTabStateService, useValue: { open: openTab } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ReferencesSectionComponent);
   fixture.componentRef.setInput('info', info);
   fixture.detectChanges();
-  return { fixture, tasks, openDetail };
+  return { fixture, tasks, openDetail, openTab };
 }
 
 describe('ReferencesSectionComponent (render — both dependency directions)', () => {
@@ -188,5 +216,26 @@ describe('ReferencesSectionComponent (render — both dependency directions)', (
     const { fixture } = await mount(info, []);
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="references-section"]')).toBeNull();
+  });
+
+  it('renders a linked document key and opens its viewer tab', async () => {
+    const info = makeTask({
+      references: {
+        dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [], workbenches: ['AGT-W4'],
+      },
+    });
+    const { fixture, openTab } = await mount(info, []);
+    const chip = fixture.nativeElement.querySelector(
+      '[data-testid="reference-chip-AGT-W4"]') as HTMLElement;
+    expect(chip.textContent).toContain('AGT-W4');
+    expect(chip.textContent).toContain('Reference source');
+
+    (chip.querySelector('.refs__chip-link') as HTMLButtonElement).click();
+    expect(openTab).toHaveBeenCalledWith({
+      kind: 'workbench',
+      projectName: 'AGT',
+      workbenchId: 'reference-source',
+      title: 'Reference source',
+    });
   });
 });

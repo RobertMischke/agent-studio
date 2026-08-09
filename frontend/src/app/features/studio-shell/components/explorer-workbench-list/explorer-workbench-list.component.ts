@@ -12,6 +12,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
 
@@ -20,7 +21,7 @@ const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expande
 @Component({
   selector: 'app-explorer-workbench-list',
   standalone: true,
-  imports: [TreeRowComponent],
+  imports: [TreeRowComponent, AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-list.component.html',
   styleUrl: './explorer-workbench-list.component.scss',
@@ -146,6 +147,10 @@ export class ExplorerWorkbenchListComponent {
     const days = Math.max(0, Math.floor((Date.now() - new Date(item.updatedAtUtc).getTime()) / 86_400_000));
     const updated = days === 0 ? 'updated today' : `updated ${days} days ago`;
     return `${this.secondaryMeta(item)}, ${updated}`;
+  }
+
+  navTooltip(item: WorkbenchListItem): string {
+    return [item.key, item.title, this.accessibleMeta(item)].filter(Boolean).join(' · ');
   }
 
   private revealHistoryItem(activeWorkbenchId: string): void {

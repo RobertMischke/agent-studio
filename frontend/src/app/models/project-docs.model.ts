@@ -293,6 +293,8 @@ export interface ConfirmWorkbenchDecisionRequest {
 
 export interface WorkbenchListItem {
   id: string;
+  /** Stable project-scoped reference key. Null only for legacy pilot entries. */
+  key?: string | null;
   title: string;
   summary: string;
   status: WorkbenchStatus;
@@ -302,6 +304,8 @@ export interface WorkbenchListItem {
   valid: boolean;
   error: string | null;
   sourceTaskKeys: string[];
+  /** Legacy descriptor bridge. Derived card references use the keyed endpoint. */
+  relatedTaskKeys?: string[];
   /** Shared lifecycle projection. Present on schema-v2 descriptors. */
   lifecycleState?: WikiLifecycleState | null;
   editedBy?: string | null;
@@ -324,6 +328,21 @@ export interface WorkbenchDocument {
   revision: string | null;
   workingTreeModified: boolean;
   fingerprint: string | null;
+}
+
+export interface WorkbenchTaskReferences {
+  projectName: string;
+  workbenchKey: string;
+  workbenchId: string;
+  legacyTaskKeys: string[];
+  items: {
+    sourceKey: string | null;
+    sourceJobId: string;
+    sourceTitle: string;
+    sourceState: string;
+    sourceWatchPath: string;
+    kind: 'workbenches';
+  }[];
 }
 
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----

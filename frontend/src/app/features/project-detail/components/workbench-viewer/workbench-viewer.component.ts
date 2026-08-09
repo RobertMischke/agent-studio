@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed,
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { WorkbenchDocument } from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
 import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
 import { PageContext, pageExcerpt } from '../../../../models/page-context.model';
@@ -22,7 +23,12 @@ import {
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [PageActionBarComponent, StudioIconComponent, WorkbenchDecisionPanelComponent],
+  imports: [
+    PageActionBarComponent,
+    StudioIconComponent,
+    WorkbenchDecisionPanelComponent,
+    CopyableTaskKeyComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',

@@ -5,7 +5,7 @@
           [class.copy-key--copied]="copied()"
           [attr.data-testid]="testId()"
           title="Click to copy"
-          [attr.aria-label]="'Copy task key ' + taskKey"
+          [attr.aria-label]="ariaLabel() + ' ' + taskKey"
           [appTooltip]="copied() ? 'Copied' : 'Click to copy'"
           (click)="copy($event)">
     @if (copied()) {

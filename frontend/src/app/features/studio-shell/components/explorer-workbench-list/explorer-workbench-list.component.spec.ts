@@ -9,6 +9,7 @@ import { ExplorerWorkbenchListComponent } from './explorer-workbench-list.compon
 function item(id: string, status: WorkbenchListItem['status']): WorkbenchListItem {
   return {
     id,
+    key: `DEM-W${id === 'active' ? '4' : '5'}`,
     title: id,
     summary: `${id} summary`,
     status,
@@ -18,6 +19,7 @@ function item(id: string, status: WorkbenchListItem['status']): WorkbenchListIte
     valid: true,
     error: null,
     sourceTaskKeys: [],
+    relatedTaskKeys: [],
   };
 }
 
@@ -111,6 +113,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     expect(fixture.componentInstance.expanded()).toBe(true);
     expect(active.classList.contains('studio-workbench-topic--active')).toBe(true);
     expect(active.getAttribute('aria-current')).toBe('page');
+    expect(fixture.componentInstance.navTooltip(item('active', 'active'))).toContain('DEM-W4');
     expect(another.getAttribute('aria-current')).toBeNull();
     expect(disclosure.classList.contains('tree-row--active')).toBe(false);
     expect(disclosure.getAttribute('aria-current')).toBeNull();

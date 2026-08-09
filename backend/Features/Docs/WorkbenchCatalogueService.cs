@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentStudio.Persistence;
 
 namespace AgentStudio.Docs;
 
@@ -21,6 +23,10 @@ public sealed class WorkbenchCatalogueService
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
     private readonly GitService _git;
+    private readonly IAtomicJsonFileWriter _fileWriter;
+
+    private static readonly ConcurrentDictionary<string, object> KeyAssignmentGates =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private static readonly HashSet<string> CurrentStatuses = new(StringComparer.Ordinal)
         { "active", "decision-pending" };
@@ -45,11 +51,16 @@ public sealed class WorkbenchCatalogueService
         // "Decoupled lifecycles" removed 2026-08-08: wiki page deleted by the operator.
     ];
 
-    public WorkbenchCatalogueService(TaskScannerService scanner, ProjectRegistry registry, GitService git)
+    public WorkbenchCatalogueService(
+        TaskScannerService scanner,
+        ProjectRegistry registry,
+        GitService git,
+        IAtomicJsonFileWriter? fileWriter = null)
     {
         _scanner = scanner;
         _registry = registry;
         _git = git;
+        _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
     }
 
     public WorkbenchCatalogue? List(string projectName, bool includeHistory = false)
@@ -57,7 +68,10 @@ public sealed class WorkbenchCatalogueService
         var root = ResolveRoot(projectName);
         if (root == null) return null;
 
-        var items = DiscoverCanonical(root);
+        var project = ResolveProject(projectName);
+        if (project != null) EnsureCanonicalKeys(root, project);
+
+        var items = DiscoverCanonical(root, project);
         foreach (var duplicate in items
                      .Where(item => item.Valid)
                      .GroupBy(item => item.Id, StringComparer.Ordinal)
@@ -71,6 +85,21 @@ public sealed class WorkbenchCatalogueService
                 Valid = false,
                 Status = "invalid",
                 Error = "Workbench id is duplicated by another canonical descriptor.",
+            };
+        }
+        foreach (var duplicate in items
+                     .Where(item => item.Valid && item.Key != null)
+                     .GroupBy(item => item.Key!, StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group.Count() > 1)
+                     .SelectMany(group => group)
+                     .ToList())
+        {
+            var index = items.IndexOf(duplicate);
+            items[index] = duplicate with
+            {
+                Valid = false,
+                Status = "invalid",
+                Error = "Document reference key is duplicated by another canonical descriptor.",
             };
         }
         var ids = items.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
@@ -100,6 +129,34 @@ public sealed class WorkbenchCatalogueService
             .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
         return new WorkbenchCatalogue(projectName, includeHistory, visible.Count, visible);
+    }
+
+    /// <summary>All valid document reference keys currently owned by one project.</summary>
+    public IReadOnlySet<string> KnownKeys(string projectName) =>
+        (List(projectName, includeHistory: true)?.Items ?? [])
+        .Where(item => item.Valid && !string.IsNullOrWhiteSpace(item.Key))
+        .Select(item => item.Key!)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns every card that points at <paramref name="key"/> through
+    /// <c>references.workbenches</c>. Legacy descriptor keys stay separate so
+    /// the next viewer slice can merge them explicitly without presenting
+    /// hand-maintained data as a derived edge.
+    /// </summary>
+    public WorkbenchTaskReferences? References(string projectName, string key)
+    {
+        var item = List(projectName, includeHistory: true)?.Items.SingleOrDefault(candidate =>
+            candidate.Valid && string.Equals(candidate.Key, key, StringComparison.OrdinalIgnoreCase));
+        if (item == null || item.Key == null) return null;
+        var links = _scanner.GetReferenceIndex()
+            .Dependents(item.Key, TaskReferenceKinds.Workbenches);
+        return new WorkbenchTaskReferences(
+            projectName,
+            item.Key,
+            item.Id,
+            item.RelatedTaskKeys,
+            links);
     }
 
     public WorkbenchDocument? Read(string projectName, string id)
@@ -273,7 +330,7 @@ public sealed class WorkbenchCatalogueService
         candidate.Equals(folder, PathComparison)
         || candidate.StartsWith(folder + "/", PathComparison);
 
-    private List<WorkbenchListItem> DiscoverCanonical(string root)
+    private List<WorkbenchListItem> DiscoverCanonical(string root, ProjectRecord? project)
     {
         var result = new List<WorkbenchListItem>();
         var docsRoot = ContainedPath(root, "docs");
@@ -305,6 +362,7 @@ public sealed class WorkbenchCatalogueService
                 var schema = RequiredInt(obj, "schemaVersion");
                 if (schema is not (1 or 2)) throw new InvalidDataException("schemaVersion must be 1 or 2.");
                 var id = RequiredString(obj, "id");
+                var key = OptionalString(obj, "key");
                 var title = RequiredString(obj, "title");
                 var summary = RequiredString(obj, "summary");
                 var entrypoint = RequiredString(obj, "entrypoint");
@@ -328,6 +386,11 @@ public sealed class WorkbenchCatalogueService
                     : RequiredString(obj, "status");
                 var phase = OptionalString(obj, "phase");
                 if (!SafeId(id) || id != folder) throw new InvalidDataException("id must match the containing folder.");
+                if (project != null && string.IsNullOrWhiteSpace(key))
+                    throw new InvalidDataException("key is required after project discovery.");
+                if (key != null && !TryWorkbenchKeyNumber(key, null, out _))
+                    throw new InvalidDataException(
+                        "key must use the project reference form 'PROJECT-W<number>'.");
                 if (!AllowedStatuses.Contains(status)) throw new InvalidDataException($"Unsupported status '{status}'.");
                 if (phase != null && !AllowedPhases.Contains(phase)) throw new InvalidDataException($"Unsupported phase '{phase}'.");
                 if (!IsUtcLifecycleTimestamp(updatedText, out var updated))
@@ -344,6 +407,8 @@ public sealed class WorkbenchCatalogueService
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
                     updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))
                 {
+                    Key = key,
+                    RelatedTaskKeys = StringArray(obj, "relatedTaskKeys"),
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
                     LifecycleHistory = lifecycleHistory,
@@ -357,6 +422,66 @@ public sealed class WorkbenchCatalogueService
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// Backfills missing keys before the descriptor is projected. Assignment is
+    /// serialized per project, derives the registry floor from the descriptors,
+    /// reserves a monotonic sequence, then swaps the complete JSON document into
+    /// place through the same atomic persistence boundary as decision writes.
+    /// Existing keys are never rewritten.
+    /// </summary>
+    private void EnsureCanonicalKeys(string root, ProjectRecord project)
+    {
+        var docsRoot = ContainedPath(root, "docs");
+        if (docsRoot == null || !Directory.Exists(docsRoot)) return;
+        var gateKey = $"{project.Id}:{Path.GetFullPath(root)}";
+        lock (KeyAssignmentGates.GetOrAdd(gateKey, _ => new object()))
+        {
+            var descriptors = EnumerateWorkbenchDescriptors(docsRoot)
+                .OrderBy(path => path, PathComparer)
+                .ToList();
+            var highest = 0;
+            foreach (var descriptorPath in descriptors)
+            {
+                try
+                {
+                    using var json = JsonDocument.Parse(File.ReadAllText(descriptorPath));
+                    var key = OptionalString(json.RootElement, "key");
+                    if (key != null && TryWorkbenchKeyNumber(key, null, out var number))
+                        highest = Math.Max(highest, number);
+                }
+                catch (Exception ex) when (ex is IOException or JsonException)
+                {
+                    SilentCatch.Note(ex, "Document key floor skipped an unreadable descriptor.");
+                }
+            }
+            _registry.EnsureWorkbenchKeyFloor(project.Id, highest + 1);
+
+            foreach (var descriptorPath in descriptors)
+            {
+                try
+                {
+                    var text = File.ReadAllText(descriptorPath);
+                    var descriptor = JsonNode.Parse(text) as JsonObject;
+                    if (descriptor == null || descriptor["key"] is JsonValue) continue;
+                    var schema = descriptor["schemaVersion"]?.GetValue<int>();
+                    var id = descriptor["id"]?.GetValue<string>();
+                    var folder = Path.GetFileName(Path.GetDirectoryName(descriptorPath));
+                    if (schema is not (1 or 2) || id == null || !SafeId(id) || id != folder)
+                        continue;
+
+                    var seq = _registry.IssueNextWorkbenchKey(project.Id);
+                    descriptor["key"] = $"{project.ShortCode}-W{seq}";
+                    _fileWriter.Write(descriptorPath, descriptor.ToJsonString(
+                        new JsonSerializerOptions { WriteIndented = true }));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+                {
+                    SilentCatch.Note(ex, "Document reference key assignment failed.");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -415,6 +540,15 @@ public sealed class WorkbenchCatalogueService
     private string? ResolveRoot(string projectName) =>
         ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
 
+    private ProjectRecord? ResolveProject(string projectName)
+    {
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, projectName, StringComparison.OrdinalIgnoreCase));
+        return entry != null
+            ? _registry.FindByStorageLocation(entry.Path)
+            : _registry.FindByIdOrDisplayName(projectName);
+    }
+
     private static string? ContainedPath(string root, string rel)
     {
         if (string.IsNullOrWhiteSpace(rel) || Path.IsPathRooted(rel)) return null;
@@ -450,6 +584,9 @@ public sealed class WorkbenchCatalogueService
     private static StringComparison PathComparison => OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
+    private static StringComparer PathComparer => OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 
     private static bool IsHtmlWithinLimit(string path)
     {
@@ -497,6 +634,26 @@ public sealed class WorkbenchCatalogueService
 
     private static bool SafeId(string value) => value.Length is > 0 and <= 80
         && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+    private static bool TryWorkbenchKeyNumber(string key, string? shortCode, out int number)
+    {
+        number = 0;
+        var trimmed = key.Trim();
+        if (!string.Equals(key, trimmed, StringComparison.Ordinal)
+            || !string.Equals(trimmed, trimmed.ToUpperInvariant(), StringComparison.Ordinal))
+            return false;
+        var separator = trimmed.LastIndexOf("-W", StringComparison.OrdinalIgnoreCase);
+        if (separator <= 0) return false;
+        var prefix = trimmed[..separator].ToUpperInvariant();
+        if (!ShortCodeGenerator.ValidateFormat(prefix)) return false;
+        if (shortCode != null
+            && !string.Equals(prefix, shortCode, StringComparison.OrdinalIgnoreCase))
+            return false;
+        var tail = trimmed[(separator + 2)..];
+        return tail.Length > 0
+            && tail.All(char.IsAsciiDigit)
+            && int.TryParse(tail, out number)
+            && number > 0;
+    }
     private static string RequiredString(JsonElement obj, string name) =>
         obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
             ? value.GetString()! : throw new InvalidDataException($"{name} is required.");
@@ -717,12 +874,20 @@ public record WorkbenchCatalogue(string ProjectName, bool IncludesHistory, int C
 public record WorkbenchListItem(string Id, string Title, string Summary, string Status, string? Phase,
     DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
 {
+    public string? Key { get; init; }
+    public string[] RelatedTaskKeys { get; init; } = [];
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
     public WorkbenchDecisionProjection? Decision { get; init; }
     public string? DecisionStage { get; init; }
 }
+public record WorkbenchTaskReferences(
+    string ProjectName,
+    string WorkbenchKey,
+    string WorkbenchId,
+    string[] LegacyTaskKeys,
+    IReadOnlyList<TaskReferenceLink> Items);
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
     bool WorkingTreeModified, string? Fingerprint);
 

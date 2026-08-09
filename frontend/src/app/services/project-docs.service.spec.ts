@@ -65,4 +65,21 @@ describe('ProjectDocsService.searchWiki', () => {
     semantic.flush({ query: 'guide', semanticUsed: true, expandedTerms: [], durationMs: 3, results: [] });
     http.verify();
   });
+
+  it('encodes the project and document key in the reverse-reference request', () => {
+    const service = TestBed.inject(ProjectDocsService);
+    const http = TestBed.inject(HttpTestingController);
+
+    service.getWorkbenchReferences('Demo Project', 'DEM-W4').subscribe();
+    const request = http.expectOne('/api/projects/Demo%20Project/workbenches/DEM-W4/references');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      projectName: 'Demo Project',
+      workbenchKey: 'DEM-W4',
+      workbenchId: 'source',
+      legacyTaskKeys: [],
+      items: [],
+    });
+    http.verify();
+  });
 });

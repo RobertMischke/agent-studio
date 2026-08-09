@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentStudio.Persistence;
 
 namespace AgentStudio.Docs;
 
@@ -85,11 +85,16 @@ public sealed class WorkbenchDecisionService
 
     private readonly WorkbenchCatalogueService _catalogue;
     private readonly GitService _git;
+    private readonly IAtomicJsonFileWriter _fileWriter;
 
-    public WorkbenchDecisionService(WorkbenchCatalogueService catalogue, GitService git)
+    public WorkbenchDecisionService(
+        WorkbenchCatalogueService catalogue,
+        GitService git,
+        IAtomicJsonFileWriter? fileWriter = null)
     {
         _catalogue = catalogue;
         _git = git;
+        _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
     }
 
     public WorkbenchDecisionResult Prepare(
@@ -254,7 +259,7 @@ public sealed class WorkbenchDecisionService
 
         try
         {
-            WriteDescriptor(snapshot.DescriptorPath, descriptor.ToJsonString(
+            _fileWriter.Write(snapshot.DescriptorPath, descriptor.ToJsonString(
                 new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -393,26 +398,6 @@ public sealed class WorkbenchDecisionService
         {
             SilentCatch.Note(ex, "Workbench descriptor could not be re-read before the decision write.");
             return null;
-        }
-    }
-
-    private static void WriteDescriptor(string descriptorPath, string content)
-    {
-        var directory = Path.GetDirectoryName(descriptorPath)
-            ?? throw new IOException("The Workbench descriptor has no parent directory.");
-        var temporary = Path.Combine(directory, $".workbench.json.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            File.WriteAllText(temporary, content, new UTF8Encoding(false));
-            File.Move(temporary, descriptorPath, overwrite: true);
-        }
-        finally
-        {
-            try { if (File.Exists(temporary)) File.Delete(temporary); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                SilentCatch.Note(ex, "Workbench descriptor temp file could not be removed.");
-            }
         }
     }
 

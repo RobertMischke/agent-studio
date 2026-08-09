@@ -11,6 +11,7 @@ const EPIC_REFERENCE = 'AGT-2200';
 const EPIC_ID = 'route-restoration-epic';
 const WATCH_PATH = '/tmp/route-project';
 const TASK_KEY = `${WATCH_PATH}::${TASK_ID}`;
+const WORKBENCH_KEY = 'ROU-W4';
 
 const EMPTY_GROUPED = {
   backlog: [], preparation: [], orchestratorPrep: [],
@@ -41,7 +42,9 @@ const TASK_DETAIL = {
     lastUsage: null,
     execution: null,
     commit: null,
-    references: { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] },
+    references: {
+      dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [], workbenches: [WORKBENCH_KEY],
+    },
   },
   promptMarkdown: '# Route restoration',
   promptHistory: [],
@@ -242,6 +245,7 @@ async function stubRouteData(page: Page): Promise<void> {
         count: 1,
         items: [{
           id: 'route-lab',
+          key: WORKBENCH_KEY,
           title: 'Route Lab',
           summary: 'Deep-link restoration proof.',
           status: 'active',
@@ -251,6 +255,7 @@ async function stubRouteData(page: Page): Promise<void> {
           valid: true,
           error: null,
           sourceTaskKeys: [TASK_REFERENCE],
+          relatedTaskKeys: [],
         }],
       });
     }
@@ -258,6 +263,7 @@ async function stubRouteData(page: Page): Promise<void> {
       return json({
         workbench: {
           id: 'route-lab',
+          key: WORKBENCH_KEY,
           title: 'Route Lab',
           summary: 'Deep-link restoration proof.',
           status: 'active',
@@ -267,6 +273,7 @@ async function stubRouteData(page: Page): Promise<void> {
           valid: true,
           error: null,
           sourceTaskKeys: [TASK_REFERENCE],
+          relatedTaskKeys: [],
         },
         html: '<h1>Route Lab</h1><p>Restored Workbench.</p>',
         branch: 'task/route',
@@ -345,6 +352,27 @@ test.describe('Studio route restoration', () => {
     await expect(page.getByTestId('error-dialog')).toHaveCount(0);
   });
 
+  test('Task detail opens a linked document reference', async ({ page }, testInfo) => {
+    await page.goto(`/#/tasks/${TASK_REFERENCE}`, { waitUntil: 'commit' });
+
+    const reference = page.getByTestId(`reference-chip-${WORKBENCH_KEY}`);
+    await expect(reference).toBeVisible();
+    await expect(reference).toContainText(WORKBENCH_KEY);
+    await expect(reference).toContainText('Route Lab');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(testInfo, `task-document-reference--mocked-${theme}.png`),
+      });
+    }
+
+    await reference.getByRole('button').click();
+    await expect(page.getByTestId('workbench-viewer')).toContainText('Route Lab');
+    await expect.poll(() => new URL(page.url()).hash)
+      .toBe('#/projects/route-project/workbenches/route-lab');
+  });
+
   test('Wiki page route restores, generates an honest route, and survives reload', async ({ page }, testInfo) => {
     const route = `/#/projects/${PROJECT_SLUG}/wiki?page=concepts%2Frouting.md`;
     await page.goto(route, { waitUntil: 'commit' });
@@ -379,6 +407,8 @@ test.describe('Studio route restoration', () => {
     await page.goto(`/#/projects/${PROJECT_SLUG}/workbenches/route-lab`, { waitUntil: 'commit' });
 
     await expect(page.getByTestId('workbench-viewer')).toContainText('Route Lab');
+    const referenceChip = page.getByTestId('workbench-key-chip');
+    await expect(referenceChip).toHaveText(WORKBENCH_KEY);
     await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
       .getByRole('heading', { name: 'Route Lab' })).toBeVisible();
     await expect.poll(() => new URL(page.url()).hash)
@@ -399,6 +429,8 @@ test.describe('Studio route restoration', () => {
     await expect(activeWorkbench).toBeInViewport();
     await expect(activeWorkbench).toContainText('testing');
     await expect(activeWorkbench).not.toContainText(/updated|today|\d+d/);
+    await activeWorkbench.hover();
+    await expect(page.locator('.app-tooltip-overlay')).toContainText(WORKBENCH_KEY);
     await expect.poll(() => page.evaluate(() => JSON.parse(
       window.localStorage.getItem('atp.studio.explorer.workbenches.expanded.v1') ?? '[]',
     ))).toContain(PROJECT);
@@ -410,6 +442,8 @@ test.describe('Studio route restoration', () => {
         path: evidencePath(testInfo, `workbench-tree-after--mocked-${theme}.png`),
       });
     }
+    await referenceChip.click();
+    await expect(referenceChip).toContainText('Copied');
 
     await workbenchesRow.click();
     await expect(workbenchesRow).toHaveAttribute('aria-expanded', 'false');

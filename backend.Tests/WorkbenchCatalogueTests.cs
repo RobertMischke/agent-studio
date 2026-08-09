@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -330,6 +332,8 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     public void Read_DoesNotLabelDirtyWorkingTreeBytesAsHeadRevision()
     {
         WriteWorkbench("provenance", "Provenance", "active", "2026-07-12T10:00:00Z");
+        var service = Service();
+        service.List("Project"); // persist the discovery key before establishing the clean revision
         RunGit("init");
         RunGit("config", "user.email", "tests@example.invalid");
         RunGit("config", "user.name", "Workbench Tests");
@@ -337,7 +341,6 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         RunGit("commit", "-m", "seed workbench");
         var head = RunGit("rev-parse", "HEAD").Trim();
 
-        var service = Service();
         var clean = service.Read("Project", "provenance")!;
         Assert.Equal(head, clean.Revision);
         Assert.False(clean.WorkingTreeModified);
@@ -351,6 +354,46 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.True(dirty.WorkingTreeModified);
         Assert.NotEqual(clean.Fingerprint, dirty.Fingerprint);
         Assert.Contains("Uncommitted bytes", dirty.Html);
+    }
+
+    [Fact]
+    public void List_AssignsStableProjectKeys_AboveExistingFloor_AndKeepsThemAcrossRename()
+    {
+        WriteWorkbench("alpha", "Alpha", "active", "2026-07-12T10:00:00Z");
+        WriteWorkbench("beta", "Beta", "active", "2026-07-13T10:00:00Z");
+        var betaPath = Path.Combine(_root, "docs", "workbenches", "beta", "workbench.json");
+        var betaDescriptor = JsonNode.Parse(File.ReadAllText(betaPath))!.AsObject();
+        betaDescriptor["key"] = "PRO-W7";
+        betaDescriptor["relatedTaskKeys"] = new JsonArray("PRO-41");
+        File.WriteAllText(betaPath, betaDescriptor.ToJsonString());
+
+        var service = Service();
+        var first = service.List("Project", includeHistory: true)!;
+        var alpha = Assert.Single(first.Items, item => item.Id == "alpha");
+        var beta = Assert.Single(first.Items, item => item.Id == "beta");
+        Assert.Equal("PRO-W8", alpha.Key);
+        Assert.Equal("PRO-W7", beta.Key);
+        Assert.Equal(new[] { "PRO-41" }, beta.RelatedTaskKeys);
+
+        var alphaPath = Path.Combine(_root, "docs", "workbenches", "alpha", "workbench.json");
+        using (var assigned = JsonDocument.Parse(File.ReadAllText(alphaPath)))
+            Assert.Equal("PRO-W8", assigned.RootElement.GetProperty("key").GetString());
+
+        var renamedDir = Path.Combine(_root, "docs", "workbenches", "renamed-alpha");
+        Directory.Move(Path.GetDirectoryName(alphaPath)!, renamedDir);
+        var renamedPath = Path.Combine(renamedDir, "workbench.json");
+        var renamedDescriptor = JsonNode.Parse(File.ReadAllText(renamedPath))!.AsObject();
+        renamedDescriptor["id"] = "renamed-alpha";
+        File.WriteAllText(renamedPath, renamedDescriptor.ToJsonString());
+
+        var afterRename = service.List("Project", includeHistory: true)!;
+        Assert.Equal("PRO-W8", Assert.Single(afterRename.Items,
+            item => item.Id == "renamed-alpha").Key);
+
+        WriteWorkbench("gamma", "Gamma", "active", "2026-07-14T10:00:00Z");
+        var afterNewDiscovery = service.List("Project", includeHistory: true)!;
+        Assert.Equal("PRO-W9", Assert.Single(afterNewDiscovery.Items,
+            item => item.Id == "gamma").Key);
     }
 
     private void WriteWorkbench(string id, string title, string status, string updatedAt)
@@ -398,6 +441,10 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        registry.EnsureProjectForStorage(
+            Path.Combine(_root, ".orchestrator", "jobs"),
+            "Project",
+            DefaultWorkspace.Id);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         return new WorkbenchCatalogueService(scanner, registry, git);
     }
