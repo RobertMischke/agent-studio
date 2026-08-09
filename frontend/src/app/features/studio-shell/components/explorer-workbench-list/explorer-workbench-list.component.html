@@ -16,7 +16,15 @@
                 [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
                 [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                 (click)="openWorkbench.emit(workbench)">
-          <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+          <span class="studio-workbench-topic__primary">
+            <span class="studio-workbench-topic__pattern"
+                  aria-hidden="true"
+                  [attr.data-pattern]="documentPattern(workbench)"
+                  [attr.data-testid]="'studio-explorer-workbench-pattern-' + projectName() + '-' + workbench.id">
+              <app-studio-icon [name]="patternIcon(workbench)" [size]="12" />
+            </span>
+            <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+          </span>
           <span class="studio-workbench-topic__meta">
             @if (isAcute(workbench)) { <i [attr.data-status]="workbench.status"></i> }
             {{ secondaryMeta(workbench) }}
@@ -41,7 +49,15 @@
                     [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
                     [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                     (click)="openWorkbench.emit(workbench)">
-              <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+              <span class="studio-workbench-topic__primary">
+                <span class="studio-workbench-topic__pattern"
+                      aria-hidden="true"
+                      [attr.data-pattern]="documentPattern(workbench)"
+                      [attr.data-testid]="'studio-explorer-workbench-pattern-' + projectName() + '-' + workbench.id">
+                  <app-studio-icon [name]="patternIcon(workbench)" [size]="12" />
+                </span>
+                <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+              </span>
               <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
             </button>
           } @empty { <span class="studio-workbench-topics__state">No settled Workbenches</span> }

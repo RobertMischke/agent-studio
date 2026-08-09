@@ -39,7 +39,13 @@ export class WorkbenchViewerComponent {
   readonly error = signal<string | null>(null);
   readonly maximized = signal(false);
 
-  readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(this.document()?.html ?? ''));
+  readonly srcdoc = computed(() => {
+    const document = this.document();
+    return buildIsolatedHtmlSrcdoc(
+      document?.html ?? '',
+      document?.workbench.pattern === 'ui' ? 'ui' : 'concept',
+    );
+  });
   readonly pageContext = computed<PageContext | null>(() => {
     const document = this.document();
     if (!document) return null;

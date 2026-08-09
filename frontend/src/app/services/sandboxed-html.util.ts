@@ -16,7 +16,7 @@ export type IsolatedHtmlNavigation =
  * iframe with `sandbox="allow-scripts"`. The missing `allow-same-origin`
  * capability keeps the resulting document on an opaque origin.
  */
-export function buildIsolatedHtmlSrcdoc(html: string): string {
+export function buildIsolatedHtmlSrcdoc(html: string, pattern: 'ui' | 'concept' = 'concept'): string {
   if (!html) return '';
   const parser = new DOMParser();
   const artifact = parser.parseFromString(html, 'text/html');
@@ -37,6 +37,9 @@ export function buildIsolatedHtmlSrcdoc(html: string): string {
   wrapper.head.append(policy, base);
 
   copyAttributes(artifact.documentElement, wrapper.documentElement);
+  // The descriptor is authoritative for the article variant. Existing HTML
+  // without v2 template selectors is unaffected by this neutral data hook.
+  wrapper.documentElement.setAttribute('data-document-pattern', pattern === 'ui' ? 'ui' : 'concept');
   copyAttributes(artifact.head, wrapper.head);
   copyAttributes(artifact.body, wrapper.body);
   for (const node of Array.from(artifact.head.childNodes))

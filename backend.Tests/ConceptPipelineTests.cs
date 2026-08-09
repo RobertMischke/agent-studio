@@ -37,11 +37,37 @@ public sealed class ConceptPipelineTests : IDisposable
 
         Assert.True(review.IsComplete, review.Summary);
         Assert.Equal("concept-pipeline", review.Topic);
+        Assert.Equal("concept", review.Descriptor!.Pattern);
         Assert.True(File.Exists(Path.Combine(directory, "workbench.json")));
         Assert.True(File.Exists(Path.Combine(directory, "index.html")));
         Assert.Contains(
-            "data-concept-section=\"evidence\"",
+            "data-document-section=\"evidence\"",
             File.ReadAllText(Path.Combine(directory, "index.html")));
+    }
+
+    [Fact]
+    public void Scaffold_RendersTheUiVariantFromTheCanonicalArticleTemplate()
+    {
+        Directory.CreateDirectory(_root);
+
+        var directory = ConceptWorkbenchContract.CreateScaffold(
+            _root,
+            "visual-options",
+            "Visual options",
+            "Compare two interface directions.",
+            "AGT-2536",
+            "ui");
+        var descriptor = JsonSerializer.Deserialize<ConceptWorkbenchDescriptor>(
+            File.ReadAllText(Path.Combine(directory, "workbench.json")),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var html = File.ReadAllText(Path.Combine(directory, "index.html"));
+
+        Assert.Equal("ui", descriptor.Pattern);
+        Assert.Contains("data-document-pattern=\"ui\"", html);
+        Assert.Contains("data-article-template=\"v2\"", html);
+        Assert.Contains("width: min(70ch", html);
+        Assert.Contains("[data-document-pattern=\"ui\"] .variant-grid", html);
+        Assert.Contains("[data-document-pattern=\"concept\"] .evidence-class", html);
     }
 
     [Fact]
@@ -53,7 +79,7 @@ public sealed class ConceptPipelineTests : IDisposable
         File.WriteAllText(
             entrypoint,
             File.ReadAllText(entrypoint).Replace(
-                "data-concept-section=\"evidence\"",
+                "data-document-section=\"evidence\"",
                 "data-removed-section=\"evidence\"",
                 StringComparison.Ordinal));
 

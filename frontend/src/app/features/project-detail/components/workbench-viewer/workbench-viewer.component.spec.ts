@@ -19,6 +19,7 @@ const DOCUMENT: WorkbenchDocument = {
     valid: true,
     error: null,
     sourceTaskKeys: ['AGT-2123'],
+    pattern: 'ui',
   },
   html: '<script id="early">document.body.dataset.ran="true"</script><html><head><base href="https://example.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body class="artifact"><meta http-equiv="refresh" content="0;url=https://example.invalid/"><h1>Probe</h1></body></html>',
   branch: 'develop',
@@ -54,6 +55,7 @@ describe('WorkbenchViewerComponent', () => {
     expect(parsed.querySelector('meta[http-equiv="refresh"]')).toBeNull();
     expect(parsed.querySelector('base')?.getAttribute('href')).toBe('about:blank');
     expect(parsed.body.classList.contains('artifact')).toBe(true);
+    expect(parsed.documentElement.dataset['documentPattern']).toBe('ui');
 
     const frame = fixture.nativeElement.querySelector('[data-testid="workbench-viewer-frame"]') as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');

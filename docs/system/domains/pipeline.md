@@ -631,7 +631,10 @@ operator changes cause the step to fail before its writer runs.
   Workbench placement publishes `workbench.json` plus `index.html` through the
   managed project-artifact commit boundary. Concept review checks alternatives,
   recommendation, evidence, open decisions, and implementation-card source
-  data. It deliberately does not run build, test, code aspects, or integration.
+  data. New scaffolds use the embedded canonical v2 article template and store
+  `pattern: concept`; callers may request `ui`, while readers tolerate missing
+  or unknown values as `concept`. It deliberately does not run build, test,
+  code aspects, or integration.
   A complete Workbench moves to `5-human-review` with a durable
   `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
   successful delivery at this gate. Sight-review acceptance completes the

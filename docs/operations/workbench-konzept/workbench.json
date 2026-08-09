@@ -6,6 +6,7 @@
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "shaping",
+  "pattern": "concept",
   "updatedAt": "2026-08-09T03:50:00Z",
   "sourceTaskKeys": [],
   "relatedTaskKeys": [

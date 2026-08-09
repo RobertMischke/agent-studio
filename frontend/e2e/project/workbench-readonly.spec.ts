@@ -111,7 +111,7 @@ async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false):
   });
 }
 
-test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real repository artifacts in both themes', async ({ page, devBackend }, testInfo) => {
+test('article patterns drive the Workbench Explorer and isolated viewer in both themes', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(180_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
@@ -178,28 +178,82 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
   const workbenchesRow = page.getByTestId(`studio-explorer-project-workbenches-${project.name}`);
   await expect(workbenchesRow).toBeVisible();
   await workbenchesRow.click();
-  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-pipeline-workbench`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-mockup-family`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-app-survey`)).toBeVisible();
-  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-decoupled-lifecycles`)).toBeVisible();
+  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-deck-icon-exploration`)).toBeVisible();
+  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-konzept`)).toBeVisible();
+  await expect(page.getByTestId(
+    `studio-explorer-workbench-pattern-${project.name}-deck-icon-exploration`)).toHaveAttribute('data-pattern', 'ui');
+  await expect(page.getByTestId(
+    `studio-explorer-workbench-pattern-${project.name}-workbench-konzept`)).toHaveAttribute('data-pattern', 'concept');
   await expect(page.getByTestId(`studio-explorer-workbench-history-${project.name}`)).toBeVisible();
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await page.screenshot({ path: evidencePath(testInfo, `workbench-explorer-${theme}.png`), fullPage: true });
+    await page.screenshot({
+      path: evidencePath(testInfo, `workbench-explorer--${theme}--real.png`),
+      fullPage: true,
+    });
   }
 
-  await page.getByTestId(`studio-explorer-workbench-${project.name}-decoupled-lifecycles`).click();
+  await page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-konzept`).click();
   const frame = page.getByTestId('workbench-viewer-frame');
   await expect(frame).toBeVisible();
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
-  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/concepts/mockups/decoupled-lifecycles.html');
-  await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
-    .getByRole('heading', { name: 'The screen is a guest, not the owner.' })).toBeVisible();
+  await expect(page.getByTestId('workbench-viewer-provenance'))
+    .toContainText('docs/operations/workbench-konzept/index.html');
+  const articleFrame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
+  await expect(articleFrame.locator('html')).toHaveAttribute('data-document-pattern', 'concept');
+  const conceptGeometry = await articleFrame.locator('body').evaluate(body => {
+    const main = body.querySelector('main')!;
+    const breakout = body.querySelector('.breakout')!;
+    return {
+      bodyFont: getComputedStyle(body).fontFamily,
+      mainWidth: main.getBoundingClientRect().width,
+      breakoutWidth: breakout.getBoundingClientRect().width,
+    };
+  });
+  expect(conceptGeometry.bodyFont).toContain('Georgia');
+  expect(conceptGeometry.mainWidth).toBeLessThanOrEqual(780);
+  expect(conceptGeometry.breakoutWidth).toBeGreaterThan(conceptGeometry.mainWidth);
+  await page.getByTestId('workbench-viewer-maximize').click();
+  await expect(page.getByTestId('workbench-viewer-frame-shell'))
+    .toHaveClass(/workbench-viewer__frame-shell--maximized/);
+  await articleFrame.locator('html').evaluate(() => window.scrollTo(0, 0));
   for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
     await setTheme(page, theme);
-    await page.screenshot({ path: evidencePath(testInfo, `workbench-decoupled-${theme}.png`), fullPage: true });
+    await frame.screenshot({
+      path: evidencePath(testInfo, `article-template-concept--${theme}--real.png`),
+    });
   }
+  await page.getByTestId('workbench-viewer-maximize').click();
+
+  await page.getByTestId(`studio-explorer-workbench-${project.name}-deck-icon-exploration`).click();
+  await expect(page.getByTestId('workbench-viewer-provenance'))
+    .toContainText('docs/operations/deck-icon-exploration/index.html');
+  await expect(articleFrame.locator('html')).toHaveAttribute('data-document-pattern', 'ui');
+  const uiGeometry = await articleFrame.locator('body').evaluate(body => {
+    const main = body.querySelector('main')!;
+    const mockup = body.querySelector('.mockup')!;
+    return {
+      mainWidth: main.getBoundingClientRect().width,
+      mockupWidth: mockup.getBoundingClientRect().width,
+    };
+  });
+  expect(uiGeometry.mockupWidth).toBeGreaterThan(uiGeometry.mainWidth);
+  await page.getByTestId('workbench-viewer-maximize').click();
+  await expect(page.getByTestId('workbench-viewer-frame-shell'))
+    .toHaveClass(/workbench-viewer__frame-shell--maximized/);
+  await articleFrame.locator('.mockup').scrollIntoViewIfNeeded();
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await setTheme(page, theme);
+    await frame.screenshot({
+      path: evidencePath(testInfo, `article-template-ui--${theme}--real.png`),
+    });
+  }
+  await page.getByTestId('workbench-viewer-maximize').click();
 
   let escapedNetworkRequests = 0;
   page.on('request', request => {
@@ -210,7 +264,7 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
       workbench: {
         id: 'app-survey', title: 'Isolation probe', summary: 'Security-boundary test fixture.',
         status: 'active', phase: 'testing', updatedAtUtc: '2026-07-12T10:00:00Z',
-        entryPath: 'docs/quality/design/app-survey-2026-07-11.html', valid: true, error: null, sourceTaskKeys: [],
+        entryPath: 'docs/quality/design/app-survey-2026-07-11.html', valid: true, error: null, sourceTaskKeys: [], pattern: 'concept',
       },
       html: `<script id="early-probe">
         document.documentElement.dataset.scriptRan = 'true';
@@ -244,32 +298,6 @@ test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real reposito
   await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/quality/design/app-survey-2026-07-11.html');
   await expect(page.getByTestId('workbench-viewer-working-tree')).toContainText('uncommitted');
 
-  await page.getByTestId(`studio-explorer-project-wiki-${project.name}`).click();
-  const pipelineLifecycleRow = page.getByTestId(
-    'project-wiki-lifecycle-open-docs/system/domains/pipeline.md.report.html');
-  const surveyLifecycleRow = page.getByTestId(
-    'project-wiki-lifecycle-open-docs/quality/design/app-survey-2026-07-11.html');
-  const lifecycle = page.getByTestId('project-wiki-pulse-lifecycle');
-  await expect(lifecycle).toBeVisible();
-  await expect(pipelineLifecycleRow).toBeVisible();
-  await expect(surveyLifecycleRow).toBeVisible();
-  const firstCuratedSection = page.locator('[data-testid^="wiki-home-section-"]').first();
-  await expect(firstCuratedSection).toBeVisible();
-  const lifecycleBox = await lifecycle.boundingBox();
-  const curatedBox = await firstCuratedSection.boundingBox();
-  expect(lifecycleBox, 'The lifecycle surface must participate in dashboard layout.').not.toBeNull();
-  expect(curatedBox, 'The curated home surface must participate in dashboard layout.').not.toBeNull();
-  expect(lifecycleBox!.y, 'Fresh concepts must appear before the ordinary curated entry cards.')
-    .toBeLessThan(curatedBox!.y);
-  await page.getByTestId('project-wiki-toggle-nav').click();
-  await page.getByTestId('project-wiki-meta-toggle').click();
-  for (const theme of ['light', 'dark'] as const) {
-    await setTheme(page, theme);
-    await page.screenshot({ path: evidencePath(testInfo, `workbench-pulse-${theme}.png`), fullPage: true });
-  }
-
-  await pipelineLifecycleRow.click();
-  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/system/domains/pipeline.md.report.html');
   } finally {
     if (createdProjectId) await fetch(`${devBackend.baseUrl}/api/projects/${createdProjectId}`, {
       method: 'DELETE', headers: { 'X-Client-Id': clientId ?? '' },

@@ -6,6 +6,7 @@
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
+  "pattern": "ui",
   "updatedAt": "2026-07-28T00:00:00Z",
   "sourceTaskKeys": ["AGT-2355"],
   "implementationTasks": [
