@@ -7,12 +7,6 @@ using AgentStudio.Registry;
 
 namespace AgentStudio.Docs;
 
-/// <summary>One retained item in a wiki companion's agent-read history.</summary>
-public sealed record WikiAgentReadRecent(DateTime At, string TaskKey);
-
-/// <summary>Observed agent-read totals projected from a wiki companion.</summary>
-public sealed record WikiAgentReads(int Total, DateTime? LastReadAt, IReadOnlyList<WikiAgentReadRecent> Recent);
-
 /// <summary>Outcome of the startup-only historical CLI-log initialization.</summary>
 public sealed record WikiAgentReadBackfillResult(bool AlreadyCompleted, int LogsScanned, int ReadsApplied, string MarkerPath);
 
@@ -194,9 +188,9 @@ public static partial class WikiAgentReadLogParser
 }
 
 /// <summary>
-/// Persists observed wiki reads into adjacent companions. Live local CLI output
-/// and remote runner ingestion call the same method; startup backfill folds the
-/// durable cli-output.log inventory once behind an atomic marker.
+/// Persists observed wiki reads into runtime-only project state. Live local CLI
+/// output and remote runner ingestion call the same method; startup backfill
+/// folds the durable cli-output.log inventory once behind an atomic marker.
 /// </summary>
 public sealed class WikiAgentReadService
 {
@@ -205,7 +199,7 @@ public sealed class WikiAgentReadService
 
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
-    private readonly WikiCompanionStore _companions;
+    private readonly WikiAgentReadStore _agentReads;
     private readonly ProjectDocsService _docs;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WikiAgentReadService> _logger;
@@ -215,14 +209,14 @@ public sealed class WikiAgentReadService
     public WikiAgentReadService(
         TaskScannerService scanner,
         ProjectRegistry registry,
-        WikiCompanionStore companions,
+        WikiAgentReadStore agentReads,
         ProjectDocsService docs,
         IConfiguration configuration,
         ILogger<WikiAgentReadService> logger)
     {
         _scanner = scanner;
         _registry = registry;
-        _companions = companions;
+        _agentReads = agentReads;
         _docs = docs;
         _configuration = configuration;
         _logger = logger;
@@ -247,11 +241,10 @@ public sealed class WikiAgentReadService
         var applied = 0;
         foreach (var observation in observations)
         {
-            if (!TryReadPage(target.WikiDir, observation.RelPath, out _, out var title, out var content)) continue;
+            if (!PageExists(target.WikiDir, observation.RelPath)) continue;
             try
             {
-                _companions.IncrementAgentRead(
-                    target.WikiDir, observation.RelPath, title, content, observation.At, target.TaskKey);
+                _agentReads.Increment(target.WikiDir, observation.RelPath, observation.At, target.TaskKey);
                 applied++;
             }
             catch (Exception ex)
@@ -265,7 +258,7 @@ public sealed class WikiAgentReadService
 
     /// <summary>
     /// Scans every current/archived task log once. A durable marker makes later
-    /// startups and repeated calls no-ops; sidecar baseline writes themselves
+    /// startups and repeated calls no-ops; runtime baseline writes themselves
     /// are monotonic so a crash-resumed scan cannot inflate totals.
     /// </summary>
     public WikiAgentReadBackfillResult EnsureBackfilled()
@@ -308,8 +301,8 @@ public sealed class WikiAgentReadService
                             var key = target.WikiDir + "|" + rel;
                             if (!byPage.TryGetValue(key, out var page))
                             {
-                                if (!TryReadPage(target.WikiDir, rel, out _, out var title, out var content)) continue;
-                                page = new BackfillPage(target.WikiDir, rel, title, content);
+                                if (!PageExists(target.WikiDir, rel)) continue;
+                                page = new BackfillPage(target.WikiDir, rel);
                                 byPage[key] = page;
                             }
                             page.Total++;
@@ -327,8 +320,7 @@ public sealed class WikiAgentReadService
             var readsApplied = 0;
             foreach (var page in byPage.Values)
             {
-                _companions.ApplyAgentReadBackfill(
-                    page.WikiDir, page.RelPath, page.Title, page.Content, page.Total, page.Recent);
+                _agentReads.ApplyBackfill(page.WikiDir, page.RelPath, page.Total, page.Recent);
                 readsApplied += page.Total;
             }
 
@@ -362,32 +354,12 @@ public sealed class WikiAgentReadService
         return new TaskTarget(wikiDir, key);
     }
 
-    private static bool TryReadPage(
-        string wikiDir, string relPath, out string fullPath, out string title, out string content)
+    private static bool PageExists(string wikiDir, string relPath)
     {
-        fullPath = Path.GetFullPath(Path.Combine(wikiDir, relPath.Replace('/', Path.DirectorySeparatorChar)));
-        title = Path.GetFileNameWithoutExtension(relPath);
-        content = string.Empty;
+        var fullPath = Path.GetFullPath(Path.Combine(wikiDir, relPath.Replace('/', Path.DirectorySeparatorChar)));
         var root = Path.GetFullPath(wikiDir);
         var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath)) return false;
-        try
-        {
-            content = File.ReadAllText(fullPath);
-            title = ReadTitle(content, relPath);
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    private static string ReadTitle(string content, string relPath)
-    {
-        foreach (var line in content.Split('\n').Take(80))
-            if (line.StartsWith("# ", StringComparison.Ordinal)) return line[2..].Trim();
-        return Path.GetFileNameWithoutExtension(relPath);
+        return fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath);
     }
 
     private string MarkerPath()
@@ -427,12 +399,10 @@ public sealed class WikiAgentReadService
 
     private sealed record TaskTarget(string WikiDir, string TaskKey);
     private sealed record ReadObservation(string RelPath, DateTime At);
-    private sealed class BackfillPage(string wikiDir, string relPath, string title, string content)
+    private sealed class BackfillPage(string wikiDir, string relPath)
     {
         public string WikiDir { get; } = wikiDir;
         public string RelPath { get; } = relPath;
-        public string Title { get; } = title;
-        public string Content { get; } = content;
         public int Total { get; set; }
         public List<WikiAgentReadRecent> Recent { get; } = [];
     }

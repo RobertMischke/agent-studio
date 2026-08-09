@@ -149,7 +149,7 @@
     },
     "agentReads": {
       "type": "object",
-      "description": "Observed agent tool-use reads of this wiki page. This is durable usage evidence only; it never drives drift, gates, or workflow state.",
+      "description": "Legacy observed agent-read evidence written before 2026-08-08. New telemetry lives in gitignored .orchestrator/wiki-agent-reads runtime state; readers retain this shape only for migration compatibility.",
       "required": ["total", "lastReadAt", "recent"],
       "additionalProperties": false,
       "properties": {

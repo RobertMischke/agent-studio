@@ -651,6 +651,7 @@ builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingServi
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
 builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiAgentReadStore>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiAgentReadService>();
 builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();

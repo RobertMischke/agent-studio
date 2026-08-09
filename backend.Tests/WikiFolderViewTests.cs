@@ -284,6 +284,28 @@ public class WikiFolderViewTests : IDisposable
         Assert.Equal(new[] { "AGT-2242", "AGT-2200" }, row.AgentReads.Recent.Select(r => r.TaskKey));
     }
 
+    [Fact]
+    public void GetWikiFolder_RuntimeAgentReadsOverrideLegacyWithoutRewritingCompanion()
+    {
+        WritePage("concepts/read.md", "# Read\n");
+        WritePage("concepts/read.md.meta.json",
+            """{"source":{"path":"docs/concepts/read.md"},"agentReads":{"total":2,"lastReadAt":null,"recent":[]}}""");
+        var companionPath = Path.Combine(_docsDir, "concepts", "read.md.meta.json");
+        var companionBefore = File.ReadAllText(companionPath);
+        new WikiAgentReadStore().Increment(
+            _docsDir,
+            "concepts/read.md",
+            new DateTime(2026, 8, 8, 10, 0, 0, DateTimeKind.Utc),
+            "AGT-2507");
+
+        var row = BuildDocsService().GetWikiFolder(ProjectName, "concepts")!
+            .Children.Single(c => c.Name == "read.md");
+
+        Assert.Equal(companionBefore, File.ReadAllText(companionPath));
+        Assert.Equal(3, row.AgentReads?.Total);
+        Assert.Equal("AGT-2507", Assert.Single(row.AgentReads!.Recent).TaskKey);
+    }
+
     // ---- Guards ----
 
     [Fact]
