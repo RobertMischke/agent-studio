@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-02
+Version: 2026-08-04
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -70,6 +70,13 @@ state.
   own task worktree. A non-Git project is rejected for mutating runs instead of
   falling back to in-place execution; read-only planning and research remain
   eligible to run in place.
+- `backend/Features/Git/GitBranchRetention.cs`: host-owned recurring repository
+  maintenance. The startup-and-daily pass fetches with prune, removes missing
+  worktree registrations, and deletes only `task/*` and `runner/*` refs whose
+  tip commit is older than the configured retention window and contained in
+  both `develop` and `main`. Missing refs, active worktrees, changed tips, and
+  origin refresh failures retain the branch. Remote deletes use an exact-tip
+  force-with-lease.
 - `backend/Services/Runner/AgentOutcomeAnalyzer.cs`: terminal sentinel and
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action

@@ -328,7 +328,12 @@ public sealed record GitActiveCheckout(
 /// via <c>update-ref -d</c>; <see cref="ShortName"/> is git's abbreviated form
 /// (e.g. <c>task/42</c>, <c>origin/task/42</c>) used for merge-base checks.
 /// </summary>
-public record GitRefLine(string FullName, string ShortName, string Sha, string ShortSha);
+public record GitRefLine(
+    string FullName,
+    string ShortName,
+    string Sha,
+    string ShortSha,
+    DateTimeOffset? CommittedAtUtc = null);
 
 /// <summary>
 /// A curated publisher commit found on the integration line. The task key is
@@ -2944,6 +2949,49 @@ public class GitService
         return new GitWorktreeResult(false, repoRoot, err);
     }
 
+    /// <summary>
+    /// Deletes a remote branch only while it still points at the exact commit
+    /// inspected by the caller. The force-with-lease delete closes the race
+    /// between retention classification and mutation: a branch that receives a
+    /// newer commit is retained instead of having that unseen commit removed.
+    /// </summary>
+    public GitWorktreeResult DeleteRemoteBranchAtTip(
+        string repoRoot,
+        string branch,
+        string expectedSha,
+        string remote = "origin",
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+        if (!IsLikelyShaOrRef(expectedSha))
+            return new GitWorktreeResult(false, null, "Expected branch tip is invalid.");
+        if (string.IsNullOrWhiteSpace(remote) || !IsLikelyBranchName(remote))
+            return new GitWorktreeResult(false, null, $"Invalid remote name '{remote}'.");
+        if (!HasRemote(repoRoot, remote))
+            return new GitWorktreeResult(true, repoRoot, null);
+
+        var lease = $"--force-with-lease=refs/heads/{branch}:{expectedSha}";
+        var refspec = $":refs/heads/{branch}";
+        var (pushOut, pushErr, pushCode) = RunGitArgs(
+            repoRoot, cancellationToken, "push", lease, remote, refspec);
+        if (pushCode == 0)
+        {
+            _logger.LogInformation(
+                "Deleted remote branch {Remote}/{Branch} at expected tip {Sha} in {Path}",
+                remote, branch, expectedSha, repoRoot);
+            return new GitWorktreeResult(true, repoRoot, null);
+        }
+
+        var error = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
+        _logger.LogWarning(
+            "Expected-tip remote branch delete failed for {Remote}/{Branch} at {Path}: {Error}",
+            remote, branch, repoRoot, error);
+        return new GitWorktreeResult(false, repoRoot, error);
+    }
+
     // ADR-0052/ADR-0057 worktree + integration primitives. These are low-level
     // git plumbing for the worktree-per-coding-task model on task/<id> branches
     // off the integration branch. They take an explicit repo or worktree root
@@ -3263,6 +3311,31 @@ public class GitService
         }
         _logger.LogInformation("Deleted branch {Branch} at {Path}", branch, repoRoot);
         return new GitWorktreeResult(true, null, null);
+    }
+
+    /// <summary>
+    /// Deletes a local branch only when its tip still matches the commit the
+    /// caller classified. <c>git branch -D</c> retains Git's checked-out branch
+    /// protection; the expected-tip comparison prevents retention from deleting
+    /// a branch that advanced after the plan was built.
+    /// </summary>
+    public GitWorktreeResult DeleteBranchAtTip(string repoRoot, string branch, string expectedSha)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+        if (!IsLikelyShaOrRef(expectedSha))
+            return new GitWorktreeResult(false, null, "Expected branch tip is invalid.");
+
+        var (tip, _, tipCode) = RunGitArgs(
+            repoRoot, "rev-parse", "--verify", $"refs/heads/{branch}");
+        if (tipCode != 0)
+            return new GitWorktreeResult(true, null, null);
+        if (!string.Equals(tip.Trim(), expectedSha, StringComparison.OrdinalIgnoreCase))
+            return new GitWorktreeResult(false, null, "Branch tip changed after retention classification; kept.");
+
+        return DeleteBranch(repoRoot, branch, force: true);
     }
 
     /// <summary>
@@ -4119,7 +4192,8 @@ public class GitService
         const char US = '\x1f';
         var fmt = string.Join(US.ToString(), new[]
         {
-            "%(refname)", "%(refname:short)", "%(objectname)", "%(objectname:short)"
+            "%(refname)", "%(refname:short)", "%(objectname)", "%(objectname:short)",
+            "%(committerdate:unix)"
         });
         var (output, _, code) = RunGitArgs(repoRoot, "for-each-ref", $"--format={fmt}", pattern);
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
@@ -4132,7 +4206,16 @@ public class GitService
             if (parts.Length < 4) continue;
             var full = parts[0].Trim();
             if (full.Length == 0) continue;
-            list.Add(new GitRefLine(full, parts[1].Trim(), parts[2].Trim(), parts[3].Trim()));
+            DateTimeOffset? committedAt = null;
+            if (parts.Length >= 5
+                && long.TryParse(parts[4].Trim(), System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var unixSeconds)
+                && unixSeconds is >= -62135596800 and <= 253402300799)
+            {
+                committedAt = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+            }
+            list.Add(new GitRefLine(
+                full, parts[1].Trim(), parts[2].Trim(), parts[3].Trim(), committedAt));
         }
         return list;
     }
