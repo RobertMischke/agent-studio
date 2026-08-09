@@ -1,8 +1,81 @@
 import { TestBed } from '@angular/core/testing';
-import { TaskTestEvidenceComponent } from './task-test-evidence';
-import type { TaskTestRunEvidence } from '../../../../models/task.model';
+import { TaskState, type TaskInfo, type TaskTestRunEvidence } from '../../../../models/task.model';
+import { TaskTestEvidenceComponent, visibleTaskTestEvidence } from './task-test-evidence';
+
+const missingEvidence: TaskTestRunEvidence = {
+  runId: null,
+  runCommit: null,
+  runState: null,
+  runResult: null,
+  matchQuality: 'none',
+  direction: 'none',
+  distance: null,
+  diffContained: false,
+  evidenceState: 'unassigned',
+  awaitingEvidence: false,
+  summary: 'No test evidence assigned: card has no commit',
+};
+
+function task(state: string, overrides: Partial<TaskInfo> = {}): TaskInfo {
+  return {
+    state,
+    commit: null,
+    commits: [],
+    integration: null,
+    testEvidence: missingEvidence,
+    ...overrides,
+  } as TaskInfo;
+}
 
 describe('TaskTestEvidenceComponent', () => {
+  it.each([
+    TaskState.Backlog,
+    TaskState.Preparation,
+    TaskState.OrchestratorPrep,
+    TaskState.Ready,
+    TaskState.Progress,
+    TaskState.FailedPickup,
+    TaskState.CodeNotComplete,
+  ])('suppresses missing evidence in %s before a delivery exists', (state) => {
+    expect(visibleTaskTestEvidence(task(state))).toBeNull();
+  });
+
+  it.each([
+    TaskState.AutoReview,
+    TaskState.HumanReview,
+    TaskState.Completed,
+    TaskState.Archive,
+  ])('shows missing evidence after the task reaches %s', (state) => {
+    expect(visibleTaskTestEvidence(task(state))).toBe(missingEvidence);
+  });
+
+  it.each([
+    ['attributed commits', { commits: [{ sha: 'abcdef12' }] }],
+    ['a legacy attributed commit', { commit: { sha: 'abcdef12' } }],
+    ['an attributed delivery ref', { integration: { deliveryRef: 'runner/host/TASK-1' } }],
+  ] as const)('shows missing evidence in Ready when the task has %s', (_label, delivery) => {
+    expect(visibleTaskTestEvidence(task(TaskState.Ready, delivery as Partial<TaskInfo>))).toBe(missingEvidence);
+  });
+
+  it('keeps recorded evidence visible before review', () => {
+    const recordedEvidence: TaskTestRunEvidence = {
+      ...missingEvidence,
+      runId: 'TR-42',
+      runCommit: 'abcdef12',
+      runState: 'completed',
+      runResult: 'passed',
+      matchQuality: 'perfect',
+      direction: 'exact',
+      distance: 0,
+      diffContained: true,
+      evidenceState: 'proven',
+      summary: 'Perfect match',
+    };
+
+    expect(visibleTaskTestEvidence(task(TaskState.Ready, { testEvidence: recordedEvidence })))
+      .toBe(recordedEvidence);
+  });
+
   it.each([
     ['perfect', 'proven', 'Perfect match'],
     ['contains-diff', 'proven', '10 commit(s) after, diff included'],
@@ -10,7 +83,8 @@ describe('TaskTestEvidenceComponent', () => {
   ] as const)('renders %s evidence honestly', async (quality, state, summary) => {
     await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
     const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
-    fixture.componentRef.setInput('evidence', {
+    const evidence = {
+      ...missingEvidence,
       runId: quality === 'none' ? null : 'TR-42',
       runCommit: quality === 'none' ? null : 'abcdef12',
       runState: quality === 'none' ? null : 'completed',
@@ -20,32 +94,37 @@ describe('TaskTestEvidenceComponent', () => {
       distance: quality === 'perfect' ? 0 : quality === 'contains-diff' ? 10 : null,
       diffContained: quality !== 'none',
       evidenceState: state,
-      awaitingEvidence: false,
       summary,
-    } satisfies TaskTestRunEvidence);
+    } satisfies TaskTestRunEvidence;
+    fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
     fixture.detectChanges();
 
-    const evidence = fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]') as HTMLElement;
-    expect(evidence.textContent).toContain(summary);
-    expect(evidence.getAttribute('data-match-quality')).toBe(quality);
-    expect(evidence.getAttribute('data-evidence-state')).toBe(state);
-    if (quality === 'none') expect(evidence.textContent).toContain('No SHA-linked project run');
+    const element = fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]') as HTMLElement;
+    expect(element.textContent).toContain(summary);
+    expect(element.getAttribute('data-match-quality')).toBe(quality);
+    expect(element.getAttribute('data-evidence-state')).toBe(state);
+    if (quality === 'none') expect(element.textContent).toContain('No SHA-linked project run');
+  });
+
+  it('removes the missing-evidence block from the DOM for a Ready task without delivery', async () => {
+    await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
+    fixture.componentRef.setInput('task', task(TaskState.Ready));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]')).toBeNull();
   });
 
   it('names SHA-linked review and gate evidence instead of the unassigned default', async () => {
     await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
     const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
-    fixture.componentRef.setInput('evidence', {
-      runId: null,
-      runCommit: null,
-      runState: null,
-      runResult: null,
+    const evidence = {
+      ...missingEvidence,
       matchQuality: 'perfect',
       direction: 'exact',
       distance: 0,
       diffContained: true,
       evidenceState: 'proven',
-      awaitingEvidence: false,
       summary: 'Review build-tests Pass at d1649ce9',
       sources: [
         {
@@ -65,12 +144,13 @@ describe('TaskTestEvidenceComponent', () => {
           summary: 'Build/test gate green at d1649ce9',
         },
       ],
-    } satisfies TaskTestRunEvidence);
+    } satisfies TaskTestRunEvidence;
+    fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
     fixture.detectChanges();
 
-    const evidence = fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]') as HTMLElement;
-    expect(evidence.textContent).toContain('Review build-tests Pass at d1649ce9');
-    expect(evidence.textContent).toContain('Build/test gate green at d1649ce9');
-    expect(evidence.textContent).not.toContain('Evidence pending');
+    const element = fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]') as HTMLElement;
+    expect(element.textContent).toContain('Review build-tests Pass at d1649ce9');
+    expect(element.textContent).toContain('Build/test gate green at d1649ce9');
+    expect(element.textContent).not.toContain('Evidence pending');
   });
 });

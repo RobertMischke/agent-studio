@@ -2,6 +2,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const PROJECT = 'Lane Counter Project';
 const WATCH_PATH = 'C:/fixtures/lane-counter-project';
+const evidenceCaptureState = process.env['TASK_EVIDENCE_CAPTURE_STATE'] === 'before' ? 'before' : 'after';
 
 interface TaskFixture {
   id: string;
@@ -73,6 +74,20 @@ function task(id: string, state: string, order: number, testEvidence?: TaskFixtu
   };
 }
 
+const UNASSIGNED_EVIDENCE: NonNullable<TaskFixture['testEvidence']> = {
+  runId: null,
+  runCommit: null,
+  runState: null,
+  runResult: null,
+  matchQuality: 'none',
+  direction: 'none',
+  distance: null,
+  diffContained: false,
+  evidenceState: 'unassigned',
+  awaitingEvidence: false,
+  summary: 'No test evidence assigned: card has no commit',
+};
+
 const READY = [
   task('ready-one', '2-ready', 1, {
     runId: 'TR-perfect', runCommit: 'a'.repeat(40), runState: 'completed', runResult: 'passed',
@@ -84,18 +99,14 @@ const READY = [
     matchQuality: 'contains-diff', direction: 'after', distance: 10, diffContained: true,
     evidenceState: 'proven', awaitingEvidence: false, summary: '10 commit(s) after, diff included',
   }),
-  task('ready-three', '2-ready', 3, {
-    runId: null, runCommit: null, runState: null, runResult: null,
-    matchQuality: 'none', direction: 'none', distance: null, diffContained: false,
-    evidenceState: 'unassigned', awaitingEvidence: false, summary: 'No matching test run',
-  }),
+  task('ready-three', '2-ready', 3, UNASSIGNED_EVIDENCE),
 ];
 const PROGRESS = [
-  task('progress-one', '3-progress', 1),
+  task('progress-one', '3-progress', 1, UNASSIGNED_EVIDENCE),
   task('progress-two', '3-progress', 2),
 ];
 const HUMAN_REVIEW = [
-  task('review-one', '5-human-review', 1),
+  task('review-one', '5-human-review', 1, UNASSIGNED_EVIDENCE),
   task('review-two', '5-human-review', 2),
   task('review-three', '5-human-review', 3),
   task('review-four', '5-human-review', 4),
@@ -308,20 +319,32 @@ test('each lane counter explains its lane via the canonical appTooltip', async (
   });
 });
 
-test('cards show exact, later-containing, and unassigned test-run evidence', async ({ page }) => {
+test('missing test evidence is lane-aware while recorded evidence remains visible', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1300 });
   await boot(page);
 
   const evidence = page.getByTestId('task-card-test-evidence');
-  await expect(evidence).toHaveCount(3);
+  await expect(evidence).toHaveCount(evidenceCaptureState === 'before' ? 5 : 3);
   await expect(evidence.filter({ hasText: 'Perfect match' })).toHaveAttribute('data-match-quality', 'perfect');
   await expect(evidence.filter({ hasText: '10 commit(s) after, diff included' })).toHaveAttribute('data-match-quality', 'contains-diff');
-  const unassigned = evidence.filter({ hasText: 'No matching test run' });
-  await expect(unassigned).toHaveAttribute('data-evidence-state', 'unassigned');
-  await expect(unassigned).toContainText('No SHA-linked project run');
+  const readyWithoutDelivery = page.getByTestId('task-card').filter({ hasText: 'ready-three' });
+  const progressWithoutDelivery = page.getByTestId('task-card').filter({ hasText: 'progress-one' });
+  const reviewWithoutDelivery = page.getByTestId('task-card').filter({ hasText: 'review-one' });
+  if (evidenceCaptureState === 'before') {
+    await expect(readyWithoutDelivery.getByTestId('task-card-test-evidence')).toBeVisible();
+    await expect(progressWithoutDelivery.getByTestId('task-card-test-evidence')).toBeVisible();
+  } else {
+    await expect(readyWithoutDelivery.getByTestId('task-card-test-evidence')).toHaveCount(0);
+    await expect(progressWithoutDelivery.getByTestId('task-card-test-evidence')).toHaveCount(0);
+  }
+  const reviewEvidence = reviewWithoutDelivery.getByTestId('task-card-test-evidence');
+  await expect(reviewEvidence).toHaveAttribute('data-evidence-state', 'unassigned');
+  await expect(reviewEvidence).toContainText('No SHA-linked project run');
 
-  const boardShot = test.info().outputPath('task-card-test-run-evidence.png');
+  const screenshotName = `task-test-evidence-visibility--${evidenceCaptureState}--mocked.png`;
+  const boardShot = test.info().outputPath(screenshotName);
   await page.getByTestId('studio-board').screenshot({ path: boardShot });
-  await test.info().attach('task-card-test-run-evidence', { path: boardShot, contentType: 'image/png' });
+  await test.info().attach(screenshotName, { path: boardShot, contentType: 'image/png' });
 });
 
 test('archived-card evidence incident renders honest before and SHA-linked after states', async ({ page }) => {
