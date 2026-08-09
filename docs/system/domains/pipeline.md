@@ -53,9 +53,10 @@ pipeline view.
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly
-  one `docs/operations/<topic>/` Workbench, publishes it through the managed
-  project-artifact commit boundary, reviews document completeness and evidence,
-  waits for human sight review, then creates coding cards from the descriptor.
+  one `docs/<slug>/` dossier, publishes it through the managed project-artifact
+  commit boundary, verifies the source-card key plus `decision-pending` status
+  and task-file links, waits for human sight review, then creates coding cards
+  from the descriptor.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`,
   `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
   `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
@@ -657,11 +658,13 @@ operator changes cause the step to fail before its writer runs.
   the [Research task delivery convention](../../operations/research-deliverables/index.html).
 - The concept pipeline is distinct from the report-only pipeline. It runs in an
   isolated worktree, permits a diff only inside one
-  `docs/operations/<topic>/` directory, and never merges that task branch.
+  `docs/<slug>/` directory, and never merges that task branch.
   Workbench placement publishes `workbench.json` plus `index.html` through the
   managed project-artifact commit boundary. Concept review checks alternatives,
-  recommendation, evidence, open decisions, and implementation-card source
-  data. It deliberately does not run build, test, code aspects, or integration.
+  recommendation, evidence, open decisions, implementation-card source data,
+  the own-card `sourceTaskKeys` entry, `status=decision-pending`, and the dossier
+  path in both `results/deliverables.md` and `status.md`. It deliberately does
+  not run build, test, code aspects, or integration.
   A complete Workbench moves to `5-human-review` with a durable
   `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
   successful delivery at this gate. Sight-review acceptance completes the

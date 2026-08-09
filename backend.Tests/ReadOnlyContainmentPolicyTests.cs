@@ -44,15 +44,15 @@ public sealed class ReadOnlyContainmentPolicyTests
     }
 
     [Fact]
-    public void ConceptMode_WithOneOperationsWorkbench_IsContained()
+    public void ConceptMode_WithOneDossier_IsContained()
     {
         var result = ReadOnlyContainmentPolicy.Evaluate(
             TaskModes.Concept,
             isRepo: true,
             changedFiles:
             [
-                "docs/operations/concept-pipeline/index.html",
-                "docs/operations/concept-pipeline/workbench.json",
+                "docs/concept-pipeline/index.html",
+                "docs/concept-pipeline/workbench.json",
             ]);
 
         Assert.False(result.IsViolation);
@@ -60,7 +60,7 @@ public sealed class ReadOnlyContainmentPolicyTests
 
     [Theory]
     [InlineData("backend/Features/X.cs")]
-    [InlineData("docs/operations/one/index.html", "docs/operations/two/index.html")]
+    [InlineData("docs/one/index.html", "docs/two/index.html")]
     public void ConceptMode_WithOutsideOrMultipleWorkbenchDiff_IsViolation(params string[] changedFiles)
     {
         var result = ReadOnlyContainmentPolicy.Evaluate(

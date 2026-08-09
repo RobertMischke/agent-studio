@@ -31,9 +31,10 @@ public sealed class ConceptPipelineTests : IDisposable
         var review = ConceptWorkbenchContract.ReviewChangedFiles(
             _root,
             [
-                "docs/operations/concept-pipeline/workbench.json",
-                "docs/operations/concept-pipeline/index.html",
-            ]);
+                "docs/concept-pipeline/workbench.json",
+                "docs/concept-pipeline/index.html",
+            ],
+            "AGT-2358");
 
         Assert.True(review.IsComplete, review.Summary);
         Assert.Equal("concept-pipeline", review.Topic);
@@ -42,6 +43,11 @@ public sealed class ConceptPipelineTests : IDisposable
         Assert.Contains(
             "data-concept-section=\"evidence\"",
             File.ReadAllText(Path.Combine(directory, "index.html")));
+        var descriptor = JsonSerializer.Deserialize<ConceptWorkbenchDescriptor>(
+            File.ReadAllText(Path.Combine(directory, "workbench.json")),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal("decision-pending", descriptor!.Status);
+        Assert.Equal(["AGT-2358"], descriptor.SourceTaskKeys);
     }
 
     [Fact]
@@ -58,10 +64,94 @@ public sealed class ConceptPipelineTests : IDisposable
                 StringComparison.Ordinal));
 
         var review = ConceptWorkbenchContract.ReviewDirectory(
-            _root, "docs/operations/incomplete");
+            _root, "docs/incomplete", "AGT-2358");
 
         Assert.False(review.IsComplete);
         Assert.Contains(review.Findings, finding => finding.Contains("evidence", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void NewConceptDelivery_CreatesDossierAndProjectsBothTaskFileReferences()
+    {
+        var taskFolder = Path.Combine(_root, "task");
+        Directory.CreateDirectory(taskFolder);
+        var dossierPath = "docs/sidesheet-concept/index.html";
+
+        ConceptWorkbenchContract.CreateScaffold(
+            _root,
+            "sidesheet-concept",
+            "Sidesheet concept",
+            "A decision dossier.",
+            "AGT-2548");
+
+        ConceptDossierContract.WriteReference(taskFolder, dossierPath);
+
+        var review = ConceptWorkbenchContract.ReviewDirectory(
+            _root,
+            "docs/sidesheet-concept",
+            "AGT-2548");
+        Assert.True(review.IsComplete, review.Summary);
+        Assert.True(File.Exists(Path.Combine(_root, dossierPath)));
+        Assert.True(File.Exists(Path.Combine(_root, "docs", "sidesheet-concept", "workbench.json")));
+        Assert.Empty(ConceptDossierContract.ReviewAgentReferences(taskFolder, dossierPath));
+        var summary = TaskEndpointHelpers.BuildConceptDossierSummary(new TaskInfo
+        {
+            Id = "concept-card",
+            Mode = TaskModes.Concept,
+            FolderPath = taskFolder,
+        });
+        Assert.NotNull(summary);
+        Assert.True(summary.ContractSatisfied);
+        Assert.Equal(dossierPath, summary.RepoRelativePath);
+        Assert.Equal("results/deliverables.md", summary.ReferenceSource);
+        Assert.Contains(dossierPath, File.ReadAllText(Path.Combine(taskFolder, "status.md")));
+        Assert.Contains(dossierPath, File.ReadAllText(Path.Combine(taskFolder, "results", "deliverables.md")));
+        Assert.Null(ConceptDossierContract.NormalizePath("/docs/sidesheet-concept/index.html"));
+        Assert.True(ConceptDossierContract.IsDossierPath("docs/operations/legacy/index.html"));
+    }
+
+    [Fact]
+    public void Review_RejectsWrongSourceCardAndNonPendingStatus()
+    {
+        var directory = ConceptWorkbenchContract.CreateScaffold(
+            _root, "wrong-source", "Wrong source", "Invalid descriptor.", "AGT-OTHER");
+        var descriptorPath = Path.Combine(directory, "workbench.json");
+        var descriptor = JsonSerializer.Deserialize<ConceptWorkbenchDescriptor>(
+            File.ReadAllText(descriptorPath),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))! with { Status = "active" };
+        File.WriteAllText(
+            descriptorPath,
+            JsonSerializer.Serialize(descriptor, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+
+        var review = ConceptWorkbenchContract.ReviewDirectory(
+            _root, "docs/wrong-source", "AGT-2358");
+
+        Assert.False(review.IsComplete);
+        Assert.Contains(review.Findings, finding => finding.Contains("decision-pending", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(review.Findings, finding => finding.Contains("AGT-2358", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Review_KeepsLegacyOperationsWorkbenchReadableWithoutMigration()
+    {
+        var created = ConceptWorkbenchContract.CreateScaffold(
+            _root, "legacy", "Legacy", "Published before the dossier contract.", "AGT-OLD");
+        var descriptorPath = Path.Combine(created, "workbench.json");
+        var descriptor = JsonSerializer.Deserialize<ConceptWorkbenchDescriptor>(
+            File.ReadAllText(descriptorPath),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))! with { Status = "active" };
+        File.WriteAllText(
+            descriptorPath,
+            JsonSerializer.Serialize(descriptor, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        var legacyParent = Path.Combine(_root, "docs", "operations");
+        Directory.CreateDirectory(legacyParent);
+        Directory.Move(created, Path.Combine(legacyParent, "legacy"));
+
+        var review = ConceptWorkbenchContract.ReviewDirectory(
+            _root, "docs/operations/legacy", "AGT-NEW");
+
+        Assert.True(review.IsComplete, review.Summary);
+        Assert.Equal("legacy", review.Topic);
     }
 
     [Fact]
@@ -117,8 +207,8 @@ public sealed class ConceptPipelineTests : IDisposable
                 new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
         Assert.True(ConceptWorkbenchStore.Write(source.FolderPath, new ConceptWorkbenchRecord
         {
-            RepoRelativeDirectory = "docs/operations/delivery-flow",
-            RepoRelativeEntrypoint = "docs/operations/delivery-flow/index.html",
+            RepoRelativeDirectory = "docs/delivery-flow",
+            RepoRelativeEntrypoint = "docs/delivery-flow/index.html",
             Title = descriptor.Title,
             PublishedAt = DateTime.UtcNow,
         }));
@@ -143,7 +233,7 @@ public sealed class ConceptPipelineTests : IDisposable
             Assert.Equal(TaskModes.Coding, created!.Mode);
             Assert.Equal(TaskStates.Preparation, created.State);
             Assert.Contains(
-                "docs/operations/delivery-flow/index.html",
+                "docs/delivery-flow/index.html",
                 File.ReadAllText(Path.Combine(created.FolderPath, "prompt.md")));
         }
     }

@@ -19,7 +19,7 @@ public sealed record ConceptWorkbenchDescriptor
     public string Title { get; init; } = "";
     public string Summary { get; init; } = "";
     public string Entrypoint { get; init; } = "index.html";
-    public string Status { get; init; } = "active";
+    public string Status { get; init; } = "decision-pending";
     public string Phase { get; init; } = "sight-review";
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
     public List<string> SourceTaskKeys { get; init; } = [];

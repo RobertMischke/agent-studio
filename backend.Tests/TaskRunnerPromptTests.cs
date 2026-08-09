@@ -769,10 +769,20 @@ public class TaskRunnerPromptTests
     {
         var framing = Prompts().RenderModeFraming("concept", allowWebAccess: false);
 
-        Assert.Contains("docs-only Workbench delivery", framing);
-        Assert.Contains("docs/operations/<topic>/", framing);
+        Assert.Contains("repository dossier delivery", framing);
+        Assert.Contains("docs/<slug>/", framing);
         Assert.Contains("workbench.json", framing);
         Assert.Contains("index.html", framing);
+        Assert.Contains("status: \"decision-pending\"", framing);
+        Assert.Contains("sourceTaskKeys", framing);
+        Assert.Contains("results/deliverables.md", framing);
+        Assert.Contains("status.md", framing);
+        Assert.Contains("docs/operations/haertung-verteilte-ausfuehrung/index.html", framing);
+        Assert.Contains("plain nouns", framing);
+        Assert.Contains("light and dark themes", framing);
+        Assert.Contains("CSS variables", framing);
+        Assert.Contains("inline SVG", framing);
+        Assert.Contains("colour system or font family", framing);
         Assert.Contains("[[TASK_NEEDS_INPUT:", framing);
         Assert.DoesNotContain("Read-only run", framing);
     }

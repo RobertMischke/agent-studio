@@ -126,6 +126,17 @@ public sealed class SummaryGenerationService
                 summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
             }
 
+            if (TaskModes.IsConcept(info.Mode))
+            {
+                var dossier = AgentStudio.Tasks.ConceptDossierContract.Read(info.FolderPath);
+                if (!string.IsNullOrWhiteSpace(dossier.RepoRelativePath))
+                {
+                    summary = AgentStudio.Tasks.ConceptDossierContract.PreserveReferenceInStatus(
+                        summary,
+                        dossier.RepoRelativePath);
+                }
+            }
+
             summary = ApplyProtocolImageReferences(summary, rawLog, info.FolderPath, out var appendedImageCount);
             if (appendedImageCount > 0)
             {

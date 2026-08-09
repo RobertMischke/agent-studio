@@ -108,7 +108,7 @@ export type TaskKind = 'task' | 'epic';
 /**
  * Task execution mode. Mirrors backend `TaskModes`. `coding` is the default
  * read-write mode; `planning` and `research` produce read-only reports;
- * `concept` authors one docs-only Workbench; and `research` permits web access
+ * `concept` authors one repository dossier; and `research` permits web access
  * by default.
  */
 export type TaskMode = 'coding' | 'planning' | 'research' | 'concept';
@@ -251,6 +251,20 @@ export interface PlanningSpawnSummary {
   spawnedCount: number;
   noFollowUpDeclared: boolean;
   noFollowUpReason?: string | null;
+  declaredAt?: string | null;
+  contractSatisfied: boolean;
+}
+
+/**
+ * Interim concept-dossier projection. The path is detected from
+ * results/deliverables.md or status.md until references.workbenches provides
+ * the structured carrier.
+ */
+export interface ConceptDossierSummary {
+  repoRelativePath?: string | null;
+  referenceSource?: string | null;
+  noDossierNeeded: boolean;
+  noDossierReason?: string | null;
   declaredAt?: string | null;
   contractSatisfied: boolean;
 }
@@ -532,6 +546,8 @@ export interface TaskInfo {
    * the AGT-1915 trap. Null on every coding / research / epic card.
    */
   planningSpawn?: PlanningSpawnSummary | null;
+  /** Concept dossier link or deliberate no-dossier decision. Null outside concept mode. */
+  conceptDossier?: ConceptDossierSummary | null;
 }
 
 export interface LifecycleCheck {

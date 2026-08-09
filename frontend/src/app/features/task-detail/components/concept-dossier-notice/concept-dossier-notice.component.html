@@ -1,0 +1,57 @@
+@if (show()) {
+  <section class="dossier"
+           [class.dossier--missing]="missing()"
+           data-testid="concept-dossier-notice"
+           [attr.data-state]="missing() ? 'missing' : 'satisfied'">
+    @if (dossierPath(); as path) {
+      <span class="dossier__label">Dossier</span>
+      <a class="dossier__link"
+         data-testid="concept-dossier-link"
+         [href]="wikiHref()">{{ path }}</a>
+    } @else if (summary()?.noDossierNeeded) {
+      <span class="dossier__label">No dossier needed</span>
+      <span class="dossier__reason" data-testid="concept-dossier-no-need-reason">
+        {{ summary()?.noDossierReason }}
+      </span>
+      <button type="button" class="dossier__action" (click)="openPathEditor()">Add dossier path</button>
+    } @else {
+      <span class="dossier__signal" aria-hidden="true">!</span>
+      <span class="dossier__label" data-testid="concept-dossier-missing">No dossier linked</span>
+      <button type="button"
+              class="dossier__action"
+              data-testid="concept-dossier-add-path"
+              (click)="openPathEditor()">Add dossier path</button>
+      <button type="button"
+              class="dossier__action"
+              data-testid="concept-dossier-no-need"
+              (click)="openNoDossierEditor()">No dossier needed</button>
+    }
+
+    @if (editor() === 'path') {
+      <form class="dossier__form" data-testid="concept-dossier-path-form" (submit)="$event.preventDefault(); savePath()">
+        <input class="dossier__input"
+               aria-label="Repository-relative dossier path"
+               data-testid="concept-dossier-path-input"
+               [ngModel]="pathDraft()"
+               (ngModelChange)="pathDraft.set($event)"
+               name="dossierPath"
+               [disabled]="busy()" />
+        <button type="submit" class="dossier__action" [disabled]="busy()">Save</button>
+        <button type="button" class="dossier__action" [disabled]="busy()" (click)="cancel()">Cancel</button>
+      </form>
+    } @else if (editor() === 'no-dossier') {
+      <form class="dossier__form" data-testid="concept-dossier-no-need-form" (submit)="$event.preventDefault(); saveNoDossier()">
+        <input class="dossier__input"
+               aria-label="Why no dossier is needed"
+               placeholder="Reason required"
+               data-testid="concept-dossier-no-need-input"
+               [ngModel]="reasonDraft()"
+               (ngModelChange)="reasonDraft.set($event)"
+               name="noDossierReason"
+               [disabled]="busy()" />
+        <button type="submit" class="dossier__action" [disabled]="busy() || !reasonDraft().trim()">Record</button>
+        <button type="button" class="dossier__action" [disabled]="busy()" (click)="cancel()">Cancel</button>
+      </form>
+    }
+  </section>
+}

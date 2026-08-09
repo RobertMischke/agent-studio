@@ -1336,7 +1336,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             review = ConceptWorkbenchContract.ReviewDirectory(
                 repositoryRoot,
-                stored.RepoRelativeDirectory);
+                stored.RepoRelativeDirectory,
+                current.Key ?? current.Id);
         }
 
         var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);

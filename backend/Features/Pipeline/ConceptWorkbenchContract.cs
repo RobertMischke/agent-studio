@@ -24,7 +24,7 @@ public sealed record ConceptWorkbenchReview(
 /// </summary>
 public static class ConceptWorkbenchContract
 {
-    public const string OperationsPrefix = "docs/operations/";
+    public const string DossierPrefix = "docs/";
     public const string DescriptorFileName = "workbench.json";
     public const string EntryFileName = "index.html";
 
@@ -52,7 +52,7 @@ public static class ConceptWorkbenchContract
         string sourceTaskKey)
     {
         var safeTopic = NormalizeTopic(topic);
-        var target = Path.Combine(repositoryRoot, "docs", "operations", safeTopic);
+        var target = Path.Combine(repositoryRoot, "docs", safeTopic);
         Directory.CreateDirectory(target);
 
         var descriptor = new ConceptWorkbenchDescriptor
@@ -73,7 +73,8 @@ public static class ConceptWorkbenchContract
 
     public static ConceptWorkbenchReview ReviewChangedFiles(
         string checkoutRoot,
-        IReadOnlyList<string> changedFiles)
+        IReadOnlyList<string> changedFiles,
+        string? expectedSourceTaskKey = null)
     {
         var normalized = changedFiles
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -85,17 +86,17 @@ public static class ConceptWorkbenchContract
             findings.Add("The concept run produced no Workbench files.");
 
         var outside = normalized.Where(path =>
-            !path.StartsWith(OperationsPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
+            !path.StartsWith(DossierPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
         if (outside.Count > 0)
-            findings.Add("Concept runs may change only docs/operations/<topic>/: " + string.Join(", ", outside));
+            findings.Add("Concept runs may change only docs/<topic>/: " + string.Join(", ", outside));
 
         var topicRoots = normalized
-            .Where(path => path.StartsWith(OperationsPrefix, StringComparison.OrdinalIgnoreCase))
+            .Where(path => path.StartsWith(DossierPrefix, StringComparison.OrdinalIgnoreCase))
             .Select(path =>
             {
-                var remainder = path[OperationsPrefix.Length..];
+                var remainder = path[DossierPrefix.Length..];
                 var slash = remainder.IndexOf('/');
-                return slash <= 0 ? null : OperationsPrefix + remainder[..slash];
+                return slash <= 0 ? null : DossierPrefix + remainder[..slash];
             })
             .Where(root => root is not null)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -108,21 +109,29 @@ public static class ConceptWorkbenchContract
             return new ConceptWorkbenchReview(false, null, null, null, findings);
 
         var rel = topicRoots[0];
-        return ReviewDirectory(checkoutRoot, rel);
+        return ReviewDirectory(checkoutRoot, rel, expectedSourceTaskKey);
     }
 
-    public static ConceptWorkbenchReview ReviewDirectory(string checkoutRoot, string repoRelativeDirectory)
+    public static ConceptWorkbenchReview ReviewDirectory(
+        string checkoutRoot,
+        string repoRelativeDirectory,
+        string? expectedSourceTaskKey = null)
     {
         var rel = NormalizeRepoPath(repoRelativeDirectory).TrimEnd('/');
         var findings = new List<string>();
-        if (!rel.StartsWith(OperationsPrefix, StringComparison.OrdinalIgnoreCase)
-            || rel.Split('/').Length != 3)
+        var segments = rel.Split('/');
+        var isNewDossier = segments.Length == 2
+            && string.Equals(segments[0], "docs", StringComparison.OrdinalIgnoreCase);
+        var isLegacyWorkbench = segments.Length == 3
+            && string.Equals(segments[0], "docs", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(segments[1], "operations", StringComparison.OrdinalIgnoreCase);
+        if (!isNewDossier && !isLegacyWorkbench)
         {
-            findings.Add("Workbench directory must be docs/operations/<topic>/.");
+            findings.Add("Dossier directory must be docs/<slug>/.");
             return new ConceptWorkbenchReview(false, null, rel, null, findings);
         }
 
-        var topic = rel[(OperationsPrefix.Length)..];
+        var topic = segments[^1];
         var directory = Path.GetFullPath(Path.Combine(checkoutRoot, rel.Replace('/', Path.DirectorySeparatorChar)));
         var root = Path.GetFullPath(checkoutRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!directory.StartsWith(root, PathComparison()))
@@ -162,10 +171,20 @@ public static class ConceptWorkbenchContract
             if (string.IsNullOrWhiteSpace(descriptor.Summary)) findings.Add("workbench.json summary is required.");
             if (!string.Equals(descriptor.Entrypoint, EntryFileName, StringComparison.OrdinalIgnoreCase))
                 findings.Add("workbench.json entrypoint must be index.html.");
-            if (string.IsNullOrWhiteSpace(descriptor.Status)) findings.Add("workbench.json status is required.");
+            if (isNewDossier
+                && !string.Equals(descriptor.Status, "decision-pending", StringComparison.OrdinalIgnoreCase))
+                findings.Add("workbench.json status must be decision-pending.");
+            else if (isLegacyWorkbench && string.IsNullOrWhiteSpace(descriptor.Status))
+                findings.Add("workbench.json status is required.");
             if (string.IsNullOrWhiteSpace(descriptor.Phase)) findings.Add("workbench.json phase is required.");
             if (descriptor.SourceTaskKeys.Count == 0)
                 findings.Add("workbench.json sourceTaskKeys must identify the source concept card.");
+            else if (isNewDossier
+                && !string.IsNullOrWhiteSpace(expectedSourceTaskKey)
+                && !descriptor.SourceTaskKeys.Contains(expectedSourceTaskKey.Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                findings.Add($"workbench.json sourceTaskKeys must include the source concept card {expectedSourceTaskKey.Trim()}.");
+            }
             for (var i = 0; i < descriptor.ImplementationTasks.Count; i++)
             {
                 var item = descriptor.ImplementationTasks[i];
@@ -245,13 +264,17 @@ public static class ConceptWorkbenchContract
               <meta name="viewport" content="width=device-width, initial-scale=1">
               <title>{{title}} | Concept Workbench</title>
               <style>
-                :root { color-scheme: light dark; --bg: #fcfcfb; --surface: #f2f1ee; --ink: #151515; --muted: #62615d; --line: #d8d6cf; }
-                @media (prefers-color-scheme: dark) { :root { --bg: #191918; --surface: #242423; --ink: #f5f5f2; --muted: #b8b7af; --line: #3d3d39; } }
-                * { box-sizing: border-box; } body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; }
-                main { max-width: 72rem; margin: auto; padding: 3rem 2rem 6rem; } header { border-bottom: 1px solid var(--line); padding-bottom: 1.5rem; }
-                h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.05; } h2 { margin-top: 3rem; } p { max-width: 72ch; }
-                section { background: var(--surface); border: 1px solid var(--line); border-radius: .75rem; padding: 1.25rem; margin-top: 1rem; }
-                .lede { color: var(--muted); font-size: 1.125rem; }
+                :root { color-scheme: light; --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3; --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf; }
+                @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a; --ink-1: #fff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a; } }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 0 0 5rem; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+                main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+                header { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+                h1 { margin: 0 0 12px; font-size: 34px; line-height: 1.2; }
+                h2 { margin: 0 0 6px; font-size: 24px; }
+                p { max-width: 76ch; }
+                section { margin-top: 2rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; }
+                .lede { max-width: 62ch; margin: 0; color: var(--ink-2); font-size: 18px; }
               </style>
             </head>
             <body><main>

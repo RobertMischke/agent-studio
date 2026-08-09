@@ -4,7 +4,7 @@ namespace AgentStudio.Runner;
 /// <summary>
 /// The outcome of the read-only containment check. <see cref="IsViolation"/> is
 /// true when a planning / research run left any working-tree diff, or when a
-/// concept run changed anything outside one <c>docs/operations/&lt;topic&gt;/</c>
+/// concept run changed anything outside one <c>docs/&lt;topic&gt;/</c>
 /// directory. <see cref="FileList"/> is the
 /// display-capped, comma-joined path list (with a "+N more" suffix when the diff
 /// exceeds <see cref="ReadOnlyContainmentPolicy.MaxInlinedFiles"/>);
@@ -21,7 +21,7 @@ public sealed record ReadOnlyContainment(
 /// <summary>
 /// Pure decision for ADR-0052's "containment over trust" rule: a read-only task
 /// mode runs without product-code git steps. Planning/research must be clean;
-/// concept may carry one bounded docs-only Workbench diff. Any other dirty tree
+/// concept may carry one bounded repository-dossier diff. Any other dirty tree
 /// is a hard containment violation - reported, never auto-reverted. This
 /// helper isolates the decision (mode + git status -> violation?) from the
 /// runner's side effects (timeline event, chat note, warning log) so the rule is
@@ -52,16 +52,16 @@ public static class ReadOnlyContainmentPolicy
                 .ToList();
             var outside = normalized
                 .Where(path => !path.StartsWith(
-                    AgentStudio.Pipeline.ConceptWorkbenchContract.OperationsPrefix,
+                    AgentStudio.Pipeline.ConceptWorkbenchContract.DossierPrefix,
                     StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var topicRoots = normalized
                 .Where(path => path.StartsWith(
-                    AgentStudio.Pipeline.ConceptWorkbenchContract.OperationsPrefix,
+                    AgentStudio.Pipeline.ConceptWorkbenchContract.DossierPrefix,
                     StringComparison.OrdinalIgnoreCase))
                 .Select(path =>
                 {
-                    var remainder = path[AgentStudio.Pipeline.ConceptWorkbenchContract.OperationsPrefix.Length..];
+                    var remainder = path[AgentStudio.Pipeline.ConceptWorkbenchContract.DossierPrefix.Length..];
                     var slash = remainder.IndexOf('/');
                     return slash <= 0 ? path : remainder[..slash];
                 })

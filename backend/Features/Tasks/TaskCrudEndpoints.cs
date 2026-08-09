@@ -492,6 +492,87 @@ public static class TaskCrudEndpoints
             return Results.Ok(BuildPlanningSpawnSummary(info) ?? new PlanningSpawnSummary());
         });
 
+        // Interim dossier correction surface for concept cards. The path is
+        // written into both task result documents because those files are the
+        // only reference carrier until references.workbenches lands. A
+        // deliberate no-dossier outcome is kept in a small app-owned sidecar.
+        group.MapPost("/{jobId}/concept-dossier", (string jobId, string? project, string? watchPath,
+            SetConceptDossierRequest req,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            ILoggerFactory loggerFactory) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (!TaskModes.IsConcept(info.Mode))
+                return Results.BadRequest(new { error = "Only concept tasks carry a dossier decision." });
+
+            var logger = loggerFactory.CreateLogger("ConceptDossier");
+            if (req.NoDossierNeeded)
+            {
+                if (!string.IsNullOrWhiteSpace(req.Path))
+                    return Results.BadRequest(new { error = "Choose either a dossier path or no dossier needed." });
+                if (string.IsNullOrWhiteSpace(req.Reason))
+                    return Results.BadRequest(new { error = "Explain why no dossier is needed." });
+                if (!ConceptDossierClosureStore.Write(info.FolderPath, req.Reason, logger))
+                {
+                    return Results.Json(
+                        new { error = "Failed to persist the no-dossier explanation." },
+                        statusCode: StatusCodes.Status500InternalServerError);
+                }
+            }
+            else
+            {
+                var path = ConceptDossierContract.NormalizePath(req.Path);
+                if (!ConceptDossierContract.IsDossierPath(path))
+                    return Results.BadRequest(new { error = "Use a repository-relative docs/.../index.html dossier path." });
+
+                var context = ResolveProjectContext(projects, scanner, info);
+                var repositoryRoot = context?.Entry.RepositoryPath;
+                if (string.IsNullOrWhiteSpace(repositoryRoot)) repositoryRoot = context?.Entry.RootPath;
+                if (string.IsNullOrWhiteSpace(repositoryRoot))
+                    return Results.BadRequest(new { error = "The project repository is unavailable." });
+
+                var root = Path.GetFullPath(repositoryRoot).TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar);
+                var dossierFile = Path.GetFullPath(Path.Combine(
+                    root,
+                    path!.Replace('/', Path.DirectorySeparatorChar)));
+                var pathComparison = OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+                if (!dossierFile.StartsWith(root + Path.DirectorySeparatorChar, pathComparison)
+                    || !File.Exists(dossierFile))
+                {
+                    return Results.BadRequest(new { error = $"Dossier file does not exist in the project repository: {path}" });
+                }
+
+                try
+                {
+                    ConceptDossierContract.WriteReference(info.FolderPath, path);
+                    ConceptDossierClosureStore.Clear(info.FolderPath, logger);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not write dossier references for {Project}/{Task}", info.ProjectName, info.Key ?? info.Id);
+                    return Results.Json(
+                        new { error = "Failed to write the dossier path into the task result documents." },
+                        statusCode: StatusCodes.Status500InternalServerError);
+                }
+            }
+
+            var summary = ConceptDossierContract.Read(info.FolderPath);
+            logger.LogInformation(
+                "concept-dossier updated for {Project}/{Task}: path={Path} noDossierNeeded={NoDossierNeeded}",
+                info.ProjectName,
+                info.Key ?? info.Id,
+                summary.RepoRelativePath ?? string.Empty,
+                summary.NoDossierNeeded);
+            return Results.Ok(summary);
+        });
+
         group.MapPut("/{jobId}/state", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
             HttpContext ctx,
             TaskTransitionService transitions,
