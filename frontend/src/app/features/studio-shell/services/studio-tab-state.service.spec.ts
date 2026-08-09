@@ -128,6 +128,44 @@ describe('StudioTabStateService', () => {
       expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
     });
 
+    it('keys Wiki pages by project and normalized repository path', () => {
+      svc.open({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'wiki',
+        wikiTarget: { kind: 'page', relPath: 'docs/concepts/routing.md' },
+      });
+      svc.open({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'wiki',
+        wikiTarget: { kind: 'page', relPath: 'concepts/routing.md' },
+      });
+
+      expect(svc.tabs().filter(t => studioTabKey(t)
+        === 'hub:Project A:wiki:page:concepts%2Frouting.md')).toHaveLength(1);
+      expect(svc.activeTab()).toEqual({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'wiki',
+        wikiTarget: { kind: 'page', relPath: 'concepts/routing.md' },
+      });
+    });
+
+    it('keeps different Wiki paths as distinct internal destinations', () => {
+      svc.open({
+        kind: 'hub', projectName: 'Project A', section: 'wiki',
+        wikiTarget: { kind: 'page', relPath: 'concepts/a.md' },
+      });
+      svc.open({
+        kind: 'hub', projectName: 'Project A', section: 'wiki',
+        wikiTarget: { kind: 'page', relPath: 'concepts/b.md' },
+      });
+
+      expect(svc.tabs().filter(tab => tab.kind === 'hub' && tab.section === 'wiki')).toHaveLength(2);
+      expect(svc.activeKey()).toBe('hub:Project A:wiki:page:concepts%2Fb.md');
+    });
+
     it('still adopts fresh sections that belong to the base Hub identity', () => {
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'drift' });
@@ -163,13 +201,37 @@ describe('StudioTabStateService', () => {
     });
   });
 
-  it('closing the active tab falls back to the previous one', () => {
+  it('closing the active tab returns to the most recently active open tab', () => {
     svc.open({ kind: 'task', taskKey: 'a' });
     svc.open({ kind: 'task', taskKey: 'b' });
-    expect(svc.activeKey()).toBe('task:b');
-    svc.close('task:b');
-    expect(svc.tabs()).toHaveLength(2); // board + task:a
+    svc.open({ kind: 'task', taskKey: 'c' });
+    svc.select('task:a');
+    svc.select('task:c');
+
+    svc.close('task:c');
+
+    expect(svc.tabs()).toHaveLength(3); // board + task:a + task:b
     expect(svc.activeKey()).toBe('task:a');
+  });
+
+  it('falls back to the former last-tab behavior when no MRU survivor exists', () => {
+    TestBed.resetTestingModule();
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        v: 1,
+        tabs: [
+          { kind: 'task', taskKey: 'a' },
+          { kind: 'task', taskKey: 'b' },
+        ],
+        activeKey: 'task:a',
+      }),
+    );
+    TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+    const restored = TestBed.inject(StudioTabStateService);
+    restored.close('task:a');
+
+    expect(restored.activeKey()).toBe('task:b');
   });
 
   it('closing every tab leaves the empty-state (no active tab)', () => {

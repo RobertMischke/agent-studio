@@ -277,6 +277,50 @@ const wikiRow = (page: Page) => page.getByTestId(`studio-explorer-project-wiki-$
 const rail = (page: Page, key: string) => page.getByTestId(`project-shell-rail-${key}`);
 
 test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)', () => {
+  test('internal destination opens once and active close returns to MRU tab', async ({ page }) => {
+    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+    await gotoStudio(page);
+    await page.evaluate(projectName => {
+      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+        v: 1,
+        tabs: [
+          { kind: 'board', projectName: '__all__' },
+          { kind: 'hub', projectName, section: 'overview' },
+          { kind: 'workspace-settings' },
+        ],
+        activeKey: `hub:${projectName}`,
+      }));
+    }, PROJECT);
+    await page.reload();
+    await expect(page.getByTestId('studio-sidebar')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
+    await expect(rail(page, 'overview')).toHaveAttribute('aria-current', 'page');
+    await expandProject(page);
+
+    // (a) The Wiki rail is an internal destination, so it opens beside the
+    // current Deck tab instead of replacing it.
+    await rail(page, 'wiki').click();
+    const wikiTab = page.getByTestId(`studio-tab-hub:${PROJECT}:wiki`);
+    await expect(wikiTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId(`studio-tab-hub:${PROJECT}`)).toHaveCount(1);
+    await shot(page, 'acceptance-01-internal-link-opens-app-tab.png');
+
+    // (b) Focus Deck, then use the Explorer's Wiki entry. The already-open
+    // destination is activated and its count stays at one.
+    await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
+    await wikiRow(page).click();
+    await expect(wikiTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId(`studio-tab-hub:${PROJECT}:wiki`)).toHaveCount(1);
+    await shot(page, 'acceptance-02-repeat-click-focuses-existing-tab.png');
+
+    // (c) Workspace Settings is immediately left of Wiki, but Deck was the
+    // previously active tab. Closing Wiki must therefore activate Deck.
+    await wikiTab.getByRole('button', { name: 'Close tab' }).click();
+    await expect(page.getByTestId(`studio-tab-hub:${PROJECT}`)).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('studio-tab-workspace-settings')).toHaveAttribute('aria-selected', 'false');
+    await shot(page, 'acceptance-03-active-close-returns-to-mru.png');
+  });
+
   test('Wiki open → click Project → lands on Overview; then → Wiki again', async ({ page }) => {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await gotoStudio(page);
@@ -324,7 +368,7 @@ test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)'
     await shot(page, '04-hub-and-wiki-separate-tabs--mocked.png');
   });
 
-  test('Hub rail Wiki click retargets the current editor tab in place', async ({ page }) => {
+  test('Hub rail Wiki click opens a distinct editor tab', async ({ page }) => {
     await gotoStudio(page);
     await expandProject(page);
     await hubRow(page).click();
@@ -332,7 +376,7 @@ test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)'
     await rail(page, 'wiki').click();
 
     await expect(rail(page, 'wiki')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(0);
+    await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(1);
     await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}:wiki`)).toHaveCount(1);
   });
 });

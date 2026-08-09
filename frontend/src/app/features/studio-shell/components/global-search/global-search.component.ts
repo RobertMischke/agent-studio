@@ -97,7 +97,13 @@ export class GlobalSearchComponent {
       this.boardFilters.setSoleProject(item.projectName);
       this.tabs.open({ kind: 'diff', commitSha: item.sha });
     } else if (item.domain === 'files') {
-      this.tabs.open({ kind: 'hub', projectName: item.projectName, section: item.isWiki ? 'wiki' : 'git' });
+      const wikiPath = item.isWiki ? item.path?.replace(/^docs\//i, '') : null;
+      this.tabs.open({
+        kind: 'hub',
+        projectName: item.projectName,
+        section: item.isWiki ? 'wiki' : 'git',
+        ...(wikiPath ? { wikiTarget: { kind: 'page' as const, relPath: wikiPath } } : {}),
+      });
     }
     this.close();
   }

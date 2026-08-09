@@ -19,9 +19,11 @@ interface PersistedState {
  *
  * Behaviour mirrors the VS-Code editor surface: opening a tab that is
  * already present focuses it instead of duplicating; closing the active
- * tab falls back to the last remaining tab. When the list goes empty the
- * editor surface shows the creative idle empty-state (no tab is active).
- * Drag-reorder is supported through {@link move}.
+ * tab returns to the most recently active tab that is still open. When that
+ * in-memory history has no survivor, the last remaining tab is the fallback.
+ * When the list goes empty the editor surface shows the creative idle
+ * empty-state (no tab is active). Drag-reorder is supported through
+ * {@link move}.
  *
  * Every tab is a first-class, closable tab - including the cross-project
  * "All projects" board (`board:__all__`). On a fresh boot (no persisted
@@ -38,6 +40,8 @@ interface PersistedState {
 export class StudioTabStateService {
   private readonly _tabs = signal<StudioTab[]>([]);
   private readonly _activeKey = signal<string | null>(null);
+  /** Session-only least-recent to most-recent activation order. */
+  private activationHistory: string[] = [];
 
   readonly tabs = this._tabs.asReadonly();
   readonly activeKey = this._activeKey.asReadonly();
@@ -56,6 +60,7 @@ export class StudioTabStateService {
       this._tabs.set([ALL_BOARD_TAB]);
       this._activeKey.set(ALL_BOARD_KEY);
     }
+    this.recordActivation(this._activeKey());
     this.persist();
   }
 
@@ -84,14 +89,14 @@ export class StudioTabStateService {
       next[idx] = normalized;
       return next;
     });
-    this._activeKey.set(key);
+    this.activate(key);
     this.persist();
   }
 
   /** Focus an existing tab by key. No-op when the key is unknown. */
   select(key: string): void {
     if (this._tabs().some(t => studioTabKey(t) === key)) {
-      this._activeKey.set(key);
+      this.activate(key);
       this.persist();
     }
   }
@@ -117,24 +122,27 @@ export class StudioTabStateService {
           .map((t, i) => i === existingIdx ? normalized : t)
           .filter((_, i) => i !== sourceIdx),
       );
-      this._activeKey.set(targetKey);
+      this.activationHistory = this.activationHistory.filter(key => key !== sourceKey);
+      this.activate(targetKey);
       this.persist();
       return;
     }
     const next = list.slice();
     next[sourceIdx] = normalized;
     this._tabs.set(next);
-    this._activeKey.set(targetKey);
+    this.activationHistory = this.activationHistory.map(key => key === sourceKey ? targetKey : key);
+    this.activate(targetKey);
     this.persist();
   }
 
-  /** Close the tab; if it was active, fall back to the last remaining tab. */
+  /** Close the tab; an active close returns to the MRU open tab. */
   close(key: string): void {
     const next = this._tabs().filter(t => studioTabKey(t) !== key);
+    const wasActive = this._activeKey() === key;
     this._tabs.set(next);
-    if (this._activeKey() === key) {
-      this._activeKey.set(next.length ? studioTabKey(next[next.length - 1]) : null);
-    }
+    this.activationHistory = this.activationHistory.filter(item => item !== key);
+    if (wasActive) this.activateMostRecent(next, this.lastKey(next));
+    else this.reconcileActivationHistory(next);
     this.persist();
   }
 
@@ -142,7 +150,9 @@ export class StudioTabStateService {
   closeOthers(keepKey: string): void {
     const next = this._tabs().filter(t => studioTabKey(t) === keepKey);
     this._tabs.set(next);
-    this._activeKey.set(next.length ? keepKey : null);
+    this.reconcileActivationHistory(next);
+    if (next.length) this.activate(keepKey);
+    else this._activeKey.set(null);
     this.persist();
   }
 
@@ -152,10 +162,10 @@ export class StudioTabStateService {
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
     const next = list.filter((_, i) => i <= idx);
+    const activeSurvives = next.some(t => studioTabKey(t) === this._activeKey());
     this._tabs.set(next);
-    if (!next.some(t => studioTabKey(t) === this._activeKey())) {
-      this._activeKey.set(anchorKey);
-    }
+    this.reconcileActivationHistory(next);
+    if (!activeSurvives) this.activateMostRecent(next, anchorKey);
     this.persist();
   }
 
@@ -165,10 +175,10 @@ export class StudioTabStateService {
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
     const next = list.filter((_, i) => i >= idx);
+    const activeSurvives = next.some(t => studioTabKey(t) === this._activeKey());
     this._tabs.set(next);
-    if (!next.some(t => studioTabKey(t) === this._activeKey())) {
-      this._activeKey.set(anchorKey);
-    }
+    this.reconcileActivationHistory(next);
+    if (!activeSurvives) this.activateMostRecent(next, anchorKey);
     this.persist();
   }
 
@@ -176,6 +186,7 @@ export class StudioTabStateService {
   closeAll(): void {
     this._tabs.set([]);
     this._activeKey.set(null);
+    this.activationHistory = [];
     this.persist();
   }
 
@@ -229,10 +240,10 @@ export class StudioTabStateService {
       return true;
     });
     if (after.length === before.length) return;
+    const activeSurvives = after.some(t => studioTabKey(t) === this._activeKey());
     this._tabs.set(after);
-    if (!after.some(t => studioTabKey(t) === this._activeKey())) {
-      this._activeKey.set(after.length ? studioTabKey(after[after.length - 1]) : null);
-    }
+    this.reconcileActivationHistory(after);
+    if (!activeSurvives) this.activateMostRecent(after, this.lastKey(after));
     this.persist();
   }
 
@@ -256,13 +267,20 @@ export class StudioTabStateService {
           return tab;
       }
     };
-    const next = this.dedupe(this._tabs().map(rename));
+    const before = this._tabs();
+    const renamed = before.map(rename);
+    const keyMap = new Map(before.map((tab, index) => [studioTabKey(tab), studioTabKey(renamed[index])]));
+    const next = this.dedupe(renamed);
     this._tabs.set(next);
+    this.activationHistory = this.activationHistory.map(key => keyMap.get(key) ?? key);
+    this.reconcileActivationHistory(next);
     if (active) {
       const renamedActiveKey = studioTabKey(rename(active));
-      this._activeKey.set(next.some((tab) => studioTabKey(tab) === renamedActiveKey)
-        ? renamedActiveKey
-        : (next.length ? studioTabKey(next[next.length - 1]) : null));
+      if (next.some((tab) => studioTabKey(tab) === renamedActiveKey)) {
+        this.activate(renamedActiveKey);
+      } else {
+        this.activateMostRecent(next, this.lastKey(next));
+      }
     }
     this.persist();
   }
@@ -341,6 +359,9 @@ export class StudioTabStateService {
           kind: 'hub',
           projectName: tab.projectName,
           section: tab.section,
+          ...(tab.section === 'wiki' && tab.wikiTarget
+            ? { wikiTarget: this.normalizeWikiTarget(tab.wikiTarget) }
+            : {}),
           ...(tab.pipelineStepId ? { pipelineStepId: tab.pipelineStepId } : {}),
         };
       case 'workbench':
@@ -370,5 +391,45 @@ export class StudioTabStateService {
       next.push(normalized);
     }
     return next;
+  }
+
+  private normalizeWikiTarget(target: NonNullable<Extract<StudioTab, { kind: 'hub' }>['wikiTarget']>) {
+    if (target.kind === 'overview') return { kind: 'overview' as const };
+    return { kind: target.kind, relPath: target.relPath.trim().replace(/^docs\//i, '') };
+  }
+
+  private activate(key: string): void {
+    this._activeKey.set(key);
+    this.recordActivation(key);
+  }
+
+  private recordActivation(key: string | null): void {
+    if (!key) return;
+    this.activationHistory = [...this.activationHistory.filter(item => item !== key), key];
+  }
+
+  private reconcileActivationHistory(tabs: readonly StudioTab[]): void {
+    const openKeys = new Set(tabs.map(studioTabKey));
+    const seen = new Set<string>();
+    this.activationHistory = this.activationHistory
+      .filter(key => openKeys.has(key))
+      .reverse()
+      .filter(key => {
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .reverse();
+  }
+
+  private activateMostRecent(tabs: readonly StudioTab[], fallbackKey: string | null): void {
+    this.reconcileActivationHistory(tabs);
+    const key = this.activationHistory[this.activationHistory.length - 1] ?? fallbackKey;
+    if (key && tabs.some(tab => studioTabKey(tab) === key)) this.activate(key);
+    else this._activeKey.set(null);
+  }
+
+  private lastKey(tabs: readonly StudioTab[]): string | null {
+    return tabs.length ? studioTabKey(tabs[tabs.length - 1]) : null;
   }
 }

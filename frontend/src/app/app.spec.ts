@@ -201,6 +201,7 @@ describe('App epic tab navigation', () => {
 
     expect(app.studioTabState.tabs().map(t => studioTabKey(t))).toEqual([
       'board:__all__',
+      'task:C:/watch::task-a',
       'epic:C:/watch::epic-a',
     ]);
     expect(app.studioTabState.activeTab()).toEqual({

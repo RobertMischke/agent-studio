@@ -340,7 +340,12 @@ export class ProtocolPaneComponent implements OnDestroy {
     } catch {
       // The Wiki itself remains navigable when browser storage is unavailable.
     }
-    this.tabs.open({ kind: 'hub', projectName, section: 'wiki' });
+    this.tabs.open({
+      kind: 'hub',
+      projectName,
+      section: 'wiki',
+      wikiTarget: { kind: 'page', relPath: path },
+    });
   }
 
   openTask(taskKey: string): void {

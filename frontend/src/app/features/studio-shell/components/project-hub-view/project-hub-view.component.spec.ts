@@ -77,7 +77,7 @@ describe('ProjectHubViewComponent (smoke)', () => {
     expect(tabState.activeTab()).toEqual({ kind: 'hub', projectName: 'Alpha', section: 'security' });
   });
 
-  it('retargets the current Hub tab to the distinct Wiki identity from the rail', async () => {
+  it('opens the Wiki rail as a distinct internal destination', async () => {
     window.localStorage?.removeItem('atp.studio.tabs.v1');
     await TestBed.configureTestingModule({
       imports: [ProjectHubViewComponent],
@@ -96,7 +96,29 @@ describe('ProjectHubViewComponent (smoke)', () => {
     fixture.componentInstance.setRail('wiki');
 
     expect(tabState.activeKey()).toBe('hub:Alpha:wiki');
-    expect(tabState.tabs().some(tab => studioTabKey(tab) === 'hub:Alpha')).toBe(false);
+    expect(tabState.tabs().some(tab => studioTabKey(tab) === 'hub:Alpha')).toBe(true);
+  });
+
+  it('opens or focuses an exact Wiki path without duplicating it', async () => {
+    window.localStorage?.removeItem('atp.studio.tabs.v1');
+    await TestBed.configureTestingModule({
+      imports: [ProjectHubViewComponent],
+      providers: [
+        provideZonelessChangeDetection(), provideHttpClient(),
+        provideHttpClientTesting(), provideRouter([]),
+      ],
+    }).compileComponents();
+    const tabState = TestBed.inject(StudioTabStateService);
+    const fixture = TestBed.createComponent(ProjectHubViewComponent);
+    fixture.componentRef.setInput('projectName', 'Alpha');
+    fixture.detectChanges();
+
+    fixture.componentInstance.openWikiTarget({ kind: 'page', relPath: 'concepts/routing.md' });
+    fixture.componentInstance.openWikiTarget({ kind: 'page', relPath: 'concepts/routing.md' });
+
+    expect(tabState.tabs().filter(tab => studioTabKey(tab)
+      === 'hub:Alpha:wiki:page:concepts%2Frouting.md')).toHaveLength(1);
+    expect(tabState.activeKey()).toBe('hub:Alpha:wiki:page:concepts%2Frouting.md');
   });
 
   it('follows a section change on the tab payload (Wiki -> Overview)', async () => {

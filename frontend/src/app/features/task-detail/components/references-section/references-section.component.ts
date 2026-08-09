@@ -311,7 +311,12 @@ export class ReferencesSectionComponent {
       const current = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
       localStorage.setItem(key, JSON.stringify({ ...current, openedRel: relPath, viewerTab: 'doc' }));
     } catch { /* Navigation still opens the wiki when browser storage is unavailable. */ }
-    this.tabs.open({ kind: 'hub', projectName, section: 'wiki' });
+    this.tabs.open({
+      kind: 'hub',
+      projectName,
+      section: 'wiki',
+      wikiTarget: { kind: 'page', relPath },
+    });
   }
 }
 

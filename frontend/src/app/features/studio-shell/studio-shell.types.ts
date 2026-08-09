@@ -29,11 +29,26 @@ export interface EpicTab { kind: 'epic'; epicKey: string; viewTaskKey?: string; 
 /** Task-detail tab — one per opened job; key `task:<taskKey>`. */
 export interface TaskTab { kind: 'task'; taskKey: string; }
 
-/** Deck tab. Per project; key `hub:<projectName>`. Section is the initial Deck side-nav anchor. */
+/**
+ * Stable target inside a project's Wiki. The document or folder path belongs
+ * to the shell-tab identity. Viewer modes such as Doc, Report, Source, and Edit
+ * remain local substate of that tab.
+ */
+export type WikiTabTarget =
+  | { kind: 'overview' }
+  | { kind: 'page'; relPath: string }
+  | { kind: 'folder'; relPath: string };
+
+/**
+ * Deck tab. Project rails share `hub:<projectName>` and adopt a newly requested
+ * section in place. Wiki targets are first-class internal destinations, keyed
+ * by project plus exact page or folder path.
+ */
 export interface HubTab {
   kind: 'hub';
   projectName: string;
   section?: string;
+  wikiTarget?: WikiTabTarget;
   /** Optional exact row target when a task post-step links into Project Pipeline. */
   pipelineStepId?: string;
 }
@@ -63,7 +78,11 @@ export interface WelcomeTab { kind: 'welcome'; }
 
 export type StudioTab = BoardTab | FeedTab | EpicsTab | EpicTab | TaskTab | HubTab | WorkbenchTab | DiffTab | ActivityTab | UrlPreviewTab | WorkspaceSettingsTab | WelcomeTab;
 
-/** Build the stable string key for a tab; used for selection + persistence. */
+/**
+ * Build the stable target identity for a tab. Replaceable substate is omitted:
+ * task pane tabs, Deck rails, pipeline-row focus, and Epic child focus all
+ * update the existing destination instead of creating duplicate shell tabs.
+ */
 export function studioTabKey(tab: StudioTab): string {
   switch (tab.kind) {
     case 'board':    return `board:${tab.projectName}`;
@@ -71,9 +90,13 @@ export function studioTabKey(tab: StudioTab): string {
     case 'epics':    return `epics:${tab.projectName ?? '__all__'}`;
     case 'epic':     return `epic:${tab.epicKey}`;
     case 'task':     return `task:${tab.taskKey}`;
-    case 'hub':      return tab.section === 'wiki'
-      ? `hub:${tab.projectName}:wiki`
-      : `hub:${tab.projectName}`;
+    case 'hub': {
+      if (tab.section !== 'wiki') return `hub:${tab.projectName}`;
+      const target = tab.wikiTarget;
+      if (!target || target.kind === 'overview') return `hub:${tab.projectName}:wiki`;
+      const path = target.relPath.trim().replace(/^docs\//i, '');
+      return `hub:${tab.projectName}:wiki:${target.kind}:${encodeURIComponent(path)}`;
+    }
     case 'workbench': return `workbench:${tab.projectName}:${tab.workbenchId}`;
     case 'diff':     return `diff:${tab.commitSha}`;
     case 'activity': return `activity:${tab.taskKey}`;

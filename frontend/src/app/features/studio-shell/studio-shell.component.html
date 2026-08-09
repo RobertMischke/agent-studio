@@ -399,6 +399,7 @@
                  [attr.data-testid]="'studio-tab-' + tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  (click)="selectTab(tabKey(t))"
+                 (auxclick)="onTabAuxClick($event, tabKey(t))"
                  (keydown.enter)="selectTab(tabKey(t))"
                  (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()"
                  (contextmenu)="openTabContextMenu($event, tabKey(t))"

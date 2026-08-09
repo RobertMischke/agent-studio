@@ -429,7 +429,8 @@
                 @if (tab.kind === 'hub') {
                   <app-project-hub-view
                     [projectName]="tab.projectName" [projectId]="projectHubUrls.projectIdForName(tab.projectName)"
-                    [initialSection]="tab.section ?? 'overview'" [pipelineStepId]="tab.pipelineStepId"
+                    [initialSection]="tab.section ?? 'overview'" [wikiTarget]="tab.wikiTarget"
+                    [pipelineStepId]="tab.pipelineStepId"
                     (openTask)="onOpenTaskFromReel($event)" />
                 }
               }

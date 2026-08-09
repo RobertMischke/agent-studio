@@ -381,6 +381,25 @@ describe('ProjectWikiSectionComponent', () => {
     window.history.replaceState(null, '', '/');
   });
 
+  it('requests a distinct Studio tab for a user-opened Wiki page', async () => {
+    const { fixture, http } = await setup();
+    const targets: unknown[] = [];
+    fixture.componentRef.setInput('studioTabTarget', { kind: 'overview' });
+    fixture.componentRef.setInput('openInternalTargetsInTabs', true);
+    fixture.componentInstance.openWikiTarget.subscribe(target => targets.push(target));
+    fixture.detectChanges();
+    expandConcepts(fixture);
+
+    el(fixture).querySelector<HTMLElement>(
+      '[data-testid="project-wiki-file-concepts/overview.md"]',
+    )?.click();
+    fixture.detectChanges();
+
+    expect(targets).toEqual([{ kind: 'page', relPath: 'concepts/overview.md' }]);
+    expect(fixture.componentInstance.openedRel()).toBeNull();
+    http.verify();
+  });
+
   it('shows branch and commit and disables writes for a non-checkout source', async () => {
     const readonlyTree: WikiTree = {
       ...TREE,
