@@ -47,7 +47,10 @@ describe('WorkbenchViewerComponent', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+        {
+          provide: TaskService,
+          useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(WorkbenchViewerComponent);
@@ -58,11 +61,23 @@ describe('WorkbenchViewerComponent', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/projects/Demo/workbenches/boundary').flush(DOCUMENT);
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/workbenches/DEM-W4/references').flush({
+      projectName: 'Demo',
+      workbenchKey: 'DEM-W4',
+      workbenchId: 'boundary',
+      legacyTaskKeys: [],
+      items: [],
+    });
+    fixture.detectChanges();
 
     const srcdoc = fixture.componentInstance.srcdoc();
     const parsed = new DOMParser().parseFromString(srcdoc, 'text/html');
     expect(parsed.head.firstElementChild?.tagName).toBe('META');
-    expect(parsed.head.firstElementChild?.getAttribute('http-equiv')).toBe('Content-Security-Policy');
+    expect(parsed.head.firstElementChild?.getAttribute('http-equiv')).toBe(
+      'Content-Security-Policy',
+    );
     expect(parsed.head.children.item(1)?.tagName).toBe('BASE');
     expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('id="early"'));
     expect(parsed.querySelectorAll('meta[http-equiv="Content-Security-Policy"]')).toHaveLength(1);
@@ -70,39 +85,63 @@ describe('WorkbenchViewerComponent', () => {
     expect(parsed.querySelector('base')?.getAttribute('href')).toBe('about:blank');
     expect(parsed.body.classList.contains('artifact')).toBe(true);
 
-    const frame = fixture.nativeElement.querySelector('[data-testid="workbench-viewer-frame"]') as HTMLIFrameElement;
+    const frame = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-frame"]',
+    ) as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
     expect(srcdoc).toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);
     expect(fixture.componentInstance.decisionMarkup().points[0].id).toBe('route');
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)
-      .toContain('uncommitted');
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent,
+    ).toContain('uncommitted');
+    expect(document.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="workbench-viewer-open-decisions"]')
+        ?.textContent,
+    ).toContain('1 open');
     fixture.componentInstance.onFrameMessage({
       source: frame.contentWindow,
       data: {
         type: WORKBENCH_DECISION_CHANGE_MESSAGE,
-        responses: [{
-          decisionId: 'route', kind: 'single', selectedOptionIds: ['direct'], comment: 'Ship it.',
-        }],
+        responses: [
+          {
+            decisionId: 'route',
+            kind: 'single',
+            selectedOptionIds: ['direct'],
+            comment: 'Ship it.',
+          },
+        ],
       },
     } as MessageEvent);
-    expect(fixture.componentInstance.decisionResponses()).toEqual([{
-      decisionId: 'route', kind: 'single', selectedOptionIds: ['direct'], comment: 'Ship it.',
-    }]);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.decisionResponses()).toEqual([
+      {
+        decisionId: 'route',
+        kind: 'single',
+        selectedOptionIds: ['direct'],
+        comment: 'Ship it.',
+      },
+    ]);
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="workbench-viewer-open-decisions"]')
+        ?.textContent,
+    ).toContain('0 open');
 
     const referenceChip = fixture.nativeElement.querySelector(
-      '[data-testid="workbench-key-chip"]') as HTMLButtonElement;
+      '[data-testid="workbench-viewer-key"]',
+    ) as HTMLButtonElement;
     expect(referenceChip.textContent).toContain('DEM-W4');
-    expect(referenceChip.getAttribute('aria-label')).toBe('Copy reference key DEM-W4');
+    expect(referenceChip.getAttribute('aria-label')).toBe('Copy key DEM-W4');
     referenceChip.click();
     expect(writeText).toHaveBeenCalledWith('DEM-W4');
 
     const wikiTargets: string[] = [];
-    fixture.componentInstance.openWiki.subscribe(path => wikiTargets.push(path));
-    const wikiButton = fixture.nativeElement.querySelector(
-      '[data-testid="workbench-viewer-open-wiki"]') as HTMLButtonElement;
+    fixture.componentInstance.openWiki.subscribe((path) => wikiTargets.push(path));
+    const wikiButton = document.querySelector(
+      '[data-testid="workbench-viewer-open-wiki"]',
+    ) as HTMLButtonElement;
     wikiButton.click();
     expect(wikiTargets).toEqual(['workbenches/boundary/index.html']);
 
@@ -128,7 +167,8 @@ describe('WorkbenchViewerComponent', () => {
     openSpy.mockRestore();
 
     const maximize = fixture.nativeElement.querySelector(
-      '[data-testid="workbench-viewer-maximize"]') as HTMLButtonElement;
+      '[data-testid="workbench-viewer-maximize"]',
+    ) as HTMLButtonElement;
     maximize.click();
     fixture.detectChanges();
     expect(fixture.componentInstance.maximized()).toBe(true);
