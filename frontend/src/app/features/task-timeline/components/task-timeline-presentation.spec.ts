@@ -91,6 +91,21 @@ describe('task timeline presentation', () => {
     expect(timelineEventSummary(epic)).toBeNull();
   });
 
+  it.each([
+    ['NotApplicable', '', 'not applicable'],
+    ['Skipped', 'no verify commands derivable', 'not applicable'],
+    ['Skipped', 'pipeline interrupted before command execution', 'skipped'],
+  ])('keeps pipeline terminal status %s explicit', (status, reason, label) => {
+    const gate = event({
+      kind: TIMELINE_KIND.postStepFinished,
+      summary: `Build/test gate ${label}`,
+      details: { step: 'post-build-test-gate', status, reason },
+    });
+
+    expect(timelineEventTitle(gate)).toBe(`Post-step ${label} · Build/test gate`);
+    expect(timelineEventSummary(gate)).toBeNull();
+  });
+
   it('keeps a non-generated run-finish note that adds information', () => {
     const completed = event({
       kind: TIMELINE_KIND.agentRunFinished,

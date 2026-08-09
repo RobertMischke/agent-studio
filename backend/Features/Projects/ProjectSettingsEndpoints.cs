@@ -2,6 +2,7 @@
 
 namespace AgentStudio.Projects;
 
+using AgentStudio.Pipeline;
 using AgentStudio.Registry;
 using AgentStudio.Security;
 
@@ -743,16 +744,21 @@ public static class ProjectSettingsEndpoints
 
         // Slice P (ASS-1663): per-project build profile + onboarding.
         // GET returns the declared profile (or null), the resolved onboarding
-        // status, and whether the runner would auto-pick the project right now
-        // (mirrors BuildProfileGate). The UI uses this to render the onboarding
-        // wizard state without a second round-trip.
+        // status, whether the runner would auto-pick the project right now, and
+        // the same derived verify plan the build/test gate uses. The Settings UI
+        // can therefore disclose an empty gate without duplicating discovery.
         app.MapGet("/api/projects/{projectName}/build-profile", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
-            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
-            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            var project = scanner.GetWatchPaths().FirstOrDefault(e =>
+                string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (project is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             var profile = settings.Get(projectName).BuildProfile;
             var gate = BuildProfileGate.Evaluate(profile);
+            var repositoryPath = string.IsNullOrWhiteSpace(project.RepositoryPath)
+                ? project.RootPath
+                : project.RepositoryPath;
+            var verifyPlan = VerifyCommandPlanner.Plan(repositoryPath, profile);
             return Results.Ok(new
             {
                 profile,
@@ -760,6 +766,12 @@ public static class ProjectSettingsEndpoints
                 pickupAllowed = gate.AllowsPickup,
                 gateReason = gate.Reason,
                 plannedDryRun = BuildProfileDryRunPlanner.Plan(profile),
+                gateApplicable = !verifyPlan.IsEmpty,
+                verifyPlan = new
+                {
+                    source = verifyPlan.Source,
+                    commands = verifyPlan.Commands,
+                },
             });
         });
 

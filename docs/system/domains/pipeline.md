@@ -318,9 +318,10 @@ pipeline view.
   becomes the DECISION verdict, and recorded integration gates remain TOOL
   steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
   structurally omits are `Skipped` with an explicit remote/not-applicable
-  reason. `Not run` is reserved for a step the current attempt genuinely never
-  reached. Remote token totals, historical list-price estimates, and call
-  counts come from the same token ledger as the Task tab.
+  reason and are projected as `Not applicable` in the Overview. `Not run` is
+  reserved for a step the current attempt genuinely never reached. Remote token
+  totals, historical list-price estimates, and call counts come from the same
+  token ledger as the Task tab.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
@@ -336,6 +337,13 @@ pipeline view.
   rows, candidate inventory, chosen ids/commands, selector/model, and reasons.
   `FullSuiteRan` is execution evidence, not a planning claim: it becomes true
   only after every selected full-suite test command was attempted.
+- An empty verify plan is a separate terminal class: the runner records
+  `BuildTestGateVerdict.NotApplicable`, the pipeline stores
+  `PipelineStepStatus.NotApplicable`, and every operator surface renders the
+  neutral `No build/test defined` meaning. `Skipped` remains reserved for a
+  configured or interrupted gate that did not run and therefore stays an
+  attention state. The pre-develop BP-02 backstop accepts only `Ok` or
+  `NotApplicable`; it never treats `Skipped` as green.
 - A failing continuous-baseline command during a work-package run creates a
   separate `post-steps/test-findings-*.json` record and a `warn` gate verdict.
   It does not block the card. Selected work-package tests still block. No

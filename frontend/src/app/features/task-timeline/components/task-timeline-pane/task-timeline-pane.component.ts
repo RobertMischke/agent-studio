@@ -152,8 +152,21 @@ export class TaskTimelinePaneComponent {
     return verdictTone(v);
   }
 
-  /** Tone for an individual event row keyed off its kind. */
-  rowTone(kind: string): string {
+  /** Tone for an individual event row, including pipeline terminal semantics. */
+  rowTone(eventOrKind: TaskTimelineEvent | string): string {
+    const kind = typeof eventOrKind === 'string' ? eventOrKind : eventOrKind.kind;
+    const status = typeof eventOrKind === 'string'
+      ? null
+      : eventOrKind.details?.['status']?.trim().toLowerCase();
+    const reason = typeof eventOrKind === 'string'
+      ? null
+      : eventOrKind.details?.['reason']?.trim().toLowerCase();
+    if ((kind === TIMELINE_KIND.preStepFinished || kind === TIMELINE_KIND.postStepFinished)
+        && status === 'skipped' && reason === 'no verify commands derivable') return 'neutral';
+    if ((kind === TIMELINE_KIND.preStepFinished || kind === TIMELINE_KIND.postStepFinished)
+        && status === 'skipped') return 'danger';
+    if ((kind === TIMELINE_KIND.preStepFinished || kind === TIMELINE_KIND.postStepFinished)
+        && (status === 'notapplicable' || status === 'not-applicable')) return 'neutral';
     switch (kind) {
       case TIMELINE_KIND.orchestratorVerdictAccepted:    return 'ok';
       case TIMELINE_KIND.externalCompletion:             return 'ok';

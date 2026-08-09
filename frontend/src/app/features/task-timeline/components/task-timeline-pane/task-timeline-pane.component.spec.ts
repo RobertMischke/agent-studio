@@ -113,6 +113,27 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.rowTone(TIMELINE_KIND.externalCompletion)).toBe('ok');
     expect(c.kindLabel(TIMELINE_KIND.steerTimeoutResolved)).toBe('Steer timeout resolved');
     expect(c.rowTone(TIMELINE_KIND.steerTimeoutResolved)).toBe('neutral');
+    expect(c.rowTone({
+      ts: '2026-08-08T10:00:00Z',
+      kind: TIMELINE_KIND.postStepFinished,
+      actor: 'system',
+      summary: 'Build/test gate skipped',
+      details: { status: 'Skipped' },
+    })).toBe('danger');
+    expect(c.rowTone({
+      ts: '2026-08-08T10:00:00Z',
+      kind: TIMELINE_KIND.postStepFinished,
+      actor: 'system',
+      summary: 'Build/test gate skipped',
+      details: { status: 'Skipped', reason: 'no verify commands derivable' },
+    })).toBe('neutral');
+    expect(c.rowTone({
+      ts: '2026-08-08T10:00:00Z',
+      kind: TIMELINE_KIND.postStepFinished,
+      actor: 'system',
+      summary: 'Build/test gate not applicable',
+      details: { status: 'NotApplicable' },
+    })).toBe('neutral');
   });
 
   it('renders a resolved steer timeout with its answer as a settled event', async () => {

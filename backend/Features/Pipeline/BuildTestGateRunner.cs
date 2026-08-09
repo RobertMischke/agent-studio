@@ -14,6 +14,7 @@ public enum BuildTestGateVerdict
     Ok,
     Warn,
     Fail,
+    NotApplicable,
 }
 
 public enum BuildTestGateFailureKind
@@ -348,7 +349,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     _logger.LogInformation(
                         "BuildTestGateRunner: no verify commands derivable for {Repo}; gate runs without a build check",
                         workspace);
-                    completed = Skipped("no verify commands derivable");
+                    completed = NotApplicable("no verify commands derivable");
                 }
                 else
                 {
@@ -1469,6 +1470,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
     private static BuildTestGateResult Skipped(string reason)
         => new(BuildTestGateVerdict.Skipped, null, 0, string.Empty, reason, false, false);
+
+    private static BuildTestGateResult NotApplicable(string reason)
+        => new(BuildTestGateVerdict.NotApplicable, null, 0, string.Empty, reason, false, false);
 
     private static BuildTestGateResult InfrastructureFailure(
         BuildTestGateFailureKind kind,

@@ -96,7 +96,15 @@ function execStep(stepId: string, kind: string, status: string, extra: Record<st
   };
 }
 
-function pipelineBody() {
+function pipelineBody(gateStatus: 'passed' | 'notApplicable' | 'skipped' = 'passed') {
+  const gateExtra = gateStatus === 'notApplicable'
+    ? { verdict: 'not-applicable', reason: 'no verify commands derivable' }
+    : gateStatus === 'skipped'
+      ? { verdict: 'skipped', reason: 'pipeline interrupted before command execution' }
+      : {
+          verdict: 'ok',
+          reason: 'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
+        };
   return {
     pipeline: basePipeline(),
     execution: {
@@ -111,10 +119,7 @@ function pipelineBody() {
         execStep('core-agent-run', 'core', 'passed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('post-git-commit-attribution', 'tool', 'passed'),
-        execStep('post-build-test-gate', 'tool', 'passed', {
-          verdict: 'ok',
-          reason: 'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
-        }),
+        execStep('post-build-test-gate', 'tool', gateStatus === 'notApplicable' ? 'skipped' : gateStatus, gateExtra),
         execStep('post-orchestrator-decision', 'orchestrator', 'passed', { verdict: 'accept' }),
         execStep('post-drift-adr-code', 'drift', 'passed'),
       ],
@@ -124,7 +129,11 @@ function pipelineBody() {
   };
 }
 
-async function installRoutes(page: Page, state: string) {
+async function installRoutes(
+  page: Page,
+  state: string,
+  gateStatus: () => 'passed' | 'notApplicable' | 'skipped' = () => 'passed',
+) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
 
@@ -241,7 +250,7 @@ async function installRoutes(page: Page, state: string) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(pipelineBody()),
+      body: JSON.stringify(pipelineBody(gateStatus())),
     }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
@@ -377,6 +386,60 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
           clip: { x, y, width: right - x, height: bottom - y },
         });
         await testInfo.attach(`pipeline-subset-coverage-tooltip--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+  });
+
+  test('build gate not-applicable stays neutral and a true skip stays conspicuous in task detail', async ({ page }, testInfo) => {
+    let status: 'notApplicable' | 'skipped' = 'notApplicable';
+    await installRoutes(page, '5-human-review', () => status);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await dismissErrorDialog(page);
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+    const gate = page.locator('[data-step-id="post-build-test-gate"]');
+    await expect(gate).toHaveAttribute('data-status', 'notApplicable');
+    await expect(gate).toContainText('no build/test defined');
+    await expect(gate).not.toHaveAttribute('data-attention-required', 'true');
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2518--task-detail-build-test-gate--not-applicable--${theme}--mocked.png`,
+        );
+        await pipeline.screenshot({ path: screenshotPath });
+        await testInfo.attach(`task-detail-not-applicable--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+
+    status = 'skipped';
+    await page.reload();
+    await dismissErrorDialog(page);
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+    await expect(gate).toHaveAttribute('data-status', 'skipped');
+    await expect(gate).toHaveAttribute('data-attention-required', 'true');
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2518--task-detail-build-test-gate--skipped--${theme}--mocked.png`,
+        );
+        await pipeline.screenshot({ path: screenshotPath });
+        await testInfo.attach(`task-detail-skipped--${theme}`, {
           path: screenshotPath,
           contentType: 'image/png',
         });

@@ -353,6 +353,7 @@ public sealed class TestRunService
         {
             "passed" => "proven",
             "failed" => "failed",
+            "not-applicable" => "not-applicable",
             _ => "not-proven",
         };
         return new TaskTestRunEvidence

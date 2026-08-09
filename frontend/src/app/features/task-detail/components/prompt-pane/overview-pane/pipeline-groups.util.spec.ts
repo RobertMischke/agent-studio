@@ -58,8 +58,8 @@ describe('groupTone', () => {
   it('is not-applicable when remote execution structurally omits the local section', () => {
     expect(
       groupTone([
-        row({ phaseKey: 'aspect', status: 'skipped', remoteNotApplicable: true }),
-        row({ phaseKey: 'aspect', status: 'skipped', remoteNotApplicable: true }),
+        row({ phaseKey: 'aspect', status: 'notApplicable', remoteNotApplicable: true }),
+        row({ phaseKey: 'aspect', status: 'notApplicable', remoteNotApplicable: true }),
       ]),
     ).toBe('not-applicable');
   });
@@ -89,6 +89,13 @@ describe('rowIsRisk / rowHasConcern', () => {
     const ok = row({ phaseKey: 'aspect', status: 'passed', verdict: 'pass' });
     expect(rowIsRisk(ok)).toBe(false);
     expect(rowHasConcern(ok)).toBe(false);
+  });
+
+  it('keeps a required skipped gate in the attention path', () => {
+    const skippedGate = row({ phaseKey: 'tool', status: 'skipped', attentionRequired: true });
+    expect(rowIsRisk(skippedGate)).toBe(true);
+    expect(rowHasConcern(skippedGate)).toBe(true);
+    expect(groupTone([skippedGate])).toBe('danger');
   });
 });
 

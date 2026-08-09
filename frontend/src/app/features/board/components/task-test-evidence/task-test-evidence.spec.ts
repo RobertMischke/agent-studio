@@ -115,6 +115,38 @@ describe('TaskTestEvidenceComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]')).toBeNull();
   });
 
+  it.each([
+    ['not-applicable', 'No build/test defined', 'not-applicable'],
+    ['not-proven', 'Build/test gate skipped at d1649ce9', 'not-proven'],
+  ] as const)('keeps build gate state %s distinct on the card', async (state, summary, sourceResult) => {
+    await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TaskTestEvidenceComponent);
+    const evidence = {
+      ...missingEvidence,
+      matchQuality: 'perfect',
+      direction: 'exact',
+      distance: 0,
+      diffContained: true,
+      evidenceState: state,
+      summary,
+      sources: [{
+        kind: 'build-test-gate',
+        id: 'gate-42',
+        commit: 'd1649ce9',
+        result: sourceResult,
+        observedAt: '2026-08-08T10:00:00Z',
+        summary,
+      }],
+    } satisfies TaskTestRunEvidence;
+    fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement.querySelector('[data-testid="task-card-test-evidence"]') as HTMLElement;
+    expect(element.getAttribute('data-evidence-state')).toBe(state);
+    expect(element.textContent).toContain(summary);
+    expect(element.textContent).toContain('Build/test gate · gate-42');
+  });
+
   it('names SHA-linked review and gate evidence instead of the unassigned default', async () => {
     await TestBed.configureTestingModule({ imports: [TaskTestEvidenceComponent] }).compileComponents();
     const fixture = TestBed.createComponent(TaskTestEvidenceComponent);

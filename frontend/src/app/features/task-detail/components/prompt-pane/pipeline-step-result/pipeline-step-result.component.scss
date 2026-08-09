@@ -77,6 +77,9 @@
       background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-elevated));
     }
     &[data-status='skipped'] {
+      background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-elevated));
+    }
+    &[data-status='notApplicable'] {
       background: color-mix(in srgb, var(--studio-fg-muted) 7%, var(--studio-bg-elevated));
     }
   }
