@@ -370,12 +370,10 @@ public sealed class TaskProvenanceService
 
     private string ResolveIntegrationBranch(TaskInfo task, string? repoRoot)
     {
-        var configured = TaskIntegrationBranch.Resolve(
-            task,
-            _settings.Get(task.ProjectName).IntegrationBranch);
+        var configured = _settings.Get(task.ProjectName).IntegrationBranch;
         if (!string.IsNullOrWhiteSpace(repoRoot))
             return _git.ResolveIntegrationBranch(repoRoot, configured);
-        return string.IsNullOrWhiteSpace(configured) ? new ProjectSettings().IntegrationBranch : configured;
+        return configured;
     }
 
     /// <summary>Live head of a branch, checking the local ref then its <c>origin/</c> mirror.</summary>

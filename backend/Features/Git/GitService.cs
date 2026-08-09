@@ -3361,10 +3361,11 @@ public class GitService
     public string ResolveIntegrationBranch(string repoRoot, string? configuredBranch)
     {
         var configured = string.IsNullOrWhiteSpace(configuredBranch)
-            ? new ProjectSettings().IntegrationBranch
+            ? string.Empty
             : configuredBranch.Trim();
 
-        if (BranchExists(repoRoot, configured))
+        if (!string.IsNullOrWhiteSpace(configured)
+            && (BranchExists(repoRoot, configured) || RemoteBranchExists(repoRoot, configured)))
             return configured;
 
         var fallback = ResolveRepositoryDefaultBranch(repoRoot);
@@ -3389,11 +3390,14 @@ public class GitService
     internal string ResolveIntegrationReadRef(string repoRoot, string? configuredBranch)
     {
         var configured = string.IsNullOrWhiteSpace(configuredBranch)
-            ? new ProjectSettings().IntegrationBranch
+            ? string.Empty
             : configuredBranch.Trim();
 
-        if (BranchExists(repoRoot, configured)) return configured;
-        if (RemoteBranchExists(repoRoot, configured)) return "origin/" + configured;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            if (BranchExists(repoRoot, configured)) return configured;
+            if (RemoteBranchExists(repoRoot, configured)) return "origin/" + configured;
+        }
 
         var fallback = ResolveRepositoryDefaultBranch(repoRoot);
         if (!string.IsNullOrWhiteSpace(fallback))

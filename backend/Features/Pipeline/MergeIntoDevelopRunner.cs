@@ -201,11 +201,11 @@ public sealed class MergeIntoDevelopRunner
                 return stale;
             }
             var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
-            var branch = reviewSubject is not null
-                ? TaskIntegrationBranch.Name(
-                    reviewSubject.IntegrationBranch,
-                    TaskIntegrationBranch.Name(integrationBranch))
-                : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
+            // The caller supplies current project/repository truth. A review
+            // subject stores only the branch observed when the run was prepared
+            // and must not retarget acceptance after project settings or
+            // origin/HEAD change.
+            var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
             var taskBranch = delivery.Ref;
             var strategy = IntegrationStrategies.Normalize(integrationStrategy);
             BuildTestGateResult? preMainResult = null;
@@ -282,7 +282,7 @@ public sealed class MergeIntoDevelopRunner
                     ? result.MergedSha
                     : _git.GetBranchTip(repoRoot, branch);
                 MaybeEnqueueIntegrationPush(
-                    project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha, pipelineType);
+                    project, jobId, jobFolderPath, watchPath, branch, approvedSha, pipelineType);
             }
 
             return result;

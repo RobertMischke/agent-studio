@@ -229,12 +229,12 @@ public record ProjectSettings
 
     /// <summary>
     /// ADR-0052: branch that parallel task worktrees branch off and merge back
-    /// into (the project's integration line). Default <c>develop</c> so
-    /// <c>main</c> stays the released line. When parallelism is off
+    /// into (the project's integration line). Blank means the repository's
+    /// <c>origin/HEAD</c> branch. When parallelism is off
     /// (<see cref="MaxParallelism"/> == 1) the sequential runner keeps pushing
     /// to its configured target and this value is unused.
     /// </summary>
-    public string IntegrationBranch { get; init; } = "develop";
+    public string IntegrationBranch { get; init; } = string.Empty;
 
     /// <summary>
     /// ADR-0052: how a finished task branch is folded back into

@@ -94,6 +94,14 @@ pipeline view.
   the HTTP request. Only `Merged` or `AlreadyMerged` moves the card to Completed.
   Failures clear the phase, retain the card in Human Review, and append a hard
   integration-failed journal event.
+  Acceptance and backstop execution resolve the target through
+  `GitService.ResolveIntegrationBranch`: an existing configured local or remote
+  branch wins, otherwise the repository's `origin/HEAD` branch is used. A card
+  whose Git-derived `integration.status` is already `integrated` moves directly
+  to Completed without another merge or gate; that non-run is recorded Skipped,
+  not Passed. Immediate failures return the typed `IntegrationFailed` move
+  outcome (HTTP 409 for the single-card API), while every failure preserves the
+  concrete reason in the merge step and `integration_failed` timeline event.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched

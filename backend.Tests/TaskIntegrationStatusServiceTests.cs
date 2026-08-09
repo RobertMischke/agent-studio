@@ -140,7 +140,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
-    public void BuildLookup_RecordedRunIntegrationBranch_OverridesProjectAssumption()
+    public void BuildLookup_ConfiguredProjectBranchWinsOverRecordedRunSnapshot()
     {
         var repo = SeedDevelopMainRepo();
         RunGit(repo, "checkout -q main");
@@ -154,8 +154,8 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         var status = svc.BuildLookup([job])[job.TaskKey];
 
-        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
-        Assert.Equal("main", status.IntegrationBranch);
+        Assert.Equal(IntegrationStatuses.Pending, status.Status);
+        Assert.Equal("develop", status.IntegrationBranch);
     }
 
     [Fact]
@@ -518,6 +518,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        settings.SetIntegrationBranch(projectName, "develop");
         log = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
         return new TaskIntegrationStatusService(
             git, settings, log, NullLogger<TaskIntegrationStatusService>.Instance);

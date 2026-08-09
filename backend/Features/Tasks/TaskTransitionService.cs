@@ -230,7 +230,7 @@ public sealed class TaskTransitionService
             return new MoveJobOutcome(
                 MoveJobStatus.Failure,
                 $"Escalated tasks can only be accepted after their latest task commit is integrated into "
-                + $"{TaskIntegrationBranch.Resolve(info, settings.IntegrationBranch)}.");
+                + $"{ResolveIntegrationBranch(info, settings)}.");
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
@@ -992,11 +992,26 @@ public sealed class TaskTransitionService
                 reviewed.FolderPath);
         }
 
+        // Git-derived card truth is authoritative. If the attributed delivery is
+        // already in the effective integration branch, acceptance is a lane move,
+        // not a merge replay. In particular, do this before any fetch so a stale
+        // legacy task snapshot such as refs/heads/develop cannot block an
+        // already-integrated card in a main-only repository.
+        if (IsAlreadyIntegrated(reviewed))
+        {
+            return await CompleteTransactionalAcceptAsync(
+                reviewed,
+                ct,
+                targetIndex,
+                cause,
+                reason,
+                authorityWrite,
+                outcome: "AlreadyMerged").ConfigureAwait(false);
+        }
+
         _mutations.SetJobPhase(reviewed.FolderPath, LifecyclePhases.Integrating);
         var integrating = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
-        var integrationBranch = TaskIntegrationBranch.Resolve(
-            integrating,
-            settings.IntegrationBranch);
+        var integrationBranch = ResolveIntegrationBranch(integrating, settings);
         FlagIntegrationOnAccept(integrating, warnIfNotIntegrated: false);
         RecordIntegrationEvent(
             integrating,
@@ -1015,7 +1030,8 @@ public sealed class TaskTransitionService
                 integrating,
                 MergeIntoIntegrationOutcome.Error,
                 synchronized.Error ?? $"Integration branch '{integrationBranch}' could not be synchronized.",
-                cause);
+                cause,
+                failureRecorded: true);
         }
 
         if (IsAlreadyIntegrated(integrating))
@@ -1027,7 +1043,7 @@ public sealed class TaskTransitionService
                 cause,
                 reason,
                 authorityWrite,
-                outcome: "AlreadyIntegrated").ConfigureAwait(false);
+                outcome: "AlreadyMerged").ConfigureAwait(false);
         }
 
         var queue = _acceptedIntegrationQueue;
@@ -1083,7 +1099,8 @@ public sealed class TaskTransitionService
                 integrating,
                 result.Outcome,
                 result.Error ?? $"Integration ended with {result.Outcome}.",
-                cause);
+                cause,
+                failureRecorded: true);
         }
 
         if (_provenance != null
@@ -1109,6 +1126,18 @@ public sealed class TaskTransitionService
         var lookup = _integrationStatus.BuildLookup([job]);
         return lookup.TryGetValue(job.TaskKey, out var status)
                && status.Status == IntegrationStatuses.Integrated;
+    }
+
+    private string ResolveIntegrationBranch(TaskInfo job, ProjectSettings settings)
+    {
+        var candidate = TaskIntegrationBranch.Name(
+            settings.IntegrationBranch,
+            fallback: string.Empty);
+        var repoRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath)
+            ?? (string.IsNullOrWhiteSpace(job.WatchPath) ? null : job.WatchPath);
+        return string.IsNullOrWhiteSpace(repoRoot)
+            ? candidate
+            : _git.ResolveIntegrationBranch(repoRoot, candidate);
     }
 
     private IntegrationBranchSyncResult RefreshIntegrationBranch(
@@ -1150,18 +1179,18 @@ public sealed class TaskTransitionService
         AttemptWriteReference? authorityWrite,
         string outcome)
     {
-        if (outcome == "AlreadyIntegrated")
+        if (outcome == "AlreadyMerged")
         {
             var now = DateTime.UtcNow;
             _pipelineLog?.RecordStep(integrating.FolderPath, new PipelineStepExecution
             {
                 StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
                 Kind = StepKind.Tool,
-                Status = PipelineStepStatus.Passed,
+                Status = PipelineStepStatus.Skipped,
                 StartedAt = now,
                 CompletedAt = now,
                 Verdict = "already-integrated",
-                VerdictSummary = "Attributed commits are already present in the target branch; no merge was run.",
+                VerdictSummary = "Attributed commits are already present in the target branch; acceptance skipped the merge runner.",
             });
         }
         var clearedTags = (integrating.Tags ?? [])
@@ -1176,9 +1205,9 @@ public sealed class TaskTransitionService
             integrating,
             TimelineEventKinds.IntegrationSucceeded,
             TimelineActors.System,
-            $"Integration into {TaskIntegrationBranch.Resolve(
+            $"Integration into {ResolveIntegrationBranch(
                 integrating,
-                _settings.Get(integrating.ProjectName).IntegrationBranch)} succeeded.",
+                _settings.Get(integrating.ProjectName))} succeeded.",
             outcome);
         var completed = await MoveAsync(
             integrating.Id,
@@ -1206,8 +1235,24 @@ public sealed class TaskTransitionService
         TaskInfo reviewed,
         MergeIntoIntegrationOutcome outcome,
         string detail,
-        string? cause)
+        string? cause,
+        bool failureRecorded = false)
     {
+        if (!failureRecorded)
+        {
+            var now = DateTime.UtcNow;
+            _pipelineLog?.RecordStep(reviewed.FolderPath, new PipelineStepExecution
+            {
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+                Kind = StepKind.Tool,
+                Status = PipelineStepStatus.Failed,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = "error",
+                VerdictSummary = "Acceptance integration could not start.",
+                Reason = detail,
+            });
+        }
         _mutations.SetJobPhase(reviewed.FolderPath, null);
         var current = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
         RecordIntegrationEvent(
@@ -1218,7 +1263,7 @@ public sealed class TaskTransitionService
             outcome.ToString(),
             detail);
         return new MoveJobOutcome(
-            MoveJobStatus.Failure,
+            MoveJobStatus.IntegrationFailed,
             $"Integration failed ({outcome}); the task remains in Human Review. {detail}",
             current.FolderPath);
     }
@@ -1242,9 +1287,9 @@ public sealed class TaskTransitionService
                 Details = new Dictionary<string, string>
                 {
                     ["outcome"] = outcome,
-                    ["integrationBranch"] = TaskIntegrationBranch.Resolve(
+                    ["integrationBranch"] = ResolveIntegrationBranch(
                         job,
-                        _settings.Get(job.ProjectName).IntegrationBranch),
+                        _settings.Get(job.ProjectName)),
                     ["detail"] = detail ?? string.Empty,
                 },
             });
@@ -1308,7 +1353,7 @@ public sealed class TaskTransitionService
         var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath) ?? info.WatchPath;
         var integrationBranch = _git.ResolveIntegrationBranch(
             repoRoot,
-            TaskIntegrationBranch.Resolve(info, settings.IntegrationBranch));
+            settings.IntegrationBranch);
         return _git.IsAncestor(repoRoot, latest, integrationBranch);
     }
 
@@ -1437,6 +1482,8 @@ public sealed class TaskTransitionService
                 new BatchMoveItemResult { JobId = item.JobId, Status = "conflict", Message = outcome.Message },
             MoveJobStatus.DirectoryLocked =>
                 new BatchMoveItemResult { JobId = item.JobId, Status = "locked", Message = outcome.Message },
+            MoveJobStatus.IntegrationFailed =>
+                new BatchMoveItemResult { JobId = item.JobId, Status = "integration-failed", Message = outcome.Message },
             _ =>
                 new BatchMoveItemResult { JobId = item.JobId, Status = "failed", Message = outcome.Message }
         };
@@ -1542,7 +1589,7 @@ public sealed class TaskTransitionService
                     moved.Id,
                     moved.FolderPath,
                     moved.WatchPath,
-                    settings.IntegrationBranch,
+                    ResolveIntegrationBranch(moved, settings),
                     settings.IntegrationStrategy)))
             {
                 FlagIntegrationOnAccept(moved);
@@ -1561,7 +1608,7 @@ public sealed class TaskTransitionService
                 moved.Id,
                 moved.FolderPath,
                 moved.WatchPath,
-                TaskIntegrationBranch.Resolve(moved, settings.IntegrationBranch),
+                ResolveIntegrationBranch(moved, settings),
                 ct,
                 settings.IntegrationStrategy,
                 PipelineTypes.Resolve(moved)).ConfigureAwait(false);
