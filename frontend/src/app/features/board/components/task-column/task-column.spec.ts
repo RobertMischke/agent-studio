@@ -529,6 +529,22 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     httpMock.verify();
   });
 
+  it('reloads the archive as completed cards leave the live board', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    httpMock.expectOne((r) => isArchiveReq(r.url))
+      .flush({ items: [], total: 0, offset: 0, limit: 50 });
+
+    fixture.componentRef.setInput('jobs', [{} as TaskInfo]);
+    fixture.detectChanges();
+
+    const refresh = httpMock.expectOne((r) => isArchiveReq(r.url));
+    refresh.flush({ items: [makeArchived({ id: 'just-archived' })], total: 1, offset: 0, limit: 50 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveItems().map((item) => item.id)).toEqual(['just-archived']);
+    httpMock.verify();
+  });
+
   it('shows the empty state only after a genuine zero-total response', async () => {
     const { fixture, httpMock } = await buildArchiveColumn();
 

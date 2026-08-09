@@ -84,6 +84,16 @@ describe('NotificationService', () => {
     expect(service.notifications()).toHaveLength(0);
   });
 
+  it('updates a persistent notification in place', () => {
+    const id = service.notify({ message: 'Archiving 0 of 55 tasks...', kind: 'info', durationMs: 0 });
+
+    expect(service.update(id, { message: 'Archiving 21 of 55 tasks...' })).toBe(true);
+    expect(service.notifications()).toHaveLength(1);
+    expect(service.notifications()[0].id).toBe(id);
+    expect(service.notifications()[0].message).toBe('Archiving 21 of 55 tasks...');
+    expect(service.update(999, { message: 'missing' })).toBe(false);
+  });
+
   it('dismissAll empties the stack', () => {
     service.info('a');
     service.warning('b');

@@ -1364,70 +1364,82 @@ public sealed class TaskTransitionService
         var results = new List<BatchMoveItemResult>();
         foreach (var item in items)
         {
-            if (string.IsNullOrWhiteSpace(item.JobId))
-            {
-                results.Add(new BatchMoveItemResult
-                {
-                    JobId = item.JobId ?? "",
-                    Status = "rejected",
-                    Message = "jobId is required"
-                });
-                continue;
-            }
-
-            if (!TaskStates.All.Contains(item.TargetState))
-            {
-                var msg = TaskStates.NumberedLegacyMap.TryGetValue(item.TargetState, out var renamed)
-                    ? $"Lane '{item.TargetState}' was renamed in ADR-0025. Use '{renamed}' instead."
-                    : $"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}";
-                results.Add(new BatchMoveItemResult
-                {
-                    JobId = item.JobId,
-                    Status = "rejected",
-                    Message = msg
-                });
-                continue;
-            }
-
-            MoveJobOutcome outcome;
-            try
-            {
-                outcome = await MoveAsync(
-                    item.JobId,
-                    item.TargetState,
-                    item.WatchPath,
-                    ct,
-                    item.TargetIndex,
-                    cause: string.IsNullOrWhiteSpace(cause) ? TimelineActors.Human("") : cause,
-                    reason: item.Reason);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Batch move item failed for {JobId} -> {Target}", item.JobId, item.TargetState);
-                results.Add(new BatchMoveItemResult
-                {
-                    JobId = item.JobId,
-                    Status = "failed",
-                    Message = ex.Message
-                });
-                continue;
-            }
-
-            results.Add(outcome.Status switch
-            {
-                MoveJobStatus.Success =>
-                    new BatchMoveItemResult { JobId = item.JobId, Status = "moved" },
-                MoveJobStatus.NotFound =>
-                    new BatchMoveItemResult { JobId = item.JobId, Status = "not-found" },
-                MoveJobStatus.TargetFolderExists =>
-                    new BatchMoveItemResult { JobId = item.JobId, Status = "conflict", Message = outcome.Message },
-                MoveJobStatus.DirectoryLocked =>
-                    new BatchMoveItemResult { JobId = item.JobId, Status = "locked", Message = outcome.Message },
-                _ =>
-                    new BatchMoveItemResult { JobId = item.JobId, Status = "failed", Message = outcome.Message }
-            });
+            results.Add(await MoveBatchItemAsync(item, ct, cause).ConfigureAwait(false));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Executes one independently reportable item from a batch. Both the
+    /// compatibility <see cref="BatchMoveAsync"/> loop and the background-job
+    /// worker use this boundary so validation, outcome mapping and failure
+    /// isolation cannot drift between synchronous service callers and HTTP
+    /// jobs.
+    /// </summary>
+    public async Task<BatchMoveItemResult> MoveBatchItemAsync(
+        BatchMoveItem item,
+        CancellationToken ct = default,
+        string? cause = null)
+    {
+        if (string.IsNullOrWhiteSpace(item.JobId))
+        {
+            return new BatchMoveItemResult
+            {
+                JobId = item.JobId ?? "",
+                Status = "rejected",
+                Message = "jobId is required"
+            };
+        }
+
+        if (!TaskStates.All.Contains(item.TargetState))
+        {
+            var msg = TaskStates.NumberedLegacyMap.TryGetValue(item.TargetState, out var renamed)
+                ? $"Lane '{item.TargetState}' was renamed in ADR-0025. Use '{renamed}' instead."
+                : $"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}";
+            return new BatchMoveItemResult
+            {
+                JobId = item.JobId,
+                Status = "rejected",
+                Message = msg
+            };
+        }
+
+        MoveJobOutcome outcome;
+        try
+        {
+            outcome = await MoveAsync(
+                item.JobId,
+                item.TargetState,
+                item.WatchPath,
+                ct,
+                item.TargetIndex,
+                cause: string.IsNullOrWhiteSpace(cause) ? TimelineActors.Human("") : cause,
+                reason: item.Reason).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Batch move item failed for {JobId} -> {Target}", item.JobId, item.TargetState);
+            return new BatchMoveItemResult
+            {
+                JobId = item.JobId,
+                Status = "failed",
+                Message = ex.Message
+            };
+        }
+
+        return outcome.Status switch
+        {
+            MoveJobStatus.Success =>
+                new BatchMoveItemResult { JobId = item.JobId, Status = "moved" },
+            MoveJobStatus.NotFound =>
+                new BatchMoveItemResult { JobId = item.JobId, Status = "not-found" },
+            MoveJobStatus.TargetFolderExists =>
+                new BatchMoveItemResult { JobId = item.JobId, Status = "conflict", Message = outcome.Message },
+            MoveJobStatus.DirectoryLocked =>
+                new BatchMoveItemResult { JobId = item.JobId, Status = "locked", Message = outcome.Message },
+            _ =>
+                new BatchMoveItemResult { JobId = item.JobId, Status = "failed", Message = outcome.Message }
+        };
     }
 
     private void ReleaseCliOutputResourcesBeforeMove(TaskInfo info)

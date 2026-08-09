@@ -88,7 +88,8 @@ For self-contained projects (no `.orchestrator.yml` pointer) the `path` is
 3. **Use Node.js, not curl.** Windows backslashes in JSON bodies break shell
    quoting. The reference scripts in [`scripts/`](scripts) handle this; copy
    them rather than hand-rolling curl.
-4. **One task per request.** No bulk-create endpoint. Loop in your script.
+4. **Create one task per request.** No bulk-create endpoint. Multi-task lane
+   moves should use the asynchronous `/api/tasks/batch-move` contract.
 5. **Slugs are stable.** Do not include timestamps in `id` unless you actually
    want a fresh per-attempt artifact. Stable slugs keep history linkable.
 6. **Lane targets use the full lane name**, e.g. `2-ready` or `6-completed`
@@ -196,6 +197,12 @@ Common targets:
 
 The full template is in [`scripts/move-state.js`](scripts/move-state.js).
 
+For more than one independent move, send one `POST /api/tasks/batch-move`
+request with an `items` array. The endpoint returns `202` and a job handle
+immediately. Poll `GET /api/tasks/batch-move/{id}` until `status` is
+`completed` or `failed`. A failed item appears in `results` and does not stop
+the rest of the batch.
+
 ## Process: promoting to the top of `2-ready`
 
 `POST /api/tasks/{jobId}/move-to-top?watchPath=...` with no body.
@@ -208,11 +215,12 @@ Reference: [`scripts/move-to-top.js`](scripts/move-to-top.js).
 
 ## Process: bulk triage
 
-Triage rolls do not fit in one mutation. Pattern:
+Triage rolls separate classification from mutation. Pattern:
 
 1. Read the folder contents via `fs.readdirSync`, classify each entry
    (status.md + aspect-*.md) into action buckets.
-2. For each bucket, loop the mutation script.
+2. Apply any prompt edits independently, then submit each move bucket through
+   `POST /api/tasks/batch-move` and poll its job handle to completion.
 3. Idempotent prompt-append: when reissuing, check if the prompt.md already
    contains your "Human Review Note" marker so re-running the script does not
    stack duplicate notes.

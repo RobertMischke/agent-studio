@@ -1,12 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { forkJoin } from 'rxjs';
-import { TaskInfo, TaskState } from '../../../models/task.model';
+import { switchMap, takeWhile, timer } from 'rxjs';
+import { BatchMoveJobResponse, TaskInfo, TaskState } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UndoController } from '../../../services/undo.service';
 import { TaskSelectionService } from '../../task-detail/state/task-selection.service';
 import { laneLabelFor } from '../../task-detail/state/triage-actions.model';
+import { NotificationService } from '../../../services/notification.service';
 
 /**
  * Cycle 10b board-feature service: orchestrates the board's mutation
@@ -31,6 +32,7 @@ export class BoardMutationsService {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly jobSelection = inject(TaskSelectionService);
   private readonly undo = inject(UndoController);
+  private readonly notifications = inject(NotificationService);
 
   // ---------- drag-and-drop move ----------
 
@@ -228,32 +230,122 @@ export class BoardMutationsService {
    * folder moves and surface a 409 storm from the second pass.
    */
   readonly archiving = signal(false);
+  readonly archiveProgress = signal<BatchMoveJobResponse | null>(null);
 
   /**
-   * Move every job in `completed` to 7-archive in parallel. The shell
-   * passes the list (typically `filteredGrouped().completed`) so the
-   * service stays free of BoardFilters coupling.
+   * Queue every completed task as one server-side job. Progress polling
+   * applies successful cards to the board as each bounded move finishes.
    */
   archiveAllCompleted(completed: readonly TaskInfo[]): void {
     if (completed.length === 0) return;
     if (this.archiving()) return;
     this.archiving.set(true);
-    const moves = completed.map((job) => this.jobService.moveJob(job.id, TaskState.Archive, job.watchPath));
-    forkJoin(moves).subscribe({
-      next: () => {
-        this.archiving.set(false);
-        this.jobService.refresh();
+    this.archiveProgress.set(null);
+    const progressToastId = this.notifications.notify({
+      kind: 'info',
+      title: 'Archive in progress',
+      message: `Archiving 0 of ${completed.length} tasks...`,
+      source: 'Archive all',
+      durationMs: 0,
+    });
+    const applied = new Set<number>();
+    const items = completed.map((job) => ({
+      jobId: job.id,
+      watchPath: job.watchPath,
+      targetState: TaskState.Archive,
+    }));
+
+    this.jobService.startBatchMove(items).subscribe({
+      next: (accepted) => {
+        this.applyArchiveProgress(accepted, completed, applied, progressToastId);
+        timer(0, 250).pipe(
+          switchMap(() => this.jobService.getBatchMove(accepted.id)),
+          takeWhile((job) => !this.isBatchTerminal(job), true),
+        ).subscribe({
+          next: (job) => {
+            this.applyArchiveProgress(job, completed, applied, progressToastId);
+            if (this.isBatchTerminal(job)) this.finishArchive(job, progressToastId);
+          },
+          error: (err) => this.failArchivePolling(err, progressToastId),
+        });
       },
       error: (err) => {
         this.archiving.set(false);
-        this.errorDialog.show(err, {
-          title: 'Failed to archive tasks',
-          fallbackMessage: 'One or more tasks could not be moved to Archive',
+        this.notifications.dismiss(progressToastId);
+        this.notifications.notify({
+          kind: 'error',
+          title: 'Archive could not start',
+          message: err?.message || 'The archive job could not be queued.',
           source: 'Archive all',
+          durationMs: 0,
         });
-        this.jobService.refresh();
       },
     });
+  }
+
+  private applyArchiveProgress(
+    job: BatchMoveJobResponse,
+    completed: readonly TaskInfo[],
+    applied: Set<number>,
+    notificationId: number,
+  ): void {
+    this.archiveProgress.set(job);
+    for (const result of job.results) {
+      if (result.status !== 'moved' || applied.has(result.index)) continue;
+      const task = completed[result.index];
+      if (task) this.jobService.applyOptimisticMove(task.id, task.watchPath, TaskState.Archive);
+      applied.add(result.index);
+    }
+    this.notifications.update(notificationId, {
+      message: `Archiving ${job.completed} of ${job.total} tasks...`,
+    });
+  }
+
+  private finishArchive(job: BatchMoveJobResponse, notificationId: number): void {
+    this.archiving.set(false);
+    this.notifications.dismiss(notificationId);
+    this.jobService.refresh(true);
+
+    const failures = job.results.filter((result) => result.status !== 'moved');
+    const unprocessed = Math.max(job.total - job.completed, 0);
+    if (failures.length === 0 && unprocessed === 0 && job.status === 'completed') {
+      this.notifications.success(`Archived ${job.succeeded} tasks.`, 'Archive complete');
+      return;
+    }
+
+    const details = failures.map((result) =>
+      `${result.jobId}: ${result.message || result.status}`,
+    );
+    if (unprocessed > 0) {
+      details.push(`${unprocessed} tasks were not processed${job.message ? `: ${job.message}` : '.'}`);
+    }
+    const issueCount = failures.length + unprocessed;
+    this.notifications.notify({
+      kind: 'warning',
+      title: 'Archive completed with issues',
+      message: `Archived ${job.succeeded} of ${job.total} tasks. ${issueCount} ${issueCount === 1 ? 'needs' : 'need'} attention.`,
+      source: 'Archive all',
+      details,
+      durationMs: 0,
+    });
+  }
+
+  private failArchivePolling(err: unknown, notificationId: number): void {
+    this.archiving.set(false);
+    this.notifications.dismiss(notificationId);
+    this.jobService.refresh(true);
+    const message = err instanceof Error ? err.message : 'Progress could not be loaded.';
+    this.notifications.notify({
+      kind: 'error',
+      title: 'Archive progress unavailable',
+      message,
+      source: 'Archive all',
+      durationMs: 0,
+    });
+  }
+
+  private isBatchTerminal(job: BatchMoveJobResponse): boolean {
+    return job.status === 'completed' || job.status === 'failed';
   }
 
   // ---------- detail-side post-mutation refresh ----------

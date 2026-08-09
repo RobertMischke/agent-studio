@@ -324,6 +324,9 @@ builder.Services.AddSingleton<ProjectDeploymentCompiler>();
 builder.Services.AddSingleton<TestRunStore>();
 builder.Services.AddSingleton<TestRunService>();
 builder.Services.AddSingleton<TaskTransitionService>();
+builder.Services.AddSingleton<IBatchMoveItemExecutor, BatchMoveItemExecutor>();
+builder.Services.AddSingleton<BatchMoveJobCoordinator>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchMoveJobCoordinator>());
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
 builder.Services.AddSingleton<ExternalCompletionService>();
