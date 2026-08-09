@@ -132,7 +132,7 @@ public class TaskFolderAccessIsolationTest
             ["backend/Features/Cli/Execution/BackendCarExecution.cs"] =
                 "Deletes CAR's temporary mirror under TaskRepository/.runtime/car-cli-output, never a lane or task folder.",
             ["backend/Features/Cli/Execution/CleanContextPreparation.cs"] =
-                "Tears down the per-run clean-context temp CLI config home (OS temp dir), not the job-folder tree.",
+                "Adapts the external task clean-home store; failed-start cleanup never targets the job-folder tree.",
             ["backend/Features/Cli/Execution/CliWorkingMemoryService.cs"] =
                 "Deletes a CLI's own working-memory state under its config home (guarded by a known-state whitelist), not lane folders.",
 

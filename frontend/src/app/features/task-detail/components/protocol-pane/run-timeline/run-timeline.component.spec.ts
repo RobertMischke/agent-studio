@@ -209,23 +209,22 @@ describe('RunTimelineComponent (smoke)', () => {
     expect(badge.textContent).toContain('context');
     expect(badge.textContent).toContain('clean');
 
-    // The panel surfaces the isolated per-run temp home + the seeded temp paths
-    // (the explicit acceptance criterion: "Panel zeigt Temp-Pfade").
+    // The panel surfaces the isolated task-stable home and its seeded paths.
     const panel = fixture.nativeElement.querySelector('[data-testid="run-exec-context-1"]') as HTMLElement;
     const text = panel.textContent as string;
     expect(text).toContain('Environment');
     expect(text).toContain('CLAUDE_CONFIG_DIR');
-    expect(text).toContain('C:/Temp/atp-clean-context/claude-abc123');
-    expect(text).toContain('isolated clean-context home seeded for this run');
+    expect(text).toContain('C:/Users/operator/.atp/clean-context/claude/abc123');
+    expect(text).toContain('task-stable clean-context home seeded outside the OS temporary directory');
     expect(text).toContain('Global config');
     expect(text).toContain('Seeded .credentials.json');
-    expect(text).toContain('C:/Temp/atp-clean-context/claude-abc123/.credentials.json');
+    expect(text).toContain('C:/Users/operator/.atp/clean-context/claude/abc123/.credentials.json');
 
-    // The temp path is rendered as a real source-path code element, not just text.
+    // The state path is rendered as a real source-path code element, not just text.
     const paths = Array.from(
       panel.querySelectorAll('code.exec-context__source-path'),
     ).map(el => el.textContent);
-    expect(paths).toContain('C:/Temp/atp-clean-context/claude-abc123');
+    expect(paths).toContain('C:/Users/operator/.atp/clean-context/claude/abc123');
     http.verify();
   });
 
@@ -516,12 +515,12 @@ function execContext(): CliExecutionContext {
 /**
  * A clean-mode execution context as the backend `CleanContextPreparer` surfaces
  * it (T1b / ASS-1742): `contextMode: 'clean'` plus an `env` source for the
- * relocated `CLAUDE_CONFIG_DIR` temp home and a `global-config` source for each
- * file seeded into that temp home. Mirrors the real source shape so the panel
+ * relocated, task-stable `CLAUDE_CONFIG_DIR` home and a `global-config` source
+ * for each file seeded into that home. Mirrors the real source shape so the panel
  * assertions prove what an operator actually sees for an isolated run.
  */
 function cleanExecContext(): CliExecutionContext {
-  const tempHome = 'C:/Temp/atp-clean-context/claude-abc123';
+  const taskHome = 'C:/Users/operator/.atp/clean-context/claude/abc123';
   return {
     cli: 'claude',
     model: 'claude-opus-4-8',
@@ -534,21 +533,21 @@ function cleanExecContext(): CliExecutionContext {
       {
         kind: 'env',
         label: 'CLAUDE_CONFIG_DIR',
-        path: tempHome,
+        path: taskHome,
         exists: true,
-        detail: 'isolated clean-context home seeded for this run',
+        detail: 'task-stable clean-context home seeded outside the OS temporary directory',
       },
       {
         kind: 'global-config',
         label: 'Seeded .credentials.json',
-        path: `${tempHome}/.credentials.json`,
+        path: `${taskHome}/.credentials.json`,
         exists: true,
-        detail: 'copied from C:/Users/x/.claude/.credentials.json',
+        detail: 'hard-linked from C:/Users/x/.claude/.credentials.json',
       },
       {
         kind: 'global-config',
         label: 'Seeded settings.json',
-        path: `${tempHome}/settings.json`,
+        path: `${taskHome}/settings.json`,
         exists: true,
         detail: 'copied from C:/Users/x/.claude/settings.json',
       },

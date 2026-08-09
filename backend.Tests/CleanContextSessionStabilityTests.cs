@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
+using AgentStudio.CliHosting;
 
 namespace AgentStudio.Tests;
 
@@ -11,8 +12,9 @@ namespace AgentStudio.Tests;
 /// same task must reuse ONE isolated config home so the CLI's session state
 /// (Codex <c>sessions/rollout-*.jsonl</c>, Claude transcripts) survives a
 /// restart between attempts, and the stored session id stays resumable. A
-/// fresh home may be cut only at run boundaries. Before this contract, every
-/// <c>StartAsync</c> seeded a brand-new CODEX_HOME, which deleted the rollout
+/// fresh home may be cut only on first task use or after inactivity retention.
+/// Before this contract, every <c>StartAsync</c> seeded a brand-new CODEX_HOME,
+/// which deleted the rollout
 /// mid-task and forced each continuation into full-context recovery
 /// ("Codex rollout is absent from the new clean-context CODEX_HOME").
 /// </summary>
@@ -20,42 +22,59 @@ public class CleanContextSessionStabilityTests
 {
     /// <summary>
     /// Minimal engine whose behavior supports clean context with a real
-    /// on-disk temp home per preparation - no process spawn involved; the
+    /// on-disk task home per preparation - no process spawn involved; the
     /// tests drive <see cref="GenericCliExecutionService.AcquireCleanContext"/>
     /// directly.
     /// </summary>
-    private sealed class FakeCleanCliService : GenericCliExecutionService
+    private sealed class FakeCleanCliService : GenericCliExecutionService, IDisposable
     {
-        public FakeCleanCliService()
-            : base(BuildBehavior(), NullLogger<FakeCleanCliService>.Instance, new ConfigurationBuilder().Build())
+        private readonly string _root;
+
+        public FakeCleanCliService(string? root = null)
+            : this(
+                root ?? Path.Combine(Path.GetTempPath(), "clean-context-session-tests", Guid.NewGuid().ToString("N")),
+                Path.Combine(Path.GetTempPath(), "clean-context-session-user", Guid.NewGuid().ToString("N")))
         {
         }
 
-        private static CliBehavior BuildBehavior() => new()
+        private FakeCleanCliService(string root, string userHome)
+            : base(
+                BuildBehavior(root, userHome),
+                NullLogger<FakeCleanCliService>.Instance,
+                new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [TaskCleanContextStore.RootOverrideEnvironmentVariable] = root,
+                }).Build())
         {
-            CliType = "fake-clean",
+            _root = root;
+            Directory.CreateDirectory(userHome);
+        }
+
+        private static CliBehavior BuildBehavior(string root, string userHome) => new()
+        {
+            CliType = CliTypes.Codex,
             GetCliPath = _ => "unused",
             BuildStartInfo = (_, _, workingDirectory, _, _, _, _, _) =>
                 new System.Diagnostics.ProcessStartInfo { FileName = "unused", WorkingDirectory = workingDirectory },
             SupportsCleanContext = true,
-            PrepareCleanContext = (_, _) =>
-            {
-                var home = Path.Combine(
-                    Path.GetTempPath(), "atp-clean-context", $"fake-clean-{Guid.NewGuid():N}");
-                Directory.CreateDirectory(home);
-                return new CleanContextPreparation(
-                    "fake-clean",
-                    home,
-                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["FAKE_HOME"] = home },
-                    new List<CliContextSource>());
-            },
+            PrepareCleanContext = (_, jobKey, _) => CleanContextPreparer.PrepareCodex(
+                userHome,
+                jobKey,
+                NullLogger.Instance,
+                root),
         };
+
+        public void Dispose()
+        {
+            try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
+            catch { /* test cleanup is best-effort */ }
+        }
     }
 
     [Fact]
     public void AcquireCleanContext_SecondAttemptOfSameTask_ReusesTheHome()
     {
-        var svc = new FakeCleanCliService();
+        using var svc = new FakeCleanCliService();
         const string jobKey = "proj::task-1";
 
         var (first, firstReused) = svc.AcquireCleanContext(jobKey, Path.GetTempPath());
@@ -77,7 +96,7 @@ public class CleanContextSessionStabilityTests
     [Fact]
     public void AcquireCleanContext_DifferentTasks_GetIsolatedHomes()
     {
-        var svc = new FakeCleanCliService();
+        using var svc = new FakeCleanCliService();
 
         var (a, _) = svc.AcquireCleanContext("proj::task-a", Path.GetTempPath());
         var (b, _) = svc.AcquireCleanContext("proj::task-b", Path.GetTempPath());
@@ -95,9 +114,9 @@ public class CleanContextSessionStabilityTests
     }
 
     [Fact]
-    public void AcquireCleanContext_HomeVanished_CutsAFreshOne()
+    public void AcquireCleanContext_HomeVanished_RecreatesTheDeterministicTaskPath()
     {
-        var svc = new FakeCleanCliService();
+        using var svc = new FakeCleanCliService();
         const string jobKey = "proj::task-2";
 
         var (first, _) = svc.AcquireCleanContext(jobKey, Path.GetTempPath());
@@ -109,7 +128,7 @@ public class CleanContextSessionStabilityTests
         {
             Assert.NotNull(second);
             Assert.False(secondReused);
-            Assert.NotEqual(first.TempHome, second!.TempHome);
+            Assert.Equal(first.TempHome, second!.TempHome);
             Assert.True(Directory.Exists(second.TempHome));
         }
         finally { second?.Dispose(); }
@@ -118,7 +137,7 @@ public class CleanContextSessionStabilityTests
     [Fact]
     public void GetPersistentCleanContextHome_ReflectsLiveRegistration()
     {
-        var svc = new FakeCleanCliService();
+        using var svc = new FakeCleanCliService();
         const string jobKey = "proj::task-3";
 
         Assert.Null(svc.GetPersistentCleanContextHome(jobKey));
@@ -139,7 +158,7 @@ public class CleanContextSessionStabilityTests
         // per-task home plus CodexRolloutStore.CanResume. A rollout written by
         // attempt 1 into the shared task home makes the clean-context resume
         // viable for attempt 2.
-        var svc = new FakeCleanCliService();
+        using var svc = new FakeCleanCliService();
         const string jobKey = "proj::task-4";
         const string sessionId = "019dee65-7a9b-7843-bfd9-06e555fff02b";
 
@@ -157,5 +176,37 @@ public class CleanContextSessionStabilityTests
                 cleanHome: svc.GetPersistentCleanContextHome(jobKey)));
         }
         finally { prep?.Dispose(); }
+    }
+
+    [Fact]
+    public void PersistentHome_SurvivesServiceRestart_AndKeepsCodexResumeViable()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "clean-context-restart-tests",
+            Guid.NewGuid().ToString("N"));
+        const string jobKey = "proj::restart-task";
+        const string sessionId = "019dee65-7a9b-7843-bfd9-06e555fff02b";
+
+        using (var firstService = new FakeCleanCliService(root))
+        {
+            var (first, _) = firstService.AcquireCleanContext(jobKey, Path.GetTempPath());
+            Assert.NotNull(first);
+            var day = Path.Combine(first!.TempHome, "sessions", "2026", "08", "09");
+            Directory.CreateDirectory(day);
+            File.WriteAllText(Path.Combine(day, $"rollout-2026-08-09T10-00-00-{sessionId}.jsonl"), "{}\n");
+            first.Dispose();
+
+            // A fresh service instance has an empty in-memory registry. The
+            // marker-validated task path still resolves before StartAsync.
+            using var restartedService = new FakeCleanCliService(root);
+            var reopened = restartedService.GetPersistentCleanContextHome(jobKey);
+            Assert.Equal(first.TempHome, reopened);
+            Assert.True(CodexRolloutStore.CanResume(
+                sessionId,
+                CliContextModes.Clean,
+                sharedHome: null,
+                cleanHome: reopened));
+        }
     }
 }

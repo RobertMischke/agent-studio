@@ -555,6 +555,7 @@ public sealed class BackendCarExecutionParityTests : IDisposable
                 ["TaskRepository"] = _root,
                 ["AgentRules:CorePath"] = rulesPath,
                 ["CodexCli:Model"] = "gpt-5.5",
+                ["CleanContext:Root"] = Path.Combine(_root, "clean-context"),
             })
             .Build();
         var modelRegistry = new CliModelRegistry();

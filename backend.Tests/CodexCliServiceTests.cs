@@ -12,8 +12,13 @@ namespace AgentStudio.Tests;
 /// rebuilds context from disk via Recovery, discarding Codex's own
 /// prompt-cache (see bug-codex-session-id-not-captured-from-thread-started).
 /// </summary>
-public class CodexCliServiceTests
+[Collection(CodexDetectedDefaultCollection.Name)]
+public class CodexCliServiceTests : IDisposable
 {
+    public CodexCliServiceTests() => ModelMetadataRegistry.SetDetectedCodexDefault(null);
+
+    public void Dispose() => ModelMetadataRegistry.SetDetectedCodexDefault(null);
+
     [Fact]
     public void CanResume_CleanContextRejectsEvenWhenSharedRolloutExists()
     {

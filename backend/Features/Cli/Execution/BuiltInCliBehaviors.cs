@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AgentStudio.CliHosting;
 
 namespace AgentStudio.Cli;
 
@@ -79,8 +80,12 @@ internal static class BuiltInCliBehaviors
                 ClaudeEnsureSessionLiveness(ctx, info, sessionName!);
         },
         DescribeContextSources = (ctx, jobKey) => ClaudeDescribeContextSources(ctx, jobKey),
-        PrepareCleanContext = (ctx, workingDirectory)
-            => CleanContextPreparer.PrepareClaude(GenericCliExecutionService.ResolveUserHome(), ctx.Logger),
+        PrepareCleanContext = (ctx, jobKey, workingDirectory)
+            => CleanContextPreparer.PrepareClaude(
+                GenericCliExecutionService.ResolveUserHome(),
+                jobKey,
+                ctx.Logger,
+                CleanContextRetentionHostedService.ResolveRootOverride(ctx.Configuration)),
         TransformReadLine = (ctx, raw) => _claudeRenderer.Render(raw),
         OnOutputLine = (ctx, info, line) => ClaudeOnOutputLine(ctx, info, line),
         GetModelCatalog = (ctx, force, ct) => ClaudeGetModelCatalog(ctx, modelDiscovery, force, ct),
@@ -698,8 +703,12 @@ internal static class BuiltInCliBehaviors
                             ?? ctx.Configuration["CodexCli:Path"]
                             ?? "codex",
         SupportsCleanContext = true,
-        PrepareCleanContext = (ctx, workingDirectory)
-            => CleanContextPreparer.PrepareCodex(GenericCliExecutionService.ResolveUserHome(), ctx.Logger),
+        PrepareCleanContext = (ctx, jobKey, workingDirectory)
+            => CleanContextPreparer.PrepareCodex(
+                GenericCliExecutionService.ResolveUserHome(),
+                jobKey,
+                ctx.Logger,
+                CleanContextRetentionHostedService.ResolveRootOverride(ctx.Configuration)),
         BuildStartInfo = (ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode)
             => CodexBuildStartInfo(ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode),
         NormalizeModelForInvocation = (ctx, model) => ResolveInvocationModel(model, ctx.Configuration),
