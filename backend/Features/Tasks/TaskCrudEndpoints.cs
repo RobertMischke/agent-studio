@@ -868,7 +868,8 @@ public static class TaskCrudEndpoints
         // be created later, so the write persists and the unknown edges come
         // back as `warnings` for the FE to surface as an open dependency chip.
         group.MapPut("/{jobId}/references", (string jobId, string? project, string? watchPath, SetTaskReferencesRequest req,
-            TaskScannerService scanner, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+            TaskScannerService scanner, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Docs.WorkbenchCatalogueService workbenches) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
@@ -876,8 +877,14 @@ public static class TaskCrudEndpoints
 
             var proposed = (req ?? new SetTaskReferencesRequest()).ToReferences();
             var index = scanner.GetReferenceIndex();
+            var owningProject = !string.IsNullOrWhiteSpace(info.ProjectName)
+                ? info.ProjectName
+                : project;
             var validation = TaskReferenceValidator.Validate(
-                info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph);
+                info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph,
+                string.IsNullOrWhiteSpace(owningProject)
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : workbenches.KnownKeys(owningProject));
 
             if (!validation.IsValid)
                 return Results.BadRequest(new

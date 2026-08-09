@@ -59,6 +59,16 @@ button.copy-key:focus-visible {
   letter-spacing: 0.03em;
 }
 
+.copy-key--reference {
+  min-height: 20px;
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
 .copy-key--copied {
   color: var(--studio-success);
   background: color-mix(in srgb, var(--studio-success) 12%, var(--studio-bg-elevated));

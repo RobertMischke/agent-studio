@@ -31,7 +31,15 @@
                   </span>
                   <b>{{ item.title }}</b>
                   <small>{{ item.error || item.relPath }}</small>
-                </button></li>
+                </button>
+                @if (keyFor(item); as referenceKey) {
+                  <app-copyable-task-key
+                    [key]="referenceKey"
+                    variant="reference"
+                    ariaLabel="Copy reference key"
+                    [testId]="'project-wiki-lifecycle-key-' + referenceKey" />
+                }
+                </li>
               }
             </ul>
           </section>

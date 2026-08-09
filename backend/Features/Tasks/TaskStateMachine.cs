@@ -946,6 +946,7 @@ public class TaskStateMachine
                 RelatedTo = Replace(refs.RelatedTo, oldKey, newKey),
                 BlockedBy = Replace(refs.BlockedBy, oldKey, newKey),
                 Supersedes = Replace(refs.Supersedes, oldKey, newKey),
+                Workbenches = [.. refs.Workbenches],
             };
             var folder = string.Equals(task.FolderPath, movedSourceFolder, StringComparison.OrdinalIgnoreCase)
                 ? movedDestinationFolder

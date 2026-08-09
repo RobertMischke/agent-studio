@@ -21,6 +21,7 @@
                 <span
                   class="refs__chip"
                   [class.refs__chip--waiting]="isWaiting(kind, key)"
+                  [class.refs__chip--document]="kind === 'workbenches'"
                   [attr.data-testid]="'reference-chip-' + key">
                   <button
                     type="button"
@@ -45,7 +46,7 @@
                   <input
                     type="text"
                     class="refs__add-input"
-                    [attr.list]="datalistId()"
+                    [attr.list]="datalistId(kind)"
                     [attr.data-testid]="'reference-add-' + kind"
                     [placeholder]="'+ key'"
                     [disabled]="busyKind() !== null"
@@ -107,11 +108,13 @@
     </div>
 
     @if (adding()) {
-      <datalist [id]="datalistId()">
-        @for (key of candidateKeys(); track key) {
-          <option [value]="key">{{ titleFor(key) || key }}</option>
-        }
-      </datalist>
+      @for (kind of kinds; track kind) {
+        <datalist [id]="datalistId(kind)">
+          @for (key of candidateKeys(kind); track key) {
+            <option [value]="key">{{ titleFor(key) || key }}</option>
+          }
+        </datalist>
+      }
     }
   </section>
 }

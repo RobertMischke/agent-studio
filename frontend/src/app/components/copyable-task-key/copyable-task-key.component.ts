@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, input, signal } from '@a
 import { copyTextToClipboard } from '../../services/clipboard.util';
 import { AppTooltipDirective } from '../tooltip/app-tooltip.directive';
 
-export type CopyableTaskKeyVariant = 'card' | 'detail';
+export type CopyableTaskKeyVariant = 'card' | 'detail' | 'reference';
 
 @Component({
   selector: 'app-copyable-task-key',
@@ -17,6 +17,7 @@ export class CopyableTaskKeyComponent implements OnDestroy {
   readonly label = input('');
   readonly variant = input<CopyableTaskKeyVariant>('card');
   readonly testId = input('copyable-task-key');
+  readonly ariaLabel = input('Copy task key');
   readonly copied = signal(false);
   private resetTimer: ReturnType<typeof setTimeout> | null = null;
 

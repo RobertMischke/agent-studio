@@ -6,6 +6,7 @@ import { WorkbenchInboxComponent } from './workbench-inbox.component';
 function item(id: string, valid = true): WorkbenchListItem {
   return {
     id,
+    key: valid ? `DEM-W${id === 'valid' ? '4' : '5'}` : null,
     title: id,
     summary: `${id} summary`,
     status: valid ? 'active' : 'invalid',
@@ -15,6 +16,7 @@ function item(id: string, valid = true): WorkbenchListItem {
     valid,
     error: valid ? null : 'Descriptor needs repair.',
     sourceTaskKeys: [],
+    relatedTaskKeys: [],
   };
 }
 
@@ -71,6 +73,8 @@ describe('WorkbenchInboxComponent', () => {
     const invalidButton = fixture.nativeElement.querySelector(
       `[data-testid="project-wiki-lifecycle-open-${invalid.entryPath}"]`) as HTMLButtonElement;
     expect(validButton.disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-key-DEM-W4"]')?.textContent).toContain('DEM-W4');
     expect(invalidButton.disabled).toBe(true);
     expect(invalidButton.textContent).toContain('Descriptor needs repair.');
     pageButton.click();

@@ -14,6 +14,7 @@
                 [disabled]="!workbench.valid"
                 [attr.aria-current]="isActive(workbench) ? 'page' : null"
                 [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
+                [appTooltip]="navTooltip(workbench)"
                 [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                 (click)="openWorkbench.emit(workbench)">
           <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
@@ -39,6 +40,7 @@
                     [class.studio-workbench-topic--active]="isActive(workbench)"
                     [attr.aria-current]="isActive(workbench) ? 'page' : null"
                     [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
+                    [appTooltip]="navTooltip(workbench)"
                     [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                     (click)="openWorkbench.emit(workbench)">
               <span class="studio-workbench-topic__title">{{ workbench.title }}</span>

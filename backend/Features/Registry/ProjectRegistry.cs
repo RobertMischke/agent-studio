@@ -238,6 +238,7 @@ public sealed class ProjectRegistry
                 WorkspaceId = workspaceId,
                 SortOrder = _state.Projects.Count,
                 NextTaskKeySeq = 1,
+                NextWorkbenchKeySeq = 1,
                 StorageLocation = storageLocation,
                 CreatedAt = clock.GetUtcNow().UtcDateTime,
             };
@@ -275,6 +276,54 @@ public sealed class ProjectRegistry
             next[idx] = updated;
             ReplaceStateAndPersistLocked(_state with { Projects = next });
             return issued;
+        }
+    }
+
+    /// <summary>
+    /// Atomically reserves and persists the next document reference sequence
+    /// for <paramref name="projectId"/>. The counter is independent from task
+    /// keys so both namespaces remain monotonic without creating gaps in one
+    /// another.
+    /// </summary>
+    public int IssueNextWorkbenchKey(string projectId)
+    {
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(p =>
+                string.Equals(p.Id, projectId, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0)
+                throw new KeyNotFoundException($"Unknown projectId: {projectId}");
+
+            var current = _state.Projects[idx];
+            var issued = current.NextWorkbenchKeySeq;
+            var updated = current with { NextWorkbenchKeySeq = issued + 1 };
+            var next = _state.Projects.ToList();
+            next[idx] = updated;
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
+            return issued;
+        }
+    }
+
+    /// <summary>
+    /// Raises <see cref="ProjectRecord.NextWorkbenchKeySeq"/> to at least the
+    /// supplied floor. Discovery derives this floor from descriptors before it
+    /// mints, preventing a rewound registry snapshot from reusing a live key.
+    /// </summary>
+    public void EnsureWorkbenchKeyFloor(string projectId, int floor)
+    {
+        if (floor < 1) return;
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(p =>
+                string.Equals(p.Id, projectId, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown projectId: {projectId}");
+            var current = _state.Projects[idx];
+            if (current.NextWorkbenchKeySeq >= floor) return;
+            var next = _state.Projects.ToList();
+            next[idx] = current with { NextWorkbenchKeySeq = floor };
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
         }
     }
 

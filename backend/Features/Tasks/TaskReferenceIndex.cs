@@ -12,7 +12,7 @@ namespace AgentStudio.Tasks;
 /// <item>forward — the inputs the <see cref="TaskReferenceValidator"/> needs:
 /// the set of known stable keys and the dependsOn adjacency for cycle
 /// detection;</item>
-/// <item>reverse — "who references X?" across all four relation kinds, which
+/// <item>reverse - "who references X?" across task and document relation kinds, which
 /// drives the detail-view dependents list and the "depends on X" board
 /// filter.</item>
 /// </list>
@@ -165,6 +165,19 @@ public sealed class TaskReferenceIndex
                     if (!sources.Contains(sourceKey, KeyComparer))
                         sources.Add(sourceKey);
                 }
+            }
+            foreach (var target in refs.Workbenches)
+            {
+                if (string.IsNullOrWhiteSpace(target)) continue;
+                if (!incoming.TryGetValue(target, out var list))
+                    incoming[target] = list = new List<TaskReferenceLink>();
+                list.Add(new TaskReferenceLink(
+                    SourceKey: sourceKey.Length > 0 ? sourceKey : null,
+                    SourceJobId: t.Id,
+                    SourceTitle: t.Title,
+                    SourceState: t.State,
+                    SourceWatchPath: t.WatchPath,
+                    Kind: TaskReferenceKinds.Workbenches));
             }
         }
 

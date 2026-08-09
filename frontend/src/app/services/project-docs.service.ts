@@ -30,6 +30,7 @@ import {
   WikiTree,
   WorkbenchCatalogue,
   WorkbenchDocument,
+  WorkbenchTaskReferences,
 } from '../models/project-docs.model';
 
 export interface WikiConditionalResponse<T> {
@@ -195,6 +196,12 @@ export class ProjectDocsService {
   getWorkbench(projectName: string, id: string) {
     return this.http.get<WorkbenchDocument>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(id)}`,
+    );
+  }
+
+  getWorkbenchReferences(projectName: string, key: string) {
+    return this.http.get<WorkbenchTaskReferences>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(key)}/references`,
     );
   }
 

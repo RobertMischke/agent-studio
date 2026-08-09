@@ -74,7 +74,12 @@
           },
           "properties": {
             "schemaVersion": { "type": "integer", "const": 2, "description": "Workbench descriptor version that adopts the shared lifecycle." },
-            "pageKind": { "type": "string", "const": "workbench" }
+            "pageKind": { "type": "string", "const": "workbench" },
+            "key": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9]{1,5}-W[1-9][0-9]*$",
+              "description": "Stable project-scoped reference key assigned atomically during discovery. The folder slug remains the descriptor identity."
+            }
           }
         }
       ]

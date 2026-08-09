@@ -72,7 +72,8 @@ public sealed class TaskDependencyReferenceJsonConverter : JsonConverter<TaskDep
 /// <c>"references"</c> object in <c>job.json</c>; absent or null on disk means
 /// "no references" and the scanner surfaces an empty instance.
 ///
-/// <para>Four relation kinds (see <see cref="TaskReferenceKinds"/>):</para>
+/// <para>Task relations plus one typed document-reference namespace (see
+/// <see cref="TaskReferenceKinds"/>):</para>
 /// <list type="bullet">
 /// <item><b>dependsOn</b>: the target must reach <c>6-completed</c> before this
 /// task is workable. An edge with <c>releaseGate=true</c> additionally requires
@@ -81,6 +82,7 @@ public sealed class TaskDependencyReferenceJsonConverter : JsonConverter<TaskDep
 /// <item><b>relatedTo</b>: thematic link, non-blocking.</item>
 /// <item><b>blockedBy</b>: this task is currently blocked by the target.</item>
 /// <item><b>supersedes</b>: this task replaces an obsolete target.</item>
+/// <item><b>workbenches</b>: stable project-scoped document reference keys.</item>
 /// </list>
 /// </summary>
 public record TaskReferences
@@ -93,13 +95,15 @@ public record TaskReferences
     public List<string> BlockedBy { get; init; } = [];
     [JsonPropertyName("supersedes")]
     public List<string> Supersedes { get; init; } = [];
+    [JsonPropertyName("workbenches")]
+    public List<string> Workbenches { get; init; } = [];
 
     /// <summary>True when every relation list is empty.</summary>
     public bool IsEmpty =>
         DependsOn.Count == 0 && RelatedTo.Count == 0 &&
-        BlockedBy.Count == 0 && Supersedes.Count == 0;
+        BlockedBy.Count == 0 && Supersedes.Count == 0 && Workbenches.Count == 0;
 
-    /// <summary>Flattens the four lists into (kind, target) pairs, in kind order.</summary>
+    /// <summary>Flattens task-target lists into (kind, target) pairs, in kind order.</summary>
     public IEnumerable<(string Kind, string Target)> Enumerate()
     {
         foreach (var t in DependsOn) yield return (TaskReferenceKinds.DependsOn, t.Key);
@@ -110,7 +114,7 @@ public record TaskReferences
 }
 
 /// <summary>
-/// String constants for the four <see cref="TaskReferences"/> relation kinds.
+/// String constants for the <see cref="TaskReferences"/> relation kinds.
 /// Kept as constants (not an enum) so the JSON wire format is the literal
 /// camelCase string matching the field names on disk.
 /// </summary>
@@ -120,8 +124,9 @@ public static class TaskReferenceKinds
     public const string RelatedTo = "relatedTo";
     public const string BlockedBy = "blockedBy";
     public const string Supersedes = "supersedes";
+    public const string Workbenches = "workbenches";
 
-    public static readonly string[] All = [DependsOn, RelatedTo, BlockedBy, Supersedes];
+    public static readonly string[] All = [DependsOn, RelatedTo, BlockedBy, Supersedes, Workbenches];
 }
 
 /// <summary>
@@ -136,6 +141,7 @@ public record SetTaskReferencesRequest
     public List<string>? RelatedTo { get; init; }
     public List<string>? BlockedBy { get; init; }
     public List<string>? Supersedes { get; init; }
+    public List<string>? Workbenches { get; init; }
 
     /// <summary>Projects the request into a normalised <see cref="TaskReferences"/>.</summary>
     public TaskReferences ToReferences() => TaskReferenceValidator.Normalize(new TaskReferences
@@ -144,6 +150,7 @@ public record SetTaskReferencesRequest
         RelatedTo = RelatedTo ?? [],
         BlockedBy = BlockedBy ?? [],
         Supersedes = Supersedes ?? [],
+        Workbenches = Workbenches ?? [],
     });
 }
 
@@ -156,6 +163,8 @@ public enum TaskReferenceErrorCode
     UnknownKey,
     /// <summary>The proposed dependsOn edge closes a cycle (dependsOn must stay a DAG).</summary>
     DependsOnCycle,
+    /// <summary>The document reference key does not resolve in the owning project.</summary>
+    UnknownWorkbenchKey,
 }
 
 /// <summary>One reason a <see cref="SetTaskReferencesRequest"/> was rejected.</summary>
@@ -167,7 +176,8 @@ public record TaskReferenceError(
 
 /// <summary>
 /// Outcome of <see cref="TaskReferenceValidator.Validate"/>. Splits hard
-/// <see cref="Errors"/> (self-reference, dependsOn cycle) that block the write
+/// <see cref="Errors"/> (self-reference, dependsOn cycle, unknown document key)
+/// that block the write
 /// from non-blocking <see cref="Warnings"/> (AGT-2029: an unknown key is
 /// allowed because the referenced task may be created later; it surfaces as an
 /// open dependency chip instead of a 400).
@@ -259,6 +269,7 @@ public static class TaskReferenceValidator
         RelatedTo = NormalizeList(refs.RelatedTo),
         BlockedBy = NormalizeList(refs.BlockedBy),
         Supersedes = NormalizeList(refs.Supersedes),
+        Workbenches = NormalizeList(refs.Workbenches),
     };
 
     /// <summary>
@@ -277,7 +288,8 @@ public static class TaskReferenceValidator
         string selfKey,
         TaskReferences proposed,
         IReadOnlySet<string> knownKeys,
-        IReadOnlyDictionary<string, IReadOnlyCollection<string>> dependsOnGraph)
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> dependsOnGraph,
+        IReadOnlySet<string>? knownWorkbenchKeys = null)
     {
         var self = NormalizeKey(selfKey);
         var norm = Normalize(proposed);
@@ -298,6 +310,18 @@ public static class TaskReferenceValidator
                 warnings.Add(new TaskReferenceError(
                     TaskReferenceErrorCode.UnknownKey, kind, target,
                     $"Referenced task '{target}' does not exist yet."));
+        }
+
+        var knownDocuments = knownWorkbenchKeys
+            ?? new HashSet<string>(KeyComparer);
+        foreach (var target in norm.Workbenches)
+        {
+            if (!knownDocuments.Contains(target))
+                errors.Add(new TaskReferenceError(
+                    TaskReferenceErrorCode.UnknownWorkbenchKey,
+                    TaskReferenceKinds.Workbenches,
+                    target,
+                    $"Document reference '{target}' does not exist in this project."));
         }
 
         // Only run cycle detection on edges that exist and are not self-edges;

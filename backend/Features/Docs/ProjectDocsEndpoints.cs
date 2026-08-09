@@ -98,6 +98,15 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(document);
         });
 
+        app.MapGet("/api/projects/{projectName}/workbenches/{key}/references",
+            (string projectName, string key, WorkbenchCatalogueService workbenches) =>
+            {
+                var references = workbenches.References(projectName, key);
+                return references == null
+                    ? Results.NotFound(new { error = "Document reference key not found" })
+                    : Results.Ok(references);
+            });
+
         // The Workbench Decision gate (AGT-2375). Prepare validates against
         // the exact revision/fingerprint and writes nothing; confirm is the
         // single durable write and lands in the Workbench's own workbench.json.
