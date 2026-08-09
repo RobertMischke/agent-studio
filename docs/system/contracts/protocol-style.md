@@ -168,8 +168,9 @@ protocol pane and the workspace-wide visual evidence reel:
 
 | Endpoint | Purpose |
 |----------|---------|
+| `GET /api/tasks/{id}/results/{**path}?watchPath=...` | Guarded, task-relative artifact server for top-level and nested `results/` files. HTML is served inline under a response sandbox; known preview types retain their MIME type and unknown types retain download behavior. |
 | `GET /api/tasks/{id}/screenshots?watchPath=...` | Recursive walk over `<job>/results/`, ordered oldest-first, captioned by spec/folder name with optional pass-fail status from `results/playwright/index.json`. Drives the per-task strip + lightbox above the protocol body. |
-| `GET /api/tasks/{id}/screenshot?path=<rel>&watchPath=...` | Sub-path aware file server. Path-traversal-guarded; only image content types are served. Used by the strip for nested artefacts under `results/playwright/<spec>/...` (the existing flat `/results/{name}` endpoint stays for top-level files). |
+| `GET /api/tasks/{id}/screenshot?path=<rel>&watchPath=...` | Compatibility image server used by screenshot listings. Path-traversal-guarded; only image content types are served. |
 | `GET /api/workspace/screenshots?windowHours=N&projectFilter=...` | Newest-first reel across every watched job whose `results/` folder was touched inside the window. Drives the workspace "Visual evidence" overlay (`#/workspace/screenshots`). |
 
 The retention rule from §4.1 still applies: only files that already
@@ -229,16 +230,37 @@ journal, so the per-task surface can reuse the same records.
 
 ### 4.2 Local rendering
 
-The protocol pane renders `status.md` through [`markdownToHtml`](../../frontend/src/app/components/markdown-utils.ts) with a `resolveImageSrc` that maps:
+Task, Activity, Result, and Docs render Markdown through the canonical
+`<cac-markdown>` surface or the Result view's specialized renderer. A shared
+host resolver binds artifact links to the open card rather than the browser URL
+or an execution-host filesystem path:
+
+| Markdown link source | Resolved URL |
+|----------------------|--------------|
+| `results/<path>` | `/api/tasks/{jobId}/results/<path>?watchPath=…` |
+| Allowed text `logs/<path>` (`.log`, Markdown, JSON/JSONL, CSV, XML, YAML, or plain text) | `/api/tasks/{jobId}/files/logs/<path>?watchPath=…&scope=workspace` |
+| Absolute runner path ending in `results/<path>` or `logs/<path>` | Same task-relative route after discarding the host-specific prefix |
+
+Artifact links open in a new tab. The server response decides inline preview or
+download by content type. External URLs, source references, Wiki links, and
+task references keep their existing navigation behavior. Traversal and encoded
+traversal are not rewritten.
+
+Image sources use the same card context and map as follows:
 
 | Markdown source | Resolved URL |
 |-----------------|--------------|
 | `attachments/<name>` | `/api/tasks/{jobId}/attachments/{name}?watchPath=…` |
-| `results/<name>` | `/api/tasks/{jobId}/results/{name}?watchPath=…` |
+| `results/<path>` | `/api/tasks/{jobId}/results/{path}?watchPath=…` |
 | `<name>.png` (no prefix) | `/api/tasks/{jobId}/results/{name}?watchPath=…` (fallback for legacy protocols) |
 | Absolute `http(s)://…` | passed through unchanged |
 
-The flat `attachments/<name>` and `results/<name>` endpoints serve only files whose names contain no path separators and live directly under those folders. Nested `results/<subdir>/<name>` protocol images are served by the guarded `/api/tasks/{id}/screenshot?path=...` endpoint. All image-serving paths reject traversal; see `TaskScannerService.ResolveAttachment`, `TaskScannerService.ResolveResult`, and `ScreenshotIndexService.ResolveScreenshotFile`.
+The flat `attachments/<name>` endpoint serves only files directly under that
+folder. The guarded `results/{**path}` route serves both top-level and nested
+result artifacts. Screenshot listings retain the compatibility
+`/screenshot?path=...` image route. All serving paths reject traversal; see
+`TaskScannerService.ResolveAttachment`, `TaskScannerService.ResolveResult`, and
+`ScreenshotIndexService.ResolveScreenshotFile`.
 
 ### 4.2.5 Playwright artifact harvesting
 

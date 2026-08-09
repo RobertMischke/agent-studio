@@ -2,6 +2,7 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   OnDestroy,
   input,
@@ -15,6 +16,7 @@ import { formatTime as fmtTime } from '../../../../services/format.util';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { TaskArtifactLinksDirective } from '../task-artifact-links/task-artifact-links.directive';
 /**
  * Modal overlay that shows the live CLI output and the parsed protocol
  * log side-by-side. Triggered from the protocol pane's "Maximize log"
@@ -26,13 +28,20 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
   selector: 'app-log-overlay',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ActivityLogViewComponent, TooltipDirective],
+  imports: [ActivityLogViewComponent, TooltipDirective, TaskArtifactLinksDirective],
   templateUrl: './log-overlay.component.html'
 })
 export class LogOverlayComponent implements AfterViewInit, OnDestroy {
   readonly cliOutput = input<CliOutputLine[]>([]);
   readonly log = input<TaskLogEntry[]>([]);
   readonly isRunning = input(false);
+  readonly jobId = input<string | null>(null);
+  readonly watchPath = input<string | null>(null);
+
+  readonly artifactLinkContext = computed(() => ({
+    jobId: this.jobId(),
+    watchPath: this.watchPath(),
+  }));
 
   readonly closeRequest = output<void>();
 

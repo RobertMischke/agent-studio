@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { BrowserContext, expect, test } from '@playwright/test';
 import * as path from 'path';
 
 const SHOTS_DIR = process.env['JOB_RESULTS_DIR']
@@ -102,6 +102,11 @@ function outputBuffer(): OutLine[] {
       stream: 'stderr',
       text: 'The concept and its navigation entry are ready for review.',
     },
+    {
+      timestamp: at(39.5),
+      stream: 'stderr',
+      text: 'Fertig: [Konzeptbericht öffnen](/home/agent/runner-work/tasks/AGT-2514/results/report.html)',
+    },
     { timestamp: at(40), stream: 'stderr', text: '[[TASK_DONE]]' },
     {
       timestamp: at(41),
@@ -149,7 +154,11 @@ function detail() {
       tags: [],
       references: { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] },
     },
-    promptMarkdown: 'Fixture prompt.',
+    promptMarkdown: [
+      'Fixture prompt.',
+      '',
+      '[Task report](/home/agent/runner-work/tasks/AGT-2514/results/report.html)',
+    ].join('\n'),
     promptHistory: [],
     titleHistory: [],
     statusMarkdown: `# Status
@@ -177,11 +186,11 @@ function detail() {
   };
 }
 
-async function installRoutes(page: Page): Promise<void> {
+async function installRoutes(context: BrowserContext): Promise<void> {
   const encodedId = encodeURIComponent(TARGET.id);
-  await page.route('**/api/**', (route) =>
+  await context.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-  await page.route('**/api/auth/status', (route) =>
+  await context.route('**/api/auth/status', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -192,7 +201,7 @@ async function installRoutes(page: Page): Promise<void> {
         user: null,
       }),
     }));
-  await page.route('**/api/tasks/grouped**', (route) =>
+  await context.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -211,7 +220,7 @@ async function installRoutes(page: Page): Promise<void> {
         archive: [],
       }),
     }));
-  await page.route('**/api/watch-paths**', (route) =>
+  await context.route('**/api/watch-paths**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -229,13 +238,13 @@ async function installRoutes(page: Page): Promise<void> {
     archived: false,
     urls: [],
   };
-  await page.route('**/api/projects', (route) =>
+  await context.route('**/api/projects', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify([project]),
     }));
-  await page.route('**/api/workspaces', (route) =>
+  await context.route('**/api/workspaces', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -246,13 +255,13 @@ async function installRoutes(page: Page): Promise<void> {
         projects: [project],
       }]),
     }));
-  await page.route('**/api/cli/quota**', (route) =>
+  await context.route('**/api/cli/quota**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ snapshots: [], ttlSeconds: 600 }),
     }));
-  await page.route('**/api/runner/status**', (route) =>
+  await context.route('**/api/runner/status**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -268,13 +277,13 @@ async function installRoutes(page: Page): Promise<void> {
         },
       }),
     }));
-  await page.route(`**/api/tasks/${encodedId}/output**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}/output**`, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(outputBuffer()),
     }));
-  await page.route(`**/api/tasks/${encodedId}/plan**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}/plan**`, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -288,7 +297,7 @@ async function installRoutes(page: Page): Promise<void> {
         unassignedSubActions: [],
       }),
     }));
-  await page.route(`**/api/tasks/${encodedId}/pipeline**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}/pipeline**`, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -300,25 +309,32 @@ async function installRoutes(page: Page): Promise<void> {
         cost: null,
       }),
     }));
-  await page.route(`**/api/tasks/${encodedId}/runs**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}/runs**`, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ runs: [], runnerEvents: [] }),
     }));
-  await page.route(`**/api/tasks/${encodedId}/session-events**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}/session-events**`, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ events: [], sessionChain: [] }),
     }));
-  await page.route(`**/api/tasks/${encodedId}/claude-session**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}/claude-session**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
-  await page.route(`**/api/tasks/${encodedId}?**`, (route) =>
+  await context.route(`**/api/tasks/${encodedId}?**`, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(detail()),
+    }));
+  await context.route(`**/api/tasks/${encodedId}/results/report.html**`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      headers: { 'Content-Disposition': 'inline' },
+      body: '<!doctype html><html><body><h1>Artifact opened</h1></body></html>',
     }));
 }
 
@@ -330,7 +346,7 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
   await page.addInitScript((selectedTheme) => {
     localStorage.setItem('atp.studio.theme', selectedTheme);
   }, theme);
-  await installRoutes(page);
+  await installRoutes(page.context());
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(
     `/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`,
@@ -420,24 +436,47 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
 });
 }
 
-test('Result markdown keeps docs, reports, and task keys inside Studio', async ({ page }) => {
+test('Activity, Task, and Result links bind task artifacts to the open card', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('atp.studio.theme', 'light');
+    localStorage.setItem('atp.flag.nextGenChat', '1');
   });
-  await installRoutes(page);
+  await installRoutes(page.context());
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(
     `/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`,
   );
 
+  const artifactHref = `/api/tasks/${encodeURIComponent(TARGET.id)}/results/report.html?watchPath=${encodeURIComponent(TARGET.watchPath)}`;
+
+  await page.getByTestId('inspector-tab-activity').click();
+  const activityReport = page.getByTestId('activity-panel').getByRole('link', {
+    name: 'Konzeptbericht öffnen',
+  });
+  await expect(activityReport).toHaveAttribute('href', artifactHref);
+  await expect(activityReport).toHaveAttribute('target', '_blank');
+  const activityPopupPromise = page.waitForEvent('popup');
+  await activityReport.click();
+  const activityPopup = await activityPopupPromise;
+  await expect(activityPopup.getByRole('heading', { name: 'Artifact opened' })).toBeVisible();
+  await activityPopup.close();
+
+  await page.getByTestId('inspector-tab-task').click();
+  const taskReport = page.getByTestId('task-tab-content').getByRole('link', { name: 'Task report' });
+  await expect(taskReport).toHaveAttribute('href', artifactHref);
+  await expect(taskReport).toHaveAttribute('target', '_blank');
+
+  await page.getByTestId('inspector-tab-protocol').click();
   const result = page.getByTestId('protocol-beautiful-results');
   await expect(result).toBeVisible();
   const wiki = result.getByRole('link', { name: 'Open quality/angular-components.md in project Wiki' });
-  const report = result.getByRole('link', { name: 'Open results/report.html in source viewer' });
+  const report = result.getByRole('link', { name: 'Open task artifact results/report.html' });
   const card = result.getByRole('link', { name: 'Open task ASS-4242' });
   const external = result.getByRole('link', { name: 'External' });
   await expect(wiki).toBeVisible();
   await expect(report).toBeVisible();
+  await expect(report).toHaveAttribute('href', artifactHref);
+  await expect(report).toHaveAttribute('target', '_blank');
   await expect(card).toBeVisible();
   await expect(external).toHaveAttribute('target', '_blank');
   await page.screenshot({
@@ -445,9 +484,11 @@ test('Result markdown keeps docs, reports, and task keys inside Studio', async (
     fullPage: false,
   });
 
+  const resultPopupPromise = page.waitForEvent('popup');
   await report.click();
-  await expect(page.getByTestId('source-viewer')).toBeVisible();
-  await page.getByTestId('source-viewer-close').click();
+  const resultPopup = await resultPopupPromise;
+  await expect(resultPopup.getByRole('heading', { name: 'Artifact opened' })).toBeVisible();
+  await resultPopup.close();
 
   await card.click();
   await expect(page).toHaveURL(/#\/tasks\/ASS-4242/);

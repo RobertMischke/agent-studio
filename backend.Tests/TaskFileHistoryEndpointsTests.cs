@@ -103,6 +103,35 @@ public sealed class TaskFileHistoryEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task ResultArtifactRoute_ServesNestedHtmlInline_AndKeepsUnknownFilesAsDownloads()
+    {
+        var job = WriteJob("ASS-RESULT-HTML");
+        var nested = Path.Combine(job, "results", "reports");
+        Directory.CreateDirectory(nested);
+        File.WriteAllText(Path.Combine(nested, "concept report.html"), "<h1>Concept report</h1>", Encoding.UTF8);
+        File.WriteAllBytes(Path.Combine(nested, "evidence.bin"), [0, 1, 2, 255]);
+
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var watchPath = Uri.EscapeDataString(_workspaceProjectRoot);
+        using var html = await client.GetAsync(
+            $"/api/tasks/ASS-RESULT-HTML/results/reports/concept%20report.html?watchPath={watchPath}");
+
+        html.EnsureSuccessStatusCode();
+        Assert.Equal("text/html", html.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("utf-8", html.Content.Headers.ContentType?.CharSet?.ToLowerInvariant());
+        Assert.Equal("inline", html.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains("sandbox allow-scripts", html.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("<h1>Concept report</h1>", await html.Content.ReadAsStringAsync());
+
+        using var binary = await client.GetAsync(
+            $"/api/tasks/ASS-RESULT-HTML/results/reports/evidence.bin?watchPath={watchPath}");
+        binary.EnsureSuccessStatusCode();
+        Assert.Equal("application/octet-stream", binary.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(new byte[] { 0, 1, 2, 255 }, await binary.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
     public async Task CodeFileHistory_UsesProjectRepositoryWhenScopedToCode()
     {
         WriteJob("ASS-900");

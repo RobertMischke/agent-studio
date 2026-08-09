@@ -127,7 +127,7 @@ describe('renderResultsHtml', () => {
     expect(html).toMatch(/rel="noopener noreferrer"/);
   });
 
-  it('routes docs, task keys, and HTML reports to typed in-app controls', () => {
+  it('routes docs, task keys, and HTML reports to typed task-aware controls', () => {
     const md = [
       '[convention](docs/quality/angular-components.md)',
       '[report](results/report.html)',
@@ -136,9 +136,10 @@ describe('renderResultsHtml', () => {
     const { html } = renderResultsHtml(md, CTX);
 
     expect(html).toContain('data-results-wiki="quality/angular-components.md"');
-    expect(html).toContain('data-results-source="results/report.html"');
+    expect(html).toContain('data-results-artifact="results/report.html"');
+    expect(html).toContain('/api/tasks/abc/results/report.html?watchPath=C%3A%2FProjects%2Frepo');
+    expect(html).toContain('target="_blank"');
     expect(html).toContain('data-results-task-key="AGT-2437"');
-    expect(html).not.toContain('target="_blank"');
   });
 
   it('lifts the sentinel marker out of the body even when surrounded by text', () => {

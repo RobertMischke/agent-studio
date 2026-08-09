@@ -36,6 +36,7 @@ import DOMPurify from 'dompurify';
 import { html as diff2htmlRender } from 'diff2html';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 import { detectSourceRef } from './source-ref';
+import { resolveTaskArtifactLink } from '../task-artifact-links/task-artifact-link';
 
 export interface BeautifulRendererContext {
   jobId: string | null | undefined;
@@ -206,6 +207,8 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
         const inner = token.tokens && token.tokens.length
           ? this.parser.parseInline(token.tokens)
           : escapeHtml(token.text ?? '');
+        const artifact = resolveTaskArtifactLink(rawHref, context);
+        if (artifact) return renderArtifactLink(artifact.href, artifact.relativePath, inner);
         if (!/^[a-z][a-z0-9+.-]*:/i.test(rawHref)) {
           const wikiPath = detectWikiPath(rawHref);
           if (wikiPath) return renderWikiLink(wikiPath, inner);
@@ -221,6 +224,13 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
       }
     }
   };
+}
+
+function renderArtifactLink(href: string, relativePath: string, inner: string): string {
+  return `<a class="results-internal-link" href="${escapeAttr(href)}"`
+    + ` data-results-artifact="${escapeAttr(relativePath)}"`
+    + ` target="_blank" rel="noopener noreferrer"`
+    + ` aria-label="Open task artifact ${escapeAttr(relativePath)}">${inner}</a>`;
 }
 
 function detectWikiPath(rawHref: string): string | null {
@@ -327,6 +337,7 @@ function sanitize(raw: string): string {
       'data-results-line',
       'data-results-wiki',
       'data-results-task-key',
+      'data-results-artifact',
       'data-source',
       'data-lang',
       'loading'

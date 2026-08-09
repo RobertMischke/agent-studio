@@ -1,4 +1,7 @@
-<section class="pane pane--protocol" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-protocol">
+<section class="pane pane--protocol"
+         [style.flex]="maximized() ? '1 1 100%' : weight()"
+         [appTaskArtifactLinks]="artifactLinkContext()"
+         data-testid="pane-protocol">
   <!--
     F38: Protocol / Activity tabs are lifted into the pane-header's
     `[tabs]` slot so the right pane mirrors the left pane's

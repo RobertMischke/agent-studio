@@ -68,6 +68,7 @@ import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-
 import { projectStructuredActivityContent } from '../structured-activity-projection';
 import { TaskInspectorTabComponent } from '../task-inspector-tab/task-inspector-tab.component';
 import { DecisionSurfaceComponent } from '../../decision-surface/decision-surface.component';
+import { TaskArtifactLinksDirective } from '../../task-artifact-links/task-artifact-links.directive';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -131,6 +132,7 @@ interface InterimSummaryState {
     TaskInspectorTabComponent,
     DecisionSurfaceComponent,
     ActivityEventPresentationDirective,
+    TaskArtifactLinksDirective,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -152,6 +154,11 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly regenerating = input(false);
   readonly runOutcome = input<ProtocolVerdict | null>(null);
+
+  readonly artifactLinkContext = computed(() => ({
+    jobId: this.detail().info.id,
+    watchPath: this.detail().info.watchPath,
+  }));
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
