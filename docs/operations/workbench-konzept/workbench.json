@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "workbench-konzept",
   "title": "Workbenches: Name, Muster, App-Werdung",
-  "summary": "IN UMSETZUNG 09.08. (Operator: \"kann man so machen und loslegen\"): Slices laufen als AGT-2533 (Keys+Referenzen) -> AGT-2534 (Viewer-Kopf SEHR kompakt) / AGT-2535 (zentrale Seite+Projektliste+SignalR) / AGT-2537 (documented-Stufe) / AGT-2538 (Refresh-Karte); AGT-2536 (Template v2 + pattern-Feld) parallel. Offen: NAME (Runde 2: Task-*/Epic-Richtung; Empfehlung Dossier, Alternativen Charter/Initiative/Task Docs/Task Companion) -> danach Umbenennungs- und Website-Slice (AOW-13). 08 korrigiert: Workbench buendelt den GESAMTEN Lebenszyklus. Meta-Workbench zum Workbench-Konzept selbst (Operator-Auftrag 09.08.). Bestandsaufnahme des heutigen Mechanismus, These: Workbench = Vorstufe zum Task, teils Operator-Backlog, fast der ideale Arbeitsweg. Entscheidungsfelder: Name (4 Kandidaten, Empfehlung Concepts, AGT-2520-Kollisionsnotiz), Nav-Einbindung, zwei Muster als erste Klasse (ui-heavy vs concept-heavy), Medium-Artikel-Stil mit Full-Bleed-Mockups (Dokument demonstriert ihn selbst), Mehr-App (Live-Task-Tracking, Refresh-Karten, Interaktivität auf AGT-2520-Basis). Neu 09.08.: Verwandtschaft mit Epics (Epic bündelt beschlossene, Workbench werdende Arbeit), zentrale projektübergreifende Seite analog Epics mit Entscheiden-aus-der-Liste, vollständiger Lebenszyklus: nicht verworfene Workbenches tracken bis zum Abschluss und werden dann Doku (documented-Stufe); Erklärung des Arbeitsmodells auf agent-orchestrator.dev als Slice 7 (AOW-Backlog-Karte). Neu: Projektebenen-Liste als eigene Seite und SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) fuer Tree/Listen/Viewer als Mehrbenutzer-Grundlage - Praxisbeleg: vier neue Workbenches waren per API gelistet, im Tree aber bis zum Reload unsichtbar. Neu 09.08.: Workbench-Keys nach Karten-Vorbild (AGT-W4, Auto-Vergabe via Projekt-Sequenz, Klick-Kopier-Chip, Karten referenzieren per Key; Live-Task-Block wird dadurch ableitbar statt handgepflegt). Slice-Plan mit 8 Scheiben, Keys als Slice 1.",
+  "summary": "NAME ENTSCHIEDEN 09.08.: **Dossier**. Umbenennung UI+Doku als AGT-2539; Website-Karten entsperrt (AOW-13 Hub-Arbeitsmodell, WEB-18 Studio-Site-Element, dependsOn WEB-16). IN UMSETZUNG 09.08. (Operator: \"kann man so machen und loslegen\"): Slices laufen als AGT-2533 (Keys+Referenzen) -> AGT-2534 (Viewer-Kopf SEHR kompakt) / AGT-2535 (zentrale Seite+Projektliste+SignalR) / AGT-2537 (documented-Stufe) / AGT-2538 (Refresh-Karte); AGT-2536 (Template v2 + pattern-Feld) parallel. Offen: NAME (Runde 2: Task-*/Epic-Richtung; Empfehlung Dossier, Alternativen Charter/Initiative/Task Docs/Task Companion) -> danach Umbenennungs- und Website-Slice (AOW-13). 08 korrigiert: Workbench buendelt den GESAMTEN Lebenszyklus. Meta-Workbench zum Workbench-Konzept selbst (Operator-Auftrag 09.08.). Bestandsaufnahme des heutigen Mechanismus, These: Workbench = Vorstufe zum Task, teils Operator-Backlog, fast der ideale Arbeitsweg. Entscheidungsfelder: Name (4 Kandidaten, Empfehlung Concepts, AGT-2520-Kollisionsnotiz), Nav-Einbindung, zwei Muster als erste Klasse (ui-heavy vs concept-heavy), Medium-Artikel-Stil mit Full-Bleed-Mockups (Dokument demonstriert ihn selbst), Mehr-App (Live-Task-Tracking, Refresh-Karten, Interaktivität auf AGT-2520-Basis). Neu 09.08.: Verwandtschaft mit Epics (Epic bündelt beschlossene, Workbench werdende Arbeit), zentrale projektübergreifende Seite analog Epics mit Entscheiden-aus-der-Liste, vollständiger Lebenszyklus: nicht verworfene Workbenches tracken bis zum Abschluss und werden dann Doku (documented-Stufe); Erklärung des Arbeitsmodells auf agent-orchestrator.dev als Slice 7 (AOW-Backlog-Karte). Neu: Projektebenen-Liste als eigene Seite und SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) fuer Tree/Listen/Viewer als Mehrbenutzer-Grundlage - Praxisbeleg: vier neue Workbenches waren per API gelistet, im Tree aber bis zum Reload unsichtbar. Neu 09.08.: Workbench-Keys nach Karten-Vorbild (AGT-W4, Auto-Vergabe via Projekt-Sequenz, Klick-Kopier-Chip, Karten referenzieren per Key; Live-Task-Block wird dadurch ableitbar statt handgepflegt). Slice-Plan mit 8 Scheiben, Keys als Slice 1.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "testing",
-  "updatedAt": "2026-08-09T14:15:00Z",
+  "updatedAt": "2026-08-09T15:00:00Z",
   "sourceTaskKeys": [],
   "relatedTaskKeys": [
     "AGT-2533",
@@ -15,8 +15,9 @@
     "AGT-2536",
     "AGT-2537",
     "AGT-2538",
-    "AGT-2520",
-    "AGT-2509",
-    "AGT-2375"
+    "AGT-2539",
+    "AOW-13",
+    "WEB-18",
+    "AGT-2520"
   ]
 }
