@@ -1,11 +1,14 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
-const SHOTS_DIR = path.resolve(__dirname, '../../results/AGT-2437');
+const SHOTS_DIR = process.env['JOB_RESULTS_DIR']
+  ?? path.resolve(__dirname, '../../results/AGT-2437');
+const EVIDENCE_VARIANT = process.env['EVIDENCE_VARIANT'] === 'before' ? 'before' : 'after';
 const TARGET = {
   id: 'activity-structured-content-fixture',
   watchPath: 'C:/fixtures/activity-structured-content',
 };
+const WORKTREE_ROOT = 'C:/Users/operator/AppData/Local/Temp/ass-worktrees/fixture/activity-structured-content-fixture';
 
 interface OutLine {
   timestamp: string;
@@ -17,6 +20,20 @@ function outputBuffer(): OutLine[] {
   const t0 = Date.parse('2026-07-28T10:40:44.000Z');
   const at = (offset: number) => new Date(t0 + offset * 1000).toISOString();
   return [
+    { timestamp: at(-110), stream: 'stdout', text: 'I will inspect the implementation before editing it.' },
+    { timestamp: at(-108), stream: 'stdout', text: '* Run npm --prefix frontend run test:one (shell)' },
+    { timestamp: at(-106), stream: 'stdout', text: '* Run npm --prefix frontend run test:two (shell)' },
+    { timestamp: at(-104), stream: 'stdout', text: '* Run npm --prefix frontend run test:three (shell)' },
+    { timestamp: at(-102), stream: 'stdout', text: '* Run npm --prefix frontend run test:four (shell)' },
+    { timestamp: at(-100), stream: 'stdout', text: '* Read frontend/src/app/campaign.ts' },
+    { timestamp: at(-98), stream: 'stdout', text: '* Read frontend/src/app/campaign.spec.ts' },
+    { timestamp: at(-80), stream: 'stdout', text: 'The call sites are mapped. I will apply the focused edits now.' },
+    { timestamp: at(-78), stream: 'stdout', text: `* Edit ${WORKTREE_ROOT}\\frontend\\src\\app\\campaign.ts` },
+    { timestamp: at(-76), stream: 'stdout', text: `* Edit ${WORKTREE_ROOT}\\frontend\\src\\app\\campaign.ts` },
+    { timestamp: at(-74), stream: 'stdout', text: `* Edit ${WORKTREE_ROOT}\\frontend\\src\\app\\campaign.ts` },
+    { timestamp: at(-72), stream: 'stdout', text: `* Edit ${WORKTREE_ROOT}\\frontend\\src\\app\\campaign.ts` },
+    { timestamp: at(-70), stream: 'stdout', text: `* Edit ${WORKTREE_ROOT}\\frontend\\src\\app\\campaign.ts` },
+    { timestamp: at(-60), stream: 'stdout', text: 'The edits are complete. I will verify the structured transcript.' },
     { timestamp: at(0), stream: 'system', text: "[runner] working tree ready on branch 'main'" },
     { timestamp: at(1), stream: 'system', text: '[runner] spawning codex exec -m gpt-5.6-sol -' },
     { timestamp: at(2), stream: 'stderr', text: 'OpenAI Codex v0.144.1' },
@@ -116,6 +133,14 @@ function detail() {
       useOwnSession: null,
       lastUsage: null,
       execution: null,
+      executionLocation: {
+        state: 'no-active-execution',
+        executionKind: 'none',
+        worktreePath: `${WORKTREE_ROOT}/frontend`,
+        connectionState: 'idle',
+        leaseState: 'none',
+        trustReason: 'Historical fixture worktree.',
+      },
       commit: null,
       commits: [],
       codeActivityDetected: true,
@@ -321,8 +346,38 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
   await expect(panel.getByTestId('conversation-view')).toBeVisible();
 
   const tools = panel.getByTestId('tool-burst-chip');
-  await expect(tools).toHaveCount(2);
-  const diffTool = tools.nth(0);
+  await expect(tools).toHaveCount(4);
+  const mixedTool = tools.nth(0);
+  const editTool = tools.nth(1);
+  if (EVIDENCE_VARIANT === 'before') {
+    await expect(mixedTool.getByTestId('tool-burst-row')).toContainText('6');
+    await expect(mixedTool.getByTestId('tool-burst-row')).not.toContainText('shell ×4');
+    await expect(editTool.getByTestId('tool-burst-row')).toContainText('5');
+    await expect(editTool.getByTestId('tool-burst-row')).not.toContainText('5 Edits · 1 file');
+  } else {
+    await expect(mixedTool.getByTestId('tool-burst-row')).toContainText('6 Tool calls');
+    await expect(mixedTool.getByTestId('tool-burst-row')).toContainText('shell ×4, read ×2');
+    await expect(mixedTool.getByTestId('tool-burst-row')).toContainText('all ok');
+    await expect(mixedTool.getByTestId('tool-burst-row')).toContainText('10s');
+    await expect(editTool.getByTestId('tool-burst-row')).toContainText('5 Edits · 1 file');
+    await expect(editTool.getByTestId('tool-burst-row')).toContainText('frontend/src/app/campaign.ts');
+    await expect(editTool.getByTestId('tool-burst-row')).toContainText('8s');
+    await expect(editTool.getByTestId('activity-edit-files')).toHaveAttribute(
+      'title',
+      `${WORKTREE_ROOT}/frontend/src/app/campaign.ts`,
+    );
+    await expect(editTool.getByRole('button', { name: /diff/i })).toHaveCount(0);
+  }
+  await panel.getByTestId('conversation-view').screenshot({
+    path: path.join(
+      SHOTS_DIR,
+      process.env['JOB_RESULTS_DIR']
+        ? `AGT-2526--tool-edit-lines-${EVIDENCE_VARIANT}-${theme}--mocked.png`
+        : `activity-density-${EVIDENCE_VARIANT}-${theme}.png`,
+    ),
+  });
+
+  const diffTool = tools.nth(2);
   await diffTool.getByTestId('tool-burst-row').click();
   const diffOutput = diffTool.getByTestId('tool-burst-command-output');
   await expect(diffOutput).toContainText('diff --git a/docs/start/README.md');
@@ -336,7 +391,7 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
     ),
   });
 
-  const markupTool = tools.nth(1);
+  const markupTool = tools.nth(3);
   await expect(markupTool.getByTestId('tool-burst-row')).toHaveAttribute('aria-expanded', 'false');
   await markupTool.getByTestId('tool-burst-row').click();
   const markupOutput = markupTool.getByTestId('tool-burst-command-output');
