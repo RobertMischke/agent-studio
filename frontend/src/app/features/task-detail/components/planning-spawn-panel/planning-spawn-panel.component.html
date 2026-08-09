@@ -1,22 +1,14 @@
 @if (show()) {
   <section class="spawn"
-           data-testid="planning-spawn-panel"
-           [class.spawn--ok]="contractSatisfied()"
-           [class.spawn--risk]="!contractSatisfied()">
+           data-testid="planning-spawn-panel">
     <header class="spawn__head">
       <span class="spawn__glyph" aria-hidden="true">🗺️</span>
       <h3 class="spawn__title">Planning follow-ups</h3>
       @if (contractSatisfied()) {
         <span class="spawn__contract spawn__contract--ok"
               data-testid="planning-contract"
-              [cacTooltip]="'Spawn contract satisfied: this planning task either produced follow-up cards or declared no follow-up intended.'">
+              title="Spawn contract satisfied: this planning task either produced follow-up cards or declared no follow-up intended.">
           ✓ contract met
-        </span>
-      } @else {
-        <span class="spawn__contract spawn__contract--risk"
-              data-testid="planning-contract"
-              [cacTooltip]="'Spawn contract not satisfied: no follow-up cards and no declaration. Accepting now is the AGT-1915 trap.'">
-          ! no follow-ups
         </span>
       }
     </header>
@@ -35,33 +27,75 @@
           }
         }
       </div>
+      @if (promoteAvailable()) {
+        <div class="spawn__actions spawn__actions--standalone">
+          <button type="button"
+                  class="spawn__btn spawn__btn--primary"
+                  data-testid="overview-promote-btn"
+                  title="Open the create-task modal pre-filled from this planning report, including its title, prompt, and copied images."
+                  [disabled]="promotePending()"
+                  (click)="promoteRequested.emit()">
+            {{ promotePending() ? 'Preparing…' : 'Promote to coding task' }}
+          </button>
+        </div>
+      }
     } @else if (noFollowUpDeclared()) {
       <div class="spawn__declared" data-testid="planning-no-followup-declared">
         <p class="spawn__declared-line">
-          <span class="spawn__declared-badge">no follow-up intended</span>
-          This planning task was deliberately closed without follow-up cards.
+          <span class="spawn__status-dot spawn__status-dot--ok" aria-hidden="true"></span>
+          No follow-up intended
         </p>
         @if (noFollowUpReason(); as reason) {
           <p class="spawn__declared-reason">“{{ reason }}”</p>
         }
-        <button type="button"
-                class="spawn__btn spawn__btn--ghost"
-                data-testid="planning-clear-declaration"
-                [disabled]="busy()"
-                (click)="clearDeclaration()">
-          Undo declaration
-        </button>
+        <div class="spawn__actions">
+          @if (promoteAvailable()) {
+            <button type="button"
+                    class="spawn__btn spawn__btn--primary"
+                    data-testid="overview-promote-btn"
+                    title="Open the create-task modal pre-filled from this planning report, including its title, prompt, and copied images."
+                    [disabled]="promotePending()"
+                    (click)="promoteRequested.emit()">
+              {{ promotePending() ? 'Preparing…' : 'Promote to coding task' }}
+            </button>
+          }
+          <button type="button"
+                  class="spawn__btn spawn__btn--ghost"
+                  data-testid="planning-clear-declaration"
+                  [disabled]="busy()"
+                  (click)="clearDeclaration()">
+            Undo declaration
+          </button>
+        </div>
       </div>
     } @else {
-      <div class="spawn__warning" data-testid="planning-no-followups-warning" role="alert">
-        <span class="spawn__warning-icon" aria-hidden="true">⚠</span>
-        <div class="spawn__warning-body">
-          <p class="spawn__warning-title">No follow-up cards created</p>
-          <p class="spawn__warning-text">
-            A planning task is only done once it has spawned the concrete work it proposed,
-            or explicitly declared that no follow-up is intended. Promote the plan into a
-            coding task, or record a deliberate no-follow-up decision below.
-          </p>
+      <div class="spawn__risk-row">
+        <span class="spawn__risk-status"
+              data-testid="planning-no-followups-status"
+              role="status"
+              title="A planning task is complete after it creates the proposed follow-up work or records that none is intended.">
+          <span class="spawn__status-dot" aria-hidden="true"></span>
+          No follow-up cards created
+        </span>
+        <div class="spawn__actions">
+          @if (promoteAvailable()) {
+            <button type="button"
+                    class="spawn__btn spawn__btn--primary"
+                    data-testid="overview-promote-btn"
+                    title="Open the create-task modal pre-filled from this planning report, including its title, prompt, and copied images."
+                    [disabled]="promotePending()"
+                    (click)="promoteRequested.emit()">
+              {{ promotePending() ? 'Preparing…' : 'Promote to coding task' }}
+            </button>
+          }
+          @if (!declaring()) {
+            <button type="button"
+                    class="spawn__btn spawn__btn--ghost"
+                    data-testid="planning-declare-open"
+                    (click)="openDeclare()">
+              Declare: no follow-up intended
+            </button>
+          }
         </div>
       </div>
 
@@ -92,13 +126,6 @@
             </button>
           </div>
         </div>
-      } @else {
-        <button type="button"
-                class="spawn__btn spawn__btn--declare"
-                data-testid="planning-declare-open"
-                (click)="openDeclare()">
-          Declare: no follow-up intended
-        </button>
       }
     }
   </section>

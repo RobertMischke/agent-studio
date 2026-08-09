@@ -43,11 +43,11 @@ console.log('card mode pills:', JSON.stringify(modes));
 const microcards = await page.locator('app-task-reference-microcard').count();
 if (microcards < 1) throw new Error('Expected at least one spawn microcard');
 
-// B + contract) Three spawn panels; one loud "no follow-ups" warning; two contract-met.
+// B + contract) Three spawn panels; one compact unresolved status; two contract-met.
 const panels = await page.locator('[data-testid="planning-spawn-panel"]').count();
 if (panels !== 3) throw new Error(`Expected 3 spawn panels, found ${panels}`);
-const warnings = await page.locator('[data-testid="planning-no-followups-warning"]').count();
-if (warnings !== 1) throw new Error(`Expected exactly 1 no-follow-up warning, found ${warnings}`);
+const warnings = await page.locator('[data-testid="planning-no-followups-status"]').count();
+if (warnings !== 1) throw new Error(`Expected exactly 1 no-follow-up status, found ${warnings}`);
 const contracts = await page.locator('[data-testid="planning-contract"]').allTextContents();
 console.log('contract badges:', JSON.stringify(contracts.map((c) => c.trim())));
 
@@ -55,6 +55,12 @@ for (const theme of ['dark', 'light']) {
   await setTheme(theme);
   await shot(`planning-visibility-${theme}--mocked.png`);
 }
+
+await page.setViewportSize({ width: 320, height: 800 });
+await setTheme('light');
+await page.locator('[data-scenario="at-risk"] [data-testid="planning-spawn-panel"]').screenshot({
+  path: path.join(OUT, 'planning-visibility-narrow--mocked.png'),
+});
 
 await browser.close();
 console.log('DONE');

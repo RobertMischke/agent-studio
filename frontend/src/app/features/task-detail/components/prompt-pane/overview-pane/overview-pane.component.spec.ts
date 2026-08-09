@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -1990,6 +1990,24 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(
       fixture.nativeElement.querySelector('[data-testid="overview-promote-btn"]'),
     ).toBeNull();
+  });
+
+  it('promote affordance: the compact spawn-panel action delegates to the existing promote flow', async () => {
+    const fixture = await build(baseJob({
+      mode: 'planning',
+      state: '5-human-review',
+      planningSpawn: {
+        spawned: [],
+        spawnedCount: 0,
+        noFollowUpDeclared: false,
+        contractSatisfied: false,
+      },
+    }));
+    const promote = vi.spyOn(fixture.componentInstance, 'promote').mockImplementation(() => undefined);
+
+    (fixture.nativeElement.querySelector('[data-testid="overview-promote-btn"]') as HTMLButtonElement).click();
+
+    expect(promote).toHaveBeenCalledOnce();
   });
 
   it('agent-execution row: run count is read from the run-timeline (same source as the Overview Runs value)', async () => {

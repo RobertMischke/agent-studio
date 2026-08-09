@@ -17,7 +17,6 @@ import {
 } from '../../../../components/task-reference-microcard/task-reference-microcard';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
-import { TooltipDirective } from 'coding-agent-chat/shared';
 
 interface ReferenceStatusResponse {
   items: TaskReferenceStatus[];
@@ -30,8 +29,8 @@ interface ReferenceStatusResponse {
  * <ul>
  *   <li>follow-ups exist -> renders each as an AGT-2050 reference microcard
  *       ("spawnt: AGT-xxxx");</li>
- *   <li>none, not declared -> a loud warning ("no follow-up cards created") plus
- *       a "declare no follow-up intended" action;</li>
+ *   <li>none, not declared -> a compact warning with promote and declaration
+ *       actions;</li>
  *   <li>declared -> shows the deliberate no-follow-up declaration + an undo.</li>
  * </ul>
  * The contract line mirrors the accept-dialog guard: an unsatisfied contract is
@@ -45,12 +44,16 @@ interface ReferenceStatusResponse {
   selector: 'app-planning-spawn-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TaskReferenceMicrocardComponent, TooltipDirective],
+  imports: [FormsModule, TaskReferenceMicrocardComponent],
   templateUrl: './planning-spawn-panel.component.html',
   styleUrl: './planning-spawn-panel.component.scss',
 })
 export class PlanningSpawnPanelComponent {
   readonly job = input.required<TaskInfo>();
+  /** Presentation-only bridge to the Overview-owned promote flow. */
+  readonly promoteAvailable = input(false);
+  readonly promotePending = input(false);
+  readonly promoteRequested = output<void>();
   /** Emitted after a declaration write so the parent re-fetches the detail. */
   readonly changed = output<void>();
 
