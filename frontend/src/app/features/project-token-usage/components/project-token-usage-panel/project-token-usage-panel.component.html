@@ -21,13 +21,33 @@
     </div>
   }
 
+  @if (tokenFreshness(); as freshness) {
+    <div class="tup__freshness"
+         [class.tup__freshness--warning]="freshness.status !== 'complete'"
+         data-testid="token-usage-as-of">
+      <span class="tup__freshness-dot" aria-hidden="true"></span>
+      <span>
+        Data as of
+        @if (freshness.asOf) {
+          <time [attr.datetime]="freshness.asOf">{{ formatTs(freshness.asOf) }} UTC</time>
+        } @else {
+          <span>no readable activity timestamp</span>
+        }
+      </span>
+    </div>
+    @if (freshness.warning; as warning) {
+      <div class="tup__source-warning" data-testid="token-usage-source-warning">
+        <strong>Token data may be incomplete.</strong> {{ warning }}
+      </div>
+    }
+  }
+
   @if (summary()?.hasData === false) {
     <div class="tup__empty" data-testid="token-usage-empty">
       <p>No token activity recorded for this project yet.</p>
       <p class="tup__empty-detail">
-        Once the orchestrator (or a supporting analysis loop like a
-        security audit) makes an LLM call here, the totals,
-        heatmap, and expensive-jobs list will appear.
+        Once a task receipt or historical telemetry records an LLM call,
+        the totals, heatmap, and expensive-tasks list will appear.
       </p>
     </div>
   } @else {
@@ -69,12 +89,17 @@
     <section class="tup__pipeline" data-testid="token-usage-pipeline-cost"
              aria-label="Pipeline cost by step kind over time">
       <h3 class="tup__section-title"
-          [cacTooltip]="'Per-step-kind token + cost trend, folded from every task pipeline run over the window. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
+          [cacTooltip]="'Per-step-kind token + cost trend, folded from durable task receipts and historical pipeline runs over the window. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
         Pipeline cost by step kind
       </h3>
+      @if (pipelineCost()?.freshness?.warning; as warning) {
+        <div class="tup__source-warning tup__source-warning--compact" data-testid="pipeline-cost-source-warning">
+          <strong>Pipeline cost data may be incomplete.</strong> {{ warning }}
+        </div>
+      }
       @if (!pipelineCost()?.hasData) {
         <p class="tup__section-empty" data-testid="pipeline-cost-empty">
-          No pipeline step telemetry recorded in this window yet.
+          No readable pipeline cost telemetry was recorded in this window.
         </p>
       } @else {
         <div class="tup__pl-legend" data-testid="pipeline-cost-legend">
@@ -172,7 +197,7 @@
       <h3 class="tup__section-title">Most expensive tasks</h3>
       @if (expensive().length === 0) {
         <p class="tup__section-empty" data-testid="expensive-empty">
-          No tasks have recorded orchestrator token spend yet.
+          No tasks have recorded token spend yet.
         </p>
       } @else {
         <ul class="tup__expensive-list" data-testid="token-usage-expensive">
@@ -214,7 +239,7 @@
         } @else if (!drilldown()) {
           <p class="tup__section-empty" data-testid="drill-loading">Loading drill-down…</p>
         } @else if (drilldown()!.runs.length === 0) {
-          <p class="tup__section-empty" data-testid="drill-empty">No orchestrator calls recorded for this task.</p>
+          <p class="tup__section-empty" data-testid="drill-empty">No token calls recorded for this task.</p>
         } @else {
           <div class="tup__drill-summary">
             <span class="tup__drill-summary-cat"

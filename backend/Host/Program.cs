@@ -446,6 +446,7 @@ builder.Services.AddSingleton<BusAggregationCache>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedAdHocUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedTokenSummaryReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedWorkspaceTimelineReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.ProjectTokenReceiptReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedProjectTokenUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.Tokens.TokenAggregationService>();
 // Central step-call dispatch: the concrete Claude runner is wrapped by the

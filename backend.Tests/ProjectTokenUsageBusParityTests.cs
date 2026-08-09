@@ -233,7 +233,7 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         Assert.DoesNotContain(scanner.ScanAllJobs(), j => j.State == TaskStates.Archive);
 
         var stats = new JobStatsMetadataCache(scanner, config, NullLogger<JobStatsMetadataCache>.Instance);
-        var reader = new BusBackedProjectTokenUsageReader(store, config, stats);
+        var reader = new BusBackedProjectTokenUsageReader(store, config, stats, new ProjectTokenReceiptReader());
 
         var result = reader.BuildSummary(ProjectName, _watchPath, Now);
 
@@ -241,6 +241,62 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         Assert.Equal(11_000, result.LifetimeTotalTokens);
         Assert.Equal(11_000, result.LifetimeSupportingTokens);
         Assert.Equal(0, result.LifetimeJobTokens);
+    }
+
+    [Fact]
+    public void InstanceReader_MergesLegacyBusAndFlatLayoutReceipt_WithoutDoubleCounting()
+    {
+        var now = new DateTime(2026, 8, 9, 12, 0, 0, DateTimeKind.Utc);
+        var store = new AgentMessageBusStore();
+        var historicalAt = new DateTime(2026, 7, 11, 18, 0, 0, DateTimeKind.Utc);
+        var currentAt = now.AddHours(-2);
+
+        var fixtureRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures", "token-aggregation", "hybrid-old-new");
+        var busPath = AgentMessageBusPaths.DayFile(_workspace, ProjectName, historicalAt);
+        Directory.CreateDirectory(Path.GetDirectoryName(busPath)!);
+        File.Copy(Path.Combine(fixtureRoot, "legacy-token-usage.jsonl"), busPath);
+
+        var taskFolder = Path.Combine(_watchPath, "tasks", "002", "AGT-2542");
+        Directory.CreateDirectory(taskFolder);
+        File.Copy(Path.Combine(fixtureRoot, "task.json"), Path.Combine(taskFolder, "task.json"));
+
+        var reader = BuildInstanceReader(store);
+        var summary = reader.BuildSummary(ProjectName, _watchPath, now);
+        var heatmap = reader.BuildHeatmap(ProjectName, _watchPath, 30, now);
+        var perJob = reader.BuildPerJob(ProjectName, _watchPath);
+
+        Assert.Equal(6_600, summary.LifetimeTotalTokens);
+        Assert.Equal(5_500, summary.Last24hTotalTokens);
+        Assert.Equal(5_500, summary.Last7dTotalTokens);
+        Assert.Equal(3, summary.LifetimeCalls);
+        Assert.Equal("complete", summary.Freshness.Status);
+        Assert.Equal(currentAt.ToString("o"), summary.Freshness.AsOf);
+        Assert.Contains("historical-token-bus", summary.Freshness.Sources);
+        Assert.Contains("task-token-receipts", summary.Freshness.Sources);
+        Assert.Contains(heatmap.Jobs, job => job.JobId == "AGT-2542" && job.Total == 5_500);
+        Assert.Equal(5_500, perJob["AGT-2542"].TotalTokens);
+    }
+
+    [Fact]
+    public async Task InstanceReader_ReportsPartialData_WhenReceiptCannotBeParsed()
+    {
+        var (_, bridge, store) = BuildStack();
+        await bridge.EmitTokenUsageAsync(
+            ProjectName, "AGT-2146", AgentMessageBusBridge.ParticipantOrchestratorFor(ProjectName), "agent-run",
+            new OrchestratorTokenUsage { InputTokens = 100, OutputTokens = 10 },
+            Now);
+        await WaitForBusCountAsync(store, 1);
+
+        var taskFolder = Path.Combine(_watchPath, "tasks", "002", "AGT-2542");
+        Directory.CreateDirectory(taskFolder);
+        File.WriteAllText(Path.Combine(taskFolder, "task.json"), "{ \"id\": \"AGT-2542\", \"tokenSummary\": ");
+
+        var result = BuildInstanceReader(store).BuildSummary(ProjectName, _watchPath, Now);
+
+        Assert.Equal("partial", result.Freshness.Status);
+        Assert.NotNull(result.Freshness.Warning);
+        Assert.Contains("could not be read", result.Freshness.Warning!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(110, result.LifetimeTotalTokens);
     }
 
     [Fact]
@@ -371,6 +427,22 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         var store = new AgentMessageBusStore();
         var bridge = new AgentMessageBusBridge(store, config, NullLogger<AgentMessageBusBridge>.Instance);
         return (log, bridge, store);
+    }
+
+    private BusBackedProjectTokenUsageReader BuildInstanceReader(AgentMessageBusStore store)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+                ["WatchPaths:0:Name"] = ProjectName,
+                ["WatchPaths:0:Path"] = _watchPath,
+            })
+            .Build();
+        var generation = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, generation);
+        var stats = new JobStatsMetadataCache(scanner, config, NullLogger<JobStatsMetadataCache>.Instance);
+        return new BusBackedProjectTokenUsageReader(store, config, stats, new ProjectTokenReceiptReader());
     }
 
     private static IReadOnlyDictionary<string, TaskInfo> BuildJobs(params (string Id, string Title)[] jobs)

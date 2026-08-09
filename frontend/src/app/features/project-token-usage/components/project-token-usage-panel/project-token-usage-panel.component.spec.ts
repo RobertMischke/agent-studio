@@ -5,7 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectTokenUsagePanelComponent } from './project-token-usage-panel.component';
-import type { ProjectPipelineCostTimeline } from '../../../../features/project-token-usage';
+import type { ProjectPipelineCostTimeline, ProjectTokenUsageSummary } from '../../../../features/project-token-usage';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -106,6 +106,12 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
       taskCount: 4,
       hasData: true,
       fetchedAt: '2026-06-02T00:00:00Z',
+      freshness: {
+        status: 'partial',
+        asOf: '2026-06-02T00:00:00Z',
+        warning: 'One historical pipeline record could not be read.',
+        sources: ['task-token-receipts'],
+      },
     };
   }
 
@@ -132,6 +138,8 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="token-usage-pipeline-cost"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-cost-empty"]')).toBeNull();
+    expect(host.querySelector('[data-testid="pipeline-cost-source-warning"]')?.textContent)
+      .toContain('may be incomplete');
 
     const legend = host.querySelector('[data-testid="pipeline-cost-legend"]');
     expect(legend).toBeTruthy();
@@ -147,5 +155,60 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
     // Busiest day (3rd: 160k tokens) carries core, aspect, and drift segments.
     const lastColSegs = cols[2].querySelectorAll('.tup__pl-seg');
     expect(lastColSegs.length).toBe(3);
+  });
+});
+
+describe('ProjectTokenUsagePanelComponent (freshness)', () => {
+  it('shows the source timestamp and an honest partial-data warning', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectTokenUsagePanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectTokenUsagePanelComponent);
+    fixture.componentRef.setInput('projectName', 'demo');
+    try { fixture.detectChanges(); } catch { /* pending HTTP, ignore */ }
+    const summary: ProjectTokenUsageSummary = {
+      project: 'demo',
+      hasData: true,
+      lifetimeTotalTokens: 2_000,
+      lifetimeJobTokens: 2_000,
+      lifetimeSupportingTokens: 0,
+      lifetimeOrchestratorTokens: 0,
+      lifetimeCalls: 1,
+      last24hTotalTokens: 2_000,
+      last24hJobTokens: 2_000,
+      last24hSupportingTokens: 0,
+      last24hOrchestratorTokens: 0,
+      last24hCalls: 1,
+      last7dTotalTokens: 2_000,
+      last7dJobTokens: 2_000,
+      last7dSupportingTokens: 0,
+      last7dOrchestratorTokens: 0,
+      last7dCalls: 1,
+      firstActivity: '2026-08-09T10:00:00Z',
+      lastActivity: '2026-08-09T10:00:00Z',
+      fetchedAt: '2026-08-09T10:01:00Z',
+      freshness: {
+        status: 'partial',
+        asOf: '2026-08-09T10:00:00Z',
+        warning: 'The task receipt source could not be read.',
+        sources: ['historical-token-bus'],
+      },
+      disclaimer: '',
+    };
+    fixture.componentInstance.summary.set(summary);
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('[data-testid="token-usage-as-of"]')?.textContent)
+      .toContain('2026-08-09 10:00 UTC');
+    expect(host.querySelector('[data-testid="token-usage-source-warning"]')?.textContent)
+      .toContain('may be incomplete');
   });
 });

@@ -549,4 +549,42 @@ public class PipelineConfigAndCostTests
         Assert.Equal(0, timeline.TaskCount);
         Assert.Equal(7, timeline.Days.Count); // axis still dense
     }
+
+    [Fact]
+    public void PipelineTimeline_ReceiptCallsPopulateCurrentStepKinds()
+    {
+        var now = new DateTime(2026, 8, 9, 12, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            ReceiptEntry("AGT-2542", "agent:codex", now.AddHours(-3), 1_000, 100),
+            ReceiptEntry("AGT-2542", "support:code-review", now.AddHours(-2), 500, 50),
+            ReceiptEntry("AGT-2542", "orchestrator:agent-taskboard", now.AddHours(-1), 200, 20),
+        };
+
+        var records = ProjectPipelineCostService.BuildReceiptRecords("P", entries);
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", records, days: 7, nowUtc: now);
+
+        Assert.Equal(1_870, timeline.TotalTokens);
+        Assert.Equal(new[] { "core", "aspect", "orchestrator" }, timeline.Kinds.Select(kind => kind.Kind));
+        Assert.Equal(now.AddHours(-1).ToString("o"), timeline.Freshness.AsOf);
+        Assert.Equal(1, timeline.TaskCount);
+    }
+
+    private static OrchestratorLogEntry ReceiptEntry(
+        string jobId,
+        string participant,
+        DateTime at,
+        int input,
+        int output) => new()
+        {
+            Ts = at,
+            JobId = jobId,
+            ParticipantId = participant,
+            TokenUsage = new OrchestratorTokenUsage
+            {
+                Model = "gpt-5.3-codex",
+                InputTokens = input,
+                OutputTokens = output,
+            },
+        };
 }

@@ -11,8 +11,9 @@ namespace AgentStudio.Tokens;
 /// breaking call sites.
 ///
 /// <para>
-/// <b>Consolidation status (2026-05-11).</b> Phase 4+5 has flipped the
-/// public read surface to bus-backed readers. The legacy services
+/// <b>Consolidation status (2026-08-09).</b> Project, lifetime, workspace
+/// aggregate, and task-card reads combine historical bus events with durable
+/// task token receipts. The legacy services
 /// (<see cref="ProjectTokenUsageService"/>, <see cref="TokenSummaryService"/>,
 /// <see cref="WorkspaceTokensTimelineService"/>, <see cref="AdHocUsageService"/>)
 /// still hold pure fold helpers and parity fixtures, but new consumers use
@@ -22,7 +23,7 @@ namespace AgentStudio.Tokens;
 public interface ITokenAggregator
 {
     /// <summary>
-    /// Bus-native rollup for one project. Pre-computed buckets when no
+    /// Bus-native diagnostic rollup for one project. Pre-computed buckets when no
     /// since/until is supplied; bounded scan otherwise. The canonical
     /// dimensions are byModel / byParticipant / byDay; the response also
     /// carries lifetime totals.

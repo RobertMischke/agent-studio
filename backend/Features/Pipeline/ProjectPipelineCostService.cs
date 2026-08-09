@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// Project-level rollup of pipeline step cost over time: "how it develops"
-/// per the original ask. Walks every task folder in a project, reads each
-/// <c>pipeline-execution.json</c> through <see cref="PipelineExecutionLog"/>,
-/// and folds the per-step token usage into (step-kind, day) cells priced
+/// Project-level rollup of pipeline step cost over time. Durable task token
+/// receipts are authoritative when present; legacy tasks fall back to
+/// <c>pipeline-execution.json</c>. Both paths fold token usage into
+/// (step-kind, day) cells priced
 /// through the single <see cref="TokenPricing"/> table. The frontend
 /// renders the result as a stacked time trend in the project Token Usage
 /// surface, next to the orchestrator-log heatmap.
@@ -27,12 +27,17 @@ public sealed class ProjectPipelineCostService
 
     private readonly TaskScannerService _scanner;
     private readonly PipelineExecutionLog _log;
+    private readonly ProjectTokenReceiptReader _receipts;
     private readonly ConcurrentDictionary<string, (DateTime At, ProjectPipelineCostTimeline Value)> _cache = new();
 
-    public ProjectPipelineCostService(TaskScannerService scanner, PipelineExecutionLog log)
+    public ProjectPipelineCostService(
+        TaskScannerService scanner,
+        PipelineExecutionLog log,
+        ProjectTokenReceiptReader receipts)
     {
         _scanner = scanner;
         _log = log;
+        _receipts = receipts;
     }
 
     /// <summary>
@@ -53,18 +58,49 @@ public sealed class ProjectPipelineCostService
         }
 
         var records = new List<PipelineExecutionRecord>();
+        var warnings = new List<string>();
+        var sources = new List<string>();
+        var receiptRead = _receipts.Read(watchPath);
+        if (receiptRead.SourceAvailable) sources.Add("task-token-receipts");
+        if (!string.IsNullOrWhiteSpace(receiptRead.Warning)) warnings.Add(receiptRead.Warning!);
+        var receiptJobIds = receiptRead.Entries
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.JobId))
+            .Select(entry => entry.JobId!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        records.AddRange(BuildReceiptRecords(projectName, receiptRead.Entries));
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
-            foreach (var task in _scanner.ScanAllAutomationJobs())
+            foreach (var task in _scanner.ScanAllAutomationJobsWithArchive())
             {
                 if (!string.Equals(task.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.IsNullOrWhiteSpace(task.FolderPath)) continue;
+                if (receiptJobIds.Contains(task.Id)) continue;
                 var rec = _log.Read(task.FolderPath);
-                if (rec != null) records.Add(rec);
+                if (rec != null)
+                {
+                    sources.Add("pipeline-execution-log");
+                    records.Add(rec);
+                    records.AddRange(rec.PreviousAttempts);
+                }
+                else if (File.Exists(Path.Combine(task.FolderPath, PipelineExecutionLog.FileName)))
+                {
+                    warnings.Add($"Pipeline telemetry for task {task.Id} could not be read.");
+                }
             }
         }
 
         var timeline = BuildFromRecords(projectName, records, d, nowUtc);
+        var distinctWarnings = warnings.Distinct(StringComparer.Ordinal).ToList();
+        var freshness = timeline.Freshness with
+        {
+            Status = distinctWarnings.Count == 0
+                ? "complete"
+                : timeline.HasData ? "partial" : "unavailable",
+            Warning = distinctWarnings.Count == 0 ? null : string.Join(" ", distinctWarnings),
+            Sources = sources.Distinct(StringComparer.Ordinal).ToList(),
+        };
+        timeline = timeline with { Freshness = freshness };
         if (nowUtc == null)
         {
             _cache[cacheKey] = (DateTime.UtcNow, timeline);
@@ -160,6 +196,10 @@ public sealed class ProjectPipelineCostService
             .ThenBy(s => s.StepId, StringComparer.Ordinal)
             .ToList();
 
+        var asOf = records
+            .Where(record => record.Steps.Any(step => StepTokens(step) > 0))
+            .Select(record => (DateTime?)(record.CompletedAt ?? record.StartedAt).ToUniversalTime())
+            .Max();
         return new ProjectPipelineCostTimeline(
             Project: projectName,
             Days: dayList,
@@ -171,7 +211,63 @@ public sealed class ProjectPipelineCostService
             AnyModelUnknown: grandUnknown,
             TaskCount: contributingTasks.Count,
             HasData: grandTokens > 0,
-            FetchedAt: DateTime.UtcNow.ToString("o"));
+            FetchedAt: DateTime.UtcNow.ToString("o"),
+            Freshness: new ProjectTokenDataFreshness
+            {
+                AsOf = asOf?.ToString("o"),
+            });
+    }
+
+    internal static IReadOnlyList<PipelineExecutionRecord> BuildReceiptRecords(
+        string projectName,
+        IReadOnlyList<OrchestratorLogEntry> entries)
+    {
+        var records = new List<PipelineExecutionRecord>();
+        foreach (var entry in entries)
+        {
+            var usage = entry.TokenUsage;
+            if (usage is null || string.IsNullOrWhiteSpace(entry.JobId)) continue;
+            if ((long)usage.InputTokens + usage.OutputTokens + usage.CacheReadTokens + usage.CacheCreationTokens <= 0)
+                continue;
+
+            var kind = TokenModelDisplay.IsOrchestratorParticipant(entry.ParticipantId)
+                ? StepKind.Orchestrator
+                : TokenModelDisplay.IsSupportingParticipant(entry.ParticipantId)
+                    ? StepKind.Aspect
+                    : StepKind.Core;
+            var stepId = kind switch
+            {
+                StepKind.Orchestrator => "task-receipt-orchestrator",
+                StepKind.Aspect => "task-receipt-supporting",
+                _ => PipelineCatalogue.CoreAgentRunStepId,
+            };
+            records.Add(new PipelineExecutionRecord
+            {
+                PipelineId = "task-token-receipt",
+                Project = projectName,
+                JobId = entry.JobId!,
+                StartedAt = entry.Ts,
+                CompletedAt = entry.Ts,
+                Steps =
+                [
+                    new PipelineStepExecution
+                    {
+                        StepId = stepId,
+                        Kind = kind,
+                        Status = PipelineStepStatus.Passed,
+                        StartedAt = entry.Ts,
+                        CompletedAt = entry.Ts,
+                        Model = usage.Model,
+                        InputTokens = usage.InputTokens,
+                        OutputTokens = usage.OutputTokens,
+                        CacheReadTokens = usage.CacheReadTokens,
+                        CacheCreationTokens = usage.CacheCreationTokens,
+                        TokenUsageSource = "Durable task token receipt",
+                    },
+                ],
+            });
+        }
+        return records;
     }
 
     public static int ResolveDays(int requested) =>
@@ -222,6 +318,9 @@ public sealed class ProjectPipelineCostService
 
     private static decimal Round(decimal value) => Math.Round(value, 6, MidpointRounding.AwayFromZero);
 
+    private static long StepTokens(PipelineStepExecution step)
+        => step.InputTokens + step.OutputTokens + step.CacheReadTokens + step.CacheCreationTokens;
+
     private static DateTime AlignDay(DateTime ts)
     {
         var utc = ts.Kind == DateTimeKind.Utc ? ts : ts.ToUniversalTime();
@@ -262,7 +361,8 @@ public sealed record ProjectPipelineCostTimeline(
     bool AnyModelUnknown,
     int TaskCount,
     bool HasData,
-    string FetchedAt);
+    string FetchedAt,
+    ProjectTokenDataFreshness Freshness);
 
 /// <summary>
 /// One pipeline step's token + cost rollup over the whole window, folded

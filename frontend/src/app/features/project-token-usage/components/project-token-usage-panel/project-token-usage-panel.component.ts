@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TaskService } from '../../../../services/task.service';
-import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectPipelineCostTimeline, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary, PipelineStepKindKey } from '../../../../features/project-token-usage';
+import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectPipelineCostTimeline, ProjectTokenCategory, ProjectTokenDataFreshness, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary, PipelineStepKindKey } from '../../../../features/project-token-usage';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 interface CardSpec {
@@ -64,11 +64,11 @@ interface PipelineStackColumn {
  * with per-run deltas.
  *
  * Action-driven principle: this panel does no analysis on its own. It
- * only reads the orchestrator log via the `/api/projects/{project}/
- * token-usage/*` endpoints. Token usage is visibility, not enforcement
+ * reads the canonical hybrid token aggregation via the `/api/projects/
+ * {project}/token-usage/*` endpoints. Token usage is visibility, not enforcement
  * (Critical Boundaries in the README).
  *
- * Hide-when-empty: a project with no token-using orchestrator entries
+ * Hide-when-empty: a project with no readable token entries
  * shows an explicit empty-state card instead of phantom zeros.
  */
 @Component({
@@ -90,6 +90,17 @@ export class ProjectTokenUsagePanelComponent {
   readonly heatmap = signal<ProjectTokenHeatmap | null>(null);
   readonly expensive = signal<ProjectExpensiveJob[]>([]);
   readonly pipelineCost = signal<ProjectPipelineCostTimeline | null>(null);
+
+  readonly tokenFreshness = computed<ProjectTokenDataFreshness | null>(() => {
+    const value = this.summary();
+    if (!value) return null;
+    return value.freshness ?? {
+      status: 'complete',
+      asOf: value.lastActivity,
+      warning: null,
+      sources: [],
+    };
+  });
 
   readonly selectedJobId = signal<string | null>(null);
   readonly drilldown = signal<ProjectJobTokenDetail | null>(null);
