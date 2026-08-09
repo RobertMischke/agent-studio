@@ -100,9 +100,15 @@ public sealed class CarWorkerExecutionTests : IDisposable
         Assert.Contains("--output-format", run.SpawnedArgv!);
         Assert.Contains("stream-json", run.SpawnedArgv!);
 
-        // T1 jump 2 - clean context: the CLI gets an isolated config home.
+        // T1 jump 2 - clean context: the CLI gets a task-stable config home
+        // from the same store used by local execution. CAR receives it as a
+        // shared home and must not compose a second process-temp directory.
         Assert.True(run.SpawnedEnvironment!.TryGetValue("CLAUDE_CONFIG_DIR", out var configDir));
         Assert.False(string.IsNullOrWhiteSpace(configDir));
+        Assert.StartsWith(
+            Path.Combine(_root, "clean-context"),
+            configDir!,
+            StringComparison.Ordinal);
 
         // CAR-A keeps the remote prompt transport: stdin, never the argv.
         Assert.DoesNotContain(prompt, run.SpawnedArgv!);
@@ -145,6 +151,22 @@ public sealed class CarWorkerExecutionTests : IDisposable
                 ProviderAuthEnvironment.ClaudeCodeOAuthToken,
                 run.SpawnedEnvironment!.Keys);
         }
+    }
+
+    [Fact]
+    public async Task Same_task_reuses_its_remote_clean_home_while_other_tasks_stay_isolated()
+    {
+        if (NodeMissing()) return;
+        var fixture = Fixture.Load("p1-happy-done.codex.fixture");
+
+        var first = await RunFixtureAsync(fixture, cleanContextKey: "AGT-2525");
+        var continued = await RunFixtureAsync(fixture, cleanContextKey: "AGT-2525");
+        var otherTask = await RunFixtureAsync(fixture, cleanContextKey: "AGT-2526");
+
+        var firstHome = first.SpawnedEnvironment!["CODEX_HOME"];
+        Assert.Equal(firstHome, continued.SpawnedEnvironment!["CODEX_HOME"]);
+        Assert.NotEqual(firstHome, otherTask.SpawnedEnvironment!["CODEX_HOME"]);
+        Assert.Contains(continued.Shipped, line => line.Text.Contains("clean-context reused", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -248,7 +270,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
             options => options with
             {
                 ClaudePath = Path.Combine(_root, "missing-cli"),
-            });
+            },
+            cleanContextRoot: Path.Combine(_root, "clean-context"));
 
         Assert.Equal(125, result.ExitCode);
         Assert.False(timedOut);
@@ -346,7 +369,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
         string? permissionMode = null,
         string? contextMode = null,
         int timeoutSeconds = 120,
-        IReadOnlyDictionary<string, string>? extraEnvironment = null)
+        IReadOnlyDictionary<string, string>? extraEnvironment = null,
+        string? cleanContextKey = null)
     {
         var workerDirectory = Path.Combine(_root, Guid.NewGuid().ToString("N"));
         var workingDirectory = Path.Combine(workerDirectory, "worktree");
@@ -366,7 +390,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
             PermissionMode: permissionMode,
             ContextMode: contextMode,
             Engine: RunnerOptions.ExecEngineCar,
-            RunId: $"car-parity-{Guid.NewGuid():N}");
+            RunId: $"car-parity-{Guid.NewGuid():N}",
+            CleanContextKey: cleanContextKey);
 
         var spawner = new FixtureSpawner(fixture.Path);
         var shipped = new List<(string, string)>();
@@ -386,7 +411,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
                 CodexPath = "node",
                 Spawner = spawner,
                 EnvironmentOverrides = environment,
-            });
+            },
+            cleanContextRoot: Path.Combine(_root, "clean-context"));
 
         JsonDocument? capture = null;
         if (File.Exists(capturePath))

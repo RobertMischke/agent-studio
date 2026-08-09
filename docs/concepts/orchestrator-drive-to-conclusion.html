@@ -649,7 +649,9 @@
             with <code>codex_session_stillborn_cleanup</code>. Aspect, grade, changed-file, and abort-review evidence select the last
             completed run; a launch-only failure after a graded success routes to human review with that successful SHA range and
             cannot reissue. The 2026-07-11 forensic scan found 7 stale shared-home index-only rows and 10 clean Codex homes in the
-            CAR-5 window; the rows are removed by the first post-deploy session inventory refresh.
+            CAR-5 window; the rows are removed by the first post-deploy session inventory refresh. AGT-2525 closes the remaining
+            root cause: local and remote attempts now reopen one marker-validated, task-stable home outside the OS temporary root,
+            so a valid rollout survives attempt teardown and host restart instead of taking the fallback branch.
           </td>
         </tr>
         <tr>

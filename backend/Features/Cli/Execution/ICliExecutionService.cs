@@ -33,8 +33,9 @@ public interface ICliExecutionService
     /// <summary>
     /// Whether this adapter can isolate its persistent state for a
     /// <see cref="CliContextModes.Clean"/> run by relocating
-    /// the CLI's config home to a per-run temp dir (T1b / ASS-1742). Claude and
-    /// Codex can; Gemini exposes no such redirect and is shared-only.
+    /// the CLI's config home to a stable, task-isolated directory (T1b /
+    /// ASS-1742). Claude and Codex can; Gemini exposes no such redirect and is
+    /// shared-only.
     /// Defaults to false so a stub / shared-only backend opts out cleanly; the
     /// runner falls back to a shared run when this is false even if clean was
     /// requested. Must agree with
@@ -43,22 +44,22 @@ public interface ICliExecutionService
     bool SupportsCleanContext => false;
 
     /// <summary>
-    /// Create a fresh, isolated config home for one clean run, seeded with only
-    /// the auth + base config (no session history / memory). The base spawn
-    /// flow injects the returned env override into the child and disposes the
-    /// preparation (tearing the temp home down) when the run's tracking entry is
-    /// evicted. Returns null when the backend is shared-only or the temp home
-    /// could not be created (the caller then runs shared). Default no-op keeps
-    /// stubs and shared-only backends compilable.
+    /// Acquire a task-isolated config home seeded with only auth + base config
+    /// on first use. Later attempts adopt the same marker-validated home so CLI
+    /// rollout state remains resumable. The base spawn flow injects the returned
+    /// env override into the child; bounded retention owns deletion after the
+    /// task is inactive. Returns null when the backend is shared-only or the
+    /// home could not be acquired. Default no-op keeps stubs and shared-only
+    /// backends compilable.
     /// </summary>
-    CleanContextPreparation? PrepareCleanContext(string workingDirectory) => null;
+    CleanContextPreparation? PrepareCleanContext(string jobKey, string workingDirectory) => null;
 
     /// <summary>
     /// The task's still-live clean-context home (the isolated
     /// CLAUDE_CONFIG_DIR / CODEX_HOME all attempts of this task share), or null
-    /// when none is registered or its directory no longer exists. Attempts and
-    /// recoveries of the same run reuse one home so CLI session state stays
-    /// resumable across them (refresh only at run boundaries — MKT-8 / WEB-14
+    /// when none exists or its task marker is invalid. Attempts and recoveries
+    /// of the same task reuse one home so CLI session state stays resumable
+    /// across them, including after a backend restart (MKT-8 / WEB-14
     /// "Codex rollout state loss"); the runner consults this before planning a
     /// resume so a clean-context Codex session whose rollout lives in this home
     /// is actually resumed instead of being discarded into full-context

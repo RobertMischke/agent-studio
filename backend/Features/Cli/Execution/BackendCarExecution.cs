@@ -64,10 +64,10 @@ public partial class GenericCliExecutionService
         var invocationThinkingLevel = CliThinkingLevels.Normalize(
             CliType, invocationModel, thinkingLevel);
 
-        // CAR 0.7.0 owns clean-context preparation only for one process. Studio
-        // has a longer task boundary so Codex rollouts remain resumable across
-        // attempts. Until PROJ-011/public-clean-context-lease lands, reuse the
-        // existing task-scoped home and hand it to CAR as shared + explicit env.
+        // Studio's shared host library owns the longer task boundary so Codex
+        // rollouts remain resumable across attempts and backend restarts. Hand
+        // that home to CAR as shared + explicit env so CAR does not create a
+        // second process-scoped home.
         CleanContextPreparation? cleanContext = null;
         var cleanContextReused = false;
         if (CliContextModes.Normalize(contextMode) == CliContextModes.Clean && SupportsCleanContext)
@@ -371,7 +371,11 @@ public partial class GenericCliExecutionService
         if (cleanContext == null || cleanContextReused) return;
         _cleanContextsByJob.TryRemove(
             new KeyValuePair<string, CleanContextPreparation>(jobKey, cleanContext));
-        cleanContext.Dispose();
+        try { cleanContext.Delete(); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed-start clean-context cleanup failed for {JobId}", jobKey);
+        }
     }
 
     private static void AddClaudeRulesArgument(

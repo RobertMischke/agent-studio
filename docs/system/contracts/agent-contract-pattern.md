@@ -174,6 +174,8 @@ Post-Guard is keyed on `(slug, category)`. Default budget: 1 requeue per pair pe
 
 Both guards write a structured event to `<run-folder>/contracts/loop-guard-decisions.jsonl` whenever they refuse an action. The event is the audit trail.
 
+State that makes re-entry meaningful must use the same durable identity and must outlive one agent process. Attempt-scoped temporary directories are not valid storage for continuation state. For example, clean CLI context is keyed by task and retained outside the OS temporary root, so a post-guard retry or operator continue sees the provider rollout written by the preceding attempt. Marker validation keeps this durability from becoming cross-task state sharing, and a separately budgeted retention tick removes inactive homes.
+
 ## Loop inventory and architecture tests
 
 [docs/system/contracts/loop-inventory.md](./loop-inventory.md) is the registry of every place in the codebase where work can re-enter itself: retry, requeue, re-trigger, replay. Each entry names its kind (Pre-Guard / Post-Guard), the code anchor, the budget constant, and the breaker test.

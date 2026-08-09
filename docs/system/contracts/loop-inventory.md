@@ -111,6 +111,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet fired in production.
 - **Notes:** Iteration state is durable in `results/ui-iteration-NNN/` and `steer-pending.json`. Backend restarts do not reset the counter. The generic steer timeout explicitly ignores this human-review marker.
 
+### clean-context.retention-sweep
+
+- **Kind:** Tick
+- **Where:** [`backend/Features/Cli/Execution/CleanContextRetentionHostedService.cs`](../../../backend/Features/Cli/Execution/CleanContextRetentionHostedService.cs) `ExecuteAsync`, plus opportunistic acquisition in [`cli-hosting/TaskCleanContextStore.cs`](../../../cli-hosting/TaskCleanContextStore.cs) `Acquire`
+- **Re-entry trigger:** Backend startup, each retention timer tick, or a local/remote task acquiring a clean CLI home.
+- **Budget:** `CleanContextRetentionHostedService.DefaultSweepIntervalHours = 6` and `TaskCleanContextStore.DefaultRetentionDays = 7`; each pass scans only the CLI/task directory depth under the resolved root.
+- **Action when budget exhausted:** Delete homes whose last-use marker is older than the retention cutoff, remove empty CLI directories, and stop after the single bounded pass. Per-directory failures are retained and retried by the next scheduled tick or acquisition; there is no immediate retry loop.
+- **Breaker test:** [`backend.Tests/Architecture/CleanContextRetentionBreakerTest.cs`](../../../backend.Tests/Architecture/CleanContextRetentionBreakerTest.cs)
+- **Last fired:** Not yet observed in production; AGT-2525 introduces the stable store and its retention owner.
+- **Notes:** Attempt teardown only refreshes last use. A fresh home whose CLI launch was never adopted is deleted immediately. Ownership shape and task-marker validation prevent the sweep or a continuation from adopting another task's directory.
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.
