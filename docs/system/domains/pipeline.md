@@ -351,10 +351,24 @@ pipeline view.
   derived verification command runs. An explicit build profile `installCmd` is
   authoritative. Otherwise a selected root .NET entry point gets `dotnet
   restore`, and every selected Node package directory gets `npm ci`. Local npm
-  commands share a cache outside the disposable worktree; remote npm commands
-  use the executor user's shared Agent Studio cache. Explicit profile commands,
-  including `installCmd`, use the same `bash -lc` contract as build-profile
-  validation on every host. Convention-derived commands retain the host shell.
+  commands set `NPM_CONFIG_CACHE` to the machine's shared Agent Studio npm cache;
+  remote npm commands use the executor user's equivalent cache. Exact-subject
+  local gates also keep one dependency cache per source repository under
+  `agentstudio-review-gates/.dependency-cache`: `node_modules`, `.angular`, and
+  `.nm-state` move into the new disposable worktree before verification and move
+  back before Git cleanup. `DepsState` compares the build profile lockfiles, or
+  conventionally discovered npm lockfile, with `.nm-state`; an unchanged hash
+  skips the install, while a missing or changed dependency state runs the install
+  and stamps the new hash. Explicit profile commands, including `installCmd`, use
+  the same `bash -lc` contract as build-profile validation on every host.
+  Convention-derived commands retain the host shell.
+- Dependency preparation and verification consume one shared `gate-run` budget.
+  Machine-gate queue wait, exact workspace materialization, and exact workspace
+  cleanup have separate named budgets. Local Git operations receive the remaining
+  budget from the owning workspace phase and never fall back to the Git helper's
+  per-process default. A timeout reason, structured completion event, and durable
+  gate receipt identify the violated budget with its limit, consumption, and
+  phase. The receipt also includes dependency-cache hit/miss evidence.
 - A failed preparation or verification command stores a bounded, single-line
   stderr/stdout excerpt in the gate reason that flows into the durable pipeline
   step record. Full streams remain in per-process evidence and the gate log, so

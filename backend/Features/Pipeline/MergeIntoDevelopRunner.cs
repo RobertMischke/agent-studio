@@ -1063,10 +1063,20 @@ public sealed class MergeIntoDevelopRunner
         var selection = System.Text.Json.JsonSerializer.Serialize(
             result.TestSelection,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var dependencyCache = System.Text.Json.JsonSerializer.Serialize(
+            result.DependencyCache,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var budget = result.ViolatedBudget is null
+            ? "budget=none"
+            : $"budget={result.ViolatedBudget.Name} limitMs={result.ViolatedBudget.LimitMs} " +
+              $"consumedMs={result.ViolatedBudget.ConsumedMs} phase={result.ViolatedBudget.Phase}";
         var body =
             $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} durationMs={result.DurationMs}\n" +
             $"expectedSha={result.ExpectedSha ?? "n/a"} testedSha={result.TestedSha ?? "n/a"}\n" +
             $"reason={result.Reason}\n" +
+            budget + "\n" +
+            "--- dependency-cache.json ---\n" +
+            dependencyCache + "\n" +
             "--- test-selection.json ---\n" +
             selection + "\n" +
             "--- last-300-lines ---\n" +

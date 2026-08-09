@@ -97,7 +97,22 @@ public sealed record BuildTestGateProcessEvidence
     public string? LaunchError { get; init; }
     public string StandardOutput { get; init; } = "";
     public string StandardError { get; init; } = "";
+    public BuildTestGateBudgetEvidence? ViolatedBudget { get; init; }
 }
+
+public sealed record BuildTestGateBudgetEvidence(
+    string Name,
+    long LimitMs,
+    long ConsumedMs,
+    string Phase);
+
+public sealed record BuildTestGateDependencyCacheEvidence(
+    string WorkingSubdir,
+    string State,
+    string Reason,
+    string LockHash,
+    IReadOnlyList<string> Lockfiles,
+    bool InstallRan);
 
 public sealed record BuildTestGateFinding(
     string Kind,
@@ -133,6 +148,8 @@ public sealed record BuildTestGateResult(
     public BuildTestGateFailureKind FailureKind { get; init; }
     public string? FailureFingerprint { get; init; }
     public IReadOnlyList<BuildTestGateProcessEvidence> Processes { get; init; } = [];
+    public IReadOnlyList<BuildTestGateDependencyCacheEvidence> DependencyCache { get; init; } = [];
+    public BuildTestGateBudgetEvidence? ViolatedBudget { get; init; }
     public TestSelectionAudit? TestSelection { get; init; }
     public IReadOnlyList<BuildTestGateFinding> Findings { get; init; } = [];
     public bool IsInfrastructureFailure => FailureKind is not BuildTestGateFailureKind.None
@@ -162,6 +179,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     public const int MaxFailureExcerptChars = 2_000;
     internal const string FullOriginBranchesRefspec =
         "+refs/heads/*:refs/remotes/origin/*";
+    internal const string DependencyCacheDirectoryName = ".dependency-cache";
 
     private static readonly SemaphoreSlim ProcessGate = new(1, 1);
     internal static readonly string MachineGateLockPath = Path.Combine(
@@ -240,6 +258,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
         MachineGateLease? machineLease = null;
         ExactWorkspaceLease? workspaceLease = null;
+        GateDependencyCacheSession? dependencyCache = null;
+        var dependencyCacheSaved = false;
         BuildTestGateResult? completed = null;
         string? workspace = null;
         string? testedSha = null;
@@ -297,7 +317,10 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 if (acquisition.Lease is null)
                 {
                     completed = InfrastructureFailure(
-                        BuildTestGateFailureKind.Timeout, acquisition.Reason, acquisition.Reason);
+                        BuildTestGateFailureKind.Timeout,
+                        acquisition.Reason,
+                        acquisition.Reason,
+                        acquisition.ViolatedBudget);
                 }
                 else
                 {
@@ -326,7 +349,10 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 if (prepared.Lease is null)
                 {
                     completed = InfrastructureFailure(
-                        prepared.FailureKind, prepared.Reason, prepared.Output);
+                        prepared.FailureKind,
+                        prepared.Reason,
+                        prepared.Output,
+                        prepared.ViolatedBudget);
                 }
                 else
                 {
@@ -379,6 +405,18 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     }
                     var commands = staged.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
                     var preparation = GatePreparationPlanner.Plan(workspace!, profile, commands);
+                    IReadOnlyList<string> cacheRestoreMessages = [];
+                    if (workspaceLease is not null)
+                    {
+                        dependencyCache = GateDependencyCacheSession.Create(
+                            ReviewWorkspaceRoot,
+                            repositoryPath,
+                            workspace!,
+                            preparation,
+                            commands,
+                            _logger);
+                        cacheRestoreMessages = dependencyCache.Restore();
+                    }
                     completed = commands.Count == 0
                         ? Skipped($"no verify commands apply to the changed files ({plan.Source}); level={staged.Audit.Level}")
                             with
@@ -386,7 +424,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                             TestSelection = staged.Audit,
                         }
                         : await RunCommandsAsync(
-                            workspace!, preparation, commands, plan.Source, mode, timeout, ct)
+                            workspace!, preparation, commands, plan.Source, mode, timeout,
+                            cacheRestoreMessages, ct)
                             .ConfigureAwait(false);
                     var completedAudit = CompleteAudit(staged.Audit, commands, completed.Processes);
                     completed = completed with
@@ -399,18 +438,28 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
             if (workspaceLease is not null)
             {
+                completed = SaveDependencyCache(completed!, dependencyCache);
+                dependencyCacheSaved = true;
                 var cleanupError = await workspaceLease.RemoveAsync(
                     infrastructureTimeout, CancellationToken.None).ConfigureAwait(false);
                 workspaceLease = null;
                 if (cleanupError is not null)
                 {
-                    completed = InfrastructureFailure(
-                        cleanupError.FailureKind,
-                        "exact review workspace cleanup failed after bounded retries",
-                        cleanupError.Evidence) with
+                    var cleanupReason = BudgetFailureReason(
+                        "exact review workspace cleanup",
+                        cleanupError.ViolatedBudget,
+                        cleanupError.Evidence);
+                    completed = WithFailure(completed with
                     {
-                        Processes = completed.Processes,
-                    };
+                        Verdict = BuildTestGateVerdict.Fail,
+                        ExitCode = null,
+                        DurationMs = Math.Max(
+                            completed.DurationMs,
+                            (long)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds),
+                        Output = AppendOutput(completed.Output, cleanupError.Evidence),
+                        Reason = cleanupReason,
+                        ViolatedBudget = cleanupError.ViolatedBudget,
+                    }, cleanupError.FailureKind);
                 }
             }
 
@@ -435,10 +484,19 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         finally
         {
             if (workspaceLease is not null)
+            {
+                if (!dependencyCacheSaved)
+                {
+                    if (completed is not null)
+                        completed = SaveDependencyCache(completed, dependencyCache);
+                    else
+                        dependencyCache?.Save();
+                }
                 await workspaceLease.RemoveBestEffortAsync(infrastructureTimeout).ConfigureAwait(false);
+            }
             var completedAt = completed?.GateCompletedAtUtc ?? DateTimeOffset.UtcNow;
             _logger.LogInformation(
-                "build_test_gate_completed gate_run_id={GateRunId} gate_id={GateId} completed_at_utc={CompletedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} attempt_chain_id={AttemptChainId} executor={Executor} workspace={Workspace} verdict={Verdict} exit={ExitCode} signal={Signal} failure_kind={FailureKind} failure_fingerprint={FailureFingerprint} collision={CollisionDetected} queue_wait_ms={QueueWaitMs} self_healed={SelfHealed}",
+                "build_test_gate_completed gate_run_id={GateRunId} gate_id={GateId} completed_at_utc={CompletedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} attempt_chain_id={AttemptChainId} executor={Executor} workspace={Workspace} verdict={Verdict} exit={ExitCode} signal={Signal} failure_kind={FailureKind} failure_fingerprint={FailureFingerprint} violated_budget={ViolatedBudget} budget_limit_ms={BudgetLimitMs} budget_consumed_ms={BudgetConsumedMs} collision={CollisionDetected} queue_wait_ms={QueueWaitMs} self_healed={SelfHealed}",
                 gateRunId, request.GateId, completedAt, repositoryPath,
                 request.ExpectedSha ?? "missing", completed?.TestedSha ?? testedSha ?? "missing",
                 request.AttemptChainId ?? "missing", request.Executor,
@@ -446,6 +504,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 completed?.ExitCode?.ToString() ?? "n/a", completed?.TerminationSignal ?? "n/a",
                 completed?.FailureKind.ToString() ?? BuildTestGateFailureKind.Cancellation.ToString(),
                 completed?.FailureFingerprint ?? "none",
+                completed?.ViolatedBudget?.Name ?? "none",
+                completed?.ViolatedBudget?.LimitMs ?? 0,
+                completed?.ViolatedBudget?.ConsumedMs ?? 0,
                 machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0,
                 completed?.SelfHealed ?? selfHealed);
             machineLease?.Dispose();
@@ -602,7 +663,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 var process = await RunProcessAsync(
                     Path.GetTempPath(), command.Command, "ssh",
                     ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", sshHost, sshCommand],
-                    remaining, output, ct, phase: "preparation").ConfigureAwait(false);
+                    remaining, timeout, sw.Elapsed, output, ct, phase: "preparation")
+                    .ConfigureAwait(false);
                 evidence.Add(process);
                 if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
                 {
@@ -621,6 +683,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     {
                         Processes = evidence,
                         TerminationSignal = process.TerminationSignal,
+                        ViolatedBudget = process.ViolatedBudget,
                         SelfHealed = discovery.SelfHealed,
                     }, kind);
                     return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
@@ -648,7 +711,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 var process = await RunProcessAsync(
                     Path.GetTempPath(), command.Command, "ssh",
                     ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", sshHost, sshCommand],
-                    remaining, output, ct, phase: "verification").ConfigureAwait(false);
+                    remaining, timeout, sw.Elapsed, output, ct, phase: "verification")
+                    .ConfigureAwait(false);
                 evidence.Add(process);
                 if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
                 {
@@ -665,6 +729,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     {
                         Processes = evidence,
                         TerminationSignal = process.TerminationSignal,
+                        ViolatedBudget = process.ViolatedBudget,
                         SelfHealed = discovery.SelfHealed,
                     }, kind);
                     return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
@@ -808,13 +873,16 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string planSource,
         PostStepMode mode,
         TimeSpan timeout,
+        IReadOnlyList<string> cacheRestoreMessages,
         CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
         var output = new RingOutput(MaxOutputLines);
         var evidence = new List<BuildTestGateProcessEvidence>();
         var findings = new List<BuildTestGateFinding>();
+        var dependencyCache = new List<BuildTestGateDependencyCacheEvidence>();
         output.AppendLine($"# verify plan: {planSource} ({commands.Count} command(s))");
+        foreach (var message in cacheRestoreMessages) output.AppendLine($"# {message}");
         var ranBackend = false;
         var ranFrontend = false;
 
@@ -829,15 +897,44 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     ranBackend, ranFrontend)
                 {
                     Processes = evidence,
+                    DependencyCache = dependencyCache,
                 }, BuildTestGateFailureKind.MissingSource);
             }
 
             output.AppendLine($"# dependency preparation: {workingDirectory}");
+            var decisions = command.DependencyScopes
+                .Select(scope =>
+                {
+                    var installRoot = ResolveWorkingDirectory(repositoryPath, scope.WorkingSubdir);
+                    return new DependencyPreparationDecision(
+                        scope,
+                        installRoot,
+                        DepsState.Evaluate(installRoot, scope.Lockfiles));
+                })
+                .ToArray();
+            var installNeeded = decisions.Length == 0
+                || decisions.Any(item => item.Decision.InstallNeeded
+                    || string.Equals(item.Decision.Reason, "no-lockfile", StringComparison.Ordinal));
+            if (!installNeeded)
+            {
+                foreach (var item in decisions)
+                {
+                    dependencyCache.Add(ToCacheEvidence(item, installRan: false));
+                    output.AppendLine(
+                        $"# dependency-cache hit scope={DisplayScope(item.Scope.WorkingSubdir)} " +
+                        $"reason={item.Decision.Reason} lockHash={item.Decision.LockHash}");
+                }
+                continue;
+            }
+
+            var elapsedBefore = sw.Elapsed;
             var process = await RunShellAsync(
                 workingDirectory,
                 command.Command,
                 command.Shell,
-                Remaining(timeout, sw.Elapsed),
+                Remaining(timeout, elapsedBefore),
+                timeout,
+                elapsedBefore,
                 output,
                 ct,
                 phase: "preparation").ConfigureAwait(false);
@@ -856,8 +953,22 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 {
                     Processes = evidence,
                     Findings = findings,
+                    DependencyCache = decisions
+                        .Select(item => ToCacheEvidence(item, installRan: true))
+                        .Concat(dependencyCache)
+                        .ToArray(),
                     TerminationSignal = process.TerminationSignal,
+                    ViolatedBudget = process.ViolatedBudget,
                 }, kind);
+            }
+            foreach (var item in decisions)
+            {
+                if (!string.IsNullOrWhiteSpace(item.Decision.LockHash))
+                    DepsState.Stamp(item.InstallRoot, item.Decision.LockHash);
+                dependencyCache.Add(ToCacheEvidence(item, installRan: true));
+                output.AppendLine(
+                    $"# dependency-cache miss scope={DisplayScope(item.Scope.WorkingSubdir)} " +
+                    $"reason={item.Decision.Reason} installRan=true lockHash={item.Decision.LockHash}");
             }
         }
 
@@ -871,6 +982,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     $"verify command directory is missing: {workingDirectory}", ranBackend, ranFrontend)
                 {
                     Processes = evidence,
+                    DependencyCache = dependencyCache,
                 }, BuildTestGateFailureKind.MissingSource);
             }
 
@@ -878,11 +990,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             else ranBackend = true;
             output.AppendLine($"# working directory: {workingDirectory}");
 
+            var elapsedBefore = sw.Elapsed;
             var process = await RunShellAsync(
                 workingDirectory,
                 command.Command,
                 command.Shell,
-                Remaining(timeout, sw.Elapsed),
+                Remaining(timeout, elapsedBefore),
+                timeout,
+                elapsedBefore,
                 output,
                 ct,
                 phase: "verification")
@@ -914,7 +1029,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 {
                     Processes = evidence,
                     Findings = findings,
+                    DependencyCache = dependencyCache,
                     TerminationSignal = process.TerminationSignal,
+                    ViolatedBudget = process.ViolatedBudget,
                 }, kind);
             }
         }
@@ -930,8 +1047,28 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         {
             Processes = evidence,
             Findings = findings,
+            DependencyCache = dependencyCache,
         };
     }
+
+    private sealed record DependencyPreparationDecision(
+        GateDependencyScope Scope,
+        string InstallRoot,
+        DepsEnsureDecision Decision);
+
+    private static BuildTestGateDependencyCacheEvidence ToCacheEvidence(
+        DependencyPreparationDecision item,
+        bool installRan)
+        => new(
+            DisplayScope(item.Scope.WorkingSubdir),
+            item.Decision.InstallNeeded || item.Decision.Reason == "no-lockfile" ? "miss" : "hit",
+            item.Decision.Reason,
+            item.Decision.LockHash,
+            item.Decision.Lockfiles,
+            installRan);
+
+    private static string DisplayScope(string workingSubdir)
+        => string.IsNullOrWhiteSpace(workingSubdir) ? "." : workingSubdir;
 
     private static string CoverageReason(string reason, TestSelectionAudit audit)
     {
@@ -991,8 +1128,39 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string suffix = "")
     {
         var excerpt = FailureOutputExcerpt(process);
+        if (process.ViolatedBudget is not null)
+            return BudgetFailureReason(
+                commandDescription + suffix,
+                process.ViolatedBudget,
+                excerpt);
         return $"{commandDescription} exit {process.ExitCode?.ToString() ?? "n/a"}{suffix}" +
                (string.IsNullOrWhiteSpace(excerpt) ? string.Empty : $"; output: {excerpt}");
+    }
+
+    private static BuildTestGateBudgetEvidence NewBudgetEvidence(
+        string name,
+        TimeSpan limit,
+        TimeSpan consumed,
+        string phase)
+        => new(
+            name,
+            Math.Max(1, (long)Math.Round(limit.TotalMilliseconds)),
+            Math.Max(0, (long)Math.Round(consumed.TotalMilliseconds)),
+            phase);
+
+    private static string BudgetFailureReason(
+        string operation,
+        BuildTestGateBudgetEvidence? budget,
+        string? detail = null)
+    {
+        var prefix = budget is null
+            ? $"{operation} failed"
+            : $"{operation} violated {budget.Name} budget " +
+              $"(limit={budget.LimitMs}ms, consumed={budget.ConsumedMs}ms, phase={budget.Phase})";
+        if (string.IsNullOrWhiteSpace(detail)) return prefix;
+        var normalized = Whitespace.Replace(detail, " ").Trim();
+        if (normalized.Length > 900) normalized = "..." + normalized[^900..];
+        return $"{prefix}; evidence: {normalized}";
     }
 
     /// <summary>
@@ -1098,7 +1266,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             if (ownsProcessGate) ProcessGate.Release();
             wait.Stop();
             return MachineGateAcquisition.TimedOut(wait.ElapsedMilliseconds, collision,
-                $"machine build/test gate queue wait exceeded SLA of {queueWaitTimeout.TotalSeconds:F0}s");
+                BudgetFailureReason(
+                    "machine build/test gate queue wait",
+                    NewBudgetEvidence(
+                        "machine-gate-queue",
+                        queueWaitTimeout,
+                        wait.Elapsed,
+                        "queue")),
+                queueWaitTimeout);
         }
         catch
         {
@@ -1131,13 +1306,27 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         MachineGateLease? Lease,
         long QueueWaitMs,
         bool CollisionDetected,
-        string Reason)
+        string Reason,
+        BuildTestGateBudgetEvidence? ViolatedBudget)
     {
         public static MachineGateAcquisition Acquired(MachineGateLease lease)
-            => new(lease, lease.QueueWaitMs, lease.CollisionDetected, string.Empty);
+            => new(lease, lease.QueueWaitMs, lease.CollisionDetected, string.Empty, null);
 
-        public static MachineGateAcquisition TimedOut(long waitMs, bool collision, string reason)
-            => new(null, waitMs, collision, reason);
+        public static MachineGateAcquisition TimedOut(
+            long waitMs,
+            bool collision,
+            string reason,
+            TimeSpan? limit = null)
+            => new(
+                null,
+                waitMs,
+                collision,
+                reason,
+                NewBudgetEvidence(
+                    "machine-gate-queue",
+                    limit ?? TimeSpan.FromMilliseconds(Math.Max(1, waitMs)),
+                    TimeSpan.FromMilliseconds(waitMs),
+                    "queue"));
     }
 
     private sealed class MachineGateLease : IDisposable
@@ -1179,6 +1368,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             return WorkspacePreparation.Failed(BuildTestGateFailureKind.MissingSource,
                 "exact review subject SHA is missing or invalid");
 
+        var stopwatch = Stopwatch.StartNew();
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
         bounded.CancelAfter(infrastructureTimeout);
         try
@@ -1186,25 +1376,30 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             Directory.CreateDirectory(ReviewWorkspaceRoot);
             var selfHealed = false;
             var available = await RunGitAsync(
-                repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
+                repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"],
+                Remaining(infrastructureTimeout, stopwatch.Elapsed), bounded.Token)
                 .ConfigureAwait(false);
             if (available.ExitCode != 0)
             {
                 var fetchTarget = string.IsNullOrWhiteSpace(subjectRef) ? expectedSha : subjectRef;
                 var fetch = await RunGitAsync(
-                    repositoryPath, ["fetch", "--no-tags", "origin", fetchTarget!], bounded.Token)
+                    repositoryPath, ["fetch", "--no-tags", "origin", fetchTarget!],
+                    Remaining(infrastructureTimeout, stopwatch.Elapsed), bounded.Token)
                     .ConfigureAwait(false);
                 available = await RunGitAsync(
-                    repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
+                    repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"],
+                    Remaining(infrastructureTimeout, stopwatch.Elapsed), bounded.Token)
                     .ConfigureAwait(false);
                 if (available.ExitCode != 0)
                 {
                     var fullFetch = await RunGitAsync(
                         repositoryPath,
                         ["fetch", "--no-tags", "origin", "--prune", FullOriginBranchesRefspec],
+                        Remaining(infrastructureTimeout, stopwatch.Elapsed),
                         bounded.Token).ConfigureAwait(false);
                     available = await RunGitAsync(
-                        repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
+                        repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"],
+                        Remaining(infrastructureTimeout, stopwatch.Elapsed), bounded.Token)
                         .ConfigureAwait(false);
                     if (available.ExitCode != 0)
                     {
@@ -1214,7 +1409,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                             $"subject probe:\n{available.StandardOutput}\n{available.StandardError}";
                         return WorkspacePreparation.Failed(
                             ClassifyInfrastructureOrMissing(fetchEvidence),
-                            "exact review subject could not be fetched", fetchEvidence);
+                            "exact review subject could not be fetched",
+                            fetchEvidence,
+                            FirstInfrastructureBudget(
+                                infrastructureTimeout,
+                                stopwatch.Elapsed,
+                                "materialization",
+                                fetch,
+                                fullFetch,
+                                available));
                     }
 
                     selfHealed = true;
@@ -1226,21 +1429,31 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
             var workspace = Path.Combine(ReviewWorkspaceRoot, gateRunId);
             var add = await RunGitAsync(
-                repositoryPath, ["worktree", "add", "--detach", workspace, expectedSha], bounded.Token)
+                repositoryPath, ["worktree", "add", "--detach", workspace, expectedSha],
+                Remaining(infrastructureTimeout, stopwatch.Elapsed), bounded.Token)
                 .ConfigureAwait(false);
             if (add.ExitCode != 0)
             {
                 var addEvidence = add.StandardOutput + "\n" + add.StandardError;
                 return WorkspacePreparation.Failed(
                     ClassifyInfrastructureOrMissing(addEvidence),
-                    "exact review workspace could not be created", addEvidence);
+                    "exact review workspace could not be created",
+                    addEvidence,
+                    FirstInfrastructureBudget(
+                        infrastructureTimeout,
+                        stopwatch.Elapsed,
+                        "materialization",
+                        add));
             }
 
             var lease = new ExactWorkspaceLease(repositoryPath, workspace, "missing", _logger);
             string? testedSha;
             try
             {
-                testedSha = await ReadHeadShaAsync(workspace, infrastructureTimeout, bounded.Token)
+                testedSha = await ReadHeadShaAsync(
+                        workspace,
+                        Remaining(infrastructureTimeout, stopwatch.Elapsed),
+                        bounded.Token)
                     .ConfigureAwait(false);
                 lease.SetTestedSha(testedSha ?? "missing");
             }
@@ -1263,10 +1476,26 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            stopwatch.Stop();
+            var budget = NewBudgetEvidence(
+                "workspace-materialization",
+                infrastructureTimeout,
+                stopwatch.Elapsed,
+                "materialization");
             return WorkspacePreparation.Failed(BuildTestGateFailureKind.Timeout,
-                $"exact review subject materialization exceeded infrastructure SLA of {infrastructureTimeout.TotalSeconds:F0}s");
+                BudgetFailureReason("exact review subject materialization", budget),
+                violatedBudget: budget);
         }
     }
+
+    private static BuildTestGateBudgetEvidence? FirstInfrastructureBudget(
+        TimeSpan limit,
+        TimeSpan consumed,
+        string phase,
+        params GitCommandResult[] commands)
+        => commands.Any(command => command.FailureKind == GitProcessFailureKind.TimedOut)
+            ? NewBudgetEvidence($"workspace-{phase}", limit, consumed, phase)
+            : null;
 
     private static BuildTestGateFailureKind ClassifyInfrastructureOrMissing(string evidence)
     {
@@ -1283,13 +1512,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     {
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
         bounded.CancelAfter(timeout);
-        var result = await RunGitAsync(path, ["rev-parse", "HEAD"], bounded.Token).ConfigureAwait(false);
+        var result = await RunGitAsync(path, ["rev-parse", "HEAD"], timeout, bounded.Token)
+            .ConfigureAwait(false);
         return result.ExitCode == 0 ? result.StandardOutput.Trim() : null;
     }
 
     private static async Task<GitCommandResult> RunGitAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
+        TimeSpan timeout,
         CancellationToken ct)
     {
         var psi = new ProcessStartInfo("git")
@@ -1304,35 +1535,45 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         var result = await GitNetworkProcessRunner.RunAsync(
             psi,
             stdin: null,
-            GitNetworkProcessRunner.DefaultTimeout,
+            timeout,
             ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         return new GitCommandResult(
             result.ExitCode,
             result.StandardOutput,
-            result.StandardError);
+            result.StandardError,
+            result.FailureKind);
     }
 
-    private sealed record GitCommandResult(int? ExitCode, string StandardOutput, string StandardError);
+    private sealed record GitCommandResult(
+        int? ExitCode,
+        string StandardOutput,
+        string StandardError,
+        GitProcessFailureKind FailureKind);
 
     private sealed record WorkspacePreparation(
         ExactWorkspaceLease? Lease,
         BuildTestGateFailureKind FailureKind,
         string Reason,
         string Output,
-        bool SelfHealed)
+        bool SelfHealed,
+        BuildTestGateBudgetEvidence? ViolatedBudget)
     {
         public static WorkspacePreparation Ready(ExactWorkspaceLease lease, bool selfHealed)
-            => new(lease, BuildTestGateFailureKind.None, string.Empty, string.Empty, selfHealed);
+            => new(lease, BuildTestGateFailureKind.None, string.Empty, string.Empty, selfHealed, null);
 
         public static WorkspacePreparation Failed(
-            BuildTestGateFailureKind kind, string reason, string output = "")
-            => new(null, kind, reason, output, false);
+            BuildTestGateFailureKind kind,
+            string reason,
+            string output = "",
+            BuildTestGateBudgetEvidence? violatedBudget = null)
+            => new(null, kind, reason, output, false, violatedBudget);
     }
 
     private sealed record WorkspaceCleanupError(
         BuildTestGateFailureKind FailureKind,
-        string Evidence);
+        string Evidence,
+        BuildTestGateBudgetEvidence? ViolatedBudget);
 
     private sealed class ExactWorkspaceLease
     {
@@ -1357,6 +1598,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         public async Task<WorkspaceCleanupError?> RemoveAsync(TimeSpan timeout, CancellationToken ct)
         {
             if (_removed) return null;
+            var stopwatch = Stopwatch.StartNew();
             using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
             bounded.CancelAfter(timeout);
             var evidence = new StringBuilder();
@@ -1365,7 +1607,10 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 for (var attempt = 1; attempt <= 3; attempt++)
                 {
                     var remove = await RunGitAsync(
-                        _repositoryPath, ["worktree", "remove", "--force", Path], bounded.Token)
+                        _repositoryPath,
+                        ["worktree", "remove", "--force", Path],
+                        Remaining(timeout, stopwatch.Elapsed),
+                        bounded.Token)
                         .ConfigureAwait(false);
                     if (remove.ExitCode == 0)
                     {
@@ -1373,6 +1618,16 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                         return null;
                     }
                     evidence.AppendLine($"cleanup attempt {attempt}: {remove.StandardOutput} {remove.StandardError}".Trim());
+                    if (remove.FailureKind == GitProcessFailureKind.TimedOut)
+                    {
+                        stopwatch.Stop();
+                        var budget = NewBudgetEvidence(
+                            "workspace-cleanup", timeout, stopwatch.Elapsed, "cleanup");
+                        return new WorkspaceCleanupError(
+                            BuildTestGateFailureKind.Timeout,
+                            evidence.ToString().Trim(),
+                            budget);
+                    }
 
                     if (attempt < 3)
                         await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt), bounded.Token).ConfigureAwait(false);
@@ -1380,11 +1635,18 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                return new WorkspaceCleanupError(BuildTestGateFailureKind.Timeout,
-                    evidence.Append("cleanup infrastructure SLA expired").ToString());
+                stopwatch.Stop();
+                var budget = NewBudgetEvidence(
+                    "workspace-cleanup", timeout, stopwatch.Elapsed, "cleanup");
+                return new WorkspaceCleanupError(
+                    BuildTestGateFailureKind.Timeout,
+                    evidence.Append("cleanup infrastructure SLA expired").ToString(),
+                    budget);
             }
             return new WorkspaceCleanupError(
-                ClassifyInfrastructureOrMissing(evidence.ToString()), evidence.ToString().Trim());
+                ClassifyInfrastructureOrMissing(evidence.ToString()),
+                evidence.ToString().Trim(),
+                null);
         }
 
         public async Task RemoveBestEffortAsync(TimeSpan timeout)
@@ -1411,7 +1673,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string workingDirectory,
         string command,
         VerifyCommandShell shell,
-        TimeSpan timeout,
+        TimeSpan processTimeout,
+        TimeSpan budgetLimit,
+        TimeSpan elapsedBefore,
         RingOutput output,
         CancellationToken ct,
         string phase)
@@ -1422,7 +1686,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
                 : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
         return RunProcessAsync(
-            workingDirectory, command, fileName, args, timeout, output, ct, phase);
+            workingDirectory, command, fileName, args, processTimeout,
+            budgetLimit, elapsedBefore, output, ct, phase);
     }
 
     private async Task<BuildTestGateProcessEvidence> RunProcessAsync(
@@ -1430,7 +1695,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string command,
         string fileName,
         IReadOnlyList<string> args,
-        TimeSpan timeout,
+        TimeSpan processTimeout,
+        TimeSpan budgetLimit,
+        TimeSpan elapsedBefore,
         RingOutput output,
         CancellationToken ct,
         string phase)
@@ -1479,7 +1746,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         using (process)
         using (var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct))
         {
-            bounded.CancelAfter(timeout);
+            bounded.CancelAfter(processTimeout);
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
             var stderrTask = process.StandardError.ReadToEndAsync();
             var timedOut = false;
@@ -1502,19 +1769,29 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             var stderr = await stderrTask.ConfigureAwait(false);
             output.AppendBlock("stdout", stdout);
             output.AppendBlock("stderr", stderr);
-            if (timedOut) output.AppendLine($"{fileName} timed out after {timeout.TotalSeconds:F0}s");
+            var completedAt = DateTimeOffset.UtcNow;
+            BuildTestGateBudgetEvidence? violatedBudget = null;
+            if (timedOut)
+            {
+                var consumed = elapsedBefore + (completedAt - startedAt);
+                violatedBudget = NewBudgetEvidence("gate-run", budgetLimit, consumed, phase);
+                output.AppendLine(
+                    $"{fileName} violated gate-run budget " +
+                    $"limit={violatedBudget.LimitMs}ms consumed={violatedBudget.ConsumedMs}ms phase={phase}");
+            }
             if (cancelled) output.AppendLine($"{fileName} was cancelled");
             int? exitCode = process.HasExited ? process.ExitCode : null;
             var signal = ResolveTerminationSignal(exitCode, timedOut, cancelled);
             return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory, phase) with
             {
-                CompletedAtUtc = DateTimeOffset.UtcNow,
+                CompletedAtUtc = completedAt,
                 ExitCode = exitCode,
                 TerminationSignal = signal,
                 TimedOut = timedOut,
                 Cancelled = cancelled,
                 StandardOutput = stdout,
                 StandardError = stderr,
+                ViolatedBudget = violatedBudget,
             };
         }
     }
@@ -1636,16 +1913,45 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private static BuildTestGateResult InfrastructureFailure(
         BuildTestGateFailureKind kind,
         string reason,
-        string output)
-        => WithFailure(new BuildTestGateResult(
-            BuildTestGateVerdict.Fail, null, 0, output, reason, false, false), kind);
+        string output,
+        BuildTestGateBudgetEvidence? violatedBudget = null)
+    {
+        var honestReason = violatedBudget is null
+            || reason.Contains($"{violatedBudget.Name} budget", StringComparison.OrdinalIgnoreCase)
+                ? reason
+                : BudgetFailureReason(reason, violatedBudget, output);
+        return WithFailure(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail, null, 0, output, honestReason, false, false)
+        {
+            ViolatedBudget = violatedBudget,
+        }, kind);
+    }
+
+    private static BuildTestGateResult SaveDependencyCache(
+        BuildTestGateResult result,
+        GateDependencyCacheSession? session)
+    {
+        if (session is null) return result;
+        var output = result.Output;
+        foreach (var message in session.Save())
+            output = AppendOutput(output, $"# {message}");
+        return result with { Output = output };
+    }
+
+    private static string AppendOutput(string current, string? addition)
+    {
+        if (string.IsNullOrWhiteSpace(addition)) return current;
+        if (string.IsNullOrWhiteSpace(current)) return addition.Trim();
+        return current.TrimEnd() + Environment.NewLine + addition.Trim();
+    }
 
     private static BuildTestGateResult WithFailure(
         BuildTestGateResult result,
         BuildTestGateFailureKind kind)
     {
         var processEvidence = string.Join("\n", result.Processes.Select(p =>
-            $"{p.Command}\nexit={p.ExitCode}\nsignal={p.TerminationSignal}\nlaunch={p.LaunchError}\n{p.StandardOutput}\n{p.StandardError}"));
+            $"{p.Command}\nexit={p.ExitCode}\nsignal={p.TerminationSignal}\nlaunch={p.LaunchError}" +
+            $"\nbudget={p.ViolatedBudget?.Name}\n{p.StandardOutput}\n{p.StandardError}"));
         return result with
         {
             FailureKind = kind,
@@ -1721,7 +2027,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private static TimeSpan Remaining(TimeSpan timeout, TimeSpan elapsed)
     {
         var remaining = timeout - elapsed;
-        return remaining > TimeSpan.FromSeconds(10) ? remaining : TimeSpan.FromSeconds(10);
+        return remaining > TimeSpan.Zero ? remaining : TimeSpan.FromMilliseconds(1);
     }
 
     private sealed class RingOutput

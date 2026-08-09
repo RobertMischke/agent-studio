@@ -278,6 +278,8 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var evidence = File.ReadAllText(evidencePath);
         Assert.Contains("verdict=Skipped", evidence);
         Assert.Contains("Docs-only delivery", evidence);
+        Assert.Contains("budget=none", evidence);
+        Assert.Contains("--- dependency-cache.json ---", evidence);
 
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
@@ -487,6 +489,13 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             true,
             false)
         {
+            ViolatedBudget = new BuildTestGateBudgetEvidence(
+                "gate-run", 3_600_000, 3_600_041, "verification"),
+            DependencyCache =
+            [
+                new BuildTestGateDependencyCacheEvidence(
+                    ".", "hit", "lock-unchanged", "abc123", ["package-lock.json"], false),
+            ],
             TestSelection = new TestSelectionAudit
             {
                 Level = TestExecutionLevels.Full,
@@ -521,6 +530,13 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Failed, step!.Status);
         Assert.Contains("output: stderr: exact release regression", step.Reason);
+        var evidencePath = Assert.Single(
+            Directory.GetFiles(Path.Combine(jobFolder, "post-steps"), "pre-main-test-gate-*.log"));
+        var evidence = File.ReadAllText(evidencePath);
+        Assert.Contains("budget=gate-run limitMs=3600000 consumedMs=3600041 phase=verification", evidence);
+        Assert.Contains("\"State\": \"hit\"", evidence);
+        Assert.Contains("\"Reason\": \"lock-unchanged\"", evidence);
+        Assert.Contains("\"InstallRan\": false", evidence);
     }
 
     [Fact]
