@@ -59,15 +59,15 @@ describe('WorkbenchViewerComponent', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)
+    expect(document.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)
       .toContain('uncommitted');
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="page-action-archive"]')).toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="page-action-extra"]')).toBeNull();
+    expect(document.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="page-action-archive"]')).toBeNull();
+    expect(document.querySelector('[data-testid="page-action-extra"]')).toBeNull();
 
     const wikiTargets: string[] = [];
     fixture.componentInstance.openWiki.subscribe(path => wikiTargets.push(path));
-    const wikiButton = fixture.nativeElement.querySelector(
+    const wikiButton = document.querySelector(
       '[data-testid="workbench-viewer-open-wiki"]') as HTMLButtonElement;
     wikiButton.click();
     expect(wikiTargets).toEqual(['workbenches/boundary/index.html']);

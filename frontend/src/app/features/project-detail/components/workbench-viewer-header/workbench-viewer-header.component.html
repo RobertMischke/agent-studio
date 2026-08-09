@@ -1,0 +1,124 @@
+<header class="viewer-head" data-testid="workbench-viewer-header">
+  @if (document().workbench.key; as key) {
+    <app-copyable-task-key
+      [key]="key"
+      [ariaLabel]="'Copy key ' + key"
+      variant="detail"
+      testId="workbench-viewer-key" />
+  }
+
+  <h1 data-testid="workbench-viewer-title">{{ document().workbench.title }}</h1>
+
+  <span class="viewer-head__status"
+        [attr.data-status]="document().workbench.status"
+        [attr.aria-label]="'Status: ' + statusLabel()"
+        [appTooltip]="statusLabel()"
+        data-testid="workbench-viewer-status">
+    <i aria-hidden="true"></i>
+  </span>
+
+  @if (taskStatusesLoading() || taskStatuses().length > 0) {
+    <span class="viewer-head__tasks" role="group" aria-label="Linked cards" data-testid="workbench-viewer-tasks">
+      @if (taskStatusesLoading() && taskStatuses().length === 0) {
+        <i class="viewer-head__task-loading" aria-label="Loading linked cards"></i>
+      } @else {
+        @for (status of inlineTaskStatuses(); track status.key) {
+          <app-task-reference-microcard
+            [status]="status"
+            variant="lane-dot"
+            [testId]="'workbench-viewer-task-' + status.key" />
+        }
+        @if (hiddenTaskCount() > 0) {
+          <span class="viewer-head__task-overflow"
+                [attr.aria-label]="hiddenTaskCount() + ' more linked cards'">
+            +{{ hiddenTaskCount() }}
+          </span>
+        }
+      }
+    </span>
+  }
+
+  <span class="viewer-head__decisions"
+        [class.viewer-head__decisions--open]="openDecisionCount() > 0"
+        [attr.aria-label]="openDecisionCount() + ' open decisions'"
+        appTooltip="Open decisions"
+        data-testid="workbench-viewer-open-decisions">
+    {{ openDecisionCount() }} open
+  </span>
+
+  <button #detailsTrigger
+          type="button"
+          class="viewer-head__details-trigger"
+          data-testid="workbench-viewer-details-trigger"
+          aria-label="Details"
+          [attr.aria-expanded]="detailsOpen()"
+          appTooltip="Details"
+          (click)="toggleDetails($event)">
+    <app-studio-icon name="more" [size]="14" />
+  </button>
+</header>
+
+<section #detailsPopover
+         class="viewer-details"
+         [hidden]="!detailsOpen()"
+         [appConnectedOverlay]="triggerElement()"
+         connectedOverlayPlacement="below"
+         connectedOverlayAlignment="end"
+         [connectedOverlayGap]="8"
+         role="dialog"
+         aria-label="Details"
+         data-testid="workbench-viewer-details-popover">
+  <header class="viewer-details__header">
+    <strong>Details</strong>
+    <button type="button" aria-label="Close details" (click)="closeDetails()">×</button>
+  </header>
+
+  <p class="viewer-details__summary">{{ document().workbench.summary }}</p>
+
+  <dl class="viewer-details__meta">
+    <div><dt>Status</dt><dd>{{ statusLabel() }}</dd></div>
+    <div><dt>Project</dt><dd>{{ projectName() }}</dd></div>
+    <div class="viewer-details__meta-wide"><dt>Source</dt><dd><code>{{ document().workbench.entryPath }}</code></dd></div>
+    <div><dt>Branch</dt><dd>{{ document().branch || 'Unavailable' }}</dd></div>
+    <div>
+      <dt>Revision</dt>
+      <dd data-testid="workbench-viewer-provenance">
+        @if (document().workingTreeModified) {
+          <span data-testid="workbench-viewer-working-tree">Working tree · uncommitted</span>
+        } @else if (document().revision) {
+          <code>{{ document().revision!.slice(0, 8) }}</code>
+        } @else {
+          Unavailable
+        }
+      </dd>
+    </div>
+  </dl>
+
+  <button type="button"
+          class="viewer-details__wiki-link"
+          data-testid="workbench-viewer-open-wiki"
+          (click)="openWiki.emit()">
+    <app-studio-icon name="book" [size]="13" />
+    <span>Open in Wiki</span>
+  </button>
+
+  @if (taskStatuses().length > 0) {
+    <div class="viewer-details__tasks">
+      <span>Linked cards</span>
+      <div>
+        @for (status of taskStatuses(); track status.key) {
+          <app-task-reference-microcard [status]="status" />
+        }
+      </div>
+    </div>
+  }
+
+  <app-page-action-bar
+    [context]="pageContext()"
+    [decisionActionsOwned]="true" />
+
+  <app-workbench-decision-panel
+    [projectName]="projectName()"
+    [document]="document()"
+    (decisionChanged)="decisionChanged.emit()" />
+</section>

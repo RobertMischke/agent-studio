@@ -15,6 +15,7 @@ export type CopyableTaskKeyVariant = 'card' | 'detail';
 export class CopyableTaskKeyComponent implements OnDestroy {
   readonly key = input<string | null | undefined>(null);
   readonly label = input('');
+  readonly ariaLabel = input<string | null>(null);
   readonly variant = input<CopyableTaskKeyVariant>('card');
   readonly testId = input('copyable-task-key');
   readonly copied = signal(false);

@@ -40,4 +40,25 @@ describe('TaskReferenceMicrocardComponent', () => {
     expect(fixture.nativeElement.querySelector('a')).toBeNull();
     expect(fixture.nativeElement.querySelector('.task-ref--ghost')).toBeTruthy();
   });
+
+  it('keeps task navigation and tooltip detail in the compact lane-dot variant', async () => {
+    const openTaskKey = vi.fn(() => true);
+    await TestBed.configureTestingModule({
+      imports: [TaskReferenceMicrocardComponent],
+      providers: [{ provide: TaskReferenceNavigationService, useValue: { openTaskKey } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskReferenceMicrocardComponent);
+    fixture.componentRef.setInput('status', status);
+    fixture.componentRef.setInput('variant', 'lane-dot');
+    fixture.componentRef.setInput('testId', 'linked-task-AGT-2050');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement.querySelector('[data-testid="linked-task-AGT-2050"]');
+    const link = host.querySelector('a') as HTMLAnchorElement;
+    expect(host.querySelector('.task-ref__lane-dot')).toBeTruthy();
+    expect(host.textContent).toContain('Living references');
+    expect(host.textContent).not.toContain('AGT-2050●');
+    link.click();
+    expect(openTaskKey).toHaveBeenCalledWith('PROJ-001::task');
+  });
 });

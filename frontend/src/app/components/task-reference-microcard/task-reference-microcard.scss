@@ -22,6 +22,30 @@
   white-space: nowrap;
 }
 
+.task-ref__link--lane-dot {
+  width: 18px;
+  height: 18px;
+  justify-content: center;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--task-ref-project) 34%, var(--studio-border));
+  background: color-mix(in srgb, var(--task-ref-project) 8%, var(--studio-bg-elevated));
+}
+
+.task-ref__lane-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--studio-fg-dim);
+}
+.task-ref__lane-dot[data-tone='done'] { background: var(--studio-success); }
+.task-ref__lane-dot[data-tone='active'] { background: var(--severity-info); }
+.task-ref__lane-dot[data-tone='waiting'] { background: var(--studio-warn); }
+.task-ref__lane-dot[data-tone='queued'] { background: var(--studio-fg-dim); }
+.task-ref__lane-dot[data-tone='ghost'] {
+  border: 1px solid var(--studio-fg-dim);
+  background: transparent;
+}
+
 a.task-ref__link:hover { background: color-mix(in srgb, var(--task-ref-project) 18%, var(--studio-bg-elevated)); }
 a.task-ref__link:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
 .task-ref__project { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--task-ref-project); }

@@ -31,6 +31,8 @@ export interface TaskReferenceStatus {
 })
 export class TaskReferenceMicrocardComponent {
   readonly status = input.required<TaskReferenceStatus>();
+  readonly variant = input<'default' | 'lane-dot'>('default');
+  readonly testId = input('task-reference-microcard');
   private readonly navigation = inject(TaskReferenceNavigationService);
 
   readonly color = computed(() => this.status().projectColor || projectIdentity(this.status().projectName).color);

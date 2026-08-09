@@ -48,4 +48,11 @@ describe('CopyableTaskKeyComponent', () => {
     fixture.detectChanges();
     expect(button.textContent).toContain('AGT-2268');
   });
+
+  it('accepts a neutral accessible label for non-task key surfaces', () => {
+    fixture.componentRef.setInput('ariaLabel', 'Copy key AGT-W4');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')?.getAttribute('aria-label'))
+      .toBe('Copy key AGT-W4');
+  });
 });

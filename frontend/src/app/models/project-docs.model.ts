@@ -293,6 +293,8 @@ export interface ConfirmWorkbenchDecisionRequest {
 
 export interface WorkbenchListItem {
   id: string;
+  /** Stable project-scoped key added by the key/reference slice. */
+  key?: string | null;
   title: string;
   summary: string;
   status: WorkbenchStatus;
@@ -302,6 +304,10 @@ export interface WorkbenchListItem {
   valid: boolean;
   error: string | null;
   sourceTaskKeys: string[];
+  /** Legacy descriptor bridge used when no card references the stable key yet. */
+  relatedTaskKeys?: string[];
+  /** Host projection supplied by the inline-decision slice when available. */
+  openDecisionCount?: number | null;
   /** Shared lifecycle projection. Present on schema-v2 descriptors. */
   lifecycleState?: WikiLifecycleState | null;
   editedBy?: string | null;

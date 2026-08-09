@@ -142,6 +142,8 @@ export interface TaskReferences {
   relatedTo: string[];
   blockedBy: string[];
   supersedes: string[];
+  /** Stable keys of repository-backed planning documents associated with this card. */
+  workbenches?: string[];
 }
 
 export interface RelatedWikiPage {

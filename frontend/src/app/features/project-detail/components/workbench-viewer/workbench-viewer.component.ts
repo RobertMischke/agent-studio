@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed,
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { WorkbenchDocument } from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
-import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
+import { WorkbenchViewerHeaderComponent } from '../workbench-viewer-header/workbench-viewer-header.component';
 import { PageContext, pageExcerpt } from '../../../../models/page-context.model';
 import {
   ISOLATED_HTML_LINK_MESSAGE,
@@ -22,7 +21,7 @@ import {
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [PageActionBarComponent, StudioIconComponent, WorkbenchDecisionPanelComponent],
+  imports: [StudioIconComponent, WorkbenchViewerHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -65,14 +64,6 @@ export class WorkbenchViewerComponent {
       this.maximized.set(false);
       this.loadDocument(project, id);
     });
-  }
-
-  statusLabel(): string {
-    const workbench = this.document()?.workbench;
-    if (!workbench) return '';
-    return workbench.status === 'active'
-      ? workbench.phase ?? workbench.status
-      : workbench.status;
   }
 
   openCurrentPageInWiki(): void {
