@@ -484,7 +484,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             1,
             20,
             "release regression",
-            "full-suite test failed",
+            "full-suite test failed; output: stderr: exact release regression",
             true,
             false)
         {
@@ -521,7 +521,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Failed, step!.Status);
-        Assert.Contains("full-suite test failed", step.Reason);
+        Assert.Contains("output: stderr: exact release regression", step.Reason);
     }
 
     [Fact]
@@ -1317,10 +1317,8 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     /// A verify command that leaves a durable, checkable trace and exits zero on
     /// every platform: it tags the commit the gate actually checked out. Git tags
     /// are written to the shared repository, so the test can read them from the
-    /// main checkout after the gate's isolated worktree is gone. Deliberately
-    /// quote- and path-free: the gate launches commands through
-    /// <c>cmd.exe /c</c> with an argument list, and cmd does not understand the
-    /// backslash-escaped quotes .NET produces for embedded quotes.
+    /// main checkout after the gate's isolated worktree is gone. Explicit profile
+    /// commands run through the same <c>bash -lc</c> contract as profile validation.
     /// </summary>
     private static string TagMarker(string tag) => $"git tag {tag}";
 
