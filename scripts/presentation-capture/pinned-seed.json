@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "fixedTimeBase": "2026-08-09T08:00:00.000Z",
+  "source": {
+    "kind": "anonymized-real-workspace-export",
+    "capturedAt": "2026-08-09T08:00:00.000Z",
+    "note": "Names, paths, project keys, task keys, repository references, and timestamps were sanitized before this snapshot was committed. Capture never reads the source workspace."
+  },
+  "projects": [
+    { "key": "demo-app", "name": "Demo App" },
+    { "key": "demo-platform", "name": "Demo Platform" }
+  ],
+  "tasks": [
+    { "project": "demo-app", "key": "DEMO-1", "state": "0-backlog", "type": "feature", "title": "Add saved views to the task board" },
+    { "project": "demo-app", "key": "DEMO-2", "state": "1-preparation", "type": "feature", "title": "Shape the onboarding checklist" },
+    { "project": "demo-app", "key": "DEMO-3", "state": "2-ready", "type": "chore", "title": "Update the accessibility test baseline" },
+    { "project": "demo-app", "key": "DEMO-4", "state": "3-progress", "type": "bug", "title": "Fix large avatar uploads", "history": true },
+    { "project": "demo-app", "key": "DEMO-5", "state": "5-human-review", "type": "feature", "title": "Add CSV export to reports", "history": true },
+    { "project": "demo-app", "key": "DEMO-6", "state": "5-human-review", "type": "bug", "title": "Correct calendar timezone handling", "history": true },
+    { "project": "demo-app", "key": "DEMO-7", "state": "6-completed", "type": "feature", "title": "Introduce board keyboard shortcuts", "history": true },
+    { "project": "demo-app", "key": "DEMO-8", "state": "7-archive", "type": "chore", "title": "Retire the legacy notification banner", "history": true },
+    { "project": "demo-app", "key": "DEMO-9", "state": "5e-escalated", "type": "feature", "title": "Approve the reports export release", "history": true, "decision": true },
+    { "project": "demo-app", "key": "DEMO-10", "state": "0-backlog", "type": "feature", "title": "Add reusable dashboard filters" },
+    { "project": "demo-app", "key": "DEMO-11", "state": "2-ready", "type": "bug", "title": "Keep table columns stable while loading" },
+    { "project": "demo-app", "key": "DEMO-12", "state": "3-progress", "type": "feature", "title": "Stream export progress to the activity feed", "history": true },
+    { "project": "demo-app", "key": "DEMO-13", "state": "4-auto-review", "type": "chore", "title": "Verify dependency license notices", "history": true },
+    { "project": "demo-app", "key": "DEMO-14", "state": "5-human-review", "type": "feature", "title": "Review the empty-state copy" },
+    { "project": "demo-app", "key": "DEMO-15", "state": "6-completed", "type": "bug", "title": "Restore report sorting after refresh", "history": true },
+    { "project": "demo-app", "key": "DEMO-16", "state": "2-ready", "type": "feature", "title": "Add export presets for finance teams" },
+    { "project": "demo-app", "key": "DEMO-17", "state": "1-preparation", "type": "chore", "title": "Document the export retention policy" },
+    { "project": "demo-app", "key": "DEMO-18", "state": "5-human-review", "type": "feature", "title": "Sign off the responsive report layout" },
+    { "project": "demo-platform", "key": "PLAT-1", "state": "0-backlog", "type": "feature", "title": "Expose a health-check endpoint" },
+    { "project": "demo-platform", "key": "PLAT-2", "state": "2-ready", "type": "chore", "title": "Add structured request logging" },
+    { "project": "demo-platform", "key": "PLAT-3", "state": "6-completed", "type": "feature", "title": "Cache catalog responses", "history": true },
+    { "project": "demo-platform", "key": "PLAT-4", "state": "7-archive", "type": "bug", "title": "Stop double-counting retried tasks" }
+  ],
+  "decision": {
+    "taskKey": "DEMO-9",
+    "promptMarkdown": "# Approve the reports export release\n\nReview the delivered CSV export as a bounded release decision. Keep the accepted escaping and timezone behavior, inspect the attached visual proof and diff, and decide whether the remaining empty-state assertion must block release.\n\n## Acceptance\n\n- Exported values remain RFC 4180 compatible.\n- The review verdict and every evidence file stay attached to this task.\n- The operator chooses continue, accept as-is, or abort from the recorded decision surface.\n",
+    "reviewSummary": "The export is shippable, but the empty-table behavior still needs an explicit regression assertion.",
+    "reviewFindings": [
+      "Add a focused assertion for exporting an empty report table.",
+      "Confirm the disabled export action remains visible in both themes.",
+      "Keep the attached diff and browser proof with the release decision."
+    ],
+    "decisionTitle": "Release the reports export?",
+    "decisionQuestion": "Should the export ship now, return for one focused assertion, or be aborted?",
+    "decisionContext": "The implementation, diff, automated grade, visual proof, and the one remaining test gap are attached to this task.",
+    "diffFiles": [
+      "frontend/src/app/features/reports/report-export.ts",
+      "frontend/src/app/features/reports/report-export.spec.ts"
+    ]
+  }
+}

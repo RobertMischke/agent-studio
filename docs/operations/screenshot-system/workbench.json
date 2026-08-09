@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "screenshot-system",
-  "title": "Reproduzierbare Produkt-Screenshots: gepinnte Demo-Daten",
-  "summary": "ENTSCHIEDEN 09.08. (Operator): Pinned ist die Regel - Existing-Data-Regel entfaellt; Demo-Daten duerfen aus realen Daten abgeleitet werden (Sanitize-Snapshot in den deterministischen Seed); Quellklasse --pinned. Karten AGT-2530 (Pipeline+Regelwechsel) und WEB-17 (Sync-Fix+Shot-Austausch, dependsOn) sind aktiviert. Operator-Auftrag 09.08. (im Zuge des Landing-Page-Rewrites WEB-16): System für wiederholbare Screenshots mit gepinntem Zustand. Inventur-Ergebnis: Das System EXISTIERT bereits im Produkt-Repo — ADR-0056-Pipeline (seed-demo-workspace.mjs mit byte-identischem DEMO-*/PLAT-*-Workspace, isolierter Stack via worktree-test-stack.sh, npm run docs:presentation, Runbook + Storyboard + eingecheckte 4K-Light/Dark-PNGs). Daneben die Visual Documentation Library mit Existing-Data-Regel und der --real/--mocked/--composite-Naming-Grammatik (backend-geparst, UI-gelabelt) sowie eine Website-Sync-Pipeline (prepare-capture-checkout auf Ports 5042/4042, sync-from-product) — deren Manifest-Pfad ist allerdings veraltet und bricht heute (docs/visual/ statt docs/quality/visual-features/). Entscheidungen: demo-pinned als dritte ehrliche Quell-Klasse neben real/mocked/composite, Demo-Seed um die WEB-16-Shotliste + Annotations-Overlays erweitern, Sync-Bug fixen. Zwei Backlog-Karten vorbereitet.",
+  "title": "Reproducible product screenshots from pinned demo data",
+  "summary": "The 2026-08-09 operator decision makes the committed deterministic snapshot the source for documentation and marketing captures. AGT-2530 extends the ADR-0056 pipeline with a sanitized real-workspace export, a complete DEMO-9 decision state, two light/dark landing-page shot pairs, optional rendered annotations, and the --pinned source class across the manifest, backend parser, and UI. Task evidence retains --real, --mocked, and --composite. WEB-17 remains the follow-up for the website manifest-path and asset-sync update.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "testing",

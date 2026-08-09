@@ -1,8 +1,8 @@
 # MVP presentation capture runbook
 
-This runbook produces the 16:9 product media used by the MVP slide deck. Use
-only the deterministic ADR-0056 workspace. Never capture the production
-workspace, even for a quick rehearsal.
+This runbook produces the 16:9 product media used by the MVP slide deck and
+landing page. Capture uses only the deterministic ADR-0056 pinned workspace.
+Never point the capture process at a production workspace.
 
 The source of truth for the ordered outputs is the
 [MVP presentation storyboard](../../concepts/mvp-presentation-storyboard.md).
@@ -18,7 +18,7 @@ Before any capture, confirm all of the following:
   notifications are closed or suppressed.
 - The output folder contains no earlier production capture.
 
-Reset the default demo store from the repository root:
+Reset the default pinned demo store from the repository root:
 
 ```sh
 node scripts/seed-demo-workspace.mjs
@@ -28,6 +28,24 @@ The seed refuses the production workspace root. After reset, open the demo
 backend configured for `C:\Projects\agent-taskboard-workspace-demo`, select
 `Demo App`, and verify the visible keys again. Do not point ScreenToGif or OBS
 at the stable or production browser window.
+
+## Updating the pinned snapshot from real data
+
+Pinned is the source rule for documentation and marketing captures. A real
+board and task may be used only during an explicit snapshot update: the export
+rewrites project names, paths, repository references, and task keys to the
+`Demo App` / `Demo Platform` and `DEMO-*` / `PLAT-*` vocabulary, fixes the time
+base, and writes a versioned JSON snapshot. Review the resulting diff for
+private data before committing it. The normal capture command never reads the
+source workspace.
+
+```sh
+node scripts/presentation-capture/export-pinned-seed.mjs \
+  --source-root <workspace-root> \
+  --project <source-project-key> \
+  --task <source-task-key> \
+  --secondary-project <optional-source-project-key>
+```
 
 ## Deterministic stills with Playwright
 
@@ -40,14 +58,26 @@ npm --prefix frontend run docs:presentation
 ```
 
 The command uses marketing mode, a 1920x1080 CSS viewport, and a device scale
-factor of 2. Each PNG is therefore 3840x2160 and scales cleanly into a
+factor of 2. Each presentation PNG is therefore 3840x2160 and scales cleanly into a
 1920x1080 slide. Outputs are written to
 `docs/assets/images/presentation/`. Do not resize the source files before
 placing them in the deck. Fit them proportionally inside the slide frame.
 
-The filenames include their order, theme, and `--real` source claim. A failed
+The filenames include their order, theme, and `--pinned` source claim. A failed
 dimension check fails the Playwright run instead of leaving a soft screenshot
 in the output set.
+
+The two landing-page pairs render at most three Playwright-owned annotation
+labels. They are enabled by default and are part of the browser DOM at capture
+time, not a later image edit. Disable them for a clean product-only variant:
+
+```sh
+PW_PRESENTATION_ANNOTATIONS=0 npm --prefix frontend run docs:presentation
+```
+
+For a reproducibility check, run the command twice and compare the ordered PNG
+hash list. In a managed task, store both lists and the comparison under
+`$JOB_RESULTS_DIR`.
 
 ## Silent loops with ScreenToGif
 
@@ -69,7 +99,7 @@ Use ScreenToGif only for storyboard rows marked as a silent loop.
 7. Export GIF for maximum slide compatibility. If the deck supports embedded
    MP4 loops, also export H.264 at 1920x1080 and 15 fps using the same basename.
 
-Use the exact storyboard filename, including theme and `--real`. Review the
+Use the exact storyboard filename, including theme and `--pinned`. Review the
 loop at slide size and confirm it restarts without a distracting jump.
 
 ## Narrated backup with OBS Studio
@@ -101,6 +131,8 @@ The narrated backup is optional and contains microphone audio but no webcam.
 - Silent loops contain no audio or webcam and use the requested theme.
 - The narrated backup is 1920x1080 at 30 fps, microphone only, with no webcam.
 - Captions live in the deck, not baked into product media.
-- Every filename matches the storyboard and contains `--real`.
+- Every filename matches the storyboard and contains `--pinned`.
+- Two consecutive capture runs produce identical SHA-256 values for all four
+  landing-page PNGs in storyboard rows 07 and 08.
 - A second person checks the first and last frame of every motion asset for
   production data before it leaves the operator machine.

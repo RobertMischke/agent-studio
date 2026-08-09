@@ -25,7 +25,8 @@ public record TaskScreenshot
     /// <summary>
     /// Provenance label derived from the filename suffix: one of
     /// <see cref="ScreenshotSources"/> (<c>real</c> / <c>mocked</c> /
-    /// <c>composite</c> / <c>unlabeled</c>). The UI renders it text-only next
+    /// <c>composite</c> / <c>pinned</c> / <c>unlabeled</c>). The UI
+    /// renders it text-only next
     /// to the caption so the reviewer can tell a live-backend shot from a
     /// mocked-route e2e shot.
     /// </summary>

@@ -5,13 +5,13 @@
 The task detail view shows one unit of work. The protocol pane explains what
 happened, what evidence exists, and why the task is ready for review.
 
-![Task detail with protocol pane](../../../assets/images/detail-protocol.png)
+![Task detail with protocol pane](../../../assets/images/detail-protocol--pinned.png)
 
 ## Relevant State
 
-- Route: `/tasks/<existing-agent-studio-task>`
+- Route: `/tasks/DEMO-9`
 - Viewport: `1440x900`
-- Data state: existing Agent Software Studio task selected by the Playwright spec
+- Data state: pinned DEMO-9 task selected by the Playwright spec
 - Visible state: task prompt and protocol pane are visible together
 
 This state matters because a reviewer should not have to reconstruct task
@@ -29,9 +29,9 @@ Manifest id: `task-detail-protocol`
 The Playwright spec:
 
 1. Opens `/`.
-2. Opens the preferred existing task card.
+2. Opens the preferred pinned DEMO-9 task card.
 3. Waits for `pane-protocol`.
-4. Captures `docs/assets/images/detail-protocol.png`.
+4. Captures `docs/assets/images/detail-protocol--pinned.png`.
 
 ## Marketing Usage
 

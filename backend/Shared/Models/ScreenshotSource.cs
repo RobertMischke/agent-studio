@@ -6,6 +6,9 @@ namespace AgentStudio.Shared;
 /// taken against a running backend (<c>real</c>) or an e2e run with mocked
 /// API routes (<c>mocked</c>). Composite images that stitch several shots
 /// together carry <c>composite</c> plus the source of each part.
+/// Documentation and marketing captures made from a versioned deterministic
+/// workspace snapshot carry <c>pinned</c>; this is separate from task-run
+/// evidence provenance.
 ///
 /// See <c>docs/system/contracts/protocol-style.md</c> §4.4 for the filename grammar.
 /// </summary>
@@ -17,10 +20,12 @@ public static class ScreenshotSources
     public const string Mocked = "mocked";
     /// <summary>A stitched image; the sources of its parts live on <see cref="ScreenshotSourceInfo.Parts"/>.</summary>
     public const string Composite = "composite";
+    /// <summary>Captured from the versioned, deterministic documentation workspace snapshot.</summary>
+    public const string Pinned = "pinned";
     /// <summary>No recognised source suffix on the filename. The UI stays honest and shows no real/mocked claim.</summary>
     public const string Unlabeled = "unlabeled";
 
-    public static readonly string[] All = [Real, Mocked, Composite, Unlabeled];
+    public static readonly string[] All = [Real, Mocked, Composite, Pinned, Unlabeled];
 }
 
 /// <summary>
@@ -44,6 +49,7 @@ public readonly record struct ScreenshotSourceInfo(string Source, IReadOnlyList<
 ///   <item><c>name--mocked.png</c> → <see cref="ScreenshotSources.Mocked"/></item>
 ///   <item><c>name--composite.png</c> → <see cref="ScreenshotSources.Composite"/>, no parts</item>
 ///   <item><c>before-after--composite-real-mocked.png</c> → composite of a real and a mocked part</item>
+///   <item><c>name--pinned.png</c> → <see cref="ScreenshotSources.Pinned"/></item>
 ///   <item>anything else / no suffix → <see cref="ScreenshotSources.Unlabeled"/></item>
 /// </list>
 ///
@@ -84,6 +90,8 @@ public static class ScreenshotSourceParser
                     if (t is ScreenshotSources.Real or ScreenshotSources.Mocked) parts.Add(t);
                 }
                 return new ScreenshotSourceInfo(ScreenshotSources.Composite, parts);
+            case ScreenshotSources.Pinned:
+                return new ScreenshotSourceInfo(ScreenshotSources.Pinned, []);
             default:
                 return ScreenshotSourceInfo.UnlabeledInfo;
         }
