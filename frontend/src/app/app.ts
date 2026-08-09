@@ -1930,7 +1930,7 @@ export class App implements OnInit, OnDestroy {
           );
           return;
         }
-        this.openEpicDetailFromTaskAnchor(detail, currentTask.taskKey);
+        this.openEpicDetailFromTaskAnchor(detail);
       },
       error: (err) => {
         if (requestToken !== this.relatedOpenToken) return;
@@ -1982,22 +1982,10 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private openEpicDetailFromTaskAnchor(detail: TaskDetail, anchorTaskKey: string): void {
+  private openEpicDetailFromTaskAnchor(detail: TaskDetail): void {
     this.epicTabTaskDetail.set(null);
     const target = { kind: 'epic' as const, epicKey: detail.info.taskKey };
-    const active = this.studioTabState.activeTab();
-    const sourceKey =
-      active?.kind === 'task' && active.taskKey === anchorTaskKey
-        ? studioTabKey(active)
-        : active?.kind === 'epic' && active.epicKey === detail.info.taskKey
-          ? studioTabKey(active)
-          : null;
-
-    if (sourceKey) {
-      this.studioTabState.retarget(sourceKey, target);
-    } else {
-      this.studioTabState.open(target);
-    }
+    this.studioTabState.open(target);
 
     const token = this.jobSelection.bumpOpenDetailToken();
     this.jobSelection.setSelectedFromAdvance(detail, token);

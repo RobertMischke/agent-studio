@@ -726,6 +726,12 @@ export class StudioShellComponent {
     this.closeWorkspaceSettingsStateIfTabMissing();
   }
 
+  onTabAuxClick(event: MouseEvent, key: string): void {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    this.closeTab(key, event);
+  }
+
   closeOthers(key: string): void {
     this.tabState.closeOthers(key);
     this.closeWorkspaceSettingsStateIfTabMissing();
@@ -1124,6 +1130,11 @@ export class StudioShellComponent {
         return job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey);
       }
       case 'hub': {
+        if (tab.section === 'wiki' && tab.wikiTarget && tab.wikiTarget.kind !== 'overview') {
+          const pathParts = tab.wikiTarget.relPath.split('/');
+          const targetLabel = pathParts[pathParts.length - 1] || tab.wikiTarget.relPath;
+          return `${this.projectShortLabel(tab.projectName)} · ${targetLabel}`;
+        }
         const railItem = this.railItemForSection(tab.section);
         const surfaceLabel = railItem.key === DEFAULT_PROJECT_RAIL_KEY ? 'Deck' : railItem.label;
         return `${this.projectShortLabel(tab.projectName)} · ${surfaceLabel}`;
@@ -1230,6 +1241,10 @@ export class StudioShellComponent {
   tabTooltip(tab: StudioTab): string {
     const name = this.tabProjectName(tab);
     const label = this.tabLabel(tab);
+    if (tab.kind === 'hub' && tab.section === 'wiki'
+      && tab.wikiTarget && tab.wikiTarget.kind !== 'overview') {
+      return `${name ?? tab.projectName}: ${tab.wikiTarget.relPath}`;
+    }
     return name ? `${name} — ${label}` : label;
   }
 

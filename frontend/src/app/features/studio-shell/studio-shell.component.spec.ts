@@ -668,6 +668,34 @@ describe('StudioShellComponent hub tab label + icon', () => {
   });
 });
 
+describe('StudioShellComponent tab closing', () => {
+  it('closes a shell tab on middle click through the same close path as X', () => {
+    localStorage.removeItem('atp.studio.tabs.v1');
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    const component = fixture.componentInstance;
+    const tabState = TestBed.inject(StudioTabStateService);
+    component.openBoard('Project A');
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const tab = root.querySelector<HTMLElement>(
+      '[data-testid="studio-tab-board:Project A"]',
+    );
+    tab?.dispatchEvent(new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+
+    expect(tabState.tabs().some(item => item.kind === 'board' && item.projectName === 'Project A')).toBe(false);
+  });
+});
+
 describe('StudioShellComponent active-tab scroll-into-view (AGT-2135)', () => {
   function configure(): {
     fixture: ComponentFixture<StudioShellComponent>;

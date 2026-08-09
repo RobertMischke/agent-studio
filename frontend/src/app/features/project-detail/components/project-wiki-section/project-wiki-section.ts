@@ -177,6 +177,11 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
 export class ProjectWikiSectionComponent implements OnDestroy {
   readonly projectName = input.required<string>();
   readonly projectId = input<string | null>(null);
+  /** Shell-owned target when this Wiki is mounted in a Studio editor tab. */
+  readonly studioTabTarget = input<WikiDeepLinkTarget | null>(null);
+  /** Legacy project overlays navigate in place; Studio opens internal targets as tabs. */
+  readonly openInternalTargetsInTabs = input(false);
+  readonly openWikiTarget = output<WikiDeepLinkTarget>();
   readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
@@ -350,6 +355,17 @@ export class ProjectWikiSectionComponent implements OnDestroy {
         // re-reads do not re-fire it.
         this.loadGradingContext();
       }
+    });
+    effect(() => {
+      const target = this.studioTabTarget();
+      if (!target) return;
+      const tree = this.tree();
+      if (!tree) {
+        this.pendingUrlTarget = target;
+        return;
+      }
+      if (this.sameWikiTarget(target, this.currentDeepLinkTarget())) return;
+      this.applyDeepLinkTarget(tree, target);
     });
     if (typeof window !== 'undefined') {
       window.addEventListener('hashchange', this.onHashChange);
@@ -608,10 +624,14 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    * into subfolders from the overview table and breadcrumb). The folder is
    * expanded in the tree so the selection stays visible.
    */
-  openFolderOverview(relPath: string): void {
+  openFolderOverview(relPath: string, inPlace = false): void {
+    const target: WikiDeepLinkTarget = relPath
+      ? { kind: 'folder', relPath }
+      : { kind: 'overview' };
+    if (!inPlace && this.requestStudioTab(target)) return;
     this.resetSearchState();
     this.deepLinkMissing.set(null);
-    if (this.openedRel()) this.closeFile();
+    if (this.openedRel()) this.closeFile(inPlace);
     if (!relPath) {
       this.selectedFolderRel.set(null);
       this.syncDeepLinkUrl('replace');
@@ -628,6 +648,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   /** Root breadcrumb of the folder overview: back to the Pulse landing. */
   showWikiLanding(): void {
+    if (this.requestStudioTab({ kind: 'overview' })) return;
     this.selectedFolderRel.set(null);
     this.deepLinkMissing.set(null);
     this.syncDeepLinkUrl('replace');
@@ -644,10 +665,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
    * (open page, folder overview, search) so the dashboard landing renders -
    * the same state as the initial view.
    */
-  openOverview(): void {
+  openOverview(inPlace = false): void {
+    if (!inPlace && this.requestStudioTab({ kind: 'overview' })) return;
     this.resetSearchState();
     this.deepLinkMissing.set(null);
-    if (this.openedRel()) this.closeFile();
+    if (this.openedRel()) this.closeFile(inPlace);
     this.selectedFolderRel.set(null);
     this.syncDeepLinkUrl('replace');
   }
@@ -907,6 +929,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   // ---- viewer ----
 
   openFile(rel: string, type: WikiNodeType = 'md', tab: WikiViewerTab = 'doc', reportAnchor: string | null = null): void {
+    if (this.requestStudioTab({ kind: 'page', relPath: rel })) return;
     this.resetSearchState();
     this.deepLinkMissing.set(null);
     this.selectedFolderRel.set(null);
@@ -959,7 +982,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.persistState();
   }
 
-  closeFile(): void {
+  closeFile(inPlace = false): void {
+    if (!inPlace && this.requestStudioTab({ kind: 'overview' })) return;
     this.wikiLiveRefresh.stopPage();
     this.openedRel.set(null);
     this.openedContent.set('');
@@ -1577,12 +1601,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     while (cur) {
       const node = this.findNode(roots, cur);
       if (node && node.type === 'folder') {
-        this.openFolderOverview(cur);
+        this.openFolderOverview(cur, true);
         return;
       }
       cur = this.parentDir(cur);
     }
-    this.openOverview();
+    this.openOverview(true);
   }
 
   onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
@@ -1812,6 +1836,19 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     const folder = this.selectedFolderRel();
     if (folder) return { kind: 'folder', relPath: folder };
     return { kind: 'overview' };
+  }
+
+  private requestStudioTab(target: WikiDeepLinkTarget): boolean {
+    if (!this.openInternalTargetsInTabs() || this.restoringOpen) return false;
+    if (this.sameWikiTarget(target, this.currentDeepLinkTarget())) return false;
+    this.openWikiTarget.emit(target);
+    return true;
+  }
+
+  private sameWikiTarget(left: WikiDeepLinkTarget, right: WikiDeepLinkTarget): boolean {
+    if (left.kind !== right.kind) return false;
+    if (left.kind === 'overview' || right.kind === 'overview') return true;
+    return left.relPath === right.relPath;
   }
 
   /**

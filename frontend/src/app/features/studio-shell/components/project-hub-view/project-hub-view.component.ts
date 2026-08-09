@@ -30,7 +30,7 @@ import {
 } from '../../../project-detail/components/project-shell/project-shell.config';
 import { ProjectOverlaysService } from '../../../project-detail/state/project-overlays.service';
 import { StudioTabStateService } from '../../services/studio-tab-state.service';
-import { studioTabKey } from '../../studio-shell.types';
+import type { WikiTabTarget } from '../../studio-shell.types';
 import type { WorkbenchListItem } from '../../../../models/project-docs.model';
 
 /** Rails whose content panel is real (not the project-shell placeholder). */
@@ -117,6 +117,8 @@ export class ProjectHubViewComponent {
   readonly projectId = input<string | null>(null);
   /** Optional initial rail; defaults to "overview" if absent or unknown. */
   readonly initialSection = input<string>('overview');
+  /** Exact Wiki destination owned by this shell tab. */
+  readonly wikiTarget = input<WikiTabTarget | undefined>();
   /** Exact Project Pipeline row requested by a task-detail activation link. */
   readonly pipelineStepId = input<string | undefined>();
 
@@ -144,12 +146,22 @@ export class ProjectHubViewComponent {
 
   setRail(rail: ProjectRailKey): void {
     const projectName = this.projectName();
-    const sourceKey = studioTabKey({ kind: 'hub', projectName, section: this.activeRail() });
     this.activeRail.set(rail);
-    this.tabState.retarget(
-      sourceKey,
-      { kind: 'hub', projectName, section: rail },
-    );
+    this.tabState.open({
+      kind: 'hub',
+      projectName,
+      section: rail,
+      ...(rail === 'wiki' ? { wikiTarget: { kind: 'overview' } as const } : {}),
+    });
+  }
+
+  openWikiTarget(target: WikiTabTarget): void {
+    this.tabState.open({
+      kind: 'hub',
+      projectName: this.projectName(),
+      section: 'wiki',
+      wikiTarget: target,
+    });
   }
 
   /**

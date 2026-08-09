@@ -116,6 +116,9 @@
       <app-project-wiki-section
         [projectName]="projectName()"
         [projectId]="projectId()"
+        [studioTabTarget]="wikiTarget() ?? { kind: 'overview' }"
+        [openInternalTargetsInTabs]="true"
+        (openWikiTarget)="openWikiTarget($event)"
         (openWorkbench)="openWorkbench($event)" />
     }
   }

@@ -101,6 +101,29 @@ Local storage still owns workspace preferences and the open-tab collection. It
 may seed the shell only when the URL does not identify another surface. URL
 state always wins for the active surface.
 
+## Shell tab target identity
+
+Internal navigation opens or focuses an application tab. It does not replace
+the current shell destination. The shared tab key is the target identity:
+
+- Tasks use the canonical task key, regardless of whether the entry point was a
+  board card, search result, task reference, feed item, or public route.
+- Workbenches use project identity plus Workbench id.
+- Wiki destinations use project identity plus target kind and exact repository
+  path. The Wiki overview is its own target.
+- Project Deck rails share one project target and adopt the newly requested
+  rail. Pipeline row focus and similar rail state do not create another tab.
+
+Task pane tabs, inspector tabs, Wiki viewer modes, and other replaceable
+substate update the existing target. The shared `<app-pane-tabs>` control is
+therefore not a shell tab strip and does not participate in shell close or MRU
+behavior. External HTTP links retain normal browser behavior.
+
+Each shell tab strip keeps a session-only activation history. Closing the
+active tab with either its close button or a middle click returns to the most
+recently active tab that is still open. If no history entry survives, the
+previous last-tab fallback applies.
+
 ## Invalid and stale routes
 
 - An unknown project slug is left intact while the project registry is
@@ -145,3 +168,5 @@ review screenshots under the managed task's `results/` directory.
 - **2026-07-30:** Promoted the workspace Activity Feed to the embedded
   `#/feed` main route. Kept the existing project modal as a quick-access
   compatibility surface rather than a second primary route.
+- **2026-08-09:** Defined internal application-tab target identity, exact Wiki
+  path deduplication, and session-only MRU return when the active tab closes.

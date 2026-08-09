@@ -11,7 +11,7 @@ import { WorkspaceManagerService } from '../../shell';
 import { FeatureFlagsService } from '../../../services/feature-flags.service';
 import { TaskService } from '../../../services/task.service';
 import { withRouteSegment } from '../../../services/url-hash.util';
-import type { StudioTab } from '../studio-shell.types';
+import type { StudioTab, WikiTabTarget } from '../studio-shell.types';
 import { StudioTabStateService } from './studio-tab-state.service';
 
 /**
@@ -75,14 +75,13 @@ export class ProjectHubUrlService {
     const project = this.projects().find(candidate => candidate.displayName === projectName);
     const page = relPath.trim().replace(/^docs\//i, '');
     if (!project || !page) return false;
-    const next = withProjectHubRoute(
-      window.location.hash,
-      project.id,
-      'wiki',
-      `?page=${encodeURIComponent(page)}`,
-    );
-    this.writeHash(next, 'push');
-    return this.applyHash(false);
+    this.tabs.open({
+      kind: 'hub',
+      projectName: project.displayName,
+      section: 'wiki',
+      wikiTarget: { kind: 'page', relPath: page },
+    });
+    return true;
   }
 
   /** Resolve the current hash into the Studio's in-editor Project Hub tab. */
@@ -109,6 +108,7 @@ export class ProjectHubUrlService {
       kind: 'hub',
       projectName: target.project.displayName,
       section: target.section,
+      ...(target.section === 'wiki' ? { wikiTarget: wikiTargetFromQuery(target.query) } : {}),
     });
     this.appliedRevision.update(revision => revision + 1);
     return true;
@@ -134,9 +134,12 @@ export class ProjectHubUrlService {
       if (!project) return;
       const section = isProjectRailKey(tab.section) ? tab.section : DEFAULT_PROJECT_RAIL_KEY;
       const sameDestination = current?.project.id === project.id && current.section === section;
-      const query = sameDestination ? current.query : '';
+      const query = section === 'wiki'
+        ? wikiTargetQuery(tab.wikiTarget)
+        : (sameDestination ? current.query : '');
+      const sameTarget = sameDestination && current?.query === query;
       const next = withProjectHubRoute(window.location.hash, project.id, section, query);
-      this.writeHash(next, sameDestination && current?.legacySlug ? 'replace' : 'push');
+      this.writeHash(next, sameTarget && current?.legacySlug ? 'replace' : 'push');
       return;
     }
 
@@ -158,4 +161,18 @@ export class ProjectHubUrlService {
       /* Browser history may be unavailable in embedded/test environments. */
     }
   }
+}
+
+function wikiTargetFromQuery(query: string): WikiTabTarget {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  const page = params.get('page')?.trim();
+  if (page) return { kind: 'page', relPath: page };
+  const folder = params.get('folder')?.trim();
+  if (folder) return { kind: 'folder', relPath: folder };
+  return { kind: 'overview' };
+}
+
+function wikiTargetQuery(target: WikiTabTarget | undefined): string {
+  if (!target || target.kind === 'overview') return '';
+  return `?${target.kind}=${encodeURIComponent(target.relPath)}`;
 }
