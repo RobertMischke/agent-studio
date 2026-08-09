@@ -2,7 +2,7 @@
   @if (backlog.length > 0) {
     <aside class="decision-backlog"
            data-testid="decision-backlog"
-           aria-label="Entscheidungen mit wartenden Karten">
+           aria-label="Decisions with waiting cards">
       <ol class="decision-backlog__list">
         @for (entry of backlog; track entry.task.taskKey) {
           <li class="decision-backlog__entry"
@@ -14,11 +14,11 @@
                     [attr.aria-controls]="'decision-backlog-waiters-' + entry.key"
                     (click)="toggle(entry)">
               <span>
-                Deine Entscheidung zu
+                Your decision on
                 <strong class="decision-backlog__key">{{ entry.key }}</strong>
-                blockiert
+                blocks
                 <strong class="decision-backlog__count">
-                  {{ entry.count }} wartende {{ entry.count === 1 ? 'Karte' : 'Karten' }}
+                  {{ entry.count }} waiting {{ entry.count === 1 ? 'card' : 'cards' }}
                 </strong>
               </span>
               <span class="decision-backlog__chevron" aria-hidden="true">⌄</span>
@@ -26,7 +26,11 @@
             <div class="decision-backlog__waiters"
                  [id]="'decision-backlog-waiters-' + entry.key"
                  [attr.data-testid]="'decision-backlog-waiters-' + entry.key">
-              <p>Diese Karten warten auf deine Entscheidung:</p>
+              <p>
+                {{ entry.count === 1
+                  ? 'This card is waiting for your decision:'
+                  : 'These cards are waiting for your decision:' }}
+              </p>
               <ul>
                 @for (waiter of entry.waiters; track waiter.key) {
                   <li>
