@@ -1,11 +1,13 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
-const SHOTS_DIR = path.resolve(__dirname, '../../results/AGT-2437');
+const SHOTS_DIR = process.env['JOB_RESULTS_DIR']
+  ?? path.resolve(__dirname, '../../results/AGT-2437');
 const TARGET = {
   id: 'activity-structured-content-fixture',
   watchPath: 'C:/fixtures/activity-structured-content',
 };
+const WORKTREE_ROOT = 'C:/Users/operator/AppData/Local/Temp/ass-worktrees/fixture/activity-structured-content-fixture';
 
 interface OutLine {
   timestamp: string;
@@ -57,7 +59,7 @@ function outputBuffer(): OutLine[] {
     {
       timestamp: at(21),
       stream: 'stderr',
-      text: 'docs/concepts/wiki-concept.html',
+      text: `${WORKTREE_ROOT}\\docs\\concepts\\wiki-concept.html`,
     },
     { timestamp: at(22), stream: 'stderr', text: ' succeeded in 12ms:' },
     { timestamp: at(23), stream: 'stderr', text: '<!doctype html>' },
@@ -80,14 +82,26 @@ function outputBuffer(): OutLine[] {
     { timestamp: at(36), stream: 'stderr', text: '</body>' },
     { timestamp: at(37), stream: 'stderr', text: '</html>' },
     { timestamp: at(38), stream: 'stderr', text: 'codex' },
+    { timestamp: at(39), stream: 'stderr', text: 'I will apply the final source edit.' },
+    { timestamp: at(40), stream: 'stderr', text: 'apply_patch' },
+    { timestamp: at(41), stream: 'stderr', text: '*** Begin Patch' },
     {
-      timestamp: at(39),
+      timestamp: at(42),
+      stream: 'stderr',
+      text: `*** Update File: ${WORKTREE_ROOT}\\frontend\\src\\app\\campaign.ts`,
+    },
+    { timestamp: at(43), stream: 'stderr', text: '*** End Patch' },
+    { timestamp: at(44), stream: 'stderr', text: ' succeeded in 24ms:' },
+    { timestamp: at(45), stream: 'stderr', text: 'Done!' },
+    { timestamp: at(46), stream: 'stderr', text: 'codex' },
+    {
+      timestamp: at(47),
       stream: 'stderr',
       text: 'The concept and its navigation entry are ready for review.',
     },
-    { timestamp: at(40), stream: 'stderr', text: '[[TASK_DONE]]' },
+    { timestamp: at(48), stream: 'stderr', text: '[[TASK_DONE]]' },
     {
-      timestamp: at(41),
+      timestamp: at(49),
       stream: 'system',
       text: '[runner] CLI exited 0; typedOutcome=ExplicitAgentDone classifier=execution-outcome/v1',
     },
@@ -116,6 +130,14 @@ function detail() {
       useOwnSession: null,
       lastUsage: null,
       execution: null,
+      executionLocation: {
+        state: 'no-active-execution',
+        executionKind: 'none',
+        worktreePath: `${WORKTREE_ROOT}/frontend`,
+        connectionState: 'idle',
+        leaseState: 'none',
+        trustReason: 'Historical fixture worktree.',
+      },
       commit: null,
       commits: [],
       codeActivityDetected: true,
@@ -321,7 +343,7 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
   await expect(panel.getByTestId('conversation-view')).toBeVisible();
 
   const tools = panel.getByTestId('tool-burst-chip');
-  await expect(tools).toHaveCount(2);
+  await expect(tools).toHaveCount(3);
   const diffTool = tools.nth(0);
   await diffTool.getByTestId('tool-burst-row').click();
   const diffOutput = diffTool.getByTestId('tool-burst-command-output');
@@ -348,8 +370,20 @@ test(`Activity renders structured tool payloads and runner events quietly in ${t
   await expect(markupOutput.locator('li')).toHaveCount(0);
   expect((await panel.getByTestId('conversation-message-item').allTextContents()).join('\n'))
     .not.toContain('<meta charset=');
-  await panel.screenshot({
-    path: path.join(SHOTS_DIR, 'activity-html-after.png'),
+  const editTool = tools.nth(2);
+  await expect(editTool.getByTestId('tool-burst-row')).toHaveAttribute('aria-expanded', 'false');
+  await editTool.getByTestId('tool-burst-row').click();
+  await expect(editTool.getByTestId('tool-burst-files')).toContainText(
+    'frontend/src/app/campaign.ts',
+  );
+  await editTool.scrollIntoViewIfNeeded();
+  await editTool.screenshot({
+    path: path.join(
+      SHOTS_DIR,
+      process.env['JOB_RESULTS_DIR']
+        ? `AGT-2526--tool-edit-lines--${theme}--mocked.png`
+        : 'activity-html-after.png',
+    ),
   });
   const runnerRows = panel.locator('[data-testid="conversation-system-status"][data-category="runner"]');
   await expect(runnerRows).toHaveCount(2);

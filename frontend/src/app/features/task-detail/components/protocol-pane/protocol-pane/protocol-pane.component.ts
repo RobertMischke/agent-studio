@@ -805,10 +805,25 @@ export class ProtocolPaneComponent implements OnDestroy {
       emitTraceLink: false,
       emitDebugAggregate: false,
     });
-    const presented = presentActivityEvents(projected, info.id, info.watchPath, {
-      typedTurnCompletions: typedLifecycle,
-    });
-    return mergeReplayEvents(mergeByTimestamp(presented, structured.events), replay.timelineEvents);
+    const worktreeRootsByRun = new Map<number, string>();
+    for (const run of this.runTimeline()?.runs ?? []) {
+      const root = run.executionLocation?.worktreePath;
+      if (root) worktreeRootsByRun.set(run.index, root);
+    }
+    // Present after the Studio-native structured events join the library
+    // projection. Codex structured tool frames otherwise bypass host cleanup,
+    // which used to leave their absolute worktree paths untouched.
+    const presented = presentActivityEvents(
+      mergeByTimestamp(projected, structured.events),
+      info.id,
+      info.watchPath,
+      {
+        typedTurnCompletions: typedLifecycle,
+        worktreeRootsByRun,
+        fallbackWorktreeRoot: info.executionLocation?.worktreePath,
+      },
+    );
+    return mergeReplayEvents(presented, replay.timelineEvents);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {

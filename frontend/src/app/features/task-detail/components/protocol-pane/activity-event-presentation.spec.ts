@@ -10,6 +10,7 @@ import {
   formatCompactTokens,
   presentActivityEvents,
   stripLegacyCompletionLines,
+  type PresentedToolBurstEvent,
 } from './activity-event-presentation';
 
 const range = { source: 'AGT-2088', start: 10, end: 12 };
@@ -38,6 +39,111 @@ describe('presentActivityEvents', () => {
       kind: 'artifact.image', caption: 'results/playwright / dark.png',
       url: '/api/tasks/AGT-2088/screenshot?path=playwright%2Fdark.png&watchPath=watch',
     });
+  });
+
+  it('projects edit files relative to the run worktree and retains absolute tooltip paths', () => {
+    const root = 'C:\\Users\\operator\\AppData\\Local\\Temp\\ass-worktrees\\Agent-Studio-Marketing\\MKT-20\\frontend';
+    const first = 'C:\\Users\\operator\\AppData\\Local\\Temp\\ass-worktrees\\Agent-Studio-Marketing\\MKT-20\\frontend\\src\\app\\campaign.ts';
+    const second = 'C:\\Users\\operator\\AppData\\Local\\Temp\\ass-worktrees\\Agent-Studio-Marketing\\MKT-20\\docs\\brief.md';
+    const result = presentActivityEvents([{
+      ...burst,
+      count: 5,
+      families: { edit: 5 },
+      files: [first, first, second],
+      samples: { edit: `Edit ${first}` },
+    }], 'MKT-20', null, {
+      worktreeRootsByRun: new Map([[2, root]]),
+    });
+
+    const presented = result[0] as PresentedToolBurstEvent;
+    expect(presented.files).toEqual([
+      'frontend/src/app/campaign.ts',
+      'docs/brief.md',
+    ]);
+    expect(presented.fileDetails).toEqual([
+      { displayPath: 'frontend/src/app/campaign.ts', fullPath: first.replace(/\\/g, '/') },
+      { displayPath: 'docs/brief.md', fullPath: second.replace(/\\/g, '/') },
+    ]);
+    expect(presented.samples?.['edit']).toBe('Edit frontend/src/app/campaign.ts');
+    expect(presented.rowPresentation).toEqual({
+      primaryLabel: '5 Edits · 2 files',
+      mixLabel: '',
+      outcomeLabel: 'all ok',
+      fileTooltip: `${first.replace(/\\/g, '/')}\n${second.replace(/\\/g, '/')}`,
+    });
+  });
+
+  it('builds a top-two tool mix, success aggregate, and duration-ready row data', () => {
+    const result = presentActivityEvents([{
+      ...burst,
+      count: 8,
+      families: { search: 1, read: 2, command: 5 },
+      failures: 0,
+      durationMs: 88_000,
+    }], 'AGT-2088', null);
+
+    const presented = result[0] as PresentedToolBurstEvent;
+    expect(presented.rowPresentation).toEqual({
+      primaryLabel: '8 Tool calls',
+      mixLabel: 'shell ×5, read ×2',
+      outcomeLabel: 'all ok',
+      fileTooltip: undefined,
+    });
+    expect(presented.durationMs).toBe(88_000);
+  });
+
+  it('keeps the failure aggregate explicit and preserves error severity', () => {
+    const result = presentActivityEvents([{
+      ...burst,
+      count: 3,
+      families: { command: 2, read: 1 },
+      failures: 2,
+      severity: 'error',
+    }], 'AGT-2088', null);
+
+    const presented = result[0] as PresentedToolBurstEvent;
+    expect(presented.rowPresentation.outcomeLabel).toBe('2 failed');
+    expect(presented.severity).toBe('error');
+  });
+
+  it('uses the matching worktree root for each run and leaves unrelated absolute paths intact', () => {
+    const runOne = '/home/runner/cache/worktrees/AGT-1';
+    const runTwo = '/home/runner/cache/worktrees/AGT-2';
+    const events: ConversationEvent[] = [{
+      ...burst,
+      id: 'run-one',
+      runId: 1,
+      files: [`${runOne}/src/one.ts`],
+    }, {
+      ...burst,
+      id: 'run-two',
+      runId: 2,
+      files: [`${runTwo}/src/two.ts`, '/opt/shared/generated.ts'],
+    }];
+
+    const result = presentActivityEvents(events, 'AGT-2', null, {
+      worktreeRootsByRun: new Map([[1, runOne], [2, runTwo]]),
+    }) as PresentedToolBurstEvent[];
+
+    expect(result[0].files).toEqual(['src/one.ts']);
+    expect(result[1].files).toEqual(['src/two.ts', '/opt/shared/generated.ts']);
+  });
+
+  it('resolves an already relative file to a full tooltip path', () => {
+    const root = '/home/runner/cache/worktrees/AGT-2';
+    const result = presentActivityEvents([{
+      ...burst,
+      files: ['./src/relative.ts'],
+    }], 'AGT-2', null, {
+      worktreeRootsByRun: new Map([[2, root]]),
+    }) as PresentedToolBurstEvent[];
+
+    expect(result[0].files).toEqual(['src/relative.ts']);
+    expect(result[0].fileDetails).toEqual([{
+      displayPath: 'src/relative.ts',
+      fullPath: `${root}/src/relative.ts`,
+    }]);
+    expect(result[0].rowPresentation.fileTooltip).toBe(`${root}/src/relative.ts`);
   });
 
   it('upgrades legacy completion prose into a typed label and turn metric', () => {
