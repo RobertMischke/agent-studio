@@ -159,7 +159,17 @@
 <h3>Der vollständige Lebenszyklus: am Ende Doku</h3>
 <p>Die entscheidende Ergänzung: Eine Workbench, die nicht verworfen wurde, endet nicht mit der Entscheidung. Sie <b>trackt die entstandenen Karten bis zum Abschluss</b> (Slice-Plan-Zeile für Zeile) und kippt dann in ihren Endzustand: <b>Dokumentation</b>. Aus dem Entscheidungsdokument wird das Sachstands-Dokument — was gebaut wurde, warum, mit welchen Belegen. Der heutige status-Wert <code>decided</code> ist dafür zu früh gedacht; der Lebenszyklus braucht die Stufe <code>documented</code> (oder: archived behält die Doppelrolle, aber die Liste unterscheidet „verworfen" von „abgeschlossen und dokumentiert"). Verworfene Workbenches bleiben als verworfene Historie sichtbar — auch das ist Wissen.</p>
 
-<h2><span class="no">09</span>Entscheidungen</h2>
+<h2><span class="no">09</span>Schlüssel und Referenzen</h2>
+<p>Workbenches haben heute nur den Ordner-Slug (<code>workbench-konzept</code>) — unhandlich zum Zitieren, unbrauchbar als Referenz in Karten. Sie bekommen einen <b>Key nach Karten-Vorbild</b>:</p>
+<ul>
+  <li><b>Schema:</b> projektgebunden mit W-Präfix, z. B. <code>AGT-W4</code> (Alternative zur Entscheidung: globale Sequenz <code>WB-17</code>). Das W disambiguiert gegen Task-Keys, die Projektbindung sortiert wie gewohnt.</li>
+  <li><b>Vergabe:</b> automatisch bei Erst-Discovery ohne Key — das Backend zieht die nächste Nummer aus einer Projekt-Sequenz (analog <code>NextTaskKeySeq</code>) und schreibt sie atomar in die <code>workbench.json</code> (Decision-Service-Schreibpfad). Der Slug bleibt Ordner-Identität; der Key übersteht Umbenennungen.</li>
+  <li><b>Darstellung:</b> subtil — kleiner Mono-Chip im Viewer-Kopf, in Listen und Nav-Tooltip; <b>Klick kopiert den Key</b> (gleiches Muster wie Commit-SHAs).</li>
+  <li><b>Karten referenzieren per Key:</b> Karten, die aus einer Workbench entstehen oder sich auf sie beziehen, tragen den Key — als eigenes Referenzfeld (<code>references.workbenches</code>) oder als erweitertes relatedTo-Vokabular (Validator löst beide Namensräume auf; das W-Präfix macht es eindeutig). Das Task-Detail zeigt den Workbench-Chip verlinkt.</li>
+  <li><b>Die elegante Folge:</b> Der Live-Task-Block der Workbench (Abschnitt 06) muss nicht mehr handgepflegt werden — er wird <b>ableitbar</b> aus allen Karten, die den Key referenzieren. <code>relatedTaskKeys</code> degradiert zur Alt-Daten-Brücke.</li>
+</ul>
+
+<h2><span class="no">10</span>Entscheidungen</h2>
 <ul>
   <li>Name: Concepts/Konzepte (Empfehlung) — oder Workbench behalten / anderer Kandidat?</li>
   <li><code>pattern</code>-Feld (ui | concept) mit Template-Varianten: GO?</li>
@@ -171,17 +181,20 @@
   <li>SignalR-Ereignisse für Workbench-Änderungen (Tree/Listen/Viewer live, Mehrbenutzer-Grundlage): GO?</li>
   <li>Lebenszyklus-Endzustand „Doku": eigene Stufe <code>documented</code> oder archived mit Unterscheidung verworfen/abgeschlossen?</li>
   <li>Erklärung des Arbeitsmodells auf agent-orchestrator.dev (zentrale Seite): GO? (Karte liegt im AOW-Backlog, wartet auf die Namens-Entscheidung.)</li>
+  <li>Key-Schema: projektgebunden <code>AGT-W4</code> (Empfehlung) oder global <code>WB-17</code>?</li>
+  <li>Karten-Referenz: eigenes Feld <code>references.workbenches</code> (Empfehlung: explizit, validierbar) oder relatedTo-Vokabular erweitern?</li>
 </ul>
 
-<h2><span class="no">10</span>Slice-Plan (nach GO)</h2>
+<h2><span class="no">11</span>Slice-Plan (nach GO)</h2>
 <ol>
-  <li><b>Slice 1 — Viewer-Kopf:</b> Live-Task-Block + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
-  <li><b>Slice 2 — Zentrale Seite + Projektebenen-Liste:</b> projektübergreifende Übersicht analog Epics — decision-pending mit Offen-Zähler zuerst, Entscheiden direkt aus der Liste; History getrennt nach verworfen/dokumentiert; dieselbe Seite projektgefiltert je Projekt. Inklusive SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) für Tree, Listen und offenen Viewer.</li>
-  <li><b>Slice 3 — Template v2:</b> kanonisches Artikel-Stylesheet + Autoren-Doku + <code>pattern</code>-Feld; bestehende aktive Workbenches migrieren nur bei Anfassen.</li>
-  <li><b>Slice 4 — Lebenszyklus bis Doku:</b> Tracking-Abschluss + <code>documented</code>-Stufe + Übergangs-Mechanik (alle relatedTaskKeys terminal ⇒ Vorschlag „als Doku abschließen").</li>
-  <li><b>Slice 5 — Refresh-Karte:</b> „Aktualisieren"-Aktion erzeugt vorbefüllte Update-Karte mit Dokument-Kontext.</li>
-  <li><b>Slice 6 — Umbenennung</b> (falls entschieden): UI-Oberfläche + Doku, Code-Bezeichner bleiben.</li>
-  <li><b>Slice 7 — Website:</b> Das Arbeitsmodell (Analyse → Entscheidung → Karten → Doku) als Abschnitt auf agent-orchestrator.dev erklären — nüchtern, mit dem Lebenszyklus-Diagramm (AOW-Karte, nach Namens-Entscheidung).</li>
+  <li><b>Slice 1 — Schlüssel & Referenzen:</b> Key-Vergabe (Projekt-Sequenz, atomarer Descriptor-Write), Klick-Kopier-Chip in Viewer/Listen/Nav, Karten-Referenzfeld + verlinkter Chip im Task-Detail. Früh, weil es die abgeleitete Task-Verfolgung für alle weiteren Slices freischaltet.</li>
+  <li><b>Slice 2 — Viewer-Kopf:</b> Live-Task-Block (abgeleitet aus Key-Referenzen, relatedTaskKeys als Alt-Brücke) + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
+  <li><b>Slice 3 — Zentrale Seite + Projektebenen-Liste:</b> projektübergreifende Übersicht analog Epics — decision-pending mit Offen-Zähler zuerst, Entscheiden direkt aus der Liste; History getrennt nach verworfen/dokumentiert; dieselbe Seite projektgefiltert je Projekt. Inklusive SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) für Tree, Listen und offenen Viewer.</li>
+  <li><b>Slice 4 — Template v2:</b> kanonisches Artikel-Stylesheet + Autoren-Doku + <code>pattern</code>-Feld; bestehende aktive Workbenches migrieren nur bei Anfassen.</li>
+  <li><b>Slice 5 — Lebenszyklus bis Doku:</b> Tracking-Abschluss + <code>documented</code>-Stufe + Übergangs-Mechanik (alle referenzierenden Karten terminal ⇒ Vorschlag „als Doku abschließen").</li>
+  <li><b>Slice 6 — Refresh-Karte:</b> „Aktualisieren"-Aktion erzeugt vorbefüllte Update-Karte mit Dokument-Kontext.</li>
+  <li><b>Slice 7 — Umbenennung</b> (falls entschieden): UI-Oberfläche + Doku, Code-Bezeichner bleiben.</li>
+  <li><b>Slice 8 — Website:</b> Das Arbeitsmodell (Analyse → Entscheidung → Karten → Doku) als Abschnitt auf agent-orchestrator.dev erklären — nüchtern, mit dem Lebenszyklus-Diagramm (AOW-Karte, nach Namens-Entscheidung).</li>
 </ol>
 
 <p class="dim">Quellen: Workbench-Machinerie-Kartierungen vom 08.08. (Catalogue/Decision-Service, Nav-Feedback), Operator-Aussagen 08./09.08. Der Operator-Satz „Bisher mache ich …" brach ab — Ergänzungen fließen in die nächste Fassung.</p>
