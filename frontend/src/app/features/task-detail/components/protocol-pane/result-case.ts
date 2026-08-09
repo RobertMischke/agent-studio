@@ -40,14 +40,8 @@ export type ResultCase =
   | 'blocked'
   | 'generic';
 
-/** Where the winning classification came from (drives a tooltip + tests). */
-export type ResultCaseConfidence = 'explicit' | 'metadata' | 'heuristic' | 'fallback';
-
 export interface ResultCaseResult {
   case: ResultCase;
-  confidence: ResultCaseConfidence;
-  /** Short human-readable justification for the pick. */
-  reason: string;
 }
 
 export interface ResultCaseInputs {
@@ -83,10 +77,6 @@ export type ResultCaseLayout = 'standard' | 'sequence' | 'before-after' | 'block
 
 /** Presentation metadata for a case: how the Result head labels + tones it. */
 export interface ResultCaseMeta {
-  /** Human label shown on the case badge. */
-  label: string;
-  /** Leading glyph for the badge. */
-  glyph: string;
   /** Semantic tone bucket -> CSS accent (`accent` | `warn` | `info` | `neutral`). */
   tone: 'accent' | 'warn' | 'info' | 'neutral';
   /** One-line intent shown under the overview when the body is thin. */
@@ -100,8 +90,6 @@ export interface ResultCaseMeta {
 
 export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
   bugfix: {
-    label: 'Bugfix',
-    glyph: '🐞',
     tone: 'accent',
     blurb: 'A defect was diagnosed and fixed.',
     problemLabel: 'Symptom',
@@ -109,8 +97,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'sequence',
   },
   feature: {
-    label: 'Feature',
-    glyph: '✨',
     tone: 'accent',
     blurb: 'A new capability was added.',
     problemLabel: 'Goal',
@@ -118,8 +104,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'standard',
   },
   refactor: {
-    label: 'Refactor',
-    glyph: '♻️',
     tone: 'info',
     blurb: 'Structure changed while behaviour held.',
     problemLabel: 'Motivation',
@@ -127,8 +111,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'before-after',
   },
   docs: {
-    label: 'Docs / Concept',
-    glyph: '📝',
     tone: 'info',
     blurb: 'Documentation or a concept was written.',
     problemLabel: 'Question',
@@ -136,8 +118,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'standard',
   },
   forensics: {
-    label: 'Forensics',
-    glyph: '🔬',
     tone: 'info',
     blurb: 'An investigation produced a finding.',
     problemLabel: 'Investigated',
@@ -145,8 +125,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'sequence',
   },
   'ui-cleanup': {
-    label: 'UI Cleanup',
-    glyph: '🎨',
     tone: 'accent',
     blurb: 'A visual or UX rough edge was polished.',
     problemLabel: 'Before',
@@ -154,8 +132,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'before-after',
   },
   blocked: {
-    label: 'Blocked / Partial',
-    glyph: '🚧',
     tone: 'warn',
     blurb: 'The run did not fully land. Read what stopped it.',
     problemLabel: 'Goal',
@@ -163,8 +139,6 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     layout: 'blocker',
   },
   generic: {
-    label: 'Result',
-    glyph: '📦',
     tone: 'neutral',
     blurb: 'A run completed.',
     problemLabel: 'Problem',
@@ -279,34 +253,29 @@ export function classifyResultCase(input: ResultCaseInputs): ResultCaseResult {
   // 1. Outcome framing first: a run that did not land reads as `blocked`,
   //    regardless of the underlying work type.
   if (isBlockedVerdict(input.verdictKind, input.verdictLabel)) {
-    const label = (input.verdictLabel ?? 'blocked').trim() || 'blocked';
-    return {
-      case: 'blocked',
-      confidence: 'metadata',
-      reason: `Outcome verdict "${label}" -> lead with the blocker and what remains.`,
-    };
+    return { case: 'blocked' };
   }
 
   // 2. Explicit prompt hint.
   const hinted = normalizeCaseHint(input.hint);
   if (hinted && hinted !== 'blocked') {
-    return { case: hinted, confidence: 'explicit', reason: `Summary prompt tagged the run as "${hinted}".` };
+    return { case: hinted };
   }
 
   // 3. Metadata: structural task type and execution mode.
   const type = (input.taskType ?? '').trim().toLowerCase();
   const mode = (input.mode ?? '').trim().toLowerCase();
   if (mode === 'research') {
-    return { case: 'forensics', confidence: 'metadata', reason: 'Research-mode task -> investigation template.' };
+    return { case: 'forensics' };
   }
   if (mode === 'planning') {
-    return { case: 'docs', confidence: 'metadata', reason: 'Planning-mode task -> docs / concept template.' };
+    return { case: 'docs' };
   }
   if (type === 'bug') {
-    return { case: 'bugfix', confidence: 'metadata', reason: 'Task type is "bug".' };
+    return { case: 'bugfix' };
   }
   if (type === 'feature' || type === 'user-story') {
-    return { case: 'feature', confidence: 'metadata', reason: 'Task type is "feature".' };
+    return { case: 'feature' };
   }
 
   // 4. Keyword heuristics over the summary body. First matching case (in the
@@ -316,11 +285,11 @@ export function classifyResultCase(input: ResultCaseInputs): ResultCaseResult {
     for (const entry of CASE_KEYWORDS) {
       const hit = entry.words.find((w) => body.includes(w));
       if (hit) {
-        return { case: entry.case, confidence: 'heuristic', reason: `Summary body mentions "${hit.trim()}".` };
+        return { case: entry.case };
       }
     }
   }
 
   // 5. Fallback.
-  return { case: 'generic', confidence: 'fallback', reason: 'No strong case signal; using the generic template.' };
+  return { case: 'generic' };
 }

@@ -108,6 +108,15 @@ created scaffold emits a structured `result-scaffold-created` warning with
 count. Refreshing the same owned scaffold after a lane move does not increment
 the count.
 
+The rendered Result view recognizes this marker as presentation metadata. It
+replaces the scaffold's internal `## Overview` provenance prose with one compact
+notice that explains the missing `status.md`, shows the best available
+timestamp and stable card key, and links the task's artifacts. `## What Was
+Done`, `## Open Items`, and the remaining evidence body
+still render normally. Composite task ids, absolute paths, and the HTML marker
+do not appear in the rendered view; the source file and scaffold creation
+mechanic remain unchanged.
+
 Remote coding runs preserve the same application ownership. After the runner
 flushes `cli-output.log`, its final `/api/runner/artifacts` upload asks Studio to
 run `SummaryGenerationService` against that durable log. The response

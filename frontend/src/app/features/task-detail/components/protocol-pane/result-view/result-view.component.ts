@@ -61,13 +61,4 @@ export class ResultViewComponent {
     return 'neutral';
   });
 
-  /** True when the overview carries at least one usable line. */
-  readonly hasOverview = computed<boolean>(() => {
-    const o = this.doc().overview;
-    return !!(o.problem || o.solution);
-  });
-
-  onOpenSource(ref: { path: string; line: number | null }): void {
-    this.openSource.emit(ref);
-  }
 }

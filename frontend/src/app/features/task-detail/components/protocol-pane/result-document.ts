@@ -48,12 +48,6 @@ export interface ResultDocument {
   metrics: ResultMetric[];
   /** Markdown for the detail layer: `# Status` + `## Overview` stripped out. */
   detailMarkdown: string;
-  /** Count of `## Open Items` bullets that are not the literal "None." */
-  openItemsCount: number;
-  /** Count of `## Images` entries. */
-  imagesCount: number;
-  /** True when there is any detail markdown worth rendering below the overview. */
-  hasDetail: boolean;
 }
 
 const CODE_REVIEW_GRADE_RE = /^code-review:grade-([abcd])$/i;
@@ -147,20 +141,6 @@ function sectionBody(markdown: string, heading: string): string | null {
   return hit ? hit.body : null;
 }
 
-/** Count list bullets in a section body, excluding the literal placeholder "None.". */
-function countBullets(body: string | null): number {
-  if (!body) return 0;
-  let n = 0;
-  for (const line of body.split('\n')) {
-    const t = line.trim();
-    if (!/^[-*]\s+/.test(t)) continue;
-    const text = t.replace(/^[-*]\s+/, '').trim().toLowerCase();
-    if (text === 'none.' || text === 'none') continue;
-    n++;
-  }
-  return n;
-}
-
 /** First bullet (or first non-empty line) of a section, stripped of markdown noise. */
 function firstBullet(body: string | null): string | null {
   if (!body) return null;
@@ -221,6 +201,10 @@ function stripHeaderAndOverview(markdown: string): string {
   const isOverviewHeading = (l: string) => /^##\s+Overview\s*$/i.test(l);
   const isAnyHeading = (l: string) => /^#{1,6}\s+/.test(l);
   while (i < lines.length) {
+    if (lines[i].includes('agent-studio:')) {
+      i++;
+      continue;
+    }
     if (isStatusHeading(lines[i]) || isOverviewHeading(lines[i])) {
       i++;
       while (i < lines.length && !isAnyHeading(lines[i])) i++;
@@ -319,7 +303,10 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
  */
 export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict): ResultDocument {
   const markdown = detail.statusMarkdown ?? '';
-  const overview = parseOverviewSection(markdown) ?? synthesizeOverview(detail, markdown);
+  const scaffold = markdown.includes('agent-studio:result-scaffold');
+  const overview = scaffold
+    ? { problem: null, solution: null, synthesized: true }
+    : parseOverviewSection(markdown) ?? synthesizeOverview(detail, markdown);
   const detailMarkdown = stripHeaderAndOverview(markdown);
   const caseResult = classifyResultCase({
     hint: parseCaseHint(markdown),
@@ -335,9 +322,6 @@ export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict
     overview,
     metrics: buildMetrics(detail, verdict, markdown),
     detailMarkdown,
-    openItemsCount: countBullets(sectionBody(markdown, 'Open Items')),
-    imagesCount: countBullets(sectionBody(markdown, 'Images')),
-    hasDetail: detailMarkdown.trim().length > 0,
   };
 }
 

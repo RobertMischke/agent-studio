@@ -36,7 +36,6 @@ describe('classifyResultCase', () => {
   it('leads with blocked framing when the verdict is a problem, over any work type', () => {
     const r = classify({ verdictKind: 'problem', verdictLabel: 'Blocked', taskType: 'feature', hint: 'feature' });
     expect(r.case).toBe('blocked');
-    expect(r.confidence).toBe('metadata');
   });
 
   it('treats Partial / Needs input as blocked framing', () => {
@@ -51,7 +50,6 @@ describe('classifyResultCase', () => {
   it('honours an explicit prompt hint above metadata', () => {
     const r = classify({ hint: 'refactor', taskType: 'bug' });
     expect(r.case).toBe('refactor');
-    expect(r.confidence).toBe('explicit');
   });
 
   it('falls back to task metadata: bug -> bugfix, feature -> feature', () => {
@@ -75,7 +73,6 @@ describe('classifyResultCase', () => {
   it('falls back to generic when nothing classifies', () => {
     const r = classify({ taskType: 'chore', body: 'Did some stuff.' });
     expect(r.case).toBe('generic');
-    expect(r.confidence).toBe('fallback');
   });
 
   it('every case has presentation metadata including a valid layout', () => {
@@ -83,7 +80,6 @@ describe('classifyResultCase', () => {
     const layouts = ['standard', 'sequence', 'before-after', 'blocker'];
     for (const c of cases) {
       expect(RESULT_CASE_META[c]).toBeTruthy();
-      expect(RESULT_CASE_META[c].label.length).toBeGreaterThan(0);
       expect(RESULT_CASE_META[c].problemLabel.length).toBeGreaterThan(0);
       expect(RESULT_CASE_META[c].solutionLabel.length).toBeGreaterThan(0);
       expect(layouts).toContain(RESULT_CASE_META[c].layout);
