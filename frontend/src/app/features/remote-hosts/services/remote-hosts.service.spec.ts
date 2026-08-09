@@ -359,6 +359,14 @@ describe('RemoteHostsService client registry hydration', () => {
       runtimeCapacity: capacity,
       effectiveMaxParallelism: 4,
       runtimeCapacityAppliedAt: now,
+      runtimeCapacityAppliedVersion: 1,
+      projectPolicy: {
+        hostId: 'host-a',
+        allowAllProjects: false,
+        allowedProjectIds: ['PROJ-001'],
+        version: 2,
+        updatedAt: now,
+      },
     }]);
 
     svc.setCapacity('agent-runner-01', 6, 85, 'aggressive');
@@ -388,6 +396,24 @@ describe('RemoteHostsService client registry hydration', () => {
       effectiveMaxParallelism: 4,
       busyAction: null,
     });
+
+    svc.setProjectPolicy('agent-runner-01', false, ['PROJ-002'], 2);
+    const projectPolicyRequest = http.expectOne('/api/v1/hosts/host-a/project-policy');
+    expect(projectPolicyRequest.request.method).toBe('PUT');
+    expect(projectPolicyRequest.request.body).toEqual({
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-002'],
+      expectedVersion: 2,
+    });
+    projectPolicyRequest.flush({
+      hostId: 'host-a',
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-002'],
+      version: 3,
+      updatedAt: now,
+    });
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.projectPolicy)
+      .toMatchObject({ version: 3, allowedProjectIds: ['PROJ-002'] });
     http.verify();
   });
 
@@ -510,6 +536,7 @@ describe('RemoteHostsService client registry hydration', () => {
       },
       effectiveMaxParallelism: 6,
       runtimeCapacityAppliedAt: now,
+      runtimeCapacityAppliedVersion: 3,
     };
 
     svc.reload();
@@ -526,10 +553,18 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
-    http.expectOne('/api/v1/management/remote-hosts').flush([snapshot]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      ...snapshot,
+      effectiveMaxParallelism: null,
+      runtimeCapacityAppliedAt: null,
+      runtimeCapacityAppliedVersion: null,
+    }]);
 
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       runtimeCapacity: { maxParallelism: 6, rampStrategy: 'conservative', version: 3 },
+      effectiveMaxParallelism: null,
+      runtimeCapacityAppliedAt: null,
+      runtimeCapacityAppliedVersion: null,
     });
 
     // And the write still goes to the versioned Task Server route.

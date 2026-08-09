@@ -103,7 +103,7 @@ public sealed partial class TaskServerStore
             if (_mode == TaskServerMode.Normal)
                 await RefreshAvailablePermitsAsync(connection, transaction, ct);
             var permits = _mode == TaskServerMode.Normal
-                ? await ReadAvailablePermitsAsync(connection, transaction, ct)
+                ? await ReadAvailablePermitsAsync(connection, transaction, request.HostId, ct)
                 : [];
             response = new HostReportResponse(
                 status,
@@ -175,10 +175,12 @@ public sealed partial class TaskServerStore
             string? acceptedKey;
             string? runId;
             string taskState;
+            string projectId;
             DateTime expiresAt;
             await using (var command = Command(connection, """
                 SELECT p.task_id, p.status, p.accepted_runner_id, p.accepted_instance_id,
-                       p.accept_idempotency_key, p.run_id, p.expires_at, t.state
+                       p.accept_idempotency_key, p.run_id, p.expires_at, t.state,
+                       t.project_id
                   FROM work_permits p
                   JOIN tasks t ON t.id = p.task_id
                  WHERE p.id = $permit;
@@ -194,6 +196,7 @@ public sealed partial class TaskServerStore
                 runId = reader.IsDBNull(5) ? null : reader.GetString(5);
                 expiresAt = Parse(reader.GetString(6));
                 taskState = reader.GetString(7);
+                projectId = reader.GetString(8);
             }
 
             if (status == "accepted")
@@ -210,6 +213,23 @@ public sealed partial class TaskServerStore
                 throw new TaskServerConflictException(
                     "work-permit-already-accepted",
                     $"Permit '{permitId}' was already accepted by another host or idempotency key.");
+            }
+            var hostProjectPolicy = await ReadHostProjectPolicyAsync(
+                connection,
+                transaction,
+                request.HostId,
+                ct);
+            if (hostProjectPolicy is
+                {
+                    AllowAllProjects: false,
+                }
+                && !hostProjectPolicy.AllowedProjectIds.Contains(
+                    projectId,
+                    StringComparer.Ordinal))
+            {
+                throw new TaskServerConflictException(
+                    "work-permit-project-not-allowed",
+                    $"Host '{request.HostId}' is not allowed to claim project '{projectId}'.");
             }
             if (expiresAt <= UtcNow)
                 throw new TaskServerConflictException("work-permit-expired", $"Permit '{permitId}' has expired.");
@@ -267,6 +287,8 @@ public sealed partial class TaskServerStore
                     request.InstanceId,
                     request.ReportSequence,
                     fence,
+                    projectId,
+                    hostProjectPolicyVersion = hostProjectPolicy?.Version,
                 }), ct);
             response = await ReadPermitAcceptanceAsync(
                 connection, transaction, permitId, createdRunId, "accepted", ct);
@@ -522,6 +544,7 @@ public sealed partial class TaskServerStore
     private async Task<IReadOnlyList<WorkPermitDto>> ReadAvailablePermitsAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        string hostId,
         CancellationToken ct)
     {
         await using var command = Command(connection, """
@@ -531,8 +554,20 @@ public sealed partial class TaskServerStore
               FROM work_permits p
               JOIN tasks t ON t.id = p.task_id
              WHERE p.status = 'available' AND p.expires_at > $now AND t.state = '2-ready'
+               AND (
+                   NOT EXISTS (
+                       SELECT 1 FROM host_project_policies policy
+                        WHERE policy.host_id = $host)
+                   OR EXISTS (
+                       SELECT 1 FROM host_project_policies policy
+                        WHERE policy.host_id = $host
+                          AND policy.allow_all_projects = 1)
+                   OR EXISTS (
+                       SELECT 1 FROM host_allowed_projects allowed
+                        WHERE allowed.host_id = $host
+                          AND allowed.project_id = t.project_id))
              ORDER BY t.created_at, t.task_key;
-            """, transaction, ("$now", Iso(UtcNow)));
+            """, transaction, ("$now", Iso(UtcNow)), ("$host", hostId));
         await using var reader = await command.ExecuteReaderAsync(ct);
         var result = new List<WorkPermitDto>();
         while (await reader.ReadAsync(ct))

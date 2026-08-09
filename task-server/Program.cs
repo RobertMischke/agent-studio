@@ -37,6 +37,7 @@ builder.Services
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<TaskServerStore>();
 builder.Services.AddSingleton<RuntimeCapacitySettingsService>();
+builder.Services.AddSingleton<HostProjectPolicyService>();
 builder.Services.AddSingleton<LegacyMigrationService>();
 builder.Services.AddSingleton<IResultRefDeleter, GitResultRefDeleter>();
 builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();

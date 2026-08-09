@@ -8,7 +8,7 @@ namespace TaskServer.Tests;
 public sealed class RuntimeCapacitySettingsTests
 {
     [Fact]
-    public async Task First_registration_bootstraps_capacity_and_later_runners_inherit_it()
+    public async Task First_registration_bootstraps_capacity_and_later_runners_receive_it_unconfirmed()
     {
         using var temp = new TempDirectory();
         var store = Store(temp.Path);
@@ -31,8 +31,9 @@ public sealed class RuntimeCapacitySettingsTests
         Assert.Equal(80, second.RuntimeCapacity.TargetLoadPercent);
         var secondSnapshot = (await store.ListRunnerCapabilitySnapshotsAsync(default))
             .Single(item => item.RunnerId == "runner-b");
-        Assert.Equal(7, secondSnapshot.EffectiveMaxParallelism);
-        Assert.NotNull(secondSnapshot.RuntimeCapacityAppliedAt);
+        Assert.Null(secondSnapshot.EffectiveMaxParallelism);
+        Assert.Null(secondSnapshot.RuntimeCapacityAppliedAt);
+        Assert.Null(secondSnapshot.RuntimeCapacityAppliedVersion);
     }
 
     [Fact]
@@ -104,6 +105,134 @@ public sealed class RuntimeCapacitySettingsTests
     }
 
     [Fact]
+    public async Task A_host_can_be_configured_before_its_first_runner_connects()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var service = new RuntimeCapacitySettingsService(store);
+
+        var created = await service.UpdateAsync(
+            "fresh-host",
+            new UpdateRuntimeCapacitySettingsRequest(6, 85, "conservative", 0),
+            "operator",
+            default);
+        var registered = await store.RegisterRunnerAsync(
+            "fresh-runner",
+            new RegisterRunnerRequest(
+                "fresh-runner",
+                "fresh-host",
+                "fresh-host:1",
+                "1.0.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor],
+                BootstrapMaxParallelism: 2),
+            "fresh-runner",
+            default);
+
+        Assert.Equal(1, created.Version);
+        Assert.Equal(6, registered.RuntimeCapacity!.MaxParallelism);
+        Assert.Contains(
+            await store.ListAuditAsync(0, default),
+            record => record.Action == "runtime-capacity.created"
+                      && record.TargetId == "fresh-host");
+    }
+
+    [Fact]
+    public async Task Matching_runner_version_is_audited_once_as_configuration_adoption()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("runner-a:1", bootstrap: 4),
+            "test",
+            default);
+
+        for (var poll = 0; poll < 2; poll++)
+        {
+            await store.ClaimAsync(
+                new ClaimRequest(
+                    "runner-a",
+                    "runner-a:1",
+                    AvailableSlots: 0,
+                    EffectiveMaxParallelism: 4,
+                    RuntimeCapacityAppliedVersion: 1),
+                "runner-a",
+                default);
+        }
+
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        Assert.Equal(4, snapshot.EffectiveMaxParallelism);
+        Assert.Equal(1, snapshot.RuntimeCapacityAppliedVersion);
+        Assert.NotNull(snapshot.RuntimeCapacityAppliedAt);
+        var adoption = Assert.Single(
+            await store.ListAuditAsync(0, default),
+            record => record.Action == "runtime-capacity.applied");
+        Assert.Equal("runner-a", adoption.TargetId);
+        Assert.Contains("\"Version\":1", adoption.DetailJson);
+    }
+
+    [Fact]
+    public async Task Replacement_runner_must_confirm_the_policy_for_its_own_instance()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("runner-a:1", bootstrap: 4),
+            "test",
+            default);
+        await store.ClaimAsync(
+            new ClaimRequest(
+                "runner-a",
+                "runner-a:1",
+                AvailableSlots: 0,
+                EffectiveMaxParallelism: 4,
+                RuntimeCapacityAppliedVersion: 1),
+            "runner-a",
+            default);
+
+        await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("runner-a:2", bootstrap: 2),
+            "test",
+            default);
+
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        Assert.Null(snapshot.EffectiveMaxParallelism);
+        Assert.Null(snapshot.RuntimeCapacityAppliedAt);
+        Assert.Null(snapshot.RuntimeCapacityAppliedVersion);
+    }
+
+    [Theory]
+    [InlineData(4, 2, 1, false, false)]
+    [InlineData(3, 3, 1, false, false)]
+    [InlineData(4, 3, null, true, true)]
+    [InlineData(4, 3, 3, true, false)]
+    public void Adoption_policy_requires_the_exact_value_and_version(
+        int reportedMax,
+        long reportedVersion,
+        int? previousVersion,
+        bool confirms,
+        bool audit)
+    {
+        var desired = new RuntimeCapacitySettingsDto(
+            "host-a", 4, 80, "balanced", 3, DateTime.UtcNow);
+
+        var decision = RuntimeCapacityAdoptionPolicy.Decide(
+            desired,
+            reportedMax,
+            reportedVersion,
+            previousVersion);
+
+        Assert.Equal(confirms, decision.ConfirmsDesired);
+        Assert.Equal(audit, decision.EmitAudit);
+    }
+
+    [Fact]
     public async Task Central_capacity_limits_claims_across_runners_and_projects_on_one_host()
     {
         using var temp = new TempDirectory();
@@ -140,14 +269,16 @@ public sealed class RuntimeCapacitySettingsTests
             new ClaimRequest(
                 "runner-a",
                 "runner-a:1",
-                EffectiveMaxParallelism: 1),
+                EffectiveMaxParallelism: 1,
+                RuntimeCapacityAppliedVersion: 1),
             "runner-a",
             default);
         var blocked = await store.ClaimAsync(
             new ClaimRequest(
                 "runner-b",
                 "runner-b:1",
-                EffectiveMaxParallelism: 1),
+                EffectiveMaxParallelism: 1,
+                RuntimeCapacityAppliedVersion: 1),
             "runner-b",
             default);
 
@@ -170,7 +301,8 @@ public sealed class RuntimeCapacitySettingsTests
             new ClaimRequest(
                 "runner-b",
                 "runner-b:1",
-                EffectiveMaxParallelism: 2),
+                EffectiveMaxParallelism: 2,
+                RuntimeCapacityAppliedVersion: 2),
             "runner-b",
             default);
 
@@ -181,6 +313,7 @@ public sealed class RuntimeCapacitySettingsTests
             .Single(item => item.RunnerId == "runner-b");
         Assert.Equal(2, snapshot.EffectiveMaxParallelism);
         Assert.NotNull(snapshot.RuntimeCapacityAppliedAt);
+        Assert.Equal(2, snapshot.RuntimeCapacityAppliedVersion);
     }
 
     private static TaskServerStore Store(string dataDirectory)

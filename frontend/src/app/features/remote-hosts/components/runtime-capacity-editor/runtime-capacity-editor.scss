@@ -94,6 +94,11 @@
 
 .capacity__form input { font-variant-numeric: tabular-nums; }
 
+.capacity__form [data-testid='remote-host-project-policy-ids'] {
+  min-width: 220px;
+  font-variant-numeric: normal;
+}
+
 .capacity__save {
   border: 1px solid color-mix(in srgb, var(--studio-accent) 50%, var(--studio-border));
   border-radius: 6px;

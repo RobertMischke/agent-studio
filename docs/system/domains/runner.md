@@ -141,8 +141,14 @@ state.
   process that runs as either a separately registered `coding` or `review`
   service. Coding continuously claims server-assigned projects with centrally
   managed bounded host slots (`RUNNER_MAX_PARALLELISM` is bootstrap/fallback
-  only), fenced leases + heartbeat, per-task linked git
+  only). The Coding daemon caches the last accepted version under
+  `RUNNER_STATE_DIR/configuration/runtime-capacity.json`, reports the exact
+  applied version on claim polls, and never treats registration delivery alone
+  as an acknowledgement. The Task Server audits the first exact value/version
+  confirmation. It then uses fenced leases + heartbeat, per-task linked git
   worktrees, log/artifact upload, and fenced normal completion into auto-review.
+  Host project access is also versioned in the Task Server, but is enforced
+  during central claim and permit selection rather than copied into the runner.
   Review claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
   and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
