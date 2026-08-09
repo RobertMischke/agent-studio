@@ -8,14 +8,14 @@ namespace AgentStudio.Tasks;
 /// timeline from <c>session-events.jsonl</c> + <c>cli-output.log</c>, the
 /// timeline endpoint read <c>timeline.jsonl</c> separately, and the per-run
 /// endpoints rebuilt the run timeline a third time. This reader loads those
-/// sources once into a <see cref="TaskReadModel"/> and the model owns the
+/// sources plus terminal RunAttempt history once into a <see cref="TaskReadModel"/> and the model owns the
 /// projections, so a caller never stitches the parsers together by hand.
 ///
 /// <para>
 /// The reader holds no policy. Each projection on <see cref="TaskReadModel"/>
 /// is the exact logic the corresponding endpoint ran inline before T2b, so
-/// switching a view onto the reader is behaviour-identical. The one addition is
-/// the lane-change mesh: the unified representation joins the new
+/// switching a view onto the reader keeps the projection policies inside their
+/// pure builders. The unified representation joins the
 /// <c>lane_changed</c> ledger rows back to the ASS-1724 commit-provenance
 /// anchors recorded alongside them, so a single consumer sees the whole lane
 /// crossing (von / nach / wann / ausloeser + branch-tip / work-branch-head)
@@ -27,12 +27,18 @@ public sealed class TaskReader
     private readonly TaskScannerService _scanner;
     private readonly TaskSessionLog _sessions;
     private readonly TimelineLog _timeline;
+    private readonly AttemptAuthorityService _attempts;
 
-    public TaskReader(TaskScannerService scanner, TaskSessionLog sessions, TimelineLog timeline)
+    public TaskReader(
+        TaskScannerService scanner,
+        TaskSessionLog sessions,
+        TimelineLog timeline,
+        AttemptAuthorityService attempts)
     {
         _scanner = scanner;
         _sessions = sessions;
         _timeline = timeline;
+        _attempts = attempts;
     }
 
     /// <summary>
@@ -51,15 +57,23 @@ public sealed class TaskReader
         var cliOutputLines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
         var ledger = _timeline.ReadAll(info.FolderPath);
         var runnerEvents = AgentStudio.Projection.RunnerEventSource.ReadRecords(info);
+        var runAttempts = _attempts.GetTaskProjection(info.TaskKey, includeArchived: true).RunAttempts;
 
-        return new TaskReadModel(detail, sessionEvents, cliOutputLines, ledger, nowUtc ?? DateTime.UtcNow, runnerEvents);
+        return new TaskReadModel(
+            detail,
+            sessionEvents,
+            cliOutputLines,
+            ledger,
+            nowUtc ?? DateTime.UtcNow,
+            runnerEvents,
+            runAttempts);
     }
 }
 
 /// <summary>
 /// The single in-memory representation of one task's raw data (T2b / ASS-1740):
 /// the scanned <see cref="TaskDetail"/>, the session-event log, the parsed
-/// <c>cli-output.log</c> lines, and the unified timeline ledger - all loaded
+/// <c>cli-output.log</c> lines, terminal RunAttempts, and the unified timeline ledger - all loaded
 /// once by <see cref="TaskReader"/>. The projection methods derive the existing
 /// per-view shapes from these raw sources; the model carries no source of truth
 /// of its own.
@@ -74,6 +88,7 @@ public sealed class TaskReadModel
     public IReadOnlyList<TimelineEvent> Ledger { get; }
     public DateTime NowUtc { get; }
     public IReadOnlyList<RunnerRecordedEvent> RunnerEvents { get; }
+    public IReadOnlyList<RunAttemptDto> RunAttempts { get; }
 
     public TaskReadModel(
         TaskDetail detail,
@@ -81,7 +96,8 @@ public sealed class TaskReadModel
         IReadOnlyList<CliOutputLine> cliOutputLines,
         IReadOnlyList<TimelineEvent> ledger,
         DateTime nowUtc,
-        IReadOnlyList<RunnerRecordedEvent>? runnerEvents = null)
+        IReadOnlyList<RunnerRecordedEvent>? runnerEvents = null,
+        IReadOnlyList<RunAttemptDto>? runAttempts = null)
     {
         Detail = detail;
         SessionEvents = sessionEvents ?? [];
@@ -89,6 +105,7 @@ public sealed class TaskReadModel
         Ledger = ledger ?? [];
         NowUtc = nowUtc;
         RunnerEvents = runnerEvents ?? [];
+        RunAttempts = runAttempts ?? [];
     }
 
     /// <summary>
@@ -98,7 +115,14 @@ public sealed class TaskReadModel
     /// </summary>
     public RunTimeline BuildRunTimeline()
     {
-        var timeline = RunTimelineBuilder.Build(SessionEvents, CliOutputLines, NowUtc);
+        var timeline = RunTimelineBuilder.Build(
+            SessionEvents,
+            CliOutputLines,
+            NowUtc,
+            new RunTimelineFallbackContext(
+                RunAttempts,
+                Ledger,
+                string.Equals(Info.State, TaskStates.Progress, StringComparison.OrdinalIgnoreCase)));
         var reviewAttemptEpoch = OperatorReviewRequeueService.ReadEpoch(Info.FolderPath);
         return timeline with
         {

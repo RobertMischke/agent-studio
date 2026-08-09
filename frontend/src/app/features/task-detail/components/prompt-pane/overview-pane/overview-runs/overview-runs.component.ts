@@ -4,23 +4,18 @@ import type { CliType } from '../../../../../../models/task.model';
 import {
   cliTypeLabel,
   formatCompactDateTime,
-  formatDateTime,
   formatTokens,
   shortModelName,
 } from '../../../../../../services/format.util';
 import { formatDuration } from '../overview-pane-formatters';
-
-type RunResultTone = 'success' | 'danger' | 'warning' | 'active' | 'neutral';
 
 const KNOWN_CLIS: readonly CliType[] = ['claude', 'codex', 'gemini'];
 
 interface OverviewRunVm {
   record: RunRecord;
   startedAt: string | null;
-  startedAtTitle: string | null;
   trigger: string;
   result: string;
-  resultTone: RunResultTone;
   duration: string;
   engine: string | null;
   tokens: string | null;
@@ -51,10 +46,8 @@ export class OverviewRunsComponent {
       .map((run) => ({
         record: run,
         startedAt: this.startedAtLabel(run),
-        startedAtTitle: this.startedAtTitle(run),
         trigger: this.triggerLabel(run),
         result: this.resultLabel(run),
-        resultTone: this.resultTone(run),
         duration: this.durationLabel(run),
         engine: this.engineLabel(run),
         tokens: this.tokenLabel(run),
@@ -63,7 +56,13 @@ export class OverviewRunsComponent {
   );
 
   /** Aggregate count is always the sum of the visible card-scoped rows. */
-  readonly runCount = computed(() => this.rows().length);
+  runCount(): number { return this.rows().length; }
+
+  /**
+   * Lift the common agent/model out of repeated rows. A single-run panel also
+   * uses this summary; mixed panels retain only the per-run deviations.
+   */
+  sharedEngine(): string | null { return this.rows().at(-1)?.engine ?? null; }
 
   readonly totalDurationSeconds = computed(() => {
     const recorded = this.rows().reduce(
@@ -73,16 +72,12 @@ export class OverviewRunsComponent {
     return recorded > 0 ? recorded : Math.max(0, this.fallbackDurationSeconds());
   });
 
-  readonly hasContent = computed(() => this.runCount() > 0 || this.totalDurationSeconds() > 0);
-
-  readonly countLabel = computed(() => {
+  countLabel(): string {
     const count = this.runCount();
     return count === 1 ? '1 run' : `${count} runs`;
-  });
+  }
 
-  readonly totalDurationLabel = computed(
-    () => `${formatDuration(this.totalDurationSeconds())} total`,
-  );
+  totalDurationLabel(): string { return `${formatDuration(this.totalDurationSeconds())} total`; }
 
   private triggerLabel(run: RunRecord): string {
     switch (run.intent.trim().toLowerCase()) {
@@ -102,45 +97,27 @@ export class OverviewRunsComponent {
   }
 
   private resultLabel(run: RunRecord): string {
-    switch (run.status.trim().toLowerCase()) {
-      case 'completed':
-        return 'Completed';
-      case 'failed':
-        return 'Failed';
-      case 'running':
-        return 'Running';
-      case 'stopped':
-      case 'cancelled':
-        return 'Stopped';
-      case 'interrupted':
-        return 'Interrupted';
-      default:
-        return run.status.trim() || 'Unknown';
-    }
-  }
-
-  private resultTone(run: RunRecord): RunResultTone {
-    switch (run.status.trim().toLowerCase()) {
-      case 'completed':
-        return 'success';
-      case 'failed':
-        return 'danger';
-      case 'stopped':
-      case 'cancelled':
-      case 'interrupted':
-        return 'warning';
-      case 'running':
-        return 'active';
-      default:
-        return 'neutral';
-    }
+    if (this.isLegacyUnrecorded(run)) return 'Not recorded (legacy run)';
+    const outcome = run.result?.trim().toLowerCase();
+    const raw = outcome === 'environmentfailure'
+      ? run.status
+      : outcome || run.status.trim() || 'unknown';
+    const label = raw.replaceAll('-', ' ');
+    return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
   private durationLabel(run: RunRecord): string {
     if (run.durationSeconds != null && run.durationSeconds >= 0) {
       return formatDuration(run.durationSeconds);
     }
-    return run.status.trim().toLowerCase() === 'running' ? 'In progress' : 'Not recorded';
+    if (run.status.trim().toLowerCase() === 'running') return 'In progress';
+    return this.isLegacyUnrecorded(run)
+      ? 'Not recorded (legacy run)'
+      : 'Unknown (not recorded)';
+  }
+
+  private isLegacyUnrecorded(run: RunRecord): boolean {
+    return !run.result?.trim() && run.closeoutSource?.startsWith('legacy-') === true;
   }
 
   private tokenLabel(run: RunRecord): string | null {
@@ -156,17 +133,8 @@ export class OverviewRunsComponent {
    * as "Invalid Date".
    */
   private startedAtLabel(run: RunRecord): string | null {
-    return this.hasValidStart(run) ? formatCompactDateTime(run.startedAt) : null;
-  }
-
-  private startedAtTitle(run: RunRecord): string | null {
-    return this.hasValidStart(run) ? formatDateTime(run.startedAt) : null;
-  }
-
-  private hasValidStart(run: RunRecord): boolean {
     const raw = run.startedAt?.trim();
-    if (!raw) return false;
-    return !Number.isNaN(new Date(raw).getTime());
+    return raw && !Number.isNaN(Date.parse(raw)) ? formatCompactDateTime(raw) : null;
   }
 
   /**
@@ -200,6 +168,6 @@ export class OverviewRunsComponent {
   private reasonLabel(run: RunRecord): string | null {
     const reason = run.reason?.trim();
     if (!reason) return null;
-    return this.resultTone(run) === 'success' ? null : reason;
+    return run.status.trim().toLowerCase() === 'completed' ? null : reason;
   }
 }

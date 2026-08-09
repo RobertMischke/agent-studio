@@ -169,6 +169,69 @@ public class SessionEventsTests : IDisposable
         Assert.Equal("task-tip", events[1].HeadShaAfter);
     }
 
+    [Fact]
+    public void CloseSessionEvent_RecordsTerminalResultAndDurationOnMatchingAttempt()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var (_, sessions) = BuildServices();
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = new DateTime(2026, 8, 8, 16, 8, 43, DateTimeKind.Utc),
+            Kind = "start",
+            Cli = "remote-runner",
+            RunAttemptId = "run-54"
+        }, _watchPath);
+
+        var finishedAt = new DateTime(2026, 8, 8, 16, 36, 42, DateTimeKind.Utc);
+        var ok = sessions.CloseSessionEvent("demo-task", new RunSessionCloseout
+        {
+            RunAttemptId = "run-54",
+            FinishedAt = finishedAt,
+            Status = RunStatuses.Completed,
+            Result = "done",
+            ExitCode = 0
+        }, _watchPath);
+
+        Assert.True(ok);
+        var recorded = Assert.Single(sessions.ReadSessionEvents("demo-task", _watchPath));
+        Assert.Equal(finishedAt, recorded.FinishedAt);
+        Assert.Equal("done", recorded.Result);
+        Assert.Equal(RunStatuses.Completed, recorded.Status);
+        Assert.Equal(0, recorded.ExitCode);
+        Assert.Equal(1_679, recorded.DurationSeconds);
+    }
+
+    [Fact]
+    public void AppendSessionEvent_ClosesPreviousOpenRunBeforeWritingSuccessor()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var (_, sessions) = BuildServices();
+        var startedAt = new DateTime(2026, 8, 8, 16, 0, 55, DateTimeKind.Utc);
+        var continuedAt = startedAt.AddMinutes(26).AddSeconds(14);
+
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = startedAt,
+            Kind = "start",
+            Cli = "codex"
+        }, _watchPath);
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = continuedAt,
+            Kind = "continue",
+            Cli = "codex"
+        }, _watchPath);
+
+        var recorded = sessions.ReadSessionEvents("demo-task", _watchPath);
+        Assert.Equal(2, recorded.Count);
+        Assert.Equal(continuedAt, recorded[0].FinishedAt);
+        Assert.Equal("superseded", recorded[0].Result);
+        Assert.Equal("superseded", recorded[0].Status);
+        Assert.Equal(1_574, recorded[0].DurationSeconds);
+        Assert.Null(recorded[1].FinishedAt);
+        Assert.Single(recorded, item => item.FinishedAt is null);
+    }
+
     /// <summary>
     /// Persistence link of the read-only execution-context data path
     /// (ASS-1739 / T1a): the snapshot the adapter's

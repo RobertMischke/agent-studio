@@ -5138,6 +5138,19 @@ public class ProjectRunner
                 "Job {JobId} finished in project '{Project}' on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s",
                 jobId, ProjectName, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0);
 
+            var runFinishedAt = execution.DurationSeconds is double recordedDuration
+                ? execution.StartedAt.AddSeconds(Math.Max(0, recordedDuration))
+                : DateTime.UtcNow;
+            _sessions.CloseSessionEvent(jobId, new RunSessionCloseout
+            {
+                StartedAt = execution.StartedAt,
+                FinishedAt = runFinishedAt,
+                Status = execution.Status,
+                Result = execution.RunOutcome,
+                ExitCode = execution.ExitCode,
+                DurationSeconds = execution.DurationSeconds
+            }, Entry.Path);
+
             var cli = _router.Get(cliType);
             var earlyOutputSnapshot = cli.GetOutput(jobKey);
             var runInfo = _scanner.FindJob(jobId, Entry.Path);
@@ -5538,6 +5551,15 @@ public class ProjectRunner
             }
 
             var terminalOutcome = TerminalRunOutcomeClassifier.Classify(execution.Status, outcome, commitsDuringRun);
+            _sessions.CloseSessionEvent(jobId, new RunSessionCloseout
+            {
+                StartedAt = execution.StartedAt,
+                FinishedAt = runFinishedAt,
+                Status = execution.Status,
+                Result = terminalOutcome.Kind,
+                ExitCode = execution.ExitCode,
+                DurationSeconds = execution.DurationSeconds
+            }, Entry.Path);
             if (string.Equals(terminalOutcome.Kind, TerminalRunOutcomeKinds.CommittedPartial, StringComparison.Ordinal))
             {
                 _logger.LogInformation(
