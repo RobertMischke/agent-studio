@@ -150,3 +150,17 @@ test('presentation still 06 - project knowledge', async ({ page }, testInfo) => 
   await expect(page.getByTestId('project-wiki-viewer').first()).toBeVisible();
   await captureBoth(page, testInfo, '06', 'project-knowledge');
 });
+
+// AGT-2530 owns the ADR-0056 shot sequence. This is the only shot-list hook
+// added here; scripts/seed-demo-workspace.mjs owns the deterministic scene.
+test('presentation still 09 - activity artifact gallery', async ({ page }, testInfo) => {
+  await openDemoTask(page);
+  await page.getByTestId('inspector-tab-activity').click();
+  const gallery = page.getByTestId('conversation-artifact-gallery');
+  await expect(gallery).toBeVisible();
+  await expect(gallery.getByTestId('artifact-gallery-thumbnail')).toHaveCount(8);
+  await expect(gallery.getByTestId('artifact-document-diff')).toBeVisible();
+  await expect(gallery.getByTestId('artifact-document-markdown')).toBeVisible();
+  await gallery.scrollIntoViewIfNeeded();
+  await captureBoth(page, testInfo, '09', 'activity-artifact-gallery');
+});

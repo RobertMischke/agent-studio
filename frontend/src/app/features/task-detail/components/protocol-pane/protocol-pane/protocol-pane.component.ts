@@ -198,6 +198,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /** Tracks the job whose Activity sub-view override is currently held. */
   private activityViewJobId: string | null = null;
+  readonly nextGenChatEvents = signal<ConversationEvent[]>([]);
 
   constructor() {
     // A fresh task opens at its default Activity sub-view (Plan when a plan
@@ -216,6 +217,23 @@ export class ProtocolPaneComponent implements OnDestroy {
       } else {
         this.releaseRunsPortal();
       }
+    });
+    effect((onCleanup) => {
+      const baseEvents = this.baseNextGenChatEvents();
+      const { id, watchPath } = this.detail().info;
+      this.nextGenChatEvents.set(baseEvents);
+      if (baseEvents.length === 0) return;
+
+      let cancelled = false;
+      void import('../artifact-gallery/artifact-gallery.lazy')
+        .then(({ presentArtifactEvents }) => {
+          if (!cancelled) {
+            this.nextGenChatEvents.set(presentArtifactEvents(baseEvents, id, watchPath));
+          }
+        });
+      onCleanup(() => {
+        cancelled = true;
+      });
     });
     this.destroyRef.onDestroy(() => {
       this.releaseRunsPortal();
@@ -788,7 +806,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    * the host only feeds it the evidence it already has in scope. Workbench
    * preview events are off until slice 6 wires the split presets.
    */
-  readonly nextGenChatEvents = computed<ConversationEvent[]>(() => {
+  readonly baseNextGenChatEvents = computed<ConversationEvent[]>(() => {
     if (!this.featureFlags.nextGenChat()) return [];
     const filtered = this.filteredCliOutput();
     if (filtered.length === 0 && !this.runTimeline() && !this.screenshots().length) {
