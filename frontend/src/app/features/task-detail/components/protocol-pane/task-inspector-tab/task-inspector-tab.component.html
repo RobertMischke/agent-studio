@@ -1,172 +1,232 @@
 <section class="task-tab" data-testid="task-tab-content">
   <div class="task-tab__layout">
-    <article class="task-tab__prompt" data-testid="task-tab-prompt">
-      @if (promptMarkdown().trim()) {
-        <cac-markdown
-          [source]="promptMarkdown()"
-          [resolveImageSrc]="imageResolver()" />
-      } @else {
-        <p class="task-tab__empty">No task description is available.</p>
-      }
-    </article>
-
     @if (enrichmentReport(); as report) {
       <aside
         class="enrichment-report"
         [attr.data-status]="report.status"
         data-testid="enrichment-report"
-        aria-labelledby="enrichment-report-title">
-        <header class="enrichment-report__header">
-          <div>
-            <p class="enrichment-report__eyebrow">Preprocessing</p>
-            <h3 id="enrichment-report-title">Enrichment report</h3>
-          </div>
-          <span class="enrichment-report__status" data-testid="enrichment-report-status">
-            <span class="enrichment-report__dot" aria-hidden="true"></span>
-            {{ statusLabel(report.status) }}
+        aria-label="Prompt enrichment report"
+      >
+        <button
+          type="button"
+          class="enrichment-report__summary"
+          data-testid="enrichment-report-toggle"
+          aria-controls="enrichment-report-details"
+          [attr.aria-expanded]="enrichmentExpanded()"
+          (click)="toggleEnrichmentReport()"
+        >
+          <span class="enrichment-report__dot" aria-hidden="true"></span>
+          <span class="enrichment-report__summary-copy">
+            <strong data-testid="enrichment-report-status">{{ statusLabel(report.status) }}</strong>
+            <span class="enrichment-report__summary-separator" aria-hidden="true">·</span>
+            <span class="enrichment-report__summary-metric" data-testid="enrichment-token-balance">
+              {{ report.tokens.original }} +{{ report.tokens.appended }} → {{ report.tokens.final }}
+            </span>
+            <span class="enrichment-report__summary-separator" aria-hidden="true">·</span>
+            <span class="enrichment-report__summary-metric">
+              {{ report.candidates.length }} decision{{ report.candidates.length === 1 ? '' : 's' }}
+            </span>
+            <span class="enrichment-report__summary-separator" aria-hidden="true">·</span>
+            <span class="enrichment-report__summary-metric">
+              {{ report.appendedBlocks.length }} appended
+            </span>
+            @if (messageCount(report) > 0) {
+              <span class="enrichment-report__summary-separator" aria-hidden="true">·</span>
+              <span
+                class="enrichment-report__summary-metric enrichment-report__summary-metric--message"
+              >
+                {{ messageCount(report) }} message{{ messageCount(report) === 1 ? '' : 's' }}
+              </span>
+            }
           </span>
-        </header>
+          <span
+            class="enrichment-report__chevron"
+            [class.enrichment-report__chevron--expanded]="enrichmentExpanded()"
+            aria-hidden="true"
+            >›</span
+          >
+        </button>
 
-        <dl class="enrichment-report__tokens" aria-label="Prompt token attribution">
-          <div>
-            <dt>Original</dt>
-            <dd>{{ report.tokens.original }}</dd>
-          </div>
-          <div>
-            <dt>Appended</dt>
-            <dd>+{{ report.tokens.appended }}</dd>
-          </div>
-          <div>
-            <dt>Final</dt>
-            <dd>{{ report.tokens.final }}</dd>
-          </div>
-        </dl>
+        @if (enrichmentExpanded()) {
+          <div
+            id="enrichment-report-details"
+            class="enrichment-report__details"
+            data-testid="enrichment-report-details"
+          >
+            <header class="enrichment-report__header">
+              <div>
+                <p class="enrichment-report__eyebrow studio-label">Preprocessing</p>
+                <h3 id="enrichment-report-title">Enrichment report</h3>
+              </div>
+            </header>
 
-        <div class="enrichment-report__ledger" data-testid="enrichment-ledger">
-          <span>Selector: {{ report.tokens.preprocessingInput + report.tokens.preprocessingOutput }} tokens</span>
-          <span>Input estimate: {{ formatCost(report) }}</span>
-        </div>
+            <dl class="enrichment-report__tokens" aria-label="Prompt token attribution">
+              <div>
+                <dt>Original</dt>
+                <dd>{{ report.tokens.original }}</dd>
+              </div>
+              <div>
+                <dt>Appended</dt>
+                <dd>+{{ report.tokens.appended }}</dd>
+              </div>
+              <div>
+                <dt>Final</dt>
+                <dd>{{ report.tokens.final }}</dd>
+              </div>
+            </dl>
 
-        <section class="enrichment-report__section">
-          <h4>Detected</h4>
-          <div class="enrichment-report__chips">
-            @for (area of report.detectedAreas; track area) {
-              <span>{{ area }}</span>
-            } @empty {
-              <span>general</span>
-            }
-          </div>
-        </section>
-
-        <section class="enrichment-report__section">
-          <h4>Decisions</h4>
-          <ul class="enrichment-report__decisions">
-            @for (candidate of report.candidates; track candidate.id) {
-              <li>
-                <span>{{ candidate.title || candidate.id }}</span>
-                <small>{{ candidate.decision }} · {{ candidate.reason }} · ~{{ candidate.estimatedTokens }} tokens</small>
-                <small>{{ candidate.source }}</small>
-              </li>
-            } @empty {
-              <li class="enrichment-report__quiet">No matching optional context.</li>
-            }
-          </ul>
-        </section>
-
-        @if (report.appendedBlocks.length > 0) {
-          <section class="enrichment-report__section">
-            <h4>Appended context</h4>
-            @for (block of report.appendedBlocks; track block.id) {
-              <details class="enrichment-report__block">
-                <summary>
-                  <span>{{ block.title }}</span>
-                  <small>~{{ block.estimatedTokens }} tokens</small>
-                </summary>
-                <p>{{ block.source }} · rev {{ block.revision }}</p>
-                <pre>{{ block.exactContent }}</pre>
-              </details>
-            }
-          </section>
-        }
-
-        <details class="enrichment-report__audit">
-          <summary>Audit details</summary>
-          <dl>
-            <div>
-              <dt>Enrichment ID</dt>
-              <dd>{{ report.enrichmentId }}</dd>
+            <div class="enrichment-report__ledger" data-testid="enrichment-ledger">
+              <span
+                >Selector:
+                {{ report.tokens.preprocessingInput + report.tokens.preprocessingOutput }}
+                tokens</span
+              >
+              <span>Input estimate: {{ formatCost(report) }}</span>
             </div>
-            <div>
-              <dt>Policy</dt>
-              <dd>{{ report.policy.id }} v{{ report.policy.version }} · {{ report.policy.projectEnabled ? 'enabled' : 'disabled' }}</dd>
-            </div>
-            <div>
-              <dt>Selector</dt>
-              <dd>{{ report.policy.selector }}</dd>
-            </div>
-            <div>
-              <dt>Limits</dt>
-              <dd>{{ report.policy.tokenBudget }} tokens · {{ report.policy.optionalBlockLimit }} optional blocks</dd>
-            </div>
-            <div>
-              <dt>Selector ledger</dt>
-              <dd>
-                in {{ report.tokens.preprocessingInput }},
-                out {{ report.tokens.preprocessingOutput }},
-                cache read {{ report.tokens.preprocessingCacheRead }},
-                cache write {{ report.tokens.preprocessingCacheCreation }}
-              </dd>
-            </div>
-            <div>
-              <dt>Cost</dt>
-              <dd>
-                selector {{ formatUsd(report.cost.selectorUsd) }} ·
-                appended input {{ formatCost(report) }}
-                @if (report.cost.estimateModel) {
-                  on {{ report.cost.estimateModel }}
+
+            <section class="enrichment-report__section">
+              <h4 class="studio-label">Detected</h4>
+              <div class="enrichment-report__chips">
+                @for (area of report.detectedAreas; track area) {
+                  <span>{{ area }}</span>
+                } @empty {
+                  <span>general</span>
                 }
-              </dd>
-            </div>
-            @if (report.cost.unknownReason) {
-              <div>
-                <dt>Cost note</dt>
-                <dd>{{ report.cost.unknownReason }}</dd>
               </div>
-            }
-            @if (report.policy.styleGuideSnapshotId) {
-              <div>
-                <dt>Style snapshot</dt>
-                <dd>{{ report.policy.styleGuideSnapshotId }}</dd>
-              </div>
-            }
-            <div>
-              <dt>Original SHA-256</dt>
-              <dd>{{ report.originalPromptSha256 }}</dd>
-            </div>
-            <div>
-              <dt>Enriched SHA-256</dt>
-              <dd>{{ report.enrichedPromptSha256 }}</dd>
-            </div>
-            <div>
-              <dt>Generated</dt>
-              <dd>{{ formatDateTime(report.generatedAtUtc) }} · {{ report.timingMs }} ms</dd>
-            </div>
-          </dl>
-        </details>
+            </section>
 
-        @if (report.warnings.length > 0 || report.errors.length > 0) {
-          <section class="enrichment-report__section enrichment-report__messages">
-            <h4>Messages</h4>
-            @for (message of report.errors; track message) {
-              <p class="enrichment-report__message enrichment-report__message--error">{{ message }}</p>
+            <section class="enrichment-report__section">
+              <h4 class="studio-label">Decisions</h4>
+              <ul class="enrichment-report__decisions">
+                @for (candidate of report.candidates; track candidate.id) {
+                  <li>
+                    <span>{{ candidate.title || candidate.id }}</span>
+                    <small
+                      >{{ candidate.decision }} · {{ candidate.reason }} · ~{{
+                        candidate.estimatedTokens
+                      }}
+                      tokens</small
+                    >
+                    <small>{{ candidate.source }}</small>
+                  </li>
+                } @empty {
+                  <li class="enrichment-report__quiet">No matching optional context.</li>
+                }
+              </ul>
+            </section>
+
+            @if (report.appendedBlocks.length > 0) {
+              <section class="enrichment-report__section">
+                <h4 class="studio-label">Appended context</h4>
+                @for (block of report.appendedBlocks; track block.id) {
+                  <details class="enrichment-report__block">
+                    <summary>
+                      <span>{{ block.title }}</span>
+                      <small>~{{ block.estimatedTokens }} tokens</small>
+                    </summary>
+                    <p>{{ block.source }} · rev {{ block.revision }}</p>
+                    <pre>{{ block.exactContent }}</pre>
+                  </details>
+                }
+              </section>
             }
-            @for (message of report.warnings; track message) {
-              <p class="enrichment-report__message">{{ message }}</p>
+
+            <details class="enrichment-report__audit">
+              <summary>Audit details</summary>
+              <dl>
+                <div>
+                  <dt>Enrichment ID</dt>
+                  <dd>{{ report.enrichmentId }}</dd>
+                </div>
+                <div>
+                  <dt>Policy</dt>
+                  <dd>
+                    {{ report.policy.id }} v{{ report.policy.version }} ·
+                    {{ report.policy.projectEnabled ? 'enabled' : 'disabled' }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Selector</dt>
+                  <dd>{{ report.policy.selector }}</dd>
+                </div>
+                <div>
+                  <dt>Limits</dt>
+                  <dd>
+                    {{ report.policy.tokenBudget }} tokens ·
+                    {{ report.policy.optionalBlockLimit }} optional blocks
+                  </dd>
+                </div>
+                <div>
+                  <dt>Selector ledger</dt>
+                  <dd>
+                    in {{ report.tokens.preprocessingInput }}, out
+                    {{ report.tokens.preprocessingOutput }}, cache read
+                    {{ report.tokens.preprocessingCacheRead }}, cache write
+                    {{ report.tokens.preprocessingCacheCreation }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Cost</dt>
+                  <dd>
+                    selector {{ formatUsd(report.cost.selectorUsd) }} · appended input
+                    {{ formatCost(report) }}
+                    @if (report.cost.estimateModel) {
+                      on {{ report.cost.estimateModel }}
+                    }
+                  </dd>
+                </div>
+                @if (report.cost.unknownReason) {
+                  <div>
+                    <dt>Cost note</dt>
+                    <dd>{{ report.cost.unknownReason }}</dd>
+                  </div>
+                }
+                @if (report.policy.styleGuideSnapshotId) {
+                  <div>
+                    <dt>Style snapshot</dt>
+                    <dd>{{ report.policy.styleGuideSnapshotId }}</dd>
+                  </div>
+                }
+                <div>
+                  <dt>Original SHA-256</dt>
+                  <dd>{{ report.originalPromptSha256 }}</dd>
+                </div>
+                <div>
+                  <dt>Enriched SHA-256</dt>
+                  <dd>{{ report.enrichedPromptSha256 }}</dd>
+                </div>
+                <div>
+                  <dt>Generated</dt>
+                  <dd>{{ formatDateTime(report.generatedAtUtc) }} · {{ report.timingMs }} ms</dd>
+                </div>
+              </dl>
+            </details>
+
+            @if (messageCount(report) > 0) {
+              <section class="enrichment-report__section enrichment-report__messages">
+                <h4 class="studio-label">Messages</h4>
+                @for (message of report.errors; track message) {
+                  <p class="enrichment-report__message enrichment-report__message--error">
+                    {{ message }}
+                  </p>
+                }
+                @for (message of report.warnings; track message) {
+                  <p class="enrichment-report__message">{{ message }}</p>
+                }
+              </section>
             }
-          </section>
+          </div>
         }
       </aside>
     }
+
+    <article class="task-tab__prompt" data-testid="task-tab-prompt">
+      @if (promptMarkdown().trim()) {
+        <cac-markdown [source]="promptMarkdown()" [resolveImageSrc]="imageResolver()" />
+      } @else {
+        <p class="task-tab__empty">No task description is available.</p>
+      }
+    </article>
   </div>
 
   @if (refinements().length > 0) {
@@ -180,9 +240,7 @@
         @for (entry of refinements(); track entry.id) {
           <li class="refinement" data-testid="task-refinement-entry">
             <header class="refinement__meta">
-              <time
-                [attr.datetime]="entry.at"
-                [attr.title]="formatDateTime(entry.at)">
+              <time [attr.datetime]="entry.at" [attr.title]="formatDateTime(entry.at)">
                 {{ formatClock(entry.at) }}
               </time>
               <span aria-hidden="true">·</span>
@@ -196,7 +254,8 @@
               class="refinement__body"
               [source]="entry.markdown"
               [dense]="true"
-              [resolveImageSrc]="imageResolver()" />
+              [resolveImageSrc]="imageResolver()"
+            />
           </li>
         }
       </ol>

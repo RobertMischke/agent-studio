@@ -101,13 +101,15 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   The middle inspector uses the fixed `Task | Activity | Result` order. Task
   renders `prompt.md` and the read-only refinement projection from run/log and
   steering-history evidence. When `enrichment-report.json` exists, Task keeps
-  the authored prompt independently readable and renders a quiet responsive
-  report beside it with status, detected areas, every append/reject decision,
-  original/appended/final token counts, selector-ledger attribution, nullable
-  input-cost estimate, exact expandable blocks, and warnings/errors. The report
-  stacks below the prompt on narrow panes and uses background tint, badge, and
-  dot status treatment without a coloured left accent line. Activity and Result
-  retain their existing live and settled-run defaults.
+  the authored prompt independently readable at the pane's full available width
+  up to an 84ch reading limit. A quiet, single-line enrichment summary sits
+  above it with status, token balance, decision and appended-block counts, and
+  any message count. The summary truncates with an ellipsis on narrow panes and
+  expands to the full-width report with detected areas, every append/reject
+  decision, selector-ledger attribution, nullable input-cost estimate, exact
+  blocks, audit details, and warnings/errors. The disclosure defaults closed
+  and remembers its state for the browser session. Activity and Result retain
+  their existing live and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
   keeps one bounded essence line visible: typed review-round count, latest
   grade, open-finding count, and escalation-reason class. Markdown bodies never
