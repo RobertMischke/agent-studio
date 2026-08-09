@@ -212,6 +212,14 @@ carry leading YAML, so a Workbench uses the same field names and values in its
 single `workbench.json` descriptor (`schemaVersion: 2`). Pulse normalizes both
 authoring shapes into one projection and groups them by the same state machine.
 
+The descriptor may also carry `pattern: ui | concept`. This presentation hint
+selects the catalogue icon and the article-template variant, not a separate
+lifecycle or content system. Missing and unknown values resolve to `concept`
+without making the descriptor invalid. Existing active documents adopt the
+field and the canonical v2 article template only when they are otherwise
+changed. The authoring contract and copyable source live in
+[`article-document-authoring.md`](../../operations/article-document-authoring.md).
+
 ## API endpoints
 
 All paths are rooted at `/api/projects/{projectName}/wiki`. `{projectName}` is a

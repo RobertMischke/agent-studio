@@ -41,3 +41,4 @@ unter `app/` und werden nur zusammen mit Code geändert.
 
 Konvergenz-Probe 2026-07-30: develop ist der Arbeitsbranch.
 | [deck-icon-exploration/](deck-icon-exploration/index.html) | Round 2 Deck icon alternatives for the multi-faceted project console, with light and dark proofs, recommendation, rejected Round 1 direction, and implementation seam (AGT-2355). |
+| [article-document-authoring.md](article-document-authoring.md) | Authoring contract for the canonical article template, `ui` and `concept` patterns, full-bleed media, evidence classes, and touch-only migration. |

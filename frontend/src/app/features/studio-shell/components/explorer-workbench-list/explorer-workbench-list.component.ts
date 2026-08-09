@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
@@ -22,7 +23,7 @@ const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expande
 @Component({
   selector: 'app-explorer-workbench-list',
   standalone: true,
-  imports: [TreeRowComponent, AppTooltipDirective],
+  imports: [TreeRowComponent, AppTooltipDirective, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-list.component.html',
   styleUrl: './explorer-workbench-list.component.scss',

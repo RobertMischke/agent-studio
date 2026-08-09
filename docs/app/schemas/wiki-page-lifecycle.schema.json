@@ -79,6 +79,10 @@
               "type": "string",
               "pattern": "^[A-Z][A-Z0-9]{1,5}-W[1-9][0-9]*$",
               "description": "Stable project-scoped reference key assigned atomically during discovery. The folder slug remains the descriptor identity."
+            },
+            "pattern": {
+              "type": "string",
+              "description": "Optional article presentation hint. Current values are ui and concept. Readers treat missing or unknown values as concept so descriptor validation remains forward-compatible."
             }
           }
         }

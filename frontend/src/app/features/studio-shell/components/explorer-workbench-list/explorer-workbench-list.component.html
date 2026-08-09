@@ -19,7 +19,10 @@
                 [appTooltip]="navTooltip(workbench)"
                 [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                 (click)="openWorkbench.emit(workbench)">
-          <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+          <span class="studio-workbench-topic__title">
+            <app-studio-icon [name]="workbench.pattern === 'ui' ? 'grid' : 'book'" />
+            {{ workbench.title }}
+          </span>
           <span class="studio-workbench-topic__meta">
             @if (isAcute(workbench)) { <i [attr.data-status]="workbench.status"></i> }
             {{ secondaryMeta(workbench) }}

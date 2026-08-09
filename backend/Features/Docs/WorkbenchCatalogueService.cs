@@ -454,6 +454,7 @@ public sealed class WorkbenchCatalogueService
                 {
                     Key = key,
                     RelatedTaskKeys = StringArray(obj, "relatedTaskKeys"),
+                    Pattern = ArticlePatterns.Normalize(OptionalString(obj, "pattern")),
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
                     LifecycleHistory = lifecycleHistory,
@@ -973,6 +974,7 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
 {
     public string? Key { get; init; }
     public string[] RelatedTaskKeys { get; init; } = [];
+    public string Pattern { get; init; } = ArticlePatterns.Concept;
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }
     public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }

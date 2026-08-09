@@ -51,7 +51,16 @@
                       <span class="workbench-overview__status" data-status="decision-pending">{{ statusLabel(item) }}</span>
                       <span class="workbench-overview__open-count">{{ openDecisionCount(item) }} open</span>
                     </div>
-                    <h3>{{ item.workbench.title }}</h3>
+                    <div class="workbench-overview__card-title">
+                      <span class="workbench-overview__pattern"
+                            role="img"
+                            [attr.aria-label]="documentPattern(item) + ' pattern'"
+                            [attr.data-pattern]="documentPattern(item)"
+                            [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
+                        <app-studio-icon [name]="patternIcon(item)" [size]="14" />
+                      </span>
+                      <h3>{{ item.workbench.title }}</h3>
+                    </div>
                     <p>{{ item.workbench.summary }}</p>
                   </div>
                   <div class="workbench-overview__card-actions">
@@ -99,7 +108,16 @@
                       <span class="workbench-overview__project">{{ item.projectName }}</span>
                       <span class="workbench-overview__status" [attr.data-status]="item.workbench.status">{{ statusLabel(item) }}</span>
                     </div>
-                    <h3>{{ item.workbench.title }}</h3>
+                    <div class="workbench-overview__card-title">
+                      <span class="workbench-overview__pattern"
+                            role="img"
+                            [attr.aria-label]="documentPattern(item) + ' pattern'"
+                            [attr.data-pattern]="documentPattern(item)"
+                            [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
+                        <app-studio-icon [name]="patternIcon(item)" [size]="14" />
+                      </span>
+                      <h3>{{ item.workbench.title }}</h3>
+                    </div>
                     <p>{{ item.workbench.error || item.workbench.summary }}</p>
                   </div>
                   <div class="workbench-overview__card-actions">
@@ -126,7 +144,14 @@
                 <div class="workbench-overview__history-list" data-testid="workbench-overview-discarded-list">
                   @for (item of discarded(); track item.projectName + ':' + item.workbench.id) {
                     <button type="button" (click)="open(item)">
-                      <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                      <span class="workbench-overview__history-title">
+                        <span class="workbench-overview__pattern" role="img"
+                              [attr.aria-label]="documentPattern(item) + ' pattern'"
+                              [attr.data-pattern]="documentPattern(item)">
+                          <app-studio-icon [name]="patternIcon(item)" [size]="13" />
+                        </span>
+                        <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                      </span>
                       <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
                     </button>
                   } @empty { <p>No discarded items.</p> }
@@ -144,7 +169,14 @@
                 <div class="workbench-overview__history-list" data-testid="workbench-overview-completed-list">
                   @for (item of completed(); track item.projectName + ':' + item.workbench.id) {
                     <button type="button" (click)="open(item)">
-                      <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                      <span class="workbench-overview__history-title">
+                        <span class="workbench-overview__pattern" role="img"
+                              [attr.aria-label]="documentPattern(item) + ' pattern'"
+                              [attr.data-pattern]="documentPattern(item)">
+                          <app-studio-icon [name]="patternIcon(item)" [size]="13" />
+                        </span>
+                        <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                      </span>
                       <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
                     </button>
                   } @empty { <p>No completed items.</p> }

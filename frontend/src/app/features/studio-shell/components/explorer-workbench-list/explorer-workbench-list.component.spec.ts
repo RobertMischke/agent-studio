@@ -6,7 +6,11 @@ import { beforeEach, vi } from 'vitest';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
 import { ExplorerWorkbenchListComponent } from './explorer-workbench-list.component';
 
-function item(id: string, status: WorkbenchListItem['status']): WorkbenchListItem {
+function item(
+  id: string,
+  status: WorkbenchListItem['status'],
+  pattern?: WorkbenchListItem['pattern'],
+): WorkbenchListItem {
   return {
     id,
     key: `DEM-W${id === 'active' ? '4' : '5'}`,
@@ -20,6 +24,7 @@ function item(id: string, status: WorkbenchListItem['status']): WorkbenchListIte
     error: null,
     sourceTaskKeys: [],
     relatedTaskKeys: [],
+    pattern,
   };
 }
 
@@ -37,6 +42,31 @@ describe('ExplorerWorkbenchListComponent', () => {
       configurable: true,
       value: scrollIntoView,
     });
+  });
+
+  it('renders the descriptor pattern icon and defaults missing values to concept', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ExplorerWorkbenchListComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+
+    fixture.componentInstance.toggle();
+    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([
+      item('visual', 'active', 'ui'),
+      item('reasoning', 'active'),
+      item('explicit-concept', 'active', 'concept'),
+    ], false));
+    fixture.detectChanges();
+
+    const iconMarkup = (id: string) => fixture.nativeElement.querySelector(
+      `[data-testid="studio-explorer-workbench-Demo-${id}"] svg`)?.innerHTML;
+    expect(iconMarkup('visual')).not.toBe(iconMarkup('reasoning'));
+    expect(iconMarkup('reasoning')).toBe(iconMarkup('explicit-concept'));
+    http.verify();
   });
 
   it('loads history separately and shows the empty state after filtering current items', async () => {

@@ -63,9 +63,13 @@ export class WorkbenchViewerComponent {
   readonly maximized = signal(false);
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
 
-  readonly srcdoc = computed(() =>
-    buildIsolatedHtmlSrcdoc(this.document()?.html ?? '', { workbenchDecisions: true }),
-  );
+  readonly srcdoc = computed(() => {
+    const document = this.document();
+    const pattern = document?.workbench.pattern === 'ui' ? 'ui' : 'concept';
+    return buildIsolatedHtmlSrcdoc(document?.html ?? '', { workbenchDecisions: true })
+      .replace(/\sdata-document-pattern=(?:"[^"]*"|'[^']*')/i, '')
+      .replace('<html', `<html data-document-pattern="${pattern}"`);
+  });
   readonly decisionMarkup = computed(() =>
     discoverWorkbenchDecisionMarkup(this.document()?.html ?? ''),
   );

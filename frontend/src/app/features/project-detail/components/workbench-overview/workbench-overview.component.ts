@@ -11,10 +11,12 @@ import {
   untracked,
 } from '@angular/core';
 import { LoadingSurfaceComponent } from '../../../../components/async-feedback';
+import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.component';
 import type {
+  ArticlePattern,
   WorkbenchOverview,
   WorkbenchOverviewItem,
 } from '../../../../models/project-docs.model';
@@ -22,7 +24,7 @@ import type {
 @Component({
   selector: 'app-workbench-overview',
   standalone: true,
-  imports: [LoadingSurfaceComponent, WorkbenchViewerComponent],
+  imports: [LoadingSurfaceComponent, StudioIconComponent, WorkbenchViewerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-overview.component.html',
   styleUrl: './workbench-overview.component.scss',
@@ -98,6 +100,14 @@ export class WorkbenchOverviewComponent {
   openDecisionCount(item: WorkbenchOverviewItem): number {
     return item.workbench.openDecisionCount
       ?? (item.workbench.status === 'decision-pending' ? 1 : 0);
+  }
+
+  documentPattern(item: WorkbenchOverviewItem): ArticlePattern {
+    return item.workbench.pattern === 'ui' ? 'ui' : 'concept';
+  }
+
+  patternIcon(item: WorkbenchOverviewItem): StudioIconName {
+    return this.documentPattern(item) === 'ui' ? 'grid' : 'book';
   }
 
   statusLabel(item: WorkbenchOverviewItem): string {
