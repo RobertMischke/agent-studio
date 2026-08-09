@@ -604,18 +604,30 @@ public sealed class TaskLanePipelineEdgeCaseTests : IDisposable
     {
         const string id = "completion-review-mint-race";
         const string key = "AGT-COMPLETION-REVIEW-MINT-RACE";
+        const string baseSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string resultSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         _fixture.SeedTask(TaskStates.Progress, id, LifecyclePhases.ExecutionRunning, key: key);
         var authority = _fixture.CreateAttemptAuthority(() => DateTime.UtcNow);
         var run = authority.AcquireRun(key, "PROJ-002", null, "runner", "host", 60, "claim").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "PROJ-002",
+            run.AttemptId,
+            baseSha,
+            resultSha,
+            "refs/agent-studio/results/completion-review-mint-race",
+            null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
         authority.SettleRun(new SettleRunAttemptRequest
         {
             Write = new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "complete"),
             Outcome = "done",
-            ResultSha = "sha-completion-race",
+            ResultSha = resultSha,
+            ResultEnvelope = envelope,
+            ResultEnvelopeDigest = AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope),
         });
         var lifecycle = _fixture.CreateReviewAttemptLifecycle(authority);
         var request = new CreateReviewAttemptRequest(
-            key, "PROJ-002", "sha-completion-race", run.AttemptId,
+            key, "PROJ-002", resultSha, run.AttemptId,
             "requirements", "policy", [], "review-create");
 
         // This is the old interleaving: a claim poll after the mint but before

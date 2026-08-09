@@ -64,6 +64,47 @@ public sealed class GitNetworkProcessRunnerTests : IDisposable
             await AssertProcessExitedAsync(pid);
     }
 
+    [SkippableFact]
+    [Trait("Category", "MachineBound")]
+    public async Task SynchronousHangingFakeRemote_TimesOutAndReapsProcessTree()
+    {
+        Skip.IfNot(OperatingSystem.IsLinux(), "The fake remote process probe uses Linux process evidence.");
+        Directory.CreateDirectory(_tempDir);
+        var fakeRemote = CreateHangingFakeRemote();
+        var pidFile = Path.Combine(_tempDir, "sync-git.pid");
+
+        var result = GitNetworkProcessRunner.Run(
+            CreateNetworkStartInfo(fakeRemote, pidFile, "ls-remote"),
+            timeout: TimeSpan.FromMilliseconds(250));
+
+        Assert.Equal(GitProcessFailureKind.TimedOut, result.FailureKind);
+        Assert.Equal(-1, result.ExitCode);
+        var pids = await ReadPidsAsync(pidFile);
+        foreach (var pid in pids)
+            await AssertProcessExitedAsync(pid);
+    }
+
+    [SkippableFact]
+    [Trait("Category", "MachineBound")]
+    public async Task SynchronousHangingFakeRemote_CancellationReapsProcessTree()
+    {
+        Skip.IfNot(OperatingSystem.IsLinux(), "The fake remote process probe uses Linux process evidence.");
+        Directory.CreateDirectory(_tempDir);
+        var fakeRemote = CreateHangingFakeRemote();
+        var pidFile = Path.Combine(_tempDir, "sync-cancelled-git.pid");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+
+        var result = GitNetworkProcessRunner.Run(
+            CreateNetworkStartInfo(fakeRemote, pidFile, "ls-remote"),
+            timeout: TimeSpan.FromSeconds(10),
+            cancellationToken: cancellation.Token);
+
+        Assert.Equal(GitProcessFailureKind.Cancelled, result.FailureKind);
+        var pids = await ReadPidsAsync(pidFile);
+        foreach (var pid in pids)
+            await AssertProcessExitedAsync(pid);
+    }
+
     [Fact]
     public async Task ProcessHandleExhaustion_ReturnsTypedFailureWithoutThrowing()
     {
