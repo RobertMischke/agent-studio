@@ -357,12 +357,13 @@ Do **not** select by CSS class names; they belong to styling and change often.
 |------|---------|
 | `menu-no-icons.spec.ts` | Menu surfaces are text-only |
 
-### `mockups/` - 5 specs
+### `mockups/` - 6 specs
 
 | Spec | Summary |
 |------|---------|
 | `experimentier-workbench-mockup.spec.ts` | @mockup experimentier-workbench |
 | `plan-strip-mockup.spec.ts` | @mockup plan-strip (real component) |
+| `planning-visibility-mockup.spec.ts` | @mockup planning follow-up status |
 | `project-overview-dashboard-mockup.spec.ts` | Project Overview interactive mockup |
 | `remote-run-testsuite-report.spec.ts` | @mockup remote-run testsuite report |
 | `result-view-mockup.spec.ts` | @mockup result-view (real component) |

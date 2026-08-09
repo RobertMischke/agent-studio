@@ -44,7 +44,11 @@ function job(mode: TaskMode, spawn: PlanningSpawnSummary | null): TaskInfo {
   };
 }
 
-async function mount(info: TaskInfo, taskService: Partial<TaskService> = {}) {
+async function mount(
+  info: TaskInfo,
+  taskService: Partial<TaskService> = {},
+  promoteAvailable = false,
+) {
   await TestBed.configureTestingModule({
     imports: [PlanningSpawnPanelComponent],
     providers: [
@@ -57,6 +61,7 @@ async function mount(info: TaskInfo, taskService: Partial<TaskService> = {}) {
   }).compileComponents();
   const fixture = TestBed.createComponent(PlanningSpawnPanelComponent);
   fixture.componentRef.setInput('job', info);
+  fixture.componentRef.setInput('promoteAvailable', promoteAvailable);
   fixture.detectChanges();
   return fixture;
 }
@@ -67,16 +72,28 @@ describe('PlanningSpawnPanelComponent (AGT-2069)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="planning-spawn-panel"]')).toBeNull();
   });
 
-  it('shows the "no follow-up cards" warning + risk contract when nothing spawned or declared', async () => {
-    const fixture = await mount(job('planning', summary({ contractSatisfied: false })));
+  it('shows the unresolved state once with both resolution actions', async () => {
+    const fixture = await mount(job('planning', summary({ contractSatisfied: false })), {}, true);
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="planning-spawn-panel"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="planning-no-followups-warning"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="planning-contract"]')!.textContent).toContain('no follow-ups');
+    expect(host.querySelector('[data-testid="planning-no-followups-status"]')).toBeTruthy();
+    expect(host.textContent?.match(/No follow-up cards created/g)).toHaveLength(1);
+    expect(host.querySelector('[data-testid="planning-contract"]')).toBeNull();
+    expect(host.querySelector('[data-testid="overview-promote-btn"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="planning-declare-open"]')).toBeTruthy();
   });
 
-  it('renders spawned follow-ups (as key chips before hydration) and a met contract', async () => {
+  it('emits the existing promote request from the compact action row', async () => {
+    const fixture = await mount(job('planning', summary({ contractSatisfied: false })), {}, true);
+    const requested = vi.fn();
+    fixture.componentInstance.promoteRequested.subscribe(requested);
+
+    (fixture.nativeElement.querySelector('[data-testid="overview-promote-btn"]') as HTMLButtonElement).click();
+
+    expect(requested).toHaveBeenCalledOnce();
+  });
+
+  it('renders spawned follow-ups as key chips before hydration', async () => {
     const fixture = await mount(
       job('planning', summary({
         spawned: [{ targetKey: 'WEB-42', at: '2026-07-10T00:00:00Z' }],
@@ -86,7 +103,6 @@ describe('PlanningSpawnPanelComponent (AGT-2069)', () => {
     );
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="planning-spawn-cards"]')!.textContent).toContain('WEB-42');
-    expect(host.querySelector('[data-testid="planning-contract"]')!.textContent).toContain('contract met');
     // The panel hydrates the spawned keys through the reference-status endpoint.
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/tasks/reference-status').flush({ items: [] });
@@ -107,6 +123,6 @@ describe('PlanningSpawnPanelComponent (AGT-2069)', () => {
 
     expect(setPlanningClosure).toHaveBeenCalledWith('job-1', true, 'archived', '/wp');
     expect(host.querySelector('[data-testid="planning-no-followup-declared"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="planning-contract"]')!.textContent).toContain('contract met');
+    expect(host.textContent).toContain('No follow-up intended');
   });
 });
