@@ -96,6 +96,14 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   [../concepts/api-project-identity-and-watchpath.md](../../concepts/api-project-identity-and-watchpath.md).
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
+- Multi-task lane moves use the asynchronous batch contract. Send up to 500
+  entries to `POST /api/tasks/batch-move`, retain the returned job `id`, and
+  poll `GET /api/tasks/batch-move/{id}` for `completed`, `succeeded`, `failed`,
+  and ordered per-item results. The coordinator processes each card as an
+  independent bounded transition on one background worker. It never holds a
+  lock for the lifetime of the batch, and an item failure does not stop later
+  items. Completed job snapshots also expose batch-local lane-lock, scanner,
+  and Git timings for operational diagnosis.
 - Accepted integration commits that already exist in the project repository
   can be appended through
   `POST /api/tasks/{id}/commits/integration?watchPath=...` with
@@ -437,6 +445,14 @@ own lease owner rather than inheriting a project-wide runner status.
 Settled session events preserve the same projection as historical run evidence.
 Historical entries never reuse disconnected warning treatment. See the
 [execution location schema](../schemas/task-execution-location.schema.json).
+
+For a Ready card offered to a remote Runner, `executionLocation.lastRejection`
+contains the latest refusal for the current lane stay. It names the Runner and
+preserves the admission reason, including missing `repositoryUrl`, capability
+mismatch, failed project delivery preflight, and dispatch preparation failure.
+The board and task detail render the complete reason inline. The durable field
+is removed after dispatch succeeds; lane-entry timestamps prevent an older
+refusal from leaking into a later Ready generation.
 
 ## Outcome issue presentation contract
 

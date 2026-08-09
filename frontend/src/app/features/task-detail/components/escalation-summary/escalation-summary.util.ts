@@ -4,21 +4,17 @@
  * A `5e-escalated` card only showed the thin status protocol of the LAST run,
  * never WHY it escalated or what was already delivered (operator feedback
  * Robert 2026-07-09). This module aggregates the artifacts that already exist
- * for such a card into one decision-ready view — no new persistence, display
- * only:
+ * for such a card into one decision-ready view, with no new persistence:
  *
- *   1. ESCALATION REASON — the concrete open gate points, rendered as a
- *      checklist. Sourced, in priority order, from the reissue follow-up file
- *      checklist (`orchestrator-follow-up.md`, present only on reissued cards),
- *      the structured gate findings on the latest escalate/reissue steering
- *      timeline event (the common pure-escalation case), then the task-level
- *      review evidence.
- *   2. REVIEW VERDICT — the code-review grade + verdict + summary parsed from
+ *   1. ESCALATION REASON - concrete open findings from the latest structured
+ *      council reaction, then structured steering findings or review evidence.
+ *      Follow-up Markdown remains an artifact and never feeds banner copy.
+ *   2. REVIEW VERDICT - the code-review grade + verdict + summary parsed from
  *      the newest `code-review-grade-*.md` frontmatter (already served by
  *      `GET …/code-review/list`).
- *   3. DELIVERY CONTEXT — is the work already in develop / main, and how many
+ *   3. DELIVERY CONTEXT - is the work already in develop / main, and how many
  *      commits / files it carries (from `TaskInfo.mergeSignal` + `commits`).
- *   4. RECOMMENDATION — the gate's steer (accept as-is / reissue / needs
+ *   4. RECOMMENDATION - the gate's steer (accept as-is / reissue / needs
  *      decision), derived from `orchestratorVerdict` when present.
  *
  * Kept dependency-light and pure so the aggregation rules are unit-tested in
@@ -27,7 +23,10 @@
  */
 import type { TaskInfo } from '../../../../models/task.model';
 import type { ReviewEvidenceEntry, ReviewEvidenceSeverity } from '../../../../models/task.model';
-import type { CodeReviewListEntry } from '../../../../services/task.service';
+import type {
+  CodeReviewListEntry,
+  CouncilFindingAssessment,
+} from '../../../../services/task.service';
 import {
   codeReviewVerdictTone,
   type CodeReviewVerdictTone,
@@ -43,8 +42,12 @@ import type { TaskTimelineEvent } from '../../../task-timeline';
 
 /** One open gate point, rendered as a checklist row. */
 export interface EscalationGateItem {
+  /** Stable identity for keyed rendering. */
+  id: string;
   /** Human text of the gate point. */
   text: string;
+  /** Structured explanation kept separate from the finding title. */
+  detail?: string | null;
   /** Checklist state; `false` (unchecked) means still open. */
   checked: boolean;
   /** Optional per-aspect verdict token (e.g. `block`) for a tone chip. */
@@ -54,7 +57,7 @@ export interface EscalationGateItem {
 }
 
 /** Where {@link EscalationSummaryView.gateItems} was sourced from. */
-export type EscalationGateSource = 'follow-up' | 'gate-evidence' | 'review-evidence' | 'none';
+export type EscalationGateSource = 'council-reaction' | 'gate-evidence' | 'review-evidence' | 'none';
 
 /** Compact review-verdict head, from the newest code-review grade file. */
 export interface EscalationReviewHead {
@@ -91,6 +94,15 @@ export interface EscalationDelivery {
   commitCount: number;
   /** Distinct changed files across those commits (0 when unknown). */
   filesChanged: number;
+}
+
+/** The single structured line that remains visible when details are closed. */
+export interface EscalationEssence {
+  reviewRounds: number;
+  latestGrade: string | null;
+  openFindings: number;
+  reasonClass: string;
+  label: string;
 }
 
 /**
@@ -264,8 +276,8 @@ export interface EscalationSummaryView {
   recommendation: EscalationRecommendation | null;
   /** Reissue history derived from quality-loop reopen rows. */
   reissues: EscalationReissue[];
-  /** One reconciled operator-facing sentence for delivery and decision state. */
-  stateSentence: string;
+  /** Structured, bounded banner copy. Never derived from Markdown bodies. */
+  essence: EscalationEssence;
 }
 
 /** Inputs the host feeds in from the existing polled / fetched signals. */
@@ -273,8 +285,6 @@ export interface EscalationSummaryInputs {
   info: TaskInfo;
   reviewEvidence: readonly ReviewEvidenceEntry[];
   codeReviews: readonly CodeReviewListEntry[];
-  /** Body of `orchestrator-follow-up.md`, or null when the file is absent. */
-  followUpMarkdown: string | null;
   /** Latest escalate/reissue steering info from the timeline, or null. */
   steering: SteeringInfo | null;
   /**
@@ -287,32 +297,22 @@ export interface EscalationSummaryInputs {
   timeline: readonly TaskTimelineEvent[];
 }
 
-/**
- * Matches a GitHub-flavoured task-list line: `- [ ] text` / `- [x] text`
- * (also `*`/`+` bullets, any indentation, upper or lower `x`). The follow-up
- * file writes exactly this shape for its open-item checklist.
- */
-const CHECKLIST_LINE = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
-
-/**
- * Parse the reissue follow-up markdown into gate items. Only genuine task-list
- * rows are lifted; the free-form preamble the orchestrator writes above the
- * list is ignored so the checklist stays clean. Returns [] when the input has
- * no task-list rows (or is absent), letting the caller fall back to the
- * timeline / evidence sources.
- */
-export function parseFollowUpGateItems(markdown: string | null | undefined): EscalationGateItem[] {
-  if (!markdown) return [];
-  const out: EscalationGateItem[] = [];
-  for (const line of markdown.split(/\r?\n/)) {
-    const m = CHECKLIST_LINE.exec(line);
-    if (!m) continue;
-    const checked = m[1].toLowerCase() === 'x';
-    const text = m[2].trim();
-    if (!text) continue;
-    out.push({ text, checked });
-  }
-  return out;
+/** Project the latest council sidecar's typed finding decisions. */
+export function gateItemsFromCouncil(
+  assessments: readonly CouncilFindingAssessment[],
+): EscalationGateItem[] {
+  return assessments.map((assessment, index) => ({
+    id: `council-${index}-${assessment.finding}`,
+    text: assessment.finding,
+    detail: assessment.reason,
+    checked: assessment.action === 'Accept',
+    verdict: councilActionLabel(assessment.action),
+    tone: assessment.action === 'Accept'
+      ? 'ok'
+      : assessment.action === 'FixNextRound'
+        ? 'warn'
+        : 'danger',
+  }));
 }
 
 /**
@@ -321,10 +321,11 @@ export function parseFollowUpGateItems(markdown: string | null | undefined): Esc
  * reason, rendered unchecked (they are the reasons the gate did NOT pass).
  */
 export function gateItemsFromFindings(findings: readonly AspectFinding[]): EscalationGateItem[] {
-  return findings.map((f) => {
+  return findings.map((f, index) => {
     const reason = f.reason?.trim();
     const text = reason ? `${f.aspect}: ${reason}` : f.aspect;
     return {
+      id: `gate-${index}-${f.aspect}`,
       text,
       checked: false,
       verdict: f.verdict || null,
@@ -358,6 +359,7 @@ export function gateItemsFromEvidence(entries: readonly ReviewEvidenceEntry[]): 
     .filter((e) => !e.acknowledged)
     .sort((a, b) => (EVIDENCE_RANK[a.severity] ?? 3) - (EVIDENCE_RANK[b.severity] ?? 3))
     .map((e) => ({
+      id: `evidence-${e.id}`,
       text: e.title,
       checked: false,
       verdict: e.severity,
@@ -365,17 +367,13 @@ export function gateItemsFromEvidence(entries: readonly ReviewEvidenceEntry[]): 
     }));
 }
 
-/**
- * Choose the gate-item source in priority order and return the items plus a
- * label of where they came from. Follow-up checklist wins (it is the most
- * concrete "do these" list), then the structured steering findings, then the
- * review evidence.
- */
+/** Choose findings from typed sources only, newest council reaction first. */
 export function resolveGateItems(
-  inputs: Pick<EscalationSummaryInputs, 'followUpMarkdown' | 'steering' | 'reviewEvidence'>,
+  inputs: Pick<EscalationSummaryInputs, 'codeReviews' | 'steering' | 'reviewEvidence'>,
 ): { items: EscalationGateItem[]; source: EscalationGateSource } {
-  const followUp = parseFollowUpGateItems(inputs.followUpMarkdown);
-  if (followUp.length > 0) return { items: followUp, source: 'follow-up' };
+  const newest = newestCodeReview(inputs.codeReviews);
+  const council = gateItemsFromCouncil(newest?.councilReaction?.assessments ?? []);
+  if (council.length > 0) return { items: council, source: 'council-reaction' };
 
   const findings = gateItemsFromFindings(inputs.steering?.openItems ?? []);
   if (findings.length > 0) return { items: findings, source: 'gate-evidence' };
@@ -384,6 +382,18 @@ export function resolveGateItems(
   if (evidence.length > 0) return { items: evidence, source: 'review-evidence' };
 
   return { items: [], source: 'none' };
+}
+
+function councilActionLabel(action: CouncilFindingAssessment['action']): string {
+  if (action === 'FixNextRound') return 'fix next round';
+  if (action === 'Escalate') return 'escalate';
+  return 'accepted';
+}
+
+function newestCodeReview(
+  entries: readonly CodeReviewListEntry[],
+): CodeReviewListEntry | null {
+  return [...entries].sort((a, b) => (b.runAt ?? '').localeCompare(a.runAt ?? ''))[0] ?? null;
 }
 
 /** Map a code-review grade letter to a tone chip. A → ok … D → danger. */
@@ -449,36 +459,53 @@ export function deriveReissues(events: readonly TaskTimelineEvent[]): Escalation
     });
 }
 
-/** Reconcile successful delivery signals with the still-acute human decision. */
-export function buildEscalationStateSentence(
-  delivery: EscalationDelivery,
-  gateItems: readonly EscalationGateItem[],
+/** Compose the bounded banner line from typed review, finding and timeline data. */
+export function buildEscalationEssence(inputs: {
+  codeReviews: readonly CodeReviewListEntry[];
+  gateItems: readonly EscalationGateItem[];
+  timeline: readonly TaskTimelineEvent[];
+  steering: SteeringInfo | null;
+}): EscalationEssence {
+  const reviewRounds = inputs.codeReviews.filter(
+    (entry) => !!entry.grade?.trim() || /^code-review-grade-/i.test(entry.fileName),
+  ).length;
+  const latestGrade = pickReviewHead(inputs.codeReviews)?.grade ?? null;
+  const openFindings = inputs.gateItems.filter((item) => !item.checked).length;
+  const reasonClass = escalationReasonClass(inputs.timeline, inputs.steering, inputs.codeReviews);
+  const roundsLabel = reviewRounds === 1 ? '1 review round' : `${reviewRounds} review rounds`;
+  const findingsLabel = openFindings === 1 ? '1 open finding' : `${openFindings} open findings`;
+  return {
+    reviewRounds,
+    latestGrade,
+    openFindings,
+    reasonClass,
+    label: `${roundsLabel} · Grade ${latestGrade ?? 'not recorded'} · ${findingsLabel} · ${reasonClass}`,
+  };
+}
+
+/** Classify the escalation without inspecting reason or follow-up prose. */
+export function escalationReasonClass(
   events: readonly TaskTimelineEvent[],
-  reason: string | null,
+  steering: SteeringInfo | null,
+  codeReviews: readonly CodeReviewListEntry[],
 ): string {
-  const merged = !!delivery.merge?.develop.merged || !!delivery.merge?.main.merged;
-  const delivered = delivery.commitCount > 0;
-  const deliveryText = merged
-    ? 'Delivered and merged'
-    : delivered
-      ? 'Delivered but not merged'
-      : 'Not delivered yet';
   const escalation = [...events].reverse().find((event) => event.kind === 'orchestrator_escalated');
   const attempt = Number(escalation?.details?.['attempt']);
   const maxAttempts = Number(escalation?.details?.['maxAttempts']);
-  const budgetExhausted = Number.isFinite(attempt)
-    && Number.isFinite(maxAttempts)
-    && maxAttempts > 0
-    && attempt >= maxAttempts;
-  const why = budgetExhausted
-    ? 'the reissue budget is exhausted'
-    : reason?.trim() || 'the orchestrator escalated the remaining gaps';
-  const open = gateItems.filter((item) => !item.checked).length;
-  if (gateItems.length === 0) {
-    return `${deliveryText}; waiting for your decision because ${why}.`;
+  if (Number.isFinite(attempt) && Number.isFinite(maxAttempts) && maxAttempts > 0 && attempt >= maxAttempts) {
+    return 'Reissue budget exhausted';
   }
-  const gateText = open === 1 ? '1 gate point remains open' : `${open} gate points remain open`;
-  return `${deliveryText}; waiting for your decision because ${why}, and ${gateText}.`;
+
+  const cause = causeOf(steering)?.toLowerCase() ?? '';
+  const gaveUpCategory = [...GAVE_UP_CATEGORIES].find((category) => cause.includes(category));
+  if (gaveUpCategory) return escalationCategoryLabel(gaveUpCategory);
+  if (cause === 'completion-gate') return 'Completion gate';
+  if (cause === 'needs-input-escalate') return 'Input required';
+  if (cause.includes('aspect-verdict')) return 'Aspect gate';
+  if (newestCodeReview(codeReviews)?.councilReaction?.disposition === 'Escalate') {
+    return 'Council review escalated';
+  }
+  return 'Human decision required';
 }
 
 /**
@@ -536,7 +563,12 @@ export function buildEscalationSummaryView(inputs: EscalationSummaryInputs): Esc
     delivery,
     recommendation: deriveRecommendation(inputs.info.orchestratorVerdict),
     reissues: deriveReissues(inputs.timeline),
-    stateSentence: buildEscalationStateSentence(delivery, items, inputs.timeline, reason),
+    essence: buildEscalationEssence({
+      codeReviews: inputs.codeReviews,
+      gateItems: items,
+      timeline: inputs.timeline,
+      steering: inputs.steering,
+    }),
   };
 }
 

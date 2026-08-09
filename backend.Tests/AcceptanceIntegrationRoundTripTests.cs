@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -55,6 +56,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         RunGit(_repo, "commit", "-q", "-m", "seed");
         RunGit(_repo, "remote", "add", "origin", _origin);
         RunGit(_repo, "push", "-q", "-u", "origin", "main");
+        RunGit(_repo, "remote", "set-head", "origin", "main");
         RunGit(_repo, "checkout", "-q", "-b", "develop");
         RunGit(_repo, "push", "-q", "-u", "origin", "develop");
         RunGit(_repo, "checkout", "-q", "main");
@@ -128,6 +130,145 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.NotNull(mergeStep);
         Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
         Assert.Equal("merged", mergeStep.Verdict);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RemoteSimulation_GreenSettledEnvelope_IntegratesBeforeHumanReview()
+    {
+        var deliverySha = PublishDelivery("remote-immediate.txt", "remote work\n");
+        var deps = Build(deliverySha, initialState: TaskStates.AutoReview);
+        var autoReview = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var decision = RemoteDeliveryIntegrationPolicy.Decide(
+            hasSettledResultEnvelope: true,
+            reviewOutcome: "Pass",
+            new AgentStudio.TaskServer.Contracts.ReviewPlanDto(
+                [new AgentStudio.TaskServer.Contracts.ReviewCommandDto(
+                    "verify",
+                    "build-tests",
+                    "git",
+                    ["status", "--short"])],
+                ["build-tests"]),
+            [new AgentStudio.TaskServer.Contracts.ReviewVerdictDto(
+                "build-tests",
+                "pass",
+                "GatePassed",
+                "Remote build and tests passed.")]);
+        Assert.True(decision.ShouldIntegrate);
+
+        var coordinator = new RemoteDeliveryIntegrationCoordinator(
+            deps.Merge,
+            deps.Scanner,
+            deps.Provenance,
+            deps.Timeline,
+            NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance);
+        var result = await coordinator.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
+            Project,
+            autoReview.Id,
+            autoReview.FolderPath,
+            autoReview.WatchPath,
+            "develop",
+            IntegrationStrategies.DirectMerge,
+            PipelineTypes.Task,
+            ReviewSubjectStore.Read(autoReview.FolderPath)!.CompletedAtUtc));
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, result.Outcome);
+        var integratedBeforeReview = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(TaskStates.AutoReview, integratedBeforeReview.State);
+        Assert.Equal(
+            IntegrationStatuses.Integrated,
+            Assert.Single(deps.Integration.BuildLookup([integratedBeforeReview]).Values).Status);
+
+        var moved = await deps.Transitions.MoveAsync(
+            Slug,
+            TaskStates.HumanReview,
+            _watchPath,
+            suppressProductExecution: true,
+            expectedSourceState: TaskStates.AutoReview);
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+        var humanReview = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(TaskStates.HumanReview, humanReview.State);
+        Assert.Equal(
+            IntegrationStatuses.Integrated,
+            Assert.Single(deps.Integration.BuildLookup([humanReview]).Values).Status);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task AcceptanceBackstop_RetriesArtificiallyFailedImmediateMerge()
+    {
+        var deliverySha = PublishDelivery("shared.txt", "delivery version\n");
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        File.WriteAllText(Path.Combine(_repo, "shared.txt"), "develop version\n");
+        RunGit(_repo, "add", "shared.txt");
+        RunGit(_repo, "commit", "-q", "-m", "develop edits shared");
+        RunGit(_repo, "checkout", "-q", "main");
+        var deps = Build(
+            deliverySha,
+            backgroundIntegration: true,
+            initialState: TaskStates.AutoReview);
+        var autoReview = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var coordinator = new RemoteDeliveryIntegrationCoordinator(
+            deps.Merge,
+            deps.Scanner,
+            deps.Provenance,
+            deps.Timeline,
+            NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance);
+
+        var immediate = await coordinator.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
+            Project,
+            autoReview.Id,
+            autoReview.FolderPath,
+            autoReview.WatchPath,
+            "develop",
+            IntegrationStrategies.DirectMerge,
+            PipelineTypes.Task,
+            ReviewSubjectStore.Read(autoReview.FolderPath)!.CompletedAtUtc));
+        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, immediate.Outcome);
+        Assert.Equal(
+            IntegrationStatuses.ConflictSkipped,
+            Assert.Single(deps.Integration.BuildLookup([autoReview]).Values).Status);
+
+        RunGit(_repo, "checkout", "-q", "develop");
+        RunGit(_repo, "reset", "-q", "--hard", "origin/develop");
+        RunGit(_repo, "checkout", "-q", "main");
+        var reviewed = await deps.Transitions.MoveAsync(
+            Slug,
+            TaskStates.HumanReview,
+            _watchPath,
+            suppressProductExecution: true,
+            expectedSourceState: TaskStates.AutoReview);
+        Assert.Equal(MoveJobStatus.Success, reviewed.Status);
+
+        var accepted = await deps.Transitions.MoveAsync(
+            Slug,
+            TaskStates.Completed,
+            _watchPath);
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+        var integrating = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(LifecyclePhases.Integrating, integrating.Phase);
+        Assert.Equal(
+            PipelineStepStatus.Pending,
+            deps.Pipeline.Read(integrating.FolderPath)!.Steps.Single(step =>
+                step.StepId == PipelineCatalogue.MergeIntoDevelopStepId).Status);
+
+        var backstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance,
+            deps.Transitions,
+            deps.Timeline);
+        Assert.Equal(1, backstop.RunOnce());
+
+        var completed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(TaskStates.Completed, completed.State);
+        Assert.Equal(
+            IntegrationStatuses.Integrated,
+            Assert.Single(deps.Integration.BuildLookup([completed]).Values).Status);
     }
 
     [Fact]
@@ -301,7 +442,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 
         var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
 
-        Assert.Equal(MoveJobStatus.Failure, outcome.Status);
+        Assert.Equal(MoveJobStatus.IntegrationFailed, outcome.Status);
         Assert.NotEqual(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "develop").Code);
 
         var reviewed = deps.Scanner.FindJob(Slug, _watchPath);
@@ -336,7 +477,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 
         var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
 
-        Assert.Equal(MoveJobStatus.Failure, outcome.Status);
+        Assert.Equal(MoveJobStatus.IntegrationFailed, outcome.Status);
         Assert.Equal(developBefore, Git(_repo, "rev-parse", "develop").Out.Trim());
         var reviewed = deps.Scanner.FindJob(Slug, _watchPath);
         Assert.NotNull(reviewed);
@@ -429,12 +570,78 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
             step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
         Assert.NotNull(mergeStep);
-        Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
+        Assert.Equal(PipelineStepStatus.Skipped, mergeStep!.Status);
         Assert.Equal("already-integrated", mergeStep.Verdict);
         Assert.Contains(
             deps.Timeline.ReadAll(completed.FolderPath),
             entry => entry.Kind == TimelineEventKinds.IntegrationSucceeded
-                     && entry.Details?.GetValueOrDefault("outcome") == "AlreadyIntegrated");
+                     && entry.Details?.GetValueOrDefault("outcome") == "AlreadyMerged");
+    }
+
+    [Fact]
+    public async Task AcceptMainOnlyProject_WithoutExplicitIntegrationBranch_UsesOriginHead()
+    {
+        var deliverySha = PublishDelivery("main-only-delivery.txt", "remote work\n");
+        RunGit(_repo, "push", "-q", "origin", "--delete", "develop");
+        var gate = new CountingBuildTestGateRunner();
+        var deps = Build(
+            deliverySha,
+            gateRunner: gate,
+            configureIntegrationBranch: false,
+            recordedIntegrationBranch: "refs/heads/develop");
+
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var before = deps.Integration.BuildLookup([reviewed])[reviewed.TaskKey];
+        Assert.Equal("main", before.IntegrationBranch);
+        Assert.Equal(IntegrationStatuses.Pending, before.Status);
+
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.True(
+            accepted.Status == MoveJobStatus.Success,
+            accepted.Message ?? accepted.Status.ToString());
+        Assert.Equal(0, Git(_repo, "merge-base", "--is-ancestor", deliverySha, "main").Code);
+        Assert.Equal(1, gate.Invocations);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(TaskStates.Completed, completed.State);
+        var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
+        Assert.Contains("main", mergeStep.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AcceptAlreadyIntegratedMainOnlyCard_MovesWithoutMergeOrGate()
+    {
+        var deliverySha = PublishDelivery("main-only-integrated.txt", "already integrated\n");
+        RunGit(_repo, "merge", "-q", "--no-ff", "--no-edit", deliverySha);
+        RunGit(_repo, "push", "-q", "origin", "--delete", "develop");
+        var gate = new CountingBuildTestGateRunner();
+        var deps = Build(
+            deliverySha,
+            backgroundIntegration: true,
+            gateRunner: gate,
+            configureIntegrationBranch: false,
+            recordedIntegrationBranch: "refs/heads/develop");
+
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var before = deps.Integration.BuildLookup([reviewed])[reviewed.TaskKey];
+        Assert.Equal(IntegrationStatuses.Integrated, before.Status);
+        Assert.Equal("main", before.IntegrationBranch);
+
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+        Assert.Equal(TaskStates.Completed, deps.Scanner.FindJob(Slug, _watchPath)?.State);
+        Assert.False(deps.AcceptedQueue!.Reader.TryRead(out _));
+        Assert.Equal(0, gate.Invocations);
+        var mergeStep = deps.Pipeline.Read(
+                deps.Scanner.FindJob(Slug, _watchPath)!.FolderPath)?.Steps.LastOrDefault(
+            step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Skipped, mergeStep!.Status);
+        Assert.Equal("already-integrated", mergeStep.Verdict);
     }
 
     [Fact]
@@ -476,6 +683,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         var mergeStep = deps.Pipeline.Read(completed.FolderPath)?.Steps.LastOrDefault(
             step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
         Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Skipped, mergeStep!.Status);
         Assert.Equal("already-integrated", mergeStep!.Verdict);
     }
 
@@ -508,8 +716,12 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 
         var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
 
-        Assert.Equal(MoveJobStatus.Failure, accepted.Status);
+        Assert.Equal(MoveJobStatus.IntegrationFailed, accepted.Status);
         Assert.Contains("diverged from origin", accepted.Message, StringComparison.Ordinal);
+        var apiResult = TaskEndpointHelpers.MoveResult(accepted);
+        Assert.Equal(
+            StatusCodes.Status409Conflict,
+            Assert.IsAssignableFrom<IStatusCodeHttpResult>(apiResult).StatusCode);
         var reviewed = deps.Scanner.FindJob(Slug, _watchPath);
         Assert.NotNull(reviewed);
         Assert.Equal(TaskStates.HumanReview, reviewed!.State);
@@ -526,6 +738,13 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         var integration = deps.Integration.BuildLookup([reviewed])[reviewed.TaskKey];
         Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
         Assert.Contains("diverged from origin", integration.Detail, StringComparison.Ordinal);
+        var failedEvent = Assert.Single(
+            deps.Timeline.ReadAll(reviewed.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationFailed);
+        Assert.Contains(
+            "diverged from origin",
+            failedEvent.Details?.GetValueOrDefault("detail"),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -557,7 +776,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Transitions,
             deps.Timeline);
         await worker.StartAsync(CancellationToken.None);
-        await gate.Entered.WaitAsync(TimeSpan.FromSeconds(5));
+        await gate.Entered.WaitAsync(AsyncTestDeadline);
         Assert.True(deps.Merge.IsMergeGateBusy);
 
         using var factory = new WebApplicationFactory<Program>()
@@ -591,7 +810,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.True(deps.Merge.IsMergeGateBusy);
 
         gate.Release();
-        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+        await stopTask.WaitAsync(AsyncTestDeadline);
         Assert.False(deps.Merge.IsMergeGateBusy);
         Assert.Equal("idle", await client.GetStringAsync("/healthz/drain"));
 
@@ -618,7 +837,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         var deps = Build(deliverySha);
 
         var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
-        Assert.Equal(MoveJobStatus.Failure, accepted.Status);
+        Assert.Equal(MoveJobStatus.IntegrationFailed, accepted.Status);
         Assert.Equal(TaskStates.HumanReview, deps.Scanner.FindJob(Slug, _watchPath)?.State);
 
         using var factory = new WebApplicationFactory<Program>()
@@ -1099,7 +1318,10 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         bool backgroundIntegration = false,
         IBuildTestGateRunner? gateRunner = null,
         bool writeReviewSubject = true,
-        IntegrationPushQueue? pushQueue = null)
+        IntegrationPushQueue? pushQueue = null,
+        bool configureIntegrationBranch = true,
+        string? recordedIntegrationBranch = null,
+        string initialState = TaskStates.HumanReview)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -1121,7 +1343,8 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
             NullLogger<TaskMutationService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        settings.SetIntegrationBranch(Project, "develop");
+        if (configureIntegrationBranch)
+            settings.SetIntegrationBranch(Project, "develop");
         settings.SetIntegrationStrategy(Project, integrationStrategy);
         settings.SetAutoPushStrategy(Project, AutoPushStrategies.Never);
         if (gateRunner != null)
@@ -1148,6 +1371,15 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 "settle-fixture"),
             Outcome = "done",
             ResultSha = deliverySha,
+            ResultEnvelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+                "PROJ-FIXTURE",
+                sourceRun.AttemptId,
+                Git(_repo, "rev-parse", $"{deliverySha}^").Out.Trim(),
+                deliverySha,
+                $"refs/heads/{DeliveryRef}",
+                null,
+                new string('a', 64),
+                RepositoryUrl: _origin),
         });
         Assert.True(settled.Accepted);
         var merge = new MergeIntoDevelopRunner(
@@ -1157,6 +1389,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             pushQueue: pushQueue,
             attemptAuthority: authority,
             projectSettings: settings,
+            preMainTestGate: gateRunner == null ? null : new PreMainTestGate(gateRunner),
             preDevelopBuildGate: gateRunner == null ? null : new PreDevelopBuildGate(gateRunner),
             preDevelopTimeout: TimeSpan.FromSeconds(30));
         var integration = new TaskIntegrationStatusService(
@@ -1169,21 +1402,24 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             NullLogger<TaskProvenanceService>.Instance);
         var acceptedQueue = backgroundIntegration ? new AcceptedIntegrationQueue() : null;
 
-        var jobFolder = Path.Combine(_watchPath, TaskStates.HumanReview, Slug);
+        var jobFolder = Path.Combine(_watchPath, initialState, Slug);
         Directory.CreateDirectory(jobFolder);
         var job = new
         {
             id = Slug,
             key = TaskKey,
             title = "Remote delivery",
-            state = TaskStates.HumanReview,
+            state = initialState,
             order = 1,
             agent = "codex",
             cliType = "codex",
             mode = TaskModes.Coding,
             projectName = Project,
+            integrationBranch = recordedIntegrationBranch,
             codeActivityDetected = true,
-            tags = new[] { IntegrationStatuses.PendingTag },
+            tags = initialState == TaskStates.HumanReview
+                ? new[] { IntegrationStatuses.PendingTag }
+                : Array.Empty<string>(),
             commit = Commit(deliverySha),
             commits = new[] { Commit(deliverySha) },
         };
@@ -1205,6 +1441,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 LeaseId = sourceRun.Lease.LeaseId,
                 FencingToken = sourceRun.LastFence,
                 ImmutableResultRef = DeliveryRef,
+                IntegrationBranch = recordedIntegrationBranch,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
             });
         }
@@ -1363,6 +1600,12 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             {
                 ExpectedSha = request.ExpectedSha,
                 TestedSha = request.ExpectedSha,
+                TestSelection = new TestSelectionAudit
+                {
+                    Level = TestExecutionLevels.Full,
+                    FullSuiteRequired = true,
+                    FullSuiteRan = true,
+                },
             });
         }
     }

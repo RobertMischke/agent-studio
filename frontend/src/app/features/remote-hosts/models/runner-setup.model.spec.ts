@@ -48,7 +48,7 @@ describe('runner setup model', () => {
     expect(runnerSetupIssues({ ...loopback, connectionMode: 'tunnel' })).toEqual([]);
   });
 
-  it('builds the exact idempotent remote setup and OAuth contract', () => {
+  it('builds the exact idempotent remote setup and protected provider-auth contract', () => {
     const request = buildRunnerSetupRequest(HOST, VALID);
 
     expect(request.title).toBe('Set up agent host on agent-runner-01');
@@ -71,10 +71,13 @@ describe('runner setup model', () => {
     expect(request.prompt).toContain('systemd');
     expect(request.prompt).toContain('agent-host.service');
     expect(request.prompt).toContain('Preserve the existing runner identity `agent-runner-01`');
-    expect(request.prompt).toContain('codex login --device-auth');
-    expect(request.prompt).toContain('codex login status');
-    expect(request.prompt).toContain('claude auth status');
-    expect(request.prompt).toContain('Never copy, upload, or reuse credential files');
+    expect(request.prompt).toContain('/etc/agent-runner/provider-auth.env');
+    expect(request.prompt).toContain('root:agent');
+    expect(request.prompt).toContain('Provider credentials were already delivered by Studio through SSH stdin');
+    expect(request.prompt).toContain('/proc/<main-pid>/environ');
+    expect(request.prompt).toContain('reads process environment only');
+    expect(request.prompt).not.toContain('codex login --device-auth');
+    expect(request.prompt).not.toContain('claude auth login');
     expect(request.prompt).toContain('one real smoke task');
   });
 });

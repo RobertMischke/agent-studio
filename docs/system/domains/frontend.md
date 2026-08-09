@@ -109,12 +109,15 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   dot status treatment without a coloured left accent line. Activity and Result
   retain their existing live and settled-run defaults.
   Escalated tasks render a borderless, collapsible decision section that
-  reconciles delivery and decision state in one sentence, places the primary
-  reissue, accept-as-is, and abort decisions beside the recommendation, lists
-  reissue timestamps and triggers from the timeline, and shows only recorded
-  gate, review, and delivery context. When none of that structured context is
-  present, the section renders one compact empty-context line instead of three
-  placeholder columns.
+  keeps one bounded essence line visible: typed review-round count, latest
+  grade, open-finding count, and escalation-reason class. Markdown bodies never
+  feed that line. The expanded section renders structured council findings,
+  complete council reactions and `orchestrator-follow-up.md`, every
+  `code-review-grade-*.md` artifact with file history, reissue history, and
+  delivery context. Long artifact blocks scroll within their own container and
+  never truncate the source text. The primary reissue, accept-as-is, and abort
+  decisions remain beside the recommendation. When findings, review artifacts,
+  and delivery context are absent, the section renders one compact empty line.
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
@@ -167,7 +170,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
   read-only Workbench host. Explorer discovery is lazy per expanded project;
-  Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
+  Pulse reuses the same catalogue as a thinking inbox. An active Workbench is
+  the selected leaf in the Explorer rather than making its Workbenches disclosure
+  parent current. Opening one expands the owning workspace, project, and
+  project-specific Workbenches section, persists that section state, and scrolls
+  the selected leaf into view. Settled Workbenches keep the same selection
+  semantics but are revealed under the existing History disclosure. Repository
+  HTML runs only
   in an opaque-origin `srcdoc` iframe with the Workbench CSP. A source-checked
   message boundary maps docs-relative links to the in-app Wiki and opens absolute
   HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
@@ -194,10 +203,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   commit-bound runs in product order, including scope, host, duration, result,
   and cards attached by the backend ancestry projection. Board cards render the
   same project-run projection as perfect, diff included, diff not included,
-  pending, or no assigned run. The card evidence block also renders SHA-linked
-  task-owned Remote Review build-tests grades and build/test gate logs supplied
-  by the backend. It names their source and tested SHA instead of showing the
-  project-run default when task-owned evidence exists.
+  pending, or no assigned run. A missing-evidence block stays absent in Backlog,
+  Preparation, Ready, and an active run until an attributed delivery exists; it
+  becomes relevant in Post Processing, Human Review, Completed, and Archive.
+  Recorded evidence remains visible regardless of lane. The card evidence block
+  also renders SHA-linked task-owned Remote Review build-tests grades and
+  build/test gate logs supplied by the backend. It names their source and tested
+  SHA instead of showing the project-run default when task-owned evidence exists.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned

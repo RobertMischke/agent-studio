@@ -879,6 +879,11 @@ public class TaskRunnerService : BackgroundService
             Branch = branch,
             WorktreePath = string.IsNullOrWhiteSpace(job.FolderPath) ? null : job.FolderPath,
             LastActivityAt = job.LastActivity,
+            LastRejection = job.State == AgentStudio.Shared.TaskStates.Ready
+                            && job.RemoteDispatchRejection is { } rejection
+                            && rejection.RejectedAtUtc >= job.EnteredLaneAt.ToUniversalTime()
+                ? rejection
+                : null,
         };
 
         if (job.State == AgentStudio.Shared.TaskStates.Progress && lease is not null)

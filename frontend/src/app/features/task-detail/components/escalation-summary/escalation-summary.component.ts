@@ -19,8 +19,8 @@ import {
   type SteeringInfo,
 } from '../../../../components/steering-detail';
 import { TooltipDirective } from 'coding-agent-chat/shared';
-import { formatDateTimeUtc } from '../../../../services/format.util';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
+import { EscalationDetailsComponent } from '../escalation-details/escalation-details.component';
 import {
   laneActionsFor,
   type TriageActionPayload,
@@ -28,7 +28,6 @@ import {
 } from '../../state/triage-actions.model';
 import {
   buildEscalationSummaryView,
-  type EscalationGateSource,
   type EscalationSummaryView,
 } from './escalation-summary.util';
 
@@ -49,7 +48,7 @@ import {
   selector: 'app-escalation-summary',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective, PendingButtonDirective],
+  imports: [TooltipDirective, PendingButtonDirective, EscalationDetailsComponent],
   templateUrl: './escalation-summary.component.html',
   styleUrl: './escalation-summary.component.scss',
 })
@@ -70,9 +69,9 @@ export class EscalationSummaryComponent {
   private readonly timelinePoll = inject(TaskTimelinePollService);
 
   /** Newest-first code-review list for the open job; drives the verdict head. */
-  private readonly codeReviews = signal<CodeReviewListEntry[]>([]);
+  readonly codeReviews = signal<CodeReviewListEntry[]>([]);
   /** Body of `orchestrator-follow-up.md`, or null when the file is absent. */
-  private readonly followUpMarkdown = signal<string | null>(null);
+  readonly followUpMarkdown = signal<string | null>(null);
   /** Which job the current fetch results belong to, to drop stale responses. */
   private fetchedJobId: string | null = null;
 
@@ -154,30 +153,10 @@ export class EscalationSummaryComponent {
       info: this.detail().info,
       reviewEvidence: this.detail().reviewEvidence ?? [],
       codeReviews: this.codeReviews(),
-      followUpMarkdown: this.followUpMarkdown(),
       steering: this.steering(),
       statusMarkdown: this.detail().statusMarkdown,
       timeline: this.timelinePoll.events(),
     }),
-  );
-
-  /** Human label for where the gate items were sourced from. */
-  gateSourceLabel(source: EscalationGateSource): string {
-    switch (source) {
-      case 'follow-up':
-        return 'From the reissue follow-up checklist';
-      case 'gate-evidence':
-        return 'From the completion-gate findings';
-      case 'review-evidence':
-        return 'From the recorded review evidence';
-      default:
-        return '';
-    }
-  }
-
-  /** Count of still-open (unchecked) gate items, for the section header. */
-  readonly openGateCount = computed<number>(
-    () => this.view().gateItems.filter((i) => !i.checked).length,
   );
 
   /**
@@ -202,9 +181,6 @@ export class EscalationSummaryComponent {
     this.triageAction.emit({ id: action.id, label: action.label, intent: action.intent });
   }
 
-  formatRunAt(iso: string | null): string {
-    return iso ? formatDateTimeUtc(iso) : '';
-  }
 }
 
 /** localStorage key holding the per-task collapse map (`{ [jobId]: boolean }`). */

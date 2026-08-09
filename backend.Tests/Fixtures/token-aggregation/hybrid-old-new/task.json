@@ -1,0 +1,42 @@
+{
+  "id": "AGT-2542",
+  "title": "Restore current token analytics",
+  "state": "3-progress",
+  "order": 1,
+  "tokenSummary": {
+    "calls": 2,
+    "inputTokens": 5000,
+    "outputTokens": 500,
+    "cacheReadTokens": 0,
+    "cacheCreationTokens": 0,
+    "totalTokens": 5500,
+    "estimatedApiCostUsd": 0,
+    "allModelsPriced": true,
+    "lastModel": "gpt-5.3-codex",
+    "lastUpdate": "2026-08-09T10:00:00Z",
+    "entries": [
+      {
+        "ts": "2026-08-09T00:00:00Z",
+        "model": "gpt-5.3-codex",
+        "participantId": "agent:codex",
+        "inputTokens": 2000,
+        "outputTokens": 200,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "estimatedApiCostUsd": 0,
+        "modelPriced": true
+      },
+      {
+        "ts": "2026-08-09T10:00:00Z",
+        "model": "gpt-5.3-codex",
+        "participantId": "agent:codex",
+        "inputTokens": 3000,
+        "outputTokens": 300,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "estimatedApiCostUsd": 0,
+        "modelPriced": true
+      }
+    ]
+  }
+}

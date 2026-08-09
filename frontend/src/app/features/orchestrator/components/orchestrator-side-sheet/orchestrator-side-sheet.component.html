@@ -83,10 +83,13 @@
               {{ contextDigestState.refreshing() ? 'Refreshing...' : (loading() ? 'Loading...' : 'Refresh') }}
             </button>
             <button type="button"
-                    [attr.aria-pressed]="!contextDismissed()"
+                    [attr.aria-pressed]="contextKind() === 'task' || !contextDismissed()"
+                    [disabled]="contextKind() === 'task'"
                     (click)="toggleNextMessageContext()"
                     data-testid="orch-context-send-toggle">
-              {{ contextDismissed() ? 'Include context next' : 'Exclude context once' }}
+              {{ contextKind() === 'task'
+                ? 'Task context always included'
+                : (contextDismissed() ? 'Include context next' : 'Exclude context once') }}
             </button>
           </div>
         </header>
@@ -141,6 +144,10 @@
                 [showHeader]="false"
                 (openVerboseDebug)="onOpenVerboseDebug()" />
             </div>
+
+            @if (latestContextReceipt(); as receipt) {
+              <app-orchestrator-context-receipt [receipt]="receipt" />
+            }
 
             @for (event of events(); track event.id) {
               @if (event.actionLabel && hasChatEventAction(event.id)) {

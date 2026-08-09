@@ -14,6 +14,13 @@ export interface RuntimeCapacityChange {
   rampStrategy: HostRampStrategy;
 }
 
+export interface HostProjectPolicyChange {
+  id: string;
+  allowAllProjects: boolean;
+  allowedProjectIds: readonly string[];
+  expectedVersion: number;
+}
+
 /** Ceiling proposed in the empty state when the daemon reported nothing either. */
 const SUGGESTED_CEILING = 2;
 const SUGGESTED_TARGET_LOAD = 80;
@@ -54,9 +61,12 @@ export class RuntimeCapacityEditorComponent {
   /** Projects occupying this host's slots, derived from the board's lease truth. */
   readonly projectSlots = input<readonly HostProjectSlots[]>([]);
   readonly capacityChange = output<RuntimeCapacityChange>();
+  readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly capacityDraft = signal<number | null>(null);
   readonly targetLoadDraft = signal<number | null>(null);
   readonly rampDraft = signal<HostRampStrategy | null>(null);
+  readonly allowAllProjectsDraft = signal<boolean | null>(null);
+  readonly allowedProjectIdsDraft = signal<string | null>(null);
 
   /** The hard ceiling, or null when no server has published one yet. */
   readonly ceiling = computed(() => this.host().runtimeCapacity?.maxParallelism ?? null);
@@ -84,8 +94,10 @@ export class RuntimeCapacityEditorComponent {
 
   readonly awaitingAdoption = computed(() => {
     const host = this.host();
-    return !!host.runtimeCapacity
-      && host.runtimeCapacity.maxParallelism !== host.effectiveMaxParallelism;
+    if (!host.runtimeCapacity) return false;
+    return host.runtimeCapacity.version >= 1
+      ? host.runtimeCapacity.version !== host.runtimeCapacityAppliedVersion
+      : host.runtimeCapacity.maxParallelism !== host.effectiveMaxParallelism;
   });
 
   updateCapacityDraft(event: Event): void {
@@ -100,6 +112,40 @@ export class RuntimeCapacityEditorComponent {
 
   updateRampDraft(event: Event): void {
     this.rampDraft.set((event.target as HTMLSelectElement).value as HostRampStrategy);
+  }
+
+  updateProjectPolicyMode(event: Event): void {
+    this.allowAllProjectsDraft.set(
+      (event.target as HTMLSelectElement).value === 'all');
+  }
+
+  updateAllowedProjects(event: Event): void {
+    this.allowedProjectIdsDraft.set((event.target as HTMLInputElement).value);
+  }
+
+  saveProjectPolicy(): void {
+    const host = this.host();
+    if (host.busyAction || !host.capacityHostId) return;
+    const policy = host.projectPolicy;
+    const allowAllProjects = this.allowAllProjectsDraft()
+      ?? policy?.allowAllProjects
+      ?? true;
+    const allowedProjectIds = allowAllProjects
+      ? []
+      : [...new Set((this.allowedProjectIdsDraft()
+        ?? policy?.allowedProjectIds.join(', ')
+        ?? '')
+        .split(',')
+        .map(projectId => projectId.trim())
+        .filter(Boolean))].sort();
+    this.projectPolicyChange.emit({
+      id: host.id,
+      allowAllProjects,
+      allowedProjectIds,
+      expectedVersion: policy?.version ?? 0,
+    });
+    this.allowAllProjectsDraft.set(null);
+    this.allowedProjectIdsDraft.set(null);
   }
 
   /**

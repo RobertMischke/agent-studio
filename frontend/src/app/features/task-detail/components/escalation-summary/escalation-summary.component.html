@@ -17,15 +17,8 @@
         <span class="escalation__eyebrow" aria-hidden="true">{{ v.escalation?.kind === 'gave-up' ? '⚙' : '⚠' }}</span>
         <span class="escalation__headline">
           <span class="escalation__title" data-testid="escalation-title">{{ headTitle() }}</span>
-          <span class="escalation__state" data-testid="escalation-state-sentence">{{ v.stateSentence }}</span>
-          <span class="escalation__essence" data-testid="escalation-essence" aria-label="Supporting status">
-            @if (v.review; as r) {
-              @if (r.grade; as grade) {
-                <span
-                  class="escalation__grade escalation__grade--sm escalation__grade--{{ r.gradeTone }}"
-                  data-testid="escalation-essence-grade">{{ grade }}</span>
-              }
-            }
+          <span class="escalation__essence" data-testid="escalation-essence">
+            <span class="escalation__essence-copy">{{ v.essence.label }}</span>
             @if (v.delivery.merge; as m) {
               <span
                 class="escalation__essence-merge"
@@ -84,113 +77,52 @@
         @if (v.escalation?.kind === 'gave-up') {
           <div class="escalation__giveup" data-testid="escalation-gave-up">
             <div class="escalation__giveup-head">
-              <span class="escalation__giveup-label">Handed to a human — the orchestrator could not conclude</span>
+              <span class="escalation__giveup-label">Handed to a human: the orchestrator could not conclude</span>
               @if (v.escalation?.categoryLabel; as cat) {
                 <span class="escalation__giveup-cat" data-testid="escalation-gave-up-category">{{ cat }}</span>
               }
             </div>
-            @if (v.escalation?.reason; as r) {
-              <p class="escalation__giveup-reason" data-testid="escalation-gave-up-reason">{{ r }}</p>
+            @if (v.escalation?.reason; as reason) {
+              <div class="escalation__giveup-reason" data-testid="escalation-gave-up-reason">{{ reason }}</div>
             }
             <p class="escalation__giveup-note">
-              An infra / orchestrator fault kept the task from a clean verdict, not a rejection of the work.
-              The drive-to-conclusion loop was preserved and the task handed to you — no automated quality review ran.
+              An infrastructure or orchestrator fault kept the task from a clean verdict, not a rejection of the work.
+              The drive-to-conclusion loop was preserved and the task handed to you; no automated quality review ran.
             </p>
           </div>
         }
-        @if (v.reason) {
-          <p class="escalation__reason" data-testid="escalation-reason">
-            {{ v.reason }}
-            @if (v.cause) {
-              <span class="escalation__cause">· {{ v.cause }}</span>
-            }
+
+        @if (v.delivery.commitCount > 0 || v.delivery.filesChanged > 0) {
+          <div class="escalation__delivery" data-testid="escalation-delivery">
+            <strong>Delivery</strong>
+            <span data-testid="escalation-delivery-counts">
+              {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
+              @if (v.delivery.filesChanged > 0) {
+                · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
+              }
+            </span>
+          </div>
+        }
+
+        <app-escalation-details
+          [job]="detail().info"
+          [reviews]="codeReviews()"
+          [followUpMarkdown]="followUpMarkdown()"
+          [gateItems]="v.gateItems"
+          [gateSource]="v.gateSource"
+          [reissues]="v.reissues" />
+
+        @if (
+          v.gateItems.length === 0 &&
+          codeReviews().length === 0 &&
+          !followUpMarkdown() &&
+          v.delivery.commitCount === 0 &&
+          v.delivery.filesChanged === 0
+        ) {
+          <p class="escalation__empty" data-testid="escalation-context-empty">
+            No structured findings, review artifacts, or delivery context were recorded.
           </p>
         }
-
-        @if (v.reissues.length > 0) {
-          <details class="escalation__reissues" data-testid="escalation-reissues">
-            <summary>
-              Reissue history
-              <span class="escalation__history-count">{{ v.reissues.length }}</span>
-            </summary>
-            <ol class="escalation__reissue-list">
-              @for (reissue of v.reissues; track reissue.index) {
-                <li [attr.data-testid]="'escalation-reissue-' + reissue.index">
-                  <span class="escalation__reissue-head">
-                    <strong>Reissue {{ reissue.index }}</strong>
-                    <time [attr.datetime]="reissue.at">{{ formatRunAt(reissue.at) }}</time>
-                  </span>
-                  <span class="escalation__reissue-trigger">{{ reissue.trigger }}</span>
-                </li>
-              }
-            </ol>
-          </details>
-        }
-
-        <div class="escalation__context" data-testid="escalation-context">
-          @if (v.gateItems.length > 0) {
-            <section class="escalation__block escalation__block--gate">
-              <h4 class="escalation__block-title">
-                Open gate points
-                <span class="escalation__count" data-testid="escalation-gate-count">{{ openGateCount() }} open</span>
-              </h4>
-              <ul class="escalation__checklist" data-testid="escalation-gate-items">
-                @for (item of v.gateItems; track $index) {
-                  <li class="escalation__gate-item" [class.escalation__gate-item--done]="item.checked">
-                    <span class="escalation__check" aria-hidden="true">{{ item.checked ? '☑' : '☐' }}</span>
-                    @if (item.tone) {
-                      <span class="escalation__verdict escalation__verdict--{{ item.tone }}">{{ item.verdict }}</span>
-                    }
-                    <span class="escalation__gate-text">{{ item.text }}</span>
-                  </li>
-                }
-              </ul>
-              @if (gateSourceLabel(v.gateSource); as src) {
-                <p class="escalation__source" data-testid="escalation-gate-source">{{ src }}</p>
-              }
-            </section>
-          }
-
-          @if (v.review; as r) {
-            <section class="escalation__block escalation__block--review">
-              <h4 class="escalation__block-title">Review verdict</h4>
-              <div class="escalation__verdict-head" data-testid="escalation-review-head">
-                @if (r.grade) {
-                  <span class="escalation__grade escalation__grade--{{ r.gradeTone }}"
-                        data-testid="escalation-review-grade">{{ r.grade }}</span>
-                }
-                <span class="escalation__verdict escalation__verdict--{{ r.verdictTone }}"
-                      data-testid="escalation-review-verdict">{{ r.verdict }}</span>
-                @if (r.model) {
-                  <span class="escalation__model" [cacTooltip]="formatRunAt(r.runAt)">{{ r.model }}</span>
-                }
-              </div>
-              @if (r.summary) {
-                <p class="escalation__summary" data-testid="escalation-review-summary">{{ r.summary }}</p>
-              }
-            </section>
-          }
-
-          @if (v.delivery.commitCount > 0 || v.delivery.filesChanged > 0) {
-            <section class="escalation__block escalation__block--delivery">
-              <h4 class="escalation__block-title">Delivery context</h4>
-              <div class="escalation__delivery" data-testid="escalation-delivery">
-                <span class="escalation__counts" data-testid="escalation-delivery-counts">
-                  {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
-                  @if (v.delivery.filesChanged > 0) {
-                    · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
-                  }
-                </span>
-              </div>
-            </section>
-          }
-
-          @if (v.gateItems.length === 0 && !v.review && v.delivery.commitCount === 0 && v.delivery.filesChanged === 0) {
-            <p class="escalation__empty escalation__empty--context" data-testid="escalation-context-empty">
-              No structured context was recorded.
-            </p>
-          }
-        </div>
       </div>
     }
   </section>

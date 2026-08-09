@@ -10,7 +10,7 @@
       <div>
         <span class="setup__eyebrow">Agent host process</span>
         <h2 id="runner-setup-title">Set up agent host on {{ host().name }}</h2>
-        <p>Confirm how the controller reaches this host and how the host reaches the Task Server. Progress and operator login steps stay in the durable task conversation.</p>
+        <p>Confirm connectivity, provision provider authentication through the protected host channel, then queue the visible setup task. Provider credentials never enter the task conversation.</p>
       </div>
       <button class="setup__close" type="button" aria-label="Close agent host setup" (click)="cancelled.emit()">×</button>
     </header>
@@ -94,12 +94,64 @@
         }
       </section>
 
-      <section class="setup__execution" aria-labelledby="runner-setup-execution-title">
+      <section class="setup__authentication" aria-labelledby="runner-setup-auth-title">
         <div class="setup__section-head">
           <span class="setup__step">2</span>
           <div>
+            <h3 id="runner-setup-auth-title">Provider authentication</h3>
+            <p>Studio sends this value once through SSH stdin to <code>/etc/agent-runner/provider-auth.env</code>. It is not stored in the Studio database, repository, or setup task.</p>
+          </div>
+        </div>
+
+        <div class="setup__fields">
+          <label>
+            <span>Claude credential type</span>
+            <select data-testid="runner-setup-provider-auth-kind"
+                    [ngModel]="providerAuthEnvironmentVariable()"
+                    (ngModelChange)="setProviderAuthEnvironmentVariable($event)">
+              <option value="CLAUDE_CODE_OAUTH_TOKEN">CLAUDE_CODE_OAUTH_TOKEN</option>
+              <option value="ANTHROPIC_API_KEY">ANTHROPIC_API_KEY</option>
+            </select>
+            <small>Choose exactly one. Updating Claude authentication replaces the other Claude entry but preserves future provider entries in the shared file.</small>
+          </label>
+
+          <label>
+            <span>Provider credential</span>
+            <input data-testid="runner-setup-provider-auth-secret"
+                   type="password"
+                   autocomplete="new-password"
+                   autocapitalize="none"
+                   spellcheck="false"
+                   [ngModel]="providerAuthSecret()"
+                   (ngModelChange)="providerAuthSecret.set($event)" />
+            <small>The field is cleared as soon as provisioning succeeds or fails.</small>
+          </label>
+        </div>
+
+        <div class="setup__auth-actions">
+          <button type="button"
+                  class="setup__provision"
+                  data-testid="runner-setup-provider-auth-provision"
+                  [disabled]="providerAuthPhase() === 'provisioning' || !sshTarget().trim() || providerAuthSecret().length < 16"
+                  (click)="provisionProviderAuth()">
+            {{ providerAuthPhase() === 'provisioning' ? 'Provisioning…' : 'Provision and verify' }}
+          </button>
+          <span class="setup__auth-status"
+                data-testid="runner-setup-provider-auth-status"
+                [attr.data-state]="providerAuthVerified() ? 'ok' : providerAuthPhase()">
+            <span class="setup__auth-dot" aria-hidden="true"></span>
+            {{ providerAuthVerified() ? 'Latest runner probe: OK' : providerAuthPhase() === 'idle' ? 'Not provisioned' : providerAuthPhase() }}
+          </span>
+        </div>
+        <p class="setup__auth-detail">{{ providerAuthVerified() ? currentProviderAuth()?.detail : providerAuthDetail() }}</p>
+      </section>
+
+      <section class="setup__execution" aria-labelledby="runner-setup-execution-title">
+        <div class="setup__section-head">
+          <span class="setup__step">3</span>
+          <div>
             <h3 id="runner-setup-execution-title">Visible setup task</h3>
-            <p>The standard CLI-task surface owns live output, OAuth device codes, operator replies, completion, and history.</p>
+            <p>The standard CLI-task surface owns installation output, provider probe results, completion, and history. It never receives the credential.</p>
           </div>
         </div>
 
@@ -114,6 +166,9 @@
             <ul>
               @for (issue of issues(); track issue) {
                 <li>{{ issue }}</li>
+              }
+              @if (!providerAuthGateSatisfied()) {
+                <li>Provision provider authentication through the protected SSH channel.</li>
               }
             </ul>
           </div>

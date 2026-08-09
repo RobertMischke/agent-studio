@@ -17,6 +17,12 @@ export interface ComposerLocationContext {
   project: string | null;
   surface: string;
   detail?: string;
+  /** Task identity carried by the same active-tab projection the footer shows. */
+  taskKey?: string;
+  taskId?: string;
+  taskTitle?: string;
+  taskState?: string;
+  taskWatchPath?: string;
 }
 
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
@@ -31,10 +37,16 @@ function taskFor(tabKey: string, tasks: readonly TaskInfo[]): TaskInfo | undefin
 
 function taskContext(surface: string, tabKey: string, tasks: readonly TaskInfo[]): ComposerLocationContext {
   const task = taskFor(tabKey, tasks);
+  const taskKey = task?.displayKey ?? task?.key ?? task?.taskKey ?? tabKey;
   return {
     project: task?.projectName ?? null,
     surface,
-    detail: task?.displayKey ?? task?.key ?? task?.taskKey ?? tabKey,
+    detail: taskKey,
+    taskKey,
+    taskId: task?.id ?? tabKey,
+    ...(task?.title ? { taskTitle: task.title } : {}),
+    ...(task?.state ? { taskState: task.state } : {}),
+    ...(task?.watchPath ? { taskWatchPath: task.watchPath } : {}),
   };
 }
 

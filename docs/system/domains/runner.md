@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-02
+Version: 2026-08-04
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -70,6 +70,13 @@ state.
   own task worktree. A non-Git project is rejected for mutating runs instead of
   falling back to in-place execution; read-only planning and research remain
   eligible to run in place.
+- `backend/Features/Git/GitBranchRetention.cs`: host-owned recurring repository
+  maintenance. The startup-and-daily pass fetches with prune, removes missing
+  worktree registrations, and deletes only `task/*` and `runner/*` refs whose
+  tip commit is older than the configured retention window and contained in
+  both `develop` and `main`. Missing refs, active worktrees, changed tips, and
+  origin refresh failures retain the branch. Remote deletes use an exact-tip
+  force-with-lease.
 - `backend/Services/Runner/AgentOutcomeAnalyzer.cs`: terminal sentinel and
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
@@ -108,6 +115,13 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- Remote provider credentials use one protected host file,
+  `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
+  `root:agent` mode `640`, loaded by both Coding and Review units after their
+  existing EnvironmentFile, and provisioned only through SSH stdin. Studio
+  never stores the value. Provider probes inspect only the process environment
+  and CLI status. Provider-specific files, including `claude.env`, are outside
+  the contract.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -141,8 +155,14 @@ state.
   process that runs as either a separately registered `coding` or `review`
   service. Coding continuously claims server-assigned projects with centrally
   managed bounded host slots (`RUNNER_MAX_PARALLELISM` is bootstrap/fallback
-  only), fenced leases + heartbeat, per-task linked git
+  only). The Coding daemon caches the last accepted version under
+  `RUNNER_STATE_DIR/configuration/runtime-capacity.json`, reports the exact
+  applied version on claim polls, and never treats registration delivery alone
+  as an acknowledgement. The Task Server audits the first exact value/version
+  confirmation. It then uses fenced leases + heartbeat, per-task linked git
   worktrees, log/artifact upload, and fenced normal completion into auto-review.
+  Host project access is also versioned in the Task Server, but is enforced
+  during central claim and permit selection rather than copied into the runner.
   Review claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
   and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
@@ -150,6 +170,15 @@ state.
   origin are generation-scoped salvage and immutable result refs described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `runner/RemoteTaskRunner.cs` and
+  `backend/Features/Diagnostics/ArtifactIngestionEndpoints.cs`: the compatibility
+  coding result-return boundary. After the final log flush, the runner uploads
+  every file below its external `JOB_RESULTS_DIR` recursively and requests the
+  application-owned `status.md` projection from `SummaryGenerationService`.
+  The server acknowledges the exact result-path set and summary state before
+  worktree teardown. An incomplete or absent acknowledgement retains the
+  worktree. A genuine summary failure is allowed through so the marked
+  `TaskTransitionService` scaffold remains the honest terminal backstop.
 - `runner/ReviewStateStore.cs`, `runner/DurableReviewProcess.cs`,
   `runner/RemoteReviewDaemon.cs`, and `runner/RemoteReviewExecutor.cs`: durable
   Remote Review handoff. The daemon persists the immutable ReviewAttempt,
@@ -371,6 +400,12 @@ state.
   authenticated `GET /api/v1/management/remote-hosts` route exposes the latest
   retained coding and review snapshots in both the monolith compatibility
   profile and the standalone Task Server profile.
+- Provider-auth advertisement changes are appended to the same bounded recovery
+  history exposed by the management snapshot. Execution Hosts turns that data
+  into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition
+  notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
+  A recognized provider-auth run failure reports unavailability immediately so
+  revocation between periodic probes is visible.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
@@ -598,6 +633,15 @@ state.
   Digest sections are capped and omit raw quota samples and full decision
   prompts/responses. Normal turns use cached quota; only the explicit refresh
   endpoint starts quota probes.
+- Every task-scoped side-sheet message also carries the stable task key from
+  the same synchronous active-tab projection shown in the composer footer.
+  Prompt composition resolves that task through `TaskScannerService` on every
+  turn and adds independently capped task metadata, `prompt.md`, `status.md`
+  when present, and the latest recorded run outcome. This task block is
+  independent of the ORCH-1 digest, so a failed digest lookup is logged and
+  marked as degraded without silently erasing task substance. Each reply
+  persists a context receipt naming the scope and included blocks; the chat UI
+  shows the latest receipt below the answer transcript.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this
@@ -640,17 +684,45 @@ state.
   A process restart replays the original outbox before new claims and never
   starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
   worktree, and consumes no coding or completion budget.
+- Compatibility remote teardown is fail-closed at the older artifact-upload
+  boundary too. Git salvage protects source changes only; it does not collect
+  the runner's external `JOB_RESULTS_DIR` or the Studio task folder. Therefore
+  the final recursive result upload, exact path acknowledgement, and server-side
+  `status.md` generation all precede `GitWorkspace` teardown. A transfer error
+  retains the checkout instead of converting missing evidence into a normal
+  completion.
 - The compatibility Remote completion boundary also fails closed when an older
-  Runner reports `Done` or `NoOp` without the complete `BaseSha`,
-  `ImmutableResultRef`, and `ArtifactManifestDigest` trio. The RunAttempt settles
-  as `Failed` with terminal outcome `unverified`, no ReviewAttempt or
-  ReviewSubject is created, and the card reaches Escalated with category
-  `unverified-delivery`. This closes the legacy path where an immutable-ref push
-  failure intentionally omitted the trio but the server still persisted `Done`
-  and waited for Review to discover the impossible subject. Epic planning and
-  report-only modes remain exempt because they do not produce a coding review
-  subject. The canonical protocol 2 Task Server continues to reject successful
-  coding completion until the matching envelope handoff is acknowledged.
+  Runner reports any coding terminal without a complete `ResultSha`, `BaseSha`,
+  `ImmutableResultRef`, and `ArtifactManifestDigest` envelope. This includes
+  `Blocked`, `NeedsInput`, and `Unknown`, not only `Done` and `NoOp`. The
+  RunAttempt settles as `Failed` with terminal outcome `delivery-failed`; no
+  ReviewAttempt or ReviewSubject is created. The first consecutive envelope
+  failure appends an idempotent status note with the published salvage-fence ref
+  and returns the card to Ready. The durable failure counter survives the lane
+  move and process restarts. A second consecutive failure reaches Escalated with
+  category `unverified-delivery`. A valid envelope or a non-coding completion
+  resets the counter. Epic planning, report-only modes, and repository or
+  environment preparation failures are exempt because they produce no coding
+  delivery. A failed salvage-fence push is not eligible for this retry: the
+  runner retains the worktree and keeps the existing `worktree-blocked`
+  escalation.
+- The July Marathon envelope repair restored best-effort emission of the trio,
+  and the AGT-2250 delivery probe showed that valid envelopes could reach Review.
+  It did not make the trio a teardown precondition: a legacy immutable-result-ref
+  push failure deliberately omitted all three additive fields after salvage.
+  The later server guard checked only `Done` and `NoOp` and escalated those cases
+  immediately. Consequently AGT-2531's `Blocked` outcome bypassed the guard,
+  while AGT-2541's `Done` outcome was detected but had no automatic recovery
+  path. The expanded completion policy and two-attempt delivery-failure budget
+  close both gaps.
+- For every generation-fenced compatibility coding run, `GitWorkspace` commits
+  local changes when present and publishes the generation-scoped salvage fence
+  before attempting the immutable result ref and before removing the worktree.
+  Clean runs publish the fence as well, so an envelope failure can always name a
+  durable recovery ref. If the fence cannot be published and verified, teardown
+  stops and retains the checkout.
+  The canonical protocol 2 Task Server continues to reject completion until the
+  matching envelope handoff is acknowledged.
 - The Task Server stores one result envelope per RunAttempt with repository ID
   and URL, base and result SHA, immutable ref or source-bundle digest,
   artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion
@@ -744,6 +816,22 @@ quietly. The wire contract is
 Run timeline context events retain exact source members so count disclosures
 are inspectable. Terminal run events retain status and duration as structured
 details; the frontend owns their compact, non-redundant sentence projection.
+
+A remote claim refusal is durable task state, not log-only evidence. Claim
+admission records the Runner identity, a stable reason code, readable detail,
+and timestamp in `task.json.remoteDispatchRejection`. Task reads expose the
+current Ready-lane value as `executionLocation.lastRejection`; the card and
+detail header render it inline. Successful dispatch clears it, and a later lane
+generation cannot inherit it. Missing repository registration is also projected
+as a failed project preflight in Execution Hosts before a Runner polls.
+
+`RemoteQueueStarvationWatchdog` independently detects remotely routed Ready
+cards older than `RemoteQueueStarvation:ThresholdMinutes` (30 by default) while
+a live Runner reports free slots. It publishes
+`GET /api/runner/queue-starvation`, emits the rate-limited
+`remote-ready-starvation` warning event, and clears the acute signal when the
+queue or capacity condition recovers. This guard does not depend on recognizing
+the claim refusal reason.
 
 ## Verification
 

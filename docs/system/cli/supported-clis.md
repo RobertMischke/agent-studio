@@ -128,7 +128,13 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 
 **Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Availability and quota probes remain Studio services because they also feed settings and routing surfaces outside an active CAR run.
 
-**Authentication.** Most CLIs auth out-of-band (browser login, env var, gh-cli token). The task processor does **not** drive login flows — if `TestCliPath` succeeds but the CLI is logged out, the failure surfaces when the first quota probe or job starts. New CLIs should make the failure mode obvious in their error message.
+**Authentication.** Studio-local CLIs may still authenticate out of band.
+Remote hosts use the protected provider-auth provisioning flow. Environment
+credentials live only in `/etc/agent-runner/provider-auth.env` on the selected
+host, owned by `root:agent` with mode `640`. Studio sends a replacement through
+SSH stdin and does not persist it. Both remote units load the file after their
+normal runner EnvironmentFile; the probe reads only the resulting process
+environment and the CLI status, never a credential path.
 
 **Remote coding hosts.** The standalone host keeps one primary
 `RUNNER_CLI_BIN` plus `RUNNER_CLAUDE_CLI_BIN` and `RUNNER_CODEX_CLI_BIN`.
@@ -136,7 +142,18 @@ Capability probing tests binary presence and provider authentication for each
 configured provider before the first advertisement. A card requires the
 matching `cli-execution:<cliType>` and `provider-auth:<cliType>` keys. The CAR
 worker receives the matching provider path, so a Claude pin on a Codex-primary
-host cannot fall through to `codex -m <claude-model>`.
+host cannot fall through to `codex -m <claude-model>`. On headless Linux hosts,
+both runner units load `/etc/agent-runner/provider-auth.env`; the Claude worker
+explicitly admits `CLAUDE_CODE_OAUTH_TOKEN` from the process environment after
+clean-context preparation. The probe and worker do not read credential paths.
+
+Execution Hosts renders `OK`, `Unavailable`, or `Unknown` for each advertised
+CLI and exposes the probe detail as a tooltip. Provider-auth state changes are
+retained in capability recovery history. An `OK -> Unavailable` transition
+notifies the operator; an auth-classified run failure reports unavailability
+immediately. Ready cards assigned to a host without usable matching auth show a
+provider sign-in wait reason. If the runner can advertise a known expiry,
+Studio warns during the final 14 days.
 
 ### 2.8 Execution context (read-only observability)
 

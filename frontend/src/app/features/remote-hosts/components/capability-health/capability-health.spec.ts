@@ -53,4 +53,28 @@ describe('CapabilityHealthComponent', () => {
     expect(route.textContent).toContain('Task Server route unreachable');
     expect(route.textContent).toContain('Check the tunnel');
   });
+
+  it('does not label a fresh unavailable provider advertisement as healthy', () => {
+    TestBed.configureTestingModule({ imports: [CapabilityHealthComponent] });
+    const fixture = TestBed.createComponent(CapabilityHealthComponent);
+    fixture.componentRef.setInput('host', {
+      id: 'runner', name: 'Runner', role: 'remote', address: null, clientId: 'runner',
+      status: 'degraded', os: 'Linux', lastHeartbeatAt: new Date().toISOString(),
+      uptimeLabel: null, capabilities: [], cliQuotas: [], stats: null,
+      capabilityHealth: [{
+        key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', reason: null, detail: 'Not logged in',
+        advertisedAt: new Date().toISOString(), freshUntil: new Date().toISOString(),
+        isFresh: true, consecutiveFailures: 0, affectedClaims: [], recoveryHistory: [],
+      }],
+    } satisfies RemoteHost);
+    fixture.detectChanges();
+
+    const capability: HTMLElement = fixture.nativeElement.querySelector(
+      '[data-testid="remote-host-capability-provider-auth:claude"]',
+    );
+    expect(capability.getAttribute('data-state')).toBe('unavailable');
+    expect(capability.textContent).toContain('unavailable');
+    expect(capability.textContent).not.toContain('healthy');
+  });
 });

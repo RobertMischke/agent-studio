@@ -600,6 +600,95 @@ public sealed class TaskLanePipelineEdgeCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task Progress_CompletionReviewMint_ClaimCannotSupersedeBeforeAutoReviewLaneLands()
+    {
+        const string id = "completion-review-mint-race";
+        const string key = "AGT-COMPLETION-REVIEW-MINT-RACE";
+        const string baseSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string resultSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        _fixture.SeedTask(TaskStates.Progress, id, LifecyclePhases.ExecutionRunning, key: key);
+        var authority = _fixture.CreateAttemptAuthority(() => DateTime.UtcNow);
+        var run = authority.AcquireRun(key, "PROJ-002", null, "runner", "host", 60, "claim").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "PROJ-002",
+            run.AttemptId,
+            baseSha,
+            resultSha,
+            "refs/agent-studio/results/completion-review-mint-race",
+            null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "complete"),
+            Outcome = "done",
+            ResultSha = resultSha,
+            ResultEnvelope = envelope,
+            ResultEnvelopeDigest = AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope),
+        });
+        var lifecycle = _fixture.CreateReviewAttemptLifecycle(authority);
+        var request = new CreateReviewAttemptRequest(
+            key, "PROJ-002", resultSha, run.AttemptId,
+            "requirements", "policy", [], "review-create");
+
+        // This is the old interleaving: a claim poll after the mint but before
+        // the lane write. The lifecycle boundary refuses to mint in Progress.
+        Assert.Equal(AttemptWriteStatus.InvalidState,
+            lifecycle.CreateReviewAttemptInAutoReview(
+                _fixture.Scanner.FindJob(id, _fixture.WatchPath)!, request).Status);
+        Assert.Equal(AttemptWriteStatus.NotFound,
+            lifecycle.ClaimNextReview("reviewer", "review-host", "review-instance", 60).Status);
+
+        var transitions = _fixture.CreateTransitions(reviewAttemptLifecycle: lifecycle);
+        Assert.Equal(MoveJobStatus.Success,
+            (await transitions.MoveAsync(id, TaskStates.AutoReview, _fixture.WatchPath)).Status);
+        var created = lifecycle.CreateReviewAttemptInAutoReview(
+            _fixture.Scanner.FindJob(id, _fixture.WatchPath)!, request);
+
+        Assert.True(created.Accepted);
+        Assert.Equal(AttemptWriteStatus.Accepted,
+            lifecycle.ClaimNextReview("reviewer", "review-host", "review-instance", 60).Status);
+        Assert.DoesNotContain(_fixture.Timeline.ReadAll(
+                _fixture.Scanner.FindJob(id, _fixture.WatchPath)!.FolderPath),
+            item => item.Kind == TimelineEventKinds.ReviewAttemptSuperseded
+                    && item.Details is not null
+                    && item.Details.TryGetValue("source", out var source)
+                    && source == "claim-guard");
+    }
+
+    [Fact]
+    public void AutoReview_SupersededCurrentReviewWithCompletedEnvelope_RecoveryReissuesAttempt()
+    {
+        const string id = "superseded-review-recovery";
+        const string key = "AGT-SUPERSEDED-REVIEW-RECOVERY";
+        const string resultSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        _fixture.SeedTask(TaskStates.AutoReview, id, LifecyclePhases.AwaitingReview, key: key);
+        var authority = _fixture.CreateAttemptAuthority(() => DateTime.UtcNow);
+        var run = authority.AcquireRun(key, "PROJ-002", null, "runner", "host", 60, "claim").RunAttempt!;
+        var envelope = new AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope(
+            "PROJ-002", run.AttemptId,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", resultSha,
+            "refs/agent-studio/results/recovery", null,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "complete"),
+            Outcome = "done", ResultSha = resultSha, ResultEnvelope = envelope,
+            ResultEnvelopeDigest = AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(envelope),
+        });
+        var original = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            key, "PROJ-002", resultSha, run.AttemptId, "requirements", "policy", [], "original")).ReviewAttempt!;
+        authority.SupersedeOpenReviewAttempts(taskKey => taskKey == key ? "old claim guard race" : null);
+        var lifecycle = _fixture.CreateReviewAttemptLifecycle(authority);
+
+        Assert.Equal(1, lifecycle.SweepSupersededAutoReviewAttempts());
+        var replacement = authority.GetTaskProjection(key).CurrentReviewAttempt!;
+        Assert.NotEqual(original.AttemptId, replacement.AttemptId);
+        Assert.Equal(AttemptLifecycleState.Pending, replacement.State);
+        Assert.Equal(run.AttemptId, replacement.SourceRunAttemptId);
+        Assert.Equal(0, lifecycle.SweepSupersededAutoReviewAttempts());
+    }
+
+    [Fact]
     public void ArchivedTask_BootSweep_SupersedesPersistedOpenReviewAttempt()
     {
         const string id = "terminal-review-boot-sweep";

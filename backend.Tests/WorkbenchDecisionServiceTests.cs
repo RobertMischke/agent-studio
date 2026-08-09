@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// The write half of the Sichtblick gate (AGT-2375). The decision must land in
+/// The write half of the Workbench Decision gate (AGT-2375). The decision must land in
 /// the Workbench's own <c>workbench.json</c> - that file, not a
 /// <c>.meta.json</c> sidecar, is what the catalogue and the Wiki read.
 /// </summary>
@@ -17,6 +17,25 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
 
     public WorkbenchDecisionServiceTests() => Directory.CreateDirectory(_root);
     public void Dispose() { try { Directory.Delete(_root, true); } catch { } }
+
+    [Theory]
+    [InlineData("old-head", "same-fingerprint", "new-head", "same-fingerprint", null)]
+    [InlineData("same-head", "old-fingerprint", "same-head", "new-fingerprint", "content changed")]
+    [InlineData("old-head", null, "new-head", "same-fingerprint", "revision changed")]
+    [InlineData(null, null, "new-head", "same-fingerprint", "must name")]
+    public void StalenessPolicy_IsFileScopedWhenFingerprintIsAvailable(
+        string? expectedRevision,
+        string? expectedFingerprint,
+        string? currentRevision,
+        string? currentFingerprint,
+        string? errorFragment)
+    {
+        var error = WorkbenchDecisionContracts.StalenessError(
+            expectedRevision, expectedFingerprint, currentRevision, currentFingerprint);
+
+        if (errorFragment == null) Assert.Null(error);
+        else Assert.Contains(errorFragment, error!, StringComparison.OrdinalIgnoreCase);
+    }
 
     [Fact]
     public void Prepare_RejectsAnIncompleteFeatureDraftWithoutTouchingTheDescriptor()
@@ -69,6 +88,17 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
             Actor = "Robert",
             ExpectedFingerprint = fingerprint,
             Task = FeaturePrepare(fingerprint).Task,
+            Responses =
+            [
+                new WorkbenchDecisionResponse
+                {
+                    DecisionId = "route",
+                    Kind = "single",
+                    SelectedOptionIds = ["direct"],
+                    Comment = "Keep the boundary explicit.",
+                },
+            ],
+            SpawnedTaskKeys = ["AGT-2527"],
             Confirmed = true,
         });
 
@@ -84,12 +114,37 @@ public sealed class WorkbenchDecisionServiceTests : IDisposable
         Assert.Equal("decided", history[^1].GetProperty("state").GetString());
         Assert.Contains("Implement the routing policy", history[^1].GetProperty("note").GetString());
         Assert.Equal("succeeded", descriptor.GetProperty("decision").GetProperty("state").GetString());
+        Assert.Equal("route", descriptor.GetProperty("decision").GetProperty("responses")[0]
+            .GetProperty("decisionId").GetString());
+        Assert.Equal("AGT-2527", descriptor.GetProperty("relatedTaskKeys")[0].GetString());
 
         // The descriptor still validates, so the catalogue projects the decision.
         var item = catalogue.List("Project", includeHistory: true)!.Items.Single();
         Assert.Equal("decided", item.Status);
         Assert.Equal("succeeded", item.DecisionStage);
+        Assert.Equal("direct", Assert.Single(item.Decision!.Responses).SelectedOptionIds.Single());
+        Assert.Contains("AGT-2527", item.SourceTaskKeys);
         Assert.False(File.Exists(Descriptor("routing-policy") + ".meta.json"));
+    }
+
+    [Fact]
+    public void Prepare_UsesTheFileFingerprintWhenRepositoryRevisionMovedElsewhere()
+    {
+        WriteSchemaTwo("routing-policy");
+        var (catalogue, decisions) = Services();
+        var fingerprint = catalogue.Read("Project", "routing-policy")!.Fingerprint;
+        var request = FeaturePrepare(fingerprint) with
+        {
+            // The checkout used by this unit fixture has no HEAD. Supplying a
+            // different informational revision therefore exercises the same
+            // matrix branch as an unrelated commit moving a real repository.
+            ExpectedRevision = new string('f', 40),
+        };
+
+        var result = decisions.Prepare("Project", "routing-policy", request);
+
+        Assert.True(result.Success);
+        Assert.Equal(fingerprint, result.Fingerprint);
     }
 
     [Fact]

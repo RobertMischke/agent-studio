@@ -19,15 +19,12 @@ npm i -g @anthropic-ai/claude-code @openai/codex
 npx playwright install --with-deps chromium
 ```
 
-Authenticate each CLI on the host. Do not copy credential files from the
-operator workstation:
-
-```bash
-claude auth login --claudeai
-claude auth status --text
-codex login --device-auth
-codex login status
-```
+Provision Claude authentication in the wizard. Studio sends
+`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` through SSH stdin and installs
+`/etc/agent-runner/provider-auth.env` as `root:agent` mode `640`. The value is
+never retained in Studio, a task, or the repository. Both runner units load the
+same file; the runner probe verifies only the process environment and CLI
+status. Do not copy credential files from the operator workstation.
 
 ## Give the host push identity
 
@@ -132,12 +129,62 @@ Task Server versions the update, enforces the ceiling across Coding RUN leases
 on the host, and returns it on the next claim poll. The Coding daemon adopts it
 without a restart. Existing work continues when the ceiling is lowered; only
 new admission stops. The card distinguishes the central ceiling from the last
-value reported as adopted by the daemon. Review GATE work remains a separate
-pool and does not consume a RUN slot.
+version explicitly confirmed by the daemon. A matching value alone is not an
+acknowledgement. The Task Server records `runtime-capacity.updated` and the
+first matching runner poll records `runtime-capacity.applied`, both with actor
+and timestamp in the audit ledger. Review GATE work remains a separate pool and
+does not consume a RUN slot.
 
 `RUNNER_MAX_PARALLELISM` is no longer the live operator control for a versioned
 Task Server. It seeds the first registration and remains a compatibility
-fallback. Subsequent file changes do not replace the central policy.
+fallback. Subsequent file changes do not replace the central policy. The daemon
+also writes the last accepted policy to
+`RUNNER_STATE_DIR/configuration/runtime-capacity.json`. This file is an atomic
+last-known-good cache, not an operator configuration surface. A replacement
+daemon on the same host restores it before connecting, while the next valid
+Task Server response remains authoritative.
+
+Provision a host policy before the first daemon connects by using expected
+version `0`:
+
+```bash
+curl -sS -X PUT https://tasks.example.com/api/v1/hosts/build-host-02/runtime-capacity \
+  -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: local-default' \
+  -d '{"maxParallelism":4,"targetLoadPercent":80,"rampStrategy":"balanced","expectedVersion":0}'
+```
+
+The first Coding runner registered with `hostId=build-host-02` receives that
+record instead of seeding a value from its environment. During a Task Server
+outage, no new work is claimed and no policy is invented locally. Already
+running work continues only inside its existing lease safety window, using the
+in-memory or cached last-known-good capacity until normal fenced reconciliation
+resumes.
+
+The same host card owns **Project access**. Select all projects or enter the
+stable Task Server project ids that this host may claim. The Task Server stores
+the allowlist as a separate versioned host policy and applies it to both direct
+claims and host-orchestrator work permits. The daemon does not resolve or cache
+this list because the server already owns task selection. Removing a project
+stops new admission but never interrupts an active fenced lease.
+
+An absent policy preserves migration compatibility and allows all projects. An
+explicit selected-project policy with an empty list blocks every new claim.
+Creation uses expected version `0`; later writes use the version returned by
+the server:
+
+```bash
+curl -sS -X PUT https://tasks.example.com/api/v1/hosts/build-host-02/project-policy \
+  -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: local-default' \
+  -d '{"allowAllProjects":false,"allowedProjectIds":["PROJ-002"],"expectedVersion":0}'
+```
+
+Unknown project ids are rejected, stale writes return a version conflict, and
+the audit ledger records `host-project-policy.created` or
+`host-project-policy.updated` with actor and timestamp. Capability health is
+not copied into this policy: the existing Task Server capability advertisement
+and canary admission remain the single capability mechanism.
 
 The workspace status bar defines `running` from the Board's `3-progress`
 snapshot: a local run needs a running process execution and a remote run needs

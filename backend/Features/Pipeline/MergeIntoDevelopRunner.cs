@@ -3,25 +3,24 @@
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// Runs the deferred, operator-triggered "Merge into Develop" post-step
-/// (<see cref="PipelineCatalogue.MergeIntoDevelopStepId"/>). Unlike the automatic
-/// in-run integration (<c>ProjectRunner.IntegrateWorktreeRunAsync</c>, ADR-0052),
-/// this step does NOT run on its own: the catalogue marks it
-/// <see cref="PipelineStep.Deferred"/> so it sits "pending" in the pipeline view
-/// until the operator accepts a done-green task via the "Merge into Develop"
-/// action. Acceptance keeps the task in Human Review with phase
-/// <c>integrating</c> and enqueues this runner for
-/// <see cref="AcceptedIntegrationWorker"/>.
+/// Runs the common "Merge into Develop" post-step
+/// (<see cref="PipelineCatalogue.MergeIntoDevelopStepId"/>). Green fenced Remote
+/// deliveries invoke it immediately before Human Review. Human acceptance invokes
+/// it again when immediate integration failed or a legacy delivery is still
+/// pending. The catalogue remains <see cref="PipelineStep.Deferred"/> because the
+/// ordinary local post-bracket does not execute this step by itself.
 ///
 /// <para>
-/// It performs the real, scoped git merge <c>task/&lt;id&gt; -&gt; develop</c> via
+/// It performs the real, scoped git merge from the resolved delivery ref into
+/// the configured integration branch via
 /// <see cref="GitService.MergeBranchIntoIntegration"/> and records the outcome
 /// into the job's <c>pipeline-execution.json</c> so the deferred step flips from
 /// pending to passed / failed / skipped in place. A merge conflict is recorded
 /// <see cref="PipelineStepStatus.Failed"/> with the conflicted files in the
 /// verdict summary - made visible, never silently resolved - while the working
 /// tree is left clean (the merge is aborted). Only a successful result lets the
-/// acceptance worker move the task to Completed.
+/// acceptance worker move the task to Completed. Immediate Remote failures remain
+/// visible in Human Review and do not claim integration.
 /// </para>
 /// </summary>
 public sealed class MergeIntoDevelopRunner
@@ -98,8 +97,8 @@ public sealed class MergeIntoDevelopRunner
             pipelineType).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Async merge entry point used by the accepted-integration worker and
-    /// durable backstop. A configured
+    /// Async merge entry point used by immediate Remote integration, the
+    /// accepted-integration worker, and its durable backstop. A configured
     /// <c>main</c> target is a release mutation, so it is fail-closed behind the
     /// mandatory full-suite gate and advances only to the exact tested SHA.
     /// </summary>
@@ -141,7 +140,7 @@ public sealed class MergeIntoDevelopRunner
     }
 
     /// <summary>
-    /// True while an accepted integration is inside, or waiting to enter, the
+    /// True while a delivery integration is inside, or waiting to enter, the
     /// serialized merge + build-gate + rollback consistency boundary.
     /// </summary>
     public bool IsMergeGateBusy => Volatile.Read(ref _mergeGateUsers) > 0;
@@ -201,11 +200,11 @@ public sealed class MergeIntoDevelopRunner
                 return stale;
             }
             var delivery = DeliveryRefResolver.Resolve(jobId, jobFolderPath);
-            var branch = reviewSubject is not null
-                ? TaskIntegrationBranch.Name(
-                    reviewSubject.IntegrationBranch,
-                    TaskIntegrationBranch.Name(integrationBranch))
-                : _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
+            // The caller supplies current project/repository truth. A review
+            // subject stores only the branch observed when the run was prepared
+            // and must not retarget acceptance after project settings or
+            // origin/HEAD change.
+            var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
             var taskBranch = delivery.Ref;
             var strategy = IntegrationStrategies.Normalize(integrationStrategy);
             BuildTestGateResult? preMainResult = null;
@@ -282,7 +281,7 @@ public sealed class MergeIntoDevelopRunner
                     ? result.MergedSha
                     : _git.GetBranchTip(repoRoot, branch);
                 MaybeEnqueueIntegrationPush(
-                    project, jobId, jobFolderPath, watchPath, integrationBranch, approvedSha, pipelineType);
+                    project, jobId, jobFolderPath, watchPath, branch, approvedSha, pipelineType);
             }
 
             return result;

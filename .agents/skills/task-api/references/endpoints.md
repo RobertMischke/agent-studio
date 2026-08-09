@@ -138,6 +138,46 @@ Returns `200` (empty body). 404 if slug not found at the resolved watchPath.
 Same effect as `PUT /state`; exists as an alternative verb for clients that
 prefer POST for state changes.
 
+### `POST /api/tasks/batch-move`
+
+Queue up to 500 independent state transitions without occupying the request
+path for their filesystem and Git work. The body is:
+
+```json
+{
+  "items": [
+    { "jobId": "alpha", "watchPath": "C:\\Tasks\\project", "targetState": "7-archive" },
+    { "jobId": "beta", "watchPath": "C:\\Tasks\\project", "targetState": "2-ready" }
+  ]
+}
+```
+
+The response is `202 Accepted`, carries a job snapshot, and sets `Location` to
+the progress endpoint. `status` may already be `running` when the response is
+read.
+
+```json
+{
+  "id": "batch-...",
+  "status": "queued",
+  "total": 2,
+  "completed": 0,
+  "succeeded": 0,
+  "failed": 0,
+  "results": []
+}
+```
+
+### `GET /api/tasks/batch-move/{batchId}`
+
+Read the latest job snapshot. While `status` is `running`, `completed` and
+`results` grow after every card. Each result contains `index`, `jobId`,
+`status`, optional `message`, and `durationMs`. Item statuses include `moved`,
+`not-found`, `conflict`, `rejected`, and `failed`. One item error never stops
+later items. Terminal snapshots also contain `metrics` for total and per-item
+move duration, lane-lock acquisitions/wait/held time, scanner invalidations
+and refresh time, and Git process count/time.
+
 ### `POST /api/tasks/{jobId}/move-to-top?watchPath=...`
 
 Promote a job to the head of `2-ready`. No body. Returns

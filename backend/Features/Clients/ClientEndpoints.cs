@@ -30,26 +30,58 @@ public static class ClientEndpoints
             }
         });
 
-        clients.MapGet("/", (ClientIdentityStore store, AgentStudio.Pipeline.RemoteGateActivityStore gateActivity) =>
+        clients.MapGet("/", (
+            ClientIdentityStore store,
+            AgentStudio.Pipeline.RemoteGateActivityStore gateActivity,
+            ProjectRegistry registry,
+            ProjectSettingsService projectSettings) =>
         {
+            var projects = registry.List();
+            var now = DateTime.UtcNow;
             var summaries = store.ListAll().Select(record =>
             {
+                var summary = ClientSummary.From(record) with
+                {
+                    RunnerProjectPreflights = RemoteProjectClaimabilityPolicy.ProjectForRunner(
+                        record,
+                        projects,
+                        projectSettings,
+                        now),
+                };
                 if (record.RunnerDaemonState is null && record.RunnerGitStatus is null)
-                    return ClientSummary.From(record);
+                    return summary;
                 var gates = gateActivity.ForRunner(record.Id);
-                return ClientSummary.From(record) with
+                return summary with
                 {
                     RunnerActiveGateCount = gates.Active,
                     RunnerGateCapacity = gates.Capacity,
                 };
             }).ToList();
+            summaries.AddRange(store.ListDiagnostics().Select(DiagnosticSummary));
             return Results.Ok(summaries);
         });
 
         clients.MapGet("/{id}", (string id, ClientIdentityStore store, TaskScannerService scanner) =>
         {
             var record = store.Find(id);
-            if (record is null) return Results.NotFound(new { error = "client-not-found" });
+            if (record is null)
+            {
+                var diagnostic = store.FindDiagnostic(id);
+                if (diagnostic is not null)
+                {
+                    return Results.Conflict(new
+                    {
+                        error = "identity-file-corrupt",
+                        message = diagnostic.Message,
+                        file = diagnostic.FileName,
+                        modifiedAt = diagnostic.ModifiedAt,
+                        sizeBytes = diagnostic.SizeBytes,
+                        detail = diagnostic.Detail,
+                        hint = diagnostic.RestoreHint,
+                    });
+                }
+                return Results.NotFound(new { error = "client-not-found" });
+            }
 
             var owned = scanner.ScanAllAutomationJobs()
                 .Where(j => string.Equals(j.OwnerClientId, id, StringComparison.OrdinalIgnoreCase))
@@ -268,4 +300,18 @@ public static class ClientEndpoints
             });
         });
     }
+
+    private static ClientSummary DiagnosticSummary(ClientIdentityFileDiagnostic diagnostic) => new()
+    {
+        Id = diagnostic.IdentityId,
+        DisplayName = diagnostic.IdentityId,
+        Kind = ClientIdentityKinds.Service,
+        RegisteredAt = diagnostic.ModifiedAt,
+        Notes = diagnostic.RestoreHint,
+        IdentityFileError = diagnostic.Message,
+        IdentityFileName = diagnostic.FileName,
+        IdentityFileModifiedAt = diagnostic.ModifiedAt,
+        IdentityFileSizeBytes = diagnostic.SizeBytes,
+        IdentityRestoreHint = diagnostic.RestoreHint,
+    };
 }

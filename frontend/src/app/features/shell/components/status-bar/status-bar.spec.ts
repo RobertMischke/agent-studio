@@ -4,7 +4,18 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { StatusBarComponent } from './status-bar';
+import { formatRunningLabel, StatusBarComponent } from './status-bar';
+
+describe('formatRunningLabel', () => {
+  it.each([
+    { local: 2, remote: 3, expected: '2 local · 3 remote' },
+    { local: 2, remote: 0, expected: '2 local' },
+    { local: 0, remote: 1, expected: '1 remote' },
+    { local: 0, remote: 0, expected: 'no runners' },
+  ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
+    expect(formatRunningLabel(local, remote)).toBe(expected);
+  });
+});
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.

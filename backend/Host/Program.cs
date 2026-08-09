@@ -210,6 +210,7 @@ catch (Exception ex)
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<AccessSecurityStore>();
 builder.Services.AddSingleton<ManagementService>();
+builder.Services.AddSingleton<IProviderAuthProvisioner, SshProviderAuthProvisioner>();
 builder.Services.AddSingleton<MigrationStateStore>();
 builder.Services.AddSingleton<HostTelemetryStore>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteGateActivityStore>();
@@ -280,6 +281,7 @@ builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
 builder.Services.AddSingleton<OrchestratorContextDigestService>();
+builder.Services.AddSingleton<OrchestratorTaskPromptContextComposer>();
 builder.Services.AddSingleton<RemoteChatWorkBroker>();
 builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<ProjectChatStore>();
@@ -324,6 +326,9 @@ builder.Services.AddSingleton<ProjectDeploymentCompiler>();
 builder.Services.AddSingleton<TestRunStore>();
 builder.Services.AddSingleton<TestRunService>();
 builder.Services.AddSingleton<TaskTransitionService>();
+builder.Services.AddSingleton<IBatchMoveItemExecutor, BatchMoveItemExecutor>();
+builder.Services.AddSingleton<BatchMoveJobCoordinator>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchMoveJobCoordinator>());
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
 builder.Services.AddSingleton<ExternalCompletionService>();
@@ -395,6 +400,9 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 builder.Services.AddSingleton<AttemptAuthorityService>();
 builder.Services.AddSingleton<ReviewAttemptTaskLifecycleService>();
 builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
+builder.Services.AddSingleton<RemoteDispatchRejectionStore>();
+builder.Services.AddSingleton<RemoteQueueStarvationWatchdog>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
     sp.GetRequiredService<AttemptAuthorityService>()));
@@ -438,6 +446,7 @@ builder.Services.AddSingleton<BusAggregationCache>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedAdHocUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedTokenSummaryReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedWorkspaceTimelineReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.ProjectTokenReceiptReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedProjectTokenUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.Tokens.TokenAggregationService>();
 // Central step-call dispatch: the concrete Claude runner is wrapped by the
@@ -580,6 +589,8 @@ builder.Services.AddSingleton<ProjectIntegrationViewService>();
 builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<GitCleanupService>();
+builder.Services.AddSingleton<GitBranchRetentionService>();
+builder.Services.AddHostedService<GitBranchRetentionHostedService>();
 // Slice P (ASS-1663): build-profile onboarding validation dry-run.
 builder.Services.AddSingleton<IBuildCommandRunner, ProcessBuildCommandRunner>();
 builder.Services.AddSingleton<BuildProfileValidationService>();
@@ -594,9 +605,11 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // keeps the card in Human Review with phase=integrating and enqueues merge +
 // gate here. Only successful integration moves it to Completed; failures return
 // it to ordinary Human Review with durable evidence. Both queues are latency
-// optimizations; the backstops recover from phase and pipeline facts.
+// optimizations; the backstops recover from phase and pipeline facts. Remote
+// deliveries use the same merge runner before Human Review.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // The channel is intentionally in-memory. Durable phase and pipeline facts
@@ -649,6 +662,7 @@ builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingServi
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
 builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiAgentReadStore>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiAgentReadService>();
 builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();

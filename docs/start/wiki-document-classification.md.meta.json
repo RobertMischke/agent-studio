@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Wiki Document Classification",
+  "source": {
+    "path": "docs/start/wiki-document-classification.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "0aad617afef0428502dba546b40a1015292c01a822b08a5035e2eb20e0ae35b2",
+      "sizeBytes": 3900,
+      "lineCount": 110,
+      "capturedAt": "2026-08-04T18:16:38.3113328Z"
+    }
+  },
+  "agentReads": {
+    "total": 4,
+    "lastReadAt": "2026-08-04T18:16:38.3113328Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:16:38.3113328Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113328Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113328Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113328Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

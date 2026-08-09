@@ -229,6 +229,12 @@ public record ClientSummary
     public DateTime? RunnerEffectiveMaxParallelismAppliedAt { get; init; }
     public int RunnerActiveGateCount { get; init; }
     public int RunnerGateCapacity { get; init; }
+    /// <summary>Present only for a synthetic registry row representing an unreadable identity file.</summary>
+    public string? IdentityFileError { get; init; }
+    public string? IdentityFileName { get; init; }
+    public DateTime? IdentityFileModifiedAt { get; init; }
+    public long? IdentityFileSizeBytes { get; init; }
+    public string? IdentityRestoreHint { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {

@@ -36,7 +36,8 @@ public sealed record ArtifactIngestRequest(
     string? AttemptId = null,
     long? Fence = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    bool FinalizeResult = false);
 
 public sealed record RunnerArtifactUpload(string Path, string ContentBase64);
 
@@ -46,4 +47,6 @@ public sealed record ArtifactIngestResponse(
     List<string> Files,
     string? Message = null,
     string? CommitSha = null,
-    string? CommitStatus = null);
+    string? CommitStatus = null,
+    bool ResultDocumentGenerated = false,
+    string? ResultDocumentStatus = null);

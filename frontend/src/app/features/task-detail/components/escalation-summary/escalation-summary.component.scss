@@ -8,8 +8,6 @@
   flex-direction: column;
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-3) var(--studio-spacing-4);
-  // Workspace-level decision strip, not another inset card. The open inline
-  // edges let it flow into the editor chrome without introducing a status rail.
   border-block: 1px solid color-mix(in srgb, var(--severity-high) 52%, var(--studio-border));
   border-inline: 0;
   border-radius: 0;
@@ -21,14 +19,9 @@
   );
   box-shadow: 0 1px 0 color-mix(in srgb, var(--severity-high) 8%, transparent);
 
-  // Collapsed: just the header strip, tightened up so it stops dominating.
   &--collapsed { padding-block: var(--studio-spacing-2); }
 
-  // DtC step 6 — a GaveUpToHuman escalation (infra crash / inconclusive / quota /
-  // …) wears a distinct amber "system fault" wash instead of the red
-  // decision-needed wash, so it reads apart from a logical / quality escalation
-  // at a glance. R1: the state is carried by the all-round tint, never a left
-  // bar; R5: both themes read the same severity tokens.
+  // System give-ups use an all-round amber wash, never a decorative side bar.
   &--gave-up {
     border-block-color: color-mix(in srgb, var(--severity-warn) 52%, var(--studio-border));
     background: linear-gradient(
@@ -39,77 +32,23 @@
     );
     box-shadow: 0 1px 0 color-mix(in srgb, var(--severity-warn) 8%, transparent);
 
-    .escalation__eyebrow,
-    .escalation__count { color: var(--severity-warn); }
+    .escalation__eyebrow { color: var(--severity-warn); }
   }
 
-  &__reissues {
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
-    padding: var(--studio-spacing-2) var(--studio-spacing-3);
-
-    summary {
-      cursor: pointer;
-      color: var(--studio-fg-strong);
-      font-size: 11px;
-      font-weight: 700;
-    }
-  }
-
-  &__history-count {
-    margin-inline-start: var(--studio-spacing-1);
-    color: var(--studio-fg-dim);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__reissue-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--studio-spacing-2);
-    margin: var(--studio-spacing-2) 0 0;
-    padding-inline-start: var(--studio-spacing-4);
-
-    li { color: var(--studio-fg); }
-  }
-
-  &__reissue-head {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--studio-spacing-2);
-    font-size: 11px;
-
-    time { color: var(--studio-fg-dim); }
-  }
-
-  &__reissue-trigger {
-    display: block;
-    margin-top: var(--studio-spacing-1);
-    color: var(--studio-fg-dim);
-    font-size: 11px;
-    line-height: 1.45;
-  }
-
-  // Expanded body: height-capped with an internal scroll so a long checklist
-  // scrolls in place instead of pushing the rest of the detail view down.
   &__body {
     display: flex;
     flex-direction: column;
     gap: var(--studio-spacing-3);
-    max-height: 340px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    @include m.thin-scroll;
+    min-width: 0;
   }
 
-  // Prominent GaveUpToHuman banner at the top of the body: names the terminal
-  // ("handed to a human"), the escalation category, and the honest reason.
   &__giveup {
     display: flex;
     flex-direction: column;
     gap: var(--studio-spacing-1);
     padding: var(--studio-spacing-2) var(--studio-spacing-3);
-    border-radius: 6px;
     border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+    border-radius: 6px;
     background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
   }
 
@@ -121,240 +60,77 @@
   }
 
   &__giveup-label {
+    color: var(--studio-fg-strong);
     font-size: 12px;
     font-weight: 700;
-    color: var(--studio-fg-strong);
   }
 
   &__giveup-cat {
     display: inline-flex;
     align-items: center;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
+    border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+    color: var(--severity-warn);
     font-size: 10px;
     font-weight: 700;
-    text-transform: uppercase;
     letter-spacing: 0.03em;
-    padding: 2px 8px;
-    border-radius: 999px;
-    color: var(--severity-warn);
-    background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
-    border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+    text-transform: uppercase;
   }
 
   &__giveup-reason {
-    margin: 0;
+    max-height: min(180px, 32vh);
+    overflow: auto;
+    color: var(--studio-fg);
     font-size: 12px;
     line-height: 1.5;
-    color: var(--studio-fg);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    @include m.thin-scroll;
   }
 
   &__giveup-note {
     margin: 0;
+    color: var(--studio-fg-dim);
     font-size: 11px;
     line-height: 1.5;
-    color: var(--studio-fg-dim);
-  }
-
-  &__reason {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--studio-fg);
-  }
-
-  &__cause {
-    color: var(--studio-fg-dim);
-    font-variant: small-caps;
-  }
-
-  &__context {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
-    gap: var(--studio-spacing-4);
-  }
-
-  &__block { min-width: 0; }
-
-  &__block-title {
-    display: flex;
-    align-items: center;
-    gap: var(--studio-spacing-2);
-    margin: 0 0 var(--studio-spacing-2);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--studio-fg-dim);
-  }
-
-  &__count {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--severity-high);
-  }
-
-  &__checklist {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--studio-spacing-2);
-  }
-
-  &__gate-item {
-    display: flex;
-    align-items: baseline;
-    gap: var(--studio-spacing-2);
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--studio-fg);
-
-    &--done {
-      color: var(--studio-fg-dim);
-      text-decoration: line-through;
-    }
-  }
-
-  &__check { flex: 0 0 auto; color: var(--studio-fg-dim); }
-
-  &__gate-text { min-width: 0; }
-
-  &__verdict {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: lowercase;
-    letter-spacing: 0.02em;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: var(--studio-bg-hover);
-    border: 1px solid var(--studio-border);
-    color: var(--studio-fg-dim);
-
-    &--ok {
-      color: var(--severity-pass);
-      background: color-mix(in srgb, var(--severity-pass) 14%, transparent);
-      border-color: color-mix(in srgb, var(--severity-pass) 40%, transparent);
-    }
-    &--warn {
-      color: var(--severity-warn);
-      background: color-mix(in srgb, var(--severity-warn) 14%, transparent);
-      border-color: color-mix(in srgb, var(--severity-warn) 40%, transparent);
-    }
-    &--danger,
-    &--block {
-      color: var(--severity-high);
-      background: color-mix(in srgb, var(--severity-high) 14%, transparent);
-      border-color: color-mix(in srgb, var(--severity-high) 40%, transparent);
-    }
-    &--neutral,
-    &--unknown { color: var(--studio-fg-dim); }
-  }
-
-  &__source,
-  &__empty {
-    margin: var(--studio-spacing-2) 0 0;
-    font-size: 11px;
-    color: var(--studio-fg-dim);
-  }
-
-  &__empty--context { margin: 0; }
-
-  &__verdict-head {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--studio-spacing-2);
-  }
-
-  &__grade {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 6px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 800;
-    border: 1px solid var(--studio-border);
-    color: var(--studio-fg-strong);
-
-    &--ok {
-      color: var(--severity-pass);
-      background: color-mix(in srgb, var(--severity-pass) 16%, transparent);
-      border-color: color-mix(in srgb, var(--severity-pass) 45%, transparent);
-    }
-    &--warn {
-      color: var(--severity-warn);
-      background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
-      border-color: color-mix(in srgb, var(--severity-warn) 45%, transparent);
-    }
-    &--danger {
-      color: var(--severity-high);
-      background: color-mix(in srgb, var(--severity-high) 16%, transparent);
-      border-color: color-mix(in srgb, var(--severity-high) 45%, transparent);
-    }
-
-    // Compact grade chip for the header essence line.
-    &--sm {
-      min-width: 18px;
-      height: 18px;
-      padding: 0 5px;
-      font-size: 11px;
-      font-weight: 700;
-    }
-  }
-
-  &__model {
-    font-size: 11px;
-    color: var(--studio-fg-dim);
-    font-family: var(--font-mono, monospace);
-  }
-
-  &__summary {
-    margin: var(--studio-spacing-2) 0 0;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--studio-fg);
   }
 
   &__delivery {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--studio-spacing-2) var(--studio-spacing-3);
-  }
-
-  &__merge {
-    display: inline-flex;
-    gap: var(--studio-spacing-1);
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-2);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+    color: var(--studio-fg-dim);
     font-size: 11px;
+    font-variant-numeric: tabular-nums;
 
-    &--none { color: var(--studio-fg-dim); }
+    strong { color: var(--studio-fg-strong); }
   }
 
   &__seg {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 1px 8px;
-    border-radius: 999px;
+    gap: var(--studio-spacing-1);
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
     border: 1px solid var(--studio-border);
+    border-radius: 999px;
     color: var(--studio-fg-dim);
 
     &--in {
-      color: var(--severity-pass);
-      background: color-mix(in srgb, var(--severity-pass) 12%, transparent);
       border-color: color-mix(in srgb, var(--severity-pass) 40%, transparent);
+      background: color-mix(in srgb, var(--severity-pass) 12%, transparent);
+      color: var(--severity-pass);
     }
   }
 
-  &__counts {
-    font-size: 11px;
+  &__empty {
+    margin: 0;
     color: var(--studio-fg-dim);
+    font-size: 11px;
   }
-
 }

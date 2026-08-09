@@ -119,6 +119,33 @@ describe('projectStructuredActivityContent', () => {
     expect(agentBodies.join('\n')).not.toContain('<p class=');
   });
 
+  it('annotates apply_patch records with their unique edit targets', () => {
+    const root = 'C:\\Temp\\ass-worktrees\\fixture\\AGT-2526';
+    const lines: CliOutputLine[] = [
+      { timestamp: '2026-08-09T10:00:00.000Z', stream: 'stderr', text: 'OpenAI Codex v0.144.1' },
+      { timestamp: '2026-08-09T10:00:01.000Z', stream: 'stderr', text: 'apply_patch' },
+      { timestamp: '2026-08-09T10:00:02.000Z', stream: 'stderr', text: '*** Begin Patch' },
+      { timestamp: '2026-08-09T10:00:03.000Z', stream: 'stderr', text: `*** Update File: ${root}\\frontend\\src\\app\\campaign.ts` },
+      { timestamp: '2026-08-09T10:00:04.000Z', stream: 'stderr', text: `*** Update File: ${root}\\frontend\\src\\app\\campaign.ts` },
+      { timestamp: '2026-08-09T10:00:05.000Z', stream: 'stderr', text: `*** Add File: ${root}\\frontend\\src\\app\\campaign.spec.ts` },
+      { timestamp: '2026-08-09T10:00:06.000Z', stream: 'stderr', text: '*** End Patch' },
+      { timestamp: '2026-08-09T10:00:07.000Z', stream: 'stderr', text: ' succeeded in 24ms:' },
+      { timestamp: '2026-08-09T10:00:08.000Z', stream: 'stderr', text: 'Done!' },
+    ];
+
+    const result = projectStructuredActivityContent(lines, 'AGT-2526');
+    const tool = result.events.find((event): event is ToolBurstEvent => event.kind === 'toolBurst');
+
+    expect(tool).toMatchObject({
+      families: { edit: 1 },
+      samples: { edit: `${root}\\frontend\\src\\app\\campaign.ts` },
+      files: [
+        `${root}\\frontend\\src\\app\\campaign.ts`,
+        `${root}\\frontend\\src\\app\\campaign.spec.ts`,
+      ],
+    });
+  });
+
   it('recognizes XML-family resource payloads from their tool header and extension', () => {
     const lines: CliOutputLine[] = [
       { timestamp: '2026-07-29T22:16:00.000Z', stream: 'stderr', text: 'OpenAI Codex v0.144.1' },

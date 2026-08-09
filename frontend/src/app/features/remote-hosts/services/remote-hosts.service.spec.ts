@@ -79,6 +79,41 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
+  it('surfaces a corrupt identity and does not request telemetry for it', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      emoji: null,
+      colour: null,
+      kind: 'service',
+      registeredAt: '2026-08-05T14:35:00Z',
+      lastSeenAt: null,
+      tokenBudgetMonthly: null,
+      notes: null,
+      identityFileError: 'identity file corrupt: agent-runner-01.json',
+      identityFileName: 'agent-runner-01.json',
+      identityFileModifiedAt: '2026-08-05T14:35:00Z',
+      identityRestoreHint: 'Restore a valid file or re-register with POST /api/clients/register.',
+    }]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    expect(svc.identityDiagnostics()).toHaveLength(1);
+    expect(svc.hosts().find(host => host.clientId === 'agent-runner-01')).toMatchObject({
+      status: 'offline',
+      identityFileError: 'identity file corrupt: agent-runner-01.json',
+      telemetryLoading: false,
+    });
+    http.expectNone('/api/clients/agent-runner-01/telemetry?window=14d');
+    http.verify();
+  });
+
   it('preserves a loaded 14-day series and replaces an updated active finding', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
@@ -359,6 +394,14 @@ describe('RemoteHostsService client registry hydration', () => {
       runtimeCapacity: capacity,
       effectiveMaxParallelism: 4,
       runtimeCapacityAppliedAt: now,
+      runtimeCapacityAppliedVersion: 1,
+      projectPolicy: {
+        hostId: 'host-a',
+        allowAllProjects: false,
+        allowedProjectIds: ['PROJ-001'],
+        version: 2,
+        updatedAt: now,
+      },
     }]);
 
     svc.setCapacity('agent-runner-01', 6, 85, 'aggressive');
@@ -388,6 +431,24 @@ describe('RemoteHostsService client registry hydration', () => {
       effectiveMaxParallelism: 4,
       busyAction: null,
     });
+
+    svc.setProjectPolicy('agent-runner-01', false, ['PROJ-002'], 2);
+    const projectPolicyRequest = http.expectOne('/api/v1/hosts/host-a/project-policy');
+    expect(projectPolicyRequest.request.method).toBe('PUT');
+    expect(projectPolicyRequest.request.body).toEqual({
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-002'],
+      expectedVersion: 2,
+    });
+    projectPolicyRequest.flush({
+      hostId: 'host-a',
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-002'],
+      version: 3,
+      updatedAt: now,
+    });
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.projectPolicy)
+      .toMatchObject({ version: 3, allowedProjectIds: ['PROJ-002'] });
     http.verify();
   });
 
@@ -510,6 +571,7 @@ describe('RemoteHostsService client registry hydration', () => {
       },
       effectiveMaxParallelism: 6,
       runtimeCapacityAppliedAt: now,
+      runtimeCapacityAppliedVersion: 3,
     };
 
     svc.reload();
@@ -526,10 +588,18 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
     });
-    http.expectOne('/api/v1/management/remote-hosts').flush([snapshot]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      ...snapshot,
+      effectiveMaxParallelism: null,
+      runtimeCapacityAppliedAt: null,
+      runtimeCapacityAppliedVersion: null,
+    }]);
 
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       runtimeCapacity: { maxParallelism: 6, rampStrategy: 'conservative', version: 3 },
+      effectiveMaxParallelism: null,
+      runtimeCapacityAppliedAt: null,
+      runtimeCapacityAppliedVersion: null,
     });
 
     // And the write still goes to the versioned Task Server route.

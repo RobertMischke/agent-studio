@@ -3,11 +3,11 @@ using System.Collections.Concurrent;
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// AGT-2202 - computes the honest, git-derived integration verdict for accepted
-/// cards (5-human-review / 6-completed / 7-archive): is the task's work actually
-/// folded into the integration branch (develop)? The result is attached to
+/// AGT-2202 - computes the honest, git-derived integration verdict for delivered
+/// cards (4-auto-review / 5-human-review / 6-completed / 7-archive): is the task's
+/// work actually folded into the integration branch (develop)? The result is attached to
 /// <see cref="TaskInfo.Integration"/> so the board renders a single, unambiguous
-/// "integrated / not integrated / conflict / no branch" badge on every accepted
+/// "integrated / not integrated / conflict / no branch" badge on every delivered
 /// card, and so the accept flow can flag an accept-without-merge the moment it
 /// happens.
 ///
@@ -53,9 +53,10 @@ public sealed class TaskIntegrationStatusService
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly ILogger<TaskIntegrationStatusService> _logger;
 
-    /// <summary>The accepted lanes this verdict applies to. Cards outside get no entry.</summary>
-    internal static readonly HashSet<string> AcceptedLanes = new(StringComparer.Ordinal)
+    /// <summary>The delivered lanes this verdict applies to. Cards outside get no entry.</summary>
+    internal static readonly HashSet<string> DeliveredLanes = new(StringComparer.Ordinal)
     {
+        TaskStates.AutoReview,
         TaskStates.HumanReview,
         TaskStates.Completed,
         TaskStates.Archive,
@@ -92,10 +93,10 @@ public sealed class TaskIntegrationStatusService
     }
 
     /// <summary>
-    /// Per-<see cref="TaskInfo.TaskKey"/> integration verdict for the accepted cards
-    /// in the given board set. Only cards in <see cref="AcceptedLanes"/> get an
-    /// entry; every other card carries no verdict and the card renders none. Never
-    /// throws.
+    /// Per-<see cref="TaskInfo.TaskKey"/> integration verdict for delivered cards
+    /// in the given board set. Auto Review is included because a green Remote
+    /// delivery now integrates before it moves to Human Review. Every earlier
+    /// lane carries no verdict and the card renders none. Never throws.
     /// </summary>
     public Dictionary<string, TaskIntegrationStatus> BuildLookup(IReadOnlyCollection<TaskInfo> jobs)
     {
@@ -108,7 +109,7 @@ public sealed class TaskIntegrationStatusService
         var noRepo = new List<TaskInfo>();
         foreach (var job in jobs)
         {
-            if (!AcceptedLanes.Contains(job.State)) continue;
+            if (!DeliveredLanes.Contains(job.State)) continue;
             var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
             if (string.IsNullOrWhiteSpace(root))
             {
@@ -203,25 +204,18 @@ public sealed class TaskIntegrationStatusService
         TaskIntegrationStatus? status)
     {
         var lastMerge = ReadLatestMergeStep(job);
-        if (lastMerge?.Status == PipelineStepStatus.Passed
-            && status?.Status == IntegrationStatuses.Integrated)
+        if (status?.Status == IntegrationStatuses.Integrated
+            && lastMerge?.Status != PipelineStepStatus.Pending)
         {
             return new AcceptedIntegrationRecoveryDecision(
                 AcceptedIntegrationRecoveryAction.Finalize,
-                "Git and the terminal merge step prove integration.",
+                "Git proves that the attributed delivery is integrated; no merge replay is required.",
                 lastMerge);
         }
 
-        // The attributed delivery can be fully integrated while a later fenced
-        // lifecycle snapshot is intentionally not a delivery expectation.
-        if (status?.Status == IntegrationStatuses.Integrated
-            && !IsFencedDeliveryIntegrated(job))
-        {
-            return new AcceptedIntegrationRecoveryDecision(
-                AcceptedIntegrationRecoveryAction.Finalize,
-                "The attributed delivery is integrated; the fenced lifecycle snapshot is not required.",
-                lastMerge);
-        }
+        // BP-02: a crash can leave the merge commit in local ancestry while the
+        // exact-SHA gate verdict is still pending. That state must resume the
+        // runner rather than treating ancestry as proof that the gate ran.
 
         if (IsDecidedIntegrationAttempt(lastMerge, job))
         {
@@ -307,7 +301,7 @@ public sealed class TaskIntegrationStatusService
         var anchor = AnchorFor(job);
         var hasWork = anchor != null || deliveryRef != null;
 
-        if (repoResolved && ReadMergeConflict(job) is { } conflictDetail)
+        if (repoResolved && ReadMergeConflict(job, branchName) is { } conflictDetail)
             return new TaskIntegrationStatus
             {
                 Status = IntegrationStatuses.ConflictSkipped,
@@ -386,27 +380,28 @@ public sealed class TaskIntegrationStatusService
     /// merge was recorded conflicted / errored, else null. Local file read only (no
     /// git spawn); best-effort - any failure reads as "no recorded conflict".
     /// </summary>
-    private string? ReadMergeConflict(TaskInfo job)
+    private string? ReadMergeConflict(TaskInfo job, string integrationBranch)
     {
         var step = ReadLatestMergeStep(job);
         if (step is null) return null;
         if (string.Equals(step.Verdict, "conflict", StringComparison.OrdinalIgnoreCase))
         {
-            var evidence = step.VerdictSummary ?? step.Reason ?? "Merge into develop hit a conflict; not merged.";
+            var evidence = step.VerdictSummary ?? step.Reason
+                ?? $"Merge into {integrationBranch} hit a conflict; not merged.";
             var delivery = ReviewSubjectStore.Read(job.FolderPath)?.ResultRef
                 ?? WorktreeTaskLifecycle.BranchFor(job.Id);
             return $"{evidence} Start the integration recovery action to run a steer round: "
-                   + $"rebase '{delivery}' onto the current integration branch '{ConfiguredIntegrationBranch(job)}', "
+                   + $"rebase '{delivery}' onto the current integration branch '{integrationBranch}', "
                    + "resolve the conflicts, and deliver the updated branch.";
         }
         // The pre-develop build gate found the merge result red and rolled the
         // integration branch back: the work is genuinely not in develop, so the
         // card must read as not-integrated with the gate's reason attached.
         if (string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
-            return step.Reason ?? "The build gate blocked the merge into develop; not merged.";
+            return step.Reason ?? $"The build gate blocked the merge into {integrationBranch}; not merged.";
         if (step.Status == PipelineStepStatus.Failed
             && string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase))
-            return step.Reason ?? "Merge into develop failed; not merged.";
+            return step.Reason ?? $"Merge into {integrationBranch} failed; not merged.";
         return null;
     }
 
@@ -554,9 +549,7 @@ public sealed class TaskIntegrationStatusService
 
     private string ConfiguredIntegrationBranch(TaskInfo task)
     {
-        return TaskIntegrationBranch.Resolve(
-            task,
-            _settings.Get(task.ProjectName).IntegrationBranch);
+        return _settings.Get(task.ProjectName).IntegrationBranch;
     }
 
     internal void InvalidateCache() => _cache.Invalidate();

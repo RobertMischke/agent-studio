@@ -371,6 +371,26 @@ describe('TaskService', () => {
     });
     req.flush({});
   });
+
+  it('queues a batch move and reads its progress by handle', () => {
+    const items = [
+      { jobId: 'alpha', watchPath: 'C:/projects/demo', targetState: '7-archive' },
+      { jobId: 'beta', watchPath: 'C:/projects/demo', targetState: '7-archive' },
+    ];
+    let batchId = '';
+
+    service.startBatchMove(items).subscribe((job) => { batchId = job.id; });
+    const start = http.expectOne('/api/tasks/batch-move');
+    expect(start.request.method).toBe('POST');
+    expect(start.request.body).toEqual({ items });
+    start.flush({ id: 'batch-123', status: 'queued', total: 2, completed: 0, results: [] });
+    expect(batchId).toBe('batch-123');
+
+    service.getBatchMove(batchId).subscribe();
+    const progress = http.expectOne('/api/tasks/batch-move/batch-123');
+    expect(progress.request.method).toBe('GET');
+    progress.flush({ id: batchId, status: 'running', total: 2, completed: 1, results: [] });
+  });
 });
 
 describe('orchestratorContextChatSegment', () => {

@@ -39,6 +39,26 @@
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }
 
+  @if (identityDiagnostics().length) {
+    <section class="rh__identity-errors"
+             role="alert"
+             data-testid="remote-hosts-identity-errors">
+      <strong>Client identity registry needs repair</strong>
+      <p>Affected runners cannot start until each identity file is restored.</p>
+      <ul>
+        @for (diagnostic of identityDiagnostics(); track diagnostic.identityFileName || diagnostic.id) {
+          <li>
+            <code>{{ diagnostic.identityFileError }}</code>
+            @if (diagnostic.identityFileModifiedAt) {
+              <span>Last modified {{ diagnostic.identityFileModifiedAt }}</span>
+            }
+            <span>{{ diagnostic.identityRestoreHint }}</span>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
   @if (total() === 0 && !loading()) {
     <div class="rh__empty" data-testid="remote-hosts-empty">
       No execution hosts registered yet. This local machine and remote runners
@@ -55,6 +75,7 @@
         [projectSlots]="projectSlots(host)"
         (action)="onAction($event)"
         (capacityChange)="onCapacityChange($event)"
+        (projectPolicyChange)="onProjectPolicyChange($event)"
         (setup)="openSetup($event)" />
     }
   </div>

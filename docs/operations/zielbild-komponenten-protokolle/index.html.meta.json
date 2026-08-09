@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "index",
+  "source": {
+    "path": "docs/operations/zielbild-komponenten-protokolle/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "5efd911fd39b5fb5a3295d0da07e5b36d7f2c9b96536d26322eab6408f698f82",
+      "sizeBytes": 16891,
+      "lineCount": 196,
+      "capturedAt": "2026-08-04T18:18:38.8347351Z"
+    }
+  },
+  "agentReads": {
+    "total": 2,
+    "lastReadAt": "2026-08-04T18:18:38.8347351Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:18:38.8347351Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:18:38.8347351Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

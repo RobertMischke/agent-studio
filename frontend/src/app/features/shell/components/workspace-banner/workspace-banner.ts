@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, s
 import { HttpClient } from '@angular/common/http';
 import { NotificationService } from '../../../../services/notification.service';
 import type { NotificationKind } from '../../../../models/app-dialog.model';
+import { RemoteQueueStarvationBannerComponent } from '../remote-queue-starvation-banner/remote-queue-starvation-banner';
 
 /**
  * F56: workspace auto-review verdicts now render as toasts in the unified
@@ -44,6 +45,7 @@ const BANNER_TOPICS: ReadonlySet<string> = new Set([
 @Component({
   selector: 'app-workspace-banner',
   standalone: true,
+  imports: [RemoteQueueStarvationBannerComponent],
   templateUrl: './workspace-banner.html',
   styleUrl: './workspace-banner.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

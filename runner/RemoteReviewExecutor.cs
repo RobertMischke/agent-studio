@@ -98,6 +98,23 @@ public sealed class RemoteReviewExecutor
         var workerStarted = slot.ProcessId is not null || DurableReviewProcess.HasCompleted(slot);
         try
         {
+            // A completed persisted slot is terminal work from the previous
+            // daemon generation. Reporting it must never materialize or launch
+            // another worker under the adopted fence.
+            if (reattach && DurableReviewProcess.HasCompleted(slot))
+            {
+                var completedResult = DurableReviewProcess.Attach(slot).ReadResult();
+                if (completedResult is not null)
+                {
+                    slot = _state.Save(slot with { Phase = "finalizing" });
+                    return await FinalizeResultAsync(
+                        slot,
+                        workspace,
+                        completedResult,
+                        CancellationToken.None);
+                }
+            }
+
             if (!reattach)
             {
                 try

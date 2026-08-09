@@ -24,6 +24,7 @@ namespace AgentRunner.Tests;
 /// pins (P1, P5 incl. the plaintext no-sentinel protection) are asserted
 /// explicitly on top.</para>
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class CarWorkerExecutionTests : IDisposable
 {
     private readonly string _root = Path.Combine(
@@ -112,6 +113,38 @@ public sealed class CarWorkerExecutionTests : IDisposable
         Assert.Equal(
             run.ResultsDirectory,
             run.SpawnedEnvironment!["JOB_RESULTS_DIR"]);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Clean_context_admits_the_process_environment_claude_token_only_when_provisioned(
+        bool tokenProvisioned)
+    {
+        if (NodeMissing()) return;
+        const string dummyToken = "dummy-claude-setup-token-for-unit-test";
+        using var environment = new EnvironmentVariableScope(
+            ProviderAuthEnvironment.ClaudeCodeOAuthToken,
+            tokenProvisioned ? dummyToken : null);
+
+        var run = await RunFixtureAsync(Fixture.Load("p1-happy-done.claude.fixture"));
+
+        Assert.NotNull(run.SpawnedEnvironment);
+        if (tokenProvisioned)
+        {
+            Assert.True(
+                string.Equals(
+                    dummyToken,
+                    run.SpawnedEnvironment![ProviderAuthEnvironment.ClaudeCodeOAuthToken],
+                    StringComparison.Ordinal),
+                "The spawned Claude process did not receive the arranged setup token.");
+        }
+        else
+        {
+            Assert.DoesNotContain(
+                ProviderAuthEnvironment.ClaudeCodeOAuthToken,
+                run.SpawnedEnvironment!.Keys);
+        }
     }
 
     [Fact]
@@ -450,6 +483,21 @@ public sealed class CarWorkerExecutionTests : IDisposable
         {
             return true;
         }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _original;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _original = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose() => Environment.SetEnvironmentVariable(_name, _original);
     }
 
     private sealed record Fixture(

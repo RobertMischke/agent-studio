@@ -1,0 +1,50 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "index",
+  "source": {
+    "path": "docs/operations/lagebild-2026-08/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "13660e084fa24b848aa839ab37814d353b8b7d52950ca144f7b1636784da3116",
+      "sizeBytes": 25774,
+      "lineCount": 481,
+      "capturedAt": "2026-08-04T18:16:38.3113569Z"
+    }
+  },
+  "agentReads": {
+    "total": 7,
+    "lastReadAt": "2026-08-04T18:17:38.5723006Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:17:38.5723006Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:17:38.5723006Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:17:38.5723006Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113569Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113569Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113569Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113569Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

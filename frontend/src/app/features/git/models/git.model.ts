@@ -166,7 +166,13 @@ export interface GitProjectInventory {
   error: string | null;
 }
 
-export type IntegrationQueueState = 'merged' | 'waiting' | 'conflict' | 'skipped';
+export type IntegrationQueueState =
+  | 'merged'
+  | 'waiting'
+  | 'conflict'
+  | 'skipped'
+  | 'legacy-unverifiable'
+  | 'superseded';
 
 export interface IntegrationQueueItem {
   taskId: string;

@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe('EscalationSummaryComponent', () => {
-  it('renders the review grade, follow-up gate checklist, delivery context and recommendation', () => {
+  it('renders the structured council findings, artifacts, delivery context and recommendation', () => {
     const fixture = mount({
       followUp: '- [ ] Frontend Playwright verification skipped.\n- [ ] Live Haiku probe not run.',
       reviews: [
@@ -79,6 +79,20 @@ describe('EscalationSummaryComponent', () => {
           model: 'claude-opus-4-8',
           cliType: 'claude',
           runAt: '2026-07-09T19:22:02Z',
+          councilReaction: {
+            createdAt: '2026-07-09T19:22:03Z',
+            reviewFileName: 'code-review-grade-2026-07-09T19-22-02Z.md',
+            grade: 'B',
+            disposition: 'Escalate',
+            summary: 'Escalate two open findings; loop budget exhausted.',
+            assessments: [
+              { finding: 'Frontend verification missing.', action: 'Escalate', reason: 'Budget exhausted.' },
+              { finding: 'Live probe missing.', action: 'Escalate', reason: 'Budget exhausted.' },
+            ],
+            startsNewRound: false,
+            targetJobId: null,
+            targetRunAttempt: null,
+          },
         },
       ],
       events: [
@@ -94,15 +108,19 @@ describe('EscalationSummaryComponent', () => {
     });
     const el: HTMLElement = fixture.nativeElement;
 
-    // Review verdict head
-    expect(el.querySelector('[data-testid="escalation-review-grade"]')?.textContent?.trim()).toBe('B');
-    expect(el.querySelector('[data-testid="escalation-review-verdict"]')?.textContent?.trim()).toBe('pass');
-    expect(el.querySelector('[data-testid="escalation-review-summary"]')?.textContent).toContain('Solid first slice');
+    expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).toContain(
+      '1 review round · Grade B · 2 open findings · Reissue budget exhausted',
+    );
+    expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).not.toContain('Frontend Playwright');
+    expect(el.querySelector('[data-testid="escalation-grade-documents"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="escalation-council-follow-up"]')?.textContent).toContain(
+      'Escalate two open findings',
+    );
 
-    // Gate checklist from the follow-up file
+    // Findings come from the typed council reaction, not the follow-up Markdown.
     const gateItems = el.querySelectorAll('[data-testid="escalation-gate-items"] li');
     expect(gateItems.length).toBe(2);
-    expect(el.querySelector('[data-testid="escalation-gate-source"]')?.textContent).toContain('follow-up checklist');
+    expect(el.querySelector('[data-testid="escalation-gate-source"]')?.textContent).toContain('Council reaction');
     expect(el.querySelector('[data-testid="escalation-gate-count"]')?.textContent).toContain('2 open');
 
     // Delivery context
@@ -115,9 +133,6 @@ describe('EscalationSummaryComponent', () => {
     expect(recommendation?.tagName).toBe('SPAN');
     expect(recommendation?.getAttribute('data-label-kind')).toBe('status');
     expect(recommendation?.getAttribute('aria-label')).toBe('Recommendation: Needs decision');
-    expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).toContain(
-      'Delivered and merged; waiting for your decision because the reissue budget is exhausted',
-    );
     expect(el.querySelector('[data-testid="escalation-reissue-1"]')?.textContent).toContain('npm test exit 1');
   });
 
@@ -143,13 +158,17 @@ describe('EscalationSummaryComponent', () => {
     });
     const el: HTMLElement = fixture.nativeElement;
 
-    expect(el.querySelector('[data-testid="escalation-reason"]')?.textContent).toContain('completion gate');
-    expect(el.querySelector('[data-testid="escalation-gate-source"]')?.textContent).toContain('completion-gate findings');
+    expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).toContain(
+      '0 review rounds · Grade not recorded · 1 open finding · Completion gate',
+    );
+    expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).not.toContain(
+      'completion gate found unfinished work',
+    );
+    expect(el.querySelector('[data-testid="escalation-gate-source"]')?.textContent).toContain('Completion-gate findings');
     const gateItems = el.querySelectorAll('[data-testid="escalation-gate-items"] li');
     expect(gateItems.length).toBe(1);
     expect(gateItems[0].textContent).toContain('missing regression');
-    // Empty review context is omitted instead of rendering a placeholder column.
-    expect(el.querySelector('[data-testid="escalation-review-head"]')).toBeNull();
+    expect(el.querySelector('[data-testid="escalation-grade-documents"]')).toBeNull();
   });
 
   it('places the three decisions in the panel and emits the existing triage action', () => {
@@ -179,12 +198,12 @@ describe('EscalationSummaryComponent', () => {
     const el: HTMLElement = mount({ reviews: [], detail: empty }).nativeElement;
 
     expect(el.querySelector('[data-testid="escalation-context-empty"]')?.textContent?.trim()).toBe(
-      'No structured context was recorded.',
+      'No structured findings, review artifacts, or delivery context were recorded.',
     );
     expect(el.querySelector('[data-testid="escalation-gate-items"]')).toBeNull();
-    expect(el.querySelector('[data-testid="escalation-review-head"]')).toBeNull();
+    expect(el.querySelector('[data-testid="escalation-grade-documents"]')).toBeNull();
     expect(el.querySelector('[data-testid="escalation-delivery"]')).toBeNull();
-    expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).not.toContain('gate points');
+    expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).toContain('0 open findings');
   });
 });
 
@@ -234,7 +253,7 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
     expect(el.querySelector('[data-testid="escalation-body"]')).toBeNull();
   });
 
-  it('carries the reconciled state and grade without duplicating the merge badge', () => {
+  it('carries the structured essence without duplicating the merge badge', () => {
     const el: HTMLElement = mount({
       reviews: [
         {
@@ -248,8 +267,9 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
         },
       ],
     }).nativeElement;
-    expect(el.querySelector('[data-testid="escalation-essence-grade"]')?.textContent?.trim()).toBe('B');
-    expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).toContain('Delivered and merged');
+    expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).toContain(
+      '1 review round · Grade B · 0 open findings',
+    );
     expect(el.querySelectorAll('[data-testid="escalation-essence-merge"]')).toHaveLength(1);
   });
 });

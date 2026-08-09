@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "workbench",
+  "source": {
+    "path": "docs/quality/architecture-quality-layer/workbench.json",
+    "type": "json",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "874744194fab308fe18858a2f48e1f1f30019f1d3bd7d1fc718844746186b0ac",
+      "sizeBytes": 734,
+      "lineCount": 22,
+      "capturedAt": "2026-08-04T18:17:38.5723012Z"
+    }
+  },
+  "agentReads": {
+    "total": 3,
+    "lastReadAt": "2026-08-04T18:17:38.5723012Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:17:38.5723012Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:17:38.5723012Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:17:38.5723012Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

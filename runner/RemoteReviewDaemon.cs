@@ -315,6 +315,21 @@ public sealed class RemoteReviewDaemon
                     $"exiting for re-registration: {fatal.Message}");
                 throw;
             }
+            catch (TaskServerException exception) when (
+                ReviewClaimRegistrationRecovery.IsRequired(exception)
+                && !shutdown.IsCancellationRequested)
+            {
+                _log(
+                    $"review claim authority lost code={exception.ErrorCode}; " +
+                    "performing full review executor re-registration");
+                await WithServerRetryAsync(
+                    "review claim authority recovery registration",
+                    () => _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown),
+                    connectivity,
+                    () => active.Count,
+                    shutdown);
+                nextCapabilityAdvertisement = DateTime.MinValue;
+            }
             catch (Exception exception) when (RemoteRunnerDaemon.IsTransientServerFault(exception))
             {
                 var delay = TaskServerConnectivityMonitor.RetryDelay(

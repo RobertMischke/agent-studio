@@ -162,13 +162,13 @@ public static class TimelineEventKinds
     /// </summary>
     public const string IntegrationStarted = "integration_started";
     /// <summary>
-    /// The acceptance integration reached Merged/AlreadyMerged and the task
-    /// became eligible for Completed.
+    /// Delivery integration reached Merged/AlreadyMerged, either immediately
+    /// before Human Review or through the acceptance backstop.
     /// </summary>
     public const string IntegrationSucceeded = "integration_succeeded";
     /// <summary>
-    /// The acceptance integration failed. The task remains in Human Review and
-    /// the pipeline record carries the concrete outcome and evidence.
+    /// Delivery integration failed. The pipeline record carries the concrete
+    /// outcome and evidence; Human Review acceptance may retry it.
     /// </summary>
     public const string IntegrationFailed = "integration_failed";
     /// <summary>

@@ -1,4 +1,4 @@
-# Token Aggregation — Audit and Consolidation Plan
+# Token Aggregation: Sources, Aggregation, and Migration Record
 
 > **Concept + living knowledge page:**
 > [`docs/concepts/token-aggregation.md`](../../concepts/token-aggregation.md)
@@ -6,12 +6,15 @@
 > is the knowledge-collection point for this area. This document is the
 > system-of-record plan and migration record.
 
-> **Status (2026-05-11):** Phase 4+5 complete. Every surface that
-> `ITokenAggregator` exposes now reads through a bus-backed reader; the
-> legacy services (`TokenSummaryService`, `WorkspaceTokensTimelineService`,
-> `ProjectTokenUsageService`) stay registered for the parity-test fixture
-> and for older direct callers that still go through their concrete types, but
-> `TokenAggregationService` never reaches into them. Each surface ships
+> **Status (2026-08-09):** Project and task-card surfaces read a deduplicated
+> union of the historical token bus and durable `task.json.tokenSummary`
+> receipts. The bus remains the historical source, while task receipts are the
+> current source for remote runner calls. Project summary, heatmap, and pipeline
+> cost responses include the newest successfully read usage timestamp and
+> report partial or unavailable sources instead of presenting an unexplained
+> zero. The legacy services (`TokenSummaryService`,
+> `WorkspaceTokensTimelineService`, `ProjectTokenUsageService`) retain the pure
+> fold helpers used by the canonical readers and parity fixtures. Each surface ships
 > with a Phase-5 parity test
 > (`TokenSummaryBusParityTests`, `WorkspaceTokensTimelineBusParityTests`,
 > `ProjectTokenUsageBusParityTests`, alongside the earlier
@@ -30,18 +33,52 @@ because each aggregator rounds, filters, and categorises in its own way.
 This is the same drift pattern the codebase already eliminated for CLI
 invocations (`ICliOneShot`), JSONL appends (`IJsonlAppender`), and frontmatter
 parsing (`FrontmatterParser`). The fix is the same shape: one canonical
-aggregator (`ITokenAggregator`), one source of truth (the Agent Message Bus),
-and a drift rule that flags new ad-hoc roll-ups.
+aggregator (`ITokenAggregator`), explicit source precedence, and a drift rule
+that flags new ad-hoc roll-ups.
+
+## July 11 remote-runner telemetry gap
+
+The Project Token Usage page stopped receiving current calls when remote task
+execution became the primary run path around 2026-07-11. The local
+`ProjectRunner` mirrors completed CLI usage to the Agent Message Bus through
+`EmitTokenUsageRichAsync`. `RemoteTaskRunner` does not execute that code. Its
+lease completion envelope carries the run outcome and evidence, but no token
+usage payload. As a result, the historical bus stayed readable and lifetime
+totals remained near 2 billion tokens, while rolling windows and heatmaps
+quietly aged out.
+
+The task layout migration from legacy lane folders to
+`tasks/<three-digit-bucket>/<task-id>` was not itself a timestamp parsing bug.
+It did make a direct lane-folder-only fallback insufficient. The receipt reader
+therefore supports both layouts and enumerates every bucket, including later
+buckets such as `tasks/002`.
+
+The repair deliberately changes the read side instead of recreating the lost
+bus write at remote completion:
+
+- `task.json.tokenSummary` is already the durable token receipt used by current
+  task-card token chips. It retains per-call timestamps, participants, models,
+  and token dimensions.
+- Historical bus entries remain in the aggregate. Receipt calls are merged by
+  task, timestamp, and token dimensions with multiset deduplication, so an
+  overlap does not count twice and the pre-July lifetime is retained.
+- Project pipeline cost uses receipt calls when a task has them, mapping
+  `agent:*` to core, `support:*` to aspect, and `orchestrator:*` to orchestrator.
+  Tasks without receipts retain their historical `pipeline-execution.json`
+  records, including previous attempts.
+- `freshness.status`, `freshness.asOf`, `freshness.warning`, and
+  `freshness.sources` make source health part of the API contract. A read
+  failure produces partial or unavailable data rather than a silent zero.
 
 ## The five duplicated aggregators
 
 | # | Service | Source file | Reads | Produces | Consumed by |
 |---|---------|-------------|-------|----------|-------------|
-| 1 | `AdHocUsageService` (read path) over `AdHocUsageRecorder` | `backend/Services/AdHoc/AdHocUsageService.cs`, `AdHocUsageRecorder.cs` | `adhoc-usage.jsonl` (workspace-wide) | Per-source / per-day / per-model rollup of one-shot Haiku calls | `GET /api/adhoc/usage` — ad-hoc usage chart in the status-bar modal |
-| 2 | `ProjectTokenUsageService` | `backend/Services/Runner/ProjectTokenUsageService.cs` | `orchestrator.jsonl` (per project) + job-folder scan | Lifetime/24h summary with Job/Supporting/Orchestrator split; per-day × per-job heatmap; expensive-jobs top-N; per-job drill-down with deltas | `GET /api/projects/{project}/token-usage/*` — Project-Detail Token-Usage panel |
-| 3 | `WorkspaceTokensTimelineService` | `backend/Services/Runner/WorkspaceTokensTimelineService.cs` | `orchestrator.jsonl` for *every* watched project | (project × time-bucket) cells with priced dollars | `GET /api/workspace/tokens` — `#/workspace/tokens` stacked timeline |
-| 4 | `TokenSummaryService` + `TokenSummary` | `backend/Services/Runner/TokenSummary.cs` | `orchestrator.jsonl` (per project) | Per-project lifetime totals + per-model split + estimated dollars; aggregate across all projects | Project-card last-usage, status-bar usage modal, `JobEndpointHelpers.WithRuntime` per-job rollups |
-| 5 | `BusAggregationCache` (the canonical one) | `backend/Services/Bus/BusAggregationCache.cs` | `logs/bus/*.jsonl` via `AgentMessageBusStore` | `byModel` / `byParticipant` / `byDay` totals plus context-window and latency awareness | `GET /api/bus/{project}/token-aggregate` |
+| 1 | `AdHocUsageService` (read path) over `AdHocUsageRecorder` | `backend/Features/AdHoc/AdHocUsageService.cs`, `AdHocUsageRecorder.cs` | `adhoc-usage.jsonl` (workspace-wide) | Per-source / per-day / per-model rollup of one-shot Haiku calls | `GET /api/adhoc/usage` — ad-hoc usage chart in the status-bar modal |
+| 2 | `ProjectTokenUsageService` | `backend/Features/Runner/ProjectTokenUsageService.cs` | Historical token bus + durable task token receipts | Lifetime/24h summary with Job/Supporting/Orchestrator split; per-day × per-job heatmap; expensive-jobs top-N; per-job drill-down with deltas | `GET /api/projects/{project}/token-usage/*`: Project-Detail Token-Usage panel |
+| 3 | `WorkspaceTokensTimelineService` | `backend/Features/Runner/WorkspaceTokensTimelineService.cs` | `orchestrator.jsonl` for *every* watched project | (project × time-bucket) cells with priced dollars | `GET /api/workspace/tokens` — `#/workspace/tokens` stacked timeline |
+| 4 | `TokenSummaryService` + `TokenSummary` | `backend/Features/Runner/TokenSummary.cs` | Historical token bus + durable task token receipts for canonical project/card reads | Per-project lifetime totals + per-model split + estimated dollars; aggregate across all projects | Project-card last-usage, status-bar usage modal, `TaskEndpointHelpers.WithRuntime` per-job rollups |
+| 5 | `BusAggregationCache` (the canonical one) | `backend/Features/Bus/BusAggregationCache.cs` | `logs/bus/*.jsonl` via `AgentMessageBusStore` | `byModel` / `byParticipant` / `byDay` totals plus context-window and latency awareness | `GET /api/bus/{project}/token-aggregate` |
 
 Three of these (#2, #3, #4) read the *same* file (`orchestrator.jsonl`) and
 each produce a different shape. Two (#1, #5) read different files. None of
@@ -70,7 +107,7 @@ fields that the bus messages now carry.
 
 The canonical aggregator is the union of all five consumer needs. The
 interface is defined in
-[`backend/Services/Tokens/ITokenAggregator.cs`](../../backend/Services/Tokens/ITokenAggregator.cs).
+[`backend/Features/Tokens/ITokenAggregator.cs`](../../../backend/Features/Tokens/ITokenAggregator.cs).
 The shape:
 
 ```csharp
@@ -95,10 +132,11 @@ public interface ITokenAggregator
 }
 ```
 
-The first implementation, `TokenAggregationService`, lives next to the
-interface and currently delegates to `BusAggregationCache` plus the legacy
-aggregators while Phase 4 migrates each consumer over one at a time. New code
-must depend on `ITokenAggregator` rather than the legacy services directly.
+`TokenAggregationService` lives next to the interface. Project summary,
+heatmap, expensive-task, drill-down, lifetime, workspace aggregate, and task
+card reads share `BusBackedProjectTokenUsageReader`, which now performs the
+hybrid merge. New code must depend on `ITokenAggregator` rather than legacy
+services directly.
 
 ## Migration order
 
@@ -147,9 +185,10 @@ All four shims have landed in this order:
    last-activity trackers are unchanged because the bucketer is unchanged.
    Parity test:
    [`WorkspaceTokensTimelineBusParityTests`](../../../backend.Tests/WorkspaceTokensTimelineBusParityTests.cs).
-4. **Landed.** `ProjectTokenUsageService.BuildSummary` /
+4. **Landed, repaired 2026-08-09.** `ProjectTokenUsageService.BuildSummary` /
    `BuildHeatmap` / `BuildExpensiveJobs` / `BuildJobDetail` read paths.
-   `BusBackedProjectTokenUsageReader` uses the bus-native participant
+   `BusBackedProjectTokenUsageReader` merges bus history with durable task
+   receipts, then uses the participant
    split for runtime reads: `agent:*` counts as Job, `support:*` counts as
    Supporting, and `orchestrator:*` counts as Orchestrator. Legacy
    `orchestrator.jsonl` entries with no participant id still use
@@ -182,8 +221,8 @@ guards.
 The drift rule `token-aggregation-canonical` is in
 [`docs/system/contracts/code-patterns.md`](../contracts/code-patterns.md). Phase 4 is now complete, so
 the severity is ready to move from `Info` to `Warn`; the rule will then
-flag any new aggregator outside `backend/Services/Tokens/` or
-`backend/Services/Bus/`.
+flag any new aggregator outside `backend/Features/Tokens/` or
+`backend/Features/Bus/`.
 
 The candidate marker scans for the two telltale patterns:
 
@@ -222,27 +261,25 @@ split. CLI pages are extendable by adding another page key and model mapping.
   `Dollars` field on the bus response.
 - **CLI quota** (`/api/cli/quota`). Different source (subscription window),
   different cadence, different consumer.
-- **Backfill of historical orchestrator.jsonl into the bus.** Optional
-  one-shot — the bus has been live long enough that current spend is on it;
-  the only consumer of older history is the lifetime totals surface, which
-  the shim can read straight from `orchestrator.jsonl` until backfill lands.
+- **Rewriting historical bus files or task receipts.** The hybrid reader keeps
+  both immutable sources in place and merges them at read time. No destructive
+  backfill is needed.
 
 ## Reference — file paths
 
 | File | Role after consolidation |
 |------|--------------------------|
-| `backend/Services/Tokens/ITokenAggregator.cs` | Canonical interface |
-| `backend/Services/Tokens/TokenAggregationService.cs` | Implementation, delegates to the bus and (during migration) legacy services |
-| `backend/Services/Bus/BusAggregationCache.cs` | In-memory rollup over `logs/bus/*.jsonl` — source of truth |
-| `backend/Services/Bus/AgentMessageBusBridge.cs` | Producer side: `EmitTokenUsageAsync` / `EmitTokenUsageRichAsync` |
-| `backend/Services/AdHoc/AdHocClaudeInvoker.cs` | Ad-hoc-call recorder; **also fires `EmitTokenUsageAsync` after Phase 2** |
-| `backend/Services/AdHoc/AdHocUsageRecorder.cs` | Legacy write path (kept for disk-format readers) |
-| `backend/Services/AdHoc/AdHocUsageService.cs` | Legacy aggregator; only the parity fixture still calls it directly |
-| `backend/Services/Runner/ProjectTokenUsageService.cs` | Pure-function fold reused by `BusBackedProjectTokenUsageReader` |
-| `backend/Services/Runner/WorkspaceTokensTimelineService.cs` | Pure-function bucketer reused by `BusBackedWorkspaceTimelineReader` |
-| `backend/Services/Runner/TokenSummary.cs` | Pure-function summarizer reused by `BusBackedTokenSummaryReader`; workspace fold extracted to `AggregateSummaries` |
-| `backend/Services/Tokens/BusTokenEntryConverter.cs` | Shared adapter that turns bus `kind=token-usage` messages into transient `OrchestratorLogEntry` records so the bus-backed readers reuse the legacy folds |
-| `backend/Services/Tokens/BusBackedTokenSummaryReader.cs` | Phase-4 read path for the lifetime + per-model summary |
-| `backend/Services/Tokens/BusBackedWorkspaceTimelineReader.cs` | Phase-4 read path for the workspace timeline |
-| `backend/Services/Tokens/BusBackedProjectTokenUsageReader.cs` | Phase-4 read path for the four project-detail surfaces |
-| `backend/Endpoints/Jobs/JobEndpointHelpers.cs` | Job-card token footer lookup through `ITokenAggregator.WorkspacePerJob` |
+| `backend/Features/Tokens/ITokenAggregator.cs` | Canonical interface |
+| `backend/Features/Tokens/TokenAggregationService.cs` | Canonical consumer implementation |
+| `backend/Features/Tokens/ProjectTokenReceiptReader.cs` | Reads both task layouts, converts receipts, and deduplicates overlap with history |
+| `backend/Features/Bus/BusAggregationCache.cs` | In-memory rollup over historical `logs/bus/*.jsonl` |
+| `backend/Features/Bus/AgentMessageBusBridge.cs` | Legacy/local producer side: `EmitTokenUsageAsync` / `EmitTokenUsageRichAsync` |
+| `backend/Features/AdHoc/AdHocClaudeInvoker.cs` | Ad-hoc-call recorder; **also fires `EmitTokenUsageAsync` after Phase 2** |
+| `backend/Features/AdHoc/AdHocUsageRecorder.cs` | Legacy write path (kept for disk-format readers) |
+| `backend/Features/AdHoc/AdHocUsageService.cs` | Legacy aggregator; only the parity fixture still calls it directly |
+| `backend/Features/Runner/ProjectTokenUsageService.cs` | Pure-function fold reused by `BusBackedProjectTokenUsageReader` |
+| `backend/Features/Runner/WorkspaceTokensTimelineService.cs` | Pure-function bucketer reused by `BusBackedWorkspaceTimelineReader` |
+| `backend/Features/Runner/TokenSummary.cs` | Pure-function summarizer reused by canonical readers |
+| `backend/Features/Tokens/BusTokenEntryConverter.cs` | Adapter from bus `kind=token-usage` messages to the shared fold shape |
+| `backend/Features/Tokens/BusBackedProjectTokenUsageReader.cs` | Hybrid read path for project, lifetime, aggregate, and task-card surfaces |
+| `backend/Features/Tasks/TaskEndpointHelpers.cs` | Task-card token footer lookup through `ITokenAggregator.WorkspacePerJob` |

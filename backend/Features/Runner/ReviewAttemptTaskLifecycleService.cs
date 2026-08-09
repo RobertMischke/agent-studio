@@ -102,6 +102,90 @@ public sealed class ReviewAttemptTaskLifecycleService
     }
 
     /// <summary>
+    /// Mints a ReviewAttempt only after its owning card has durably entered Auto
+    /// Review. The lane check and mint share the claim lifecycle lock, so a
+    /// claim poll can observe either no attempt or an eligible attempt, never a
+    /// fresh attempt while the card still resides in Progress.
+    /// </summary>
+    public AttemptWriteResult CreateReviewAttemptInAutoReview(
+        TaskInfo task,
+        CreateReviewAttemptRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(request);
+
+        lock (_gate)
+        {
+            var current = _scanner.FindJob(task.Id, task.WatchPath);
+            if (current is null
+                || !string.Equals(current.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+            {
+                return new AttemptWriteResult(
+                    AttemptWriteStatus.InvalidState,
+                    string.Empty,
+                    "ReviewAttempt can be minted only after the task has entered 4-auto-review.");
+            }
+
+            return _authority.CreateReviewAttempt(request);
+        }
+    }
+
+    /// <summary>
+    /// Restores a canonical review subject when an older claim guard terminalized
+    /// it before the completion lane move landed. Only the exact incident shape
+    /// is eligible: Auto Review card, current superseded ReviewAttempt, and a
+    /// completed current RunAttempt with its immutable result envelope.
+    /// </summary>
+    public int SweepSupersededAutoReviewAttempts(string source = "auto-review-recovery")
+    {
+        lock (_gate)
+        {
+            var repaired = 0;
+            foreach (var task in _scanner.ScanAllAutomationJobs()
+                         .Where(task => string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase)))
+            {
+                var taskKey = string.IsNullOrWhiteSpace(task.Key)
+                    ? (!string.IsNullOrWhiteSpace(task.TaskKey) ? task.TaskKey : task.Id)
+                    : task.Key;
+                var projection = _authority.GetTaskProjection(taskKey);
+                var review = projection.CurrentReviewAttempt;
+                var run = projection.CurrentRunAttempt;
+                if (review is not { State: AttemptLifecycleState.Superseded, Outcome: ReviewTerminalOutcome.Superseded }
+                    || run is not { State: AttemptLifecycleState.Completed, ResultEnvelope: not null, ResultSha: not null }
+                    || !string.Equals(review.SourceRunAttemptId, run.AttemptId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var subject = review.Subject;
+                var created = _authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                    taskKey,
+                    subject.RepositoryId,
+                    subject.ExpectedResultSha,
+                    run.AttemptId,
+                    subject.TaskRequirementsHash,
+                    subject.ReviewPolicyHash,
+                    subject.EvidenceDigestInputs,
+                    $"review-recovery:{review.AttemptId}",
+                    RepositoryUrl: subject.RepositoryUrl ?? run.ResultEnvelope.RepositoryUrl,
+                    ResultRef: subject.ResultRef ?? run.ResultEnvelope.ImmutableRemoteRef,
+                    Plan: subject.Plan));
+                if (!created.Accepted)
+                {
+                    _logger.LogWarning(
+                        "review-attempt-auto-review-recovery-failed task={TaskKey} sourceAttempt={AttemptId} status={Status} message={Message}",
+                        taskKey, review.AttemptId, created.Status, created.Message);
+                    continue;
+                }
+
+                repaired++;
+                _logger.LogInformation(
+                    "review-attempt-auto-review-recovered task={TaskKey} sourceAttempt={AttemptId} replacementAttempt={ReplacementAttemptId} source={Source}",
+                    taskKey, review.AttemptId, created.AttemptId, source);
+            }
+            return repaired;
+        }
+    }
+
+    /// <summary>
     /// Applies the same card-state guard to the attempt-addressed compatibility
     /// claim route.
     /// </summary>

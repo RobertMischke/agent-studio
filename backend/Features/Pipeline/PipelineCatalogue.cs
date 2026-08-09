@@ -179,7 +179,8 @@ public static class PipelineCatalogue
     /// conflicted files) rather than swallowed, and the working tree is left
     /// clean. It closes the delivery gap so accepted work actually lands on
     /// <c>develop</c>. Implemented by <c>MergeIntoDevelopRunner</c>, triggered
-    /// from <c>TaskTransitionService</c>.
+    /// immediately for a green fenced Remote delivery and retried from
+    /// <c>TaskTransitionService</c> on human acceptance when necessary.
     /// </summary>
     public const string MergeIntoDevelopStepId = "post-merge-into-develop";
 

@@ -5,6 +5,7 @@ import type {
   SystemStatusEvent,
   ToolBurstEvent,
   ToolCommandExecution,
+  ToolFamily,
 } from 'coding-agent-chat/core';
 import type { CliOutputLine } from '../../../../models/task.model';
 import { resolveProtocolImageSrc } from './protocol-image-resolver';
@@ -12,6 +13,51 @@ import { resolveProtocolImageSrc } from './protocol-image-resolver';
 const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const TOKEN_TOTAL = /\bTurn completed\s*\(tokens:\s*([\d,_]+)\)/i;
 const FREE_COMPLETION_LINE = /^\s*(?:Session|Turn) completed(?:\s*\(tokens:\s*[\d,_]+\))?[.!]?\s*$/i;
+const REPOSITORY_SEGMENT = /(?:^|\/)(\.agents|backend(?:\.Tests)?|docs|frontend|prompts|runner|scripts)(\/.*)?$/i;
+
+const TOOL_FAMILY_ORDER: readonly ToolFamily[] = [
+  'command', 'read', 'search', 'edit', 'task', 'todo', 'other',
+];
+
+export interface PresentedToolFile {
+  /** Repository-relative path used by the compact and expanded UI. */
+  displayPath: string;
+  /** Original absolute path retained for hover disclosure. */
+  fullPath: string;
+}
+
+export interface ToolBurstRowPresentation {
+  /** Selects the compact row vocabulary without inferring from file presence. */
+  kind: 'tool' | 'edit';
+  /** Explicit operation and file-count semantics for the compact row. */
+  primaryLabel: string;
+  /** Top two tool families, already formatted for the compact row. */
+  mixLabel: string;
+  /** Aggregate result; failed events retain the library's error treatment. */
+  outcomeLabel: string;
+  /** Compact repository-relative file summary for edit-only rows. */
+  pathLabel?: string;
+  /** Newline-separated absolute paths for native hover disclosure. */
+  fileTooltip?: string;
+}
+
+/**
+ * Host-only extension consumed by the 0.3.x compatibility directive. The
+ * library still receives a normal ToolBurstEvent and keeps its expandable
+ * details; the extra metadata enriches only the compact Studio row.
+ */
+export type PresentedToolBurstEvent = ToolBurstEvent & {
+  fileDetails?: readonly PresentedToolFile[];
+  rowPresentation: ToolBurstRowPresentation;
+};
+
+export interface ActivityEventPresentationOptions {
+  typedTurnCompletions?: boolean;
+  /** Worktree cwd captured for a specific run index. */
+  worktreeRootsByRun?: ReadonlyMap<number, string>;
+  /** Used for unscoped legacy tool events. */
+  fallbackWorktreeRoot?: string | null;
+}
 
 /** Remove transport-era completion prose when the typed lifecycle is authoritative. */
 export function stripLegacyCompletionLines(
@@ -31,7 +77,7 @@ export function presentActivityEvents(
   events: readonly ConversationEvent[],
   jobId: string,
   watchPath: string | null | undefined,
-  options: { typedTurnCompletions?: boolean } = {},
+  options: ActivityEventPresentationOptions = {},
 ): ConversationEvent[] {
   const presented: ConversationEvent[] = [];
 
@@ -53,9 +99,17 @@ export function presentActivityEvents(
     }
 
     if (event.kind === 'toolBurst') {
+      const capturedWorktreeRoot = event.runId == null
+        ? options.fallbackWorktreeRoot
+        : options.worktreeRootsByRun?.get(event.runId) ?? options.fallbackWorktreeRoot;
+      const toolBurst = presentToolBurst(
+        event,
+        capturedWorktreeRoot ?? watchPath,
+        jobId,
+      );
       const imageArtifacts = (event.artifacts ?? []).filter((path) => IMAGE_EXTENSION.test(path));
       const otherArtifacts = (event.artifacts ?? []).filter((path) => !IMAGE_EXTENSION.test(path));
-      presented.push({ ...event, artifacts: otherArtifacts.length > 0 ? otherArtifacts : undefined });
+      presented.push({ ...toolBurst, artifacts: otherArtifacts.length > 0 ? otherArtifacts : undefined });
       presented.push(...imageArtifacts.map((path, index) => artifactImage(event, path, index, jobId, watchPath)));
       continue;
     }
@@ -78,6 +132,184 @@ export function presentActivityEvents(
   }
 
   return presented;
+}
+
+export function isPresentedToolBurstEvent(
+  event: ConversationEvent,
+): event is PresentedToolBurstEvent {
+  return event.kind === 'toolBurst' && 'rowPresentation' in event;
+}
+
+function presentToolBurst(
+  event: ToolBurstEvent,
+  capturedWorktreeRoot: string | null | undefined,
+  jobId: string,
+): PresentedToolBurstEvent {
+  // A captured CLI cwd can sit below the linked-worktree root. Recover the
+  // root from the task segment or the two canonical worktree-pool layouts.
+  const worktreeRoot = capturedWorktreeRoot
+    ? canonicalWorktreeRoot(capturedWorktreeRoot, jobId)
+    : null;
+  const editOnly = event.count > 0 && event.families['edit'] === event.count;
+  const rawFiles = unique([
+    ...(event.files ?? []),
+    ...(editOnly ? editPathsFromSample(event.samples?.['edit']) : []),
+  ]);
+  const fileDetails = uniquePresentedFiles(
+    rawFiles.map((path) => presentToolFile(path, worktreeRoot)),
+  );
+  const samples = event.samples?.['edit'] && worktreeRoot
+    ? { ...event.samples, edit: stripWorktreeRoot(event.samples['edit'], worktreeRoot) }
+    : event.samples;
+  const files = fileDetails?.map((file) => file.displayPath);
+
+  return {
+    ...event,
+    files,
+    fileDetails,
+    samples,
+    rowPresentation: toolBurstRowPresentation(event, editOnly, fileDetails),
+  };
+}
+
+function toolBurstRowPresentation(
+  event: ToolBurstEvent,
+  editOnly: boolean,
+  fileDetails: readonly PresentedToolFile[] | undefined,
+): ToolBurstRowPresentation {
+  const operationLabel = editOnly
+    ? `${event.count} ${event.count === 1 ? 'Edit' : 'Edits'}`
+    : `${event.count} Tool ${event.count === 1 ? 'call' : 'calls'}`;
+  const fileCount = fileDetails?.length ?? 0;
+  const fileLabel = editOnly
+    ? ` · ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`
+    : '';
+  const mixLabel = editOnly ? '' : topToolFamilies(event)
+    .map(([family, count]) => `${toolFamilyLabel(family)} ×${count}`)
+    .join(', ');
+  const pathLabel = editOnly && fileDetails?.length
+    ? fileDetails.length === 1
+      ? fileDetails[0].displayPath
+      : `${fileDetails[0].displayPath} +${fileDetails.length - 1} more`
+    : undefined;
+
+  return {
+    kind: editOnly ? 'edit' : 'tool',
+    primaryLabel: `${operationLabel}${fileLabel}`,
+    mixLabel,
+    outcomeLabel: event.failures > 0 ? `${event.failures} failed` : 'all ok',
+    pathLabel,
+    fileTooltip: fileDetails?.length
+      ? fileDetails.map((file) => file.fullPath).join('\n')
+      : undefined,
+  };
+}
+
+function topToolFamilies(event: ToolBurstEvent): [ToolFamily, number][] {
+  return TOOL_FAMILY_ORDER
+    .map((family): [ToolFamily, number] => [family, event.families[family] ?? 0])
+    .filter(([, count]) => Number.isFinite(count) && count > 0)
+    .sort((left, right) => right[1] - left[1]
+      || TOOL_FAMILY_ORDER.indexOf(left[0]) - TOOL_FAMILY_ORDER.indexOf(right[0]))
+    .slice(0, 2);
+}
+
+function toolFamilyLabel(family: ToolFamily): string {
+  return family === 'command' ? 'shell' : family === 'other' ? 'tool' : family;
+}
+
+function editPathsFromSample(sample: string | undefined): string[] {
+  if (!sample) return [];
+  const paths: string[] = [];
+  const pattern = /(?:^|,\s*)Edit\s+(.+?)(?=,\s*Edit\s+|$)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(sample)) !== null) {
+    const path = match[1].trim();
+    if (path) paths.push(path);
+  }
+  return paths;
+}
+
+function presentToolFile(path: string, worktreeRoot: string | null): PresentedToolFile {
+  const normalized = normalizePath(path);
+  const fullPath = worktreeRoot && !isAbsoluteOrResourcePath(normalized)
+    ? `${worktreeRoot.replace(/\/+$/, '')}/${normalized.replace(/^\.\//, '')}`
+    : normalized;
+  return {
+    displayPath: repoRelativePath(fullPath, worktreeRoot),
+    fullPath,
+  };
+}
+
+function uniquePresentedFiles(
+  files: readonly PresentedToolFile[],
+): PresentedToolFile[] | undefined {
+  if (files.length === 0) return undefined;
+  const seen = new Set<string>();
+  return files.filter((file) => {
+    const key = /^[a-z]:\//i.test(file.fullPath) ? file.fullPath.toLowerCase() : file.fullPath;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function canonicalWorktreeRoot(path: string, jobId: string): string {
+  const normalized = normalizePath(path).replace(/\/+$/, '');
+  const segments = normalized.split('/');
+  const taskSegment = segments.findIndex((segment) => segment.toLowerCase() === jobId.toLowerCase());
+  if (taskSegment >= 0 && segments.slice(0, taskSegment).some((segment) =>
+    /^(?:ass-)?worktrees$/i.test(segment))) {
+    return segments.slice(0, taskSegment + 1).join('/');
+  }
+  const assPool = /^(.*?\/ass-worktrees\/[^/]+\/[^/]+)(?:\/|$)/i.exec(normalized);
+  if (assPool) return assPool[1];
+  const runnerPool = /^(.*?\/worktrees\/[^/]+)(?:\/|$)/i.exec(normalized);
+  return runnerPool?.[1] ?? normalized;
+}
+
+function repoRelativePath(path: string, worktreeRoot: string | null): string {
+  if (!isAbsoluteOrResourcePath(path)) return path.replace(/^\.\//, '');
+  if (worktreeRoot) {
+    const stripped = stripExactRoot(path, worktreeRoot);
+    if (stripped !== null) return stripped;
+  }
+  const repositoryMatch = REPOSITORY_SEGMENT.exec(path);
+  return repositoryMatch
+    ? `${repositoryMatch[1]}${repositoryMatch[2] ?? ''}`
+    : path;
+}
+
+function stripExactRoot(path: string, root: string): string | null {
+  const normalizedRoot = normalizePath(root).replace(/\/+$/, '');
+  const caseInsensitive = /^[a-z]:\//i.test(normalizedRoot);
+  const comparablePath = caseInsensitive ? path.toLowerCase() : path;
+  const comparableRoot = caseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
+  if (!comparablePath.startsWith(`${comparableRoot}/`)) return null;
+  return path.slice(normalizedRoot.length + 1);
+}
+
+function stripWorktreeRoot(value: string, worktreeRoot: string): string {
+  const normalized = normalizePath(value);
+  const root = normalizePath(worktreeRoot).replace(/\/+$/, '');
+  const caseInsensitive = /^[a-z]:\//i.test(root);
+  const comparableValue = caseInsensitive ? normalized.toLowerCase() : normalized;
+  const comparableRoot = caseInsensitive ? root.toLowerCase() : root;
+  const rootIndex = comparableValue.indexOf(`${comparableRoot}/`);
+  if (rootIndex < 0) return normalized;
+  return normalized.slice(0, rootIndex) + normalized.slice(rootIndex + root.length + 1);
+}
+
+function isAbsoluteOrResourcePath(path: string): boolean {
+  return path.startsWith('/') || /^[a-z]:\//i.test(path) || /^[a-z][a-z\d+.-]*:\/\//i.test(path);
+}
+
+function normalizePath(path: string): string {
+  return path.trim().replace(/\\/g, '/');
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 function findOwningBurst(events: readonly ConversationEvent[], warning: SystemParserWarningEvent): number {

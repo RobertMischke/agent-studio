@@ -633,7 +633,8 @@ public class TaskScannerService : ITaskScanner
                     && released.ValueKind == JsonValueKind.True,
                 RelatedWikiPages = ReadRelatedWikiPages(raw, entry),
                 Provenance = ReadProvenance(raw),
-                ExternalCompletion = ReadExternalCompletion(raw)
+                ExternalCompletion = ReadExternalCompletion(raw),
+                RemoteDispatchRejection = ReadRemoteDispatchRejection(raw)
             };
             if (isArchive)
             {
@@ -792,6 +793,21 @@ public class TaskScannerService : ITaskScanner
             ProjectName = info.ProjectName,
             Attachments = attachments,
         };
+    }
+
+    private static RemoteDispatchRejection? ReadRemoteDispatchRejection(JsonElement raw)
+    {
+        if (!raw.TryGetProperty(RemoteDispatchRejectionStore.FieldName, out var rejection)
+            || rejection.ValueKind != JsonValueKind.Object)
+            return null;
+        try
+        {
+            return rejection.Deserialize<RemoteDispatchRejection>(TaskJsonFile.ReadOpts);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

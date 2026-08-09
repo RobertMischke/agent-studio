@@ -1,5 +1,12 @@
 # Konzept: CLI-Token-Refresh ohne SSH-Tunnel
 
+> Historical concept note. The binding provider-auth contract adopted on
+> 2026-08-04 supersedes its host credential-file and interactive re-login
+> recommendations. Current operations use
+> `/etc/agent-runner/provider-auth.env`, SSH-stdin provisioning, process-only
+> probes, and the renewal flow in
+> [setup/cli-relogin-runbook.md](setup/cli-relogin-runbook.md).
+
 **Stand:** 2026-07-28 · **Phase:** P3-Vorlauf (Umsetzungsplan-Zielbild §3.3 / §5) · **Modus:** Konzept, keine Code-Änderung
 **Bezug:** AGT-2262 (SSH-Brücke abreißen), `execution-model-shift` E1/E2, `car-migration-plan` §2.2 (CAR-B) und §5
 **Im Code verifiziert am 28.07.:** `runner/`, `backend/Features/{Runner,Tasks,Cli}/`, `task-server/`, `contracts/TaskServer.Contracts/`, `scripts/remote-runner-onboard.sh`, `deploy/`, `docs/operations/setup/{linux-runner-host,networked-task-server,remote-runner-persistent-connection}.md`, `docs/system/cli/supported-clis.md`

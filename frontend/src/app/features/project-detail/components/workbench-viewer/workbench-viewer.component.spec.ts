@@ -3,8 +3,13 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
+import { of } from 'rxjs';
 import type { WorkbenchDocument } from '../../../../models/project-docs.model';
-import { ISOLATED_HTML_LINK_MESSAGE } from '../../../../services/sandboxed-html.util';
+import {
+  ISOLATED_HTML_LINK_MESSAGE,
+  WORKBENCH_DECISION_CHANGE_MESSAGE,
+} from '../../../../services/sandboxed-html.util';
+import { TaskService } from '../../../../services/task.service';
 import { WorkbenchViewerComponent } from './workbench-viewer.component';
 
 const DOCUMENT: WorkbenchDocument = {
@@ -20,7 +25,7 @@ const DOCUMENT: WorkbenchDocument = {
     error: null,
     sourceTaskKeys: ['AGT-2123'],
   },
-  html: '<script id="early">document.body.dataset.ran="true"</script><html><head><base href="https://example.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body class="artifact"><meta http-equiv="refresh" content="0;url=https://example.invalid/"><h1>Probe</h1></body></html>',
+  html: '<script id="early">document.body.dataset.ran="true"</script><html><head><base href="https://example.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body class="artifact"><meta http-equiv="refresh" content="0;url=https://example.invalid/"><h1>Probe</h1><section data-decision-id="route" data-decision-kind="single"><strong>Choose route</strong><span data-option-id="direct">Direct</span><span data-option-id="queue">Queue</span><span data-comment="Optional note"></span></section></body></html>',
   branch: 'develop',
   revision: null,
   workingTreeModified: true,
@@ -31,7 +36,12 @@ describe('WorkbenchViewerComponent', () => {
   it('normalises artifact HTML behind a policy-first fixed wrapper', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(WorkbenchViewerComponent);
     fixture.componentRef.setInput('projectName', 'Demo');
@@ -40,8 +50,6 @@ describe('WorkbenchViewerComponent', () => {
 
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/projects/Demo/workbenches/boundary').flush(DOCUMENT);
-    fixture.detectChanges();
-    http.expectOne('/api/projects/Demo/wiki/home').flush({ sections: [] });
     fixture.detectChanges();
 
     const srcdoc = fixture.componentInstance.srcdoc();
@@ -59,11 +67,24 @@ describe('WorkbenchViewerComponent', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
+    expect(srcdoc).toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);
+    expect(fixture.componentInstance.decisionMarkup().points[0].id).toBe('route');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-working-tree"]')?.textContent)
       .toContain('uncommitted');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-panel"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="page-action-archive"]')).toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="page-action-extra"]')).toBeNull();
+
+    fixture.componentInstance.onFrameMessage({
+      source: frame.contentWindow,
+      data: {
+        type: WORKBENCH_DECISION_CHANGE_MESSAGE,
+        responses: [{
+          decisionId: 'route', kind: 'single', selectedOptionIds: ['direct'], comment: 'Ship it.',
+        }],
+      },
+    } as MessageEvent);
+    expect(fixture.componentInstance.decisionResponses()).toEqual([{
+      decisionId: 'route', kind: 'single', selectedOptionIds: ['direct'], comment: 'Ship it.',
+    }]);
 
     const wikiTargets: string[] = [];
     fixture.componentInstance.openWiki.subscribe(path => wikiTargets.push(path));

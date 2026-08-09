@@ -35,7 +35,7 @@ const PRIMARY_DECISION = {
 };
 const SECONDARY_DECISION = {
   ...task('decision-secondary', 'AGT-2190', 'Confirm migration fallback', '5-human-review', 2),
-  transitiveWaiters: { count: 3, keys: WAITING_KEYS.slice(0, 3) },
+  transitiveWaiters: { count: 1, keys: WAITING_KEYS.slice(0, 1) },
 };
 const READY = WAITING_KEYS.map((key, index) =>
   task(`waiting-${index}`, key, `Waiting implementation ${index + 1}`, '2-ready', index + 1, ['AGT-2182']));
@@ -63,6 +63,12 @@ async function json(route: Route, body: unknown): Promise<void> {
 
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) => json(route, []));
+  await page.route('**/api/tasks/archive**', (route) => json(route, {
+    items: [],
+    total: 0,
+    offset: 0,
+    limit: 50,
+  }));
   await page.route('**/api/auth/status', (route) => json(route, {
     profile: 'local',
     bootstrapRequired: false,
@@ -77,6 +83,15 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/environment**', (route) => json(route, {
     isDev: false,
     devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false },
+  }));
+  await page.route('**/api/cli/usage**', (route) => json(route, {
+    at: '2026-08-08T08:00:00Z',
+    sessions: [],
+  }));
+  await page.route('**/api/cli/quota**', (route) => json(route, {
+    at: '2026-08-08T08:00:00Z',
+    ttlSeconds: 600,
+    snapshots: [],
   }));
   await page.route(/\/api\/runner\/status(\?|$)/, (route) => json(route, {
     projects: {
@@ -120,8 +135,8 @@ test.describe('transitive decision backlog dam', () => {
 
     const rows = page.getByTestId('decision-backlog').locator('[aria-expanded]');
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(0)).toContainText('Deine Entscheidung zu AGT-2182 blockiert 10 wartende Karten');
-    await expect(rows.nth(1)).toContainText('Deine Entscheidung zu AGT-2190 blockiert 3 wartende Karten');
+    await expect(rows.nth(0)).toContainText('Your decision on AGT-2182 blocks 10 waiting cards');
+    await expect(rows.nth(1)).toContainText('Your decision on AGT-2190 blocks 1 waiting card');
 
     const card = page.getByTestId('task-card').filter({ hasText: PRIMARY_DECISION.title });
     const badge = card.getByTestId('task-card-decision-dam');
@@ -144,7 +159,7 @@ test.describe('transitive decision backlog dam', () => {
       await setTheme(page, theme);
       await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
       const primaryEntry = page.getByTestId('decision-backlog-item-AGT-2182');
-      await expect(primaryEntry).toContainText('10 wartende Karten');
+      await expect(primaryEntry).toContainText('10 waiting cards');
       await primaryEntry.click();
       await expect(page.getByTestId('decision-backlog-waiters-AGT-2182')).toBeVisible();
       await expect(
@@ -152,10 +167,10 @@ test.describe('transitive decision backlog dam', () => {
           .getByTestId('task-card-decision-dam'),
       ).toContainText('Dams 10 cards');
 
-      const resultsDir = process.env['DECISION_BACKLOG_RESULTS_DIR'];
+      const resultsDir = process.env['JOB_RESULTS_DIR'] ?? process.env['DECISION_BACKLOG_RESULTS_DIR'];
       if (resultsDir) {
         await page.screenshot({
-          path: `${resultsDir}/decision-backlog-${theme}.png`,
+          path: `${resultsDir}/decision-backlog-${theme}--mocked.png`,
           fullPage: false,
         });
       }

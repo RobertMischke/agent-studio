@@ -3,9 +3,13 @@ import type { TaskInfo } from '../../models/task.model';
 import { buildComposerLocationContext } from './composer-location-context';
 
 const task = {
+  id: 'agt-2162-folder',
   taskKey: 'C:/tasks/AGT-2162',
   displayKey: 'AGT-2162',
   projectName: 'Agent Studio',
+  title: 'Fix task context',
+  state: '3-progress',
+  watchPath: 'C:/tasks',
 } as TaskInfo;
 
 describe('buildComposerLocationContext', () => {
@@ -20,7 +24,16 @@ describe('buildComposerLocationContext', () => {
     expect(buildComposerLocationContext(
       { kind: 'task', taskKey: task.taskKey },
       [task],
-    )).toEqual({ project: 'Agent Studio', surface: 'Task', detail: 'AGT-2162' });
+    )).toEqual({
+      project: 'Agent Studio',
+      surface: 'Task',
+      detail: 'AGT-2162',
+      taskKey: 'AGT-2162',
+      taskId: 'agt-2162-folder',
+      taskTitle: 'Fix task context',
+      taskState: '3-progress',
+      taskWatchPath: 'C:/tasks',
+    });
   });
 
   it.each([

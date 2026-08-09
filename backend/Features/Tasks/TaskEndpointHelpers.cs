@@ -81,6 +81,7 @@ internal static class TaskEndpointHelpers
         MoveJobStatus.Success => Results.Ok(),
         MoveJobStatus.NotFound => Results.NotFound(),
         MoveJobStatus.TargetFolderExists => Results.Conflict(new { error = outcome.Message }),
+        MoveJobStatus.IntegrationFailed => Results.Conflict(new { error = outcome.Message }),
         MoveJobStatus.DirectoryLocked => Results.Json(
             new { error = outcome.Message ?? "Task folder is temporarily locked by another process. Retry after the active process releases its file handles." },
             statusCode: StatusCodes.Status423Locked),
@@ -453,7 +454,7 @@ internal static class TaskEndpointHelpers
     /// <summary>
     /// Builds the per-project → per-job token lookup used by
     /// <c>WithRuntime</c> in the listing endpoints. Reads each unique
-    /// project bus projection at most once.
+    /// hybrid project projection at most once.
     /// </summary>
     internal static Dictionary<string, TaskTokenSummary> BuildTokenLookup(
         IEnumerable<TaskInfo> jobs,

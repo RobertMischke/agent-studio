@@ -114,6 +114,13 @@ internal sealed class DurableAgentProcess
         if (managedHost) start.ArgumentList.Add(typeof(DurableAgentProcess).Assembly.Location);
         start.ArgumentList.Add("--detached-worker");
         start.ArgumentList.Add(specPath);
+        // The daemon needs all provider credentials for capability probes, but
+        // a detached worker receives only the credential for its selected CLI.
+        // In particular, Codex workers must not inherit Claude's setup token.
+        if (ProviderAuthEnvironment.TryGetForCli(spec.CliType, out var authName, out var authValue))
+            start.Environment[authName] = authValue;
+        else
+            start.Environment.Remove(ProviderAuthEnvironment.ClaudeCodeOAuthToken);
         var process = Process.Start(start)
             ?? throw new InvalidOperationException("Failed to start the detached runner worker.");
         var started = process.StartTime.ToUniversalTime();
@@ -406,6 +413,12 @@ internal sealed class DurableAgentProcess
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(spec.TimeoutSeconds));
             try
             {
+                var environment = new Dictionary<string, string?>
+                {
+                    ["JOB_RESULTS_DIR"] = spec.ResultsDirectory,
+                };
+                if (ProviderAuthEnvironment.TryGetForCli(spec.CliType, out var authName, out var authValue))
+                    environment[authName] = authValue;
                 processResult = await ProcessRunner.RunAsync(
                     spec.FileName,
                     spec.Arguments,
@@ -421,7 +434,7 @@ internal sealed class DurableAgentProcess
                         Append("stderr", line);
                         trace.WriteFromRawLine(spec.CliType, runId, "stderr", line);
                     },
-                    new Dictionary<string, string?> { ["JOB_RESULTS_DIR"] = spec.ResultsDirectory },
+                    environment,
                     clearEnvironment: false,
                     ct: timeout.Token);
             }

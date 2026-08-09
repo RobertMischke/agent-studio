@@ -110,7 +110,11 @@ async function mockBootApis(page: Page, currentProject: () => ProjectFixture): P
     return fulfillJson(route, [currentProject()]);
   });
   await page.route('**/api/projects/settings', (route) => fulfillJson(route, {
-    [currentProject().displayName]: { maxParallelism: 1 },
+    [currentProject().displayName]: {
+      maxParallelism: 1,
+      pickupMode: 'auto',
+      executionLocation: 'agent-runner-01',
+    },
   }));
   await page.route('**/api/projects/*/snapshot', (route) => fulfillJson(route, {
     settings: {
@@ -139,6 +143,15 @@ async function mockBootApis(page: Page, currentProject: () => ProjectFixture): P
   }));
   await page.route('**/api/tasks', (route) => fulfillJson(route, []));
   await page.route('**/api/runner/status**', (route) => fulfillJson(route, { projects: {} }));
+  await page.route('**/api/runner/queue-starvation', (route) => fulfillJson(route, {
+    active: false,
+    waitingTaskCount: 0,
+    availableSlots: 0,
+    thresholdMinutes: 30,
+    observedAt: new Date().toISOString(),
+    oldestEnteredLaneAt: null,
+    items: [],
+  }));
   await page.route('**/api/clients', (route) => fulfillJson(route, [{
     id: 'agent-runner-01',
     displayName: 'agent-runner-01',
@@ -432,6 +445,30 @@ test.describe('project onboarding and editable project basics', () => {
       await setTheme(page, theme);
       await card.screenshot({
         path: join(results, `project-basics-settings-saved-${theme}--mocked.png`),
+      });
+    }
+  });
+
+  test('Project Settings warns when a remotely routed project has no repository URL', async ({ page }) => {
+    project = {
+      ...project,
+      repositoryUrl: null,
+      urls: [],
+    };
+
+    await page.goto('/#/projects/existing-project/settings');
+    await dismissDevErrorDialog(page);
+
+    const card = page.getByTestId('project-basics-card');
+    const warning = card.getByTestId('project-remote-repository-warning');
+    await expect(warning).toContainText('Remote execution is not claimable.');
+    await expect(warning).toContainText('repositoryUrl is missing');
+    await expect(warning).toContainText('agent-runner-01');
+
+    for (const theme of ['dark', 'light'] satisfies Theme[]) {
+      await setTheme(page, theme);
+      await card.screenshot({
+        path: join(results, `project-remote-repository-warning-${theme}--mocked.png`),
       });
     }
   });

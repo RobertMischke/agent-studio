@@ -1,0 +1,42 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "OSS setup path decision",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "21fc6d0501d07bbdecba6b1446315685ff4acba1356a05b8098bed919f18303f",
+      "sizeBytes": 3833,
+      "lineCount": 76,
+      "capturedAt": "2026-08-04T18:16:38.3113383Z"
+    }
+  },
+  "agentReads": {
+    "total": 5,
+    "lastReadAt": "2026-08-04T18:19:39.1016821Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:19:39.1016821Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113383Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113383Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113383Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113383Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

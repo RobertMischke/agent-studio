@@ -251,9 +251,10 @@ internal sealed class DurableReviewProcess
                 current.Id,
                 current.StartTime.ToUniversalTime(),
                 Path.GetFullPath(workspace.RepositoryPath));
-            await WriteAtomicAsync(
+            if (!await WriteAtomicAsync(
                 Path.Combine(directory, "review-worker.json"),
-                JsonSerializer.Serialize(identity, Json));
+                JsonSerializer.Serialize(identity, Json)))
+                return 0;
         }
 
         DetachedReviewResult result;
@@ -262,9 +263,13 @@ internal sealed class DurableReviewProcess
             await workspace.AdoptPreparedAsync(CancellationToken.None);
             var evidence = await workspace.ExecutePlanAsync(
                 CancellationToken.None,
-                async (progress, _) => await WriteAtomicAsync(
-                    Path.Combine(directory, "review-progress.json"),
-                    JsonSerializer.Serialize(progress, Json)));
+                async (progress, _) =>
+                {
+                    if (!await WriteAtomicAsync(
+                            Path.Combine(directory, "review-progress.json"),
+                            JsonSerializer.Serialize(progress, Json)))
+                        throw new ReviewAttemptStateRemovedException();
+                });
             result = new DetachedReviewResult(
                 evidence,
                 null,
@@ -279,6 +284,13 @@ internal sealed class DurableReviewProcess
                 exception.Message,
                 DateTime.UtcNow);
         }
+        catch (ReviewAttemptStateRemovedException)
+        {
+            // The daemon accepted the terminal report and reaped this attempt
+            // while the detached process was still unwinding. There is no
+            // authority or durable location left for another result.
+            return 0;
+        }
         catch (Exception exception)
         {
             result = new DetachedReviewResult(
@@ -288,30 +300,48 @@ internal sealed class DurableReviewProcess
                 DateTime.UtcNow);
         }
 
-        await WriteAtomicAsync(
+        if (!await WriteAtomicAsync(
             Path.Combine(directory, "review-result.json"),
-            JsonSerializer.Serialize(result, Json));
+            JsonSerializer.Serialize(result, Json)))
+            return 0;
         return result.FailureClassification is null ? 0 : 3;
     }
 
-    private static async Task WriteAtomicAsync(string path, string content)
+    internal static async Task<bool> WriteAtomicAsync(string path, string content)
     {
         var temporary = path + $".{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
-        await using (var stream = new FileStream(
-                         temporary,
-                         FileMode.CreateNew,
-                         FileAccess.Write,
-                         FileShare.None,
-                         4096,
-                         FileOptions.WriteThrough | FileOptions.Asynchronous))
-        await using (var writer = new StreamWriter(stream))
+        try
         {
-            await writer.WriteAsync(content);
-            await writer.FlushAsync();
-            stream.Flush(flushToDisk: true);
+            await using (var stream = new FileStream(
+                             temporary,
+                             FileMode.CreateNew,
+                             FileAccess.Write,
+                             FileShare.None,
+                             4096,
+                             FileOptions.WriteThrough | FileOptions.Asynchronous))
+            await using (var writer = new StreamWriter(stream))
+            {
+                await writer.WriteAsync(content);
+                await writer.FlushAsync();
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, path, overwrite: true);
+            return true;
         }
-        File.Move(temporary, path, overwrite: true);
+        catch (Exception exception) when (exception is DirectoryNotFoundException or FileNotFoundException)
+        {
+            // State deletion is the daemon's acknowledgement that this fenced
+            // worker no longer owns a reportable attempt.
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (DirectoryNotFoundException) { }
+        }
     }
+
+    private sealed class ReviewAttemptStateRemovedException : Exception;
 
     private static bool PathsEqual(string left, string right)
     {

@@ -383,6 +383,7 @@
                            anchor for that mix, so the pane renders real rows and
                            leaves scrolling plus Follow to the shared directive. -->
                       <cac-conversation-view [events]="nextGenChatEvents()"
+                                             [appActivityEventPresentation]="nextGenChatEvents()"
                                              [isRunning]="isRunning() || isActiveJob()"
                                              [queuedFollowUp]="queuedFollowUp()"
                                              [showHeader]="false"

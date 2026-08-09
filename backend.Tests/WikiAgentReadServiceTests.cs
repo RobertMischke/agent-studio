@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
@@ -46,38 +47,48 @@ public sealed class WikiAgentReadLogParserTests
 public sealed class WikiCompanionAgentReadTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "wiki-agent-read-store-" + Guid.NewGuid().ToString("N"));
+    private string WikiDir => Path.Combine(_root, "docs");
 
     [Fact]
-    public void IncrementAgentRead_PreservesExistingBlocksAndCapsNewestHistory()
+    public void Increment_PreservesTrackedCompanionMigratesLegacyBaselineAndCapsNewestHistory()
     {
-        Directory.CreateDirectory(_root);
-        var page = Path.Combine(_root, "page.md");
+        Directory.CreateDirectory(WikiDir);
+        var page = Path.Combine(WikiDir, "page.md");
         File.WriteAllText(page, "# Page\n");
         File.WriteAllText(page + ".meta.json",
-            """{"schemaVersion":"wiki-document-companion/v1","grading":{"grade":"A"}}""");
-        var store = new WikiCompanionStore();
+            """
+            {
+              "schemaVersion": "wiki-document-companion/v1",
+              "grading": { "grade": "A" },
+              "agentReads": {
+                "total": 3,
+                "lastReadAt": "2026-07-22T09:59:00Z",
+                "recent": [{ "at": "2026-07-22T09:59:00Z", "taskKey": "AGT-legacy" }]
+              }
+            }
+            """);
+        var companionBefore = File.ReadAllText(page + ".meta.json");
+        var store = new WikiAgentReadStore();
         var start = new DateTime(2026, 7, 22, 10, 0, 0, DateTimeKind.Utc);
 
         for (var i = 0; i < 22; i++)
-            store.IncrementAgentRead(_root, "page.md", "Page", "# Page\n", start.AddMinutes(i), $"AGT-{i}");
+            store.Increment(WikiDir, "page.md", start.AddMinutes(i), $"AGT-{i}");
 
-        using var doc = JsonDocument.Parse(File.ReadAllText(page + ".meta.json"));
-        var root = doc.RootElement;
-        Assert.Equal("A", root.GetProperty("grading").GetProperty("grade").GetString());
-        var reads = root.GetProperty("agentReads");
-        Assert.Equal(22, reads.GetProperty("total").GetInt32());
-        Assert.Equal(20, reads.GetProperty("recent").GetArrayLength());
-        Assert.Equal("AGT-21", reads.GetProperty("recent")[0].GetProperty("taskKey").GetString());
-        Assert.Equal("AGT-2", reads.GetProperty("recent")[19].GetProperty("taskKey").GetString());
-        Assert.Equal(start.AddMinutes(21), reads.GetProperty("lastReadAt").GetDateTime().ToUniversalTime());
+        Assert.Equal(companionBefore, File.ReadAllText(page + ".meta.json"));
+        var reads = Assert.IsType<WikiAgentReads>(store.Read(WikiDir, "page.md"));
+        Assert.Equal(25, reads.Total);
+        Assert.Equal(20, reads.Recent.Count);
+        Assert.Equal("AGT-21", reads.Recent[0].TaskKey);
+        Assert.Equal("AGT-2", reads.Recent[19].TaskKey);
+        Assert.Equal(start.AddMinutes(21), reads.LastReadAt);
     }
 
     [Fact]
-    public void ApplyAgentReadBackfill_IsIdempotentAndRetainsSameMillisecondReads()
+    public void ApplyBackfill_IsIdempotentAndRetainsSameMillisecondReads()
     {
-        Directory.CreateDirectory(_root);
-        File.WriteAllText(Path.Combine(_root, "page.md"), "# Page\n");
-        var store = new WikiCompanionStore();
+        Directory.CreateDirectory(WikiDir);
+        File.WriteAllText(Path.Combine(WikiDir, "page.md"), "# Page\n");
+        var store = new WikiAgentReadStore();
         var at = new DateTime(2026, 7, 22, 10, 0, 0, 123, DateTimeKind.Utc);
         var recent = new[]
         {
@@ -85,12 +96,82 @@ public sealed class WikiCompanionAgentReadTests : IDisposable
             new WikiAgentReadRecent(at, "AGT-1"),
         };
 
-        store.ApplyAgentReadBackfill(_root, "page.md", "Page", "# Page\n", 2, recent);
-        store.ApplyAgentReadBackfill(_root, "page.md", "Page", "# Page\n", 2, recent);
+        store.ApplyBackfill(WikiDir, "page.md", 2, recent);
+        store.ApplyBackfill(WikiDir, "page.md", 2, recent);
 
-        var root = JsonNode.Parse(File.ReadAllText(Path.Combine(_root, "page.md.meta.json")))!.AsObject();
-        Assert.Equal(2, root["agentReads"]!["total"]!.GetValue<int>());
-        Assert.Equal(2, root["agentReads"]!["recent"]!.AsArray().Count);
+        var root = JsonNode.Parse(File.ReadAllText(WikiAgentReadStore.StatePathFor(WikiDir, "page.md")))!.AsObject();
+        Assert.Equal(2, root["total"]!.GetValue<int>());
+        Assert.Equal(2, root["recent"]!.AsArray().Count);
+    }
+
+    [Theory]
+    [InlineData("../page.md")]
+    [InlineData("/absolute/page.md")]
+    [InlineData("folder//page.md")]
+    public void StatePathFor_RejectsNonRelativeOrEscapingPaths(string relPath)
+    {
+        Assert.Throws<ArgumentException>(() => WikiAgentReadStore.StatePathFor(WikiDir, relPath));
+    }
+
+    [Fact]
+    public void CompanionMetadataWrite_MovesLegacyEvidenceIntoRuntimeState()
+    {
+        Directory.CreateDirectory(WikiDir);
+        var page = Path.Combine(WikiDir, "page.md");
+        File.WriteAllText(page, "# Page\n");
+        File.WriteAllText(page + ".meta.json",
+            """{"agentReads":{"total":7,"lastReadAt":"2026-07-22T10:00:00Z","recent":[{"at":"2026-07-22T10:00:00Z","taskKey":"AGT-7"}]}}""");
+        var reads = new WikiAgentReadStore();
+        var companions = new WikiCompanionStore(reads);
+
+        companions.WriteClassificationStatus(
+            WikiDir, "page.md", "Page", "# Page\n", "aktuell", new DateTime(2026, 8, 8, 10, 0, 0, DateTimeKind.Utc));
+
+        using var companion = JsonDocument.Parse(File.ReadAllText(page + ".meta.json"));
+        Assert.False(companion.RootElement.TryGetProperty("agentReads", out _));
+        Assert.Equal("aktuell", companion.RootElement.GetProperty("classification").GetProperty("status").GetString());
+        var migrated = Assert.IsType<WikiAgentReads>(reads.Read(WikiDir, "page.md"));
+        Assert.Equal(7, migrated.Total);
+        Assert.Equal("AGT-7", Assert.Single(migrated.Recent).TaskKey);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public void Increment_LeavesGitStatusClean()
+    {
+        var repo = Path.Combine(_root, "repo");
+        var wiki = Path.Combine(repo, "docs");
+        Directory.CreateDirectory(wiki);
+        File.WriteAllText(Path.Combine(repo, ".gitignore"), ".orchestrator/\n");
+        File.WriteAllText(Path.Combine(wiki, "page.md"), "# Page\n");
+        File.WriteAllText(Path.Combine(wiki, "page.md.meta.json"),
+            """{"agentReads":{"total":4,"lastReadAt":null,"recent":[]}}""");
+        RunGit(repo, "init");
+        RunGit(repo, "add", ".");
+        RunGit(repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fixture");
+
+        new WikiAgentReadStore().Increment(
+            wiki, "page.md", new DateTime(2026, 8, 8, 10, 0, 0, DateTimeKind.Utc), "AGT-2507");
+
+        Assert.Equal(string.Empty, RunGit(repo, "status", "--porcelain"));
+    }
+
+    private static string RunGit(string workDir, params string[] args)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {stderr}");
+        return stdout.Trim();
     }
 
     public void Dispose()
@@ -159,9 +240,9 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
         Assert.True(File.Exists(first.MarkerPath));
         Assert.True(second.AlreadyCompleted);
 
-        using var companion = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(_repo, "docs", "concepts", "overview.md.meta.json")));
-        var reads = companion.RootElement.GetProperty("agentReads");
+        using var state = JsonDocument.Parse(File.ReadAllText(WikiAgentReadStore.StatePathFor(
+            Path.Combine(_repo, "docs"), "concepts/overview.md")));
+        var reads = state.RootElement;
         Assert.Equal(1, reads.GetProperty("total").GetInt32());
         Assert.Equal("AGT-2242", reads.GetProperty("recent")[0].GetProperty("taskKey").GetString());
     }
@@ -180,9 +261,9 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
         });
 
         Assert.Equal(2, applied);
-        using var companion = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(_repo, "docs", "concepts", "overview.md.meta.json")));
-        Assert.Equal(2, companion.RootElement.GetProperty("agentReads").GetProperty("total").GetInt32());
+        using var state = JsonDocument.Parse(File.ReadAllText(WikiAgentReadStore.StatePathFor(
+            Path.Combine(_repo, "docs"), "concepts/overview.md")));
+        Assert.Equal(2, state.RootElement.GetProperty("total").GetInt32());
     }
 
     [Fact]
@@ -211,9 +292,9 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
 
         Assert.Equal(1, baseline.ReadsApplied);
         Assert.Equal(1, applied);
-        using var companion = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(_repo, "docs", "concepts", "overview.md.meta.json")));
-        var reads = companion.RootElement.GetProperty("agentReads");
+        using var state = JsonDocument.Parse(File.ReadAllText(WikiAgentReadStore.StatePathFor(
+            Path.Combine(_repo, "docs"), "concepts/overview.md")));
+        var reads = state.RootElement;
         Assert.Equal(2, reads.GetProperty("total").GetInt32());
         Assert.Equal(liveAt, reads.GetProperty("lastReadAt").GetDateTime().ToUniversalTime());
         Assert.Equal(2, reads.GetProperty("recent").GetArrayLength());
@@ -257,7 +338,7 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
         return new WikiAgentReadService(
             scanner,
             registry,
-            new WikiCompanionStore(),
+            new WikiAgentReadStore(),
             docs,
             config,
             NullLogger<WikiAgentReadService>.Instance);

@@ -66,6 +66,7 @@ describe('ProjectBasicsCardComponent (smoke)', () => {
     const taskStub = {
       updateRegistryProject: vi.fn(() => of(updated)),
       getRegistryWorkspaces: vi.fn(() => of(workspaces)),
+      getAllProjectSettings: vi.fn(() => of({ Demo: { executionLocation: 'local' } })),
     };
 
     await TestBed.configureTestingModule({
@@ -103,5 +104,45 @@ describe('ProjectBasicsCardComponent (smoke)', () => {
       rootPath: 'C:/Projects/demo',
       clearRootPath: false,
     }));
+  });
+
+  it('warns when the project is remotely assigned without repositoryUrl', async () => {
+    const project: RegistryProjectSummary = {
+      sourceType: 'local-folder', id: 'PROJ-001', displayName: 'Demo', shortCode: 'DEM',
+      workspaceId: 'ws-1', color: '#569cd6', cliDefault: null, modelDefault: null,
+      sortOrder: 0, storageLocation: '/tasks', repositoryPath: null, rootPath: null,
+      repositoryUrl: null, urls: [], archived: false, createdAt: '2026-01-01T00:00:00Z',
+    };
+    const workspaces = [{
+      id: 'ws-1', displayName: 'Workspace', sortOrder: 0, isDefault: true,
+      color: null, createdAt: '2026-01-01T00:00:00Z', projects: [project],
+    }] satisfies RegistryWorkspaceListItem[];
+    const taskStub = {
+      getRegistryWorkspaces: vi.fn(() => of(workspaces)),
+      getAllProjectSettings: vi.fn(() => of({ Demo: { executionLocation: 'agent-runner-01' } })),
+    };
+    await TestBed.configureTestingModule({
+      imports: [ProjectBasicsCardComponent],
+      providers: [
+        provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
+        { provide: TaskService, useValue: taskStub },
+        { provide: CliCatalogStore, useValue: { ensure: () => of([]), modelsFor: () => [] } },
+        { provide: NotificationService, useValue: { success: vi.fn() } },
+        { provide: ProjectLookupService, useValue: { setWorkspaces: vi.fn(), getProjectDisplay: () => ({ id: project.id }) } },
+        { provide: WorkspaceManagerService, useValue: { notifyRegistryChanged: vi.fn(), notifyProjectRenamed: vi.fn() } },
+        { provide: ProjectOverlaysService, useValue: { renameOpenProjectShell: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectBasicsCardComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const warning = fixture.nativeElement.querySelector(
+      '[data-testid="project-remote-repository-warning"]',
+    ) as HTMLElement;
+    expect(warning.textContent).toContain('Remote execution is not claimable');
+    expect(warning.textContent).toContain('repositoryUrl is missing');
   });
 });

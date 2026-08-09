@@ -10,6 +10,13 @@
 
 export type ProjectTokenCategory = 'job' | 'supporting' | 'orchestrator';
 
+export interface ProjectTokenDataFreshness {
+  status: 'complete' | 'partial' | 'unavailable';
+  asOf: string | null;
+  warning: string | null;
+  sources: string[];
+}
+
 export interface ProjectTokenUsageSummary {
   project: string;
   hasData: boolean;
@@ -31,6 +38,7 @@ export interface ProjectTokenUsageSummary {
   firstActivity: string | null;
   lastActivity: string | null;
   fetchedAt: string;
+  freshness?: ProjectTokenDataFreshness;
   disclaimer: string;
 }
 
@@ -56,6 +64,7 @@ export interface ProjectTokenHeatmap {
   jobs: ProjectTokenHeatmapJob[];
   hasData: boolean;
   fetchedAt: string;
+  freshness?: ProjectTokenDataFreshness;
 }
 
 export interface ProjectExpensiveJob {
@@ -155,4 +164,5 @@ export interface ProjectPipelineCostTimeline {
   taskCount: number;
   hasData: boolean;
   fetchedAt: string;
+  freshness?: ProjectTokenDataFreshness;
 }

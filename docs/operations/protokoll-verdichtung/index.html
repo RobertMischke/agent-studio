@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protokoll-Verdichtung | Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00; --accent: #2a78d6;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f; --accent: #3987e5;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  h2 { font-size: 24px; margin: 56px 0 6px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  code { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .mock { border: 1px solid var(--line); border-radius: 8px; background: var(--surface-1); padding: 8px 14px; font: 13.5px/1.7 ui-monospace, Consolas, monospace; color: var(--ink-2); margin: 12px 0; overflow-x: auto; }
+  .mock b { color: var(--ink-1); }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Workbench · Task-Protokoll</p>
+  <h1>Protokoll-Verdichtung</h1>
+  <p class="lede">Drei Flächen im Task-Protokoll verschwenden Raum oder Information: Supervisor-Watchdog-Paare, Tool-Call-Cluster-Zeilen und Edit-Zeilen. Kartiert mit file:line-Belegen; der Ein-Zeilen-Wunsch des Operators ist sofort umsetzbar — ohne Library-Release.</p>
+  <div class="meta">
+    <span><b>Datum</b> 2026-08-09</span>
+    <span><b>Status</b> in Umsetzung · CAC-21 + AGT-2526</span>
+    <span><b>Umsetzung</b> CAC-21 (Library) · AGT-2526 (Studio)</span>
+  </div>
+</header>
+
+<div class="box" style="background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line))">
+  <h4>Entschieden (Operator, 09.08.)</h4>
+  <p><b>02 Supervisor → Variante A:</b> aufklappbare Gruppen-Zeile in der Library, mit besserer visueller Aufbereitung (Design-Mockup vor Umsetzung) — Karte <b>CAC-21</b>. Varianten B und C entfallen. <b>03 Tool-Call-Zeilen → GO</b> wie vorgeschlagen. <b>04 Edit-Zeilen → GO präzisiert:</b> repo-relative Pfade, explizite Zähler-Beschriftung, <b>ohne Diff-Zugang</b>. Studio-Teil: <b>AGT-2526</b>. Status: in Umsetzung (active/testing) bis zur Integration, dann Doku.</p>
+</div>
+
+<h2><span class="no">01</span>Wie die Supervisor-Zeilen entstehen</h2>
+<ul>
+  <li><b>Emission ist bereits sparsam gemeint:</b> Der Backend-Watchdog kündigt nur <b>Zustandswechsel</b> an (Healthy↔Quiet↔Suspicious↔Hung). Die beobachteten 5+ Paare sind echte Übergänge: Ein Agent, der alle ~35–40 s Ausgabe tröpfelt, flappt legitim Quiet→Healthy→Quiet. Budgets je Phase (TurnInProgress: 180/600 s).</li>
+  <li><b>Die Library macht daraus bewusst flache Einzelzeilen:</b> Die Projektion klassifiziert <code>[watchdog]</code>-Zeilen als Kind <code>supervisor.wait</code>; der Zeilen-Builder der Conversation-View schließt vor jedem supervisor.wait die aktuelle Gruppe und rendert eine eigene volle Zeile mit dem rohen Backend-Text. Die vorhandene „N events"-Gruppierung gilt <b>nur</b> für message.*-Kinds.</li>
+  <li><b>AS besitzt einen Transform-Hook:</b> <code>presentActivityEvents</code> (AS-eigene ConversationEvent[]→ConversationEvent[]-Stufe direkt vor der Übergabe an die Library) kann Folgen verdichten — heute, ohne Library-Änderung.</li>
+</ul>
+<p class="evidence-link"><b>Belege:</b> <code>ProjectRunner.TickWatchdog</code> ~3059–3153 (Announce nur bei Transition), <code>PhaseAwareWatchdog.cs</code> 26–124/321–337 (Budgets, phaseTag), <code>conversation-projection.ts</code> ~300–325/1092 (Klassifikation, parseWatchdogText), <code>conversation-view.component.ts</code> ~124–130/526–540 (Gruppierung nur message.*, supervisor.wait flach), <code>activity-event-presentation.ts</code> (AS-Hook).</p>
+
+<h2><span class="no">02</span>Varianten Supervisor-Verdichtung</h2>
+
+<div class="box accent">
+  <h4>Variante B — AS-Projektion: Live-Einzeiler (sofort umsetzbar, Empfehlung als erster Zug)</h4>
+  <p><code>presentActivityEvents</code> faltet konsekutive supervisor.wait-Folgen zu EINEM synthetischen Event:</p>
+  <div class="mock">🛡 Supervisor · <b>6× quiet/resumed</b> · längste Stille <b>35 s</b> (erlaubt 180 s) · zuletzt 23:49</div>
+  <p>Erfüllt exakt den Ein-Zeilen-Wunsch, kein Library-Release, keine Pin-/Patch-Arbeit. Grenze: Die Zeile ist nicht aufklappbar (die Library kennt keine Gruppen-Zeile für dieses Kind) — die Einzel-Events bleiben im Roh-Log einsehbar. Killed/Timeout-Events werden NIE verdichtet (eigene Zeile, auffällig).</p>
+</div>
+
+<div class="box">
+  <h4>Variante C — Backend-Hysterese (Emissions-Hygiene, ergänzend)</h4>
+  <p>Announce-Politik verfeinern: Quiet-Wiederholungen innerhalb eines Laufs nur erneut ankündigen, wenn die Stille einen Schwellwert des Budgets erreicht (z. B. ≥ 50 % von Suspicious) oder das Flapping ein Muster wird (z. B. &gt; 5 Wechsel in 10 min → eine Sammel-Warnung). Reduziert die Ereignis-Menge an der Quelle — wirkt auch im Roh-Log und für Remote-Betrachter. Achtung: neue Hysterese-Semantik im Watchdog, kein reiner Anzeige-Fix; Timeout-/Kill-Pfade unangetastet.</p>
+</div>
+
+<div class="box">
+  <h4>Variante A — Library-Gruppenzeile (strukturell sauber, 0.4.0-Zug)</h4>
+  <p>supervisor.wait wird in der Library gruppierbar (eigene collapsible Gruppen-Zeile nach dem Vorbild der message.*-Gruppierung, mit Zähler und Aufklappen zur vollen Historie). Richtig als Ausbau, hängt aber an der Release-Kette: Pin 0.3.2 + byte-exakter postinstall-Patch → Übernahme sinnvoll erst im CAC-20/0.4.0-Zug.</p>
+</div>
+
+<p class="dim"><b>Empfehlung:</b> B sofort + C als Emissions-Hygiene; A im 0.4.0-Zug nachziehen (dann ersetzt die aufklappbare Gruppen-Zeile den synthetischen Einzeiler).</p>
+
+<h2><span class="no">03</span>Tool-Call-Cluster-Zeilen: mehr Information auf der Zeile</h2>
+<p>Die zugeklappten Cluster („🖥 6 … 1m 28s") tragen heute nur Zähler und Dauer. Vorschlag für die Zeile (nüchtern, einzeilig):</p>
+<div class="mock">🖥 <b>6 Tool-Calls</b> · shell ×4, read ×2 · <b>alle ok</b> · 1 m 28 s</div>
+<div class="mock">📄 <b>5 Edits</b> · 1 Datei (marketing-studio-….ts) · <b>ok</b> · 12 s</div>
+<p>Also: Tool-Mix (Top-2-Arten mit Zähler), Erfolgs-Aggregat (alle ok / n fehlgeschlagen — Fehlschläge rot und nie verdichtet), Dauer. Umsetzungsort analog Variante B (AS-Projektion) bzw. A (Library-Zeile), gleiche Abwägung.</p>
+
+<h2><span class="no">04</span>Edit-Zeilen: Pfad, Zähler-Semantik, Diff</h2>
+<p>Beobachtet: <code>edit Edit C:\Users\rmisc\AppData\Local\Temp\ass-worktrees\Agent-Studio-Marketing\marketing-stu… ok ×5</code> — abgeschnittener Absolutpfad, mehrdeutiges ×5.</p>
+<ul>
+  <li><b>Antwort auf die Operator-Frage („kommt das von der CLI?"):</b> Ja und nein. Die Edit-Operationen samt Pfaden kommen aus dem CLI-Ausgabestrom; die <b>Darstellung</b> (Rohpfad ungekürzt, ×5-Aggregation) ist Projektion/Renderer. Die CLI liefert im Stream <b>keine Diffs</b> — nur die Edit-Ereignisse.</li>
+  <li><b>Pfad:</b> Der Temp-Worktree-Präfix ist Rauschen — der Host kennt den Worktree-Root und kann <b>repo-relativ</b> anzeigen (<code>frontend/src/app/wiki/…</code>), voller Pfad im Tooltip. Damit verschwindet auch das Truncation-Problem fast immer.</li>
+  <li><b>Zähler-Semantik:</b> ×5 heißt „5 Edit-Operationen", nicht „5 Dateien". Beschriftung explizit: „5 Edits · 1 Datei" bzw. „7 Edits · 3 Dateien" (Dateiliste aufklappbar bzw. im Tooltip).</li>
+  <li><b>Diff-Zugang:</b> Inline-Diff im Protokoll wäre Neuaufbau (Diffs müssten aus Git berechnet und in die Zeile geladen werden — teuer, scrollt schlecht). Vorschlag v1: die Edit-Zeile verlinkt auf die vorhandene Commit-Diff-Fläche (Task-Commit-Panel, gleicher Payload-Kontrakt); Inline-Hunks erst, wenn v1 nicht reicht.</li>
+</ul>
+
+<h2><span class="no">05</span>Entscheidung</h2>
+<ul>
+  <li>Supervisor: B sofort + C Hysterese + A im 0.4.0-Zug (Empfehlung) — oder andere Kombination?</li>
+  <li>Tool-Call-Zeilen: Zeilenformat wie in 03 — GO?</li>
+  <li>Edit-Zeilen: repo-relative Pfade + explizite Zähler + Link auf Commit-Diff (statt Inline-Diff) — GO?</li>
+</ul>
+<p class="dim">Nach GO wandert die vorbereitete Backlog-Karte nach 2-ready. Quellen: Kartierungs-Workflow wf_4d672d70-7de (09.08.), Operator-Screenshots 08./09.08.</p>
+
+</main>
+</body>
+</html>

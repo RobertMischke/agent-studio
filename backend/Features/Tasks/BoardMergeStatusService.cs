@@ -237,9 +237,7 @@ public sealed class BoardMergeStatusService
 
     private string ConfiguredIntegrationBranch(TaskInfo task)
     {
-        return TaskIntegrationBranch.Resolve(
-            task,
-            _settings.Get(task.ProjectName).IntegrationBranch);
+        return _settings.Get(task.ProjectName).IntegrationBranch;
     }
 
     /// <summary>Drops the cached reachability sets. Tests use this to force a fresh read.</summary>

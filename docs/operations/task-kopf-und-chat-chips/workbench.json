@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "task-kopf-und-chat-chips",
+  "title": "Task-Kopf & Chat-Chips — Layout-Härtung",
+  "summary": "Drei visuelle Defekte aus dem Operator-Review 08.08., kartiert mit file:line-Belegen: (1) Pane-Tabs überlappen bei Platzmangel (fehlendes Ellipsis im pane-tab__label bei shrinkbarem Host, kein Breakpoint berührt die Tab-Leiste) — zwei Responsive-Varianten nach Operator-Vorgabe (Icon-only vs. Overflow-Menü) mit Mockups und Empfehlung; (2) Escalation-Banner zeigt 'main — / main —' als Branch-Chips — bei Projekten mit Integration==Release-Branch sind beide Segmente identisch und der nackte Gedankenstrich ist als 'nicht gemergt' unlesbar; (3) Chat-Header-Session-Chip überlappt ('main@sha' ohne Overflow-Guard in dreifacher min-width:0-Kette). Zur Umsetzungs-Entscheidung vorgelegt; Implementierungs-Karte liegt im Backlog.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-08T21:30:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": ["QS-54", "AGT-2517"]
+}

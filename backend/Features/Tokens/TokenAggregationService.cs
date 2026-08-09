@@ -3,9 +3,9 @@
 namespace AgentStudio.Tokens;
 
 /// <summary>
-/// Phase-4 implementation of <see cref="ITokenAggregator"/>. Every per-project
-/// surface reads through a bus-backed reader so the workspace bus is the
-/// single source of truth (see <c>docs/system/domains/tokens.md</c>). The
+/// Implementation of <see cref="ITokenAggregator"/>. Project and task-card
+/// surfaces read a deduplicated union of the historical bus and current
+/// durable task receipts (see <c>docs/system/domains/tokens.md</c>). The
 /// pure-function folds still live on the legacy services
 /// (<see cref="TokenSummaryService"/>, <see cref="WorkspaceTokensTimelineService"/>,
 /// <see cref="ProjectTokenUsageService"/>) so the math is identical to the
@@ -29,7 +29,6 @@ public sealed class TokenAggregationService : ITokenAggregator
     private readonly IConfiguration _config;
     private readonly TokenSummaryCacheStore _summaryCache;
     private readonly BusBackedAdHocUsageReader _busAdHoc;
-    private readonly BusBackedTokenSummaryReader _busSummary;
     private readonly BusBackedWorkspaceTimelineReader _busTimeline;
     private readonly BusBackedProjectTokenUsageReader _busProjectUsage;
 
@@ -38,7 +37,6 @@ public sealed class TokenAggregationService : ITokenAggregator
         IConfiguration config,
         TokenSummaryCacheStore summaryCache,
         BusBackedAdHocUsageReader busAdHoc,
-        BusBackedTokenSummaryReader busSummary,
         BusBackedWorkspaceTimelineReader busTimeline,
         BusBackedProjectTokenUsageReader busProjectUsage)
     {
@@ -46,7 +44,6 @@ public sealed class TokenAggregationService : ITokenAggregator
         _config = config;
         _summaryCache = summaryCache;
         _busAdHoc = busAdHoc;
-        _busSummary = busSummary;
         _busTimeline = busTimeline;
         _busProjectUsage = busProjectUsage;
     }
@@ -82,10 +79,15 @@ public sealed class TokenAggregationService : ITokenAggregator
         => _busProjectUsage.BuildJobDetail(projectName, watchPath, jobId);
 
     public TokenSummary LifetimeSummary(string projectName, string watchPath)
-        => _busSummary.Summarize(projectName);
+        => _busProjectUsage.BuildLifetimeSummary(projectName, watchPath);
 
     public TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects)
-        => _busSummary.Aggregate(projects, _summaryCache);
+    {
+        var summaries = projects
+            .Select(project => (project.Name, _busProjectUsage.BuildLifetimeSummary(project.Name, project.WatchPath)))
+            .ToList();
+        return TokenSummaryService.AggregateSummaries(summaries, _summaryCache);
+    }
 
     public TokenSummaryAggregate? CachedWorkspaceAggregate()
         => _summaryCache.Read();
@@ -98,7 +100,7 @@ public sealed class TokenAggregationService : ITokenAggregator
         var resolvedProject = !string.IsNullOrWhiteSpace(projectName)
             ? projectName
             : ResolveProjectName(watchPath!) ?? Path.GetFileName(watchPath!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return _busSummary.SummarizePerJob(resolvedProject);
+        return _busProjectUsage.BuildPerJob(resolvedProject, watchPath);
     }
 
     public TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null)

@@ -153,11 +153,21 @@ public static class LeaseEndpoints
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
             PromptEnrichmentService promptEnrichment,
+            RemoteDispatchRejectionStore dispatchRejections,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
             var remoteClaimFailures = new RemoteClaimFailureBudget(
                 loggerFactory.CreateLogger<RemoteClaimFailureBudget>());
+            var remoteDeliveryFailures = new RemoteDeliveryFailureStore(
+                loggerFactory.CreateLogger<RemoteDeliveryFailureStore>());
+            void RecordRejection(TaskInfo task, string code, string? reason) =>
+                dispatchRejections.Record(
+                    task,
+                    req.RunnerId,
+                    req.RunnerName,
+                    code,
+                    reason);
             if (string.IsNullOrWhiteSpace(req.RunnerId) || string.IsNullOrWhiteSpace(req.RunnerName))
                 return Results.BadRequest(new RunnerClaimResponse(RunnerClaimStatus.Invalid, Message: "runnerId and runnerName are required."));
             if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
@@ -573,6 +583,7 @@ public static class LeaseEndpoints
                     if (!capabilityAdmission.Eligible)
                     {
                         capabilityMismatch ??= capabilityAdmission.Message;
+                        RecordRejection(task, "capability-mismatch", capabilityAdmission.Message);
                         logger.LogInformation(
                             "remote-runner-coding-claim-skipped-capability runner={Runner} task={TaskKey} cli={CliType} reason={Reason}",
                             req.RunnerName,
@@ -598,6 +609,10 @@ public static class LeaseEndpoints
                             && ProjectDeliveryPreflightPolicy.IsFresh(cached, now)
                             && !string.Equals(cached.Status, "ready", StringComparison.OrdinalIgnoreCase))
                         {
+                            RecordRejection(
+                                task,
+                                "project-preflight-failed",
+                                $"project delivery preflight failed: {cached.Detail}");
                             failedPreflightCandidate ??= task;
                             failedPreflightRepository ??= repository;
                             failedProjectPreflight ??= cached;
@@ -609,6 +624,10 @@ public static class LeaseEndpoints
                     }
 
                     nonRemoteCapableProject = task.ProjectName;
+                    RecordRejection(
+                        task,
+                        "repository-url-missing",
+                        "project has no repositoryUrl");
                     if (registryProject is not null && !string.IsNullOrWhiteSpace(clientId))
                     {
                         var missingRepositoryDetail =
@@ -644,6 +663,10 @@ public static class LeaseEndpoints
                     && failedPreflightRepository is not null
                     && failedProjectPreflight is not null)
                 {
+                    RecordRejection(
+                        failedPreflightCandidate,
+                        "project-preflight-failed",
+                        $"project delivery preflight failed: {failedProjectPreflight.Detail}");
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightFailed,
                         ProjectName: failedPreflightCandidate.ProjectName,
@@ -727,6 +750,10 @@ public static class LeaseEndpoints
 
                 if (!string.Equals(projectPreflight.Status, "ready", StringComparison.OrdinalIgnoreCase))
                 {
+                    RecordRejection(
+                        candidate,
+                        "project-preflight-failed",
+                        $"project delivery preflight failed: {projectPreflight.Detail}");
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.PreflightFailed,
                         ProjectName: candidate.ProjectName,
@@ -762,12 +789,17 @@ public static class LeaseEndpoints
                         "remote-runner-prompt-enrichment-blocked project={Project} task={TaskKey}",
                         candidate.ProjectName,
                         taskKey);
+                    RecordRejection(
+                        candidate,
+                        "dispatch-preparation-failed",
+                        $"prompt enrichment blocked dispatch: {ex.Message}");
                     return Results.Ok(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty,
                         Message: $"Prompt enrichment blocked dispatch: {ex.Message}"));
                 }
                 runSpec = AddPromptEnrichment(runSpec, enrichmentPreparation?.ContextMarkdown);
                 remoteClaimFailures.PrepareForClaim(candidate);
+                remoteDeliveryFailures.PrepareForClaim(candidate);
                 var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
                     ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
                     : req.IdempotencyKey.Trim();
@@ -784,6 +816,7 @@ public static class LeaseEndpoints
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome)));
 
+                dispatchRejections.Clear(candidate);
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
                     cause: $"remote-runner:{req.RunnerName.Trim()}",
@@ -801,6 +834,10 @@ public static class LeaseEndpoints
                     logger.LogWarning(
                         "remote-runner-claim-move-failed project={Project} task={TaskKey} runner={Runner} status={Status} message={Message}",
                         candidate.ProjectName, taskKey, req.RunnerName, move.Status, move.Message);
+                    RecordRejection(
+                        candidate,
+                        "dispatch-transition-failed",
+                        $"claim move refused: {move.Status} {move.Message}");
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty, Message: $"claim move refused: {move.Status} {move.Message}")));
                 }
@@ -935,6 +972,7 @@ public static class LeaseEndpoints
             TaskTransitionService transitions,
             RunLeaseService leases,
             AttemptAuthorityService authority,
+            ReviewAttemptTaskLifecycleService reviewAttemptLifecycle,
             TimelineLog timeline,
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
@@ -953,6 +991,8 @@ public static class LeaseEndpoints
             {
             var remoteClaimFailures = new RemoteClaimFailureBudget(
                 loggerFactory.CreateLogger<RemoteClaimFailureBudget>());
+            var remoteDeliveryFailures = new RemoteDeliveryFailureStore(
+                loggerFactory.CreateLogger<RemoteDeliveryFailureStore>());
             var reportedOutcome = req.Outcome ?? string.Empty;
             var task = scanner.ScanAllJobs().FirstOrDefault(t =>
                 string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
@@ -1049,13 +1089,20 @@ public static class LeaseEndpoints
             AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? resultEnvelope = null;
             string? resultEnvelopeDigest = null;
             var leasedRun = authority.GetRun(attemptId);
+            var worktreeBlocked = (req.GateItems ?? []).Any(item =>
+                item.TrimStart().StartsWith(
+                    HumanReviewEscalationCategories.WorktreeBlocked + ":",
+                    StringComparison.OrdinalIgnoreCase));
             var envelopeDecision = RemoteCompletionEnvelopePolicy.Decide(
-                requiresEnvelope: !isEpicPlanning && !TaskModes.IsReportOnly(task.Mode),
+                requiresEnvelope: !isEpicPlanning
+                                  && !TaskModes.IsReportOnly(task.Mode)
+                                  && !worktreeBlocked,
                 outcome,
                 runAttemptKnown: leasedRun is not null,
-                hasBaseSha: !string.IsNullOrWhiteSpace(req.BaseSha),
+                hasResultSha: ReviewSubjectStore.IsValidResultSha(req.ResultSha),
+                hasBaseSha: ReviewSubjectStore.IsValidResultSha(req.BaseSha),
                 hasImmutableResultRef: !string.IsNullOrWhiteSpace(req.ImmutableResultRef),
-                hasArtifactManifestDigest: !string.IsNullOrWhiteSpace(req.ArtifactManifestDigest));
+                hasArtifactManifestDigest: IsSha256(req.ArtifactManifestDigest));
             var responseOutcome = reportedOutcome;
             string? unverifiedDelivery = null;
             if (envelopeDecision.ShouldPersist)
@@ -1072,11 +1119,11 @@ public static class LeaseEndpoints
                 resultEnvelopeDigest =
                     AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(resultEnvelope);
             }
-            else if (envelopeDecision.ShouldEscalate)
+            else if (envelopeDecision.ShouldFailDelivery)
             {
                 outcome = envelopeDecision.AuthorityOutcome;
-                responseOutcome = "Unverified";
-                targetState = TaskStates.Escalated;
+                responseOutcome = RemoteDeliveryFailurePolicy.DeliveryFailed;
+                targetState = TaskStates.Ready;
                 unverifiedDelivery = envelopeDecision.Reason;
             }
             var settled = authority.SettleRun(new SettleRunAttemptRequest
@@ -1106,16 +1153,39 @@ public static class LeaseEndpoints
                     ? Results.BadRequest(response)
                     : Results.Conflict(response);
             }
-            if (envelopeDecision.ShouldEscalate)
+            RemoteDeliveryFailureDecision? deliveryFailure = null;
+            if (envelopeDecision.ShouldFailDelivery)
             {
-                mutations.AddJobTag(
-                    task.Id, OutOfBandStampPolicy.UnverifiedDeliveryTag, task.WatchPath);
+                deliveryFailure = settled.Status == AttemptWriteStatus.Duplicate
+                    ? remoteDeliveryFailures.GetDecision(task)
+                    : null;
+                deliveryFailure ??= remoteDeliveryFailures.Record(
+                    task,
+                    unverifiedDelivery!,
+                    req.SalvageRecoveryBranch ?? req.SalvageBranch,
+                    req.SalvageRecoveryCommitSha ?? req.SalvageCommitSha);
+                targetState = deliveryFailure.Escalate
+                    ? TaskStates.Escalated
+                    : TaskStates.Ready;
+                if (deliveryFailure.Escalate)
+                {
+                    mutations.AddJobTag(
+                        task.Id, OutOfBandStampPolicy.UnverifiedDeliveryTag, task.WatchPath);
+                }
                 loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
-                    "remote-completion-envelope-missing task={TaskKey} attempt={AttemptId} runner={RunnerId} reason={Reason}",
+                    "remote-completion-envelope-missing task={TaskKey} attempt={AttemptId} runner={RunnerId} deliveryAttempt={DeliveryAttempt}/{MaximumAttempts} targetState={TargetState} fence={FenceBranch} reason={Reason}",
                     req.TaskKey,
                     attemptId,
                     req.RunnerId,
+                    deliveryFailure.Attempt,
+                    deliveryFailure.MaximumAttempts,
+                    targetState,
+                    req.SalvageRecoveryBranch ?? req.SalvageBranch ?? "none",
                     unverifiedDelivery);
+            }
+            else if (settled.Status != AttemptWriteStatus.Duplicate)
+            {
+                remoteDeliveryFailures.Reset(task);
             }
 
             // The immutable ResultEnvelope ref is the reviewed delivery. A
@@ -1247,6 +1317,7 @@ public static class LeaseEndpoints
             }
 
             ReviewAttemptDto? reviewAttempt = null;
+            CreateReviewAttemptRequest? reviewAttemptRequest = null;
             // Report-only modes (planning / research) deliver a document into the
             // task folder on THIS server; there is no code subject to materialize
             // on a review-executor host. Their completion is validated
@@ -1265,7 +1336,7 @@ public static class LeaseEndpoints
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
                 var run = settled.RunAttempt!;
-                var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                reviewAttemptRequest = new CreateReviewAttemptRequest(
                     req.TaskKey,
                     run.RepositoryId,
                     run.ResultSha!,
@@ -1275,35 +1346,7 @@ public static class LeaseEndpoints
                     run.EvidenceDigests,
                     $"review-subject:{run.AttemptId}:{run.ResultSha}",
                     RepositoryUrl: req.Repository,
-                    ResultRef: deliveryBranch));
-                if (!review.Accepted)
-                {
-                    return Results.Conflict(new RemoteRunCompletionResponse(
-                        req.TaskKey, reportedOutcome, task.State, review.Message,
-                        RunAttemptId: run.AttemptId,
-                        FailureClassification: review.Status.ToString()));
-                }
-                reviewAttempt = review.ReviewAttempt;
-
-                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
-                {
-                    TaskKey = req.TaskKey,
-                    RunAttemptId = run.AttemptId,
-                    Project = task.ProjectName,
-                    Repository = req.Repository
-                                 ?? git.ResolveRepoRootForWatchPath(task.WatchPath)
-                                 ?? string.Empty,
-                    ResultSha = run.ResultSha!,
-                    AttemptChainId = req.AttemptChainId!,
-                    Executor = req.RunnerId,
-                    LeaseId = req.LeaseId,
-                    FencingToken = req.FencingToken,
-                    ImmutableResultRef = run.ResultEnvelope?.ImmutableRemoteRef,
-                    ResultRef = deliveryBranch,
-                    IntegrationBranch = deliveryRange?.IntegrationBranch
-                                        ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),
-                    CompletedAtUtc = DateTimeOffset.UtcNow,
-                });
+                    ResultRef: deliveryBranch);
             }
 
             if (!isEpicPlanning
@@ -1311,7 +1354,7 @@ public static class LeaseEndpoints
                 && string.Equals(task.State, targetState, StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Ok(new RemoteRunCompletionResponse(
-                    req.TaskKey, reportedOutcome, targetState, "duplicate delivery",
+                    req.TaskKey, responseOutcome, targetState, "duplicate delivery",
                     RunAttemptId: attemptId,
                     ReviewAttemptId: reviewAttempt?.AttemptId,
                     ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
@@ -1374,6 +1417,14 @@ public static class LeaseEndpoints
                 details["commitAttributionWarning"] = attributionWarning;
             if (!string.IsNullOrWhiteSpace(reportedReason))
                 details["reason"] = reportedReason;
+            if (deliveryFailure is not null)
+            {
+                details["deliveryStatus"] = RemoteDeliveryFailurePolicy.DeliveryFailed;
+                details["deliveryAttempt"] = deliveryFailure.Attempt.ToString();
+                details["maximumDeliveryAttempts"] = deliveryFailure.MaximumAttempts.ToString();
+                details["missingEnvelopeFacts"] = string.Join(",", envelopeDecision.MissingFacts ?? []);
+                details["deliveryAction"] = deliveryFailure.Escalate ? "escalate" : "requeue";
+            }
             RemoteClaimFailureDecision? claimFailure = null;
             if (outcome == "environmentfailure")
             {
@@ -1420,6 +1471,19 @@ public static class LeaseEndpoints
                     System.Text.Encoding.UTF8);
                 artifactCommits.TryCommitArtifactUpload(
                     null, task.Id, task.FolderPath, ["results/deliverables.md"]);
+            }
+            if (deliveryFailure is not null)
+            {
+                RemoteDeliveryFailureNote.Append(
+                    task.FolderPath,
+                    attemptId,
+                    deliveryFailure,
+                    unverifiedDelivery!,
+                    CredentialRedactor.Redact(req.SalvageRecoveryBranch ?? req.SalvageBranch),
+                    CredentialRedactor.Redact(req.SalvageRecoveryCommitSha ?? req.SalvageCommitSha),
+                    CredentialRedactor.Redact(req.SalvageRecoveryBranchUrl ?? req.SalvageBranchUrl));
+                artifactCommits.TryCommitArtifactUpload(
+                    null, task.Id, task.FolderPath, ["status.md", "prompt.md"]);
             }
             var timelineAlreadyRecorded = timeline.ReadAll(task.FolderPath).Any(evt =>
                 evt.Details is not null
@@ -1607,7 +1671,7 @@ public static class LeaseEndpoints
                 // boundary reason instead of a generic agent-outcome text.
                 var (category, reason) = unverifiedDelivery is not null
                     ? (HumanReviewEscalationCategories.UnverifiedDelivery, unverifiedDelivery)
-                    : RemoteEscalation(outcome, req.Reason);
+                    : RemoteEscalation(outcome, req.Reason, req.GateItems);
                 var escalated = await humanReviewEscalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,
@@ -1646,7 +1710,9 @@ public static class LeaseEndpoints
             {
                 var move = await transitions.MoveAsync(
                     task.Id, targetState, task.WatchPath, ct,
-                    cause: $"remote-runner-completion:{source}",
+                    cause: deliveryFailure is null
+                        ? $"remote-runner-completion:{source}"
+                        : $"remote-delivery-envelope-retry:{deliveryFailure.Attempt}/{deliveryFailure.MaximumAttempts}",
                     authorityWrite: laneWrite,
                     suppressProductExecution: true);
                 if (move.Status != MoveJobStatus.Success)
@@ -1655,6 +1721,44 @@ public static class LeaseEndpoints
                         RunAttemptId: attemptId,
                         ReviewAttemptId: reviewAttempt?.AttemptId,
                         ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+            }
+
+            // The claim guard and this mint share ReviewAttemptTaskLifecycleService's
+            // lifecycle lock. The persisted lane transition above therefore closes
+            // the former Progress-window race: a poll sees either no attempt or an
+            // attempt whose task is already in Auto Review.
+            if (reviewAttemptRequest is not null)
+            {
+                task = scanner.FindJob(task.Id, task.WatchPath) ?? task;
+                var review = reviewAttemptLifecycle.CreateReviewAttemptInAutoReview(task, reviewAttemptRequest);
+                if (!review.Accepted || review.ReviewAttempt is null)
+                {
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, task.State, review.Message,
+                        RunAttemptId: attemptId,
+                        FailureClassification: review.Status.ToString()));
+                }
+                reviewAttempt = review.ReviewAttempt;
+                var run = settled.RunAttempt!;
+                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
+                {
+                    TaskKey = req.TaskKey,
+                    RunAttemptId = run.AttemptId,
+                    Project = task.ProjectName,
+                    Repository = req.Repository
+                                 ?? git.ResolveRepoRootForWatchPath(task.WatchPath)
+                                 ?? string.Empty,
+                    ResultSha = run.ResultSha!,
+                    AttemptChainId = req.AttemptChainId!,
+                    Executor = req.RunnerId,
+                    LeaseId = req.LeaseId,
+                    FencingToken = req.FencingToken,
+                    ImmutableResultRef = run.ResultEnvelope?.ImmutableRemoteRef,
+                    ResultRef = reviewAttemptRequest.ResultRef,
+                    IntegrationBranch = deliveryRange?.IntegrationBranch
+                                        ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),
+                    CompletedAtUtc = DateTimeOffset.UtcNow,
+                });
             }
 
             loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(
@@ -1669,6 +1773,7 @@ public static class LeaseEndpoints
             }
             return Results.Ok(new RemoteRunCompletionResponse(
                 req.TaskKey, responseOutcome, targetState,
+                Message: deliveryFailure is null ? null : unverifiedDelivery,
                 RunAttemptId: attemptId,
                 ReviewAttemptId: reviewAttempt?.AttemptId,
                 ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
@@ -1917,12 +2022,29 @@ public static class LeaseEndpoints
     private static string InitiatingPrincipal(string? ownerClientId)
         => string.IsNullOrWhiteSpace(ownerClientId) ? "automation:unknown" : ownerClientId;
 
-    private static (string Category, string Reason) RemoteEscalation(string outcome, string? reportedReason)
+    private static bool IsSha256(string? value)
+        => value is { Length: 64 } && value.All(Uri.IsHexDigit);
+
+    private static (string Category, string Reason) RemoteEscalation(
+        string outcome,
+        string? reportedReason,
+        IReadOnlyList<string>? gateItems)
     {
         var reason = CredentialRedactor.Redact(reportedReason)
             .Replace('\r', ' ')
             .Replace('\n', ' ')
             .Trim();
+        if ((gateItems ?? []).Any(item =>
+                item.TrimStart().StartsWith(
+                    HumanReviewEscalationCategories.WorktreeBlocked + ":",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            return (
+                HumanReviewEscalationCategories.WorktreeBlocked,
+                reason.Length == 0
+                    ? "The remote runner retained an unsecured worktree because its salvage fence could not be published."
+                    : reason);
+        }
         return outcome switch
         {
             "blocked" when reason.StartsWith(

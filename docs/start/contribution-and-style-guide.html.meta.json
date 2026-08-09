@@ -1,0 +1,50 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "contribution-and-style-guide",
+  "source": {
+    "path": "docs/start/contribution-and-style-guide.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "46c9bdb2fdee54f1feb7c53acdb229bed7bb4d48b0f3a1fcbb1c36d58fcc5f43",
+      "sizeBytes": 13855,
+      "lineCount": 206,
+      "capturedAt": "2026-08-04T18:15:38.0331756Z"
+    }
+  },
+  "agentReads": {
+    "total": 7,
+    "lastReadAt": "2026-08-04T18:18:38.8347339Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:18:38.8347339Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:18:38.8347339Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331756Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331756Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331756Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331756Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:15:38.0331756Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

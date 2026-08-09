@@ -1,14 +1,14 @@
 ---
 id: token-aggregation-concept
-title: "Token aggregators became bus-backed shims (concept + living knowledge)"
+title: "Token aggregators use canonical hybrid projections (concept + living knowledge)"
 status: active
 category: concept
-updatedAt: 2026-06-09
-last-updated: 2026-06-09
-reason: "Concept + knowledge-collection page for the token-aggregation domain (ASS-881)"
-taskKey: ASS-1717
-tags: [token-aggregation, bus-backed-shim, drift-rule, observability, cost]
-related-tasks: [ASS-881, ASS-1717]
+updatedAt: 2026-08-09
+last-updated: 2026-08-09
+reason: "Document the hybrid history plus durable-receipt repair after the remote-runner telemetry gap"
+taskKey: AGT-2542
+tags: [token-aggregation, hybrid-projection, task-receipt, drift-rule, observability, cost]
+related-tasks: [ASS-881, ASS-1717, AGT-2542]
 related-adrs: []
 related-docs:
   - "docs/system/domains/tokens.md"
@@ -17,11 +17,11 @@ related-docs:
   - "docs/system/architecture/bus/agent-message-bus.md"
 ---
 
-# Token aggregators -> bus-backed shims
+# Token aggregators -> canonical hybrid projections
 
 > **What this page is.** A living concept and knowledge-collection page for the
 > token-aggregation area of the backend. It explains *why* every token roll-up
-> now reads from one source (the Agent Message Bus), *what* the four legacy
+> now reads through one canonical projection, *what* the four legacy
 > aggregators were and why they became thin shims, and *how* the architecture
 > guard test stops the old pattern from creeping back. New findings about this
 > area belong in the [Living knowledge log](#living-knowledge-log) at the
@@ -33,11 +33,15 @@ related-docs:
 - There used to be **five** independent token-spend aggregators. Three of them
   read the *same* file (`orchestrator.jsonl`) and each rounded, filtered, and
   categorised differently, so the "tokens today" number disagreed across the UI.
-- The fix is one canonical interface, **`ITokenAggregator`**, backed by one
-  source of truth, the **Agent Message Bus** (`logs/bus/*.jsonl`).
+- The fix is one canonical interface, **`ITokenAggregator`**, backed by an
+  explicit hybrid projection: historical Agent Message Bus records plus
+  durable current task token receipts.
 - **ASS-881 (Refactor Phase 4)** converted the four legacy aggregators into
   *bus-backed shims*: their pure math is reused, but the input now comes from
   the bus instead of each surface re-reading log files its own way.
+- **AGT-2542** repaired the July 11 gap caused by remote runs bypassing the bus
+  usage writer. Project, aggregate, and task-card reads now merge the bus with
+  `task.json.tokenSummary` and deduplicate overlapping calls.
 - A drift rule (`token-aggregation-canonical`) plus an **architecture guard
   test** (`TokenAggregationCanonicalDependencyTest`) prevent any new code from
   injecting the old concrete aggregators again.
@@ -57,11 +61,10 @@ frontmatter parsing (`FrontmatterParser`). The cure is always the same shape:
 
 1. **One canonical surface** that is the union of every consumer's needs:
    `ITokenAggregator`.
-2. **One source of truth**: the Agent Message Bus. Every run, supporting call,
-   and orchestrator decision already emits a `kind=token-usage` message to the
-   bus, so the bus holds the complete spend picture (and it also carries the
-   newer `contextWindow` / `latency` fields the old log readers never knew
-   about).
+2. **Explicit source precedence**: the Agent Message Bus remains the immutable
+   history source. Durable `task.json.tokenSummary` receipts supply current
+   remote-runner calls. The canonical reader merges both with multiset
+   deduplication instead of assuming either source is complete by itself.
 3. **A drift rule** that flags any new ad-hoc roll-up so the problem cannot
    silently return.
 
@@ -72,29 +75,26 @@ consumers (endpoints, job-card footer, status bar)
         |
         v
 ITokenAggregator                         <- the only thing new code depends on
-        |  (interface: backend/Services/Tokens/ITokenAggregator.cs)
+        |  (interface: backend/Features/Tokens/ITokenAggregator.cs)
         v
 TokenAggregationService                  <- the single implementation
-        |  (backend/Services/Tokens/TokenAggregationService.cs)
+        |  (backend/Features/Tokens/TokenAggregationService.cs)
         |
         +--> BusAggregationCache          (bus-native rollup: byModel/byParticipant/byDay)
-        +--> BusBackedTokenSummaryReader      (lifetime + per-model + USD, per-job footer)
+        +--> BusBackedProjectTokenUsageReader (hybrid project, lifetime, aggregate, task-card reads)
+        |       +--> AgentMessageBusStore     (historical logs/bus/*.jsonl)
+        |       +--> ProjectTokenReceiptReader (current task.json.tokenSummary)
         +--> BusBackedWorkspaceTimelineReader (project x time-bucket cells)
-        +--> BusBackedProjectTokenUsageReader (summary, heatmap, expensive-jobs, drill-down)
         +--> BusBackedAdHocUsageReader        (TitleGen / SummaryGen / ... one-shot rollup)
-                        |
-                        v
-                AgentMessageBusStore  ->  logs/bus/*.jsonl   (source of truth)
 ```
 
 `TokenAggregationService` does almost no math itself. Each method delegates to
-the matching bus-backed reader. The readers, in turn, do not re-derive the math
-either: they convert bus messages into transient log entries via
-`BusTokenEntryConverter` and then call the **same pure-function folds** that the
-legacy services always used. That is the trick that makes parity exact by
-construction: model-key normalisation, USD estimation through `TokenPricing`,
-day-bucket formatting, and the Job/Supporting/Orchestrator split all run through
-one code path. The bus reader only swaps the *input source*.
+the matching canonical reader. The readers, in turn, do not re-derive the math.
+They convert historical bus messages and current receipts into transient log
+entries and then call the **same pure-function folds** that the legacy services
+always used. Model-key normalisation, USD estimation through `TokenPricing`,
+day-bucket formatting, and the Job/Supporting/Orchestrator split still run
+through one code path. The hybrid reader only composes the inputs.
 
 ## What the legacy aggregators were, and why they became shims
 
@@ -117,7 +117,7 @@ kept their pure static fold functions (the actual math) and parity fixtures, but
 moved the runtime read path to a bus-backed reader that reuses those folds:
 
 - `TokenSummaryService.Summarize(...)` / `AggregateSummaries(...)` are reused by
-  `BusBackedTokenSummaryReader`.
+  the canonical project reader for lifetime and workspace aggregates.
 - `WorkspaceTokensTimelineService.BuildFromEntries(...)` is reused by
   `BusBackedWorkspaceTimelineReader`.
 - `ProjectTokenUsageService.Build*` folds are reused by
@@ -125,8 +125,8 @@ moved the runtime read path to a bus-backed reader that reuses those folds:
 - `AdHocUsageService.Aggregate(...)` is reused by `BusBackedAdHocUsageReader`.
 
 So the legacy classes survive as **pure-function libraries plus parity
-fixtures**, not as injectable runtime aggregators. The bus reader is the shim
-that adapts the new input source onto the old, trusted math.
+fixtures**, not as injectable runtime aggregators. The canonical readers adapt
+the explicit source union onto the old, trusted math.
 
 ### Why keep them at all instead of deleting?
 
@@ -171,7 +171,7 @@ Two things make the test precise rather than blunt:
   registration (`builder.Services.AddSingleton<TokenSummaryService>();`). That is
   why reusing the pure folds is allowed while re-injecting the aggregator is not.
 - It allow-lists the legacy files themselves plus everything under
-  `backend/Services/Tokens/`, so the bus-backed readers can keep calling the
+  `backend/Features/Tokens/`, so the canonical readers can keep calling the
   legacy folds without tripping the guard.
 
 If a future change injects a legacy aggregator into a runtime service, this test
@@ -186,7 +186,7 @@ roll-up (`entry.TokenUsage` access, `AgentMessageTokens`, a string-keyed token
 total dictionary) outside the `Tokens/` and `Bus/` namespaces, and the "good
 variant" is membership in those namespaces or use of `ITokenAggregator`. Now
 that Phase 4 is complete, its severity is **Warn**: any new aggregator outside
-`backend/Services/Tokens/` or `backend/Services/Bus/` gets flagged.
+`backend/Features/Tokens/` or `backend/Features/Bus/` gets flagged.
 
 The guard test is the build-breaking gate; the drift rule is the broader,
 advisory radar that catches patterns the narrow injection regex would miss.
@@ -201,7 +201,7 @@ advisory radar that catches patterns the narrow injection regex would miss.
   per-model price table. Pricing is deliberately *separate* from aggregation;
   the aggregator delegates to `TokenPricing` only for the `Dollars` field.
 - **Bus:** [`docs/system/architecture/bus/agent-message-bus.md`](../system/architecture/bus/agent-message-bus.md) describes the
-  channel that is now the single source of truth.
+  historical channel. It is no longer assumed to contain remote-runner usage.
 - **Schemas:** `docs/app/schemas/token-aggregate.schema.json`,
   `token-aggregate-by-client.schema.json`, `token-timeline-bucket.schema.json`
   pin the wire shapes.
@@ -226,21 +226,28 @@ For an operator or an LLM instance working in this area, the rules of the road:
    aggregator, and the drift rule will warn on a hand-rolled roll-up.
 2. **The shape you need does not exist on `ITokenAggregator`?** Add a method to
    the interface and implement it in `TokenAggregationService`, backed by a
-   bus-backed reader. Reuse an existing pure fold if one fits.
+   canonical reader. Reuse an existing pure fold if one fits.
 3. **Changing the math?** Change the pure fold on the legacy service (that is
    what it is for now) so both the bus reader and the parity fixture move
    together, then update the parity test fixture under
    `backend.Tests/Fixtures/TokenAggregationParity/`.
-4. **Emitting new spend?** Emit a `kind=token-usage` bus message
-   (`AgentMessageBusBridge.EmitTokenUsageAsync` / `EmitTokenUsageRichAsync`) so
-   the canonical aggregator can see it. Keep the existing emit instrumentation;
-   do not silently drop it while editing nearby code.
+4. **Emitting new spend?** Preserve a durable per-call receipt with timestamp,
+   participant, model, and all four token dimensions. Local paths should also
+   keep their existing `kind=token-usage` bus emit. Do not add another private
+   aggregate outside the canonical reader.
 
 ## Living knowledge log
 
 Append new findings about the token-aggregation area here, newest on top. Keep
 each entry short: date, what was learned, and a pointer to the code/commit/task.
 
+- **2026-08-09 (AGT-2542).** Remote task execution became primary around July
+  11 but did not traverse `ProjectRunner.EmitTokenUsageRichAsync`; its
+  completion envelope contains outcome and evidence rather than token usage.
+  The bus history therefore froze for project rolling windows even though
+  durable task token receipts stayed current. `ProjectTokenReceiptReader` now
+  enumerates both task layouts, merges receipts with bus history without double
+  counting, supplies pipeline step-kind cost, and reports source freshness.
 - **2026-06-09 (ASS-1717).** Page created. State of the world at creation:
   ASS-881 (Phase 4) has landed (commits `aba24661`, `d5597897`, `9bf95984`);
   all four bus-backed shims are live, the four parity tests are green, the

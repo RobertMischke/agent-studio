@@ -88,6 +88,11 @@ function buildDetail(state: string, emptyContext = false) {
   };
 }
 
+const LONG_COUNCIL_CONTEXT = Array.from(
+  { length: 18 },
+  (_, index) => `### Council finding ${index + 1}\nThe review reaction keeps the complete finding context for round three, including evidence, affected files, and the required focused verification.`,
+).join('\n\n');
+
 const FOLLOW_UP = [
   '# Orchestrator follow-up',
   '',
@@ -96,6 +101,9 @@ const FOLLOW_UP = [
   '- [ ] Frontend build/unit/Playwright verification skipped (worktree limitation).',
   '- [ ] Live Haiku probe not run (dev backend offline).',
   '- [ ] Structured JSON aspect artefacts left for follow-up.',
+  '- [ ] Preserve the complete council reaction and its focused evidence.',
+  '',
+  LONG_COUNCIL_CONTEXT,
 ].join('\n');
 
 const CODE_REVIEW_LIST = {
@@ -108,9 +116,86 @@ const CODE_REVIEW_LIST = {
       model: 'claude-opus-4-8',
       cliType: 'claude',
       runAt: '2026-07-09T19:22:02Z',
+      councilReaction: {
+        createdAt: '2026-07-09T19:22:03Z',
+        reviewFileName: 'code-review-grade-2026-07-09T19-22-02Z.md',
+        grade: 'B',
+        disposition: 'Escalate',
+        summary: `Escalate 4 open review findings; loop budget exhausted.\n\n${LONG_COUNCIL_CONTEXT}`,
+        assessments: [
+          { finding: 'Preserve the complete council response.', action: 'Escalate', reason: 'Review-loop budget exhausted.' },
+          { finding: 'Render every grade document.', action: 'Escalate', reason: 'Review-loop budget exhausted.' },
+          { finding: 'Keep artifact history reachable.', action: 'Escalate', reason: 'Review-loop budget exhausted.' },
+          { finding: 'Verify the three-round card.', action: 'Escalate', reason: 'Review-loop budget exhausted.' },
+        ],
+        startsNewRound: false,
+        targetJobId: null,
+        targetRunAttempt: null,
+      },
+    },
+    {
+      fileName: 'code-review-grade-2026-07-09T18-22-02Z.md',
+      verdict: 'concerns',
+      grade: 'C',
+      summary: 'Round two found two remaining gaps.',
+      model: 'claude-opus-4-8',
+      cliType: 'claude',
+      runAt: '2026-07-09T18:22:02Z',
+      councilReaction: {
+        createdAt: '2026-07-09T18:22:03Z',
+        reviewFileName: 'code-review-grade-2026-07-09T18-22-02Z.md',
+        grade: 'C',
+        disposition: 'Reissue',
+        summary: 'Fix two review findings in the next round.',
+        assessments: [
+          { finding: 'Show all findings.', action: 'FixNextRound', reason: 'Concrete review deficiency.' },
+          { finding: 'Add browser evidence.', action: 'FixNextRound', reason: 'Concrete review deficiency.' },
+        ],
+        startsNewRound: true,
+        targetJobId: JOB_ID,
+        targetRunAttempt: 3,
+      },
+    },
+    {
+      fileName: 'code-review-grade-2026-07-09T17-22-02Z.md',
+      verdict: 'concerns',
+      grade: 'D',
+      summary: 'Round one found an incomplete operator handoff.',
+      model: 'claude-opus-4-8',
+      cliType: 'claude',
+      runAt: '2026-07-09T17:22:02Z',
+      councilReaction: {
+        createdAt: '2026-07-09T17:22:03Z',
+        reviewFileName: 'code-review-grade-2026-07-09T17-22-02Z.md',
+        grade: 'D',
+        disposition: 'Reissue',
+        summary: 'Fix one review finding in the next round.',
+        assessments: [
+          { finding: 'Replace raw Markdown in the banner.', action: 'FixNextRound', reason: 'Concrete review deficiency.' },
+        ],
+        startsNewRound: true,
+        targetJobId: JOB_ID,
+        targetRunAttempt: 2,
+      },
     },
   ],
 };
+
+const GRADE_DOCUMENTS = new Map(CODE_REVIEW_LIST.entries.map((entry, index) => [
+  entry.fileName,
+  [
+    '---',
+    `grade: ${entry.grade}`,
+    `summary: ${entry.summary}`,
+    '---',
+    '',
+    `# Grade document body round ${3 - index}`,
+    '',
+    index === 0 ? LONG_COUNCIL_CONTEXT : entry.summary,
+    '',
+    'Complete review evidence remains readable to the final sentence.',
+  ].join('\n'),
+]));
 
 const TIMELINE = [
   {
@@ -133,7 +218,7 @@ const TIMELINE = [
     actor: 'orchestrator',
     summary: 'escalated',
     details: {
-      reason: 'Completion gate found unfinished work in the previous run.',
+      reason: `Completion gate found unfinished work in the previous run.\n\n${LONG_COUNCIL_CONTEXT}`,
       cause: 'completion-gate',
       attempt: '3',
       maxAttempts: '3',
@@ -202,6 +287,14 @@ async function installRoutes(page: Page, state: string, emptyContext = false): P
     route.fulfill(emptyContext
       ? { status: 404, contentType: 'text/plain', body: '' }
       : { status: 200, contentType: 'text/plain', body: FOLLOW_UP }));
+  await page.route(/\/files\/code-review-grade-[^/?]+\.md(\?|$)/, (route) => {
+    const fileName = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1) ?? '');
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/plain',
+      body: GRADE_DOCUMENTS.get(fileName) ?? '# Missing grade fixture',
+    });
+  });
   await page.route('**/timeline**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TIMELINE) }));
 }
@@ -254,6 +347,61 @@ async function shootBothThemes(page: Page, testInfo: TestInfo, baseName: string)
 test.describe('Escalation summary panel — collapsible + compact', () => {
   test.beforeEach(() => test.setTimeout(90_000));
 
+  test('keeps the MKT-20 three-round essence bounded and every artifact readable', async ({ page }, testInfo) => {
+    await openDetail(page, '5e-escalated');
+    await setTheme(page, 'dark');
+    await dismissAppErrorDialog(page);
+
+    const panel = page.getByTestId('escalation-summary');
+    const essence = page.getByTestId('escalation-essence');
+    await expect(essence).toContainText(
+      '3 review rounds · Grade B · 4 open findings · Reissue budget exhausted',
+    );
+    await expect(essence).not.toContainText('Council finding 1');
+    await expect(essence).not.toContainText('###');
+
+    await expect(page.locator('[data-testid="escalation-gate-items"] li')).toHaveCount(4);
+    await expect(page.getByTestId('escalation-gate-source')).toContainText('Council reaction');
+
+    const council = page.getByTestId('escalation-council-follow-up');
+    await council.locator('summary').first().click();
+    const councilContent = page.getByTestId('escalation-council-follow-up-content');
+    await expect(councilContent).toContainText('Council finding 18');
+    await expect(councilContent.getByText('orchestrator-follow-up.md')).toBeVisible();
+    await expect(page.getByTestId('escalation-follow-up-document')).toContainText('Council finding 18');
+    const councilScroll = await councilContent.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    }));
+    expect(councilScroll.overflowY).toBe('auto');
+    expect(councilScroll.scrollHeight).toBeGreaterThan(councilScroll.clientHeight);
+    await council.locator('summary').first().click();
+
+    const documents = page.getByTestId('escalation-grade-documents');
+    await documents.locator('summary').first().click();
+    const roundThree = page.getByTestId('escalation-grade-round-3');
+    await roundThree.locator('summary').click();
+    await expect(roundThree).toContainText('Grade document body round 3');
+    await expect(roundThree).toContainText('Complete review evidence remains readable to the final sentence.');
+    await expect(roundThree.getByTestId('file-source-history-toggle')).toBeVisible();
+    const gradeScroll = await page.getByTestId('escalation-grade-body-3').evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    }));
+    expect(gradeScroll.overflowY).toBe('auto');
+    expect(gradeScroll.scrollHeight).toBeGreaterThan(gradeScroll.clientHeight);
+    await documents.locator('summary').first().click();
+    await council.locator('summary').first().click();
+
+    await dismissAppErrorDialog(page);
+    await shootBothThemes(page, testInfo, 'escalation-mkt20-after');
+
+    const panelHeight = await panel.evaluate((element) => element.getBoundingClientRect().height);
+    expect(panelHeight).toBeLessThan(900);
+  });
+
   test('collapses by default off the acute lane, expands on click, carries a one-line essence', async ({ page }, testInfo) => {
     // Fixture is the AGT-1994 shape: escalate verdict parked in 5-human-review.
     await openDetail(page, '5-human-review');
@@ -265,11 +413,11 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     await expect(page.getByTestId('escalation-body')).toHaveCount(0);
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
-    // 2. The header carries the compact one-line essence at all times.
-    await expect(page.getByTestId('escalation-essence-grade')).toHaveText('B');
-    await expect(page.getByTestId('escalation-state-sentence')).toHaveText(
-      'Delivered and merged; waiting for your decision because the reissue budget is exhausted, and 3 gate points remain open.',
+    // 2. The header carries one bounded line from structured fields.
+    await expect(page.getByTestId('escalation-essence')).toContainText(
+      '3 review rounds · Grade B · 4 open findings · Reissue budget exhausted',
     );
+    await expect(page.getByTestId('escalation-essence')).not.toContainText('Council finding 1');
     // Recommendation stays on the header.
     await expect(page.getByTestId('escalation-recommendation')).toHaveText('Needs decision');
     await expect(panel.getByTestId('escalation-action-reissue-escalated')).toHaveCount(0);
@@ -310,19 +458,16 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     await expect(page.getByTestId('escalation-body')).toBeVisible();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
-    // Open gate points from the follow-up checklist.
-    await expect(page.locator('[data-testid="escalation-gate-items"] li')).toHaveCount(3);
-    await expect(page.getByTestId('escalation-gate-source')).toContainText('follow-up checklist');
-    await expect(page.getByTestId('escalation-gate-count')).toContainText('3 open');
-    // Review verdict head.
-    await expect(page.getByTestId('escalation-review-grade')).toHaveText('B');
-    await expect(page.getByTestId('escalation-review-verdict')).toHaveText('pass');
-    await expect(page.getByTestId('escalation-review-summary')).toContainText('first slice');
+    // Typed council findings and all grade artifacts are available as details.
+    await expect(page.locator('[data-testid="escalation-gate-items"] li')).toHaveCount(4);
+    await expect(page.getByTestId('escalation-gate-source')).toContainText('Council reaction');
+    await expect(page.getByTestId('escalation-gate-count')).toContainText('4 open');
+    await expect(page.getByTestId('escalation-grade-documents')).toContainText('Grade documents');
     // Delivery context: deduped file count across both commits.
     await expect(page.getByTestId('escalation-delivery-counts')).toContainText('2 commits');
     await expect(page.getByTestId('escalation-delivery-counts')).toContainText('4 files');
-    // Escalation reason headline from the timeline event.
-    await expect(page.getByTestId('escalation-reason')).toContainText('Completion gate');
+    // Raw timeline prose stays out of both the header and the expanded summary.
+    await expect(page.getByTestId('escalation-reason')).toHaveCount(0);
     const reissues = page.getByTestId('escalation-reissues');
     await expect(reissues).toBeVisible();
     await reissues.locator('summary').click();
@@ -401,12 +546,14 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     await openDetail(page, '5e-escalated', true);
     const panel = page.getByTestId('escalation-summary');
 
-    await expect(page.getByTestId('escalation-state-sentence')).toHaveText(
-      'Not delivered yet; waiting for your decision because the reissue budget is exhausted.',
+    await expect(page.getByTestId('escalation-essence')).toContainText(
+      '0 review rounds · Grade not recorded · 0 open findings · Reissue budget exhausted',
     );
-    await expect(page.getByTestId('escalation-context-empty')).toHaveText('No structured context was recorded.');
+    await expect(page.getByTestId('escalation-context-empty')).toHaveText(
+      'No structured findings, review artifacts, or delivery context were recorded.',
+    );
     await expect(page.getByTestId('escalation-gate-items')).toHaveCount(0);
-    await expect(page.getByTestId('escalation-review-head')).toHaveCount(0);
+    await expect(page.getByTestId('escalation-grade-documents')).toHaveCount(0);
     await expect(page.getByTestId('escalation-delivery')).toHaveCount(0);
     await expect(panel.getByTestId('escalation-action-reissue-escalated')).toBeEnabled();
 

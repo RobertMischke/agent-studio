@@ -2,13 +2,17 @@
 lifecycleSchema: wiki-page-lifecycle/v1
 pageKind: concept
 lifecycleState: in-progress
-editedBy: "Codex / AGT-2137"
-editedAt: 2026-07-21T05:46:33Z
+editedBy: "Codex / AGT-2520"
+editedAt: 2026-08-09T09:15:00Z
 lifecycleHistory:
   - state: in-progress
     editedBy: "Codex / AGT-2137"
     editedAt: 2026-07-21T05:46:33Z
     note: "Initial classification: the read-only slice exists; chat and decision mutations remain open."
+  - state: in-progress
+    editedBy: "Codex / AGT-2520"
+    editedAt: 2026-08-09T09:15:00Z
+    note: "Documented inline decision markup, file-scoped freshness, and durable created-card receipts."
 ---
 
 # Experiment workbenches
@@ -16,8 +20,9 @@ lifecycleHistory:
 Status: concept and mockup complete, 2026-07-11. The first read-only production
 slice landed on 2026-07-12: repository discovery, Explorer catalogue, isolated
 viewer, Pulse thinking inbox, and the curated legacy pilot. The card-scoped
-Sichtblick panel and repository-backed decision mutation landed on 2026-07-26.
-Chat attachment remains a future slice.
+Decision panel and repository-backed decision mutation landed on 2026-07-26.
+Inline decision points replaced the separate form on 2026-08-09. Chat
+attachment remains a future slice.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -122,8 +127,10 @@ lifecycle values are:
 | `decision.state` | `pending`, `failed`, `succeeded` | Recoverable mutation state for a feature decision. |
 
 A feature decision records `decidedAt`, the source revision, an operation id,
-mutation state, and one or more `spawnedTaskKeys`. An archive decision records
-the same provenance plus a non-empty reason. A task-created/manifest-not-updated
+mutation state, the inline `responses`, and one or more `spawnedTaskKeys`. The
+created keys are also appended to the descriptor's `relatedTaskKeys`, so every
+Workbench projection carries the durable task relationship. An archive decision
+records the same provenance plus a non-empty reason. A task-created/manifest-not-updated
 failure remains `decision-pending` and can be reconciled by operation id.
 Invalid descriptors remain visible as an Explorer error row with their path and
 validation problem; they are never silently omitted.
@@ -140,6 +147,49 @@ model, consistent with the
 [Wiki tree contract](../system/contracts/wiki-tree.md). The descriptor adds
 properties to one physical object, not a virtual tree.
 
+### Inline decision markup
+
+Workbench authors put decision points where the supporting analysis reaches the
+choice. The HTML remains self-contained and readable without Studio. Studio
+adds controls and persistence as progressive enhancement; authors do not add an
+API script or a second form.
+
+Minimal example:
+
+```html
+<section data-decision-id="contrast-set" data-decision-kind="single">
+  <h3>Which contrast set should Studio use?</h3>
+  <ul>
+    <li data-option-id="set-a">Set A: moderate contrast</li>
+    <li data-option-id="set-b">Set B: stronger contrast</li>
+  </ul>
+  <label>
+    Optional note
+    <textarea data-comment="Optional note for this decision"></textarea>
+  </label>
+</section>
+```
+
+The convention is deliberately small:
+
+- `data-decision-id` is unique in the document and uses 1-80 ASCII letters,
+  digits, `_`, or `-`.
+- `data-decision-kind="single"` produces radios, `multi` produces checkboxes,
+  and `confirm` produces one or more explicit confirmation checkboxes.
+- Every option is a readable child with a unique `data-option-id` using the
+  same safe-id alphabet. `data-option-label` may provide a shorter card label.
+- One optional element marked with `data-comment` becomes the bounded free-text
+  field. A normal `textarea` is preferred because the static page remains clear.
+- Existing checked inputs are respected as defaults. Studio owns the injected
+  controls, live state, validation, and the sandboxed `postMessage` bridge.
+
+On confirmation the receipt stores each decision id, kind, selected option ids,
+and optional comment together with the receipt's timestamp and operator. The
+feature-card preview derives its title, goal, and chosen-option summary from
+those responses. Repository revision remains provenance; stale-decision checks
+use the file-scoped SHA-256 fingerprint of `workbench.json` plus the entry HTML,
+so unrelated commits do not invalidate an unchanged Workbench.
+
 ## 3. Lifecycle
 
 | Stage | Durable state | Product behavior |
@@ -147,7 +197,7 @@ properties to one physical object, not a virtual tree.
 | Topic appears | No Workbench yet | A user, task result, proposal, or chat identifies a question worth seeing. |
 | Shape | `active / shaping` | Create the folder, descriptor, and initial HTML representation. |
 | Iterate | `active / testing` | Change the files through normal Git-aware editing; use the project orchestrator with the Workbench pinned as context. |
-| Decide | `active / decision-ready` | The viewer prepares either a feature-card preview or an archive reason. Nothing is created yet. |
+| Decide | `active / decision-ready` | The operator answers decision points inside the document, then opens the compact feature-card preview or enters an archive reason. Nothing is created yet. |
 | Build pending | `decision-pending / feature-spawn` | Confirmation records an operation id and expected revision; failure remains visible and retryable. |
 | Build settled | `decided / feature-spawn` | The card exists and the Workbench records its task receipt. |
 | Stop | `archived / archive` | Explicit confirmation records why no feature follows. |
@@ -256,8 +306,8 @@ versioned `postMessage` bridge may expose presentation-only events such as
 window, a per-frame capability token, schema version, event name, and payload
 size. An opaque sandbox reports a `null` origin, so origin checking alone is
 never treated as authentication. Mutating actions always stay in host chrome.
-Panel state is ephemeral in v1; opaque-origin storage is not a persistence
-contract.
+The frame never persists state itself. Studio keeps live responses in trusted
+host state and writes the settled receipt through `WorkbenchDecisionService`.
 
 Configured Project URLs can be attached by stable `projectUrlIds`. The host
 resolves the URL, represented branch, and current availability from Project

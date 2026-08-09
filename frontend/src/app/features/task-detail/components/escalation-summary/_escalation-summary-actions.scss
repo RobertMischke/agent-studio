@@ -62,19 +62,22 @@
     transition: color 0.15s ease;
   }
 
-  &__state {
-    color: var(--studio-fg);
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
   &__essence {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--studio-spacing-2);
     min-width: 0;
     font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+  }
+
+  &__essence-copy {
+    min-width: 0;
+    color: var(--studio-fg);
+    overflow-wrap: anywhere;
   }
 
   &__essence-merge {

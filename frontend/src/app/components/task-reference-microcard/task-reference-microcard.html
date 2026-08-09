@@ -5,6 +5,10 @@
        [attr.aria-label]="'Open task ' + status().key + ': ' + status().title">
       <i class="task-ref__project" aria-hidden="true"></i>
       <strong>{{ status().key }}</strong>
+      @if (expanded()) {
+        <span class="task-ref__title">{{ status().title }}</span>
+        <span class="task-ref__lane-label">{{ laneLabel() }}</span>
+      }
       <span class="task-ref__lane" [attr.data-tone]="laneTone()" aria-hidden="true">{{ laneIcon() }}</span>
       @if (status().merge; as merge) {
         <span class="task-ref__merge" role="img"

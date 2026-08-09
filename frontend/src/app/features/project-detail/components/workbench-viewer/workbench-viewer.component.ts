@@ -1,15 +1,20 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
-import { WorkbenchDocument } from '../../../../models/project-docs.model';
+import { WorkbenchDecisionResponse, WorkbenchDocument } from '../../../../models/project-docs.model';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
 import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
-import { PageContext, pageExcerpt } from '../../../../models/page-context.model';
 import {
   ISOLATED_HTML_LINK_MESSAGE,
+  WORKBENCH_DECISION_CHANGE_MESSAGE,
+  WORKBENCH_DECISION_HYDRATE_MESSAGE,
+  WORKBENCH_DECISION_READY_MESSAGE,
   buildIsolatedHtmlSrcdoc,
   resolveIsolatedHtmlNavigation,
 } from '../../../../services/sandboxed-html.util';
+import {
+  discoverWorkbenchDecisionMarkup,
+  normalizeWorkbenchDecisionResponses,
+} from '../../../../services/workbench-decision-markup.util';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
@@ -22,7 +27,7 @@ import {
 @Component({
   selector: 'app-workbench-viewer',
   standalone: true,
-  imports: [PageActionBarComponent, StudioIconComponent, WorkbenchDecisionPanelComponent],
+  imports: [StudioIconComponent, WorkbenchDecisionPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-viewer.component.html',
   styleUrl: './workbench-viewer.component.scss',
@@ -38,19 +43,12 @@ export class WorkbenchViewerComponent {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly maximized = signal(false);
+  readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
 
-  readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(this.document()?.html ?? ''));
-  readonly pageContext = computed<PageContext | null>(() => {
-    const document = this.document();
-    if (!document) return null;
-    return {
-      projectName: this.projectName(),
-      relPath: document.workbench.entryPath.replace(/^docs\//i, ''),
-      title: document.workbench.title,
-      pageType: 'workbench',
-      excerpt: pageExcerpt(document.html, document.workbench.summary),
-    };
-  });
+  readonly srcdoc = computed(() => buildIsolatedHtmlSrcdoc(
+    this.document()?.html ?? '', { workbenchDecisions: true }));
+  readonly decisionMarkup = computed(() =>
+    discoverWorkbenchDecisionMarkup(this.document()?.html ?? ''));
 
   constructor() {
     effect(() => {
@@ -67,14 +65,6 @@ export class WorkbenchViewerComponent {
     });
   }
 
-  statusLabel(): string {
-    const workbench = this.document()?.workbench;
-    if (!workbench) return '';
-    return workbench.status === 'active'
-      ? workbench.phase ?? workbench.status
-      : workbench.status;
-  }
-
   openCurrentPageInWiki(): void {
     const path = this.document()?.workbench.entryPath.replace(/^docs\//i, '');
     if (path) this.openWiki.emit(path);
@@ -84,7 +74,22 @@ export class WorkbenchViewerComponent {
   onFrameMessage(event: MessageEvent): void {
     const frameWindow = this.frame()?.nativeElement.contentWindow;
     if (!frameWindow || event.source !== frameWindow) return;
-    const message = event.data as { type?: unknown; href?: unknown } | null;
+    const message = event.data as {
+      type?: unknown;
+      href?: unknown;
+      responses?: unknown;
+    } | null;
+    if (message?.type === WORKBENCH_DECISION_READY_MESSAGE) {
+      this.hydrateFrame();
+      return;
+    }
+    if (message?.type === WORKBENCH_DECISION_CHANGE_MESSAGE) {
+      if (this.document()?.workbench.decision?.state === 'succeeded') return;
+      const normalized = normalizeWorkbenchDecisionResponses(
+        message.responses, this.decisionMarkup().points);
+      if (normalized) this.decisionResponses.set(normalized);
+      return;
+    }
     if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
     const entryPath = this.document()?.workbench.entryPath;
     if (!entryPath) return;
@@ -109,6 +114,19 @@ export class WorkbenchViewerComponent {
     this.loadDocument(this.projectName(), this.workbenchId(), false);
   }
 
+  onFrameLoaded(): void {
+    this.hydrateFrame();
+  }
+
+  private hydrateFrame(): void {
+    const decision = this.document()?.workbench.decision;
+    this.frame()?.nativeElement.contentWindow?.postMessage({
+      type: WORKBENCH_DECISION_HYDRATE_MESSAGE,
+      responses: this.decisionResponses(),
+      readonly: decision?.state === 'succeeded',
+    }, '*');
+  }
+
   private loadDocument(project: string, id: string, clear = true): void {
     this.loading.set(true);
     this.error.set(null);
@@ -116,6 +134,8 @@ export class WorkbenchViewerComponent {
     this.docs.getWorkbench(project, id).subscribe({
       next: document => {
         this.document.set(document);
+        const discovered = discoverWorkbenchDecisionMarkup(document.html);
+        this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);
         this.loading.set(false);
       },
       error: () => {

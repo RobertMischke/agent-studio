@@ -1,4 +1,6 @@
 
+using Microsoft.Extensions.Logging.Abstractions;
+
 using Xunit;
 
 namespace AgentStudio.Tests;
@@ -12,6 +14,22 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class OrchestratorRunnerTests
 {
+    [Fact]
+    public async Task DecideCodexAsync_MarksRequestAsOrchestratorChat()
+    {
+        var oneShot = new CapturingCodexOneShot();
+        var runner = new OrchestratorRunner(
+            claude: null!,
+            logger: NullLogger<OrchestratorRunner>.Instance,
+            oneShotRegistry: new CliOneShotRegistry([oneShot]));
+
+        var result = await runner.DecideCodexAsync(
+            "prompt", "gpt-5.5", "high", Path.GetTempPath());
+
+        Assert.True(result.Success);
+        Assert.Equal("orchestrator-chat", Assert.Single(oneShot.Requests).Source);
+    }
+
     [Fact]
     public void ParseResult_HappyPath_ExtractsTextAndUsage()
     {
@@ -149,5 +167,30 @@ public class OrchestratorRunnerTests
 
         var (blank, _) = OrchestratorRunner.BuildArgs("claude-opus-4-7", "   ");
         Assert.DoesNotContain("-r", blank);
+    }
+
+    private sealed class CapturingCodexOneShot : ICliOneShot
+    {
+        public string CliType => CliTypes.Codex;
+        public List<CliOneShotRequest> Requests { get; } = [];
+
+        public Task<CliOneShotResult> RunAsync(
+            CliOneShotRequest request,
+            CancellationToken ct = default)
+        {
+            Requests.Add(request);
+            var now = DateTime.UtcNow;
+            return Task.FromResult(new CliOneShotResult(
+                Ok: true,
+                ExitCode: 0,
+                Stdout: string.Empty,
+                Stderr: string.Empty,
+                Duration: TimeSpan.Zero,
+                ParsedText: "ok",
+                Usage: null,
+                RichUsage: null,
+                Latency: new AgentMessageLatency(now, null, now, null, 0),
+                Error: null));
+        }
     }
 }

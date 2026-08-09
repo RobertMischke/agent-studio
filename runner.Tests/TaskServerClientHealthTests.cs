@@ -243,6 +243,7 @@ public class TaskServerClientHealthTests
         await client.RegisterAsync("Runner v1", "service", CancellationToken.None);
 
         Assert.Equal(7, client.HostMaxParallelism);
+        Assert.Equal(1, client.RuntimeCapacityVersion);
         Assert.Equal(HttpMethod.Put, Assert.Single(handler.Requests).Method);
     }
 
@@ -287,6 +288,74 @@ public class TaskServerClientHealthTests
 
         Assert.Equal(RunnerClaimStatus.Empty, claim.Status);
         Assert.Equal(5, client.HostMaxParallelism);
+        Assert.Equal(2, client.RuntimeCapacityVersion);
+    }
+
+    [Fact]
+    public async Task Durable_capacity_survives_a_restart_without_the_task_server()
+    {
+        var state = Directory.CreateTempSubdirectory("runner-capacity-cache-");
+        try
+        {
+            var now = DateTime.UtcNow.ToString("O");
+            var handler = new RecordingHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent($$"""
+                    {
+                      "runnerId":"runner-v1",
+                      "name":"Runner v1",
+                      "hostId":"host-a",
+                      "instanceId":"host-a:1",
+                      "runnerVersion":"1.0.0",
+                      "protocolVersion":3,
+                      "status":"active",
+                      "registeredAt":"{{now}}",
+                      "lastSeenAt":"{{now}}",
+                      "runtimeCapacity":{
+                        "hostId":"host-a",
+                        "maxParallelism":7,
+                        "targetLoadPercent":80,
+                        "rampStrategy":"balanced",
+                        "version":4,
+                        "updatedAt":"{{now}}"
+                      }
+                    }
+                    """),
+            });
+            using var onlineHttp = new HttpClient(handler)
+            {
+                BaseAddress = new Uri("http://task-server"),
+            };
+            var options = CapacityOptions(state.FullName);
+            using (var online = new TaskServerClient(
+                       onlineHttp,
+                       "runner-v1",
+                       usesDurableTaskServer: true,
+                       options: options))
+            {
+                await online.RegisterAsync("Runner v1", "service", CancellationToken.None);
+                Assert.Equal(7, online.HostMaxParallelism);
+                Assert.Equal(4, online.RuntimeCapacityVersion);
+            }
+
+            using var offlineHttp = new HttpClient(new RecordingHandler(_ =>
+                throw new InvalidOperationException("The offline cache read must not use HTTP.")))
+            {
+                BaseAddress = new Uri("http://task-server"),
+            };
+            using var restarted = new TaskServerClient(
+                offlineHttp,
+                "runner-v1",
+                usesDurableTaskServer: true,
+                options: options);
+
+            Assert.Equal(7, restarted.HostMaxParallelism);
+            Assert.Equal(4, restarted.RuntimeCapacityVersion);
+        }
+        finally
+        {
+            state.Delete(recursive: true);
+        }
     }
 
     [Fact]
@@ -417,6 +486,22 @@ public class TaskServerClientHealthTests
         Assert.Equal("host-v1:original-process", authority.InstanceId);
         Assert.NotEqual(client.RunnerInstanceId, authority.InstanceId);
     }
+
+    private static RunnerOptions CapacityOptions(string stateDirectory)
+        => new()
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-v1",
+            RunnerName = "Runner v1",
+            Hostname = "host-a",
+            BackendName = "test",
+            WorkDir = Path.Combine(stateDirectory, "work"),
+            StateDir = stateDirectory,
+            BaseBranch = "main",
+            CliBin = "claude",
+            CliArgs = "-p",
+            HostMaxParallelism = 2,
+        };
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {

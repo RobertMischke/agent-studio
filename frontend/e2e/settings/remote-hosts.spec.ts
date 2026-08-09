@@ -36,6 +36,15 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
+  await page.route('**/api/runner/queue-starvation', json({
+    active: false,
+    waitingTaskCount: 0,
+    availableSlots: 0,
+    thresholdMinutes: 30,
+    observedAt: new Date().toISOString(),
+    oldestEnteredLaneAt: null,
+    items: [],
+  }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   const now = new Date().toISOString();
   await page.route('**/api/clients', json([
@@ -103,6 +112,45 @@ test.describe('Execution Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
   });
 
+  test('shows a corrupt identity with its restore path in both themes', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'local-default', displayName: 'operator-workstation', kind: 'human',
+          registeredAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
+        },
+        {
+          id: 'agent-runner-01',
+          displayName: 'agent-runner-01',
+          kind: 'service',
+          registeredAt: '2026-08-05T14:35:00Z',
+          lastSeenAt: null,
+          identityFileError: 'identity file corrupt: agent-runner-01.json',
+          identityFileName: 'agent-runner-01.json',
+          identityFileModifiedAt: '2026-08-05T14:35:00Z',
+          identityFileSizeBytes: 4481,
+          identityRestoreHint: 'Restore this file from a known-good backup or Git revision, or re-register the original displayName with POST /api/clients/register.',
+        },
+      ]),
+    }));
+    await page.goto('/#/workspace/settings/remote-hosts');
+
+    const diagnostic = page.getByTestId('remote-hosts-identity-errors');
+    await expect(diagnostic).toBeVisible();
+    await expect(diagnostic).toContainText('identity file corrupt: agent-runner-01.json');
+    await expect(diagnostic).toContainText('POST /api/clients/register');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-status')).toContainText('Offline');
+
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-identity-corrupt-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-identity-corrupt-dark--mocked.png'), fullPage: false });
+  });
+
   test('first mount waits for live status and then paints the daemon without reload', async ({ page }) => {
     let releaseResponse!: () => void;
     const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
@@ -150,6 +198,7 @@ test.describe('Execution Hosts settings section', () => {
   test('shows and centrally updates the host runtime capacity', async ({ page }) => {
     const now = new Date().toISOString();
     let capacityBody: Record<string, unknown> | null = null;
+    let projectPolicyBody: Record<string, unknown> | null = null;
     await page.unroute('**/api/v1/management/remote-hosts');
     await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
       status: 200,
@@ -184,6 +233,14 @@ test.describe('Execution Hosts settings section', () => {
         },
         effectiveMaxParallelism: 4,
         runtimeCapacityAppliedAt: now,
+        runtimeCapacityAppliedVersion: 1,
+        projectPolicy: {
+          hostId: 'runner-host-a',
+          allowAllProjects: true,
+          allowedProjectIds: [],
+          version: 1,
+          updatedAt: now,
+        },
       }]),
     }));
     await page.route('**/api/v1/hosts/runner-host-a/runtime-capacity', async route => {
@@ -196,6 +253,20 @@ test.describe('Execution Hosts settings section', () => {
           maxParallelism: 6,
           targetLoadPercent: 85,
           rampStrategy: 'aggressive',
+          version: 2,
+          updatedAt: now,
+        }),
+      });
+    });
+    await page.route('**/api/v1/hosts/runner-host-a/project-policy', async route => {
+      projectPolicyBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          hostId: 'runner-host-a',
+          allowAllProjects: false,
+          allowedProjectIds: ['PROJ-001', 'PROJ-002'],
           version: 2,
           updatedAt: now,
         }),
@@ -218,6 +289,17 @@ test.describe('Execution Hosts settings section', () => {
     });
     await expect(remote.getByTestId('remote-host-slots')).toContainText('0 active / 6 free / 6 total');
     await expect(remote.getByTestId('remote-host-capacity-awaiting-adoption')).toBeVisible();
+    await remote.getByTestId('remote-host-project-policy-mode').selectOption('selected');
+    await remote.getByTestId('remote-host-project-policy-ids').fill('PROJ-001, PROJ-002');
+    await remote.getByTestId('remote-host-project-policy-save').click();
+    await expect.poll(() => projectPolicyBody).toEqual({
+      allowAllProjects: false,
+      allowedProjectIds: ['PROJ-001', 'PROJ-002'],
+      expectedVersion: 1,
+    });
+    await expect(remote.getByTestId('remote-host-project-policy'))
+      .toContainText('Allowed projects: PROJ-001, PROJ-002');
+    await expect(remote.getByTestId('remote-host-project-policy-save')).toBeEnabled();
     await setTheme(page, 'dark');
     await remote.screenshot({ path: join(SHOT_DIR, 'runtime-capacity-dark--mocked.png') });
     await setTheme(page, 'light');
@@ -264,6 +346,7 @@ test.describe('Execution Hosts settings section', () => {
 
   test('configures one host and starts setup on the durable CLI task substrate', async ({ page }) => {
     let createBody: Record<string, unknown> | null = null;
+    const providerSecret = 'sk-ant-oat01-playwright-provider-secret';
     await page.unroute('**/api/tasks');
     await page.route('**/api/tasks', async route => {
       if (route.request().method() !== 'POST') {
@@ -278,6 +361,16 @@ test.describe('Execution Hosts settings section', () => {
       contentType: 'application/json',
       body: JSON.stringify({ error: 'mocked-task-detail-not-mounted' }),
     }));
+    await page.route('**/api/v1/management/remote-hosts/provider-auth', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        provider: 'claude', environmentVariable: 'CLAUDE_CODE_OAUTH_TOKEN',
+        host: 'agent-runner', state: 'installed-awaiting-runner',
+        detail: 'The protected EnvironmentFile was installed.', requestedAt: new Date().toISOString(),
+        restartedServices: [], processEnvironmentVerified: false,
+      }),
+    }));
 
     await page.goto('/#/workspace/settings/remote-hosts');
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
@@ -290,11 +383,16 @@ test.describe('Execution Hosts settings section', () => {
     await page.getByTestId('runner-setup-git-remote').fill('https://github.com/example/agent-studio.git');
     await page.getByTestId('runner-setup-git-push-remote').fill('git@github.com:example/agent-studio.git');
     await page.getByTestId('runner-setup-connection-mode').selectOption('tunnel');
+    await page.getByTestId('runner-setup-provider-auth-secret').fill(providerSecret);
+    await page.getByTestId('runner-setup-provider-auth-provision').click();
+    await expect(page.getByTestId('runner-setup-provider-auth-secret')).toHaveValue('');
+    await expect(page.getByTestId('runner-setup-provider-auth-status')).toHaveAttribute('data-state', 'waiting');
 
     await expect(page.getByTestId('visible-cli-task-card')).toBeVisible();
     await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('Reachability gate (must run first)');
-    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('codex login --device-auth');
-    await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes plus operator login time');
+    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('/etc/agent-runner/provider-auth.env');
+    await expect(page.getByTestId('visible-cli-task-prompt')).not.toContainText(providerSecret);
+    await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-runner-setup--mocked.png'), fullPage: false });
     await page.getByTestId('visible-cli-task-start').click();
 
@@ -309,7 +407,60 @@ test.describe('Execution Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).toContain('bash scripts/remote-runner-onboard.sh');
     expect(String(createBody?.['promptMarkdown'])).toContain("--host 'agent-runner'");
     expect(String(createBody?.['promptMarkdown'])).toContain('X-Client-Id: agent-runner-01');
-    expect(String(createBody?.['promptMarkdown'])).toContain('Never copy, upload, or reuse credential files');
+    expect(String(createBody?.['promptMarkdown'])).toContain('Provider credentials were already delivered by Studio through SSH stdin');
+    expect(String(createBody?.['promptMarkdown'])).not.toContain(providerSecret);
+  });
+
+  test('shows provider auth OK, unavailable, and unknown states with renewal context', async ({ page }) => {
+    const now = Date.now();
+    const capability = (key: string, advertisedStatus: string, detail?: string) => ({
+      key, category: key.split(':')[0], advertisedStatus, healthState: 'healthy',
+      reason: null, advertisedAt: new Date(now - 30_000).toISOString(),
+      freshUntil: new Date(now + 120_000).toISOString(), isFresh: true,
+      firstFailureAt: null, lastFailureAt: null, cooldownUntil: null,
+      canaryClaimId: null, consecutiveFailures: 0, version: null,
+      identity: key.split(':')[1], detail, affectedClaims: [], recoveryHistory: [],
+    });
+    const claude = {
+      ...capability('provider-auth:claude', 'unavailable', 'Not logged in'),
+      expiresAt: new Date(now + 10 * 24 * 60 * 60_000).toISOString(),
+      recoveryHistory: [{
+        occurredAt: new Date(now - 30_000).toISOString(), fromState: 'ready',
+        toState: 'unavailable', reason: 'Provider probe changed.',
+      }],
+    };
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+        instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2, status: 'active',
+        registeredAt: new Date(now - 86_400_000).toISOString(), lastSeenAt: new Date(now).toISOString(),
+        hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
+        capabilities: [
+          capability('cli-execution:claude', 'ready'), claude,
+          capability('cli-execution:codex', 'ready'), capability('provider-auth:codex', 'ready', 'Active session confirmed'),
+          capability('cli-execution:gemini', 'ready'),
+        ],
+        telemetry: null,
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'unavailable');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'ok');
+    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'unknown');
+    await expect(remote.getByTestId('remote-host-provider-auth-expiry-claude')).toContainText('Expires in 10 days');
+    await expect(remote.getByTestId('remote-host-provider-auth-history-claude')).toContainText('ready → unavailable');
+    await remote.getByTestId('remote-host-provider-auth-claude').hover();
+    await expect(page.getByRole('tooltip')).toContainText('Not logged in');
+
+    await setTheme(page, 'dark');
+    await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-dark--mocked.png') });
+    await setTheme(page, 'light');
+    await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-light--mocked.png') });
   });
 
   test('surfaces a failed startup push probe as a read-only host', async ({ page }) => {
@@ -532,7 +683,7 @@ test.describe('Execution Hosts settings section', () => {
     await expect(operatorAdmission).not.toContainText('Automatic');
   });
 
-  test('shows a failed project delivery preflight and its claim refusal reason', async ({ page }) => {
+  test('shows the missing repository URL claim refusal in Remote Hosts', async ({ page }) => {
     await page.unroute('**/api/clients');
     await page.route('**/api/clients', route => route.fulfill({
       status: 200,
@@ -543,10 +694,9 @@ test.describe('Execution Hosts settings section', () => {
         runnerGitStatus: 'ready',
         runnerProjectPreflights: [{
           projectId: 'PROJ-042', projectName: 'Payments', registrationFingerprint: 'a'.repeat(64),
-          repositoryUrl: 'https://github.com/example/payments.git',
-          fetchUrl: 'https://github.com/example/payments.git',
-          pushUrl: 'https://github.com/example/payments.git', status: 'failed',
-          detail: 'write probe failed (128): permission denied', checkedAt: '2026-07-22T10:01:00Z',
+          repositoryUrl: null, fetchUrl: null, pushUrl: null, status: 'failed',
+          detail: 'Remote execution is not claimable: repositoryUrl is missing; repository URL is not configured.',
+          checkedAt: '2026-08-08T10:01:00Z',
         }],
       }]),
     }));
@@ -555,8 +705,13 @@ test.describe('Execution Hosts settings section', () => {
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     const failure = remote.getByTestId('remote-host-project-preflight-failures');
     await expect(failure).toContainText('Payments');
-    await expect(failure).toContainText('permission denied');
-    await remote.screenshot({ path: join(SHOT_DIR, 'remote-host-project-preflight-failed--mocked.png') });
+    await expect(failure).toContainText('repositoryUrl is missing');
+    for (const theme of ['dark', 'light'] as const) {
+      await setTheme(page, theme);
+      await remote.screenshot({
+        path: join(SHOT_DIR, `remote-host-repository-warning-${theme}--mocked.png`),
+      });
+    }
   });
 
   test('shows persisted performance history, slot context, and a throttling finding', async ({ page }) => {
@@ -636,6 +791,38 @@ test.describe('Execution Hosts settings section', () => {
   });
 
   test('adds a host through the guided five-step setup including deploy key', async ({ page }) => {
+    let providerInstalled = false;
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts/provider-auth', route => {
+      providerInstalled = true;
+      return route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify({
+          provider: 'claude', environmentVariable: 'CLAUDE_CODE_OAUTH_TOKEN',
+          host: 'runner@host.example.com', state: 'awaiting-probe',
+          detail: 'Daemon environment verified.', requestedAt: new Date().toISOString(),
+          restartedServices: ['agent-host.service'], processEnvironmentVerified: true,
+        }),
+      });
+    });
+    await page.route('**/api/v1/management/remote-hosts', route => {
+      const now = new Date();
+      return route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify(providerInstalled ? [{
+          runnerId: 'agent-runner-02', name: 'agent-runner-02', hostId: 'agent-runner-02',
+          instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2, status: 'active',
+          registeredAt: now.toISOString(), lastSeenAt: now.toISOString(),
+          hostAdmission: { hostId: 'agent-runner-02', admissionState: 'open' },
+          capabilities: [{
+            key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'ready',
+            healthState: 'healthy', reason: null, advertisedAt: now.toISOString(),
+            freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
+            firstFailureAt: null, lastFailureAt: null, cooldownUntil: null, canaryClaimId: null,
+            consecutiveFailures: 0, version: null, identity: 'claude', detail: 'Active session confirmed',
+            affectedClaims: [], recoveryHistory: [],
+          }], telemetry: null,
+        }] : []),
+      });
+    });
     await page.goto('/#/workspace/settings/remote-hosts');
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible({ timeout: 5_000 });
     await page.getByTestId('remote-hosts-add').click();
@@ -648,8 +835,15 @@ test.describe('Execution Hosts settings section', () => {
     await expect(page.getByTestId('add-host-wizard')).toContainText('write-enabled repository deploy key');
     await page.getByTestId('add-host-deploy-key-check').check();
     await page.getByTestId('add-host-next').click();
-    await page.getByTestId('add-host-claude-check').check();
+    await page.getByTestId('add-host-provider-auth-secret').fill('sk-ant-oat01-playwright-provider-secret');
+    await page.getByTestId('add-host-provider-auth-provision').click();
+    await expect(page.getByTestId('add-host-provider-auth-status')).toHaveAttribute('data-state', 'ok');
     await page.getByTestId('add-host-codex-check').check();
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-add-wizard-provider-auth-dark--mocked.png'), fullPage: false });
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-add-wizard-provider-auth-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
     await page.getByTestId('add-host-next').click();
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-add-wizard--mocked.png'), fullPage: false });
     await page.getByTestId('add-host-smoke-check').check();

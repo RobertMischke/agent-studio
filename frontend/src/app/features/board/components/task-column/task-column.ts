@@ -447,7 +447,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.archiveInitialized || !changes['projectScope'] || changes['projectScope'].firstChange) return;
+    if (!this.archiveInitialized || ![changes['projectScope'], changes['jobs']].some(change => change && !change.firstChange)) return;
     this.archiveSub?.unsubscribe();
     this.archiveLoading.set(false);
     this.loadArchive(true);

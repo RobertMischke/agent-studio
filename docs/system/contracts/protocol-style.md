@@ -102,7 +102,20 @@ the computed integration projection. A post-move refresh may enrich that marked
 scaffold with the target-lane integration status. A real generated protocol is
 never overwritten. The startup repair applies the same scaffold once to
 missing Results in `5-human-review`, `6-completed`, and `7-archive`, adding
-`<!-- agent-studio:operator-result-backfill -->` for provenance.
+`<!-- agent-studio:operator-result-backfill -->` for provenance. Each newly
+created scaffold emits a structured `result-scaffold-created` warning with
+`project`, `job`, target `state`, provenance, and a process-local recurrence
+count. Refreshing the same owned scaffold after a lane move does not increment
+the count.
+
+Remote coding runs preserve the same application ownership. After the runner
+flushes `cli-output.log`, its final `/api/runner/artifacts` upload asks Studio to
+run `SummaryGenerationService` against that durable log. The response
+acknowledges every recursively uploaded `results/**` path and reports whether a
+real `status.md` was generated. The compatibility runner may tear down its
+worktree only after that acknowledgement. If summary generation genuinely
+fails, completion still reaches the transition backstop and receives the marked
+scaffold above.
 
 Hard rules:
 

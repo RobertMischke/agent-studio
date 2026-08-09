@@ -4,6 +4,7 @@ using Xunit;
 
 namespace AgentRunner.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class RunnerCapabilityProbeTests
 {
     [Theory]
@@ -146,6 +147,54 @@ public sealed class RunnerCapabilityProbeTests
                 item => item.Key == CapabilityProtocol.ProviderAuthentication("codex")).Status);
     }
 
+    [Theory]
+    [InlineData(true, ProviderAuthProbe.Ready)]
+    [InlineData(false, ProviderAuthProbe.Unavailable)]
+    public async Task Claude_setup_token_environment_drives_provider_auth_advertisement(
+        bool tokenProvisioned,
+        string expectedStatus)
+    {
+        using var temp = new TempDirectory();
+        var claude = Path.Combine(temp.Path, "claude");
+        await File.WriteAllTextAsync(claude, "");
+        using var environment = new EnvironmentVariableScope(
+            ProviderAuthEnvironment.ClaudeCodeOAuthToken,
+            tokenProvisioned ? "dummy-claude-setup-token-for-unit-test" : null);
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = temp.Path,
+            BaseBranch = "main",
+            CliBin = claude,
+            ClaudeCliBin = claude,
+            CliArgs = "",
+        };
+        var probe = new ProviderAuthProbe(
+            (_, _, _) => Task.FromResult(
+                string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(
+                    ProviderAuthEnvironment.ClaudeCodeOAuthToken))
+                    ? new ProcessResult(1, "", "Not logged in")
+                    : new ProcessResult(0, "Authenticated", "")),
+            File.Exists);
+        await probe.RefreshAsync(claude, CancellationToken.None);
+
+        var advertised = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            providerAuth: probe);
+
+        Assert.Equal(
+            expectedStatus,
+            Assert.Single(
+                advertised,
+                item => item.Key == CapabilityProtocol.ProviderAuthentication("claude")).Status);
+    }
+
     [Fact]
     public void Car_engine_is_advertised_as_the_canary_capability_and_legacy_is_not()
     {
@@ -280,5 +329,20 @@ public sealed class RunnerCapabilityProbeTests
             try { Directory.Delete(Path, recursive: true); }
             catch { /* best effort */ }
         }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _original;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _original = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose() => Environment.SetEnvironmentVariable(_name, _original);
     }
 }

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 const PROJECT = 'Route Project';
 const PROJECT_SLUG = 'route-project';
@@ -365,6 +366,16 @@ test.describe('Studio route restoration', () => {
   });
 
   test('Workbench route restores and survives reload', async ({ page }, testInfo) => {
+    await page.addInitScript(() => {
+      if (window.sessionStorage.getItem('workbench-reveal-test-initialized')) return;
+      window.sessionStorage.setItem('workbench-reveal-test-initialized', 'true');
+      window.localStorage.setItem('atp.studio.explorer.expanded', '[]');
+      window.localStorage.setItem('atp.studio.explorerSections', JSON.stringify({
+        workspace: true,
+        'ws:__all__': true,
+      }));
+      window.localStorage.setItem('atp.studio.explorer.workbenches.expanded.v1', '[]');
+    });
     await page.goto(`/#/projects/${PROJECT_SLUG}/workbenches/route-lab`, { waitUntil: 'commit' });
 
     await expect(page.getByTestId('workbench-viewer')).toContainText('Route Lab');
@@ -374,17 +385,46 @@ test.describe('Studio route restoration', () => {
       .toBe('#/projects/route-project/workbenches/route-lab');
     await expect(page.getByTestId('error-dialog')).toHaveCount(0);
 
-    await page.goto('/#/board', { waitUntil: 'commit' });
     const projectRow = page.getByTestId(`studio-explorer-project-${PROJECT}`);
     await expect(projectRow).toBeVisible();
-    if (await projectRow.getAttribute('aria-expanded') === 'false') await projectRow.click();
-    await page.getByTestId(`studio-explorer-project-workbenches-${PROJECT}`).click();
-    await page.getByTestId(`studio-explorer-workbench-${PROJECT}-route-lab`).click();
-    await expect.poll(() => new URL(page.url()).hash)
-      .toBe('#/projects/route-project/workbenches/route-lab');
-    await page.screenshot({ path: evidencePath(testInfo, 'route-restoration-workbench.png') });
+    await expect(projectRow).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('studio-explorer-workspace-head')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('studio-explorer-ws-group-__all__')).toHaveAttribute('aria-expanded', 'true');
+
+    const workbenchesRow = page.getByTestId(`studio-explorer-project-workbenches-${PROJECT}`);
+    const activeWorkbench = page.getByTestId(`studio-explorer-workbench-${PROJECT}-route-lab`);
+    await expect(workbenchesRow).toHaveAttribute('aria-expanded', 'true');
+    await expect(workbenchesRow).not.toHaveAttribute('aria-current', 'page');
+    await expect(activeWorkbench).toHaveAttribute('aria-current', 'page');
+    await expect(activeWorkbench).toBeInViewport();
+    await expect(activeWorkbench).toContainText('testing');
+    await expect(activeWorkbench).not.toContainText(/updated|today|\d+d/);
+    await expect.poll(() => page.evaluate(() => JSON.parse(
+      window.localStorage.getItem('atp.studio.explorer.workbenches.expanded.v1') ?? '[]',
+    ))).toContain(PROJECT);
+
+    await page.mouse.move(900, 500);
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(testInfo, `workbench-tree-after--mocked-${theme}.png`),
+      });
+    }
+
+    await workbenchesRow.click();
+    await expect(workbenchesRow).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(() => page.evaluate(() => JSON.parse(
+      window.localStorage.getItem('atp.studio.explorer.workbenches.expanded.v1') ?? '[]',
+    ))).not.toContain(PROJECT);
+    await workbenchesRow.click();
+    await expect(activeWorkbench).toBeVisible();
+
     await page.reload({ waitUntil: 'commit' });
     await expect(page.getByTestId('workbench-viewer')).toContainText('Route Lab');
+    await expect(page.getByTestId(`studio-explorer-project-workbenches-${PROJECT}`))
+      .toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId(`studio-explorer-workbench-${PROJECT}-route-lab`))
+      .toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('error-dialog')).toHaveCount(0);
   });
 

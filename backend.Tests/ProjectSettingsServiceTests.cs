@@ -260,7 +260,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         var settings = svc.Get("new-project");
 
         Assert.Equal(1, settings.MaxParallelism);
-        Assert.Equal("develop", settings.IntegrationBranch);
+        Assert.Equal(string.Empty, settings.IntegrationBranch);
         Assert.Equal(IntegrationStrategies.DirectMerge, settings.IntegrationStrategy);
     }
 
@@ -302,14 +302,14 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void SetIntegrationBranch_BlankRevertsToDefault(string? value)
+    public void SetIntegrationBranch_BlankRevertsToRepositoryDefault(string? value)
     {
         var svc = Build();
         svc.SetIntegrationBranch("runbook", "integration");
 
         svc.SetIntegrationBranch("runbook", value);
 
-        Assert.Equal("develop", svc.Get("runbook").IntegrationBranch);
+        Assert.Equal(string.Empty, svc.Get("runbook").IntegrationBranch);
     }
 
     [Fact]

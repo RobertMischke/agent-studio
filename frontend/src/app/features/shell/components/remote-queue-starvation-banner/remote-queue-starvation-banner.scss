@@ -1,0 +1,40 @@
+:host {
+  display: block;
+}
+
+.starvation {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-3);
+  margin: var(--studio-spacing-3) var(--studio-spacing-4) 0;
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  border: 1px solid color-mix(in srgb, var(--studio-warn) 45%, var(--studio-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--studio-warn) 12%, var(--studio-bg-elevated));
+  color: var(--studio-fg);
+}
+
+.starvation__signal {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--studio-warn);
+  flex: 0 0 auto;
+}
+
+.starvation p {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.starvation__detail {
+  color: var(--studio-fg-muted);
+}
+
+.starvation__number {
+  font-variant-numeric: tabular-nums;
+}

@@ -194,9 +194,24 @@ export function sameOrchestratorChatTurns(
       && left.text === right.text
       && (left.model ?? null) === (right.model ?? null)
       && (left.errorMessage ?? null) === (right.errorMessage ?? null)
+      && sameContextReceipt(left.contextReceipt, right.contextReceipt)
       && sameTokenUsage(left.tokenUsage, right.tokenUsage)
       && sameAttachments(left.attachments, right.attachments);
   });
+}
+
+function sameContextReceipt(
+  left: OrchestratorChatTurn['contextReceipt'],
+  right: OrchestratorChatTurn['contextReceipt'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  return left.scope === right.scope
+    && left.contextKey === right.contextKey
+    && (left.taskKey ?? null) === (right.taskKey ?? null)
+    && left.capturedAt === right.capturedAt
+    && left.includedBlocks.length === right.includedBlocks.length
+    && left.includedBlocks.every((block, index) => block === right.includedBlocks[index]);
 }
 
 function sameTokenUsage(

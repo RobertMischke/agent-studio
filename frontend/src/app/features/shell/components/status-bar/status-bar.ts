@@ -36,6 +36,13 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
 
+export function formatRunningLabel(local: number, remote: number): string {
+  if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
+  if (local > 0) return `${local} local`;
+  if (remote > 0) return `${remote} remote`;
+  return 'no runners';
+}
+
 @Component({
   selector: 'app-status-bar',
   standalone: true,
@@ -89,7 +96,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly runningCount = computed(() => this.runningTruth().total);
   readonly runningLabel = computed(() => {
     const truth = this.runningTruth();
-    return `${truth.local} local · ${truth.remote} remote`;
+    return formatRunningLabel(truth.local, truth.remote);
   });
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));

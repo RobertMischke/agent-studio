@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "index",
+  "source": {
+    "path": "docs/operations/umsetzungsplan-zielbild/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "3127a2d39a60a83609c1152566b6e1a683377409f367c348004adab0cc96a1fe",
+      "sizeBytes": 19617,
+      "lineCount": 204,
+      "capturedAt": "2026-08-04T18:16:38.3113535Z"
+    }
+  },
+  "agentReads": {
+    "total": 4,
+    "lastReadAt": "2026-08-04T18:16:38.3113535Z",
+    "recent": [
+      {
+        "at": "2026-08-04T18:16:38.3113535Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113535Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113535Z",
+        "taskKey": "AGT-2503"
+      },
+      {
+        "at": "2026-08-04T18:16:38.3113535Z",
+        "taskKey": "AGT-2503"
+      }
+    ]
+  }
+}

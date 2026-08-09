@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modell-Badges: Kontrast | Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00; --accent: #2a78d6;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f; --accent: #3987e5;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  h2 { font-size: 24px; margin: 56px 0 6px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  p { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 11px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  code { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip { display: inline-flex; gap: 2px; font: 700 9px/1 ui-monospace, monospace; letter-spacing: .055em; }
+  .chip span { padding: 2px 4px; border: 1px solid color-mix(in srgb, currentColor 52%, transparent); border-radius: 3px; background: color-mix(in srgb, currentColor 12%, transparent); }
+  .swatchbg { background: #faf8f4; padding: 6px 10px; border-radius: 6px; border: 1px solid #d8d6cf; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Workbench · Modell-Badges</p>
+  <h1>Modell-Badges: Kontrast im hellen Theme</h1>
+  <p class="lede">Der GPT-Chip ist kaum lesbar. Der Audit zeigt: Es trifft nicht nur GPT — alle vier Familienfarben sind Dark-Theme-Farben und fallen im hellen Theme durch die AA-Grenze.</p>
+  <div class="meta">
+    <span><b>Datum</b> 2026-08-09</span>
+    <span><b>Status</b> entschieden (Satz A) · Umsetzung AGT-2527</span>
+  </div>
+</header>
+
+<div class="box" style="background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line))">
+  <h4>Entschieden (Operator, 09.08.): Satz A</h4>
+  <p>Umsetzung läuft als Karte <b>AGT-2527</b> — Studio-Theme-Token im hellen Theme, dunkles Theme behält die Library-Defaults; Library-Follow-up als Notiz für den CAC-20/0.4.0-Zug. Status dieser Workbench: active/testing bis zur Integration, dann Doku.</p>
+</div>
+
+<h2><span class="no">01</span>Befund</h2>
+<ul>
+  <li><b>Quelle der Farbe:</b> Der Chip ist <code>cac-model-level-indicator</code> aus der Chat-Library (shared-Paket) — Antwort auf die Operator-Frage: ja, die Farbe kommt aus dem Chat-Paket. 9px fette Mono-Schrift, Rahmen/Fläche aus <code>currentColor</code>-Mischungen.</li>
+  <li><b>Familienfarben (Library-Defaults):</b> claude <code>#d97757</code>, codex <code>#38bdf8</code>, gemini <code>#a78bfa</code>, openai/GPT <code>#4ec9b0</code>.</li>
+  <li><b>Vorkommen im Studio:</b> Board-Karten (SOL/xh-Chips), Task-Detail-Header, Protokoll-/Conversation-Zeilen (AS-Wrapper <code>components/model-level-indicator</code> + Library-interne Nutzung in conversation-view/session-card).</li>
+  <li><b>Hebel ohne Library-Release:</b> Die Library liest <code>var(--model-family-claude|codex|gemini|openai, &lt;default&gt;)</code> — das Studio kann die Farben je Theme per CSS-Token übersteuern.</li>
+</ul>
+
+<h2><span class="no">02</span>Messung (WCAG-Kontrast, 9px fett = Kleintext, AA-Grenze 4,5:1)</h2>
+<table>
+  <thead><tr><th>Familie</th><th>Ist-Farbe</th><th>Hell (#faf8f4)</th><th>Dunkel (#1e1e2e)</th><th>Muster hell</th></tr></thead>
+  <tbody>
+    <tr><td>claude</td><td><code>#d97757</code></td><td><span class="pill bad">2,94:1</span></td><td><span class="pill ok">5,25:1</span></td><td class="swatchbg"><span class="chip" style="color:#d97757"><span>CLD</span><span>H</span></span></td></tr>
+    <tr><td>codex</td><td><code>#38bdf8</code></td><td><span class="pill bad">2,02:1</span></td><td><span class="pill ok">7,66:1</span></td><td class="swatchbg"><span class="chip" style="color:#38bdf8"><span>CDX</span><span>M</span></span></td></tr>
+    <tr><td>gemini</td><td><code>#a78bfa</code></td><td><span class="pill bad">2,57:1</span></td><td><span class="pill ok">6,03:1</span></td><td class="swatchbg"><span class="chip" style="color:#a78bfa"><span>GEM</span><span>L</span></span></td></tr>
+    <tr><td>openai (GPT)</td><td><code>#4ec9b0</code></td><td><span class="pill bad">1,92:1</span></td><td><span class="pill ok">8,05:1</span></td><td class="swatchbg"><span class="chip" style="color:#4ec9b0"><span>GPT</span><span>XH</span></span></td></tr>
+  </tbody>
+</table>
+<p class="dim">Dunkel funktioniert überall; das Problem ist ausschließlich das helle Theme. GPT ist mit 1,92:1 der schlechteste Wert — deshalb fiel er zuerst auf.</p>
+
+<h2><span class="no">03</span>Kandidaten (Farbton-Erhalt, gemessen auf #faf8f4)</h2>
+<table>
+  <thead><tr><th>Familie</th><th>Satz A — moderat</th><th>Kontrast</th><th>Satz B — kräftig</th><th>Kontrast</th><th>Muster A / B</th></tr></thead>
+  <tbody>
+    <tr><td>claude</td><td><code>#c2410c</code></td><td>4,88:1</td><td><code>#9a3412</code></td><td>6,89:1</td><td class="swatchbg"><span class="chip" style="color:#c2410c"><span>CLD</span></span> <span class="chip" style="color:#9a3412"><span>CLD</span></span></td></tr>
+    <tr><td>codex</td><td><code>#0369a1</code></td><td>5,59:1</td><td><code>#075985</code></td><td>7,13:1</td><td class="swatchbg"><span class="chip" style="color:#0369a1"><span>CDX</span></span> <span class="chip" style="color:#075985"><span>CDX</span></span></td></tr>
+    <tr><td>gemini</td><td><code>#6d28d9</code></td><td>6,70:1</td><td><code>#5b21b6</code></td><td>8,47:1</td><td class="swatchbg"><span class="chip" style="color:#6d28d9"><span>GEM</span></span> <span class="chip" style="color:#5b21b6"><span>GEM</span></span></td></tr>
+    <tr><td>openai (GPT)</td><td><code>#0f766e</code></td><td>5,16:1</td><td><code>#115e59</code></td><td>7,15:1</td><td class="swatchbg"><span class="chip" style="color:#0f766e"><span>GPT</span></span> <span class="chip" style="color:#115e59"><span>GPT</span></span></td></tr>
+  </tbody>
+</table>
+
+<div class="box accent">
+  <h4>Empfehlung</h4>
+  <p><b>Satz A</b> im hellen Theme (AA erfüllt, Farbidentität bleibt nah am Original; Satz B wirkt neben den pastelligen Board-Flächen schnell schwer). Dunkles Theme behält die Library-Defaults. Umsetzung: vier <code>--model-family-*</code>-Token in den Studio-Theme-Stilen (light-scope), kein Library-Release nötig; zusätzlich als Follow-up die Defaults in der Library selbst theme-aware machen (light/dark), damit andere Hosts denselben Fix erben — das kann mit in den CAC-20/0.4.0-Zug.</p>
+</div>
+
+<h2><span class="no">04</span>Entscheidung</h2>
+<ul>
+  <li>Satz A (Empfehlung) oder Satz B — oder eigene Werte?</li>
+  <li>Library-Follow-up (theme-aware Defaults) in den 0.4.0-Zug aufnehmen: ja/nein?</li>
+</ul>
+<p class="dim">Nach GO: kleine Studio-Karte (Theme-Token + Screenshots aller drei Flächen); optional CAC-Ergänzung. Messwerte: WCAG-Relative-Luminanz, berechnet 09.08.</p>
+
+</main>
+</body>
+</html>

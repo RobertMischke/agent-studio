@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task-Kopf & Chat-Chips | Layout-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00; --accent: #2a78d6;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f; --accent: #3987e5;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  code { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .badge-ok { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-accent { fill: var(--accent-soft); stroke: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Layout-Workbench · Task-Detail & Orchestrator-Chat</p>
+  <h1>Task-Kopf & Chat-Chips — Härtung</h1>
+  <p class="lede">Drei visuelle Defekte aus dem Operator-Review vom 08.08., kartiert mit file:line-Belegen. Vorgabe des Operators für die Tab-Leiste: bei Platzmangel nie überlappen — entweder nur Icons zeigen oder überzählige Tabs in ein Drei-Punkte-Menü.</p>
+  <div class="meta">
+    <span><b>Datum</b> 2026-08-08</span>
+    <span><b>Status</b> decision-pending</span>
+    <span><b>Umsetzung</b> Karte liegt im Backlog, Start nach GO</span>
+  </div>
+</header>
+
+<h2><span class="no">01</span>Defekt: Tabs überlappen bei Platzmangel</h2>
+<p>Die Tab-Leiste ist die geteilte <code>PaneTabsComponent</code>, zweimal nebeneinander (Prompt-Pane: Overview/Timeline/Evidence/Code Review/Docs; Protocol-Pane: Task/Activity/Result). Der Host ist shrinkbar (<code>min-width: 0</code>), aber <code>.pane-tab__label</code> hat <b>kein</b> <code>text-overflow: ellipsis</code> — anders als der Pane-Header-Titel. Kein Responsive-Breakpoint berührt die Tab-Leiste; die Quetschung entsteht über den nutzergezogenen Pane-Splitter. Ergebnis: Labels laufen übereinander („Evider…", „Code Re", abgeschnittenes „Ta").</p>
+<p class="evidence-link"><b>Beleg:</b> <code>pane-tabs.component.scss</code> (kein Ellipsis am Label), <code>task-detail.scss</code> Breakpoints 1200px/720px (Tab-Leiste unberührt), <code>task-detail.html</code> ~105–195 (Panes-Reihe).</p>
+
+<h3>Variante A — Icon-only-Modus</h3>
+<figure>
+<svg viewBox="0 0 1000 120" role="img" aria-label="Variante A: Icon-only">
+  <rect x="20" y="20" width="960" height="36" rx="8" class="s-node" stroke-width="1.2"/>
+  <rect x="30" y="26" width="120" height="24" rx="6" class="badge-accent" stroke-width="1.2"/>
+  <text x="44" y="43" class="s-label">▦ Overview</text>
+  <text x="170" y="43" class="s-sub">⏱</text>
+  <rect x="200" y="26" width="46" height="24" rx="6" class="s-node" stroke-width="1"/>
+  <text x="212" y="43" class="s-sub">✓</text>
+  <circle cx="238" cy="32" r="8" class="badge-bad" stroke-width="1"/>
+  <text x="234" y="36" class="s-tiny">2</text>
+  <text x="266" y="43" class="s-sub">⇄</text>
+  <text x="300" y="43" class="s-sub">🗎</text>
+  <text x="30" y="90" class="s-sub">Unter der Platzschwelle: aktiver Tab behält Icon + Label, inaktive Tabs schrumpfen auf Icon (Tooltip zeigt Label). Badges bleiben am Icon.</text>
+</svg>
+<figcaption><b>Variante A.</b> Inaktive Tabs reduzieren sich auf Icons; der aktive Tab bleibt beschriftet. Badges (z. B. Evidence „2") bleiben sichtbar am Icon. Kompakt, aber Icon-Bedeutung muss erlernt werden; bei 8 Tabs in zwei Leisten grenzwertig.</figcaption>
+</figure>
+
+<h3>Variante B — Overflow-Menü (Empfehlung)</h3>
+<figure>
+<svg viewBox="0 0 1000 150" role="img" aria-label="Variante B: Overflow-Menü">
+  <rect x="20" y="20" width="960" height="36" rx="8" class="s-node" stroke-width="1.2"/>
+  <rect x="30" y="26" width="120" height="24" rx="6" class="badge-accent" stroke-width="1.2"/>
+  <text x="44" y="43" class="s-label">▦ Overview</text>
+  <rect x="158" y="26" width="110" height="24" rx="6" class="s-node" stroke-width="1"/>
+  <text x="170" y="43" class="s-sub">⏱ Timeline</text>
+  <rect x="276" y="26" width="120" height="24" rx="6" class="s-node" stroke-width="1"/>
+  <text x="288" y="43" class="s-sub">✓ Evidence</text>
+  <circle cx="384" cy="32" r="8" class="badge-bad" stroke-width="1"/>
+  <text x="380" y="36" class="s-tiny">2</text>
+  <rect x="404" y="26" width="40" height="24" rx="6" class="s-node" stroke-width="1.2"/>
+  <text x="415" y="43" class="s-label">⋯</text>
+  <rect x="404" y="62" width="180" height="64" rx="8" class="s-node" stroke-width="1.2"/>
+  <text x="418" y="84" class="s-sub">⇄ Code Review</text>
+  <text x="418" y="106" class="s-sub">🗎 Docs</text>
+  <text x="620" y="43" class="s-tiny">passt nicht mehr → wandert ins Menü; aktiver Tab bleibt immer in der Leiste</text>
+</svg>
+<figcaption><b>Variante B.</b> Tabs, die nicht passen, wandern in ein ⋯-Menü am Leistenende; der aktive Tab wird nie ausgelagert (nötigenfalls verdrängt er den letzten sichtbaren). Badges aggregieren am ⋯ (Summe der verdeckten Badges). Labels bleiben lesbar, keine Icon-Lernkurve.</figcaption>
+</figure>
+
+<div class="box accent">
+  <h4>Empfehlung</h4>
+  <p><b>Basis-Fix in jedem Fall:</b> <code>text-overflow: ellipsis</code> + Mindestbreite je Tab, damit Überlappung strukturell unmöglich wird. Darauf <b>Variante B</b> als Responsive-Verhalten (Container-Query auf die Leistenbreite, kein globaler Breakpoint — die Enge entsteht durch den Splitter). Variante A nur, falls B in der Praxis zu viel springt; die Messlogik (ResizeObserver je Leiste) ist für beide identisch, ein späterer Wechsel ist billig.</p>
+</div>
+
+<h2><span class="no">02</span>Defekt: Branch-Chips „main — / main —"</h2>
+<p>Das Escalation-Banner rendert zwei Merge-Segmente als <code>{label} {merged ? ✓ : —}</code>. Die Labels kommen aus <code>integrationBranch</code>/<code>releaseBranch</code> der Karte. Bei Projekten, deren Integrationsbranch der Release-Branch ist (AOW, QS: Integration direkt auf <code>main</code>), sind <b>beide Segmente identisch</b> — es erscheint „main — main —". Der nackte Gedankenstrich als „nicht gemergt"-Zustand ist zusätzlich unlesbar.</p>
+<p class="evidence-link"><b>Beleg:</b> <code>escalation-summary.component.html</code> ~29–42, <code>task-card-view-model.ts</code> buildMergeSignal ~857–935 (Label-Fallback-Kette).</p>
+<div class="box">
+  <h4>Vorschlag</h4>
+  <ul>
+    <li>Wenn <code>integrationBranch == releaseBranch</code>: nur EIN Segment zeigen.</li>
+    <li>Zustand statt Interpunktion: <code>main ✓ gemergt</code> bzw. <code>main · ausstehend</code> (Text statt nacktem „—"); Tooltip mit SHA.</li>
+  </ul>
+</div>
+
+<h2><span class="no">03</span>Defekt: Chat-Header-Chip überlappt</h2>
+<p>Der Ausführungs-Chip im Orchestrator-Side-Sheet (<code>.sheet__execution-context</code>) steht in einer Kette aus drei <code>min-width: 0</code> ohne Mindestbreite. Zeile 1 (Host-Label) und der Repo-Teil haben Ellipsis — die Revisions-Zeile „main@sha" (<code>.sheet__execution-revision</code>) hat <b>weder</b> <code>overflow: hidden</code> <b>noch</b> Shrink-Fähigkeit. Wird der Sheet schmal (Resize-Clamp bis 360px), ist sie das einzige unkomprimierbare Element und kollidiert mit dem Label darüber.</p>
+<p class="evidence-link"><b>Beleg:</b> <code>orchestrator-side-sheet.component.scss</code> 48–108 (Asymmetrie 79–84 vs. 105–108), <code>sidesheet.component.scss</code> 45–53 (Header-Row ohne wrap).</p>
+<div class="box">
+  <h4>Vorschlag</h4>
+  <ul>
+    <li>Ellipsis + <code>min-width: 0</code>-Floor auch für die Revisions-Zeile; SHA auf 7 Zeichen kürzen, voller Wert im Tooltip.</li>
+    <li>Chip erhält eine Mindestbreite; darunter klappt er auf Icon+Punkt-Status (Details im Popover) statt zu kollidieren.</li>
+  </ul>
+</div>
+
+<h2><span class="no">04</span>Entscheidung</h2>
+<ul>
+  <li>Tab-Leiste: Variante B (Empfehlung), Variante A, oder Hybrid?</li>
+  <li>Branch-Chips: Ein-Segment-Kollaps + Textzustand — GO?</li>
+  <li>Chat-Chip: Ellipsis-Symmetrie + Mindestbreite + Kompakt-Zustand — GO?</li>
+</ul>
+<p class="dim">Nach GO wandert die vorbereitete Backlog-Karte nach 2-ready; sie referenziert diese Workbench als Spezifikation. Quellen: Kartierungs-Workflow wf_70111c18-2b7 (08.08.), Operator-Screenshots 08.08.</p>
+
+</main>
+</body>
+</html>

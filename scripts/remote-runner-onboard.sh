@@ -19,6 +19,7 @@ git_push_remote=""
 package_id="CodingAgentRunner"
 runner_command="agent-host"
 minimum_version="0.5.0"
+provider_auth_file="/etc/agent-runner/provider-auth.env"
 skip_auth=0
 
 usage() {
@@ -244,10 +245,36 @@ then
   die "Runner installation failed. Verify that '$package_id' version $minimum_version or newer is published as a NuGet package with package type DotnetTool and exposes '$runner_command'. The CodingAgentRunner 0.5.0 library reference alone is not installable with 'dotnet tool'."
 fi
 
+printf '[onboarding] phase=provider-auth Checking the Studio-provisioned provider EnvironmentFile.\n'
+"${ssh_base[@]}" -T "$host" bash -s -- "$provider_auth_file" <<'REMOTE_PROVIDER_AUTH'
+set -euo pipefail
+provider_auth_file="$1"
+sudo test -f "$provider_auth_file" || {
+  printf '[remote] Provider authentication is not provisioned at %s. Use the Execution Hosts auth step first.\n' "$provider_auth_file" >&2
+  exit 35
+}
+metadata="$(sudo stat -c '%U:%G:%a' "$provider_auth_file")"
+[[ "$metadata" == "root:agent:640" ]] || {
+  printf '[remote] Provider EnvironmentFile must be root:agent:640; found %s.\n' "$metadata" >&2
+  exit 36
+}
+variables="$(sudo awk -F= '/^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/ { print $1 }' "$provider_auth_file")"
+[[ -n "$variables" ]] || {
+  echo '[remote] Provider EnvironmentFile contains no supported provider variable.' >&2
+  exit 37
+}
+printf '[remote] provider-auth-file=%s metadata=%s variables=%s\n' \
+  "$provider_auth_file" "$metadata" "$(printf '%s' "$variables" | paste -sd, -)"
+REMOTE_PROVIDER_AUTH
+
 remote_login_status() {
-  "${ssh_base[@]}" -T "$host" bash -s <<'REMOTE_AUTH_STATUS'
+  "${ssh_base[@]}" -T "$host" bash -s -- "$provider_auth_file" <<'REMOTE_AUTH_STATUS'
 set -uo pipefail
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
+provider_auth_file="$1"
+while IFS= read -r provider_auth_entry; do
+  export "$provider_auth_entry"
+done < <(sudo awk '/^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/' "$provider_auth_file")
 codex_ok=0
 claude_ok=0
 echo '[remote] Codex authentication status:'
@@ -265,10 +292,9 @@ if ! remote_login_status; then
   printf '[onboarding] oauth=codex Open the URL shown below in the operator browser and enter the one-time device code.\n'
   "${ssh_base[@]}" -tt "$host" "export PATH=\"\$HOME/.dotnet/tools:\$HOME/.local/bin:\$PATH\"; codex login status || codex login --device-auth; codex login status"
 
-  printf '[onboarding] oauth=claude Complete the URL/browser flow locally. Credentials remain on this host.\n'
-  "${ssh_base[@]}" -tt "$host" "export PATH=\"\$HOME/.dotnet/tools:\$HOME/.local/bin:\$PATH\"; claude auth status --text || claude auth login --claudeai; claude auth status --text"
+  printf '[onboarding] oauth=claude A headless setup token must already be provisioned through SSH stdin at /etc/agent-runner/provider-auth.env.\n'
 
-  remote_login_status || die "Authentication did not verify. Re-run setup; never copy credential files from another host."
+  remote_login_status || die "Authentication did not verify. Provision Claude through provider-auth.env as documented; never copy credential files from another host."
 fi
 
 printf '[onboarding] phase=systemd Writing configuration and enabling the OS-owned service.\n'
@@ -279,7 +305,7 @@ resource_governance_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/agent-
   'helper_tmp="$(mktemp)"; trap '"'"'rm -f "$helper_tmp"'"'"' EXIT; cat >"$helper_tmp"; chmod 0755 "$helper_tmp"; sudo install -d -m 0755 /usr/local/libexec; sudo install -m 0755 "$helper_tmp" /usr/local/libexec/agent-host-resource-governance' \
   <"$resource_governance_script"
 "${ssh_base[@]}" -T "$host" bash -s -- \
-  "$server_url" "$client_id" "$runner_id" "$runner_name" "$role" "$git_remote" "$git_push_remote" "$runner_command" "$auth_token_file" "$service_auth" <<'REMOTE_SYSTEMD'
+  "$server_url" "$client_id" "$runner_id" "$runner_name" "$role" "$git_remote" "$git_push_remote" "$runner_command" "$auth_token_file" "$service_auth" "$provider_auth_file" <<'REMOTE_SYSTEMD'
 set -euo pipefail
 server_url="$1"
 client_id="$2"
@@ -291,6 +317,7 @@ git_push_remote="$7"
 runner_command="$8"
 auth_token_file="$9"
 service_auth="${10}"
+provider_auth_file="${11}"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
 runner_user="$(id -un)"
 runner_group="$(id -gn)"
@@ -355,6 +382,9 @@ WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$env_file
+# One shared provider credential file for coding and review units. Keeping it
+# after the role-specific file gives the centrally rotated value precedence.
+EnvironmentFile=$provider_auth_file
 ExecStart=$agent_host_root/current/$runner_command --poll
 Restart=always
 RestartSec=10s
@@ -380,6 +410,12 @@ if [[ "$role" == "review" ]]; then
   sudo install -d -m 0750 "$service_root/review-work"
 fi
 sudo chown -R "$runner_user:$runner_group" "$service_root"
+provider_auth_metadata="$(sudo stat -c '%U:%G:%a' "$provider_auth_file")"
+[[ "$provider_auth_metadata" == "root:agent:640" ]] || {
+  printf '[remote] Provider EnvironmentFile changed during setup; expected root:agent:640, found %s.\n' \
+    "$provider_auth_metadata" >&2
+  exit 46
+}
 sudo install -d -m 0755 "$agent_host_root"
 # Preserve the release boundary below the stable /opt path. The compatibility
 # command links point through current, never into files that an update mutates.
@@ -411,6 +447,20 @@ sudo systemctl restart "$service_name"
 sleep 2
 sudo systemctl is-enabled "$service_name"
 sudo systemctl is-active "$service_name"
+main_pid="$(sudo systemctl show --property=MainPID --value "$service_name")"
+[[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || {
+  printf '[remote] Service %s did not expose a running MainPID.\n' "$service_name" >&2
+  exit 43
+}
+provider_variables="$(sudo cat "/proc/${main_pid}/environ" | tr '\0' '\n' \
+  | sed -n -E 's/^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=.*/\1/p')"
+[[ -n "$provider_variables" ]] || {
+  printf '[remote] Service %s did not receive provider authentication through %s.\n' \
+    "$service_name" "$provider_auth_file" >&2
+  exit 44
+}
+printf '[remote] provider-auth-process-environment=%s variables=%s\n' \
+  "$service_name" "$(printf '%s' "$provider_variables" | paste -sd, -)"
 RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
   "$agent_host_root/current/$runner_command" --health-check --server "$server_url"
 
@@ -431,6 +481,19 @@ if [[ "$role" == "coding" ]]; then
   if [[ "$git_status" == ready-no-workflow-scope ]]; then
     printf '[remote] Contents push is ready, but GitHub workflow writes need additional token permissions. See docs/operations/setup/linux-runner-host.md#token-requirements.\n' >&2
   fi
+  provider_probe_lines=""
+  for _ in $(seq 1 30); do
+    provider_probe_lines="$(sudo journalctl -u "$service_name" -n 120 --no-pager \
+      | grep -F 'runner-provider-auth binary=' || true)"
+    [[ -n "$provider_probe_lines" ]] && break
+    sleep 2
+  done
+  [[ -n "$provider_probe_lines" ]] || {
+    sudo journalctl -u "$service_name" -n 60 --no-pager >&2
+    echo '[remote] Runner provider-auth probe did not publish a result.' >&2
+    exit 45
+  }
+  printf '%s\n' "$provider_probe_lines" | tail -n 4
 fi
 printf '[remote] service=%s role=%s active health=passed identity=%s\n' "$service_name" "$role" "$runner_id"
 REMOTE_SYSTEMD

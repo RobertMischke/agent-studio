@@ -334,6 +334,7 @@ public static class V1ReviewPlaneEndpoints
             AgentStudio.Projects.ProjectSettingsService settings,
             TaskTransitionService transitions,
             HumanReviewEscalation escalation,
+            RemoteDeliveryIntegrationCoordinator remoteIntegration,
             TimelineLog timeline,
             CancellationToken ct) =>
         {
@@ -454,6 +455,39 @@ public static class V1ReviewPlaneEndpoints
             }
             else if (!infrastructureFailure)
             {
+                var sourceRun = authority.GetRun(settled.ReviewAttempt.SourceRunAttemptId);
+                var settledReviewPlan = settled.ReviewAttempt.Subject.Plan
+                                        ?? ToSubject(
+                                            settled.ReviewAttempt,
+                                            scanner,
+                                            projects,
+                                            settings,
+                                            out _,
+                                            out _).Plan;
+                var integrationDecision = RemoteDeliveryIntegrationPolicy.Decide(
+                    HasSettledResultEnvelope(sourceRun),
+                    settled.ReviewAttempt.Outcome?.ToString(),
+                    settledReviewPlan,
+                    request.Verdicts);
+                if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase)
+                    && integrationDecision.ShouldIntegrate)
+                {
+                    var projectSettings = settings.Get(task.ProjectName);
+                    var subject = ReviewSubjectStore.Read(task.FolderPath);
+                    await remoteIntegration.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
+                        task.ProjectName,
+                        task.Id,
+                        task.FolderPath,
+                        task.WatchPath,
+                        TaskIntegrationBranch.Resolve(task, projectSettings.IntegrationBranch),
+                        projectSettings.IntegrationStrategy,
+                        PipelineTypes.Resolve(task),
+                        subject?.CompletedAtUtc
+                        ?? (sourceRun?.TerminalAt is { } terminalAt
+                            ? new DateTimeOffset(DateTime.SpecifyKind(terminalAt, DateTimeKind.Utc))
+                            : DateTimeOffset.UtcNow))).ConfigureAwait(false);
+                }
+
                 if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
                     var moved = await transitions.MoveAsync(
@@ -622,6 +656,32 @@ public static class V1ReviewPlaneEndpoints
             "orchestrator-monolith",
             ["runner", "review-runner"],
             ["review-plane", "capability-advertisement"]);
+    }
+
+    private static bool HasSettledResultEnvelope(RunAttemptDto? run)
+    {
+        if (run is not
+            {
+                State: AttemptLifecycleState.Completed,
+                ResultEnvelope: not null,
+                ResultEnvelopeDigest: not null,
+            })
+        {
+            return false;
+        }
+
+        try
+        {
+            Contract.ResultEnvelopeDigest.Validate(run.ResultEnvelope);
+            return string.Equals(
+                Contract.ResultEnvelopeDigest.Compute(run.ResultEnvelope),
+                run.ResultEnvelopeDigest,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static void RecordPostAcceptanceReportIfTerminal(
@@ -1193,6 +1253,36 @@ public sealed class V1ReviewExecutorRegistry
             {
                 throw new InvalidOperationException(
                     $"Capability generation {request.Generation} is older than {existing.Generation}.");
+            }
+
+            if (existing is not null)
+            {
+                capabilities = capabilities
+                    .Select(capability =>
+                    {
+                        if (!capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal))
+                            return capability;
+                        var previous = existing.Capabilities.FirstOrDefault(item =>
+                            string.Equals(item.Key, capability.Key, StringComparison.Ordinal));
+                        if (previous is null) return capability;
+                        var history = previous.RecoveryHistory;
+                        if (!string.Equals(
+                                previous.AdvertisedStatus,
+                                capability.AdvertisedStatus,
+                                StringComparison.Ordinal))
+                        {
+                            history = history
+                                .Append(new Contract.CapabilityRecoveryEventDto(
+                                    advertisedAt,
+                                    previous.AdvertisedStatus,
+                                    capability.AdvertisedStatus,
+                                    $"Provider authentication probe changed from {previous.AdvertisedStatus} to {capability.AdvertisedStatus}."))
+                                .TakeLast(20)
+                                .ToArray();
+                        }
+                        return capability with { RecoveryHistory = history };
+                    })
+                    .ToArray();
             }
 
             registration = registration with { LastSeenAt = now };

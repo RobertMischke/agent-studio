@@ -39,13 +39,13 @@
     <div class="health__list">
       @for (capability of h.capabilityHealth; track capability.key) {
         <article class="capability"
-                 [attr.data-state]="capability.healthState"
+                 [attr.data-state]="displayState(capability)"
                  [attr.data-fresh]="capability.isFresh"
                  [attr.data-testid]="'remote-host-capability-' + capability.key">
           <div class="capability__head">
             <strong>{{ capability.key }}</strong>
             <span class="state" [attr.data-tone]="tone(capability)">
-              {{ capability.isFresh ? capability.healthState : 'stale' }}
+              {{ displayState(capability) }}
             </span>
           </div>
           <dl>

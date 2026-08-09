@@ -65,7 +65,48 @@ public sealed partial class TaskServerStore
                 normalizedHostId,
                 ct);
             if (existing is null)
-                throw new KeyNotFoundException("Execution host capacity was not found.");
+            {
+                if (request.ExpectedVersion != 0)
+                    throw new TaskServerConflictException(
+                        "resource-version-mismatch",
+                        $"Expected runtime capacity version {request.ExpectedVersion}, but the host has no central policy.");
+                var createdAt = UtcNow;
+                updated = new RuntimeCapacitySettingsDto(
+                    normalizedHostId,
+                    request.MaxParallelism,
+                    request.TargetLoadPercent,
+                    NormalizeRampStrategy(request.RampStrategy),
+                    1,
+                    createdAt);
+                await ExecuteAsync(connection, """
+                    INSERT INTO runtime_capacity_settings(
+                        host_id, max_parallelism, target_load_percent, ramp_strategy,
+                        version, updated_at)
+                    VALUES ($host, $max, $target, $ramp, 1, $now);
+                    """, ct, transaction,
+                    ("$host", normalizedHostId),
+                    ("$max", request.MaxParallelism),
+                    ("$target", request.TargetLoadPercent),
+                    ("$ramp", NormalizeRampStrategy(request.RampStrategy)),
+                    ("$now", Iso(createdAt)));
+                await AuditAsync(
+                    connection,
+                    transaction,
+                    actorId,
+                    "runtime-capacity.created",
+                    "host",
+                    normalizedHostId,
+                    JsonSerializer.Serialize(new
+                    {
+                        request.MaxParallelism,
+                        request.TargetLoadPercent,
+                        rampStrategy = NormalizeRampStrategy(request.RampStrategy),
+                        request.ExpectedVersion,
+                        updated.Version,
+                    }),
+                    ct);
+                return;
+            }
             if (existing.Version != request.ExpectedVersion)
                 throw new TaskServerConflictException(
                     "resource-version-mismatch",
@@ -165,8 +206,8 @@ public sealed partial class TaskServerStore
             throw new ArgumentException("Runtime capacity maxParallelism must be between 1 and 256.");
         if (request.TargetLoadPercent is < 50 or > 95)
             throw new ArgumentException("Runtime capacity targetLoadPercent must be between 50 and 95.");
-        if (request.ExpectedVersion < 1)
-            throw new ArgumentException("Runtime capacity expectedVersion must be positive.");
+        if (request.ExpectedVersion < 0)
+            throw new ArgumentException("Runtime capacity expectedVersion cannot be negative.");
         _ = NormalizeRampStrategy(request.RampStrategy);
     }
 
@@ -180,3 +221,23 @@ public sealed partial class TaskServerStore
                 "Runtime capacity rampStrategy must be conservative, balanced, or aggressive."),
         };
 }
+
+internal static class RuntimeCapacityAdoptionPolicy
+{
+    public static RuntimeCapacityAdoptionDecision Decide(
+        RuntimeCapacitySettingsDto desired,
+        int? reportedMaxParallelism,
+        long? reportedVersion,
+        long? previouslyAppliedVersion)
+    {
+        var confirmsDesired = reportedVersion == desired.Version
+                              && reportedMaxParallelism == desired.MaxParallelism;
+        return new RuntimeCapacityAdoptionDecision(
+            confirmsDesired,
+            confirmsDesired && previouslyAppliedVersion != desired.Version);
+    }
+}
+
+internal readonly record struct RuntimeCapacityAdoptionDecision(
+    bool ConfirmsDesired,
+    bool EmitAudit);

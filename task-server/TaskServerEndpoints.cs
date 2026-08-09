@@ -59,6 +59,22 @@ public static class TaskServerEndpoints
                 request,
                 Actor(context),
                 ct)));
+        hosts.MapGet("/{hostId}/project-policy", async (
+            string hostId,
+            HostProjectPolicyService projectPolicy,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => projectPolicy.GetAsync(hostId, ct)));
+        hosts.MapPut("/{hostId}/project-policy", async (
+            HttpContext context,
+            string hostId,
+            UpdateHostProjectPolicyRequest request,
+            HostProjectPolicyService projectPolicy,
+            CancellationToken ct)
+            => await InvokeAsync(() => projectPolicy.UpdateAsync(
+                hostId,
+                request,
+                Actor(context),
+                ct)));
 
         api.MapGet("/projects/{projectId}/tasks", async (string projectId, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListTasksAsync(projectId, ct)));

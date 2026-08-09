@@ -681,10 +681,15 @@ public sealed class GitWorkspace
             }
         }
 
-        if (hasWork)
+        var mustPublishFence = hasWork || HasFencedGeneration || quarantine;
+        if (mustPublishFence)
         {
             try
             {
+                // The salvage fence is the recovery contract. Publish and
+                // verify it before the immutable result ref is attempted and
+                // before any worktree removal can run. A later envelope failure
+                // may therefore requeue with a durable branch reference.
                 reconciliation = HasFencedGeneration || quarantine
                     ? await PublishImmutableSalvageAsync(
                         salvageBranch,
@@ -730,9 +735,9 @@ public sealed class GitWorkspace
             {
                 // On the legacy completion path the immutable ref is best-effort
                 // evidence. Without it the request carries no result envelope,
-                // so the server routes a reported coding success to unverified
-                // instead of creating an impossible review subject. No ref, no
-                // delivery proof.
+                // so the server records delivery-failed and requeues once before
+                // escalating. The already verified salvage fence remains the
+                // delivery proof and recovery source.
                 _log($"immutable-result-ref-push-failed ref={candidateRef} path={RepoPath} error={OneLine(ex.Message)}; completing without result envelope");
             }
         }
@@ -741,8 +746,8 @@ public sealed class GitWorkspace
         else
             _log($"worktree-handoff-secured path={RepoPath} resultSha={head} immutableRef={immutableResultRef}");
 
-        return hasWork
-            ? new WorktreeTeardownResult(true, salvageBranch,
+        return reconciliation is not null
+            ? new WorktreeTeardownResult(hasWork, salvageBranch,
                 reconciliation?.AuthoritativeBaseSha ?? head,
                 BuildBranchUrl(_gitRemote!, salvageBranch),
                 ResultSha: head,

@@ -16,9 +16,9 @@ namespace AgentStudio.Tokens;
 ///   <item>Job detail: per-run breakdown with deltas for one job.</item>
 /// </list>
 ///
-/// Visibility, not enforcement (Critical Boundaries): these endpoints
-/// only read the orchestrator log; no token totals influence scheduling
-/// or job state.
+/// Visibility, not enforcement (Critical Boundaries): these endpoints read a
+/// deduplicated union of historical bus telemetry and durable task token
+/// receipts; no token totals influence scheduling or job state.
 /// </summary>
 public static class ProjectTokenUsageEndpoints
 {

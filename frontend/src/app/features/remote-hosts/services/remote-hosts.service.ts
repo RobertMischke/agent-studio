@@ -6,10 +6,11 @@ import type {
   HostRampStrategy,
   HostTelemetrySeries,
   RemoteHost,
-  RemoteHostAdmission,
-  RemoteHostCapabilityHealth,
+  TaskServerTelemetrySnapshot,
+  TaskServerRunnerCapabilitySnapshot,
 } from '../models/remote-host.model';
 import { seedRemoteHosts } from './remote-hosts.seed';
+import { ProviderAuthStatusService } from './provider-auth-status.service';
 
 /**
  * Registry + action service for the Remote-Hosts page (AGT-1921).
@@ -28,11 +29,13 @@ export class RemoteHostsService {
   readonly hosts = signal<RemoteHost[]>([]);
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
+  readonly identityDiagnostics = signal<readonly ClientSummary[]>([]);
 
   private static readonly FRESH_CLIENT_MS = 90_000;
   private static readonly DEGRADED_CLIENT_MS = 5 * 60_000;
   /** Optional keeps direct-constructor pure tests and non-HTTP previews viable. */
   private readonly http = tryInjectHttpClient();
+  private readonly providerAuth = tryInjectProviderAuthStatus();
 
   /** Every mount revalidates live state; cached cards are never authoritative. */
   ensureLoaded(): void {
@@ -85,6 +88,7 @@ export class RemoteHostsService {
     const startedAt = performance.now();
     this.http.get<ClientSummary[]>('/api/clients').subscribe({
       next: clients => {
+        this.identityDiagnostics.set((clients ?? []).filter(client => !!client.identityFileError));
         const byId = new Map((clients ?? []).map(client => [client.id, client]));
         const now = Date.now();
         this.hosts.update(hosts => {
@@ -129,7 +133,8 @@ export class RemoteHostsService {
           clients: clients?.length ?? 0,
           durationMs: Math.round(performance.now() - startedAt),
         });
-        for (const host of this.hosts().filter(host => byId.has(host.clientId) && host.status !== 'retired')) {
+        for (const host of this.hosts().filter(host =>
+          byId.has(host.clientId) && host.status !== 'retired' && !host.identityFileError)) {
           this.patch(host.id, current => preserveLongTelemetry && current.telemetry?.window === '14d'
             ? { ...current, telemetryLoading: true }
             : { ...current, stats: null, telemetry: null, telemetryLoading: true });
@@ -138,6 +143,7 @@ export class RemoteHostsService {
         this.hydrateCapabilityRegistry();
       },
       error: error => {
+        this.identityDiagnostics.set([]);
         this.hosts.update(hosts => hosts.map(host => ({ ...host, liveDataState: 'error' })));
         this.loading.set(false);
         this.error.set('Live host status is temporarily unavailable.');
@@ -153,6 +159,7 @@ export class RemoteHostsService {
     if (!this.http) return;
     this.http.get<TaskServerRunnerCapabilitySnapshot[]>('/api/v1/management/remote-hosts').subscribe({
       next: snapshots => {
+        this.providerAuth?.ingest(snapshots ?? []);
         const now = Date.now();
         this.hosts.update(hosts => {
           const projected = [...hosts];
@@ -183,7 +190,9 @@ export class RemoteHostsService {
             const telemetryFresh = snapshot.telemetry && Number.isFinite(telemetryAt)
               && now - telemetryAt <= RemoteHostsService.DEGRADED_CLIENT_MS
               && heartbeatFresh;
-            const status = hostDraining
+            const status = current.identityFileError
+              ? 'offline'
+              : hostDraining
               ? 'draining'
               : !heartbeatFresh
                 ? current.status
@@ -218,9 +227,20 @@ export class RemoteHostsService {
               capacityHostId: snapshot.hostId,
               runtimeCapacity: snapshot.runtimeCapacity ?? current.runtimeCapacity ?? null,
               effectiveMaxParallelism:
-                snapshot.effectiveMaxParallelism ?? current.effectiveMaxParallelism ?? null,
+                snapshot.effectiveMaxParallelism !== undefined
+                  ? snapshot.effectiveMaxParallelism
+                  : current.effectiveMaxParallelism ?? null,
               runtimeCapacityAppliedAt:
-                snapshot.runtimeCapacityAppliedAt ?? current.runtimeCapacityAppliedAt ?? null,
+                snapshot.runtimeCapacityAppliedAt !== undefined
+                  ? snapshot.runtimeCapacityAppliedAt
+                  : current.runtimeCapacityAppliedAt ?? null,
+              runtimeCapacityAppliedVersion:
+                snapshot.runtimeCapacityAppliedVersion !== undefined
+                  ? snapshot.runtimeCapacityAppliedVersion
+                  : current.runtimeCapacityAppliedVersion ?? null,
+              projectPolicy: snapshot.projectPolicy !== undefined
+                ? snapshot.projectPolicy
+                : current.projectPolicy ?? null,
               taskServerConnection: snapshot.telemetry
                 ? taskServerConnection(snapshot.telemetry)
                 : current.taskServerConnection ?? null,
@@ -416,6 +436,40 @@ export class RemoteHostsService {
     });
   }
 
+  /** Persist host-to-project claim admission in the Task Server. */
+  setProjectPolicy(
+    id: string,
+    allowAllProjects: boolean,
+    allowedProjectIds: readonly string[],
+    expectedVersion: number,
+  ): void {
+    const current = this.hosts().find(host => host.id === id);
+    const hostId = current?.capacityHostId;
+    if (!current || current.busyAction || !hostId || !this.http) return;
+    this.patch(id, host => ({ ...host, busyAction: 'project-policy' }));
+    this.http.put<NonNullable<RemoteHost['projectPolicy']>>(
+      `/api/v1/hosts/${encodeURIComponent(hostId)}/project-policy`,
+      { allowAllProjects, allowedProjectIds, expectedVersion },
+    ).subscribe({
+      next: updated => {
+        this.hosts.update(hosts => hosts.map(host =>
+          host.capacityHostId === hostId
+            ? {
+                ...host,
+                projectPolicy: updated,
+                busyAction: host.id === id ? null : host.busyAction,
+              }
+            : host));
+        this.log('project-policy-saved', {
+          hostId,
+          allowAllProjects,
+          allowedProjectIds,
+        });
+      },
+      error: error => this.actionFailed(id, error),
+    });
+  }
+
   permanentlyDelete(id: string): void {
     const host = this.hosts().find(item => item.id === id);
     if (!host || !this.http) return;
@@ -463,41 +517,6 @@ export class RemoteHostsService {
   }
 }
 
-interface TaskServerTelemetrySnapshot {
-  observedAt: string;
-  cpuPercent: number | null;
-  memoryUsedBytes: number | null;
-  memoryTotalBytes: number | null;
-  cpuCores: number;
-  diskFreeBytes?: number | null;
-  diskTotalBytes?: number | null;
-  taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';
-  taskServerConnectionObservedAt?: string | null;
-  taskServerConnectionFailureStartedAt?: string | null;
-  taskServerConnectionConsecutiveFailures?: number;
-  taskServerConnectionEscalatedAt?: string | null;
-  taskServerConnectionLastError?: string | null;
-  taskServerConnectionLastRecoveredAt?: string | null;
-}
-
-interface TaskServerRunnerCapabilitySnapshot {
-  runnerId: string;
-  name: string;
-  hostId: string;
-  instanceId: string;
-  runnerVersion: string;
-  protocolVersion: number;
-  status: string;
-  registeredAt: string;
-  lastSeenAt: string;
-  hostAdmission: RemoteHostAdmission;
-  capabilities: RemoteHostCapabilityHealth[];
-  telemetry?: TaskServerTelemetrySnapshot | null;
-  runtimeCapacity?: NonNullable<RemoteHost['runtimeCapacity']>;
-  effectiveMaxParallelism?: number | null;
-  runtimeCapacityAppliedAt?: string | null;
-}
-
 function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<RemoteHost['stats']> {
   return {
     ramTotalMb: (telemetry.memoryTotalBytes ?? 0) / 1024 / 1024,
@@ -533,7 +552,9 @@ function statusFor(lastSeenAt: string | null, now: number): RemoteHost['status']
 function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHost['status']): RemoteHost {
   return {
     ...host, status, lastHeartbeatAt: client.lastSeenAt, stats: null, telemetry: null,
-    liveDataState: 'ready', telemetryLoading: status !== 'retired',
+    liveDataState: 'ready', telemetryLoading: status !== 'retired' && !client.identityFileError,
+    identityFileError: client.identityFileError ?? null,
+    identityRestoreHint: client.identityRestoreHint ?? null,
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
     projectPreflights: client.runnerProjectPreflights ?? [],
@@ -567,6 +588,7 @@ function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<Remote
       effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? host.effectiveMaxParallelism ?? null,
       runtimeCapacityAppliedAt:
         client.runnerEffectiveMaxParallelismAppliedAt ?? host.runtimeCapacityAppliedAt ?? null,
+      runtimeCapacityAppliedVersion: host.runtimeCapacityAppliedVersion ?? null,
     };
   }
   if (client.runnerDesiredMaxParallelism === null
@@ -587,6 +609,7 @@ function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<Remote
     },
     effectiveMaxParallelism: client.runnerEffectiveMaxParallelism ?? null,
     runtimeCapacityAppliedAt: client.runnerEffectiveMaxParallelismAppliedAt ?? null,
+    runtimeCapacityAppliedVersion: null,
   };
 }
 
@@ -618,6 +641,14 @@ function mergeRecentTelemetry(
 function tryInjectHttpClient(): HttpClient | null {
   try {
     return inject(HttpClient, { optional: true });
+  } catch {
+    return null;
+  }
+}
+
+function tryInjectProviderAuthStatus(): ProviderAuthStatusService | null {
+  try {
+    return inject(ProviderAuthStatusService, { optional: true });
   } catch {
     return null;
   }

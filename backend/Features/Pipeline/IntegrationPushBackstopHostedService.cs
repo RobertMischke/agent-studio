@@ -62,7 +62,7 @@ public sealed class IntegrationPushBackstopHostedService : BackgroundService
                 job.Id,
                 job.FolderPath,
                 job.WatchPath,
-                TaskIntegrationBranch.Resolve(job, settings.IntegrationBranch),
+                settings.IntegrationBranch,
                 ct);
             if (result.Success) pushed++;
         }

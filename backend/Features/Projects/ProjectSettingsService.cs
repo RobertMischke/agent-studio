@@ -279,12 +279,12 @@ public class ProjectSettingsService
 
     /// <summary>
     /// ADR-0052: sets the integration branch parallel task worktrees branch off
-    /// and merge back into. Blank reverts to the default (<c>develop</c>).
+    /// and merge back into. Blank reverts to repository <c>origin/HEAD</c>.
     /// </summary>
     public void SetIntegrationBranch(string projectName, string? branch)
     {
         EnsureLoaded();
-        var value = string.IsNullOrWhiteSpace(branch) ? new ProjectSettings().IntegrationBranch : branch.Trim();
+        var value = string.IsNullOrWhiteSpace(branch) ? string.Empty : branch.Trim();
         lock (_lock)
         {
             var key = ResolveAliasLocked(projectName);

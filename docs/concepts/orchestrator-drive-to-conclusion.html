@@ -1709,7 +1709,7 @@
             as optional at the server boundary.
           </td>
           <td>
-            <span class="pill ok">fixed</span> one pure completion-envelope policy now runs before settlement. A coding
+            <span class="pill ok">fixed at the time; superseded by AGT-2544</span> one pure completion-envelope policy ran before settlement. A coding
             <code>Done</code> or <code>NoOp</code> without the complete trio settles as <code>Failed/unverified</code>,
             creates no ReviewAttempt, and reaches Escalated immediately with category
             <code>unverified-delivery</code> and a requeue action. Full-envelope completion remains reviewable, while
@@ -1794,6 +1794,54 @@
             with commits instead of an empty range. An end-to-end regression against a real origin proves the divergent
             delivery reaches <span class="lane">4-auto-review</span> on the collision branch rather than
             <span class="lane">5e-escalated</span>.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-08</td>
+          <td><code>AGT-2521</code><br><span class="small">remote Ready fleet starvation with free host capacity</span></td>
+          <td>
+            Twenty-one remote-routed cards remained in <span class="lane">2-ready</span> for hours while a healthy daemon
+            reported eight free slots. The last successful claim was five hours old. The Runner refused every affected
+            project because its registry record had no <code>repositoryUrl</code>, but the reason existed only in the backend
+            log. The board continued to present an ordinary queued-remote state.
+          </td>
+          <td>
+            Claim admission treated missing repository registration as a poll-local rejection. It cached a host preflight
+            and logged the failure, but did not persist the refusal on the card. Registry settings exposed no remote
+            claimability invariant, and no watchdog compared Ready age with reported free capacity.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> remote refusals are durable per-card state rendered on the board and
+            task detail; remotely assigned projects without <code>repositoryUrl</code> warn in project settings and Execution
+            Hosts before a claim; a 30-minute starvation watchdog emits a board banner and WRN event whenever old remote
+            Ready work coexists with fresh free Runner capacity.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-09</td>
+          <td><code>AGT-2544</code><br><span class="small">AGT-2531 and AGT-2541 existed only on salvage fences</span></td>
+          <td>
+            AGT-2531 reported <code>Blocked</code> without an immutable result envelope and still reached Completed; its
+            accepted-integration worker later returned <code>NoTaskBranch</code>. AGT-2541 reported <code>Done</code>
+            without the envelope and reached the immediate <code>unverified-delivery</code> escalation. Both deliveries
+            survived only because teardown had already published their generation-scoped salvage fences. The missing
+            delivery produced false-red gates, baseline escalations, and a blocked promotion train.
+          </td>
+          <td>
+            The Marathon repair restored best-effort envelope emission but intentionally tolerated immutable-ref push
+            failure after salvage. The AGT-2499 server guard then required envelopes only for <code>Done</code> and
+            <code>NoOp</code>, so AGT-2531's <code>Blocked</code> terminal bypassed it. AGT-2541 was detected, but the guard
+            had no retry state and routed the first failure directly to Escalated. The fence was safety evidence, not yet
+            part of the recovery response.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> every coding terminal now requires the full envelope, except an
+            explicit repository or environment preparation failure. Missing evidence settles the RunAttempt as
+            <code>Failed/delivery-failed</code>, creates no review subject, appends the exact salvage fence to the card,
+            and returns the first failure to <span class="lane">2-ready</span>. The second consecutive envelope failure
+            reaches <span class="lane">5e-escalated</span> with category <code>unverified-delivery</code>. Teardown
+            publishes and verifies the salvage fence before immutable-ref publication or worktree removal; an unsecured
+            fence still retains the checkout and uses <code>worktree-blocked</code>.
           </td>
         </tr>
       </tbody>

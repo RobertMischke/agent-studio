@@ -49,6 +49,10 @@ export type {
 } from './explorer-workspace-groups';
 
 export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'workbench' | 'epics';
+export interface ActiveExplorerWorkbench {
+  projectName: string;
+  workbenchId: string;
+}
 
 /**
  * F46 — Explorer two-level workspace → project tree. Purely presentational
@@ -81,6 +85,7 @@ export class ExplorerWorkspaceTreeComponent {
   readonly expandedProjects = input<ReadonlySet<string>>(new Set());
   readonly showAllActive = input(false);
   readonly activeProjectSurface = input<ExplorerProjectSurface | null>(null);
+  readonly activeWorkbench = input<ActiveExplorerWorkbench | null>(null);
   /** Experimental active-work visualization. Numbers remain the default. */
   readonly metricView = input<ExplorerTreeMetricView>('numbers');
   /** Project name to always-visible auto-pickup configuration and gate state. */
@@ -190,6 +195,25 @@ export class ExplorerWorkspaceTreeComponent {
       this.projectStorageByName(),
     ));
 
+  private lastRevealedWorkbenchPath: string | null = null;
+  private readonly revealActiveWorkbenchFx = effect(() => {
+    const activeWorkbench = this.activeWorkbench();
+    if (!activeWorkbench) {
+      this.lastRevealedWorkbenchPath = null;
+      return;
+    }
+
+    const workspace = this.groups()
+      .find(group => group.projects.some(project => project.name === activeWorkbench.projectName));
+    if (!workspace) return;
+
+    const revealPath = `${workspace.id}:${activeWorkbench.projectName}:${activeWorkbench.workbenchId}`;
+    if (this.lastRevealedWorkbenchPath === revealPath) return;
+    this.lastRevealedWorkbenchPath = revealPath;
+    this.setCollapsed('workspace', false);
+    this.setCollapsed(`ws:${workspace.id}`, false);
+  });
+
   isCollapsed(key: string): boolean {
     return this.sections.isCollapsed(key);
   }
@@ -208,6 +232,11 @@ export class ExplorerWorkspaceTreeComponent {
 
   isExpanded(name: string): boolean {
     return this.expandedProjects().has(name);
+  }
+
+  activeWorkbenchIdFor(projectName: string): string | null {
+    const activeWorkbench = this.activeWorkbench();
+    return activeWorkbench?.projectName === projectName ? activeWorkbench.workbenchId : null;
   }
 
   /** AGT-2067 — primary click on a URL row opens its embedded preview tab. */

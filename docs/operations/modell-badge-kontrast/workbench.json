@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "modell-badge-kontrast",
+  "title": "Modell-Badges: Kontrast im hellen Theme",
+  "summary": "ENTSCHIEDEN 09.08. (Operator): Satz A, Umsetzung als Studio-Theme-Token -> Karte AGT-2527 (2-ready). Operator-Befund 08.08.: das helle GPT-Grün ist kaum lesbar. Audit: Der Chip ist cac-model-level-indicator aus der Chat-Library (shared); alle vier Familienfarben (#d97757/#38bdf8/#a78bfa/#4ec9b0) sind Dark-Theme-Farben — im hellen Theme fallen alle durch AA (1,92-2,94:1 bei 9px-Fettschrift, Grenze 4,5:1). Betroffen: Board-Karten, Task-Detail-Header, Protokoll-Zeilen. Die Library exponiert --model-family-*-Custom-Properties: Fix ist Studio-seitig per Theme-Token möglich, ohne Library-Release. Vermessene AA-Kandidaten je Familie mit Farbton-Erhalt liegen bei; Entscheidung: Kandidaten-Satz A (moderat, 4,9-6,7:1) oder B (kräftig, 6,9-8,5:1).",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "testing",
+  "updatedAt": "2026-08-09T04:30:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": [
+    "AGT-2527"
+  ]
+}

@@ -487,12 +487,12 @@ public class JobsEndpointPerfTests : IDisposable
             config,
             summaryCache,
             new BusBackedAdHocUsageReader(store, config),
-            new BusBackedTokenSummaryReader(store, config),
             new BusBackedWorkspaceTimelineReader(store, config),
             new BusBackedProjectTokenUsageReader(
                 store,
                 config,
-                new JobStatsMetadataCache(BuildScannerFor(workspace), config, NullLogger<JobStatsMetadataCache>.Instance)));
+                new JobStatsMetadataCache(BuildScannerFor(workspace), config, NullLogger<JobStatsMetadataCache>.Instance),
+                new ProjectTokenReceiptReader()));
     }
 
     private static TaskScannerService BuildScannerFor(string watchPath)

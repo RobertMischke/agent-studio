@@ -62,6 +62,7 @@ import {
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { presentActivityEvents, stripLegacyCompletionLines } from '../activity-event-presentation';
+import { ActivityEventPresentationDirective } from '../activity-event-presentation.directive';
 import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
 import { projectStructuredActivityContent } from '../structured-activity-projection';
@@ -129,6 +130,7 @@ interface InterimSummaryState {
     RunnerReplayMetadataComponent,
     TaskInspectorTabComponent,
     DecisionSurfaceComponent,
+    ActivityEventPresentationDirective,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -805,10 +807,24 @@ export class ProtocolPaneComponent implements OnDestroy {
       emitTraceLink: false,
       emitDebugAggregate: false,
     });
-    const presented = presentActivityEvents(projected, info.id, info.watchPath, {
-      typedTurnCompletions: typedLifecycle,
-    });
-    return mergeReplayEvents(mergeByTimestamp(presented, structured.events), replay.timelineEvents);
+    const worktreeRootsByRun = new Map<number, string>();
+    for (const run of this.runTimeline()?.runs ?? []) {
+      const root = run.executionLocation?.worktreePath;
+      if (root) worktreeRootsByRun.set(run.index, root);
+    }
+    // Present after Studio-native structured events join the library
+    // projection so both CLI formats receive the same path and row cleanup.
+    const presented = presentActivityEvents(
+      mergeByTimestamp(projected, structured.events),
+      info.id,
+      info.watchPath,
+      {
+        typedTurnCompletions: typedLifecycle,
+        worktreeRootsByRun,
+        fallbackWorktreeRoot: info.executionLocation?.worktreePath,
+      },
+    );
+    return mergeReplayEvents(presented, replay.timelineEvents);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {

@@ -322,6 +322,70 @@ public sealed class HostOrchestratorStoreTests
         Assert.Equal("work-permit-task-not-ready", staleState.Code);
     }
 
+    [Fact]
+    public async Task Host_project_policy_filters_permits_and_is_rechecked_on_acceptance()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Workspace"),
+            "test",
+            default);
+        var blockedProject = await store.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Blocked", "BLK"),
+            "test",
+            default);
+        await store.CreateTaskAsync(
+            blockedProject.ProjectId,
+            new CreateTaskRequest("Blocked task", "work", "2-ready"),
+            "test",
+            default);
+        var allowedProject = await store.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Allowed", "ALW"),
+            "test",
+            default);
+        await store.CreateTaskAsync(
+            allowedProject.ProjectId,
+            new CreateTaskRequest("Allowed task", "work", "2-ready"),
+            "test",
+            default);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "runner-a", default);
+        var policy = await store.UpdateHostProjectPolicyAsync(
+            "host-a",
+            new UpdateHostProjectPolicyRequest(false, [allowedProject.ProjectId], 0),
+            "operator",
+            default);
+
+        var report = await store.AcceptHostReportAsync(
+            "runner-a",
+            Report(1, new HostCapacityDto(1, 1, 0, 0, 1)),
+            "runner-a",
+            default);
+        var permit = Assert.Single(report.AvailableWork);
+        Assert.Equal(allowedProject.ProjectId, permit.Task.ProjectId);
+
+        await store.UpdateHostProjectPolicyAsync(
+            "host-a",
+            new UpdateHostProjectPolicyRequest(false, [], policy.Version),
+            "operator",
+            default);
+        var blocked = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.AcceptWorkPermitAsync(
+                permit.PermitId,
+                new WorkPermitAcceptRequest(
+                    HostOrchestratorContract.Current,
+                    "host-a",
+                    "instance-a",
+                    "runner-a",
+                    report.AcceptedSequence,
+                    report.PolicyVersion,
+                    "policy-changed"),
+                "runner-a",
+                default));
+        Assert.Equal("work-permit-project-not-allowed", blocked.Code);
+    }
+
     private static TaskServerStore Store(string dataDirectory)
         => new(
             Options.Create(new TaskServerOptions

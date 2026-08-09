@@ -8,6 +8,82 @@ public static class IntegrationQueueStates
     public const string Waiting = "waiting";
     public const string Conflict = "conflict";
     public const string Skipped = "skipped";
+    public const string LegacyUnverifiable = "legacy-unverifiable";
+    public const string Superseded = "superseded";
+}
+
+internal sealed record IntegrationQueueClassificationFacts(
+    bool IsIntegrated,
+    string? IntegrationProof,
+    bool IsArchived,
+    bool HasLegacyUnfencedReviewSubject,
+    string? IntegrationStatus,
+    string? IntegrationDetail,
+    string IntegrationRef);
+
+internal sealed record IntegrationQueueClassification(
+    string Status,
+    string? MergeSha,
+    string? Reason);
+
+/// <summary>
+/// Pure lifecycle policy for the merge-queue projection. Archived deliveries
+/// cannot regain attempt authority or be rebased in place, so their historical
+/// outcomes are terminal without hiding the original diagnostic evidence.
+/// </summary>
+internal static class IntegrationQueueClassificationPolicy
+{
+    public static IntegrationQueueClassification Decide(IntegrationQueueClassificationFacts facts)
+    {
+        if (facts.IsIntegrated)
+            return new(IntegrationQueueStates.Merged, facts.IntegrationProof, null);
+
+        if (facts.IntegrationStatus == IntegrationStatuses.ConflictSkipped)
+        {
+            if (facts.IsArchived && facts.HasLegacyUnfencedReviewSubject)
+            {
+                return new(
+                    IntegrationQueueStates.LegacyUnverifiable,
+                    null,
+                    WithOriginalOutcome(
+                        "The archived review subject predates RunAttempt authority and cannot be verified retroactively.",
+                        facts.IntegrationDetail));
+            }
+
+            if (facts.IsArchived)
+            {
+                return new(
+                    IntegrationQueueStates.Superseded,
+                    null,
+                    WithOriginalOutcome(
+                        "The conflicting delivery belongs to an archived card and is no longer an actionable merge subject. Recover still-required work through a new card.",
+                        facts.IntegrationDetail));
+            }
+
+            return new(
+                IntegrationQueueStates.Conflict,
+                null,
+                facts.IntegrationDetail ?? "Integration conflict recorded.");
+        }
+
+        if (facts.IntegrationStatus == IntegrationStatuses.NoBranch)
+        {
+            return new(
+                IntegrationQueueStates.Skipped,
+                null,
+                facts.IntegrationDetail ?? "No integrable change set.");
+        }
+
+        var reason = facts.IntegrationStatus == IntegrationStatuses.Partial
+            ? facts.IntegrationDetail
+            : $"Accepted change is not present in {facts.IntegrationRef}.";
+        return new(IntegrationQueueStates.Waiting, null, reason);
+    }
+
+    private static string WithOriginalOutcome(string explanation, string? detail)
+        => string.IsNullOrWhiteSpace(detail)
+            ? explanation
+            : $"{explanation} Original integration outcome: {detail}";
 }
 
 public sealed record IntegrationQueueItem(
@@ -99,14 +175,19 @@ public sealed class ProjectIntegrationViewService
 
     public ProjectIntegrationView Build(string projectName)
     {
-        var integrationBranch = _settings.Get(projectName).IntegrationBranch;
-        if (string.IsNullOrWhiteSpace(integrationBranch)) integrationBranch = "develop";
+        var configuredIntegrationBranch = _settings.Get(projectName).IntegrationBranch;
         const string releaseBranch = BoardMergeStatusService.ReleaseBranch;
 
         var root = _git.ResolveProjectRepoRoot(projectName);
         if (root == null)
-            return Empty(projectName, integrationBranch, releaseBranch, "Project has no readable git repository.");
+        {
+            var unresolvedRef = string.IsNullOrWhiteSpace(configuredIntegrationBranch)
+                ? "origin/HEAD"
+                : _git.ResolveOriginReadRef(configuredIntegrationBranch);
+            return Empty(projectName, unresolvedRef, releaseBranch, "Project has no readable git repository.");
+        }
 
+        var integrationBranch = _git.ResolveIntegrationBranch(root, configuredIntegrationBranch);
         var integrationRef = _git.ResolveOriginReadRef(integrationBranch);
         var releaseRef = _git.ResolveOriginReadRef(releaseBranch);
         var integrationHead = _git.GetBranchTip(root, integrationRef);
@@ -142,22 +223,28 @@ public sealed class ProjectIntegrationViewService
                     TaskIntegrationStatusService.AncestorSetContains(integrationAncestors, sha)))
                 proof = attributed[^1];
 
-            if (proof != null)
-            {
-                proofByTask[task.TaskKey] = proof;
-                return Item(task, IntegrationQueueStates.Merged, proof, null);
-            }
-
             fallback.TryGetValue(task.TaskKey, out var localStatus);
-            if (localStatus?.Status == IntegrationStatuses.ConflictSkipped)
-                return Item(task, IntegrationQueueStates.Conflict, null, localStatus.Detail ?? "Integration conflict recorded.");
-            if (localStatus?.Status == IntegrationStatuses.NoBranch)
-                return Item(task, IntegrationQueueStates.Skipped, null, localStatus.Detail ?? "No integrable change set.");
+            var hasLegacyUnfencedReviewSubject = false;
+            if (task.State == TaskStates.Archive
+                && localStatus?.Status == IntegrationStatuses.ConflictSkipped
+                && !string.IsNullOrWhiteSpace(task.FolderPath))
+            {
+                var reviewSubject = ReviewSubjectStore.Read(task.FolderPath);
+                hasLegacyUnfencedReviewSubject = reviewSubject is not null
+                    && string.IsNullOrWhiteSpace(reviewSubject.RunAttemptId);
+            }
+            var classification = IntegrationQueueClassificationPolicy.Decide(new(
+                IsIntegrated: proof != null,
+                IntegrationProof: proof,
+                IsArchived: task.State == TaskStates.Archive,
+                HasLegacyUnfencedReviewSubject: hasLegacyUnfencedReviewSubject,
+                IntegrationStatus: localStatus?.Status,
+                IntegrationDetail: localStatus?.Detail,
+                IntegrationRef: integrationRef));
 
-            var reason = localStatus?.Status == IntegrationStatuses.Partial
-                ? localStatus.Detail
-                : $"Accepted change is not present in {integrationRef}.";
-            return Item(task, IntegrationQueueStates.Waiting, null, reason);
+            if (classification.MergeSha != null)
+                proofByTask[task.TaskKey] = classification.MergeSha;
+            return Item(task, classification.Status, classification.MergeSha, classification.Reason);
         })
         .OrderBy(item => StatusOrder(item.Status))
         .ThenByDescending(item => item.StateSince)
@@ -254,7 +341,9 @@ public sealed class ProjectIntegrationViewService
         IntegrationQueueStates.Conflict => 0,
         IntegrationQueueStates.Waiting => 1,
         IntegrationQueueStates.Skipped => 2,
-        _ => 3,
+        IntegrationQueueStates.LegacyUnverifiable => 3,
+        IntegrationQueueStates.Superseded => 4,
+        _ => 5,
     };
 
     private static ProjectIntegrationView Empty(string project, string integrationRef, string releaseRef, string error)

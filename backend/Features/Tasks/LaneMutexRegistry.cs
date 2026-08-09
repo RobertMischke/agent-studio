@@ -80,9 +80,11 @@ public sealed class LaneMutexRegistry
         var key = Normalise(watchPath);
         var sem = _mutexes.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         var effectiveTimeout = timeout ?? _defaultTimeout;
+        var waitStarted = System.Diagnostics.Stopwatch.StartNew();
 
         if (!sem.Wait(effectiveTimeout))
         {
+            waitStarted.Stop();
             _logger.LogWarning(
                 "LaneMutexRegistry: timed out after {Seconds}s waiting for lane mutex on {WatchPath}; proceeding without exclusion. " +
                 "Another writer may be wedged; investigate before this becomes routine.",
@@ -90,6 +92,8 @@ public sealed class LaneMutexRegistry
             return NoOpDisposable.Instance;
         }
 
+        waitStarted.Stop();
+        BatchMoveOperationTelemetry.RecordLaneLockWait(waitStarted.Elapsed);
         return new Release(sem);
     }
 
@@ -104,11 +108,15 @@ public sealed class LaneMutexRegistry
     private sealed class Release : IDisposable
     {
         private SemaphoreSlim? _sem;
+        private readonly long _acquiredAt = System.Diagnostics.Stopwatch.GetTimestamp();
         public Release(SemaphoreSlim sem) { _sem = sem; }
         public void Dispose()
         {
             var sem = Interlocked.Exchange(ref _sem, null);
-            sem?.Release();
+            if (sem is null) return;
+            BatchMoveOperationTelemetry.RecordLaneLockHeld(
+                System.Diagnostics.Stopwatch.GetElapsedTime(_acquiredAt));
+            sem.Release();
         }
     }
 

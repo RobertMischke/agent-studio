@@ -2,8 +2,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { GitGraphCommit, GitProjectInventory } from '../../../git';
+import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { loadDiff2Html } from '../../../../utils/diff2html-lazy';
 import { ProjectGitPanelComponent } from './project-git-panel.component';
 
@@ -110,9 +111,15 @@ function inventoryFixture(overrides: Partial<GitProjectInventory> = {}): GitProj
 }
 
 function setup() {
+  const openTaskKey = vi.fn(() => true);
   TestBed.configureTestingModule({
     imports: [ProjectGitPanelComponent],
-    providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      { provide: TaskReferenceNavigationService, useValue: { openTaskKey } },
+    ],
   });
   const fixture = TestBed.createComponent(ProjectGitPanelComponent);
   fixture.componentRef.setInput('projectName', 'Demo');
@@ -121,12 +128,13 @@ function setup() {
     fixture,
     http: TestBed.inject(HttpTestingController),
     root: fixture.nativeElement as HTMLElement,
+    openTaskKey,
   };
 }
 
 describe('ProjectGitPanelComponent', () => {
-  it('renders refs and active checkouts beside the enriched commit graph', () => {
-    const { fixture, http, root } = setup();
+  it('renders active checkouts and semantic chips beside the enriched commit graph', () => {
+    const { fixture, http, root, openTaskKey } = setup();
     http.expectOne(request => request.url === '/api/git/inventory').flush(inventoryFixture());
     fixture.detectChanges();
 
@@ -136,9 +144,12 @@ describe('ProjectGitPanelComponent', () => {
     expect(root.querySelector('[data-testid="git-tree-group-integration"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="git-tree-group-task"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('feat: add thing');
-    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('deploy:runner');
-    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('✓ develop');
-    expect(root.querySelector('[data-testid="git-history"]')?.textContent).toContain('○ main');
+    const commitRow = root.querySelector<HTMLElement>('[data-testid="git-commit-row"]')!;
+    const chips = [...commitRow.querySelectorAll<HTMLElement>('[data-tone]')]
+      .map(chip => chip.textContent?.trim());
+    expect(chips).toEqual(['Integrated · develop', 'Deployed · runner', 'AGT-1', 'In progress']);
+    commitRow.querySelector<HTMLButtonElement>('[data-kind="task"]')!.click();
+    expect(openTaskKey).toHaveBeenCalledWith('Demo::task-1');
     expect(root.querySelector('[data-testid="git-cleanup"]')).toBeNull();
     http.verify();
   });

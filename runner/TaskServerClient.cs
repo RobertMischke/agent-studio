@@ -41,6 +41,8 @@ public sealed class TaskServerClient : IDisposable
     private long _lastHostReportSequence;
     private int? _centralHostMaxParallelism;
     private DateTime? _centralHostMaxParallelismAppliedAt;
+    private long? _centralRuntimeCapacityVersion;
+    private readonly RuntimeCapacityCache? _runtimeCapacityCache;
 
     public TaskServerClient(RunnerOptions options)
     {
@@ -77,6 +79,8 @@ public sealed class TaskServerClient : IDisposable
         SetClientId(options.ClientId ?? options.RunnerId);
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.HeaderName, RunnerOptions.ProtocolVersion.ToString());
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown");
+        _runtimeCapacityCache = ConfigureRuntimeCapacityCache(options);
+        RestoreRuntimeCapacityCache();
     }
 
     /// <summary>
@@ -113,6 +117,8 @@ public sealed class TaskServerClient : IDisposable
         _useV1 = usesDurableTaskServer;
         _supportsCapabilityAdvertisement = usesDurableTaskServer;
         _supportsHostOrchestrator = usesDurableTaskServer && supportsHostOrchestrator;
+        _runtimeCapacityCache = ConfigureRuntimeCapacityCache(options);
+        RestoreRuntimeCapacityCache();
     }
 
     /// <summary>
@@ -301,6 +307,7 @@ public sealed class TaskServerClient : IDisposable
         _centralHostMaxParallelism ?? _options?.HostMaxParallelism ?? 1,
         1,
         256);
+    internal long? RuntimeCapacityVersion => _centralRuntimeCapacityVersion;
 
     public async Task<Contract.HostReportResponse> ReportHostAsync(
         Contract.HostReportRequest request,
@@ -619,7 +626,8 @@ public sealed class TaskServerClient : IDisposable
                 req.AvailableSlots,
                 ToContract(req.Inventory),
                 _options is null ? null : RunnerCapabilityProbe.CodingRequirements(_options),
-                req.EffectiveMaxParallelism ?? HostMaxParallelism),
+                req.EffectiveMaxParallelism ?? HostMaxParallelism,
+                _centralRuntimeCapacityVersion),
             ct);
         AdoptRuntimeCapacity(claim?.RuntimeCapacity);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
@@ -664,7 +672,30 @@ public sealed class TaskServerClient : IDisposable
     }
 
     private void AdoptRuntimeCapacity(Contract.RuntimeCapacitySettingsDto? capacity)
-        => AdoptCentralMaxParallelism(capacity?.MaxParallelism);
+    {
+        if (capacity is not
+            {
+                Version: > 0,
+                MaxParallelism: >= 1 and <= 256,
+                TargetLoadPercent: >= 50 and <= 95,
+            }
+            || capacity.RampStrategy is not ("conservative" or "balanced" or "aggressive"))
+        {
+            return;
+        }
+        if (_centralRuntimeCapacityVersion > capacity.Version) return;
+        if (_centralRuntimeCapacityVersion == capacity.Version
+            && _centralHostMaxParallelism == capacity.MaxParallelism)
+        {
+            return;
+        }
+
+        var adoptedAt = DateTime.UtcNow;
+        _centralHostMaxParallelism = capacity.MaxParallelism;
+        _centralHostMaxParallelismAppliedAt = adoptedAt;
+        _centralRuntimeCapacityVersion = capacity.Version;
+        _runtimeCapacityCache?.Save(capacity, adoptedAt);
+    }
 
     /// <summary>
     /// Adopt a server-owned ceiling and remember when it took effect, so the
@@ -677,6 +708,22 @@ public sealed class TaskServerClient : IDisposable
         if (_centralHostMaxParallelism == maxParallelism) return;
         _centralHostMaxParallelism = maxParallelism;
         _centralHostMaxParallelismAppliedAt = DateTime.UtcNow;
+    }
+
+    private static RuntimeCapacityCache? ConfigureRuntimeCapacityCache(
+        RunnerOptions? options)
+        => options is null || string.Equals(options.Role, "review", StringComparison.Ordinal)
+            ? null
+            : new RuntimeCapacityCache(options.StateDir);
+
+    private void RestoreRuntimeCapacityCache()
+    {
+        if (_runtimeCapacityCache is null || _options is null) return;
+        var cached = _runtimeCapacityCache.Load(_options.Hostname);
+        if (cached is null) return;
+        _centralHostMaxParallelism = cached.Capacity.MaxParallelism;
+        _centralHostMaxParallelismAppliedAt = cached.AdoptedAt;
+        _centralRuntimeCapacityVersion = cached.Capacity.Version;
     }
 
     /// <summary>
@@ -1321,7 +1368,11 @@ public sealed class TaskServerClient : IDisposable
         if (!resp.IsSuccessStatusCode)
         {
             var text = await resp.Content.ReadAsStringAsync(ct);
-            throw new TaskServerException((int)resp.StatusCode, $"POST {url} -> {(int)resp.StatusCode}: {Trim(text)}");
+            var errorCode = TryReadApiErrorCode(text);
+            throw new TaskServerException(
+                (int)resp.StatusCode,
+                $"POST {url} -> {(int)resp.StatusCode}: {Trim(text)}",
+                errorCode);
         }
         return await resp.Content.ReadFromJsonAsync<TResp>(Json, ct);
     }
@@ -1353,11 +1404,24 @@ public sealed class TaskServerClient : IDisposable
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300] + "...";
 
+    private static string? TryReadApiErrorCode(string response)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Contract.ApiError>(response, TaskServerContractJson)?.Code;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public void Dispose() => _http.Dispose();
 }
 
 /// <summary>A non-success HTTP reply from the Task Server, carrying the status code for branching.</summary>
-public sealed class TaskServerException(int statusCode, string message) : Exception(message)
+public sealed class TaskServerException(int statusCode, string message, string? errorCode = null) : Exception(message)
 {
     public int StatusCode { get; } = statusCode;
+    public string? ErrorCode { get; } = errorCode;
 }

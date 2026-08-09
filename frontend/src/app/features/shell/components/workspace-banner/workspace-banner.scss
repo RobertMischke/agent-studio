@@ -1,2 +1,2 @@
-/* F56: workspace-banner renders as toast via NotificationService; no host styling needed. */
-:host { display: none; }
+/* The host now carries the persistent queue-health banner below toast-only decisions. */
+:host { display: block; }

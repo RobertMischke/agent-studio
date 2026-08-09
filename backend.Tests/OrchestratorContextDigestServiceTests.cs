@@ -46,6 +46,23 @@ public sealed class OrchestratorContextDigestServiceTests
     }
 
     [Fact]
+    public void ScopeTasks_MatchesLegacyTaskKeyCaseInsensitively()
+    {
+        Assert.True(OrchestratorContextKey.TryParse("task:alpha/LEGACY-1", out var context));
+        var legacy = new TaskInfo
+        {
+            ProjectName = "alpha",
+            Id = "legacy-folder",
+            Key = null,
+            TaskKey = "legacy-1",
+        };
+
+        OrchestratorContextDigestService.ScopeTasks(context, [legacy], out var focus);
+
+        Assert.Same(legacy, focus);
+    }
+
+    [Fact]
     public void RenderDigest_CarriesAllReadSectionsAndCapsNoisyTails()
     {
         Assert.True(OrchestratorContextKey.TryParse("project:alpha", out var context));

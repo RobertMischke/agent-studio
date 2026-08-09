@@ -31,6 +31,67 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("Alias=agent-runner.service", content);
     }
 
+    [Theory]
+    [InlineData("deploy/systemd/agent-host.service")]
+    [InlineData("scripts/remote-runner-onboard.sh")]
+    public void Agent_host_units_load_the_shared_provider_auth_file_after_the_role_environment(
+        string relativePath)
+    {
+        var content = File.ReadAllText(Path.Combine(RepoRoot(), relativePath));
+        var roleEnvironment = content.IndexOf("EnvironmentFile=/etc/agent-runner/runner.env", StringComparison.Ordinal);
+        if (relativePath.EndsWith("remote-runner-onboard.sh", StringComparison.Ordinal))
+            roleEnvironment = content.IndexOf("EnvironmentFile=$env_file", StringComparison.Ordinal);
+        var providerEnvironment = content.IndexOf(
+            "EnvironmentFile=/etc/agent-runner/provider-auth.env",
+            StringComparison.Ordinal);
+        if (relativePath.EndsWith("remote-runner-onboard.sh", StringComparison.Ordinal))
+            providerEnvironment = content.IndexOf("EnvironmentFile=$provider_auth_file", StringComparison.Ordinal);
+
+        Assert.True(roleEnvironment >= 0);
+        Assert.True(providerEnvironment > roleEnvironment);
+        if (relativePath.EndsWith("remote-runner-onboard.sh", StringComparison.Ordinal))
+            Assert.Contains("/proc/${main_pid}/environ", content);
+    }
+
+    [Fact]
+    public void Static_and_managed_units_load_the_shared_provider_auth_file_last()
+    {
+        var staticUnit = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "systemd", "agent-host.service"));
+        var onboarding = File.ReadAllText(
+            Path.Combine(RepoRoot(), "scripts", "remote-runner-onboard.sh"));
+
+        Assert.Contains(
+            "EnvironmentFile=/etc/agent-runner/runner.env\n" +
+            "# Shared, root-owned provider credentials.",
+            staticUnit.ReplaceLineEndings("\n"));
+        Assert.Contains(
+            "EnvironmentFile=/etc/agent-runner/provider-auth.env",
+            staticUnit);
+        Assert.True(
+            staticUnit.IndexOf(
+                "EnvironmentFile=/etc/agent-runner/provider-auth.env",
+                StringComparison.Ordinal) >
+            staticUnit.IndexOf(
+                "EnvironmentFile=/etc/agent-runner/runner.env",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            "EnvironmentFile=$env_file\n" +
+            "# One shared provider credential file",
+            onboarding.ReplaceLineEndings("\n"));
+        Assert.Contains(
+            "provider_auth_metadata=\"$(sudo stat -c '%U:%G:%a' \"$provider_auth_file\")\"",
+            onboarding);
+        Assert.True(
+            onboarding.IndexOf(
+                "EnvironmentFile=$provider_auth_file",
+                StringComparison.Ordinal) >
+            onboarding.IndexOf("EnvironmentFile=$env_file", StringComparison.Ordinal));
+        Assert.Contains("root:agent:640", onboarding);
+        Assert.DoesNotContain("provider_auth_tmp", onboarding);
+        Assert.DoesNotContain("claude auth login", onboarding);
+    }
+
     [Fact]
     public void Onboarding_installs_immutable_tool_releases_and_switches_current_atomically()
     {

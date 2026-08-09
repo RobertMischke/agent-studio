@@ -35,6 +35,7 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
+import { OrchestratorContextReceiptComponent } from '../orchestrator-context-receipt/orchestrator-context-receipt.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
@@ -53,7 +54,6 @@ import {
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
 import type { PageContext } from '../../../../models/page-context.model';
-import { pageContextKey } from '../../../../models/page-context.model';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -68,6 +68,7 @@ import { pageContextKey } from '../../../../models/page-context.model';
     AppTooltipDirective,
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
+    OrchestratorContextReceiptComponent,
     ChatSwitcherRailComponent,
     OrchestratorProjectPickerComponent
   ],
@@ -202,20 +203,41 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     watchPath: string | null;
   } | null>(null);
 
+  /**
+   * Synchronous active-tab task projection shared with the visible composer
+   * footer. It wins over the asynchronously hydrated detail inputs so the
+   * request cannot briefly fall back to board scope during a tab switch.
+   */
+  private readonly composerTaskContext = computed(() => {
+    if (this.pageContext()) return null;
+    const context = this.composerContext();
+    return context?.taskKey ? context : null;
+  });
+
   private readonly navigationProject = computed(() =>
     this.pinned()
       ? (this.pinnedSnapshot()?.project ?? null)
-      : (this.pageContext()?.projectName ?? this.activeProject()));
+      : (this.pageContext()?.projectName ?? this.composerTaskContext()?.project ?? this.activeProject()));
   private readonly navigationJobId = computed(() =>
-    this.pinned() ? (this.pinnedSnapshot()?.jobId ?? null) : this.activeJobId());
+    this.pinned()
+      ? (this.pinnedSnapshot()?.jobId ?? null)
+      : (this.composerTaskContext()?.taskId ?? this.activeJobId()));
   private readonly navigationJobTitle = computed(() =>
-    this.pinned() ? (this.pinnedSnapshot()?.jobTitle ?? null) : this.activeJobTitle());
+    this.pinned()
+      ? (this.pinnedSnapshot()?.jobTitle ?? null)
+      : (this.composerTaskContext()?.taskTitle ?? this.activeJobTitle()));
   private readonly navigationJobKey = computed(() =>
-    this.pinned() ? (this.pinnedSnapshot()?.jobKey ?? null) : this.activeJobKey());
+    this.pinned()
+      ? (this.pinnedSnapshot()?.jobKey ?? null)
+      : (this.composerTaskContext()?.taskKey ?? this.activeJobKey()));
   private readonly navigationJobState = computed(() =>
-    this.pinned() ? (this.pinnedSnapshot()?.jobState ?? null) : this.activeJobState());
+    this.pinned()
+      ? (this.pinnedSnapshot()?.jobState ?? null)
+      : (this.composerTaskContext()?.taskState ?? this.activeJobState()));
   private readonly navigationWatchPath = computed(() =>
-    this.pinned() ? (this.pinnedSnapshot()?.watchPath ?? null) : this.activeWatchPath());
+    this.pinned()
+      ? (this.pinnedSnapshot()?.watchPath ?? null)
+      : (this.composerTaskContext()?.taskWatchPath ?? this.activeWatchPath()));
   private readonly navigationContextKey = computed(() => buildNavigationContextKey(
     this.navigationProject(),
     this.navigationJobKey(),
@@ -274,6 +296,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly contextKey = computed<string | null>(() => this.contextResolution().key);
 
   readonly turns = signal<OrchestratorChatTurn[]>([], { equal: sameOrchestratorChatTurns });
+  readonly latestContextReceipt = computed(() =>
+    [...this.turns()].reverse().find(turn => turn.role === 'orchestrator' && turn.contextReceipt)?.contextReceipt ?? null);
   readonly loading = signal(false);
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
@@ -315,16 +339,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     ].join('\n');
   });
 
-  /**
-   * F14 navigation-context send caching. The menu toggle dedupes sends
-   * that would ship the same `navigationContext`: first send on a
-   * (project, task) pair carries the full block, identical subsequent
-   * sends carry `null`. Dismiss forces the next send to `null` even on
-   * a context change; switching project or task re-arms context inclusion.
-   */
+  /** Project scope may explicitly omit context once. Task scope is mandatory. */
   readonly contextDismissed = signal(false);
-  private readonly lastSentContextSignature = signal<string | null>(null);
-  private lastSentProjectForSignature: string | null = null;
 
   /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
   private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
@@ -413,19 +429,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       }
     });
 
-    // F14: any picker move (project or task) re-arms context inclusion
-    // and (on project change) clears the cache so the new thread sees
-    // a fresh context block on its first send.
+    // Context exclusion is a one-message project override. Navigating to a
+    // different scope clears it, while task scope remains mandatory.
     effect(() => {
-      const proj = this.effectiveProject();
-      this.effectiveJobId();
+      this.contextKey();
       this.pageContext();
       untracked(() => {
         if (this.contextDismissed()) this.contextDismissed.set(false);
-        if (proj !== this.lastSentProjectForSignature) {
-          this.lastSentContextSignature.set(null);
-          this.lastSentProjectForSignature = proj;
-        }
       });
     });
 
@@ -623,15 +633,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   toggleNextMessageContext(): void {
+    if (this.contextKind() === 'task') return;
     this.contextDismissed.update(dismissed => !dismissed);
-  }
-
-  private currentContextSignature(): string {
-    const proj = (this.effectiveProject() ?? '').trim();
-    const jobId = (this.effectiveJobId() ?? '').trim();
-    const jobTitle = (this.effectiveJobTitle() ?? '').trim();
-    const page = this.pageContext();
-    return `${proj}|${jobId}|${jobTitle}|${page ? pageContextKey(page) : ''}`;
   }
 
   onOpenVerboseDebug(): void {
@@ -695,6 +698,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
       return;
     }
+    const navigationSnapshot = {
+      kind: this.contextKind(),
+      jobId: this.effectiveJobId(),
+      taskKey: this.effectiveJobKey(),
+      jobTitle: this.effectiveJobTitle(),
+      jobState: this.effectiveJobState(),
+      page: this.pageContext(),
+    };
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
 
@@ -770,16 +781,17 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // F14: ship full nav context only on the first send per (project,
-    // task) pair; identical sends and dismissed sends ship `null`.
-    const contextSignature = this.currentContextSignature();
-    const shouldShipContext =
-      !this.contextDismissed() && contextSignature !== this.lastSentContextSignature();
+    // Task scope is attached to every turn. Project scope is also attached by
+    // default, with one explicit one-message exclusion available in the menu.
+    const taskScope = navigationSnapshot.kind === 'task';
+    const shouldShipContext = taskScope || !this.contextDismissed();
     const contextPayload = shouldShipContext
       ? buildChatNavigationContext({
-          activeJobId: this.effectiveJobId(),
-          activeJobTitle: this.effectiveJobTitle(),
-          pageContext: this.pageContext(),
+          activeJobId: navigationSnapshot.jobId,
+          activeTaskKey: navigationSnapshot.taskKey,
+          activeJobTitle: navigationSnapshot.jobTitle,
+          activeJobState: navigationSnapshot.jobState,
+          pageContext: navigationSnapshot.page,
         })
       : null;
 
@@ -798,9 +810,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     send$.subscribe({
       next: (response) => {
         if (response.executionContext) this.executionContext.set(response.executionContext);
-        if (shouldShipContext) {
-          this.lastSentContextSignature.set(contextSignature);
-        }
+        if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
         this.sending.set(false);
         // Pre-decode the persisted attachment URL(s) so the upcoming swap
         // from the local blob bubble to the server turn uses byte-identical

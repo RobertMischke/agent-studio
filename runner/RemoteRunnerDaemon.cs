@@ -274,8 +274,9 @@ public sealed class RemoteRunnerDaemon
                 }));
         foreach (var check in providerAuthChecks)
         {
+            var logStatus = check.Status.IsReady ? "ok" : check.Status.Status;
             _log(
-                $"runner-provider-auth binary={check.Binary} status={check.Status.Status} " +
+                $"runner-provider-auth status={logStatus} binary={check.Binary} " +
                 $"detail={check.Status.Detail}");
         }
         var capabilityGeneration = DateTime.UtcNow.Ticks;
