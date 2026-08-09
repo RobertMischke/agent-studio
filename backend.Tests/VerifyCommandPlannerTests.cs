@@ -793,7 +793,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal(BuildTestGateVerdict.Ok, (await leader).Verdict);
     }
 
-    // MachineBound 20.07.: cmd.exe for /L emittiert nur line-1 auf Windows-Hosts - auf Linux-Runner validiert
+    // MachineBound: exercises a real Bash process and the machine-wide gate while
+    // retaining enough output to overflow the bounded display ring.
     [Trait("Category", "MachineBound")]
     [Fact]
     public async Task LateLockEvidenceSurvivesRingBufferAndTimeoutTestNameIsNotMisclassified()
