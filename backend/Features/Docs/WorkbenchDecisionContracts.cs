@@ -27,6 +27,58 @@ public static class WorkbenchDecisionContracts
     private static readonly string[] AllowedInitialLanes =
         [TaskStates.Backlog, TaskStates.Preparation];
 
+    private static readonly string[] AllowedDecisionKinds = ["single", "multi", "confirm"];
+
+    /// <summary>
+    /// File-scoped content wins over repository provenance. A HEAD-only caller
+    /// keeps the legacy fallback, while a caller that names the descriptor +
+    /// HTML fingerprint is unaffected by commits to other files.
+    /// </summary>
+    public static string? StalenessError(
+        string? expectedRevision,
+        string? expectedFingerprint,
+        string? currentRevision,
+        string? currentFingerprint)
+    {
+        if (expectedRevision == null && expectedFingerprint == null)
+            return "A decision must name the revision or fingerprint it was taken on.";
+        if (expectedFingerprint != null)
+            return expectedFingerprint == currentFingerprint
+                ? null
+                : "The Workbench content changed since the decision was taken.";
+        return expectedRevision == currentRevision
+            ? null
+            : "The Workbench revision changed since the decision was taken.";
+    }
+
+    public static string? ValidateResponses(IReadOnlyList<WorkbenchDecisionResponse>? responses)
+    {
+        if (responses == null || responses.Count > 100)
+            return "responses must contain at most 100 decision points.";
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var response in responses)
+        {
+            if (!SafeMarkupId(response.DecisionId) || !ids.Add(response.DecisionId))
+                return "responses contain a malformed or duplicate decisionId.";
+            if (!AllowedDecisionKinds.Contains(response.Kind, StringComparer.Ordinal))
+                return $"response kind '{response.Kind}' is invalid.";
+            if (response.SelectedOptionIds.Count is 0 or > 100
+                || response.SelectedOptionIds.Any(optionId => !SafeMarkupId(optionId))
+                || response.SelectedOptionIds.Distinct(StringComparer.Ordinal).Count()
+                    != response.SelectedOptionIds.Count)
+                return $"response '{response.DecisionId}' needs unique, safe selected option ids.";
+            if (response.Kind is "single" or "confirm" && response.SelectedOptionIds.Count != 1)
+                return $"response '{response.DecisionId}' requires exactly one selected option.";
+            if (response.Comment is { Length: > 20_000 })
+                return $"response '{response.DecisionId}' comment is too long.";
+        }
+        return null;
+    }
+
+    private static bool SafeMarkupId(string? value) =>
+        value is { Length: >= 1 and <= 80 }
+        && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_');
+
     /// <summary>
     /// Returns null when the draft is a well-formed task request, otherwise a
     /// single human-readable reason. The draft is only ever a *request*: the
@@ -64,6 +116,14 @@ public static class WorkbenchDecisionContracts
             return "task.taskType is invalid.";
         return null;
     }
+}
+
+public sealed record WorkbenchDecisionResponse
+{
+    public string DecisionId { get; init; } = "";
+    public string Kind { get; init; } = "";
+    public List<string> SelectedOptionIds { get; init; } = [];
+    public string? Comment { get; init; }
 }
 
 /// <summary>

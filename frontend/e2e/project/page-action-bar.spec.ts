@@ -23,7 +23,18 @@ const EMPTY_GROUPED = {
 const pages: Record<string, string> = {
   [DOC_PATH]: '# Action bar contract\n\nEvery repository page exposes the same dependable actions in its page head.',
   [CONCEPT_PATH]: '# Pages as interfaces\n\nAIP-4 treats each page as a bidirectional interface between knowledge and delivery.',
-  [WORKBENCH_PATH]: '<main><h1>Action Bar Workbench</h1><p>Compare the shared actions in both themes.</p></main>',
+  [WORKBENCH_PATH]: `<main>
+    <h1>Action Bar Workbench</h1>
+    <p>Compare the shared actions in both themes.</p>
+    <section data-decision-id="action-density" data-decision-kind="single">
+      <h2>Choose the action density</h2>
+      <ul>
+        <li data-option-id="compact">Compact controls in one row</li>
+        <li data-option-id="expanded">Expanded controls with descriptions</li>
+      </ul>
+      <label>Optional note <textarea data-comment="Optional action-density note"></textarea></label>
+    </section>
+  </main>`,
 };
 
 interface CapturedCalls {
@@ -51,6 +62,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     decisionBodies: [],
   };
   let created = false;
+  let workbenchTaskCreated = false;
   let pinnedPath: string | null = null;
 
   // Register the broad fallback first. Playwright gives later routes priority.
@@ -107,6 +119,15 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     model: 'gpt-5',
     thinkingLevel: null,
   }));
+  await page.route('**/api/cli/model-routing/recommendation**', route => json(route, {
+    model: 'claude-opus-4-6',
+    thinkingLevel: null,
+    tier: 'complex',
+    taskType: 'chore',
+    economyDowngraded: false,
+    policyVersion: 'e2e',
+    policyWikiPath: 'docs/system/domains/model-routing-policy.md',
+  }));
   await page.route('**/api/crash-recovery/pending**', route => json(route, { pending: [] }));
   await page.route('**/api/tasks/archive**', route => json(route, {
     items: [],
@@ -114,7 +135,14 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     offset: 0,
     limit: 50,
   }));
-  await page.route('**/api/tasks/reference-status', route => json(route, { items: [] }));
+  await page.route('**/api/tasks/reference-status', route => json(route, {
+    items: workbenchTaskCreated ? [{
+      key: 'AGT-2400', exists: true, taskKey: `${PROJECT}::AGT-2400`,
+      title: 'Implement Action Bar Workbench', lane: '1-preparation',
+      projectId: 'project-evidence', projectName: PROJECT, projectColor: null,
+      merge: null, reviewGrade: null,
+    }] : [],
+  }));
   await page.route('**/api/tasks/grouped**', route => json(route, created
     ? {
         ...EMPTY_GROUPED,
@@ -126,13 +154,22 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
           state: '1-preparation',
           projectName: PROJECT,
           watchPath: WATCH_PATH,
-        }],
+        }, ...(workbenchTaskCreated ? [{
+          id: 'workbench-feature-1', key: 'AGT-2400', displayKey: 'AGT-2400',
+          taskKey: `${PROJECT}::AGT-2400`, title: 'Implement Action Bar Workbench',
+          state: '1-preparation', projectName: PROJECT, watchPath: WATCH_PATH,
+        }] : [])],
       }
     : EMPTY_GROUPED));
   await page.route(/\/api\/tasks(?:\?.*)?$/, route => {
     if (route.request().method() === 'POST') {
-      captured.taskBodies.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
+      const body = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
+      captured.taskBodies.push(body);
       created = true;
+      if (String(body['title']).includes('Action Bar Workbench')) {
+        workbenchTaskCreated = true;
+        return json(route, { id: 'workbench-feature-1' });
+      }
       return json(route, { id: 'page-task-1' });
     }
     return json(route, created ? [{
@@ -145,6 +182,13 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
       watchPath: WATCH_PATH,
     }] : []);
   });
+  await page.route(/\/api\/tasks\/workbench-feature-1(?:\?.*)?$/, route => json(route, {
+    info: {
+      id: 'workbench-feature-1', key: 'AGT-2400', displayKey: 'AGT-2400',
+      taskKey: `${PROJECT}::AGT-2400`, title: 'Implement Action Bar Workbench',
+      state: '1-preparation', projectName: PROJECT, watchPath: WATCH_PATH,
+    },
+  }));
 
   await page.route(`**/api/projects/${encodeURIComponent(PROJECT)}/wiki/tree`, route => json(route, {
     projectName: PROJECT,
@@ -327,11 +371,13 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         reason: body['archiveReason'],
         failure: null,
         spawnedTaskKeys: [],
+        responses: body['responses'],
+        taskDraft: body['task'],
       };
       return json(route, {
         success: true, errorCode: null, error: null, workbenchId: WORKBENCH_ID,
         operationId: body['operationId'], outcome: body['outcome'], decisionStage,
-        revision, fingerprint, spawnedTaskKeys: [], idempotent: false,
+        revision, fingerprint, spawnedTaskKeys: [], responses: body['responses'], idempotent: false,
       });
     },
   );
@@ -349,12 +395,15 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         confirmedAt: '2026-07-23T10:02:00Z',
         confirmedBy: body['actor'],
         decidedAt: '2026-07-23T10:02:00Z',
-        spawnedTaskKeys: ['AGT-2400'],
+        spawnedTaskKeys: body['spawnedTaskKeys'],
+        responses: body['responses'],
+        taskDraft: body['task'],
       };
       return json(route, {
         success: true, errorCode: null, error: null, workbenchId: WORKBENCH_ID,
         operationId: body['operationId'], outcome: 'feature-spawn', decisionStage,
-        revision, fingerprint, spawnedTaskKeys: ['AGT-2400'], idempotent: false,
+        revision, fingerprint, spawnedTaskKeys: body['spawnedTaskKeys'],
+        responses: body['responses'], idempotent: false,
       });
     },
   );
@@ -419,6 +468,8 @@ async function seedWiki(page: Page) {
       activeKey: `hub:${project}:wiki`,
     }));
     localStorage.setItem('atp.studio.theme', 'light');
+    localStorage.setItem('defaultCliType', 'claude');
+    localStorage.setItem('defaultModel:claude', 'claude-opus-4-6');
   }, { project: PROJECT });
 }
 
@@ -502,7 +553,7 @@ test('shared page action bar preserves placement, task source, chat context, and
   await expect(page.getByTestId('page-action-archive')).toContainText('Archived');
   expect(captured.archivePaths).toContain(CONCEPT_PATH);
   const notificationClose = page.getByTestId('notification-close');
-  while (await notificationClose.count()) {
+  while (await notificationClose.first().isVisible().catch(() => false)) {
     await notificationClose.first().click();
   }
 
@@ -537,28 +588,49 @@ test('shared page action bar preserves placement, task source, chat context, and
   const workbenchTab = page.getByRole('tab', { name: 'Action Bar Workbench' });
   if (await workbenchTab.count()) await workbenchTab.click();
   await expect(page.getByTestId('workbench-viewer')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('page-action-bar')).toHaveAttribute('data-page-type', 'workbench');
-  await expect(page.getByTestId('page-action-extra')).toHaveCount(0);
-  await expect(page.getByTestId('page-action-archive')).toHaveCount(0);
-  await page.getByTestId('workbench-decision-build').click();
+  const decisionFrame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
+  const compactOption = decisionFrame.locator('[data-option-id="compact"] input');
+  await expect(compactOption).toBeVisible();
+  await expect(page.getByTestId('workbench-decision-prepare')).toBeDisabled();
+  await compactOption.check();
+  await decisionFrame.locator('[data-studio-decision-comment]').fill('Keep the header in one compact row.');
+  await expect(page.getByTestId('workbench-decision-answer-count')).toContainText('ready');
   await page.getByTestId('workbench-decision-prepare').click();
   await expect(page.getByTestId('workbench-decision-confirm')).toBeVisible();
+  await expect(page.getByTestId('workbench-decision-chosen-options')).toContainText('Compact controls');
   await page.getByTestId('workbench-decision-confirm').click();
-  await expect(page.getByTestId('workbench-decision-receipt')).toContainText('AGT-2400');
+  const createdTask = page.getByTestId('workbench-decision-created-tasks');
+  await expect(createdTask).toContainText('AGT-2400');
+  await expect(createdTask).toContainText('Implement Action Bar Workbench');
+  await expect(createdTask).toContainText('Preparation');
+  await expect(createdTask.locator('a')).toHaveAttribute('href', '#task:AGT-2400');
   expect(captured.decisionBodies).toHaveLength(2);
   expect(captured.decisionBodies[0]).toEqual(expect.objectContaining({
     outcome: 'feature-spawn',
     expectedRevision: '0123456789abcdef',
     expectedFingerprint: 'a'.repeat(64),
+    responses: [{
+      decisionId: 'action-density',
+      kind: 'single',
+      selectedOptionIds: ['compact'],
+      comment: 'Keep the header in one compact row.',
+    }],
   }));
   expect(captured.decisionBodies[1]).toEqual(expect.objectContaining({
     confirmed: true,
     outcome: 'feature-spawn',
     expectedRevision: '1234567890abcdef',
     expectedFingerprint: 'b'.repeat(64),
+    spawnedTaskKeys: ['AGT-2400'],
+  }));
+  expect(captured.taskBodies[1]).toEqual(expect.objectContaining({
+    title: 'Implement Action Bar Workbench',
+    watchPath: WATCH_PATH,
+    targetState: '1-preparation',
+    taskType: 'feature',
   }));
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await capture(page, 'workbench-viewer', `page-action-workbench-${theme}.png`);
+    await capture(page, 'workbench-viewer', `decision-inline-after-${theme}--mocked.png`);
   }
 });

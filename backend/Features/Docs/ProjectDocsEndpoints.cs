@@ -98,7 +98,7 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(document);
         });
 
-        // The Sichtblick gate (AGT-2375). Prepare validates the decision against
+        // The Workbench Decision gate (AGT-2375). Prepare validates against
         // the exact revision/fingerprint and writes nothing; confirm is the
         // single durable write and lands in the Workbench's own workbench.json.
         app.MapPost("/api/projects/{projectName}/workbenches/{id}/decisions/prepare",

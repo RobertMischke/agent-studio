@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ISOLATED_HTML_LINK_MESSAGE,
+  WORKBENCH_DECISION_CHANGE_MESSAGE,
+  WORKBENCH_DECISION_HYDRATE_MESSAGE,
   buildIsolatedHtmlSrcdoc,
   resolveIsolatedHtmlNavigation,
 } from './sandboxed-html.util';
@@ -14,6 +16,17 @@ describe('sandboxed HTML navigation', () => {
     expect(srcdoc).toContain(`type: '${ISOLATED_HTML_LINK_MESSAGE}'`);
     expect(srcdoc).toContain("href.charAt(0) === '#'");
     expect(srcdoc).toContain('parent.postMessage');
+  });
+
+  it('adds the inert Workbench decision bridge only when the host requests it', () => {
+    const html = '<p data-decision-id="route" data-decision-kind="single"><span data-option-id="direct">Direct</span></p>';
+    const ordinary = buildIsolatedHtmlSrcdoc(html);
+    const workbench = buildIsolatedHtmlSrcdoc(html, { workbenchDecisions: true });
+
+    expect(ordinary).not.toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);
+    expect(workbench).toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);
+    expect(workbench).toContain(WORKBENCH_DECISION_HYDRATE_MESSAGE);
+    expect(workbench).toContain('data-studio-decision-control');
   });
 
   it('resolves docs-relative targets and rejects paths that escape docs', () => {

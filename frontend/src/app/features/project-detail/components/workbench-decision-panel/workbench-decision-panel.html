@@ -2,181 +2,167 @@
          data-testid="workbench-decision-panel"
          [attr.data-stage]="stage()">
   <header class="decision-panel__header">
-    <div>
-      <span class="decision-panel__eyebrow">Sichtblick gate</span>
-      <h2>Workbench decision</h2>
-      <p>A human decision is required before this experiment creates work or closes.</p>
-    </div>
-    <span class="decision-panel__stage"><i aria-hidden="true"></i>{{ stageLabel() }}</span>
+    <strong class="decision-panel__title">{{ document().workbench.title }}</strong>
+    <span class="decision-panel__separator" aria-hidden="true">·</span>
+    <span class="decision-panel__stage">
+      <i aria-hidden="true"></i>{{ stageLabel() }}
+    </span>
+    <span class="decision-panel__separator" aria-hidden="true">·</span>
+    <label class="decision-panel__owner">
+      <span>Decision owner</span>
+      <input type="text"
+             data-testid="workbench-decision-actor"
+             [value]="actor()"
+             [disabled]="pending() || settled()"
+             (input)="updateActor($event)" />
+    </label>
+    <span class="decision-panel__provenance"
+          data-testid="workbench-viewer-provenance">
+      {{ projectName() }} · {{ document().workbench.entryPath }} ·
+      {{ document().branch || 'branch unavailable' }}
+      @if (document().workingTreeModified) {
+        <span data-testid="workbench-viewer-working-tree">working tree · uncommitted</span>
+      } @else if (document().revision) {
+        <span>{{ document().revision!.slice(0, 8) }}</span>
+      }
+    </span>
+    <button type="button"
+            class="decision-panel__wiki"
+            data-testid="workbench-viewer-open-wiki"
+            aria-label="Open Workbench in Wiki"
+            title="Open in Wiki"
+            (click)="openWiki.emit()">
+      <app-studio-icon name="book" [size]="13" />
+    </button>
   </header>
 
   @if (mutationBlocked() && !settled()) {
     <p class="decision-panel__notice" role="status" data-testid="workbench-decision-blocked">
-      Decisions require a clean, Git-backed Workbench revision. Commit the descriptor and artifact changes first.
+      Decisions require committed Workbench descriptor and HTML files.
     </p>
   } @else if (!gateReady()) {
     <p class="decision-panel__notice">
-      This Workbench is still in {{ document().workbench.phase || 'shaping' }}. Move it to decision-ready before Sichtblick.
+      Move this Workbench to decision-ready before recording a decision.
     </p>
   } @else if (persistedDecision(); as decision) {
     <div class="decision-panel__receipt" data-testid="workbench-decision-receipt">
-      <div>
-        <span>Decision</span>
+      <span>
         <strong>{{ outcomeLabel(decision) }}</strong>
-      </div>
-      <div>
-        <span>Prepared by</span>
-        <strong>{{ decision.preparedBy }}</strong>
-        <small>{{ decision.preparedAt | date:'medium' }}</small>
-      </div>
+        · {{ decision.responses.length }} decision point{{ decision.responses.length === 1 ? '' : 's' }}
+        · {{ decision.confirmedBy || decision.preparedBy }}
+        · {{ (decision.decidedAt || decision.confirmedAt || decision.preparedAt) | date:'medium' }}
+      </span>
       @if (decision.reason) {
-        <div class="decision-panel__reason">
-          <span>Reason</span>
-          <p>{{ decision.reason }}</p>
-        </div>
+        <span class="decision-panel__receipt-note">{{ decision.reason }}</span>
       }
       @if (decision.spawnedTaskKeys.length > 0) {
-        <div>
-          <span>Created task</span>
-          <strong>{{ decision.spawnedTaskKeys.join(', ') }}</strong>
+        <div class="decision-panel__created" data-testid="workbench-decision-created-tasks">
+          <span>Created card</span>
+          @for (status of taskStatuses(); track status.key) {
+            <app-task-reference-microcard [status]="status" [expanded]="true" />
+          } @empty {
+            @for (key of decision.spawnedTaskKeys; track key) {
+              <span class="decision-panel__created-fallback">
+                <strong>{{ key }}</strong>
+                <span>{{ fallbackTaskTitle() }}</span>
+                <span>{{ fallbackTaskLane() }}</span>
+              </span>
+            }
+          }
         </div>
       }
-      @if (decision.failure) {
-        <p class="decision-panel__error" role="alert">{{ decision.failure }}</p>
-      }
-      @if (decision.outcome === 'feature-spawn' && decision.spawnedTaskKeys.length === 0) {
-        <p class="decision-panel__hint" data-testid="workbench-decision-card-todo">
-          The decision is recorded. Create the implementation card with
-          <em>Create Task in Project</em> - the decision service records the direction, it never creates cards.
-        </p>
-      }
     </div>
-
-    @if (canConfirm()) {
-      <div class="decision-panel__confirm">
-        <p>
-          Confirming is the visible human gate. It
-          {{ activeOutcome() === 'archive' ? 'archives the Workbench with its recorded reason' : 'creates the feature card from the prepared draft' }}.
-        </p>
+  } @else if (stage() === 'prepared' && draftMode() === 'feature-spawn') {
+    <form class="decision-panel__confirmation"
+          data-testid="workbench-decision-feature-confirmation"
+          (submit)="$event.preventDefault(); createFeatureCard()">
+      <label>
+        <span>Title</span>
+        <input type="text"
+               data-testid="workbench-decision-title"
+               [value]="title()"
+               [disabled]="pending()"
+               (input)="updateTitle($event)" />
+      </label>
+      <label class="decision-panel__goal">
+        <span>Goal</span>
+        <textarea rows="2"
+                  data-testid="workbench-decision-goal"
+                  [value]="goal()"
+                  [disabled]="pending()"
+                  (input)="updateGoal($event)"></textarea>
+      </label>
+      <p class="decision-panel__chosen" data-testid="workbench-decision-chosen-options">
+        <span>Chosen options</span>
+        <strong>{{ selectedSummary() || 'No inline decision points' }}</strong>
+      </p>
+      <div class="decision-panel__actions">
+        <button type="button" [disabled]="pending()" (click)="cancelDraft()">Cancel</button>
+        <button type="submit"
+                data-testid="workbench-decision-confirm"
+                [appPendingButton]="requestState().pending === 'confirm'"
+                pendingLabel="Creating…">Create feature card</button>
+      </div>
+    </form>
+  } @else if (stage() === 'prepared' && draftMode() === 'archive') {
+    <div class="decision-panel__archive-confirm">
+      <span>Archive with reason: <strong>{{ archiveReason() }}</strong></span>
+      <div class="decision-panel__actions">
+        <button type="button" [disabled]="pending()" (click)="cancelDraft()">Cancel</button>
         <button type="button"
                 data-testid="workbench-decision-confirm"
                 [appPendingButton]="requestState().pending === 'confirm'"
-                pendingLabel="Confirming…"
-                (click)="confirm()">Confirm decision</button>
+                pendingLabel="Archiving…"
+                (click)="confirmArchive()">Confirm archive</button>
       </div>
-    }
-  } @else if (settled()) {
-    <p class="decision-panel__notice" data-testid="workbench-decision-settled">
-      This Workbench is {{ document().workbench.status }}. The decision lives in its
-      <code>workbench.json</code>, which is what the catalogue and the Wiki read.
-    </p>
-  } @else if (result()) {
-    <div class="decision-panel__confirm">
-      <p>
-        <strong>{{ outcomeLabel() }}</strong> is validated against this exact revision.
-        Nothing is written yet - confirming is the Sichtblick gate and the single durable write.
-      </p>
-      <button type="button"
-              data-testid="workbench-decision-confirm"
-              [appPendingButton]="requestState().pending === 'confirm'"
-              pendingLabel="Confirming…"
-              (click)="confirm()">Confirm decision</button>
     </div>
-  } @else if (choice(); as selected) {
-    <form class="decision-panel__form" (submit)="$event.preventDefault(); prepare()">
-      <label class="decision-panel__field">
-        <span>Decision owner</span>
-        <input type="text"
-               data-testid="workbench-decision-actor"
-               [value]="actor()"
-               [disabled]="pending()"
-               (input)="updateText(actor, $event)" />
+  } @else if (draftMode() === 'archive') {
+    <form class="decision-panel__archive"
+          (submit)="$event.preventDefault(); prepareArchive()">
+      <label>
+        <span>Archive reason</span>
+        <textarea rows="2"
+                  data-testid="workbench-decision-archive-reason"
+                  [value]="archiveReason()"
+                  [disabled]="pending()"
+                  (input)="updateArchiveReason($event)"></textarea>
       </label>
-
-      @if (selected === 'feature-spawn') {
-        <div class="decision-panel__route">
-          <span>{{ projectName() }}</span><span>Preparation</span><span>Coding</span><span>Feature</span>
-        </div>
-        <label class="decision-panel__field">
-          <span>Card title</span>
-          <input type="text"
-                 data-testid="workbench-decision-title"
-                 [value]="title()"
-                 [disabled]="pending()"
-                 (input)="updateText(title, $event)" />
-        </label>
-        <label class="decision-panel__field">
-          <span>Goal</span>
-          <textarea rows="3"
-                    data-testid="workbench-decision-goal"
-                    [value]="goal()"
-                    [disabled]="pending()"
-                    (input)="updateText(goal, $event)"></textarea>
-        </label>
-        <label class="decision-panel__field">
-          <span>Acceptance criteria <small>one per line</small></span>
-          <textarea rows="3"
-                    data-testid="workbench-decision-acceptance"
-                    [value]="acceptanceCriteria()"
-                    [disabled]="pending()"
-                    (input)="updateText(acceptanceCriteria, $event)"></textarea>
-        </label>
-        <label class="decision-panel__field">
-          <span>Evidence links <small>one per line</small></span>
-          <textarea rows="2"
-                    [value]="evidenceLinks()"
-                    [disabled]="pending()"
-                    (input)="updateText(evidenceLinks, $event)"></textarea>
-        </label>
-        <label class="decision-panel__field">
-          <span>Chosen option <small>optional</small></span>
-          <input type="text"
-                 [value]="chosenOption()"
-                 [disabled]="pending()"
-                 (input)="updateText(chosenOption, $event)" />
-        </label>
-      } @else {
-        <label class="decision-panel__field decision-panel__field--wide">
-          <span>Archive reason</span>
-          <textarea rows="3"
-                    data-testid="workbench-decision-archive-reason"
-                    [value]="archiveReason()"
-                    [disabled]="pending()"
-                    (input)="updateText(archiveReason, $event)"></textarea>
-        </label>
-      }
-
-      @if (validationError(); as error) {
-        <p class="decision-panel__error" role="alert">{{ error }}</p>
-      }
-      @if (requestState().error; as error) {
-        <p class="decision-panel__error" role="alert">{{ error }}</p>
-      }
-
-      <div class="decision-panel__form-actions">
+      <div class="decision-panel__actions">
         <button type="button" [disabled]="pending()" (click)="cancelDraft()">Cancel</button>
         <button type="submit"
-                data-testid="workbench-decision-prepare"
+                data-testid="workbench-decision-prepare-archive"
                 [appPendingButton]="requestState().pending === 'prepare'"
-                pendingLabel="Preparing…">Prepare {{ selected === 'archive' ? 'archive' : 'feature card' }}</button>
+                pendingLabel="Preparing…">Prepare archive</button>
       </div>
     </form>
   } @else {
-    <div class="decision-panel__choices">
-      <button type="button"
-              data-testid="workbench-decision-build"
-              [disabled]="mutationBlocked()"
-              (click)="choose('feature-spawn')">
-        <strong>Build as feature</strong>
-        <span>Prepare one implementation card from this Workbench.</span>
-      </button>
-      <button type="button"
-              data-testid="workbench-decision-archive"
-              [disabled]="mutationBlocked()"
-              (click)="choose('archive')">
-        <strong>Archive with reason</strong>
-        <span>Close the experiment without creating implementation work.</span>
-      </button>
+    <div class="decision-panel__bar">
+      <span data-testid="workbench-decision-answer-count">
+        {{ decisionPoints().length }} inline decision point{{ decisionPoints().length === 1 ? '' : 's' }}
+        · {{ answersComplete() ? 'ready' : 'answer every point in the document' }}
+      </span>
+      <div class="decision-panel__actions">
+        <button type="button"
+                data-testid="workbench-decision-archive"
+                [disabled]="pending() || mutationBlocked()"
+                (click)="beginArchive()">Archive</button>
+        <button type="button"
+                data-testid="workbench-decision-prepare"
+                [disabled]="!canPrepareFeature()"
+                [appPendingButton]="requestState().pending === 'prepare'"
+                pendingLabel="Preparing…"
+                (click)="prepareFeatureCard()">Prepare feature card</button>
+      </div>
     </div>
+  }
+
+  @if (validationError(); as error) {
+    <p class="decision-panel__error" role="alert">{{ error }}</p>
+  }
+  @if (actionError(); as error) {
+    <p class="decision-panel__error" role="alert">{{ error }}</p>
+  }
+  @if (requestState().error; as error) {
+    <p class="decision-panel__error" role="alert">{{ error }}</p>
   }
 </section>

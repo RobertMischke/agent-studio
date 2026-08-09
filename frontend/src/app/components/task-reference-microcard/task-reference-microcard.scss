@@ -25,6 +25,8 @@
 a.task-ref__link:hover { background: color-mix(in srgb, var(--task-ref-project) 18%, var(--studio-bg-elevated)); }
 a.task-ref__link:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
 .task-ref__project { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--task-ref-project); }
+.task-ref__title { overflow: hidden; max-width: 22rem; color: var(--studio-fg); text-overflow: ellipsis; }
+.task-ref__lane-label { color: var(--studio-fg-muted); }
 .task-ref__lane[data-tone='done'] { color: var(--studio-success); }
 .task-ref__lane[data-tone='active'] { color: var(--severity-info); }
 .task-ref__lane[data-tone='waiting'] { color: var(--studio-warn); }

@@ -227,6 +227,31 @@ export interface WorkbenchTaskDraft {
   taskType: 'feature';
 }
 
+export type WorkbenchDecisionKind = 'single' | 'multi' | 'confirm';
+
+/** One author-defined option discovered in the Workbench HTML. */
+export interface WorkbenchDecisionOption {
+  id: string;
+  label: string;
+}
+
+/** Read-only definition discovered from the progressive-enhancement markup. */
+export interface WorkbenchDecisionPoint {
+  id: string;
+  kind: WorkbenchDecisionKind;
+  label: string;
+  options: WorkbenchDecisionOption[];
+  commentLabel: string | null;
+}
+
+/** Operator input persisted in the descriptor's decision receipt. */
+export interface WorkbenchDecisionResponse {
+  decisionId: string;
+  kind: WorkbenchDecisionKind;
+  selectedOptionIds: string[];
+  comment: string | null;
+}
+
 /** The durable decision receipt stored inside `workbench.json` (schema v2). */
 export interface WorkbenchDecisionProjection {
   outcome: 'feature-spawn' | 'archive';
@@ -242,6 +267,8 @@ export interface WorkbenchDecisionProjection {
   reason: string | null;
   failure: string | null;
   spawnedTaskKeys: string[];
+  responses: WorkbenchDecisionResponse[];
+  taskDraft: WorkbenchTaskDraft | null;
 }
 
 export interface WorkbenchDecisionResult {
@@ -255,6 +282,7 @@ export interface WorkbenchDecisionResult {
   revision: string | null;
   fingerprint: string | null;
   spawnedTaskKeys: string[];
+  responses: WorkbenchDecisionResponse[];
   idempotent: boolean;
   /**
    * The server-validated task draft for a feature decision. The backend never
@@ -272,6 +300,7 @@ export interface PrepareWorkbenchDecisionRequest {
   actor: string;
   archiveReason: string | null;
   task: WorkbenchTaskDraft | null;
+  responses: WorkbenchDecisionResponse[];
 }
 
 /**
@@ -286,6 +315,7 @@ export interface ConfirmWorkbenchDecisionRequest {
   actor: string;
   archiveReason: string | null;
   task: WorkbenchTaskDraft | null;
+  responses: WorkbenchDecisionResponse[];
   /** Keys of cards the client already created for this decision, if any. */
   spawnedTaskKeys?: string[];
   confirmed: true;

@@ -14,6 +14,7 @@ public sealed record PrepareWorkbenchDecisionRequest
     public string Actor { get; init; } = "";
     public string? ArchiveReason { get; init; }
     public WorkbenchTaskDraft? Task { get; init; }
+    public List<WorkbenchDecisionResponse> Responses { get; init; } = [];
 }
 
 /// <summary>
@@ -29,6 +30,7 @@ public sealed record ConfirmWorkbenchDecisionRequest
     public string Actor { get; init; } = "";
     public string? ArchiveReason { get; init; }
     public WorkbenchTaskDraft? Task { get; init; }
+    public List<WorkbenchDecisionResponse> Responses { get; init; } = [];
     /// <summary>Cards the caller already created for this decision, if any.</summary>
     public string[]? SpawnedTaskKeys { get; init; }
     public bool Confirmed { get; init; }
@@ -46,6 +48,7 @@ public sealed record WorkbenchDecisionResult
     public string? Revision { get; init; }
     public string? Fingerprint { get; init; }
     public string[] SpawnedTaskKeys { get; init; } = [];
+    public List<WorkbenchDecisionResponse> Responses { get; init; } = [];
     public bool Idempotent { get; init; }
     /// <summary>
     /// The server-validated draft of a feature decision. This service never
@@ -57,7 +60,7 @@ public sealed record WorkbenchDecisionResult
 }
 
 /// <summary>
-/// The write half of the Workbench Sichtblick gate (AGT-2375). Deliberately
+/// The write half of the Workbench Decision gate (AGT-2375). Deliberately
 /// small: <see cref="Prepare"/> validates and fingerprints without touching the
 /// disk, <see cref="Confirm"/> writes the decision straight into the Workbench's
 /// own <c>workbench.json</c>. Visibility hangs on that descriptor - never on a
@@ -96,7 +99,8 @@ public sealed class WorkbenchDecisionService
         string projectName, string id, PrepareWorkbenchDecisionRequest body)
     {
         var gate = Gate(projectName, id, body.OperationId, body.Outcome, body.Actor,
-            body.ArchiveReason, body.Task, body.ExpectedRevision, body.ExpectedFingerprint);
+            body.ArchiveReason, body.Task, body.Responses,
+            body.ExpectedRevision, body.ExpectedFingerprint);
         if (gate.Failure != null) return gate.Failure;
         var snapshot = gate.Snapshot!;
         return new WorkbenchDecisionResult
@@ -109,6 +113,7 @@ public sealed class WorkbenchDecisionService
             Revision = snapshot.Revision,
             Fingerprint = snapshot.Fingerprint,
             TaskDraft = gate.Draft,
+            Responses = body.Responses,
         };
     }
 
@@ -164,7 +169,8 @@ public sealed class WorkbenchDecisionService
         string projectName, string id, ConfirmWorkbenchDecisionRequest body)
     {
         var gate = Gate(projectName, id, body.OperationId, body.Outcome, body.Actor,
-            body.ArchiveReason, body.Task, body.ExpectedRevision, body.ExpectedFingerprint,
+            body.ArchiveReason, body.Task, body.Responses,
+            body.ExpectedRevision, body.ExpectedFingerprint,
             body.SpawnedTaskKeys);
         if (gate.Failure != null) return gate.Failure;
         var snapshot = gate.Snapshot!;
@@ -197,10 +203,26 @@ public sealed class WorkbenchDecisionService
             ["confirmedBy"] = actor,
             ["decidedAt"] = now,
             ["spawnedTaskKeys"] = new JsonArray(spawned.Select(key => (JsonNode)key!).ToArray()),
+            ["responses"] = JsonSerializer.SerializeToNode(body.Responses, DraftJson),
         };
         if (archive) receipt["reason"] = body.ArchiveReason!.Trim();
         else receipt["taskDraft"] = JsonSerializer.SerializeToNode(gate.Draft, DraftJson);
         descriptor["decision"] = receipt;
+        if (spawned.Length > 0)
+        {
+            var related = descriptor["relatedTaskKeys"] is JsonArray existing
+                ? existing
+                : [];
+            var known = related
+                .OfType<JsonValue>()
+                .Select(value => value.TryGetValue<string>(out var key) ? key : null)
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Select(key => key!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in spawned)
+                if (known.Add(key)) related.Add(key);
+            descriptor["relatedTaskKeys"] = related;
+        }
 
         if (snapshot.SchemaVersion >= 2)
         {
@@ -281,6 +303,7 @@ public sealed class WorkbenchDecisionService
             Fingerprint = WorkbenchCatalogueService.ComputeWorkbenchFingerprint(
                 snapshot.DescriptorPath, snapshot.EntryPath),
             SpawnedTaskKeys = spawned,
+            Responses = body.Responses,
             TaskDraft = gate.Draft,
         };
     }
@@ -300,6 +323,7 @@ public sealed class WorkbenchDecisionService
     private GateResult Gate(
         string projectName, string id, string operationId, string outcome, string actor,
         string? archiveReason, WorkbenchTaskDraft? task,
+        IReadOnlyList<WorkbenchDecisionResponse> responses,
         string? expectedRevision, string? expectedFingerprint,
         string[]? spawnedTaskKeys = null)
     {
@@ -309,6 +333,9 @@ public sealed class WorkbenchDecisionService
             return new(Failure(id, operationId, "validation", $"Unsupported outcome '{outcome}'."));
         if (string.IsNullOrWhiteSpace(actor) || actor.Trim().Length > 120)
             return new(Failure(id, operationId, "validation", "actor is required."));
+        var responsesError = WorkbenchDecisionContracts.ValidateResponses(responses);
+        if (responsesError != null)
+            return new(Failure(id, operationId, "validation", responsesError));
 
         WorkbenchTaskDraft? draft = null;
         if (outcome == "archive")
@@ -357,6 +384,7 @@ public sealed class WorkbenchDecisionService
                     Revision = snapshot.Revision,
                     Fingerprint = snapshot.Fingerprint,
                     SpawnedTaskKeys = stored.SpawnedTaskKeys,
+                    Responses = stored.Responses,
                     Idempotent = true,
                 })
                 : new(Failure(id, operationId, "already-settled",
@@ -370,15 +398,10 @@ public sealed class WorkbenchDecisionService
         if (snapshot.Dirty)
             return new(Failure(id, operationId, "dirty-descriptor",
                 "Commit the Workbench descriptor and artifact before deciding."));
-        if (expectedRevision == null && expectedFingerprint == null)
-            return new(Failure(id, operationId, "stale-revision",
-                "A decision must name the revision or fingerprint it was taken on."));
-        if (expectedRevision != null && expectedRevision != snapshot.Revision)
-            return new(Failure(id, operationId, "stale-revision",
-                "The Workbench moved since the decision was taken."));
-        if (expectedFingerprint != null && expectedFingerprint != snapshot.Fingerprint)
-            return new(Failure(id, operationId, "stale-revision",
-                "The Workbench content changed since the decision was taken."));
+        var staleness = WorkbenchDecisionContracts.StalenessError(
+            expectedRevision, expectedFingerprint, snapshot.Revision, snapshot.Fingerprint);
+        if (staleness != null)
+            return new(Failure(id, operationId, "stale-revision", staleness));
 
         return new(null, snapshot, draft);
     }
