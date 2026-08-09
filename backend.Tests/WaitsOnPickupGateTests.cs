@@ -61,6 +61,22 @@ public sealed class WaitsOnPickupGateTests : IDisposable
     }
 
     [Fact]
+    public void RunnerQueue_ExcludesBlockedCards_FromPositionsOfPickableSiblings()
+    {
+        WriteJob(_libWatch, TaskStates.Ready, "dep", "LIB-1", order: 1);
+        WriteJob(_appWatch, TaskStates.Ready, "consumer", "APP-1", order: 1, dependsOn: new[] { "LIB-1" });
+        WriteJob(_appWatch, TaskStates.Ready, "first", "APP-2", order: 2);
+        WriteJob(_appWatch, TaskStates.Ready, "second", "APP-3", order: 3);
+
+        var queued = BuildAppRunner().GetStatus().QueuedJobIds;
+
+        Assert.Equal(new[] { "first", "second" }, queued);
+        Assert.Equal(1, queued.IndexOf("first") + 1);
+        Assert.Equal(2, queued.IndexOf("second") + 1);
+        Assert.DoesNotContain("consumer", queued);
+    }
+
+    [Fact]
     public void FulfilledDependency_CrossProject_AllowsPickup()
     {
         // Same shape, but LIB-1 has reached 6-completed in the OTHER project.

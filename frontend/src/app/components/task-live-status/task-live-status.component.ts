@@ -77,6 +77,17 @@ export class TaskLiveStatusComponent {
       };
     }
 
+    const dependencyWait = dependencyWaitHeadline(task);
+    if (dependencyWait) {
+      return {
+        tone: 'waiting',
+        headline: dependencyWait,
+        detail: activityDetail(task, status.latestEventAt, this.now()),
+        next,
+        attempt: status.attempt,
+      };
+    }
+
     if (status.queue) {
       const queueName = status.queue.kind === 'review' ? 'review slot' : 'runner slot';
       return {
@@ -131,6 +142,26 @@ export class TaskLiveStatusComponent {
       attempt: status.attempt,
     };
   });
+}
+
+/**
+ * The backend waitsOn overlay is the same archive-inclusive dependency truth
+ * used by claim admission. A dependency gate therefore outranks any stale or
+ * concurrent runner queue projection when choosing the one CURRENT wait state.
+ */
+function dependencyWaitHeadline(task: TaskInfo): string | null {
+  const waitsOn = task.waitsOn;
+  if (!waitsOn?.blocked) return null;
+
+  const open = waitsOn.items.filter(item => !item.fulfilled);
+  const primary = open[0] ?? waitsOn.items[0];
+  if (!primary) return waitsOn.cycleDetected ? 'Dependency gate blocked · cycle' : 'Dependency gate blocked';
+
+  if (waitsOn.cycleDetected) return `Dependency gate blocked · cycle: ${primary.key}`;
+
+  const extra = Math.max(0, open.length - 1);
+  const reason = primary.waitingForRelease ? 'release' : 'completion';
+  return `waits for ${reason}: ${primary.key}${extra > 0 ? ` +${extra}` : ''}`;
 }
 
 function timestamp(value: string | null | undefined): number | null {

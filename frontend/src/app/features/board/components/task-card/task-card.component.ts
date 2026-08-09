@@ -11,7 +11,7 @@ import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import {
   buildCardCtxMenuItems,
   buildCodeReviewGradeBadge,
-  buildDependencyChip,
+  buildVisibleDependencyChip,
   buildCommitChainTooltip,
   buildCommitChainView,
   buildCommitEmptyBadge,
@@ -429,7 +429,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    * AGT-2029 waits-on dependency chip from the backend-computed `waitsOn`
    * status (fulfilled/open per target, blocked, cycle). Null when no deps.
    */
-  readonly dependencyChip = computed(() => buildDependencyChip(this.job().waitsOn));
+  readonly dependencyChip = computed(() => buildVisibleDependencyChip(this.job()));
   readonly providerAuthWait = computed(() => this.providerAuthStatus.loaded()
     ? providerAuthWaitReason(this.job(), this.providerAuthStatus.statuses())
     : null);

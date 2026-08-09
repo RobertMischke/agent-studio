@@ -292,7 +292,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
       running: runningPill,
       mode: { kind: modeKind, label: modeLabel, tooltip: modeTooltip },
       queue: queueSize > 0
-        ? { count: queueSize, tooltip: `${queueSize} task${queueSize === 1 ? '' : 's'} waiting in 2-ready.` }
+        ? { count: queueSize, tooltip: `${queueSize} pickup-eligible task${queueSize === 1 ? '' : 's'} waiting for a runner slot.` }
         : null
     };
   });

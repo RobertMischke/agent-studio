@@ -8963,10 +8963,12 @@ public class ProjectRunner
 
     private List<string> GetQueuedJobIds()
     {
-        return _scanner.ScanAllAutomationJobs()
-            .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Ready)
-            .OrderBy(j => j.Order)
-            .Select(j => j.Id)
+        // This ordered list is the single queue-position source used by the
+        // status API and TaskLiveStatusProjection. Reuse the pickup candidate
+        // policy so a card held behind dependsOn, intake, crash-backoff, agent,
+        // or task-kind gates never occupies a displayed runner-slot position.
+        return ListReadyPickupCandidatesInDisplayedOrder()
+            .Select(job => job.Id)
             .ToList();
     }
 

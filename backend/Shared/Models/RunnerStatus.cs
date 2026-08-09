@@ -182,6 +182,11 @@ public record ProjectRunnerStatus
     public string? QuotaFallbackModel { get; init; }
     /// <summary>Quota window/cap explanation for the active fallback.</summary>
     public string? QuotaFallbackReason { get; init; }
+    /// <summary>
+    /// Pickup-eligible Ready tasks in canonical runner order. This list is the
+    /// source for queue counts and one-based task positions; gated Ready tasks
+    /// are deliberately absent.
+    /// </summary>
     public List<string> QueuedJobIds { get; init; } = [];
     /// <summary>
     /// Reason recorded the last time the runner mode changed. Mirrors the
