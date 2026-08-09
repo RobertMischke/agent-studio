@@ -560,6 +560,10 @@ state.
   never a silent deadlock. A `dependsOn` cycle is a
   configuration error: it is reported once per card (`waits-on-cycle` warning)
   and skipped, never deadlocked.
+  `ProjectRunnerStatus.queuedJobIds` reuses this exact pickup-candidate order.
+  It is the single source for runner queue counts and one-based positions, so a
+  card held by a dependency or another pickup gate occupies no displayed slot
+  and does not shift the positions of eligible cards.
 - A re-open starts a new run. It must rerun pre steps, core, post steps, and
   append run history instead of flattening earlier evidence.
 - Before any automatic auto-review follow-up is persisted,

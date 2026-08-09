@@ -2103,6 +2103,42 @@ describe('TaskCardComponent — waits-on dependency chip (AGT-2029)', () => {
     expect(chip!.textContent).toContain('waits for completion: CAR-3');
   });
 
+  it('renders the dependency as the only current wait when live status also carries a runner position', async () => {
+    const fixture = await mount(
+      makeJob({
+        state: '2-ready',
+        references: { dependsOn: ['AGT-2534'], relatedTo: [], blockedBy: [], supersedes: [] },
+        waitsOn: {
+          blocked: true,
+          cycleDetected: false,
+          items: [{
+            key: 'AGT-2534',
+            resolved: true,
+            fulfilled: false,
+            targetJobId: 'agt-2534',
+            targetTitle: 'Dependency',
+            targetState: '5-human-review',
+            targetWatchPath: '/ws/agent-taskboard',
+          }],
+        },
+        liveStatus: {
+          attempt: 1,
+          activeStep: null,
+          nextSteps: [{ stepId: 'core-agent-run', displayName: 'Agent execution' }],
+          queue: { kind: 'runner', position: 4 },
+          latestEventAt: '2026-08-09T08:00:00Z',
+        },
+      }),
+    );
+
+    const current = fixture.nativeElement.querySelector('[data-testid="task-live-current"]') as HTMLElement;
+    expect(current.textContent).toContain('waits for completion: AGT-2534');
+    expect(current.textContent).not.toContain('runner slot');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-waiting-on"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-live-next"]')?.textContent)
+      .toContain('Agent execution');
+  });
+
   it('renders a cycle chip when the dependency graph is cyclic', async () => {
     const fixture = await mount(
       makeJob({

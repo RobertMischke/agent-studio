@@ -1586,6 +1586,15 @@ export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChi
 }
 
 /**
+ * TaskLiveStatus owns the one CURRENT wait reason on current payloads. Keep the
+ * dependency chip only as a fallback for older payloads without liveStatus.
+ */
+export function buildVisibleDependencyChip(job: TaskInfo): DependencyChip | null {
+  if (job.liveStatus) return null;
+  return buildDependencyChip(job.waitsOn);
+}
+
+/**
  * AGT-2029: resolve the task a dependency chip should open. Prefers the
  * backend-resolved target (jobId + watchPath — correct across projects and
  * lanes the board snapshot omits, e.g. an archived target), falling back to the

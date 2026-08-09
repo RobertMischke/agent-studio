@@ -98,7 +98,7 @@ export function projectAutoInfo(status: RunnerStatus, name: string): ProjectAuto
       label: 'Auto',
       tooltip:
         readyCount > 0
-          ? `Auto-pickup is on; the next Ready task starts automatically (${readyCount} waiting). Click to stop after the current task.`
+          ? `Auto-pickup is on; the next eligible Ready task starts automatically (${readyCount} waiting for a runner slot). Click to stop after the current task.`
           : 'Auto-pickup is on; the next task moved to Ready will start automatically.',
     };
   }
@@ -120,7 +120,7 @@ export function projectAutoInfo(status: RunnerStatus, name: string): ProjectAuto
     label: 'Auto',
     tooltip:
       readyCount > 0
-        ? `Enable auto-pickup; the next Ready task starts automatically (${readyCount} waiting).`
+        ? `Enable auto-pickup; the next eligible Ready task starts automatically (${readyCount} waiting for a runner slot).`
         : 'Enable auto-pickup; the next task moved to Ready will start automatically.',
   };
 }

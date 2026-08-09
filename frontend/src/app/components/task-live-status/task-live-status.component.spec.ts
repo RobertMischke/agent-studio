@@ -98,6 +98,62 @@ describe('TaskLiveStatusComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Requirement fit');
   });
 
+  it('shows one dependency wait instead of a stale runner position, then flips to the slot after fulfillment', () => {
+    const nextSteps = [{ stepId: 'core-agent-run', displayName: 'Agent execution' }];
+    const open = task({
+      state: '2-ready',
+      waitsOn: {
+        blocked: true,
+        cycleDetected: false,
+        items: [{
+          key: 'AGT-2534',
+          resolved: true,
+          fulfilled: false,
+          waitingForRelease: false,
+          targetState: '5-human-review',
+        }],
+      },
+      liveStatus: {
+        attempt: 2,
+        activeStep: null,
+        nextSteps,
+        queue: { kind: 'runner', position: 4 },
+        latestEventAt: new Date().toISOString(),
+      },
+    });
+    fixture.componentRef.setInput('task', open);
+    fixture.detectChanges();
+
+    const current = fixture.nativeElement.querySelector('[data-testid="task-live-current"]') as HTMLElement;
+    expect(current.textContent).toContain('waits for completion: AGT-2534');
+    expect(current.textContent).not.toContain('runner slot');
+    expect(current.textContent).not.toContain('position 4');
+    expect(fixture.nativeElement.textContent).toContain('Next');
+    expect(fixture.nativeElement.textContent).toContain('Agent execution');
+
+    fixture.componentRef.setInput('task', {
+      ...open,
+      waitsOn: {
+        blocked: false,
+        cycleDetected: false,
+        items: [{
+          ...open.waitsOn!.items[0],
+          fulfilled: true,
+          targetState: '6-completed',
+        }],
+      },
+      liveStatus: {
+        ...open.liveStatus!,
+        queue: { kind: 'runner', position: 3 },
+      },
+    });
+    fixture.detectChanges();
+
+    expect(current.textContent).toContain('Waiting for runner slot · position 3');
+    expect(current.textContent).not.toContain('waits for completion');
+    expect(fixture.nativeElement.textContent).toContain('Agent execution');
+  });
+
   // AGT-2378: `runActivity` is classified from the local slot registry + local
   // CLI execution, so a remote run (fenced lease + attempt records, no local
   // process) arrives as `no-active-run` between two pipeline steps. The strip
