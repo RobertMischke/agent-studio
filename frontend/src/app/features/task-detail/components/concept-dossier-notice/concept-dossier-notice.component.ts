@@ -11,8 +11,8 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TaskInfo, TaskState, type ConceptDossierSummary } from '../../../../models/task.model';
 import { NotificationService } from '../../../../services/notification.service';
+import { studioProjectSlug } from '../../../../services/studio-project-slug.util';
 import { TaskService } from '../../../../services/task.service';
-import { studioProjectSlug } from '../../../studio-shell';
 
 type EditorKind = 'path' | 'no-dossier' | null;
 

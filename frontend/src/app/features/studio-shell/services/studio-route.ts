@@ -1,5 +1,8 @@
 import { routeSegmentOf, withRouteSegment } from '../../../services/url-hash.util';
+import { studioProjectSlug } from '../../../services/studio-project-slug.util';
 import type { StudioTab } from '../studio-shell.types';
+
+export { studioProjectSlug } from '../../../services/studio-project-slug.util';
 
 export const TASK_DETAIL_TABS = [
   'overview',
@@ -22,15 +25,6 @@ export type StudioRoute =
   | { kind: 'epics'; projectSlug: string | null }
   | { kind: 'epic'; reference: string }
   | { kind: 'workspace-settings'; section: string; detail: string | null };
-
-/** Convert a display name to the stable, human-readable URL segment. */
-export function studioProjectSlug(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 
 /**
  * Parse the single canonical Studio route from the shared hash segment model.
