@@ -513,6 +513,7 @@ public sealed class TaskProvenanceServiceTests : IDisposable
             new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
             NullLogger<TaskMutationService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        settings.SetIntegrationBranch(projectName, "develop");
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         return new TaskProvenanceService(git, settings, mutations, NullLogger<TaskProvenanceService>.Instance);
     }

@@ -151,7 +151,8 @@ public enum MoveJobStatus
     TargetFolderExists,
     DirectoryLocked,
     Failure,
-    SourceStateMismatch
+    SourceStateMismatch,
+    IntegrationFailed
 }
 
 /// <summary>

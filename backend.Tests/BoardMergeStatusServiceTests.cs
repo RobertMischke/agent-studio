@@ -334,7 +334,7 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         RunGit(repo, "checkout -q --detach main");
         RunGit(repo, "branch -D develop main");
 
-        var svc = BuildService(repo, out var project);
+        var svc = BuildService(repo, out var project, configureIntegrationBranch: false);
         var job = Job("remote-only", project: project, repo: repo, commits: [Commit(mainTip)]);
 
         var signal = svc.BuildLookup([job])[job.TaskKey];
@@ -350,7 +350,8 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         string repo,
         out string projectName,
         TimeProvider? timeProvider = null,
-        ILogger<BoardMergeStatusService>? logger = null)
+        ILogger<BoardMergeStatusService>? logger = null,
+        bool configureIntegrationBranch = true)
     {
         projectName = "Fixture";
         var dict = new Dictionary<string, string?>
@@ -365,6 +366,8 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        if (configureIntegrationBranch)
+            settings.SetIntegrationBranch(projectName, "develop");
         return new BoardMergeStatusService(
             git,
             settings,

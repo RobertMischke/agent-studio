@@ -93,6 +93,20 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
+    public void ResolveIntegrationBranch_UnconfiguredUsesOriginHeadEvenWhenDevelopExists()
+    {
+        var repo = SeedRepo("origin-head-main");
+        var git = BuildGitService(("Fixture", repo));
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "update-ref refs/remotes/origin/main refs/heads/main");
+        RunGit(repo, "symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main");
+
+        var resolved = git.ResolveIntegrationBranch(repo, null);
+
+        Assert.Equal("main", resolved);
+    }
+
+    [Fact]
     public void WorktreeAdd_PathWithSpaces_IsHandledByArgumentList()
     {
         var repo = SeedRepo("add-spaces");

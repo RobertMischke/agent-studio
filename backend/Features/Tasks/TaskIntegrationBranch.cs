@@ -27,5 +27,5 @@ public static class TaskIntegrationBranch
     }
 
     public static string Resolve(TaskInfo task, string? configured)
-        => Name(task.IntegrationBranch, Name(configured));
+        => Name(task.IntegrationBranch, Name(configured, fallback: string.Empty));
 }

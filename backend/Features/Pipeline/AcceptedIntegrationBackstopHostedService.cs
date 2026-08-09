@@ -19,6 +19,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     private readonly ILogger<AcceptedIntegrationBackstopHostedService> _logger;
     private readonly TaskTransitionService? _transitions;
     private readonly TimelineLog? _timeline;
+    private readonly PipelineExecutionLog? _pipelineLog;
 
     public AcceptedIntegrationBackstopHostedService(
         TaskScannerService scanner,
@@ -29,7 +30,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         IConfiguration configuration,
         ILogger<AcceptedIntegrationBackstopHostedService> logger,
         TaskTransitionService? transitions = null,
-        TimelineLog? timeline = null)
+        TimelineLog? timeline = null,
+        PipelineExecutionLog? pipelineLog = null)
     {
         _scanner = scanner;
         _settings = settings;
@@ -40,6 +42,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         _logger = logger;
         _transitions = transitions;
         _timeline = timeline;
+        _pipelineLog = pipelineLog;
     }
 
     public int RunOnce()
@@ -89,7 +92,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                     job.Id,
                     job.FolderPath,
                     job.WatchPath,
-                    TaskIntegrationBranch.Resolve(job, settings.IntegrationBranch),
+                    settings.IntegrationBranch,
                     settings.IntegrationStrategy,
                     PipelineTypes.Resolve(job));
                 if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
@@ -108,6 +111,11 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             }
             catch (Exception ex)
             {
+                RecordUnexpectedFailure(job, ex.Message);
+                ReturnTransactionalAcceptToReview(
+                    job,
+                    MergeIntoIntegrationOutcome.Error.ToString(),
+                    ex.Message);
                 _logger.LogError(
                     ex,
                     "accepted-integration-backstop item failed project={Project} job={JobId}",
@@ -123,6 +131,22 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 integrated);
         }
         return integrated;
+    }
+
+    private void RecordUnexpectedFailure(TaskInfo job, string detail)
+    {
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "error",
+            VerdictSummary = "Accepted integration recovery failed.",
+            Reason = detail,
+        });
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

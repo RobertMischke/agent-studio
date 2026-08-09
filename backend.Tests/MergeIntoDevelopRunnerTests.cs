@@ -64,7 +64,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_RemoteSubjectRecordedMain_OverridesConfiguredDevelop()
+    public void Run_CurrentTargetDoesNotLetRecordedSubjectRetargetDelivery()
     {
         var repo = SeedRepo("runner-recorded-main");
         RunGit(repo, "checkout -q -b develop");
@@ -97,10 +97,9 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
         var outcome = runner.Run("Fixture", "AGT-2400", jobFolder, repo, "develop");
 
-        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
-        Assert.Contains("Pre-main test gate", outcome.Error, StringComparison.Ordinal);
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
         Assert.NotEqual(resultSha, RunGit(repo, "rev-parse main").Out.Trim());
-        Assert.NotEqual(resultSha, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {resultSha} develop").Code);
     }
 
     [Fact]
@@ -388,7 +387,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             "remote-main",
             jobFolder,
             repo,
-            "develop",
+            "main",
             CancellationToken.None);
 
         Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
@@ -456,7 +455,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             "stale-main",
             jobFolder,
             repo,
-            "develop",
+            "main",
             CancellationToken.None);
 
         Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, outcome.Outcome);

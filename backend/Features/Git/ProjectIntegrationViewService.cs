@@ -175,14 +175,19 @@ public sealed class ProjectIntegrationViewService
 
     public ProjectIntegrationView Build(string projectName)
     {
-        var integrationBranch = _settings.Get(projectName).IntegrationBranch;
-        if (string.IsNullOrWhiteSpace(integrationBranch)) integrationBranch = "develop";
+        var configuredIntegrationBranch = _settings.Get(projectName).IntegrationBranch;
         const string releaseBranch = BoardMergeStatusService.ReleaseBranch;
 
         var root = _git.ResolveProjectRepoRoot(projectName);
         if (root == null)
-            return Empty(projectName, integrationBranch, releaseBranch, "Project has no readable git repository.");
+        {
+            var unresolvedRef = string.IsNullOrWhiteSpace(configuredIntegrationBranch)
+                ? "origin/HEAD"
+                : _git.ResolveOriginReadRef(configuredIntegrationBranch);
+            return Empty(projectName, unresolvedRef, releaseBranch, "Project has no readable git repository.");
+        }
 
+        var integrationBranch = _git.ResolveIntegrationBranch(root, configuredIntegrationBranch);
         var integrationRef = _git.ResolveOriginReadRef(integrationBranch);
         var releaseRef = _git.ResolveOriginReadRef(releaseBranch);
         var integrationHead = _git.GetBranchTip(root, integrationRef);

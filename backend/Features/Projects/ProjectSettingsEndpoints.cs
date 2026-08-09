@@ -712,7 +712,7 @@ public static class ProjectSettingsEndpoints
         });
 
         // ADR-0052: integration branch parallel task worktrees branch off and
-        // merge back into. Blank reverts to the default (develop).
+        // merge back into. Blank reverts to repository origin/HEAD.
         app.MapPut("/api/projects/{projectName}/integration-branch", (string projectName, SetIntegrationBranchRequest req,
             ProjectSettingsService settings, TaskScannerService scanner, ProjectRegistry projects,
             ClientIdentityStore clients) =>
