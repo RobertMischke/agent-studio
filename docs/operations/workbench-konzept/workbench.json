@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "workbench-konzept",
   "title": "Workbenches: Name, Muster, App-Werdung",
-  "summary": "Meta-Workbench zum Workbench-Konzept selbst (Operator-Auftrag 09.08.). Bestandsaufnahme des heutigen Mechanismus (Discovery, Lifecycle, Nav, Decision-Flow), These: Workbench = Vorstufe zum Task und fast der ideale Arbeitsweg. Entscheidungsfelder: Name (Workbench unsicher; 4 Kandidaten mit AGT-2520-Kollisionsnotiz), Nav-Einbindung (heute unbeholfen; Vorschlag eigener Bereich mit Live-Status), zwei Muster als erste Klasse (ui-heavy Mockups vs concept-heavy Text+Diagramme), visuelles Ziel Medium-Artikel-Stil mit Full-Bleed-Mockups (dieses Dokument demonstriert ihn), Mehr-App: Live-Task-Tracking der relatedTaskKeys, kontinuierliche Aktualisierung, Interaktivität auf AGT-2520-Basis. Mit Slice-Plan für die Umsetzungskarten nach GO.",
+  "summary": "Meta-Workbench zum Workbench-Konzept selbst (Operator-Auftrag 09.08.). Bestandsaufnahme des heutigen Mechanismus, These: Workbench = Vorstufe zum Task, teils Operator-Backlog, fast der ideale Arbeitsweg. Entscheidungsfelder: Name (4 Kandidaten, Empfehlung Concepts, AGT-2520-Kollisionsnotiz), Nav-Einbindung, zwei Muster als erste Klasse (ui-heavy vs concept-heavy), Medium-Artikel-Stil mit Full-Bleed-Mockups (Dokument demonstriert ihn selbst), Mehr-App (Live-Task-Tracking, Refresh-Karten, Interaktivität auf AGT-2520-Basis). Neu 09.08.: Verwandtschaft mit Epics (Epic bündelt beschlossene, Workbench werdende Arbeit), zentrale projektübergreifende Seite analog Epics mit Entscheiden-aus-der-Liste, vollständiger Lebenszyklus: nicht verworfene Workbenches tracken bis zum Abschluss und werden dann Doku (documented-Stufe); Erklärung des Arbeitsmodells auf agent-orchestrator.dev als Slice 7 (AOW-Backlog-Karte). Slice-Plan mit 7 Scheiben.",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "shaping",
-  "updatedAt": "2026-08-09T02:00:00Z",
+  "updatedAt": "2026-08-09T02:40:00Z",
   "sourceTaskKeys": [],
   "relatedTaskKeys": ["AGT-2520", "AGT-2509", "AGT-2375"]
 }
