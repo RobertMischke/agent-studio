@@ -935,6 +935,7 @@ public static class LeaseEndpoints
             TaskTransitionService transitions,
             RunLeaseService leases,
             AttemptAuthorityService authority,
+            ReviewAttemptTaskLifecycleService reviewAttemptLifecycle,
             TimelineLog timeline,
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
@@ -1247,6 +1248,7 @@ public static class LeaseEndpoints
             }
 
             ReviewAttemptDto? reviewAttempt = null;
+            CreateReviewAttemptRequest? reviewAttemptRequest = null;
             // Report-only modes (planning / research) deliver a document into the
             // task folder on THIS server; there is no code subject to materialize
             // on a review-executor host. Their completion is validated
@@ -1265,7 +1267,7 @@ public static class LeaseEndpoints
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
                 var run = settled.RunAttempt!;
-                var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                reviewAttemptRequest = new CreateReviewAttemptRequest(
                     req.TaskKey,
                     run.RepositoryId,
                     run.ResultSha!,
@@ -1275,35 +1277,7 @@ public static class LeaseEndpoints
                     run.EvidenceDigests,
                     $"review-subject:{run.AttemptId}:{run.ResultSha}",
                     RepositoryUrl: req.Repository,
-                    ResultRef: deliveryBranch));
-                if (!review.Accepted)
-                {
-                    return Results.Conflict(new RemoteRunCompletionResponse(
-                        req.TaskKey, reportedOutcome, task.State, review.Message,
-                        RunAttemptId: run.AttemptId,
-                        FailureClassification: review.Status.ToString()));
-                }
-                reviewAttempt = review.ReviewAttempt;
-
-                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
-                {
-                    TaskKey = req.TaskKey,
-                    RunAttemptId = run.AttemptId,
-                    Project = task.ProjectName,
-                    Repository = req.Repository
-                                 ?? git.ResolveRepoRootForWatchPath(task.WatchPath)
-                                 ?? string.Empty,
-                    ResultSha = run.ResultSha!,
-                    AttemptChainId = req.AttemptChainId!,
-                    Executor = req.RunnerId,
-                    LeaseId = req.LeaseId,
-                    FencingToken = req.FencingToken,
-                    ImmutableResultRef = run.ResultEnvelope?.ImmutableRemoteRef,
-                    ResultRef = deliveryBranch,
-                    IntegrationBranch = deliveryRange?.IntegrationBranch
-                                        ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),
-                    CompletedAtUtc = DateTimeOffset.UtcNow,
-                });
+                    ResultRef: deliveryBranch);
             }
 
             if (!isEpicPlanning
@@ -1655,6 +1629,44 @@ public static class LeaseEndpoints
                         RunAttemptId: attemptId,
                         ReviewAttemptId: reviewAttempt?.AttemptId,
                         ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+            }
+
+            // The claim guard and this mint share ReviewAttemptTaskLifecycleService's
+            // lifecycle lock. The persisted lane transition above therefore closes
+            // the former Progress-window race: a poll sees either no attempt or an
+            // attempt whose task is already in Auto Review.
+            if (reviewAttemptRequest is not null)
+            {
+                task = scanner.FindJob(task.Id, task.WatchPath) ?? task;
+                var review = reviewAttemptLifecycle.CreateReviewAttemptInAutoReview(task, reviewAttemptRequest);
+                if (!review.Accepted || review.ReviewAttempt is null)
+                {
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, task.State, review.Message,
+                        RunAttemptId: attemptId,
+                        FailureClassification: review.Status.ToString()));
+                }
+                reviewAttempt = review.ReviewAttempt;
+                var run = settled.RunAttempt!;
+                ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
+                {
+                    TaskKey = req.TaskKey,
+                    RunAttemptId = run.AttemptId,
+                    Project = task.ProjectName,
+                    Repository = req.Repository
+                                 ?? git.ResolveRepoRootForWatchPath(task.WatchPath)
+                                 ?? string.Empty,
+                    ResultSha = run.ResultSha!,
+                    AttemptChainId = req.AttemptChainId!,
+                    Executor = req.RunnerId,
+                    LeaseId = req.LeaseId,
+                    FencingToken = req.FencingToken,
+                    ImmutableResultRef = run.ResultEnvelope?.ImmutableRemoteRef,
+                    ResultRef = reviewAttemptRequest.ResultRef,
+                    IntegrationBranch = deliveryRange?.IntegrationBranch
+                                        ?? TaskIntegrationBranch.NormalizeRef(req.IntegrationBranch),
+                    CompletedAtUtc = DateTimeOffset.UtcNow,
+                });
             }
 
             loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(

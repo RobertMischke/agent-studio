@@ -80,7 +80,8 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
             using var scope = _services.CreateScope();
             var scanner = scope.ServiceProvider.GetRequiredService<TaskScannerService>();
             var transitions = scope.ServiceProvider.GetRequiredService<TaskTransitionService>();
-            RunRecoveryScan(scanner, transitions, _logger);
+            var reviewAttempts = scope.ServiceProvider.GetRequiredService<ReviewAttemptTaskLifecycleService>();
+            RunRecoveryScan(scanner, transitions, reviewAttempts, _logger);
         }
         catch (OperationCanceledException __ex)
         {
@@ -103,8 +104,17 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
         TaskTransitionService transitions,
         ILogger logger,
         DateTime? restartedAtUtc = null)
+        => RunRecoveryScan(scanner, transitions, reviewAttempts: null, logger, restartedAtUtc);
+
+    internal static RecoverySummary RunRecoveryScan(
+        TaskScannerService scanner,
+        TaskTransitionService transitions,
+        ReviewAttemptTaskLifecycleService? reviewAttempts,
+        ILogger logger,
+        DateTime? restartedAtUtc = null)
     {
         var recoveryStartedAt = (restartedAtUtc ?? DateTime.UtcNow).ToUniversalTime();
+        var reviewAttemptsReissued = reviewAttempts?.SweepSupersededAutoReviewAttempts() ?? 0;
         var candidates = scanner.ScanAllAutomationJobs()
             .Where(j => string.Equals(j.State, TaskStates.AutoReview, StringComparison.Ordinal))
             .ToList();
@@ -152,8 +162,8 @@ public sealed class AutoReviewPostProcessingRecoveryService : BackgroundService
 
         var summary = new RecoverySummary(candidates.Count, reEnqueued, skipped, failed);
         logger.LogInformation(
-            "post-processing startup-recovery: {ReEnqueued} cards re-enqueued (scanned={Scanned} already-complete={Skipped} failed={Failed})",
-            summary.ReEnqueued, summary.Scanned, summary.Skipped, summary.Failed);
+            "post-processing startup-recovery: {ReEnqueued} cards re-enqueued and {ReviewAttemptsReissued} review attempts reissued (scanned={Scanned} already-complete={Skipped} failed={Failed})",
+            summary.ReEnqueued, reviewAttemptsReissued, summary.Scanned, summary.Skipped, summary.Failed);
         return summary;
     }
 
