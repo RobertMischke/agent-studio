@@ -19,8 +19,29 @@ or commit attribution.
   linked from that HTML. See the
   [Research task delivery convention](../../operations/research-deliverables/index.html).
 - `concept` is document-first. It uses an isolated worktree but may change only
-  one `docs/operations/<topic>/` Workbench. The published document, not
-  `status.md`, is the promotion source.
+  one `docs/<slug>/` dossier. The repository dossier is canonical; a copy under
+  task `results/` is optional. `workbench.json` names the source card in
+  `sourceTaskKeys` and remains `status=decision-pending` until sight review.
+  The published document, not `status.md`, is the promotion source.
+- The concept prompt names the current house-style fallback explicitly:
+  `docs/operations/haertung-verteilte-ausfuehrung/index.html` in agent-taskboard.
+  Dossiers reuse its style block until the AGT-2536 article template is
+  integrated. The contract requires calm noun headings, factual copy, bounded
+  reading width, theme variables, inline SVG diagrams, and no dossier-specific
+  colour or font system.
+- Until AGT-2533 supplies `references.workbenches`, `TaskInfo.ConceptDossier`
+  detects a repository-relative `docs/.../index.html` path from
+  `results/deliverables.md` first and `status.md` second. Task detail renders
+  that one path as the dossier link. A concept in `5-human-review` or
+  `6-completed` with neither a link nor a deliberate no-dossier explanation
+  gets one compact `No dossier linked` notice with the two correction actions.
+  Existing cards are not bulk-migrated. MKT-21 is the reference example and
+  remains a manual backfill rather than an application migration.
+- The AGT-2533 handoff replaces this write/read adapter with the Workbench-key
+  reference. It must reuse the same detail row and operator actions, not add a
+  second Dossier block. The Markdown detector may remain read-only compatibility
+  for already-linked cards during the transition, but it must never produce a
+  duplicate visible reference.
 - A delivered concept waits in `5-human-review` with a
   `concept-sight-review` marker. This is a successful delivery state, including
   when the agent reports `NEEDS_INPUT`; it is not an escalation.

@@ -127,7 +127,7 @@ public sealed partial class RuntimePromptService
     /// Composes the per-mode framing block injected into runner prompts via the
     /// <c>{{mode_framing}}</c> placeholder. Report-only modes (planning /
     /// research) get the strict read-only block; research also gets its HTML
-    /// deliverable contract; concept gets its docs-only Workbench contract; web
+    /// deliverable contract; concept gets its repository-dossier contract; web
     /// access appends the web block. Coding with web off yields an empty string.
     /// A non-empty result ends with a blank-line separator so it slots in front
     /// of the following section cleanly.

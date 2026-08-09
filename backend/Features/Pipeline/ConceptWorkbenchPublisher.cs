@@ -16,8 +16,8 @@ public interface IConceptWorkbenchPublisher
 
 /// <summary>
 /// The Workbench-placement step for concept cards. It validates that the
-/// isolated task worktree changed exactly one docs/operations topic, then copies
-/// that Workbench through the platform-owned managed project commit/push
+/// isolated task worktree changed exactly one docs topic, then copies that
+/// dossier through the platform-owned managed project commit/push
 /// boundary. Product code is never merged from the task branch.
 /// </summary>
 public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
@@ -57,11 +57,28 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
         var status = _git.GetStatus(task.Id, task.WatchPath, preferRunLocation: true);
         var review = status.IsRepo
             ? ConceptWorkbenchContract.ReviewChangedFiles(
-                worktreeRoot, status.Files.Select(file => file.Path).ToList())
+                worktreeRoot,
+                status.Files.Select(file => file.Path).ToList(),
+                task.Key ?? task.Id)
             : new ConceptWorkbenchReview(
                 false, null, null, null, [status.Error ?? "Concept worktree is not a git repository."]);
         if (!review.IsComplete || review.RepoRelativeDirectory is null || review.Descriptor is null)
             return new ConceptWorkbenchPublishResult(false, review.Summary, review);
+
+        var repoRelativeEntrypoint =
+            review.RepoRelativeDirectory + "/" + ConceptWorkbenchContract.EntryFileName;
+        var referenceFindings = AgentStudio.Tasks.ConceptDossierContract.ReviewAgentReferences(
+            task.FolderPath,
+            repoRelativeEntrypoint);
+        if (referenceFindings.Count > 0)
+        {
+            review = review with
+            {
+                IsComplete = false,
+                Findings = [.. review.Findings, .. referenceFindings],
+            };
+            return new ConceptWorkbenchPublishResult(false, review.Summary, review);
+        }
 
         var sourceDirectory = Path.Combine(
             worktreeRoot,
@@ -89,7 +106,7 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
                 return new ManagedProjectArtifactOutput(
                     "Ok",
                     review.Summary,
-                    review.RepoRelativeDirectory + "/" + ConceptWorkbenchContract.EntryFileName);
+                    repoRelativeEntrypoint);
             },
             ct);
         if (!durable.Success)
@@ -105,7 +122,7 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
         var record = new ConceptWorkbenchRecord
         {
             RepoRelativeDirectory = review.RepoRelativeDirectory,
-            RepoRelativeEntrypoint = review.RepoRelativeDirectory + "/" + ConceptWorkbenchContract.EntryFileName,
+            RepoRelativeEntrypoint = repoRelativeEntrypoint,
             Title = review.Descriptor.Title,
             PublishedAt = DateTime.UtcNow,
             CommitSha = durable.CommitSha,
@@ -118,6 +135,8 @@ public sealed class ConceptWorkbenchPublisher : IConceptWorkbenchPublisher
                 review,
                 durable.CommitSha);
         }
+
+        AgentStudio.Tasks.ConceptDossierClosureStore.Clear(task.FolderPath, _logger);
 
         return new ConceptWorkbenchPublishResult(true, review.Summary, review, durable.CommitSha);
     }

@@ -85,7 +85,7 @@ public record TaskInfo
     /// <summary>
     /// Execution mode (orthogonal to <see cref="Kind"/>): <c>coding</c> (default,
     /// mutates source) | <c>planning</c> | <c>research</c> (read-only reports) |
-    /// <c>concept</c> (docs-only Workbench). See <see cref="TaskModes"/>.
+    /// <c>concept</c> (repository dossier). See <see cref="TaskModes"/>.
     /// </summary>
     public string Mode { get; init; } = TaskModes.Coding;
     /// <summary>
@@ -465,6 +465,15 @@ public record TaskInfo
     /// accept-dialog guard against the AGT-1915 trap.
     /// </summary>
     public PlanningSpawnSummary? PlanningSpawn { get; init; }
+
+    /// <summary>
+    /// Interim concept-dossier contract projected from the path named in
+    /// <c>results/deliverables.md</c> or <c>status.md</c>, plus an optional
+    /// operator declaration that no dossier is needed. Null outside concept
+    /// mode. This read model is replaced by <c>references.workbenches</c> once
+    /// that structured reference carrier lands.
+    /// </summary>
+    public ConceptDossierSummary? ConceptDossier { get; init; }
 }
 
 /// <summary>Compact current-step projection used by board and task detail.</summary>

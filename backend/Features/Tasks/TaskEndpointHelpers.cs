@@ -203,6 +203,7 @@ internal static class TaskEndpointHelpers
         // reads never touch the coding-card common case and the
         // JobsEndpointPerfTests contract holds. Null on every non-planning card.
         var planningSpawn = BuildPlanningSpawnSummary(job);
+        var conceptDossier = BuildConceptDossierSummary(job);
         return job with
         {
             Execution = exec,
@@ -230,7 +231,8 @@ internal static class TaskEndpointHelpers
             OrchestratorVerdict = verdict,
             WaitsOn = waitsOn,
             TransitiveWaiters = transitiveWaiters,
-            PlanningSpawn = planningSpawn
+            PlanningSpawn = planningSpawn,
+            ConceptDossier = conceptDossier
         };
     }
 
@@ -267,6 +269,19 @@ internal static class TaskEndpointHelpers
             NoFollowUpReason = closure?.Reason,
             DeclaredAt = closure?.DeclaredAt,
         };
+    }
+
+    /// <summary>
+    /// Interim read-time dossier link for concept cards. This deliberately reads
+    /// the two result documents instead of creating a second structured
+    /// workbench-reference carrier before <c>references.workbenches</c> lands.
+    /// </summary>
+    internal static ConceptDossierSummary? BuildConceptDossierSummary(TaskInfo job)
+    {
+        if (!TaskModes.IsConcept(job.Mode)) return null;
+        return string.IsNullOrWhiteSpace(job.FolderPath)
+            ? new ConceptDossierSummary()
+            : ConceptDossierContract.Read(job.FolderPath);
     }
 
     /// <summary>

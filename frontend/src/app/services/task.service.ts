@@ -955,6 +955,18 @@ export class TaskService {
     );
   }
 
+  setConceptDossier(
+    jobId: string,
+    body: { path?: string | null; noDossierNeeded: boolean; reason?: string | null },
+    watchPath?: string,
+  ) {
+    return this.http.post<import('../models/task.model').ConceptDossierSummary>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/concept-dossier`,
+      body,
+      this.withWatchPath(watchPath),
+    );
+  }
+
   // Tag registry + per-job tag mutation. Backlog-lane spec.
   listTags() {
     return this.http.get<import('../models/task.model').TagRegistryEntry[]>(`${this.baseUrl}/tags`);
