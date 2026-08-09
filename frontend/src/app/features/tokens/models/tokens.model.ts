@@ -43,6 +43,8 @@ export interface TokenSummaryByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  /** True when TokenEconomy could not resolve this used model id at all. */
+  unknownModel?: boolean;
 }
 
 export interface TokenSummaryByProject {
@@ -65,6 +67,8 @@ export interface TokenSummary {
   totalCacheCreationTokens: number;
   estimatedApiCostUsd: number;
   allModelsPriced: boolean;
+  /** Distinct used model ids that resolved to TokenEconomy's UnknownModel status. */
+  unknownModelCount?: number;
   byModel: TokenSummaryByModel[];
   disclaimer: string;
 }
@@ -85,6 +89,7 @@ export interface TokenSummaryAggregate {
   totalCacheCreationTokens: number;
   estimatedApiCostUsd: number;
   allModelsPriced: boolean;
+  unknownModelCount?: number;
   byModel: TokenSummaryByModel[];
   byProject: TokenSummaryByProject[];
   fetchedAt: string;

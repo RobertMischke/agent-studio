@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
@@ -234,6 +235,33 @@ public sealed class TokenSummaryBusParityTests : IDisposable
                 TotalMs: (long)(completedAt - requestedAt).TotalMilliseconds);
     }
 
+    [Fact]
+    public async Task InstanceSummarize_UnknownModel_LogsCatalogDriftOnce()
+    {
+        var (log, bridge, store) = BuildStack();
+        var at = new DateTime(2026, 8, 8, 12, 0, 0, DateTimeKind.Utc);
+        await WriteAllAsync(log, bridge, store,
+        [
+            MakeEntry("future-experimental", 1_000, 100, at),
+            MakeEntry("claude-haiku-4-5", 1_000, 100, at.AddMinutes(1)),
+        ]);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
+            .Build();
+        var logger = new WarningLogger();
+        var reader = new BusBackedTokenSummaryReader(store, config, logger);
+
+        var first = reader.Summarize(ProjectName);
+        var second = reader.Summarize(ProjectName);
+
+        Assert.Equal(1, first.UnknownModelCount);
+        Assert.Equal(first.UnknownModelCount, second.UnknownModelCount);
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains("token-price-catalog-drift", warning, StringComparison.Ordinal);
+        Assert.Contains("future-experimental", warning, StringComparison.Ordinal);
+        Assert.Contains("UnknownModel", warning, StringComparison.Ordinal);
+    }
+
     private static void AssertEquivalent(TokenSummary a, TokenSummary b)
     {
         Assert.Equal(a.Project,                         b.Project);
@@ -245,6 +273,7 @@ public sealed class TokenSummaryBusParityTests : IDisposable
         Assert.Equal(a.TotalCacheCreationTokens,        b.TotalCacheCreationTokens);
         Assert.Equal(a.EstimatedApiCostUsd,             b.EstimatedApiCostUsd);
         Assert.Equal(a.AllModelsPriced,                 b.AllModelsPriced);
+        Assert.Equal(a.UnknownModelCount,               b.UnknownModelCount);
 
         Assert.Equal(a.ByModel.Count, b.ByModel.Count);
         for (var i = 0; i < a.ByModel.Count; i++)
@@ -257,6 +286,7 @@ public sealed class TokenSummaryBusParityTests : IDisposable
             Assert.Equal(a.ByModel[i].CacheCreationTokens,   b.ByModel[i].CacheCreationTokens);
             Assert.Equal(a.ByModel[i].EstimatedApiCostUsd,   b.ByModel[i].EstimatedApiCostUsd);
             Assert.Equal(a.ByModel[i].ModelPriced,           b.ByModel[i].ModelPriced);
+            Assert.Equal(a.ByModel[i].UnknownModel,           b.ByModel[i].UnknownModel);
         }
     }
 
@@ -335,4 +365,27 @@ public sealed class TokenSummaryBusParityTests : IDisposable
                 CacheCreationTokens = cacheCreate,
             },
         };
+
+    private sealed class WarningLogger : ILogger<BusBackedTokenSummaryReader>
+    {
+        public List<string> Warnings { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
+            => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+                Warnings.Add(formatter(state, exception));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
+    }
 }

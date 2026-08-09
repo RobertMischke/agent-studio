@@ -1763,6 +1763,10 @@ export class OverviewPaneComponent {
     return formatPipelineCost(usd);
   }
 
+  aggregateCostLabel(usd: number, anyModelUnknown: boolean): string {
+    return anyModelUnknown && usd <= 0 ? 'Unknown' : this.formatCost(usd);
+  }
+
   formatRelativeTime(iso: string): string {
     if (!iso) return '';
     const d = new Date(iso);

@@ -30,7 +30,8 @@ public sealed record TokenSummaryAggregate(
     IReadOnlyList<TokenSummaryByModel> ByModel,
     IReadOnlyList<TokenSummaryByProject> ByProject,
     string FetchedAt,
-    string Disclaimer);
+    string Disclaimer,
+    int UnknownModelCount = 0);
 
 public sealed record TokenSummaryByProject(
     string Project,

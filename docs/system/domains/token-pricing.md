@@ -1,6 +1,6 @@
 # Token pricing
 
-> **Status (2026-07-21):** Live. Pricing is owned by the published
+> **Status (2026-08-09):** Live. Pricing is owned by the published
 > `TokenEconomy` package. Studio contains no model rates.
 
 ## Contract
@@ -12,7 +12,7 @@ in `backend/Features/Runner/TokenEconomyPriceProvider.cs` adapts
 
 The adapter is exposed through `ITokenPriceProvider`; the active
 `TokenPricing.Provider` configuration selects `TokenEconomyPriceProvider`, the
-package-specific implementation from the exactly pinned `TokenEconomy` 0.2.0
+package-specific implementation from the exactly pinned `TokenEconomy` 0.3.0
 dependency. Aggregators and frontend contracts do not depend on the provider
 package directly.
 
@@ -25,6 +25,19 @@ TokenEconomy distinguishes `Resolved`, `UnknownModel`, and `NoPriceForDate`.
 Studio maps only `Resolved` to a dollar value. The other states keep the token
 count and set the existing unknown-price flags so UI surfaces render `Unknown`,
 never a silent `$0.00`.
+
+The lifetime Token Summary counts used model ids that return `UnknownModel`,
+renders that count as a pricing-drift badge, and emits one structured
+`token-price-catalog-drift` warning per project and model during a backend
+process lifetime. `NoPriceForDate` remains an unpriced aggregate input but does
+not claim that the pinned catalog is missing the model id.
+
+## Package update procedure
+
+1. Publish and verify the intended `TokenEconomy` version on NuGet before changing Studio's exact package pin.
+2. Update the exact `PackageReference`, then run restore and compile the `ITokenPriceProvider` and `TokenEconomyPriceProvider` adapter against the published package.
+3. Run `TokenPricingTests` and the token aggregator tests to verify aliases, historical timestamp selection, unknown states, and aggregate propagation.
+4. Exercise the Token Summary and task-total UI tests, then confirm that any remaining `UnknownModel` usage produces both the structured warning and the visible drift badge.
 
 ## Cost surfaces
 

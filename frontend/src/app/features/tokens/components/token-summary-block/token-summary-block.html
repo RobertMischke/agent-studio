@@ -7,6 +7,13 @@
       } @else {
         <span class="tok-sum__sub">No orchestrator activity yet.</span>
       }
+      @if (unknownModelCount(s); as count) {
+        <span class="tok-sum__pricing-drift"
+              data-testid="token-summary-pricing-drift"
+              [cacTooltip]="unknownModelTooltip(s)">
+          {{ count }} model{{ count === 1 ? '' : 's' }} without price data
+        </span>
+      }
     </header>
 
     @if (s.orchestratorLlmCalls > 0) {
@@ -38,8 +45,8 @@
         <button type="button" class="tok-sum__cost-amount tok-sum__cost-button"
               [class.tok-sum__cost-amount--partial]="!s.allModelsPriced"
               (click)="showTotalCalculation(s)">
-          {{ formatUsd(s.estimatedApiCostUsd) }}
-          @if (!s.allModelsPriced) { <span class="tok-sum__partial">(partial; some models not priced)</span> }
+          {{ summaryCostLabel(s) }}
+          @if (!s.allModelsPriced && s.estimatedApiCostUsd > 0) { <span class="tok-sum__partial">(partial; some models not priced)</span> }
         </button>
       </div>
 

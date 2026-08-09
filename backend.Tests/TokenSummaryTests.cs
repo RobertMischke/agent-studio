@@ -111,13 +111,28 @@ public class TokenSummaryTests
         var entries = new[]
         {
             Entry("claude-opus-4-7", 1_000, 100),
-            Entry("gpt-5", 1_000, 100)
+            Entry("future-experimental", 1_000, 100)
         };
         var s = TokenSummaryService.Summarize("Demo", entries);
         Assert.False(s.AllModelsPriced);
-        var unknown = s.ByModel.Single(m => m.Model == "gpt-5");
+        Assert.Equal(1, s.UnknownModelCount);
+        var unknown = s.ByModel.Single(m => m.Model == "future-experimental");
         Assert.False(unknown.ModelPriced);
+        Assert.True(unknown.UnknownModel);
         Assert.Equal(0m, unknown.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void Summarize_KnownModelWithoutPrice_DoesNotClaimCatalogIdDrift()
+    {
+        var s = TokenSummaryService.Summarize("Demo",
+        [
+            Entry("gpt-5-codex", 1_000, 100),
+        ]);
+
+        Assert.False(s.AllModelsPriced);
+        Assert.Equal(0, s.UnknownModelCount);
+        Assert.False(Assert.Single(s.ByModel).UnknownModel);
     }
 
     [Fact]

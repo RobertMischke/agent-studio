@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTheme, type Theme } from '../helpers/theme';
 
 const JOB_ID = 'core-token-usage-fixture';
 const WATCH_PATH = 'C:/fixtures/agent-taskboard';
@@ -61,7 +62,7 @@ function jobDetail() {
   };
 }
 
-function pipeline() {
+function pipeline(pricingState: 'priced' | 'unpriced' = 'priced') {
   const coreStep = {
     id: 'core-agent-run',
     displayName: 'Agent execution',
@@ -73,6 +74,20 @@ function pipeline() {
   };
   const startedAt = '2026-06-06T20:00:00Z';
   const completedAt = '2026-06-06T20:02:05Z';
+  const unpriced = pricingState === 'unpriced';
+  const model = unpriced ? 'future-experimental' : 'claude-opus-4-8';
+  const totalCostUsd = unpriced ? 0 : 20.4025;
+  const modelUsage = {
+    model,
+    modelKnown: !unpriced,
+    steps: 1,
+    inputTokens: 2500,
+    outputTokens: 195600,
+    cacheReadTokens: 18500000,
+    cacheCreationTokens: 1000000,
+    totalTokens: 19698100,
+    costUsd: totalCostUsd,
+  };
   return {
     pipeline: {
       id: 'standard-task-pipeline',
@@ -95,7 +110,7 @@ function pipeline() {
       steps: [{
         stepId: 'core-agent-run',
         kind: 'core',
-        model: 'claude-opus-4-8',
+        model,
         status: 'passed',
         startedAt,
         completedAt,
@@ -114,31 +129,47 @@ function pipeline() {
       steps: [{
         stepId: 'core-agent-run',
         kind: 'core',
-        model: 'claude-opus-4-8',
+        model,
         tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
-        modelKnown: true,
+        modelKnown: !unpriced,
         inputTokens: 2500,
         outputTokens: 195600,
         cacheReadTokens: 18500000,
         cacheCreationTokens: 1000000,
         totalTokens: 19698100,
-        inputCostUsd: 0.0125,
-        outputCostUsd: 4.89,
-        cacheReadCostUsd: 9.25,
-        cacheCreationCostUsd: 6.25,
-        costUsd: 20.4025,
+        inputCostUsd: unpriced ? 0 : 0.0125,
+        outputCostUsd: unpriced ? 0 : 4.89,
+        cacheReadCostUsd: unpriced ? 0 : 9.25,
+        cacheCreationCostUsd: unpriced ? 0 : 6.25,
+        costUsd: totalCostUsd,
       }],
       totalInputTokens: 2500,
       totalOutputTokens: 195600,
       totalCacheReadTokens: 18500000,
       totalCacheCreationTokens: 1000000,
       totalTokens: 19698100,
-      totalInputCostUsd: 0.0125,
-      totalOutputCostUsd: 4.89,
-      totalCacheReadCostUsd: 9.25,
-      totalCacheCreationCostUsd: 6.25,
-      totalCostUsd: 20.4025,
-      anyModelUnknown: false,
+      totalInputCostUsd: unpriced ? 0 : 0.0125,
+      totalOutputCostUsd: unpriced ? 0 : 4.89,
+      totalCacheReadCostUsd: unpriced ? 0 : 9.25,
+      totalCacheCreationCostUsd: unpriced ? 0 : 6.25,
+      totalCostUsd,
+      anyModelUnknown: unpriced,
+    },
+    tokensByModel: {
+      runs: [{
+        attempt: 8,
+        current: true,
+        startedAt,
+        completedAt,
+        models: [modelUsage],
+        totalTokens: modelUsage.totalTokens,
+        totalCostUsd,
+        anyModelUnknown: unpriced,
+      }],
+      totalByModel: [modelUsage],
+      totalTokens: modelUsage.totalTokens,
+      totalCostUsd,
+      anyModelUnknown: unpriced,
     },
     config: {},
   };
@@ -173,8 +204,14 @@ function runTimeline() {
   };
 }
 
-async function installFixtureRoutes(page: Page) {
+async function installFixtureRoutes(page: Page, pricingState: 'priced' | 'unpriced' = 'priced') {
   await page.route('**/api/**', route => route.fulfill(json([])));
+  await page.route('**/api/auth/status', route => route.fulfill(json({
+    profile: 'local',
+    bootstrapRequired: false,
+    authenticated: true,
+    user: null,
+  })));
   await page.route('**/api/tasks/grouped**', route => route.fulfill(json({
     preparation: [],
     orchestratorPrep: [],
@@ -202,7 +239,7 @@ async function installFixtureRoutes(page: Page) {
   })));
 
   const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipeline())));
+  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipeline(pricingState))));
   await page.route(new RegExp(`/api/tasks/${id}/runs(\\?|$)`), route => route.fulfill(json(runTimeline())));
   await page.route(new RegExp(`/api/tasks/${id}/output(\\?|$)`), route => route.fulfill(json([])));
   await page.route(new RegExp(`/api/tasks/${id}/session-events(\\?|$)`), route => route.fulfill(json({ events: [], sessionChain: [] })));
@@ -232,12 +269,13 @@ test('task detail pipeline shows CORE CLI-footer usage, SUM footer, and API-pric
 
   const pipelineBlock = page.getByTestId('overview-pipeline');
   await expect(pipelineBlock).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('overview-pipeline-group').first().click();
   await expect(page.getByTestId('overview-pipeline-step-name')).toContainText('Agent execution');
   await expect(page.getByTestId('overview-pipeline-agent-runs')).toContainText('8 runs');
-  await expect(page.getByTestId('overview-pipeline-step-tokens')).toContainText('19.70M');
+  await expect(page.getByTestId('overview-pipeline-step-tokens')).toContainText('19.7m');
   await expect(page.getByTestId('overview-pipeline-step-cost')).toContainText('$20.40');
   await expect(page.getByTestId('overview-pipeline-total')).toContainText('SUM');
-  await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('19.70M');
+  await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('19.7m');
 
   await pipelineBlock.screenshot({ path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-core-token-usage.png') : 'test-results/pipeline-core-token-usage.png' });
 
@@ -246,10 +284,35 @@ test('task detail pipeline shows CORE CLI-footer usage, SUM footer, and API-pric
   await expect(tooltip).toContainText('Source: AGENT (CLI FOOTER) / reported');
   await expect(tooltip).toContainText('Input: 2.5k');
   await expect(tooltip).toContainText('Output: 195.6k');
-  await expect(tooltip).toContainText('Cache read: 18.50M');
-  await expect(tooltip).toContainText('Cache creation: 1.00M');
-  await expect(tooltip).toContainText('Total API price estimate: $20.40');
-  await expect(tooltip).toContainText('API price estimate only');
-  await expect(tooltip).toContainText('Actual CLI billing uses the subscription or plan, not these API rates');
+  await expect(tooltip).toContainText('Cache read: 18.5m');
+  await expect(tooltip).toContainText('Cache creation: 1m');
+  await expect(tooltip).toContainText('Estimated cost: $20.40');
+  await expect(tooltip).toContainText('historical list prices');
+  await expect(tooltip).toContainText('discounts and provider-side caching adjustments are not considered');
   await saveShot(page, 'pipeline-core-token-tooltip.png');
+});
+
+test('TASK TOTAL SUM renders Unknown for entirely unpriced usage in both themes', async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    } catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page, 'unpriced');
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+  const totalCost = page.getByTestId('overview-pipeline-total-cost');
+  await expect(totalCost).toBeVisible({ timeout: 10_000 });
+  await expect(totalCost).toHaveText('Unknown');
+  await expect(totalCost).not.toContainText('$0.00');
+
+  for (const theme of ['light', 'dark'] as Theme[]) {
+    await setTheme(page, theme);
+    if (RESULTS_DIR) await mkdir(RESULTS_DIR, { recursive: true });
+    await page.getByTestId('overview-pipeline-total').screenshot({
+      path: RESULTS_DIR
+        ? join(RESULTS_DIR, `task-total-unpriced--mocked-${theme}.png`)
+        : `test-results/task-total-unpriced--mocked-${theme}.png`,
+    });
+  }
 });

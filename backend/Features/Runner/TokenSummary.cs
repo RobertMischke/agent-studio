@@ -31,7 +31,8 @@ public sealed record TokenSummary(
     decimal EstimatedApiCostUsd,
     bool AllModelsPriced,
     IReadOnlyList<TokenSummaryByModel> ByModel,
-    string Disclaimer);
+    string Disclaimer,
+    int UnknownModelCount = 0);
 
 public sealed record TokenSummaryByModel(
     string Model,
@@ -41,7 +42,8 @@ public sealed record TokenSummaryByModel(
     long CacheReadTokens,
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
-    bool ModelPriced);
+    bool ModelPriced,
+    bool UnknownModel = false);
 
 public class TokenSummaryService
 {
@@ -313,6 +315,7 @@ public class TokenSummaryService
                 bucket.CacheCreate += m.CacheCreationTokens;
                 bucket.Cost += m.EstimatedApiCostUsd;
                 if (!m.ModelPriced) bucket.AnyUnpriced = true;
+                if (m.UnknownModel) bucket.AnyUnknownModel = true;
             }
         }
 
@@ -326,7 +329,8 @@ public class TokenSummaryService
                 CacheReadTokens: b.CacheRead,
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
-                ModelPriced: !b.AnyUnpriced))
+                ModelPriced: !b.AnyUnpriced,
+                UnknownModel: b.AnyUnknownModel))
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -347,7 +351,8 @@ public class TokenSummaryService
                 .OrderByDescending(p => p.InputTokens + p.OutputTokens)
                 .ToList(),
             FetchedAt: DateTime.UtcNow.ToString("o"),
-            Disclaimer: DefaultDisclaimer);
+            Disclaimer: DefaultDisclaimer,
+            UnknownModelCount: byModel.Count(model => model.UnknownModel));
 
         // Persist for next-app-start display. Best-effort.
         try { cache?.Write(aggregate); } catch (Exception __ex) { SilentCatch.Note(__ex, "TokenSummary: swallow; tolerant by design"); /* swallow; tolerant by design */ }
@@ -417,7 +422,11 @@ public class TokenSummaryService
                 key, u.InputTokens, u.OutputTokens, u.CacheReadTokens,
                 u.CacheCreationTokens, entry.Ts);
             bucket.Cost += entryCost.Total;
-            if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
+            var consumedTokens = u.InputTokens + u.OutputTokens
+                + u.CacheReadTokens + u.CacheCreationTokens > 0;
+            if (consumedTokens && !entryCost.ModelKnown) bucket.AnyUnpriced = true;
+            if (consumedTokens && entryCost.Status == TokenEconomy.PriceStatus.UnknownModel)
+                bucket.AnyUnknownModel = true;
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -435,7 +444,8 @@ public class TokenSummaryService
                 CacheReadTokens: bucket.CacheRead,
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
-                ModelPriced: !bucket.AnyUnpriced));
+                ModelPriced: !bucket.AnyUnpriced,
+                UnknownModel: bucket.AnyUnknownModel));
         }
 
         return new TokenSummary(
@@ -449,7 +459,8 @@ public class TokenSummaryService
             EstimatedApiCostUsd: grandTotal,
             AllModelsPriced: allPriced,
             ByModel: byModel,
-            Disclaimer: TokenSummaryService.DefaultDisclaimer);
+            Disclaimer: TokenSummaryService.DefaultDisclaimer,
+            UnknownModelCount: byModel.Count(model => model.UnknownModel));
     }
 
     private sealed class ModelBucket
@@ -463,6 +474,7 @@ public class TokenSummaryService
         public long CacheCreate;
         public decimal Cost;
         public bool AnyUnpriced;
+        public bool AnyUnknownModel;
         public ModelBucket(string model) : this(model, model)
         {
         }

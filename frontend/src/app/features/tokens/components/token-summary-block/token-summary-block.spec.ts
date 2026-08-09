@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TokenSummaryBlockComponent } from './token-summary-block';
@@ -40,5 +40,49 @@ describe('TokenSummaryBlockComponent (smoke)', () => {
       console.warn('[smoke] TokenSummaryBlockComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+    fixture.destroy();
+  });
+
+  it('shows a counted pricing-drift badge for used UnknownModel ids', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TokenSummaryBlockComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TokenSummaryBlockComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/runner/Demo/token-summary')
+      .flush({
+        project: 'Demo',
+        orchestratorEntries: 3,
+        orchestratorLlmCalls: 3,
+        totalInputTokens: 3_000,
+        totalOutputTokens: 300,
+        totalCacheReadTokens: 0,
+        totalCacheCreationTokens: 0,
+        estimatedApiCostUsd: 0.01,
+        allModelsPriced: false,
+        unknownModelCount: 2,
+        byModel: [
+          { model: 'future-a', calls: 1, inputTokens: 1_000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0, modelPriced: false, unknownModel: true },
+          { model: 'future-b', calls: 1, inputTokens: 1_000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0, modelPriced: false, unknownModel: true },
+          { model: 'claude-haiku-4-5', calls: 1, inputTokens: 1_000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0.01, modelPriced: true, unknownModel: false },
+        ],
+        disclaimer: 'Estimated list pricing.',
+      });
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector(
+      '[data-testid="token-summary-pricing-drift"]',
+    ) as HTMLElement | null;
+    expect(badge?.textContent).toContain('2 models without price data');
+    fixture.destroy();
   });
 });

@@ -138,7 +138,7 @@ describe('PipelineTokenUsageComponent', () => {
     expect(all(root(fixture), 'pipeline-token-usage-total-model').length).toBe(0);
   });
 
-  it('renders "n/a" cost for a model with no price on file', () => {
+  it('renders Unknown instead of a silent $0.00 when the whole task is unpriced', () => {
     const summary: PipelineModelUsageSummary = {
       runs: [run(1, true, [model('unpriced-test-model', 700, 0, false)])],
       totalByModel: [model('unpriced-test-model', 700, 0, false)],
@@ -147,12 +147,31 @@ describe('PipelineTokenUsageComponent', () => {
       anyModelUnknown: true,
     };
     const fixture = setup(summary);
-    // The lifetime cost carries the unknown-model asterisk even while collapsed.
-    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent).toContain('*');
+    const totalCost = one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent ?? '';
+    expect(totalCost).toContain('Unknown');
+    expect(totalCost).not.toContain('$0.00');
 
     fixture.componentInstance.toggleSummary();
     fixture.detectChanges();
     const modelRow = one(root(fixture), 'pipeline-token-usage-total-model');
     expect(modelRow?.textContent).toContain('n/a');
+  });
+
+  it('marks a priced subtotal as partial when another model is unpriced', () => {
+    const models = [
+      model('claude-haiku-4-5', 1_000, 0.25),
+      model('unpriced-test-model', 700, 0, false),
+    ];
+    const summary: PipelineModelUsageSummary = {
+      runs: [run(1, true, models)],
+      totalByModel: models,
+      totalTokens: 1_700,
+      totalCostUsd: 0.25,
+      anyModelUnknown: true,
+    };
+    const fixture = setup(summary);
+
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent?.replace(/\s+/g, ' '))
+      .toContain('$0.25 (partial)');
   });
 });

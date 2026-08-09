@@ -109,6 +109,11 @@ export class PipelineTokenUsageComponent {
     return `$${usd.toFixed(2)}`;
   }
 
+  aggregateCostLabel(usd: number, anyModelUnknown: boolean): string {
+    if (anyModelUnknown && usd <= 0) return 'Unknown';
+    return this.formatCost(usd);
+  }
+
   totalTooltip(totalTokens: number, costUsd: number, anyModelUnknown: boolean, scope: string): string {
     return buildTokenCostTooltip({
       costUsd,

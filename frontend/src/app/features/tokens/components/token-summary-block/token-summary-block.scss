@@ -20,6 +20,18 @@
   letter-spacing: 0.06em;
 }
 .tok-sum__sub { color: rgba(255,255,255,0.55); font-size: 0.75rem; }
+.tok-sum__pricing-drift {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-warn) 48%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-warn) 12%, var(--studio-surface));
+  color: var(--studio-warn);
+  font-size: 0.72rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
 .tok-sum__amounts {
   display: flex;
   flex-wrap: wrap;

@@ -31,11 +31,18 @@ public sealed class BusBackedTokenSummaryReader
 {
     private readonly AgentMessageBusStore _store;
     private readonly IConfiguration _config;
+    private readonly ILogger<BusBackedTokenSummaryReader>? _logger;
+    private readonly HashSet<string> _reportedUnknownModels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _reportGate = new();
 
-    public BusBackedTokenSummaryReader(AgentMessageBusStore store, IConfiguration config)
+    public BusBackedTokenSummaryReader(
+        AgentMessageBusStore store,
+        IConfiguration config,
+        ILogger<BusBackedTokenSummaryReader>? logger = null)
     {
         _store = store;
         _config = config;
+        _logger = logger;
     }
 
     /// <summary>
@@ -50,7 +57,9 @@ public sealed class BusBackedTokenSummaryReader
         if (string.IsNullOrWhiteSpace(workspace))
             return TokenSummaryService.Summarize(projectName, Array.Empty<OrchestratorLogEntry>());
         var entries = BusTokenEntryConverter.LoadTokenUsageEntries(_store, workspace!, projectName);
-        return TokenSummaryService.Summarize(projectName, entries);
+        var summary = TokenSummaryService.Summarize(projectName, entries);
+        ReportCatalogDrift(summary);
+        return summary;
     }
 
     /// <summary>
@@ -106,5 +115,26 @@ public sealed class BusBackedTokenSummaryReader
     {
         var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, projectName);
         return TokenSummaryService.SummarizePerJob(entries);
+    }
+
+    private void ReportCatalogDrift(TokenSummary summary)
+    {
+        if (_logger is null || summary.UnknownModelCount == 0) return;
+
+        foreach (var model in summary.ByModel.Where(model => model.UnknownModel))
+        {
+            var reportKey = $"{summary.Project}\n{model.Model}";
+            lock (_reportGate)
+            {
+                if (!_reportedUnknownModels.Add(reportKey)) continue;
+            }
+
+            _logger.LogWarning(
+                "token-price-catalog-drift project={Project} model={Model} status={PriceStatus} package={PackageVersion}",
+                summary.Project,
+                model.Model,
+                TokenEconomy.PriceStatus.UnknownModel,
+                typeof(TokenEconomy.ModelPriceCatalog).Assembly.GetName().Version?.ToString() ?? "unknown");
+        }
     }
 }

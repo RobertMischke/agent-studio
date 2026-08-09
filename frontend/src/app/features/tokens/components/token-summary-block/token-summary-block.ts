@@ -74,6 +74,24 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
     return '$' + n.toFixed(2);
   }
 
+  summaryCostLabel(summary: TokenSummary): string {
+    if (!summary.allModelsPriced && summary.estimatedApiCostUsd <= 0) return 'Unknown';
+    return this.formatUsd(summary.estimatedApiCostUsd);
+  }
+
+  unknownModelCount(summary: TokenSummary): number {
+    return summary.unknownModelCount
+      ?? summary.byModel.filter(model => model.unknownModel).length;
+  }
+
+  unknownModelTooltip(summary: TokenSummary): string {
+    const models = summary.byModel
+      .filter(model => model.unknownModel)
+      .map(model => model.model);
+    const detail = models.length > 0 ? ` Models: ${models.join(', ')}.` : '';
+    return `TokenEconomy returned UnknownModel for used model ids.${detail} The pinned catalog may need an update.`;
+  }
+
   showTotalCalculation(summary: TokenSummary): void {
     this.costBreakdown.show(summary.byModel.map(model => this.priceItem(model)),
       `${summary.project} cost calculation`);

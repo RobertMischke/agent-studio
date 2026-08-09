@@ -23,7 +23,7 @@ public class TokenPricingTests
             .InformationalVersion;
 
         Assert.Equal("TokenEconomy", assembly.GetName().Name);
-        Assert.StartsWith("0.2.0", informationalVersion, StringComparison.Ordinal);
+        Assert.StartsWith("0.3.0", informationalVersion, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -33,13 +33,16 @@ public class TokenPricingTests
     }
 
     [Fact]
-    public void Estimate_KnownGpt56WithoutPriceForRunDate_IsExplicitlyUnknown()
+    public void Estimate_Gpt56SolAtHistoricalRunTime_IsResolved()
     {
-        var c = _provider.Estimate("gpt-5.6-sol", 1_000_000, 100_000, 0, 0, new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));
-        Assert.False(c.ModelKnown);
-        Assert.Equal(TokenEconomy.PriceStatus.NoPriceForDate, c.Status);
-        Assert.Equal(0m, c.Total);
-        Assert.Null(c.PriceBasis);
+        var at = new DateTime(2026, 8, 8, 0, 0, 0, DateTimeKind.Utc);
+        var c = _provider.Estimate("gpt-5.6-sol", 1_000_000, 100_000, 0, 0, at);
+
+        Assert.True(c.ModelKnown);
+        Assert.Equal(TokenEconomy.PriceStatus.Resolved, c.Status);
+        Assert.True(c.Total > 0m);
+        Assert.NotNull(c.PriceBasis);
+        Assert.True(c.PriceBasis.ValidFrom <= at);
     }
     [Fact]
     public void Estimate_OpusPrices_MatchAnthropicListed()

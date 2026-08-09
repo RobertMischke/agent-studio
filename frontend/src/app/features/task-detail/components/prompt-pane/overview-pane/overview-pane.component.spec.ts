@@ -968,6 +968,49 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(el.querySelector('.ov-pl-total__label')?.textContent).toContain('SUM');
   });
 
+  it('pipeline block: unpriced task totals render Unknown or an explicit partial subtotal', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('future-experimental');
+    pipe.execution!.steps[0] = {
+      ...pipe.execution!.steps[0],
+      status: 'passed',
+      inputTokens: 1_000,
+      outputTokens: 250,
+    };
+    pipe.cost = emptyCost({
+      steps: [stepCost({
+        stepId: 'core-agent-run',
+        kind: 'core',
+        model: 'future-experimental',
+        modelKnown: false,
+        inputTokens: 1_000,
+        outputTokens: 250,
+        totalTokens: 1_250,
+      })],
+      totalInputTokens: 1_000,
+      totalOutputTokens: 250,
+      totalTokens: 1_250,
+      anyModelUnknown: true,
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const totalCost = (fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="overview-pipeline-total-cost"]')?.textContent?.trim();
+    expect(totalCost).toBe('Unknown');
+    expect(totalCost).not.toContain('$0.00');
+
+    TestBed.inject(TaskPipelinePollService).pipeline.set({
+      ...pipe,
+      cost: { ...pipe.cost, totalCostUsd: 0.25 },
+    });
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    const partialCost = (fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="overview-pipeline-total-cost"]')?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(partialCost).toBe('$0.25 (partial)');
+  });
+
   it('pipeline block: clicking CORE tokens opens a step-scoped token modal', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const startedAt = new Date('2026-06-09T08:00:00.000Z').toISOString();
