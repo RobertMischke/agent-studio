@@ -1264,13 +1264,25 @@ export class OverviewPaneComponent {
     }
     if (authoritative) return authoritative;
     const info = this.latestSteeringInfo();
-    if (info == null) return null;
+    if (info) {
+      return {
+        verdict: info.verdict,
+        label: info.verdictLabel,
+        tone: info.tone,
+        severity: decisionTooltipSeverity(info.tone),
+        tooltip: buildDecisionTooltip(info),
+      };
+    }
+    if (!row.verdict) return null;
     return {
-      verdict: info.verdict,
-      label: info.verdictLabel,
-      tone: info.tone,
-      severity: decisionTooltipSeverity(info.tone),
-      tooltip: buildDecisionTooltip(info),
+      verdict: row.verdict,
+      label: row.verdict,
+      tone: 'neutral',
+      severity: row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn',
+      tooltip: row.concernTooltip ?? {
+        title: 'Final verdict',
+        body: 'Aggregated from the review evidence.',
+      },
     };
   }
 

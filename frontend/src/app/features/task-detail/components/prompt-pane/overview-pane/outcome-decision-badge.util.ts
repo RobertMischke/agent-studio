@@ -19,7 +19,7 @@ export function outcomeDecisionBadge(outcome: ProtocolVerdict | null): DecisionB
   const severity: TooltipSeverity = tone === 'danger' ? 'error' : tone === 'warn' ? 'warn' : tone === 'ok' ? 'success' : 'info';
   return {
     verdict: status,
-    label: outcome.label,
+    label: outcome.label === 'Human review lane' ? 'Human review' : outcome.label,
     tone,
     severity,
     tooltip: { title: `Run outcome: ${outcome.label}`, body: outcome.detail },

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * BUG fix evidence: the two orchestrator-review pipeline rows must be visibly
@@ -154,8 +155,22 @@ async function installRoutes(page: Page, state: string) {
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
+  );
+  await page.route(/\/api\/projects\/[^/]+\/workbenches(\?|$)/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName: PROJECT, includesHistory: true, count: 0, items: [] }),
+    }),
+  );
   // The header quota chip reads `{ snapshots: [] }`; the generic `[]` catch-all
   // above makes `report.snapshots` undefined and crashes the chip into a global
   // error dialog that then intercepts pointer events. Mock the real shape so the
@@ -221,7 +236,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -234,10 +249,15 @@ async function dismissErrorDialog(page: Page): Promise<void> {
  * collapsed one reduces the remaining count until none are left.
  */
 async function expandAllPipelineSections(page: Page): Promise<void> {
-  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
-    await collapsed.first().click();
+    const expanded = await page.evaluate(() => {
+      const phase = document.querySelector<HTMLButtonElement>(
+        '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+      );
+      phase?.click();
+      return phase !== null;
+    });
+    if (!expanded) break;
   }
 }
 
@@ -257,6 +277,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await dismissErrorDialog(page);
     await expandAllPipelineSections(page);
 
     // EXACTLY one "Final verdict" chip across the whole pipeline.
@@ -324,35 +345,92 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
     // ASS-1706: the redundant expanded steering block is gone from every row.
     await expect(page.getByTestId('overview-pipeline-step-steering')).toHaveCount(0);
 
-    // Exactly ONE compact decision badge, on the final decision row only, and it
-    // carries the steering verdict (ACCEPT, rendered "Accept" before CSS upper).
-    const badges = page.getByTestId('overview-pipeline-step-decision');
+    // Exactly ONE compact decision route, on the final decision row only. The
+    // authoritative run outcome wins over the lower-level steering event.
+    const badges = page.getByTestId('overview-pipeline-step-final-verdict');
     await expect(badges).toHaveCount(1);
 
     const reviewRow = page.locator('[data-step-id="post-orchestrator-review"]');
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
-    const badge = decisionRow.getByTestId('overview-pipeline-step-decision');
+    const badge = decisionRow.getByTestId('overview-pipeline-step-final-verdict');
     await expect(badge).toHaveCount(1);
-    await expect(badge).toHaveText('Accept');
+    await expect(badge).toContainText('Final verdict → Pipeline completed');
     await expect(badge).toHaveAttribute('data-tone', 'ok');
 
     // The badge REPLACES the generic verdict pill on the final row; the early
     // gate keeps its own compact verdict pill ("complete"), not a decision badge.
-    await expect(decisionRow.getByTestId('overview-pipeline-step-verdict')).toHaveCount(0);
-    await expect(reviewRow.getByTestId('overview-pipeline-step-decision')).toHaveCount(0);
     await expect(reviewRow.getByTestId('overview-pipeline-step-verdict')).toHaveText('complete');
 
     // The detailed reasoning lives in the tooltip (hover), not inline.
     await badge.hover();
     const tooltip = page.getByTestId('cac-tooltip');
     await expect(tooltip).toBeVisible();
-    await expect(tooltip).toContainText('Moved to 5-human-review for your approval.');
+    await expect(tooltip).toContainText('All recorded pipeline steps completed without failure.');
 
     if (RESULTS_DIR) {
       await page.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-decision-badge-tooltip.png'),
         fullPage: false,
       });
+    }
+  });
+
+  test('human-review decision row stays compact in a narrow pipeline panel', async ({ page }) => {
+    await page.setViewportSize({ width: 820, height: 900 });
+    await installRoutes(page, '5-human-review');
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await dismissErrorDialog(page);
+    await expandAllPipelineSections(page);
+
+    const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
+    const finalVerdict = decisionRow.getByTestId('overview-pipeline-step-final-verdict');
+    await expect(finalVerdict).toHaveCount(1);
+    await expect(finalVerdict).toContainText('Final verdict → Human review');
+    await expect(decisionRow.locator('.ov-pl-step__final-badge')).toHaveCount(0);
+
+    const overlaps = await decisionRow.evaluate((row) => {
+      const chip = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-final-verdict"]');
+      if (!chip) throw new Error('Final verdict chip is missing.');
+      const chipRect = chip.getBoundingClientRect();
+      return Array.from(row.children)
+        .filter((child): child is HTMLElement => child instanceof HTMLElement && child !== chip)
+        .map((child) => ({ className: child.className, rect: child.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+        .filter(({ rect }) =>
+          Math.min(chipRect.right, rect.right) - Math.max(chipRect.left, rect.left) > 0
+          && Math.min(chipRect.bottom, rect.bottom) - Math.max(chipRect.top, rect.top) > 0)
+        .map(({ className }) => className);
+    });
+    expect(overlaps).toEqual([]);
+    await expect(decisionRow.locator('.ov-pl-step__name-cell')).toHaveCSS('overflow-x', 'hidden');
+
+    const rowHeights = await page.getByTestId('overview-pipeline-step').evaluateAll((rows) =>
+      rows.map((row) => Math.round(row.getBoundingClientRect().height)),
+    );
+    expect(Math.max(...rowHeights) - Math.min(...rowHeights), JSON.stringify(rowHeights)).toBeLessThanOrEqual(1);
+
+    const phaseHeights = await page.getByTestId('overview-pipeline-phase').evaluateAll((rows) =>
+      rows.map((row) => Math.round(row.getBoundingClientRect().height)),
+    );
+    expect(Math.max(...phaseHeights) - Math.min(...phaseHeights), JSON.stringify(phaseHeights)).toBeLessThanOrEqual(1);
+
+    await finalVerdict.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Run outcome: Human review lane');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('waiting for a human decision');
+
+    if (RESULTS_DIR) {
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await page.mouse.move(1, 1);
+        await expect(page.getByTestId('cac-tooltip')).toBeHidden();
+        await pipeline.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-decision-human-review-after-${theme}--mocked.png`),
+        });
+      }
     }
   });
 });

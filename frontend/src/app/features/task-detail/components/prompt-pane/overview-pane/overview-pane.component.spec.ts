@@ -672,7 +672,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(host.querySelector('[data-testid="overview-pipeline-superseded"]')?.textContent)
       .toContain('Attempt #1 · superseded');
     expect(host.querySelector('[data-testid="overview-pipeline-step-final-verdict"]')?.textContent)
-      .toContain('Final verdict · superseded');
+      .toContain('Final verdict');
     expect(host.querySelector('[data-testid="overview-pipeline-step-verdict"]')?.textContent)
       .toContain('superseded');
     expect(
@@ -1688,7 +1688,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decisionEl).not.toBeNull();
     expect(decisionEl!.classList.contains('ov-pl-step--final-verdict')).toBe(true);
     expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
-    const authoritative = decisionEl!.querySelector('[data-testid="overview-pipeline-step-decision"]');
+    const authoritative = decisionEl!.querySelector('[data-testid="overview-pipeline-step-final-verdict"]');
     expect(authoritative?.textContent).toContain('Watchdog timeout');
     expect(authoritative?.getAttribute('data-verdict')).toBe('failed');
   });
@@ -1773,15 +1773,13 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     const c = fixture.componentInstance;
     const decision = c.pipelineRows().find(r => r.id === 'post-orchestrator-decision')!;
-    expect(c.decisionBadgeForRow(decision)).toBeNull();
+    expect(c.decisionBadgeForRow(decision)?.label).toBe('accept');
 
     c.expandAllPipelineGroups();
     try { fixture.detectChanges(); } catch { /* ignore */ }
     // With no badge, the generic verdict pill renders the recorded verdict.
-    const badgeEl = fixture.nativeElement.querySelector('[data-testid="overview-pipeline-step-decision"]');
-    expect(badgeEl).toBeNull();
-    const verdictEl = fixture.nativeElement.querySelector('[data-step-id="post-orchestrator-decision"] [data-testid="overview-pipeline-step-verdict"]');
-    expect(verdictEl?.textContent?.trim()).toBe('accept');
+    const verdictEl = fixture.nativeElement.querySelector('[data-step-id="post-orchestrator-decision"] [data-testid="overview-pipeline-step-final-verdict"]');
+    expect(verdictEl?.textContent).toContain('Final verdict → accept');
   });
 
   it('pipeline block: renders visual phase groups in pipeline order including the decision phase', async () => {

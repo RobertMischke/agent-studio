@@ -394,10 +394,19 @@
               </span>
             }
             @if (row.isFinalVerdict) {
-              <span class="ov-pl-step__final-badge"
-                    data-testid="overview-pipeline-step-final-verdict"
-                    [cacTooltip]="'The orchestrator&rsquo;s single final ruling, aggregated from the parallel aspect verdicts'">
-                Final verdict@if (row.historical) { · superseded }
+              @let badge = decisionBadgeForRow(row);
+              <span class="ov-pl-step__verdict ov-pl-step__final-decision"
+                    tabindex="0"
+                    [attr.data-tone]="badge?.tone"
+                    [attr.data-verdict]="badge?.verdict"
+                    [cacTooltip]="badge?.tooltip ?? 'Decision pending'"
+                    [tooltipSeverity]="badge?.severity ?? 'info'"
+                    [attr.aria-label]="badge ? 'Final verdict: ' + badge.label : 'Final verdict'"
+                    data-testid="overview-pipeline-step-final-verdict">
+                Final verdict@if (badge) { → <span class="ov-pl-step__final-decision-route"
+                                               [attr.data-verdict]="badge.verdict"
+                                               data-testid="overview-pipeline-step-decision">{{ badge.label }}@if (row.historical) { · superseded }</span>
+                } @else if (row.historical) { · superseded }
               </span>
             }
             @if (row.status === 'running') {
@@ -418,19 +427,7 @@
                 [promptMarkdown]="promptMarkdown() ?? null"
                 [tooltip]="agentRunTooltip()" />
             }
-            @if (decisionBadgeForRow(row); as badge) {
-              <!-- Compact decision badge (ASS-1706): the orchestrator's final
-                   Accept / Re-issue / Escalate ruling inline, with the full
-                   reasoning in the tooltip instead of an expanded block. -->
-              <span class="ov-pl-step__decision"
-                    tabindex="0"
-                    [attr.data-tone]="badge.tone"
-                    [attr.data-verdict]="badge.verdict"
-                    [cacTooltip]="badge.tooltip"
-                    [tooltipSeverity]="badge.severity"
-                    [attr.aria-label]="'Decision: ' + badge.label"
-                    data-testid="overview-pipeline-step-decision">{{ badge.label }}@if (row.historical) { · superseded }</span>
-            } @else if (row.verdict) {
+            @if (!row.isFinalVerdict && row.verdict) {
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"
                     [attr.data-verdict]="row.verdict"
