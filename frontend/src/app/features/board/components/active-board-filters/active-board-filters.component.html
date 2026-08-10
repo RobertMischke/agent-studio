@@ -1,0 +1,43 @@
+@if (pills(); as activePills) {
+  @if (activePills.length > 0) {
+    <section class="active-filters" aria-label="Active board filters" data-testid="board-active-filters">
+      <span class="active-filters__title">Active filters</span>
+      <ul class="active-filters__list">
+        @for (pill of activePills; track pillIdentity(pill)) {
+          <li class="active-filters__chip" data-testid="board-active-filter-chip">
+            @if (pill.swatch) {
+              <span class="active-filters__dot"
+                    [style.background]="pill.swatch"
+                    aria-hidden="true"></span>
+            }
+            <span class="active-filters__label">{{ pill.label }}</span>
+            <button type="button"
+                    class="active-filters__remove"
+                    data-testid="board-active-filter-remove"
+                    [attr.aria-label]="'Remove filter ' + pill.label"
+                    [attr.title]="'Remove filter ' + pill.label"
+                    (click)="removeFilter(pill)">
+              <span aria-hidden="true">×</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+
+    @if (resultCount() === 0) {
+      <section class="filter-empty" aria-live="polite" data-testid="board-filter-empty-hint">
+        <p class="filter-empty__message">
+          <span class="filter-empty__count">0 tasks</span>
+          for {{ activePills.length === 1 ? 'filter' : 'filters' }}
+          <span class="filter-empty__description">{{ filterDescription() }}</span>
+        </p>
+        <button type="button"
+                class="filter-empty__clear"
+                data-testid="board-filter-empty-hint-clear"
+                (click)="clearFilters()">
+          {{ activePills.length === 1 ? 'Remove filter' : 'Clear filters' }}
+        </button>
+      </section>
+    }
+  }
+}

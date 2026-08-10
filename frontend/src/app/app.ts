@@ -15,7 +15,7 @@ import {
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
-  BoardFiltersService,
+  BoardFiltersService, ActiveBoardFiltersComponent,
   CreateTaskDialogComponent,
   EpicGroupBoardComponent,
   EpicOverviewScreenComponent,
@@ -186,7 +186,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     UpdateBlockModalComponent,
     VerboseDebugOverlayComponent,
     FiltersDropdownComponent,
-    KanbanFilterSidesheetComponent,
+    KanbanFilterSidesheetComponent, ActiveBoardFiltersComponent,
     TooltipDirective,
     MenuComponent,
     EpicOverviewScreenComponent,
@@ -477,7 +477,6 @@ export class App implements OnInit, OnDestroy {
    */
   // Cycle 9 / ADR-0034: filter state + URL sync delegated to BoardFiltersService.
   readonly searchQuery = this.boardFilters.searchQuery;
-  readonly activeFilterCount = this.boardFilters.activeFilterCount;
   readonly filterBadgeCount = computed(() => this.boardFilters.activeFilterCount());
   readonly hasActiveFiltersOrSearch = this.boardFilters.hasActiveFiltersOrSearch;
   readonly filteredGrouped = this.boardFilters.filteredGrouped;
@@ -1014,7 +1013,7 @@ export class App implements OnInit, OnDestroy {
       if (project === undefined) return;
       untracked(() => {
         if (project === null) {
-          this.boardFilters.clearProjectScope();
+          if (!this.boardFilters.hasExplicitProjectFilter()) this.boardFilters.clearProjectScope();
         } else {
           this.boardFilters.setSoleProject(project);
         }

@@ -18,6 +18,7 @@ Imports go via `from './features/board'` (the barrel). See [`index.ts`](./index.
 - `JobColumnComponent` — one lane (header + virtualised list).
 - `JobCardComponent` — one card (heavy: see [job-card.ts](./components/job-card.ts) — split planned in Cycle 10e).
 - `KanbanFilterSidesheetComponent` — VS Code-style right-edge filter panel.
+- `ActiveBoardFiltersComponent` - compact active-filter chips and the named zero-result state above the board.
 - `FiltersDropdownComponent` — header type/tag dropdown.
 - `CreateJobDialogComponent` — the create-task dialog itself.
 - `BoardSearchIconComponent` — header search affordance.
@@ -31,5 +32,5 @@ Imports go via `from './features/board'` (the barrel). See [`index.ts`](./index.
 ## Notable patterns
 
 - **Optimistic-snapshot** for moves and reorders: paint immediately, persist in background, revert on error. The lifecycle is owned by `BoardMutationsService`; the shell just forwards events.
-- **Filter URL contract**: `#filters=owner:X;projects:A,B;type:Y;tags:t1,t2` (current) + `#filter=type:Y,tag:t1` (legacy, still honoured).
+- **Filter URL contract**: `#filters=owner:X;projects:A,B;type:Y;tags:t1,t2` (current) + `#filter=type:Y,tag:t1` (legacy, still honoured). Active expressions render as removable chips; a board route without `filters=` clears the in-memory facets.
 - **Lane state on disk** = filesystem state on `info.state`; virtual sub-lanes (e.g. `2-ready-intake`) collapse to the parent for backend mutations.

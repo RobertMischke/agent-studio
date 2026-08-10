@@ -141,6 +141,13 @@ describe('BoardFiltersService project selection', () => {
     expect(svc.hasActiveFiltersOrSearch()).toBe(false);
   });
 
+  it('does not expose a route-owned project scope as a query-filter pill', () => {
+    svc.setSoleProject('Agent Task Processor');
+
+    expect(svc.activeFilterPills()).toEqual([]);
+    expect(decodeURIComponent(window.location.hash)).not.toContain('projects:');
+  });
+
   it('counts only real active filters and search text', () => {
     svc.selectProject('Agent Task Processor', false);
     svc.setSearchQuery('ready');
@@ -163,7 +170,28 @@ describe('BoardFiltersService project selection', () => {
 
     const grouped = svc.filteredGrouped();
     expect(grouped.ready.map(job => job.id)).toEqual(['atp-r-2', 'lot-r-1']);
-    expect(svc.activeFilterPills().map(pill => pill.label)).toContain('Stalled accepted tasks');
+    expect(svc.activeFilterPills().map(pill => pill.label)).toContain('integration:stalled');
+  });
+
+  it('includes search and project expressions in the visible filter pills', () => {
+    svc.setSearchQuery('release gate');
+    svc.selectProject('Lotta Dashboard', false);
+
+    expect(svc.activeFilterPills().map(pill => pill.label)).toEqual([
+      'Search: release gate',
+      'projects:Lotta Dashboard',
+    ]);
+  });
+
+  it('removes search through the same pill contract and clears q from the URL', () => {
+    svc.setSearchQuery('release gate');
+    const searchPill = svc.activeFilterPills().find(pill => pill.kind === 'search');
+    expect(searchPill).toBeDefined();
+
+    svc.removeFilterPill(searchPill!);
+
+    expect(svc.searchQuery()).toBe('');
+    expect(new URL(window.location.href).searchParams.has('q')).toBe(false);
   });
 });
 
@@ -304,6 +332,20 @@ describe('BoardFiltersService URL-hash coexistence with a route overlay', () => 
     svc.hydrateFromUrl();
 
     expect(svc.stalledIntegrationOnly()).toBe(true);
+  });
+
+  it('clears hydrated filters when navigation reaches the board route without filters=', () => {
+    history.replaceState(null, '', '/#/board&filters=integration%3Astalled%3Btype%3Abug');
+    svc.hydrateFromUrl();
+    expect(svc.stalledIntegrationOnly()).toBe(true);
+    expect(svc.activeType()).toBe('bug');
+
+    history.replaceState(null, '', '/#/board');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+    expect(svc.stalledIntegrationOnly()).toBe(false);
+    expect(svc.activeType()).toBeNull();
+    expect(svc.activeFilterPills()).toEqual([]);
   });
 
   it('hydrates the filter even when the route segment is written after filters=', () => {
