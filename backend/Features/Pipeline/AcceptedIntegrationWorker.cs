@@ -80,8 +80,7 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
                 CancellationToken.None,
                 request.IntegrationStrategy).ConfigureAwait(false);
 
-            if (result.Outcome is MergeIntoIntegrationOutcome.Merged
-                or MergeIntoIntegrationOutcome.AlreadyMerged)
+            if (result.Outcome.IsSuccessfulIntegration())
             {
                 await FinalizeAcceptedTaskAsync(request, result).ConfigureAwait(false);
             }
@@ -187,7 +186,7 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
         var job = _scanner.FindJob(request.JobId, request.WatchPath);
         if (job == null) return;
 
-        if (result.Outcome == MergeIntoIntegrationOutcome.Merged
+        if (result.Outcome.IsFreshMerge()
             && !string.IsNullOrWhiteSpace(result.MergedSha))
         {
             _provenance.RecordMerge(job, result.MergedSha);

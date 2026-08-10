@@ -110,7 +110,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                     PipelineTypes.Resolve(job));
                 attemptOutcomes.Add(result.Outcome);
                 attemptRecorded = true;
-                if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
+                if (result.Outcome.IsSuccessfulIntegration())
                 {
                     FinalizeTransactionalAccept(job);
                     ClearPendingTag(job);
@@ -221,6 +221,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         => verdict?.Trim().ToLowerInvariant() switch
         {
             "merged" => nameof(MergeIntoIntegrationOutcome.Merged),
+            "merged-after-rebase" => nameof(MergeIntoIntegrationOutcome.MergedAfterRebase),
             "already-merged" or "already-integrated" => nameof(MergeIntoIntegrationOutcome.AlreadyMerged),
             "no-branch" => nameof(MergeIntoIntegrationOutcome.NoTaskBranch),
             "conflict" => nameof(MergeIntoIntegrationOutcome.Conflict),

@@ -152,14 +152,21 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   SHA-deduplicated union across generations; a later attempt does not replace
   earlier valid commits, and inherited SHAs retain their original
   `runAttemptId`, `runnerId`, delivery `branch`, and proving `resultSha`.
+- A platform-owned mechanical rebase preserves each original `commits[]` entry,
+  marks it with `supersededBySha`, and appends its replacement object with the
+  same producer attribution. Both `supersededBySha` and the cross-attempt
+  `supersededByAttempt` marker remove a historical entry from integration
+  completeness while keeping the audit chain readable. Attribution persistence
+  is part of the merge transaction: if it fails, the target branch is rolled
+  back and no push is released.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,
   and curated merge subjects do not force `integrated`; an out-of-band merge is
   detected on the next read.
 - Human acceptance is transactional. A coding card remains in
-  `5-human-review` with phase `integrating` until the delivery reaches `Merged`
-  or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
+  `5-human-review` with phase `integrating` until the delivery reaches `Merged`,
+  `MergedAfterRebase`, or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
   to ordinary Human Review with an Integration failed badge and timeline
   evidence. Before the already-integrated decision, acceptance fetches the
   configured origin integration ref and evaluates refreshed local plus remote

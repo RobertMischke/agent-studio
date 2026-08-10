@@ -33,6 +33,7 @@ public sealed class MergeIntoDevelopRunner
     private readonly PreMainTestGate? _preMainTestGate;
     private readonly PreDevelopBuildGate? _preDevelopBuildGate;
     private readonly AttemptAuthorityService? _attemptAuthority;
+    private readonly TaskMutationService? _taskMutations;
     private readonly TimeSpan _preMainTimeout;
     private readonly TimeSpan _preDevelopTimeout;
     private readonly Func<int, TimeSpan> _environmentalBackoff;
@@ -51,7 +52,8 @@ public sealed class MergeIntoDevelopRunner
         Func<int, TimeSpan>? environmentalBackoff = null,
         PreDevelopBuildGate? preDevelopBuildGate = null,
         TimeSpan? preDevelopTimeout = null,
-        AttemptAuthorityService? attemptAuthority = null)
+        AttemptAuthorityService? attemptAuthority = null,
+        TaskMutationService? taskMutations = null)
     {
         _git = git;
         _pipelineLog = pipelineLog;
@@ -61,6 +63,7 @@ public sealed class MergeIntoDevelopRunner
         _preMainTestGate = preMainTestGate;
         _preDevelopBuildGate = preDevelopBuildGate;
         _attemptAuthority = attemptAuthority;
+        _taskMutations = taskMutations;
         _preMainTimeout = preMainTimeout is { } configured && configured > TimeSpan.Zero
             ? configured
             : TimeSpan.FromHours(1);
@@ -259,6 +262,24 @@ public sealed class MergeIntoDevelopRunner
                     branch,
                     () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch, ct)).ConfigureAwait(false);
             }
+
+            if (result.Outcome == MergeIntoIntegrationOutcome.MergedAfterRebase
+                && result.RebasedCommits.Count > 0
+                && _taskMutations is not null
+                && !_taskMutations.RecordMechanicalRebaseOnFolder(
+                    jobFolderPath,
+                    result.RebasedCommits))
+            {
+                var rollback = string.IsNullOrWhiteSpace(result.PreviousIntegrationSha)
+                    ? null
+                    : _git.ResetHard(repoRoot, result.PreviousIntegrationSha);
+                var detail = rollback?.Success == true
+                    ? $"Mechanical rebase attribution could not be persisted; {branch} was rolled back and nothing was pushed."
+                    : $"Mechanical rebase attribution could not be persisted and rollback failed ({rollback?.Error ?? "missing rollback anchor"}); manual repair is required.";
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: detail);
+            }
             _logger.LogInformation(
                 "merge-into-develop project={Project} job={JobId} delivery={Delivery} integration={Integration} strategy={Strategy} outcome={Outcome}",
                 project, jobId, taskBranch, branch, strategy, result.Outcome);
@@ -269,7 +290,7 @@ public sealed class MergeIntoDevelopRunner
             // local. Offloaded to the background worker (the same "not on the
             // request path" strategy as the completed-job workspace push), so the
             // accept transition never awaits the network round-trip.
-            if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
+            if (result.Outcome.IsSuccessfulIntegration())
             {
                 // Pin the object the push may publish: the merge result this card's
                 // gate released, or, for AlreadyMerged, the exact SHA recovered
@@ -352,10 +373,10 @@ public sealed class MergeIntoDevelopRunner
                 project, jobId, integrationBranch, skipReason);
             return (result, null);
         }
-        if (result.Outcome is not (MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged))
+        if (!result.Outcome.IsSuccessfulIntegration())
             return (result, null);
 
-        var gatedSha = result.Outcome == MergeIntoIntegrationOutcome.Merged
+        var gatedSha = result.Outcome.IsFreshMerge()
             ? result.MergedSha
             : _git.GetBranchTip(repoRoot, integrationBranch);
         if (string.IsNullOrWhiteSpace(gatedSha))
@@ -372,10 +393,10 @@ public sealed class MergeIntoDevelopRunner
         // before the merge. The first parent of the new --no-ff merge commit is
         // the exact synchronized integration tip and therefore the authoritative
         // rollback anchor.
-        var preMergeTip = result.Outcome == MergeIntoIntegrationOutcome.Merged
+        var preMergeTip = result.Outcome.IsFreshMerge()
             ? _git.GetFirstParent(repoRoot, gatedSha)
             : null;
-        if (result.Outcome == MergeIntoIntegrationOutcome.Merged
+        if (result.Outcome.IsFreshMerge()
             && string.IsNullOrWhiteSpace(preMergeTip))
         {
             var missingAnchorReason =
@@ -472,7 +493,7 @@ public sealed class MergeIntoDevelopRunner
         // AlreadyMerged recovery does not know who created the existing graph,
         // so it fails closed without rewriting that branch. In both cases the
         // failed outcome prevents Passed and prevents a push.
-        var reset = result.Outcome == MergeIntoIntegrationOutcome.Merged
+        var reset = result.Outcome.IsFreshMerge()
             ? _git.ResetHard(repoRoot, preMergeTip!)
             : null;
         _logger.LogWarning(
@@ -1121,6 +1142,16 @@ public sealed class MergeIntoDevelopRunner
                     "gate-failed",
                     result.Error ?? $"The build gate blocked the merge into {integrationBranch}.",
                     preDevelopResult?.Reason);
+            case MergeIntoIntegrationOutcome.MergedAfterRebase:
+                var replacementCount = result.RebasedCommits.Count;
+                var rebaseGate = preDevelopResult is null
+                    ? string.Empty
+                    : $" Build gate {preDevelopResult.Verdict} checked the rebased merge result.";
+                return (
+                    PipelineStepStatus.Passed,
+                    "merged-after-rebase",
+                    $"Delivery replayed cleanly onto {integrationBranch} and the rebased result was merged.",
+                    $"{replacementCount} commit SHA(s) were superseded.{rebaseGate}");
             case MergeIntoIntegrationOutcome.AlreadyMerged:
                 var exactGate = preDevelopResult is null
                     ? string.Empty

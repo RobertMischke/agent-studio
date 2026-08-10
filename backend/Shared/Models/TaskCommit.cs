@@ -39,6 +39,17 @@ public record TaskCommitInfo
     /// Verified result tip whose delivery range proved this commit reachable.
     /// </summary>
     public string? ResultSha { get; init; }
+    /// <summary>
+    /// Exact replacement object produced when the platform replayed this commit
+    /// mechanically onto a newer integration base. The historical entry remains
+    /// readable but no longer participates in integration completeness checks.
+    /// </summary>
+    public string? SupersededBySha { get; init; }
+    /// <summary>
+    /// Later run attempt that replaced this attribution generation. Kept beside
+    /// <see cref="SupersededBySha"/> for the AGT-2562 cross-attempt repair path.
+    /// </summary>
+    public string? SupersededByAttempt { get; init; }
     public int FilesChanged { get; init; }
     public List<string> Files { get; init; } = [];
     public DateTime At { get; init; }

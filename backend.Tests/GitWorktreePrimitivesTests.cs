@@ -300,6 +300,33 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
+    public void MergeBranchIntoIntegration_BehindCurrentTarget_RebasesMechanicallyBeforeMerge()
+    {
+        var repo = SeedRepo("merge-behind-target");
+        var git = BuildGitService(("Fixture", repo));
+
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/behind");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        var originalTaskTip = RunGit(repo, "rev-parse task/behind").Out.Trim();
+
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "develop.txt"), "integration advanced");
+        Commit(repo, "chore: advance integration target");
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/behind", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.MergedAfterRebase, result.Outcome);
+        var replacement = Assert.Single(result.RebasedCommits);
+        Assert.Equal(originalTaskTip, replacement.OriginalSha);
+        Assert.Equal(RunGit(repo, "rev-parse develop^2").Out.Trim(), replacement.RebasedSha);
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify develop^2").Code);
+        Assert.NotEqual(originalTaskTip, RunGit(repo, "rev-parse develop^2").Out.Trim());
+        Assert.False(git.RepoHasUncommittedChanges(repo));
+    }
+
+    [Fact]
     public void MergeBranchIntoIntegration_AlreadyContained_IsIdempotentNoOp()
     {
         var repo = SeedRepo("merge-already");
@@ -335,6 +362,7 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version");
         Commit(repo, "chore: develop edits shared");
         var developTipBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+        var worktreesBefore = git.ListWorktrees(repo).Select(item => item.Path).ToArray();
 
         var result = git.MergeBranchIntoIntegration(repo, "task/12", "develop");
 
@@ -346,6 +374,7 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         Assert.Equal(developTipBefore, RunGit(repo, "rev-parse develop").Out.Trim());
         Assert.False(git.RepoHasUncommittedChanges(repo));
         Assert.NotEqual(0, RunGit(repo, "rev-parse --verify MERGE_HEAD").Code);
+        Assert.Equal(worktreesBefore, git.ListWorktrees(repo).Select(item => item.Path));
     }
 
     [Fact]

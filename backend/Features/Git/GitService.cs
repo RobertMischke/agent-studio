@@ -77,6 +77,11 @@ public enum MergeIntoIntegrationOutcome
 {
     /// <summary>A real merge commit was just created on the integration branch.</summary>
     Merged,
+    /// <summary>
+    /// The delivery was behind the current integration tip, replayed cleanly in
+    /// an isolated worktree, and then merged. No content resolution was authored.
+    /// </summary>
+    MergedAfterRebase,
     /// <summary>The task branch was already contained in the integration branch; no-op.</summary>
     AlreadyMerged,
     /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
@@ -96,6 +101,23 @@ public enum MergeIntoIntegrationOutcome
     Error,
 }
 
+public static class MergeIntoIntegrationOutcomePolicy
+{
+    public static bool IsFreshMerge(this MergeIntoIntegrationOutcome outcome)
+        => outcome is MergeIntoIntegrationOutcome.Merged
+            or MergeIntoIntegrationOutcome.MergedAfterRebase;
+
+    public static bool IsSuccessfulIntegration(this MergeIntoIntegrationOutcome outcome)
+        => outcome.IsFreshMerge()
+            || outcome == MergeIntoIntegrationOutcome.AlreadyMerged;
+}
+
+/// <summary>
+/// One commit object rewritten by a conflict-free mechanical rebase. The old
+/// SHA remains historical attribution and points to the replacement SHA.
+/// </summary>
+public sealed record RebasedCommitReplacement(string OriginalSha, string RebasedSha);
+
 /// <summary>
 /// Result of <see cref="GitService.MergeBranchIntoIntegration"/>. On
 /// <see cref="MergeIntoIntegrationOutcome.Conflict"/> the working tree is left
@@ -106,13 +128,39 @@ public record MergeIntoIntegrationResult(
     MergeIntoIntegrationOutcome Outcome,
     string? MergedSha,
     string? Error,
-    IReadOnlyList<string> ConflictedFiles)
+    IReadOnlyList<string> ConflictedFiles,
+    IReadOnlyList<RebasedCommitReplacement> RebasedCommits,
+    string? PreviousIntegrationSha)
 {
     public static MergeIntoIntegrationResult Of(MergeIntoIntegrationOutcome outcome, string? mergedSha = null, string? error = null)
-        => new(outcome, mergedSha, error, Array.Empty<string>());
+        => new(
+            outcome,
+            mergedSha,
+            error,
+            Array.Empty<string>(),
+            Array.Empty<RebasedCommitReplacement>(),
+            null);
 
     public static MergeIntoIntegrationResult Conflicted(IReadOnlyList<string> conflictedFiles, string? error)
-        => new(MergeIntoIntegrationOutcome.Conflict, null, error, conflictedFiles);
+        => new(
+            MergeIntoIntegrationOutcome.Conflict,
+            null,
+            error,
+            conflictedFiles,
+            Array.Empty<RebasedCommitReplacement>(),
+            null);
+
+    public static MergeIntoIntegrationResult MergedAfterRebase(
+        string mergedSha,
+        string previousIntegrationSha,
+        IReadOnlyList<RebasedCommitReplacement> replacements)
+        => new(
+            MergeIntoIntegrationOutcome.MergedAfterRebase,
+            mergedSha,
+            null,
+            Array.Empty<string>(),
+            replacements,
+            previousIntegrationSha);
 }
 
 /// <summary>
@@ -3857,7 +3905,8 @@ public class GitService
     /// Merges <paramref name="taskBranch"/> (e.g. <c>task/&lt;id&gt;</c>) into
     /// <paramref name="integrationBranch"/> (e.g. <c>develop</c>) with an explicit
     /// merge commit (<c>git merge --no-ff --no-edit</c>) so an accepted task lands
-    /// on the integration branch as a single, revertable delivery. This is the
+    /// on the integration branch as a single, revertable delivery. A delivery
+    /// behind the current target is first replayed in an isolated worktree. This is the
     /// engine behind the deferred, operator-triggered "Merge into Develop"
     /// post-step (<c>PipelineCatalogue.MergeIntoDevelopStepId</c>); it is NOT the
     /// automatic in-run integration (<see cref="RebaseOnto"/> +
@@ -3868,7 +3917,8 @@ public class GitService
     /// <item>No task branch -&gt; <see cref="MergeIntoIntegrationOutcome.NoTaskBranch"/> (benign skip, e.g. a sequential run with no worktree branch).</item>
     /// <item>Already contained -&gt; <see cref="MergeIntoIntegrationOutcome.AlreadyMerged"/> (idempotent no-op, so a re-trigger is safe).</item>
     /// <item>Dirty integration tree / missing integration branch / checkout failure -&gt; <see cref="MergeIntoIntegrationOutcome.Error"/> (never merge into a dirty tree).</item>
-    /// <item>Conflict -&gt; the merge is aborted so the tree is left clean and the conflicted files are returned (<see cref="MergeIntoIntegrationOutcome.Conflict"/>); the conflict is surfaced, never silently resolved or left half-applied.</item>
+    /// <item>Behind but conflict-free -&gt; <see cref="MergeIntoIntegrationOutcome.MergedAfterRebase"/> with the replacement SHA mapping.</item>
+    /// <item>Conflict -&gt; the isolated replay or merge is aborted so the trees are left clean and the conflicted files are returned (<see cref="MergeIntoIntegrationOutcome.Conflict"/>); the conflict is surfaced, never silently resolved or left half-applied.</item>
     /// <item>Otherwise -&gt; <see cref="MergeIntoIntegrationOutcome.Merged"/> with the new integration HEAD sha.</item>
     /// </list>
     /// The merge runs in the working tree at <paramref name="repoRoot"/>; the
@@ -4148,7 +4198,26 @@ public class GitService
         if (IsAncestor(repoRoot, sourceRef, integrationBranch))
             return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
 
-        var (_, mergeErr, mergeCode) = RunGitArgs(repoRoot, "merge", "--no-ff", "--no-edit", sourceRef);
+        var sourceToMerge = sourceRef;
+        MechanicalRebaseAttempt? recovery = null;
+        if (!IsAncestor(repoRoot, integrationBranch, sourceRef))
+        {
+            recovery = TryMechanicalRebase(repoRoot, sourceRef, integrationBranch);
+            if (!recovery.Success)
+            {
+                return recovery.ConflictedFiles.Count > 0
+                    ? MergeIntoIntegrationResult.Conflicted(
+                        recovery.ConflictedFiles,
+                        recovery.Error)
+                    : MergeIntoIntegrationResult.Of(
+                        MergeIntoIntegrationOutcome.Error,
+                        error: recovery.Error);
+            }
+            sourceToMerge = recovery.RebasedTip!;
+        }
+
+        var previousIntegrationSha = ReadHeadShaAt(repoRoot);
+        var (_, mergeErr, mergeCode) = RunGitArgs(repoRoot, "merge", "--no-ff", "--no-edit", sourceToMerge);
         if (mergeCode != 0)
         {
             var conflicted = ListUnmergedFiles(repoRoot);
@@ -4156,13 +4225,236 @@ public class GitService
             RunGitArgs(repoRoot, "merge", "--abort");
             _logger.LogWarning(
                 "Merge-into-develop: merging {Task} into {Integration} at {Path} conflicted ({Count} files), aborted: {Error}",
-                sourceRef, integrationBranch, repoRoot, conflicted.Count, mergeErr.Trim());
+                sourceToMerge, integrationBranch, repoRoot, conflicted.Count, mergeErr.Trim());
             return MergeIntoIntegrationResult.Conflicted(conflicted, mergeErr.Trim());
         }
 
         var mergedSha = ReadHeadShaAt(repoRoot);
-        _logger.LogInformation("Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha})", sourceRef, integrationBranch, repoRoot, mergedSha);
-        return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha);
+        _logger.LogInformation(
+            "Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha}) afterMechanicalRebase={AfterMechanicalRebase}",
+            sourceRef,
+            integrationBranch,
+            repoRoot,
+            mergedSha,
+            recovery is not null);
+        return recovery is null
+            ? MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha)
+            : MergeIntoIntegrationResult.MergedAfterRebase(
+                mergedSha!,
+                previousIntegrationSha!,
+                recovery.Replacements);
+    }
+
+    /// <summary>
+    /// Replays a behind-base delivery in a disposable detached worktree. Rerere
+    /// is explicitly disabled: only a rebase command that applies every commit
+    /// without an unresolved textual conflict is eligible. The delivery ref and
+    /// integration branch are never moved by this probe.
+    /// </summary>
+    private MechanicalRebaseAttempt TryMechanicalRebase(
+        string repoRoot,
+        string sourceRef,
+        string integrationBranch)
+    {
+        var (mergeBaseRaw, mergeBaseError, mergeBaseCode) = RunGitArgs(
+            repoRoot,
+            "merge-base",
+            sourceRef,
+            integrationBranch);
+        if (mergeBaseCode != 0 || string.IsNullOrWhiteSpace(mergeBaseRaw))
+        {
+            return MechanicalRebaseAttempt.Failed(
+                $"Mechanical rebase could not determine a merge base: {mergeBaseError.Trim()}");
+        }
+
+        var originalCommits = ReadFirstParentRange(
+            repoRoot,
+            mergeBaseRaw.Trim(),
+            sourceRef,
+            out var originalRangeError);
+        if (originalCommits is null || originalCommits.Count == 0)
+        {
+            return MechanicalRebaseAttempt.Failed(
+                originalRangeError ?? "Mechanical rebase found no delivery commits to replay.");
+        }
+
+        var container = Path.Combine(
+            Path.GetTempPath(),
+            "agent-studio-integration-rebase-" + Guid.NewGuid().ToString("N"));
+        var worktreePath = Path.Combine(container, "worktree");
+        Directory.CreateDirectory(container);
+
+        MechanicalRebaseAttempt attempt;
+        var added = false;
+        try
+        {
+            var add = WorktreeAddDetached(repoRoot, worktreePath, sourceRef);
+            if (!add.Success)
+            {
+                attempt = MechanicalRebaseAttempt.Failed(
+                    $"Mechanical rebase worktree could not be created: {add.Error}");
+            }
+            else
+            {
+                added = true;
+                var (_, rebaseError, rebaseCode) = RunGitArgs(
+                    worktreePath,
+                    "-c",
+                    "rerere.enabled=false",
+                    "rebase",
+                    "--rebase-merges",
+                    integrationBranch);
+                if (rebaseCode != 0)
+                {
+                    var conflictedFiles = ListUnmergedFiles(worktreePath);
+                    attempt = conflictedFiles.Count > 0
+                        ? MechanicalRebaseAttempt.Conflict(
+                            conflictedFiles,
+                            $"Mechanical rebase conflicted and was aborted: {rebaseError.Trim()}")
+                        : MechanicalRebaseAttempt.Failed(
+                            $"Mechanical rebase failed before integration: {rebaseError.Trim()}");
+                }
+                else
+                {
+                    var rebasedTip = ReadHeadShaAt(worktreePath);
+                    var rebasedCommits = ReadFirstParentRange(
+                        worktreePath,
+                        integrationBranch,
+                        "HEAD",
+                        out var rebasedRangeError);
+                    if (string.IsNullOrWhiteSpace(rebasedTip)
+                        || rebasedCommits is null
+                        || originalCommits.Count != rebasedCommits.Count)
+                    {
+                        attempt = MechanicalRebaseAttempt.Failed(
+                            rebasedRangeError
+                            ?? "Mechanical rebase changed the delivery commit cardinality; refusing ambiguous SHA attribution.");
+                    }
+                    else
+                    {
+                        var replacements = originalCommits
+                            .Zip(
+                                rebasedCommits,
+                                (original, rebased) => new RebasedCommitReplacement(original, rebased))
+                            .Where(replacement => !string.Equals(
+                                replacement.OriginalSha,
+                                replacement.RebasedSha,
+                                StringComparison.OrdinalIgnoreCase))
+                            .ToArray();
+                        attempt = replacements.Length == 0
+                            ? MechanicalRebaseAttempt.Failed(
+                                "Mechanical rebase produced no replacement commit objects.")
+                            : MechanicalRebaseAttempt.Applied(rebasedTip, replacements);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            attempt = MechanicalRebaseAttempt.Failed(
+                $"Mechanical rebase failed before integration: {ex.Message}");
+        }
+
+        var cleanupError = CleanupMechanicalRebaseWorktree(
+            repoRoot,
+            container,
+            worktreePath,
+            added);
+        if (cleanupError is not null)
+            return MechanicalRebaseAttempt.Failed(cleanupError);
+
+        return attempt;
+    }
+
+    private IReadOnlyList<string>? ReadFirstParentRange(
+        string repoRoot,
+        string fromExclusive,
+        string throughInclusive,
+        out string? error)
+    {
+        var (output, rangeError, code) = RunGitArgs(
+            repoRoot,
+            "rev-list",
+            "--reverse",
+            "--first-parent",
+            $"{fromExclusive}..{throughInclusive}");
+        if (code != 0)
+        {
+            error = $"Mechanical rebase could not enumerate delivery commits: {rangeError.Trim()}";
+            return null;
+        }
+
+        error = null;
+        return output.Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private string? CleanupMechanicalRebaseWorktree(
+        string repoRoot,
+        string container,
+        string worktreePath,
+        bool added)
+    {
+        if (added && IsRebaseInProgress(worktreePath))
+            RunGitArgs(worktreePath, "rebase", "--abort");
+
+        if (added)
+        {
+            var removed = WorktreeRemove(repoRoot, worktreePath);
+            if (!removed.Success)
+            {
+                try
+                {
+                    if (Directory.Exists(worktreePath))
+                        Directory.Delete(worktreePath, recursive: true);
+                    WorktreePrune(repoRoot);
+                }
+                catch (Exception ex)
+                {
+                    SilentCatch.Note(ex, "GitService: mechanical rebase worktree fallback cleanup");
+                }
+            }
+        }
+
+        try
+        {
+            if (Directory.Exists(container))
+                Directory.Delete(container, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "GitService: mechanical rebase temp directory cleanup");
+        }
+
+        var normalizedWorktree = Path.GetFullPath(worktreePath);
+        var remainsRegistered = ListWorktrees(repoRoot).Any(entry => string.Equals(
+            Path.GetFullPath(entry.Path),
+            normalizedWorktree,
+            StringComparison.OrdinalIgnoreCase));
+        return remainsRegistered || Directory.Exists(worktreePath)
+            ? "Mechanical rebase cleanup could not remove its isolated worktree; integration was not attempted."
+            : null;
+    }
+
+    private sealed record MechanicalRebaseAttempt(
+        bool Success,
+        string? RebasedTip,
+        IReadOnlyList<RebasedCommitReplacement> Replacements,
+        IReadOnlyList<string> ConflictedFiles,
+        string? Error)
+    {
+        public static MechanicalRebaseAttempt Applied(
+            string rebasedTip,
+            IReadOnlyList<RebasedCommitReplacement> replacements)
+            => new(true, rebasedTip, replacements, [], null);
+
+        public static MechanicalRebaseAttempt Conflict(
+            IReadOnlyList<string> conflictedFiles,
+            string error)
+            => new(false, null, [], conflictedFiles, error);
+
+        public static MechanicalRebaseAttempt Failed(string error)
+            => new(false, null, [], [], error);
     }
 
     /// <summary>

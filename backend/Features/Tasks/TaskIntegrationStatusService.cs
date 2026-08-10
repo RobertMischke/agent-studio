@@ -511,12 +511,16 @@ public sealed class TaskIntegrationStatusService
         {
             foreach (var c in job.Commits)
                 if (!string.IsNullOrWhiteSpace(c.Sha)
+                    && string.IsNullOrWhiteSpace(c.SupersededBySha)
+                    && string.IsNullOrWhiteSpace(c.SupersededByAttempt)
                     && (!IsZeroFileLifecycleMarker(c)
                         || integrationAncestors is not null
                         && AncestorSetContains(integrationAncestors, c.Sha)))
                     result.Add(c.Sha);
         }
         else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha)
+                 && string.IsNullOrWhiteSpace(job.Commit!.SupersededBySha)
+                 && string.IsNullOrWhiteSpace(job.Commit.SupersededByAttempt)
                  && (!IsZeroFileLifecycleMarker(job.Commit!)
                      || integrationAncestors is not null
                      && AncestorSetContains(integrationAncestors, job.Commit!.Sha)))

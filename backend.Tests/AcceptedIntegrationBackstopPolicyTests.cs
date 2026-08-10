@@ -12,6 +12,7 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
         var summary = AcceptedIntegrationBackstopPolicy.Summarize(
         [
             MergeIntoIntegrationOutcome.Merged,
+            MergeIntoIntegrationOutcome.MergedAfterRebase,
             MergeIntoIntegrationOutcome.AlreadyMerged,
             MergeIntoIntegrationOutcome.Error,
             MergeIntoIntegrationOutcome.Conflict,
@@ -21,18 +22,18 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
 
         AcceptedIntegrationBackstopTelemetry.LogSweep(logger, summary);
 
-        Assert.Equal(5, summary.Attempted);
-        Assert.Equal(1, summary.Merged);
+        Assert.Equal(6, summary.Attempted);
+        Assert.Equal(2, summary.Merged);
         Assert.Equal(1, summary.AlreadyMerged);
         Assert.Equal(3, summary.Failed);
-        Assert.Equal(1, summary.Integrated);
+        Assert.Equal(2, summary.Integrated);
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Information, entry.Level);
-        Assert.Contains("attempted=5", entry.Message, StringComparison.Ordinal);
-        Assert.Contains("merged=1", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("attempted=6", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("merged=2", entry.Message, StringComparison.Ordinal);
         Assert.Contains("alreadyMerged=1", entry.Message, StringComparison.Ordinal);
         Assert.Contains("failed=3", entry.Message, StringComparison.Ordinal);
-        Assert.Contains("integrated=1", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("integrated=2", entry.Message, StringComparison.Ordinal);
     }
 
     [Fact]

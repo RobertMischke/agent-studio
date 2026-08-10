@@ -387,6 +387,64 @@ public class TaskMutationService
         return WriteCommitState(folderPath, union, allowEmptyReplacement: true);
     }
 
+    /// <summary>
+    /// Extends the attributed commit chain after a conflict-free platform rebase.
+    /// Each historical SHA remains visible and points at its exact replacement;
+    /// the replacement inherits producer attribution because no new agent attempt
+    /// authored it. Idempotent for a replay of the same replacement mapping.
+    /// </summary>
+    public bool RecordMechanicalRebaseOnFolder(
+        string folderPath,
+        IReadOnlyList<RebasedCommitReplacement> replacements)
+    {
+        if (!Directory.Exists(folderPath) || replacements.Count == 0) return false;
+        var persisted = ReadPersistedCommitChain(folderPath);
+        if (persisted is null || persisted.Count == 0) return false;
+
+        var replacementByOriginal = replacements
+            .Where(item => !string.IsNullOrWhiteSpace(item.OriginalSha)
+                && !string.IsNullOrWhiteSpace(item.RebasedSha))
+            .GroupBy(item => item.OriginalSha, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+        if (replacementByOriginal.Count == 0) return false;
+
+        var chain = new List<TaskCommitInfo>(persisted.Count + replacementByOriginal.Count);
+        var derived = new List<TaskCommitInfo>();
+        foreach (var commit in persisted)
+        {
+            if (!replacementByOriginal.TryGetValue(commit.Sha, out var replacement))
+            {
+                chain.Add(commit);
+                continue;
+            }
+
+            chain.Add(commit with { SupersededBySha = replacement.RebasedSha });
+            if (persisted.Any(existing => string.Equals(
+                    existing.Sha,
+                    replacement.RebasedSha,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+            derived.Add(commit with
+            {
+                Sha = replacement.RebasedSha,
+                ShortSha = replacement.RebasedSha[..Math.Min(9, replacement.RebasedSha.Length)],
+                SupersededBySha = null,
+                SupersededByAttempt = null,
+            });
+        }
+
+        if (derived.Count == 0
+            && !persisted.Any(commit => replacementByOriginal.ContainsKey(commit.Sha)))
+        {
+            return false;
+        }
+
+        chain.AddRange(derived);
+        return WriteCommitState(folderPath, chain);
+    }
+
     public bool SetRunIntegrationBranchOnFolder(string folderPath, string integrationBranch)
     {
         if (!Directory.Exists(folderPath)) return false;

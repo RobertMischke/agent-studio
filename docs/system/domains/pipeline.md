@@ -95,12 +95,16 @@ pipeline view.
   passed or explicitly not applicable. A frozen plan that requires build/test
   cannot omit that verdict. The report endpoint awaits the result before moving
   Auto Review to Human Review. The common runner performs serialized merge,
-  containment checks, the pre-develop build gate, rollback, conflict evidence,
-  and push hand-off. Human acceptance remains a retry path for a failed
+  containment checks, mechanical behind-base recovery, the pre-develop build
+  gate, rollback, conflict evidence, and push hand-off. Behind-base recovery
+  runs `rebase --rebase-merges` in a disposable detached worktree with `rerere`
+  disabled. It proceeds only after a conflict-free replay, an unambiguous SHA
+  replacement mapping, and verified cleanup. The target branch and delivery ref
+  do not move during the replay. Human acceptance remains a retry path for a failed
   immediate or legacy delivery: `TaskTransitionService` keeps the card in Human
   Review with phase `integrating`, stamps the internal `integrationpending`
   recovery marker, and enqueues `AcceptedIntegrationQueue` for
-  `AcceptedIntegrationWorker`. Only `Merged` or `AlreadyMerged` completes that
+  `AcceptedIntegrationWorker`. `Merged`, `MergedAfterRebase`, or `AlreadyMerged` completes that
   acceptance transaction; failures clear the phase, retain the card in Human
   Review, and append a hard integration-failed journal event.
   Acceptance and backstop execution resolve the target through
@@ -203,8 +207,8 @@ pipeline view.
   Passed step cannot overrule missing Git presence. The backstop finalizes
   Completed only after successful integration and returns decided failures to
   Human Review. Its 15-minute sweep reports `attempted`, `merged`,
-  `alreadyMerged`, and `failed` separately; only a `Merged` result contributes
-  to the `integrated` count. The same sweep evaluates the 30-minute accepted
+  `alreadyMerged`, and `failed` separately; `MergedAfterRebase` contributes to
+  the existing `merged` and `integrated` counters. The same sweep evaluates the 30-minute accepted
   delivery invariant. Accepted cards without Git-proven integration publish a
   project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
@@ -734,8 +738,9 @@ operator changes cause the step to fail before its writer runs.
   triggers the common runner before Human Review. A failed immediate attempt
   remains visible on the card. Human acceptance resets the row for a fresh retry,
   and `AcceptedIntegrationWorker` runs it while the card remains in Human Review
-  with phase `integrating`. Only `Merged` or `AlreadyMerged` commits the move to Completed. A
-  conflict is a visible `Failed` outcome with conflicted files in the verdict
+  with phase `integrating`. `Merged`, `MergedAfterRebase`, or `AlreadyMerged` commits the move to Completed. A
+  clean mechanical replay records the distinct `merged-after-rebase` verdict and
+  continues through the ordinary gate. A remaining conflict is a visible `Failed` outcome with conflicted files in the verdict
   summary; the phase clears, the card remains in Review, and the working tree is
   left clean. Once merge/gate/rollback starts, host cancellation
   does not interrupt that consistency boundary. `/healthz/drain` reports

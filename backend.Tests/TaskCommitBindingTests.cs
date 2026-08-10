@@ -183,6 +183,34 @@ public class TaskCommitBindingTests : IDisposable
     }
 
     [Fact]
+    public void RecordMechanicalRebase_PreservesOldShaAndAppendsAttributedReplacement()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("rebased", "3-progress", legacyCommit: null);
+        var original = MakeCommit(
+            "aaaaaaa",
+            "feat: delivered work",
+            filesChanged: 2,
+            atIso: "2026-05-09T10:00:00Z");
+        var replacementSha = Pad("bbbbbbb");
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, original));
+
+        Assert.True(mutations.RecordMechanicalRebaseOnFolder(
+            jobDir,
+            [new RebasedCommitReplacement(original.Sha, replacementSha)]));
+
+        var info = scanner.FindJob("rebased", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(2, info!.Commits.Count);
+        Assert.Equal(replacementSha, info.Commits[0].SupersededBySha);
+        Assert.Equal(replacementSha, info.Commits[1].Sha);
+        Assert.Equal(original.Message, info.Commits[1].Message);
+        Assert.Equal(original.FilesChanged, info.Commits[1].FilesChanged);
+        Assert.Null(info.Commits[1].SupersededBySha);
+        Assert.Equal(replacementSha, info.Commit!.Sha);
+    }
+
+    [Fact]
     public void AppendCommit_WithExistingSha_ReplacesInPlace_DoesNotDuplicate()
     {
         var (scanner, mutations) = Build();

@@ -334,6 +334,23 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void AttributedCommits_SupersededSha_IsReplacedWithoutPartialNoise()
+    {
+        const string original = "4444444444444444444444444444444444444444";
+        const string replacement = "5555555555555555555555555555555555555555";
+        var job = new TaskInfo
+        {
+            Commits =
+            [
+                Commit(original) with { SupersededBySha = replacement },
+                Commit(replacement),
+            ],
+        };
+
+        Assert.Equal([replacement], TaskIntegrationStatusService.AttributedCommits(job));
+    }
+
+    [Fact]
     public void BuildLookup_AncestorProofDominatesStaleZeroFileMarkerMetadata()
     {
         var repo = SeedDevelopMainRepo();
