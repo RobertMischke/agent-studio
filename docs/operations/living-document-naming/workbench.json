@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "living-document-naming",
+  "title": "Naming the Living Decision-to-Documentation Artifact",
+  "summary": "Decision dossier comparing 22 public English names for the artifact that moves from exploration through decisions and live implementation tracking into permanent documentation. It recommends retaining Dossier, using 'living dossier' as explanatory copy, and treating Living Dossier as the runner-up. The analysis separates behavior from taxonomy, scores lifecycle fit and collision risk most heavily, and records the consequences for AGT-2539, AGT-2580, AGT-2537, AOW-13, and WEB-18.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-10T13:26:58Z",
+  "sourceTaskKeys": [
+    "AGT-2584"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2539",
+    "AGT-2580",
+    "AGT-2537"
+  ],
+  "implementationTasks": []
+}
