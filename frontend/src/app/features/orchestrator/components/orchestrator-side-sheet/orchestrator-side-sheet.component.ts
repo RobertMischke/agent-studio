@@ -669,6 +669,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.turns.set(resp.turns ?? []);
         this.executionContext.set(resp.executionContext ?? null);
         this.errorMsg.set(null);
+        if (!this.contextSessions().some((session) => session.contextKey === key)) {
+          this.refreshContextSessions();
+        }
         if (!silent) this.loading.set(false);
       },
       error: (err) => {
@@ -697,6 +700,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
       return;
     }
+    const capturedAt = new Date();
     const navigationSnapshot = {
       kind: this.contextKind(),
       jobId: this.effectiveJobId(),
@@ -792,6 +796,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
           activeJobTitle: navigationSnapshot.jobTitle,
           activeJobState: navigationSnapshot.jobState,
           pageContext: navigationSnapshot.page,
+          now: () => capturedAt,
         })
       : null;
 
@@ -802,7 +807,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
       navigationContext: contextPayload,
-      contextEnvelope: lazy.buildOrchestratorContextEnvelope(contextKey, contextPayload),
+      contextEnvelope: lazy.buildOrchestratorContextEnvelope(
+        contextKey,
+        contextPayload,
+        [],
+        () => capturedAt,
+      ),
       model: this.composerModel.effectiveSelection().model || null,
       thinkingLevel: this.composerModel.effectiveSelection().thinkingLevel,
       selectionSource: this.composerModel.selectionSource(),

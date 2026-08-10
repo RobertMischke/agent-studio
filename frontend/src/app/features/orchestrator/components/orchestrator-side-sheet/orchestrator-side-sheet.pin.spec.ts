@@ -112,6 +112,21 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
         currentTaskTitle: 'Explain status.md relevance',
         currentTaskState: '3-progress',
       });
+      expect(send.request.body.contextEnvelope).toMatchObject({
+        scope: {
+          kind: 'task',
+          contextKey: 'task:Quality Studio/QS-54',
+          projectId: 'Quality Studio',
+          taskKey: 'QS-54',
+        },
+        activeSurface: {
+          kind: 'task',
+          reference: 'QS-54',
+          taskKey: 'QS-54',
+        },
+      });
+      expect(send.request.body.contextEnvelope.capturedAt)
+        .toBe(send.request.body.navigationContext.viewportTimestamp);
       send.flush({ project: 'Quality Studio', reply: { id: 'reply', role: 'orchestrator', text: 'ok' } });
 
       const read = http.expectOne(route);
@@ -119,6 +134,46 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
       read.flush({ project: 'Quality Studio', turns: [] });
     }
 
+    for (const sessions of http.match('/api/orchestrator/sessions')) {
+      expect(sessions.request.method).toBe('GET');
+      sessions.flush({ sessions: [] });
+    }
+    http.verify();
+  });
+
+  it('refreshes the central context list when opening a task context for the first time', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+    const contextKey = 'task:Quality Studio/QS-54';
+
+    c.activeProject.set('stale-project');
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Quality Studio',
+      surface: 'Task',
+      detail: 'QS-54',
+      taskKey: 'QS-54',
+      taskId: 'qs-54-folder',
+      taskTitle: 'Explain status.md relevance',
+      taskState: '3-progress',
+    });
+
+    c.refresh();
+    http.expectOne('/api/runner/task:Quality%20Studio/QS-54/orchestrator-chat')
+      .flush({ project: 'Quality Studio', turns: [] });
+    http.expectOne('/api/orchestrator/sessions').flush({
+      sessions: [{
+        contextKey,
+        kind: 'task',
+        projectId: 'Quality Studio',
+        taskKey: 'QS-54',
+        title: 'QS-54',
+        summary: 'Explain status.md relevance',
+        updatedAt: '2026-08-10T12:00:00Z',
+      }],
+    });
+
+    expect(c.contextSessions().map(session => session.contextKey)).toContain(contextKey);
     http.verify();
   });
 
@@ -215,7 +270,26 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
       project: 'demo-project',
       turns: [{ id: 't1', ts: '2026-07-09T00:00:00Z', role: 'user', text: 'task thread' }],
     });
+    const sessions = http.expectOne('/api/orchestrator/sessions');
+    expect(sessions.request.method).toBe('GET');
+    sessions.flush({ sessions: [{
+      contextKey: 'task:demo-project/AGT-1916',
+      kind: 'task',
+      projectId: 'demo-project',
+      taskKey: 'AGT-1916',
+      updatedAt: '2026-08-10T10:15:00Z',
+      model: null,
+      cumulativeInputTokens: 0,
+      cumulativeOutputTokens: 0,
+      cumulativeCacheReadTokens: 0,
+      cumulativeCacheCreationTokens: 0,
+      runtimeStatus: 'idle',
+      queuePosition: 0,
+      summary: 'Fix the header',
+    }] });
     expect(c.turns().map((t) => t.text)).toEqual(['task thread']);
+    expect(c.contextSessions().map((session) => session.contextKey))
+      .toContain('task:demo-project/AGT-1916');
     http.verify();
   });
 
@@ -231,6 +305,9 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     const req = http.expectOne('/api/runner/project:demo-project/orchestrator-chat');
     expect(req.request.method).toBe('GET');
     req.flush({ project: 'demo-project', turns: [] });
+    const sessions = http.expectOne('/api/orchestrator/sessions');
+    expect(sessions.request.method).toBe('GET');
+    sessions.flush({ sessions: [] });
     http.verify();
   });
 });

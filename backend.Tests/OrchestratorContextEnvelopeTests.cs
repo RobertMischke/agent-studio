@@ -19,6 +19,9 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         File.WriteAllText(
             Path.Combine(_watchPath, "docs", "proof.md"),
             "CENTRAL_CONTEXT_PROOF_BODY");
+        File.WriteAllText(
+            Path.Combine(_watchPath, "docs", "second-proof.md"),
+            "SECOND_EXPLICIT_PROOF_BODY");
     }
 
     [Fact]
@@ -242,6 +245,65 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
     }
 
     [Fact]
+    public async Task SendAsync_GivesEveryExplicitSourceAnExcerptOrAsksForNarrowerInput()
+    {
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+        var references = new OrchestratorContextReference[]
+        {
+            new("repository-file", "docs/proof.md", "project-a"),
+            new("repository-file", "docs/second-proof.md", "project-a"),
+        };
+        var persistence = new MemoryPersistence([]);
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, persistence);
+        var sharedExcerptEnvelope = Envelope(
+            context.Value, "project-a", null, DateTime.UtcNow, references) with
+        {
+            Budget = new OrchestratorContextBudget(1, 1, 2, 4),
+        };
+
+        var reply = await service.SendAsync(
+            "project-a",
+            _watchPath,
+            new SendOrchestratorChatRequest(
+                "Question", null, Model: "gpt-5.4-mini", ContextEnvelope: sharedExcerptEnvelope),
+            clientId: null,
+            context,
+            CancellationToken.None);
+
+        var explicitSources = Assert.IsType<OrchestratorContextReceipt>(reply.ContextReceipt)
+            .Sources!
+            .Where(source => source.Kind == "repository-file")
+            .ToArray();
+        Assert.Equal(2, explicitSources.Length);
+        Assert.All(explicitSources, source =>
+        {
+            Assert.Equal("excerpted", source.Status);
+            Assert.Equal(4, source.IncludedCharacters);
+        });
+        Assert.Contains("CENT", runner.Prompt);
+        Assert.Contains("SECO", runner.Prompt);
+
+        var tooSmallPersistence = new MemoryPersistence([]);
+        var tooSmallService = BuildService(new CapturingRunner(), tooSmallPersistence);
+        var tooSmallEnvelope = sharedExcerptEnvelope with
+        {
+            Budget = new OrchestratorContextBudget(1, 1, 1, 1),
+        };
+        var error = await Assert.ThrowsAsync<OrchestratorContextEnvelopeException>(() =>
+            tooSmallService.SendAsync(
+                "project-a",
+                _watchPath,
+                new SendOrchestratorChatRequest(
+                    "Question", null, Model: "gpt-5.4-mini", ContextEnvelope: tooSmallEnvelope),
+                clientId: null,
+                context,
+                CancellationToken.None));
+        Assert.Equal("context-explicit-budget-insufficient", error.Code);
+        Assert.Empty(tooSmallPersistence.Turns);
+    }
+
+    [Fact]
     public async Task LegacyMigration_ReadsProjectJsonl_ImportsItCentrally_AndRetainsTheSourceFile()
     {
         var legacy = new OrchestratorChat(NullLogger<OrchestratorChat>.Instance);
@@ -280,7 +342,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             NullLogger<OrchestratorChatLegacyMigrationHostedService>.Instance);
 
         await migration.StartAsync(CancellationToken.None);
-        var importBody = await handler.ImportBody.WaitAsync(TimeSpan.FromSeconds(5));
+        var importBody = await handler.ImportBody.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await migration.StopAsync(CancellationToken.None);
 
         using var document = JsonDocument.Parse(importBody);

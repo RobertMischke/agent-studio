@@ -1072,9 +1072,21 @@ public class OrchestratorChatService
     {
         var totalRemaining = budget.TotalHardCapTokens * budget.CharactersPerEstimatedToken;
         var explicitAllocated = new List<AllocatedContextBlock>();
+        var unresolvedExplicitContent = explicitBlocks.Count(block => block.Status == "included");
         foreach (var block in explicitBlocks)
         {
-            var allocated = AllocateBlock(block, totalRemaining, budget.CharactersPerEstimatedToken);
+            var perSourceRemaining = block.Status == "included" && unresolvedExplicitContent > 0
+                ? totalRemaining / unresolvedExplicitContent
+                : totalRemaining;
+            var allocated = AllocateBlock(block, perSourceRemaining, budget.CharactersPerEstimatedToken);
+            if (block.Status == "included")
+            {
+                unresolvedExplicitContent--;
+                if (allocated.IncludedContent.Length == 0)
+                    throw new OrchestratorContextEnvelopeException(
+                        "context-explicit-budget-insufficient",
+                        "Explicit context sources do not fit the submitted budget. Remove or narrow a source, then try again.");
+            }
             explicitAllocated.Add(allocated);
             totalRemaining -= allocated.IncludedContent.Length;
         }
