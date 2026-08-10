@@ -1,4 +1,4 @@
-@if (hasContent()) {
+@if (runCount() > 0 || totalDurationSeconds() > 0) {
   <section
     class="overview-runs studio-measure studio-measure--tabular"
     aria-labelledby="overview-runs-title"
@@ -13,10 +13,20 @@
       }
     </header>
 
-    @if (totalDurationSeconds() > 0) {
-      <span class="overview-runs__duration" data-testid="overview-runs-duration">{{
-        totalDurationLabel()
-      }}</span>
+    @if (totalDurationSeconds() > 0 || sharedEngine()) {
+      <span class="overview-runs__summary">
+        @if (sharedEngine(); as engine) {
+          <span>
+            <span class="overview-runs__label">Agent</span> ·
+            <span data-testid="overview-runs-agent">{{ engine }}</span>
+          </span>
+        }
+        @if (totalDurationSeconds() > 0) {
+          <span class="overview-runs__duration" data-testid="overview-runs-duration">{{
+            totalDurationLabel()
+          }}</span>
+        }
+      </span>
     }
 
     @if (rows().length > 0) {
@@ -28,12 +38,13 @@
             data-testid="overview-run-row"
           >
             <span class="overview-runs__identity">
-              <span class="overview-runs__run-id">Run #{{ row.record.index }}</span>
+              <span class="overview-runs__run-id" data-testid="overview-run-id">
+                Run #{{ row.record.index }}
+              </span>
               @if (row.startedAt; as startedAt) {
                 <time
                   class="overview-runs__started"
                   [attr.datetime]="row.record.startedAt"
-                  [attr.title]="row.startedAtTitle"
                   data-testid="overview-run-started"
                   >{{ startedAt }}</time
                 >
@@ -49,8 +60,7 @@
               <span class="overview-runs__label">Result</span>
               <span
                 class="overview-runs__result"
-                [attr.data-tone]="row.resultTone"
-                [attr.title]="row.record.reason || null"
+                [attr.data-status]="row.record.status"
                 data-testid="overview-run-result"
               >
                 <span class="overview-runs__result-dot" aria-hidden="true"></span>
@@ -63,12 +73,10 @@
               <span data-testid="overview-run-duration">{{ row.duration }}</span>
             </span>
 
-            @if (row.engine; as engine) {
+            @if (row.engine && row.engine !== sharedEngine()) {
               <span class="overview-runs__fact overview-runs__engine">
-                <span class="overview-runs__label">Agent</span>
-                <span class="overview-runs__engine-value" data-testid="overview-run-engine">{{
-                  engine
-                }}</span>
+                <span class="overview-runs__label">Agent override</span>
+                <span data-testid="overview-run-engine">{{ row.engine }}</span>
               </span>
             }
 

@@ -40,7 +40,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.overview-runs__duration {
+.overview-runs__summary {
   align-self: flex-end;
   color: var(--studio-fg-muted);
   font-size: 11px;
@@ -59,12 +59,10 @@
 .overview-runs__row {
   display: grid;
   grid-template-columns:
-    minmax(76px, 0.7fr)
-    minmax(92px, 0.95fr)
-    minmax(84px, 0.85fr)
-    minmax(72px, 0.6fr)
-    minmax(96px, 0.95fr)
-    minmax(94px, 0.8fr);
+    minmax(108px, 0.85fr)
+    minmax(96px, 1fr)
+    minmax(96px, 1fr)
+    minmax(118px, 0.9fr);
   gap: var(--studio-spacing-2);
   align-items: center;
   min-width: 0;
@@ -114,7 +112,7 @@
   gap: var(--studio-spacing-1);
   width: fit-content;
   min-width: 0;
-  color: var(--studio-fg);
+  color: var(--severity-warn);
   font-weight: 600;
 }
 
@@ -126,23 +124,19 @@
   background: currentcolor;
 }
 
-.overview-runs__result[data-tone='success'] {
+.overview-runs__result[data-status='completed'] {
   color: var(--severity-pass);
 }
 
-.overview-runs__result[data-tone='danger'] {
+.overview-runs__result[data-status='failed'] {
   color: var(--severity-high);
 }
 
-.overview-runs__result[data-tone='warning'] {
-  color: var(--severity-warn);
-}
-
-.overview-runs__result[data-tone='active'] {
+.overview-runs__result[data-status='running'] {
   color: var(--severity-info);
 }
 
-.overview-runs__result[data-tone='neutral'] {
+.overview-runs__result[data-status='unknown'] {
   color: var(--studio-fg-muted);
 }
 
@@ -155,11 +149,14 @@
   color: var(--studio-fg-dim);
 }
 
-.overview-runs__engine-value {
-  overflow: hidden;
+.overview-runs__engine {
   color: var(--studio-fg-dim);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.overview-runs__engine,
+.overview-runs__tokens {
+  grid-column: span 2;
 }
 
 /* Full-width tail: the failure / recovery cause reads as prose, not as a
@@ -182,7 +179,7 @@
 
 @container (max-width: 620px) {
   .overview-runs__row {
-    grid-template-columns: minmax(72px, 0.7fr) repeat(3, minmax(76px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .overview-runs__engine,
@@ -192,12 +189,8 @@
 }
 
 @container (max-width: 420px) {
-  .overview-runs__row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .overview-runs__engine,
   .overview-runs__tokens {
-    grid-column: span 1;
+    grid-column: 1 / -1;
   }
 }

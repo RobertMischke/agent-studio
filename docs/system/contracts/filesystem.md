@@ -148,6 +148,9 @@ Each job folder uses this structure:
   results/          # Output evidence such as screenshots
                     # Optional: results/review-evidence.jsonl (audit / review findings)
   logs/             # CLI output, including the capped logs/cli-output.log
+    session-events.jsonl
+                    # One row per confirmed local start or remote claim; new terminal rows add result, finishedAt, status, exitCode, and durationSeconds
+    timeline.jsonl  # Unified derived lifecycle ledger
     cli-output.log.1
                     # Optional previous 10 MiB tail; ignored by workspace Git
 ```

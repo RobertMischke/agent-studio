@@ -77,6 +77,20 @@ public record SessionEvent
     public string? ThinkingLevel { get; init; }
     /// <summary>Runtime-backed execution owner captured at run start for durable history.</summary>
     public TaskExecutionLocation? ExecutionLocation { get; init; }
+    /// <summary>
+    /// Fenced Attempt Authority id for a remote run. Null for local and legacy
+    /// rows. It correlates terminal authority with the row without making the
+    /// session log a second authority.
+    /// </summary>
+    public string? RunAttemptId { get; init; }
+    /// <summary>Terminal instant copied from the settled attempt or local CLI execution.</summary>
+    public DateTime? FinishedAt { get; init; }
+    /// <summary>Canonical terminal outcome, for example done, failed, noop, or superseded.</summary>
+    public string? Result { get; init; }
+    /// <summary>Terminal process/display status, for example completed, failed, or stopped.</summary>
+    public string? Status { get; init; }
+    public int? ExitCode { get; init; }
+    public double? DurationSeconds { get; init; }
     /// <summary>Session id we attempted to resume (null on fresh start / recovery).</summary>
     public string? InputSessionId { get; init; }
     /// <summary>Session id the CLI emitted in this run (filled after the run starts streaming).</summary>

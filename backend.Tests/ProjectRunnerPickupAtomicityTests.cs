@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -114,6 +115,22 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         while (runner.GetStatus().OccupiedSlots != 0 && DateTime.UtcNow < deadline)
             await Task.Delay(20);
         Assert.Equal(0, runner.GetStatus().OccupiedSlots);
+
+        SessionEvent? recorded = null;
+        var closeoutDeadline = DateTime.UtcNow.AddSeconds(10);
+        while (recorded?.FinishedAt is null && DateTime.UtcNow < closeoutDeadline)
+        {
+            recorded = JsonSerializer.Deserialize<SessionEvent>(
+                File.ReadLines(sessionEvents).Single(),
+                TaskJsonFile.ReadOpts);
+            if (recorded?.FinishedAt is null) await Task.Delay(20);
+        }
+        Assert.NotNull(recorded);
+        Assert.Equal(RunStatuses.Stopped, recorded!.Status);
+        Assert.Equal(TerminalRunOutcomeKinds.Interrupted, recorded.Result);
+        Assert.Equal(-1, recorded.ExitCode);
+        Assert.Equal(0.01, recorded.DurationSeconds);
+        Assert.NotNull(recorded.FinishedAt);
     }
 
     private void WriteJob(string state, string slug, int order = 1)
