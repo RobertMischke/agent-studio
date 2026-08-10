@@ -126,6 +126,7 @@ function pipelineAcceptedFinalVerdict() {
     },
     cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
     config: {},
+    resultFiles: { 'aspect-requirement-fit': 'aspect-requirement-fit.md' },
   };
 }
 
@@ -134,8 +135,15 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -258,6 +266,13 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
   );
+  await page.route(/\/api\/projects\/[^/]+\/workbenches(\?|$)/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName: PROJECT, includesHistory: true, count: 0, items: [] }),
+    }),
+  );
 }
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
@@ -269,7 +284,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -280,10 +295,15 @@ async function dismissErrorDialog(page: Page): Promise<void> {
  * every section first. Each header is a toggle button carrying `aria-expanded`.
  */
 async function expandAllPipelineSections(page: Page): Promise<void> {
-  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
-    await collapsed.first().click();
+    const expanded = await page.evaluate(() => {
+      const phase = document.querySelector<HTMLButtonElement>(
+        '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+      );
+      phase?.click();
+      return phase !== null;
+    });
+    if (!expanded) break;
   }
 }
 
@@ -319,10 +339,10 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(parallelNotes.first()).toHaveAttribute('aria-label', 'Parallel review pool');
 
     // The orchestrator decision is its own, clearly separated final-verdict row.
-    // Its compact kind marker reads DECISION (the full name rides the tooltip).
+    // Its compact icon marker keeps the full kind available to assistive tech.
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
     await expect(decisionRow).toBeVisible();
-    await expect(decisionRow).toContainText('DECISION');
+    await expect(decisionRow.locator('.ov-pl-step__kind')).toHaveAttribute('aria-label', 'Decision step');
     await expect(decisionRow).toHaveClass(/ov-pl-step--final-verdict/);
     await expect(decisionRow).toHaveAttribute('data-run-mode', 'sequential');
 
@@ -330,34 +350,10 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(finalChip).toBeVisible();
     await expect(finalChip).toContainText('Final verdict');
 
-    // The decision row records the aggregated `accept` verdict.
-    const verdict = decisionRow.getByTestId('overview-pipeline-step-verdict');
-    await expect(verdict).toHaveAttribute('data-verdict', 'accept');
-
-    const aspectRow = page.locator('[data-step-id="aspect-requirement-fit"]');
-    const resultTrigger = aspectRow.getByTestId('pipeline-step-result-toggle');
-    await expect(resultTrigger).toBeVisible();
-    await resultTrigger.click();
-    await expect(aspectRow.getByTestId('pipeline-step-result-card')).toBeVisible();
-    await expect(aspectRow.getByTestId('pipeline-step-result-body')).toContainText('Requirement Fit Review');
-
-    // Regression (ASS-1716): the aspect/model-reply popover must paint an OPAQUE
-    // surface so the content beneath never bleeds through. It once read undefined
-    // surface tokens (--studio-bg-raised / --studio-bg), so `background` fell back
-    // to its `transparent` initial value and the overlay was unreadable.
-    const popoverBackground = await aspectRow
-      .getByTestId('pipeline-step-result-card')
-      .evaluate((el) => getComputedStyle(el).backgroundColor);
-    const popoverAlpha = (() => {
-      const channels = popoverBackground.match(/rgba?\(([^)]+)\)/);
-      if (!channels) return 1;
-      const parts = channels[1].split(',').map((part) => part.trim());
-      return parts.length === 4 ? Number(parts[3]) : 1;
-    })();
-    expect(
-      popoverAlpha,
-      `aspect popover background must be opaque, got "${popoverBackground}"`,
-    ).toBe(1);
+    // The one combined chip projects the authoritative current-run outcome.
+    const verdict = decisionRow.getByTestId('overview-pipeline-step-final-verdict');
+    await expect(verdict).toHaveAttribute('data-verdict', 'succeeded');
+    await expect(verdict).toContainText('Final verdict → Pipeline completed');
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
@@ -365,7 +361,31 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
         path: path.join(RESULTS_DIR, 'pipeline-parallel-aspects-and-final-verdict.png'),
         fullPage: true,
       });
-      await aspectRow.screenshot({
+    }
+
+    const aspectRow = page.locator('[data-step-id="aspect-requirement-fit"]');
+    await aspectRow.getByTestId('overview-pipeline-step-details').click();
+    const detailsDialog = page.getByTestId('overview-pipeline-step-details-dialog');
+    await expect(detailsDialog).toBeVisible();
+    const resultTrigger = detailsDialog.getByTestId('pipeline-step-result-toggle');
+    await expect(resultTrigger).toBeVisible();
+    await resultTrigger.click();
+    await expect(detailsDialog.getByTestId('pipeline-step-result-card')).toBeVisible();
+    await expect(detailsDialog.getByTestId('pipeline-step-result-body')).toContainText('Requirement Fit Review');
+
+    const popoverBackground = await detailsDialog
+      .getByTestId('pipeline-step-result-card')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    const channels = popoverBackground.match(/rgba?\(([^)]+)\)/);
+    const parts = channels?.[1].split(',').map((part) => part.trim()) ?? [];
+    const popoverAlpha = parts.length === 4 ? Number(parts[3]) : 1;
+    expect(
+      popoverAlpha,
+      `aspect popover background must be opaque, got "${popoverBackground}"`,
+    ).toBe(1);
+
+    if (RESULTS_DIR) {
+      await detailsDialog.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-result-popover-open.png'),
       });
     }
@@ -390,7 +410,7 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
         const kindRect = kind.getBoundingClientRect();
         const nameRect = name.getBoundingClientRect();
         return {
-          label: kind.textContent?.trim().toUpperCase() ?? '',
+          label: kind.getAttribute('aria-label') ?? '',
           kindLeft: Math.round(kindRect.left),
           kindWidth: Math.round(kindRect.width),
           nameLeft: Math.round(nameRect.left),
@@ -399,14 +419,14 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     );
 
     expect(metrics.map(m => m.label)).toEqual([
-      'PRE',
-      'CORE',
-      'ASPECT',
-      'ASPECT',
-      'ASPECT',
-      'TOOL',
-      'DRIFT',
-      'DECISION',
+      'pre step',
+      'Core agent work step',
+      'Aspect step',
+      'Aspect step',
+      'Aspect step',
+      'Tool step',
+      'Drift step',
+      'Decision step',
     ]);
 
     const maxDelta = (values: number[]) => Math.max(...values) - Math.min(...values);
