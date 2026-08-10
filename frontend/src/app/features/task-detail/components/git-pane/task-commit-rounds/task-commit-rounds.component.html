@@ -1,0 +1,82 @@
+<section class="commit-group"
+         [class.commit-group--collapsed]="collapsed()"
+         data-testid="git-commit-group">
+  <button type="button"
+          class="commit-group__toggle"
+          data-testid="git-commit-group-toggle"
+          [attr.aria-expanded]="!collapsed()"
+          [cacTooltip]="collapsed() ? 'Show task commits' : 'Hide task commits'"
+          (click)="toggleCollapsed()">
+    <span class="commit-group__caret">{{ collapsed() ? '▾' : '▴' }}</span>
+    <span class="commit-group__title">{{ activeCommits().length }} current task {{ activeCommits().length === 1 ? 'commit' : 'commits' }}</span>
+    <span class="commit-group__summary">{{ summary() }}</span>
+  </button>
+  @if (!collapsed()) {
+    <ol class="commit-chain"
+        data-testid="git-commit-chain"
+        role="list"
+        aria-label="Current commits attributed to this task (oldest first)">
+      @if (activeCommits().length > 1) {
+        <li class="commit-chain__item commit-chain__item--all"
+            [class.commit-chain__item--selected]="selectedSha() === null"
+            data-testid="git-commit-chain-all">
+          <button type="button"
+                  class="commit-chain__button"
+                  [attr.aria-pressed]="selectedSha() === null"
+                  [cacTooltip]="'Combined diff across all ' + activeCommits().length + ' current task commits'"
+                  (click)="selectSha.emit(null)">
+            <span class="commit-chain__step">∑</span>
+            <span class="commit-chain__subject">All {{ activeCommits().length }} commits</span>
+          </button>
+        </li>
+      }
+      @for (entry of activeCommits(); track entry.sha; let i = $index) {
+        <li class="commit-chain__item"
+            [class.commit-chain__item--selected]="selectedSha() === entry.sha"
+            data-testid="git-commit-chain-item"
+            [attr.data-sha]="entry.sha">
+          <button type="button"
+                  class="commit-chain__button"
+                  [attr.aria-pressed]="selectedSha() === entry.sha"
+                  [cacTooltip]="tooltip(entry, i, activeCommits().length)"
+                  (click)="selectSha.emit(entry.sha)">
+            <span class="commit-chain__step">#{{ i + 1 }}</span>
+            <span class="commit-chain__sha">{{ entry.shortSha }}</span>
+            <span class="commit-chain__subject">{{ entry.message.split('\n')[0] }}</span>
+            <span class="commit-chain__meta"
+                  data-testid="git-commit-chain-meta">{{ entry.filesChanged }}f · {{ timestamp(entry) }}</span>
+          </button>
+        </li>
+      }
+    </ol>
+    @if (supersededRounds().length > 0) {
+      <details class="superseded" data-testid="git-superseded-rounds">
+        <summary>Superseded delivery rounds ({{ supersededRounds().length }})</summary>
+        @for (round of supersededRounds(); track round.key) {
+          <section class="superseded__round" data-testid="git-superseded-round">
+            <h4>{{ round.label }}</h4>
+            <ol class="commit-chain" role="list">
+              @for (entry of round.commits; track entry.sha; let i = $index) {
+                <li class="commit-chain__item commit-chain__item--superseded"
+                    [class.commit-chain__item--selected]="selectedSha() === entry.sha"
+                    data-testid="git-superseded-commit"
+                    [attr.data-sha]="entry.sha">
+                  <button type="button"
+                          class="commit-chain__button"
+                          [attr.aria-pressed]="selectedSha() === entry.sha"
+                          [cacTooltip]="tooltip(entry, i, round.commits.length)"
+                          (click)="selectSha.emit(entry.sha)">
+                    <span class="commit-chain__step">history</span>
+                    <span class="commit-chain__sha">{{ entry.shortSha }}</span>
+                    <span class="commit-chain__subject">{{ entry.message.split('\n')[0] }}</span>
+                    <span class="commit-chain__meta">{{ entry.filesChanged }}f · {{ timestamp(entry) }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
+          </section>
+        }
+      </details>
+    }
+  }
+</section>

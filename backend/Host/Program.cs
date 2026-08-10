@@ -316,6 +316,7 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<SupersededCommitSweep>();
 builder.Services.AddSingleton<TaskListGitProjectionCache>();
 builder.Services.AddSingleton<OperatorReviewRequeueService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
@@ -611,6 +612,7 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // optimizations; the backstops recover from phase and pipeline facts. Remote
 // deliveries use the same merge runner before Human Review.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
+builder.Services.AddSingleton<AcceptedIntegrationInventorySweep>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
@@ -663,6 +665,7 @@ builder.Services.AddSingleton<PromptEnrichmentService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<WorkbenchChangeNotifier>();
 builder.Services.AddSingleton<WorkbenchDecisionService>();
+builder.Services.AddSingleton<WorkbenchLifecycleService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
@@ -896,6 +899,18 @@ catch (Exception ex)
     crashRecorder.Record("CommitMetadataBackfill", ex);
 }
 
+// One-time, conservative repair of historical rebase/steer generations. The
+// persisted report is also the completion marker. Ambiguous file-breadth cases
+// remain untouched and visible in that report.
+try
+{
+    app.Services.GetRequiredService<SupersededCommitSweep>().RunOnce();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("SupersededCommitSweep", ex);
+}
+
 // Cap legacy durable CLI logs after the one-time full-history wiki read
 // backfill but before CLI reattachment can append new output. The sweep also
 // ensures the sole rotation file stays outside workspace evidence commits.
@@ -921,6 +936,18 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("ResultDocumentBackfill", ex);
+}
+
+// One-time read-only inventory for legacy accepted coding cards that lack an
+// integration decision or ended with Error / NoTaskBranch. Findings are logged
+// individually so silent historical completions are visible to operators.
+try
+{
+    app.Services.GetRequiredService<AcceptedIntegrationInventorySweep>().Run();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("AcceptedIntegrationInventorySweep", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

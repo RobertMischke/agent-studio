@@ -125,6 +125,10 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
+  The Git pane treats commits without `supersededByAttempt` as the current
+  delivery. Its aggregate diff and count exclude replaced rounds, while a
+  separate history disclosure keeps those commits selectable and labels their
+  relationship, for example `Round 1, replaced by round 2`.
   Timeline and steering text is ANSI-sanitised before rendering. Timeline rows
   project each fact once across title, summary, and badges, omit permanent
   defaults and zero counts, and disclose the exact members behind source counts.
@@ -200,7 +204,20 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   compact copyable mono chip in the viewer header and lifecycle lists; Explorer
   leaf tooltips include the same key. A task's `references.workbenches` entries
   render as linked key chips that open the existing viewer tab. Decision
-  mutations use the two-phase decision gate; chat pinning is not mounted.
+  mutations use the two-phase decision gate. A decided item
+  remains current while its referenced cards are still moving. References are
+  derived from the Slice-1 `references.workbenches` index, with descriptor
+  `relatedTaskKeys` and decision receipts retained as compatibility bridges.
+  Once every referenced card is in `6-completed` or `7-archive`, the catalogue
+  projects a quiet `Ready to document` suggestion in the viewer header and list
+  surfaces. `POST /api/projects/{projectName}/workbenches/{id}/document`
+  revalidates that policy and atomically writes the canonical descriptor.
+  Schema v1 stores `status=documented`; schema v2 stores
+  `lifecycleState=documented` and appends lifecycle history. Documented results
+  and discarded `archived` results remain readable in separate history groups.
+  The archive decision and documented transition both follow the AGT-2375 rule:
+  lifecycle truth lives in `workbench.json`, never in a Wiki classification
+  sidecar. Chat pinning is intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

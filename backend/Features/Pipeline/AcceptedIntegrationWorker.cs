@@ -87,7 +87,7 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
             }
             else
             {
-                ReturnToReviewWithFailure(request, result);
+                await ReturnToReviewWithFailureAsync(request, result).ConfigureAwait(false);
             }
 
             sw.Stop();
@@ -102,7 +102,7 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
             var errored = MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
                 error: ex.Message);
-            ReturnToReviewWithFailure(request, errored);
+            await ReturnToReviewWithFailureAsync(request, errored).ConfigureAwait(false);
             _logger.LogWarning(
                 ex,
                 "Accepted-integration worker failed for {JobId} after {ElapsedMs}ms; the task returned to Human Review",
@@ -145,6 +145,7 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
         CompletePendingMarker(request, result);
         if (job != null)
         {
+            TryClearAcceptanceIntegrationStatus(job);
             _timeline?.Append(
                 job.FolderPath,
                 TimelineEventKinds.IntegrationSucceeded,
@@ -158,26 +159,139 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
         }
     }
 
-    private void ReturnToReviewWithFailure(
+    private async Task ReturnToReviewWithFailureAsync(
         AcceptedIntegrationRequest request,
         MergeIntoIntegrationResult result)
     {
         var job = _scanner.FindJob(request.JobId, request.WatchPath);
-        if (job == null || job.State != TaskStates.HumanReview) return;
+        if (job == null) return;
+
+        var decision = AcceptanceIntegrationPolicy.Decide(
+            result.Outcome,
+            integrationRequired: AcceptanceIntegrationPolicy.IsIntegrationRequired(job));
+        if (decision == AcceptedIntegrationLaneDecision.Complete)
+        {
+            await FinalizeBranchlessTaskAsync(request, job, result).ConfigureAwait(false);
+            return;
+        }
+
+        if (job.State == TaskStates.Completed && _transitions != null)
+        {
+            var moveReason = $"Acceptance integration ended with {result.Outcome}: "
+                             + (result.Error ?? "The delivery was not integrated.");
+            var moved = await _transitions.MoveAsync(
+                request.JobId,
+                TaskStates.HumanReview,
+                request.WatchPath,
+                CancellationToken.None,
+                cause: TimelineActors.System,
+                reason: moveReason,
+                expectedSourceState: TaskStates.Completed,
+                suppressIntegrationTrigger: true).ConfigureAwait(false);
+            if (moved.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "Integration failed for {JobId}, but returning to Human Review failed with {Status}: {Message}",
+                    request.JobId,
+                    moved.Status,
+                    moved.Message);
+                return;
+            }
+            job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
+        }
+
+        if (job.State != TaskStates.HumanReview) return;
 
         _mutations.SetJobPhase(job.FolderPath, null);
         job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
+        TryWriteAcceptanceIntegrationFailure(job, request, result);
         _timeline?.Append(
             job.FolderPath,
             TimelineEventKinds.IntegrationFailed,
             TimelineActors.System,
-            $"Integration failed ({result.Outcome}); the task remains in Human Review.",
+            $"Integration failed ({result.Outcome}); the task is in Human Review.",
             details: new Dictionary<string, string>
             {
                 ["outcome"] = result.Outcome.ToString(),
                 ["integrationBranch"] = request.IntegrationBranch,
                 ["detail"] = result.Error ?? string.Empty,
             });
+    }
+
+    private async Task FinalizeBranchlessTaskAsync(
+        AcceptedIntegrationRequest request,
+        TaskInfo job,
+        MergeIntoIntegrationResult result)
+    {
+        if (job.State == TaskStates.HumanReview && _transitions != null)
+        {
+            var moved = await _transitions.MoveAsync(
+                request.JobId,
+                TaskStates.Completed,
+                request.WatchPath,
+                CancellationToken.None,
+                request.CompletedLaneIndex,
+                request.Cause ?? TimelineActors.System,
+                request.Reason,
+                expectedSourceState: TaskStates.HumanReview,
+                suppressIntegrationTrigger: true).ConfigureAwait(false);
+            if (moved.Status != MoveJobStatus.Success) return;
+            job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
+        }
+
+        _mutations.SetJobPhase(job.FolderPath, null);
+        CompletePendingMarker(request, result);
+        TryClearAcceptanceIntegrationStatus(job);
+        _timeline?.Append(
+            job.FolderPath,
+            TimelineEventKinds.IntegrationSucceeded,
+            TimelineActors.System,
+            "Acceptance completed without integration because the card expects no delivery branch.",
+            details: new Dictionary<string, string>
+            {
+                ["outcome"] = result.Outcome.ToString(),
+                ["integrationBranch"] = request.IntegrationBranch,
+            });
+    }
+
+    private void TryWriteAcceptanceIntegrationFailure(
+        TaskInfo job,
+        AcceptedIntegrationRequest request,
+        MergeIntoIntegrationResult result)
+    {
+        try
+        {
+            AcceptanceIntegrationStatusDocument.WriteFailure(
+                job.FolderPath,
+                result.Outcome.ToString(),
+                result.Error,
+                request.IntegrationBranch);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "acceptance-integration-status-write-failed project={Project} job={JobId} outcome={Outcome}",
+                job.ProjectName,
+                job.Id,
+                result.Outcome);
+        }
+    }
+
+    private void TryClearAcceptanceIntegrationStatus(TaskInfo job)
+    {
+        try
+        {
+            AcceptanceIntegrationStatusDocument.Clear(job.FolderPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "acceptance-integration-status-clear-failed project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+        }
     }
 
     private void CompletePendingMarker(

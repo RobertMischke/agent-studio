@@ -17,6 +17,7 @@ public class ScreenshotSourceParserTests
     [InlineData("dashboard--mocked.png", ScreenshotSources.Mocked)]
     [InlineData("DASHBOARD--REAL.PNG", ScreenshotSources.Real)] // case-insensitive head
     [InlineData("before-after--composite.png", ScreenshotSources.Composite)]
+    [InlineData("landing-board--pinned.png", ScreenshotSources.Pinned)]
     public void Parse_RecognisedSuffix_YieldsSource(string fileName, string expected)
     {
         var info = ScreenshotSourceParser.Parse(fileName);
@@ -39,10 +40,11 @@ public class ScreenshotSourceParserTests
     }
 
     [Fact]
-    public void Parse_RealOrMocked_HasNoParts()
+    public void Parse_NonCompositeSources_HaveNoParts()
     {
         Assert.Empty(ScreenshotSourceParser.Parse("a--real.png").Parts);
         Assert.Empty(ScreenshotSourceParser.Parse("a--mocked.png").Parts);
+        Assert.Empty(ScreenshotSourceParser.Parse("a--pinned.png").Parts);
     }
 
     [Fact]

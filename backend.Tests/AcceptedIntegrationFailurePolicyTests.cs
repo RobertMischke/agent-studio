@@ -42,6 +42,12 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             AcceptedIntegrationFailureCodes.IntegrationError,
             false
         },
+        {
+            "no-branch",
+            "No task branch to merge.",
+            AcceptedIntegrationFailureCodes.NoTaskBranch,
+            false
+        },
     };
 
     [Theory]
@@ -53,7 +59,7 @@ public sealed class AcceptedIntegrationFailurePolicyTests
         bool recoveryAvailable)
     {
         var failure = AcceptedIntegrationFailurePolicy.Classify(
-            PipelineStepStatus.Failed,
+            verdict == "no-branch" ? PipelineStepStatus.Skipped : PipelineStepStatus.Failed,
             verdict,
             reason,
             verdictSummary: null);

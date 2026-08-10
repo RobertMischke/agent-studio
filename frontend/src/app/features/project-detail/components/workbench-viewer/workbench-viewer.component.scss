@@ -10,6 +10,48 @@
   color: var(--studio-fg);
 }
 
+.workbench-viewer__head { min-width: 0; }
+
+.workbench-viewer__documentation-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-4);
+  border-top: 1px solid color-mix(in srgb, var(--studio-success) 30%, var(--studio-border));
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-success) 30%, var(--studio-border));
+  background: color-mix(in srgb, var(--studio-success) 9%, var(--studio-bg));
+  color: var(--studio-fg);
+  font-size: 0.72rem;
+}
+
+.workbench-viewer__documentation-ready button {
+  min-height: 28px;
+  padding: 0 var(--studio-spacing-3);
+  border: 1px solid color-mix(in srgb, var(--studio-success) 40%, var(--studio-border));
+  border-radius: var(--studio-radius-sm);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workbench-viewer__documentation-ready button:hover:not(:disabled) { background: var(--studio-bg-hover); }
+.workbench-viewer__documentation-ready button:disabled { cursor: default; opacity: 0.55; }
+.workbench-viewer__documentation-ready button:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 2px;
+}
+
+.workbench-viewer__documentation-error {
+  margin: 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-4);
+  background: color-mix(in srgb, var(--studio-error) 8%, transparent);
+  color: var(--studio-error);
+  font-size: 0.72rem;
+}
+
 .workbench-viewer__frame-shell {
   position: relative;
   min-width: 0;
@@ -59,6 +101,10 @@
 
 .workbench-viewer__state { padding: var(--studio-spacing-5); color: var(--studio-fg-muted); }
 .workbench-viewer__state--error { color: var(--studio-error); }
+
+@media (max-width: 700px) {
+  .workbench-viewer__documentation-ready { align-items: flex-start; flex-direction: column; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .workbench-viewer * { transition-duration: 0s !important; }

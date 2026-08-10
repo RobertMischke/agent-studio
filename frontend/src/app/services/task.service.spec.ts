@@ -372,6 +372,29 @@ describe('TaskService', () => {
     req.flush({});
   });
 
+  it('sends the explicit integration override only when requested', () => {
+    service
+      .moveJob(
+        'AGT-2543',
+        '6-completed',
+        'C:/projects/demo',
+        undefined,
+        'No delivery branch is expected.',
+        true,
+      )
+      .subscribe();
+
+    const req = http.expectOne((request) =>
+      request.url === '/api/tasks/AGT-2543/move'
+      && request.params.get('watchPath') === 'C:/projects/demo');
+    expect(req.request.body).toEqual({
+      targetState: '6-completed',
+      reason: 'No delivery branch is expected.',
+      operatorOverride: true,
+    });
+    req.flush({});
+  });
+
   it('queues a batch move and reads its progress by handle', () => {
     const items = [
       { jobId: 'alpha', watchPath: 'C:/projects/demo', targetState: '7-archive' },

@@ -8,8 +8,8 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input,
  *
  * Existing surfaces consume this component via slot projection:
  *   - `<app-notification-stack>` mounts one per active toast;
- *   - `<app-workspace-banner>` mounts one for the active auto-review
- *     verdict, with `layout="banner"`.
+ *   - persistent workspace alarms use `layout="banner"` for the shared,
+ *     full-bleed notice-bar treatment.
  *
  * The component is intentionally agent-/app-agnostic. It does not know
  * about the notification service, the message bus, or any business

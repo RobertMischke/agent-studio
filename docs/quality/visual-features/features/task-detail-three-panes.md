@@ -6,13 +6,13 @@ The three-pane task detail view shows prompt, protocol, and Git evidence at the
 same time. It is the review posture of the product: the human can inspect the
 request, the result, and the repository evidence without losing the task.
 
-![Task detail with prompt, protocol, and Git panes](../../../assets/images/detail-three-panes.png)
+![Task detail with prompt, protocol, and Git panes](../../../assets/images/detail-three-panes--pinned.png)
 
 ## Relevant State
 
-- Route: `/tasks/<existing-agent-studio-task>`
+- Route: `/tasks/DEMO-9`
 - Viewport: `1440x900`
-- Data state: existing Agent Software Studio task selected by the Playwright spec
+- Data state: pinned DEMO-9 task selected by the Playwright spec
 - Visible state: prompt pane, protocol pane, and Git pane are visible
 
 This state matters because review is not only a yes/no decision. It is a small
@@ -29,11 +29,11 @@ Manifest id: `task-detail-three-panes`
 The Playwright spec:
 
 1. Opens `/`.
-2. Opens the preferred existing task card.
+2. Opens the preferred pinned DEMO-9 task card.
 3. Waits for `pane-protocol`.
 4. Clicks `pane-toggle-git`.
 5. Waits for `pane-git`.
-6. Captures `docs/assets/images/detail-three-panes.png`.
+6. Captures `docs/assets/images/detail-three-panes--pinned.png`.
 
 ## Marketing Usage
 

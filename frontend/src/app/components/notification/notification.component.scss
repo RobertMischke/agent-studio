@@ -12,12 +12,16 @@
  * so we do not leak.
  */
 
+app-notification {
+  display: block;
+}
+
 .notification {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--studio-spacing-3);
   align-items: flex-start;
-  padding: 12px 14px;
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
   border-radius: 12px;
   background: var(--notify-surface-bg);
   border: 1px solid var(--notify-surface-border);
@@ -34,12 +38,41 @@
 }
 
 .notification--layout-banner {
-  border-radius: 10px;
-  padding: 8px 12px;
+  width: 100%;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-inline: 0;
+  border-radius: 0;
   font-size: 13px;
-  box-shadow: var(--elevation-resting);
-  /* Banners sit inline (e.g. top of the workspace shell); they should
-     not float and do not need the heavy drop shadow a toast carries. */
+  box-shadow: none;
+
+  /* A persistent workspace alarm is a classic app notice bar. It occupies
+     the complete in-flow width and never adopts floating card chrome. */
+  .notification__icon {
+    width: 9px;
+    height: 9px;
+    margin-block-start: var(--studio-spacing-1);
+    border-radius: 50%;
+    font-size: 0;
+  }
+
+  .notification__body,
+  .notification__message {
+    display: block;
+  }
+
+  .notification__message {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+
+  .notification__detail {
+    margin-inline-start: var(--studio-spacing-1);
+    color: var(--studio-fg-muted);
+  }
+
+  .notification__number {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 .notification__icon {
@@ -115,6 +148,11 @@
   }
   &.notification--layout-banner {
     background: $tint;
+
+    .notification__icon {
+      background: $icon-fg;
+      color: transparent;
+    }
   }
 }
 

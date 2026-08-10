@@ -121,7 +121,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
-    public void BuildLookup_RebasedReviewedResultSupersedesHistoricalAttemptSha()
+    public void BuildLookup_RebasedReviewedResultWithMarkedHistoricalAttempt_IsIntegrated()
     {
         var repo = SeedDevelopMainRepo();
         RunGit(repo, "checkout -q develop");
@@ -146,7 +146,11 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
             log,
             commits:
             [
-                Commit(historicalSha) with { RunAttemptId = "run-original" },
+                Commit(historicalSha) with
+                {
+                    RunAttemptId = "run-original",
+                    SupersededByAttempt = "run-recovery",
+                },
                 Commit(rebasedSha) with { RunAttemptId = "run-recovery" },
             ]);
         ReviewSubjectStore.Write(job.FolderPath, new ReviewSubjectRecord
@@ -164,7 +168,7 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
 
         Assert.Equal(IntegrationStatuses.Integrated, status.Status);
         Assert.Equal(rebasedSha[..7], status.Sha);
-        Assert.Equal("reviewed-result-ancestor", status.Detail);
+        Assert.Equal("anchor-ancestor", status.Detail);
     }
 
     [Fact]
@@ -269,6 +273,16 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         var job = Job("partial", "AGT-3006", project, repo, log,
             commits: new[] { Commit(landed), Commit(notLanded) },
             prov: Prov(branch: "task/partial"));
+        ReviewSubjectStore.Write(job.FolderPath, new ReviewSubjectRecord
+        {
+            TaskKey = "AGT-3006",
+            RunAttemptId = "run-current",
+            Project = project,
+            Repository = repo,
+            ResultSha = landed,
+            AttemptChainId = "chain-current",
+            ResultRef = "refs/heads/agent-studio/results/current",
+        });
 
         var status = svc.BuildLookup(new[] { job })[job.TaskKey];
 
@@ -276,6 +290,47 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Contains(notLanded[..7], status.Detail);
         Assert.Contains("1/2", status.Detail!);
         Assert.DoesNotContain(landed[..7], status.Detail!);
+    }
+
+    [Fact]
+    public void BuildLookup_SupersededConflictRoundMissingButReplacementLanded_IsIntegrated()
+    {
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/conflicted-round");
+        File.WriteAllText(Path.Combine(repo, "replacement.txt"), "complete delivery");
+        Commit(repo, "wip(runner): salvage before teardown - outcome Done");
+        var superseded = RunGit(repo, "rev-parse task/conflicted-round").Out.Trim();
+
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "integration-advance.txt"), "advance");
+        Commit(repo, "chore: advance integration branch");
+        RunGit(repo, $"cherry-pick {superseded}");
+        var replacement = RunGit(repo, "rev-parse develop").Out.Trim();
+        Assert.NotEqual(superseded, replacement);
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job(
+            "replacement-round",
+            "AGT-2533",
+            project,
+            repo,
+            log,
+            commits:
+            [
+                Commit(superseded) with
+                {
+                    RunAttemptId = "round-1",
+                    SupersededByAttempt = "round-2",
+                },
+                Commit(replacement) with { RunAttemptId = "round-2" },
+            ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(replacement[..7], status.Sha);
+        Assert.Equal("anchor-ancestor", status.Detail);
     }
 
     [Fact]

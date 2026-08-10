@@ -37,20 +37,14 @@
         {{ historyOpen() ? 'Hide history' : 'History' }}
       </button>
       @if (historyOpen()) {
-        <div class="studio-workbench-history__items">
-          @for (workbench of settledHistory(); track workbench.id) {
-            <button #workbenchTopic type="button" class="studio-workbench-topic studio-workbench-topic--settled"
-                    [class.studio-workbench-topic--active]="isActive(workbench)"
-                    [attr.aria-current]="isActive(workbench) ? 'page' : null"
-                    [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
-                    [appTooltip]="navTooltip(workbench)"
-                    [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
-                    (click)="openWorkbench.emit(workbench)">
-              <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
-              <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
-            </button>
-          } @empty { <span class="studio-workbench-topics__state">No settled Workbenches</span> }
-        </div>
+        @defer (when historyOpen()) {
+          <app-explorer-workbench-history
+            [projectName]="projectName()"
+            [items]="historyCatalogue()?.items ?? []"
+            [activeWorkbenchId]="activeWorkbenchId()"
+            (openWorkbench)="openWorkbench.emit($event)"
+          />
+        }
       }
     }
   </div>

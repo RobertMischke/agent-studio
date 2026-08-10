@@ -11,6 +11,8 @@ canonical layout:
   .metadata/
     projects.json
     workspaces.json
+    migrations/
+      superseded-commits-v1.json
     test-runs/
       PROJ-023.json
   projects/
@@ -69,6 +71,12 @@ derive their best run, commit distance, direction, and diff containment from
 Git ancestry, so moving or completing a card cannot rewrite test evidence.
 Normal writers use `POST /api/projects/{project}/test-runs` and
 `PUT /api/projects/{project}/test-runs/{runId}`.
+
+`<TaskRepository>/.metadata/migrations/superseded-commits-v1.json` is the
+durable report and completion marker for the one-time historical delivery-round
+repair. It lists both marked commits and ambiguous cards left untouched. The
+backend writes it atomically after scanning delivered and archived cards; an
+unreadable existing report fails that repair rather than silently rerunning it.
 
 ## Operational Boundary
 

@@ -129,6 +129,8 @@ export class ScreenshotStripComponent {
         return s.compositeParts.length > 0
           ? `composite (${s.compositeParts.join(', ')})`
           : 'composite';
+      case 'pinned':
+        return 'pinned';
       default:
         return '';
     }
@@ -144,6 +146,8 @@ export class ScreenshotStripComponent {
         return s.compositeParts.length > 0
           ? `Stitched composite combining ${s.compositeParts.join(' + ')} parts`
           : 'Stitched composite image';
+      case 'pinned':
+        return 'Captured from the versioned deterministic documentation workspace';
       default:
         return '';
     }

@@ -806,19 +806,6 @@
     }
   }
 
-  // The final verdict keeps a structural top divider and quiet whole tint.
-  &--final-verdict {
-    margin-top: 3px;
-    padding-top: 5px;
-    border-top: 1px solid var(--studio-border);
-    background: color-mix(in srgb, var(--studio-accent-4) 8%, transparent);
-
-    .ov-pl-step__name {
-      color: var(--studio-fg-strong);
-      font-weight: 600;
-    }
-  }
-
   &__running-badge {
     flex: 0 0 auto;
     display: inline-flex;
@@ -863,20 +850,93 @@
     cursor: help;
   }
 
-  // "Final verdict" chip on the orchestrator-decision row, naming it as the
-  // single aggregated ruling. Pairs with the &--final-verdict row divider.
-  &__final-badge {
+  &__verdict {
     flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
     font-size: 9.5px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 6px;
-    border-radius: 999px;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1px solid var(--studio-border);
+    background: transparent;
+    color: var(--studio-fg-dim);
+
+    &[data-verdict='pass'] {
+      color: var(--severity-pass);
+      border-color: color-mix(in srgb, var(--severity-pass) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-pass) 16%, transparent);
+    }
+    &[data-verdict='concerns'] { color: var(--severity-warn); }
+    &[data-verdict='block'] {
+      color: var(--severity-high);
+      border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+    }
+
+    // Regression-radar spec-change categories (reporting only - the step
+    // status stays Passed; the pill carries the signal).
+    &[data-verdict='clean']    { color: var(--lane-completed); }
+    &[data-verdict='intended'] { color: var(--lane-completed); }
+    &[data-verdict='at-risk']  { color: var(--severity-warn); }
+    &[data-verdict='drift']    { color: var(--severity-high); }
+
+    // Auto-mode Ralph-loop guard (pre-loop-guard step): a forming loop warns,
+    // a circuit-broken loop reads as a hard stop.
+    &[data-verdict='looping']       { color: var(--severity-warn); }
+    &[data-verdict='loop-detected'] { color: var(--severity-high); }
+
+    // Hover affordance: the pill carries the concrete concern in a tooltip.
+    &--concern { cursor: help; }
+  }
+
+  // One compact status chip carries both the decision role and its route.
+  // Full outcome reasoning remains available from the chip tooltip.
+  &__final-decision {
+    min-width: 0;
+    max-width: 100%;
+    justify-self: start;
+    gap: calc(var(--studio-spacing-1) / 2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-inline: var(--studio-spacing-1);
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
     cursor: help;
-    color: var(--studio-fg-strong);
-    background: color-mix(in srgb, var(--studio-accent-4) 18%, var(--studio-bg-elevated));
-    border: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
+
+    &[data-tone='ok'] {
+      color: var(--severity-pass);
+      border-color: color-mix(in srgb, var(--severity-pass) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-pass) 16%, transparent);
+    }
+
+    &[data-tone='warn'] {
+      color: var(--severity-warn);
+      border-color: color-mix(in srgb, var(--severity-warn) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+    }
+
+    &[data-tone='danger'] {
+      color: var(--severity-high);
+      border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent-2);
+      outline-offset: 1px;
+    }
+  }
+
+  &__final-decision-route {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   &__status {
@@ -938,104 +998,16 @@
   }
 
   &__parallel-note { grid-column: 4; }
-  &__final-badge { grid-column: 4; }
   &__running-badge { grid-column: 6; }
   &__runs { grid-column: 7; }
   &__verdict { grid-column: 5; }
-  &__decision { grid-column: 5; }
+  &__final-decision { grid-column: 4 / 6; }
   &__result { grid-column: 6; }
   &__model { grid-column: 7; }
   &__model-select { grid-column: 6; }
   &__timing { grid-column: 8; }
   &__tokens { grid-column: 9; }
   &__cost { grid-column: 10; }
-
-  &__verdict {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 38px;
-    font-size: 9.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 2px 7px;
-    border-radius: 5px;
-    border: 1px solid var(--studio-border);
-    background: transparent;
-    color: var(--studio-fg-dim);
-
-    &[data-verdict='pass'] {
-      color: var(--severity-pass);
-      border-color: color-mix(in srgb, var(--severity-pass) 56%, var(--studio-border));
-      background: color-mix(in srgb, var(--severity-pass) 16%, transparent);
-    }
-    &[data-verdict='concerns'] { color: var(--severity-warn); }
-    &[data-verdict='block'] {
-      color: var(--severity-high);
-      border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
-      background: color-mix(in srgb, var(--severity-high) 18%, transparent);
-    }
-
-    // Regression-radar spec-change categories (reporting only - the step
-    // status stays Passed; the pill carries the signal).
-    &[data-verdict='clean']    { color: var(--lane-completed); }
-    &[data-verdict='intended'] { color: var(--lane-completed); }
-    &[data-verdict='at-risk']  { color: var(--severity-warn); }
-    &[data-verdict='drift']    { color: var(--severity-high); }
-
-    // Auto-mode Ralph-loop guard (pre-loop-guard step): a forming loop warns,
-    // a circuit-broken loop reads as a hard stop.
-    &[data-verdict='looping']       { color: var(--severity-warn); }
-    &[data-verdict='loop-detected'] { color: var(--severity-high); }
-
-    // Hover affordance: the pill carries the concrete concern in a tooltip.
-    &--concern { cursor: help; }
-  }
-
-  // Compact decision badge for the final orchestrator ruling (ASS-1706): the
-  // Accept / Re-issue / Escalate verdict inline, full reasoning on hover. Tone
-  // tracks the central severity tokens so it reads consistently with the grid.
-  &__decision {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 38px;
-    font-size: 9.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 2px 7px;
-    border-radius: 5px;
-    border: 1px solid var(--studio-border);
-    background: transparent;
-    color: var(--studio-fg-dim);
-    // The badge carries the orchestrator's reasoning in a tooltip.
-    cursor: help;
-
-    &[data-tone='ok'] {
-      color: var(--severity-pass);
-      border-color: color-mix(in srgb, var(--severity-pass) 56%, var(--studio-border));
-      background: color-mix(in srgb, var(--severity-pass) 16%, transparent);
-    }
-    &[data-tone='warn'] {
-      color: var(--severity-warn);
-      border-color: color-mix(in srgb, var(--severity-warn) 56%, var(--studio-border));
-      background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
-    }
-    &[data-tone='danger'] {
-      color: var(--severity-high);
-      border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
-      background: color-mix(in srgb, var(--severity-high) 18%, transparent);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--studio-accent-2);
-      outline-offset: 1px;
-    }
-  }
 
   &__model {
     flex: 0 0 auto;
@@ -1085,6 +1057,7 @@
     text-align: right;
     font-family: var(--font-mono);
     font-size: 10px;
+    white-space: nowrap;
     color: var(--studio-fg-muted);
   }
 
@@ -1153,8 +1126,8 @@
     opacity: 0.72;
   }
 
-  .ov-pl-step__verdict, .ov-pl-step__decision,
-  .ov-pl-step__final-badge, .ov-pl-step__running-badge {
+  .ov-pl-step__verdict, .ov-pl-step__final-decision,
+  .ov-pl-step__running-badge {
     border-color: var(--studio-border);
     background: transparent;
     color: var(--studio-fg-muted);
@@ -1186,6 +1159,12 @@
   .ov-pl-header__cost,
   .ov-pl-step__cost {
     display: none;
+  }
+
+  // Keep optional post-step controls inside the name track when the compact
+  // decision chip needs the adjacent metadata columns.
+  .ov-pl-step--final-verdict .ov-pl-step__name-cell {
+    overflow: hidden;
   }
 }
 

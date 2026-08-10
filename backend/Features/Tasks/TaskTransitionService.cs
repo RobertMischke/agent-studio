@@ -127,10 +127,17 @@ public sealed class TaskTransitionService
         AttemptWriteReference? authorityWrite = null,
         bool suppressProductExecution = false,
         string? expectedSourceState = null,
-        bool suppressIntegrationTrigger = false)
+        bool suppressIntegrationTrigger = false,
+        bool operatorOverride = false)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+        if (operatorOverride && targetState != TaskStates.Completed)
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                "operatorOverride is valid only for a move to 6-completed.");
+        }
 
         var settledRunRecovery = PrepareSettledRunRecovery(info, targetState, cause);
         if (settledRunRecovery.Error is not null)
@@ -179,6 +186,7 @@ public sealed class TaskTransitionService
         // reports any stray working-tree diff as a containment violation rather
         // than committing it. See TaskModes / ParallelSlotPolicy and ADR-0052.
         var isReadOnly = TaskModes.IsReadOnly(info.Mode);
+        var integrationRequired = AcceptanceIntegrationPolicy.IsIntegrationRequired(info);
 
         // Auto-commit is a per-project operator setting. Read it from the live
         // ProjectSettingsService cache for every transition so a UI toggle
@@ -215,9 +223,8 @@ public sealed class TaskTransitionService
         // card back to Human Review on every accept.
         if (!suppressIntegrationTrigger
             && !suppressProductExecution
-            && !isReadOnly
-            && !TaskModes.IsConcept(info.Mode)
-            && !TaskKinds.IsEpic(info.Kind)
+            && integrationRequired
+            && !operatorOverride
             && fromState == TaskStates.HumanReview
             && targetState == TaskStates.Completed
             && (_acceptedIntegrationQueue != null || _mergeRunner != null))
@@ -257,6 +264,8 @@ public sealed class TaskTransitionService
             : MoveCore();
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
+        var supersedeFailedDelivery = operatorRequeue && HasFailedIntegrationRound(
+            outcome.NewFolderPath ?? info.FolderPath);
         if (operatorRequeue && _operatorReviewRequeue != null)
         {
             var movedFolder = outcome.NewFolderPath
@@ -271,6 +280,31 @@ public sealed class TaskTransitionService
                 reason,
                 cause!);
             _scanner.InvalidateCache();
+        }
+        if (supersedeFailedDelivery)
+        {
+            var movedFolder = outcome.NewFolderPath
+                ?? _scanner.FindJob(jobId, watchPath)?.FolderPath
+                ?? info.FolderPath;
+            var supersession = _mutations.SupersedeCurrentDeliveryOnFolder(
+                movedFolder,
+                TaskCommitSupersession.PendingAttempt);
+            if (!supersession.Succeeded)
+            {
+                _logger.LogError(
+                    "integration-requeue commit supersession failed project={Project} job={JobId} folder={Folder}",
+                    projectName,
+                    jobId,
+                    movedFolder);
+            }
+            else if (supersession.MarkedCommits > 0)
+            {
+                _logger.LogInformation(
+                    "integration-requeue superseded commits project={Project} job={JobId} count={Count}",
+                    projectName,
+                    jobId,
+                    supersession.MarkedCommits);
+            }
         }
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
@@ -418,6 +452,18 @@ public sealed class TaskTransitionService
                 RecordConceptSightReviewCompletion(info, watchPath, cause);
             }
 
+            if (fromState == TaskStates.HumanReview && targetState == TaskStates.Completed)
+            {
+                var accepted = _scanner.FindJob(jobId, watchPath);
+                if (accepted != null)
+                {
+                    if (operatorOverride)
+                        RecordOperatorIntegrationOverride(accepted, cause, reason);
+                    else if (!integrationRequired)
+                        TryClearAcceptanceIntegrationStatus(accepted);
+                }
+            }
+
             // ASS-1724: the ONE commit-provenance recording hook. Anchor the
             // task/<id> tip + integration head at this lane crossing so the board
             // can graph "where does this work live" historically. Best-effort and
@@ -452,11 +498,13 @@ public sealed class TaskTransitionService
             var integrationRunsInBackground = _acceptedIntegrationQueue != null;
 
             // Stamp the durable pending fact before the volatile hand-off. A
-            // pending status is the normal state while the worker waits and is
-            // therefore deliberately quiet. Only a failed hand-off or a decided
-            // inline merge failure emits the accept-without-merge warning.
+            // pending status is the normal state while the card remains in
+            // Human Review with phase integrating and is therefore deliberately
+            // quiet. Only a failed hand-off or a decided merge failure emits the
+            // accept-without-merge warning.
             if (targetState == TaskStates.Completed
-                && !isReadOnly
+                && integrationRequired
+                && !operatorOverride
                 && !suppressIntegrationTrigger
                 && integrationRunsInBackground)
             {
@@ -467,11 +515,13 @@ public sealed class TaskTransitionService
 
             // Deferred "Merge into Develop" post-step. Production hands the
             // accepted delivery to a background worker so merge + cold build
-            // gate never occupy the accept HTTP request. The completed lane,
-            // pending pipeline step, and integrationpending marker are durable;
-            // AcceptedIntegrationBackstop recovers a dropped in-memory item.
+            // gate never occupy the accept HTTP request. The Human Review lane,
+            // integrating phase, pending pipeline step, and integrationpending
+            // marker are durable; AcceptedIntegrationBackstop recovers a dropped
+            // in-memory item.
             if (targetState == TaskStates.Completed
-                && !isReadOnly
+                && integrationRequired
+                && !operatorOverride
                 && !suppressIntegrationTrigger
                 && (_acceptedIntegrationQueue != null || _mergeRunner != null))
             {
@@ -480,16 +530,14 @@ public sealed class TaskTransitionService
                     await TriggerMergeIntoDevelopAsync(mergeJob, settings, ct);
             }
 
-            // AGT-2202: compatibility fixtures without the production queue still
-            // run the merge inline. In that path, derive visibility after the
-            // merge so existing synchronous callers retain their historical
-            // result. If work is NOT in develop, make it loud - a Warn timeline
-            // event plus an
-            // integrationpending tag the completed-lane audit can list - WITHOUT
-            // blocking the acceptance that already landed (Robert wants visibility,
-            // not a new brake). Fully guarded and read-only.
+            // Compatibility fixtures without the production queue still run the
+            // merge inline. In that path, derive visibility after the merge so
+            // synchronous callers receive the terminal integration decision. A
+            // failed outcome remains in Human Review and carries the same durable
+            // reason as the background-worker path. Fully guarded and read-only.
             if (targetState == TaskStates.Completed
-                && !isReadOnly
+                && integrationRequired
+                && !operatorOverride
                 && !suppressIntegrationTrigger
                 && !integrationRunsInBackground)
             {
@@ -508,6 +556,34 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    private bool HasFailedIntegrationRound(string folderPath)
+    {
+        if (_pipelineLog is null) return false;
+        try
+        {
+            var step = _pipelineLog.Read(folderPath)?.Steps.LastOrDefault(candidate =>
+                string.Equals(
+                    candidate.StepId,
+                    AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+                    StringComparison.Ordinal));
+            return step is not null
+                && AgentStudio.Pipeline.AcceptedIntegrationFailurePolicy.Classify(
+                    step.Status,
+                    step.Verdict,
+                    step.Reason,
+                    step.VerdictSummary,
+                    step.FailureCode) is not null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-requeue could not inspect the prior integration round folder={Folder}",
+                folderPath);
+            return false;
+        }
     }
 
     /// <summary>
@@ -1047,6 +1123,7 @@ public sealed class TaskTransitionService
 
         _mutations.SetJobPhase(reviewed.FolderPath, LifecyclePhases.Integrating);
         var integrating = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        TryClearAcceptanceIntegrationStatus(integrating);
         var integrationBranch = ResolveIntegrationBranch(integrating, settings);
         FlagIntegrationOnAccept(integrating, warnIfNotIntegrated: false);
         RecordIntegrationEvent(
@@ -1283,6 +1360,7 @@ public sealed class TaskTransitionService
             if (accepted != null)
             {
                 _mutations.SetJobPhase(accepted.FolderPath, null);
+                TryClearAcceptanceIntegrationStatus(accepted);
             }
         }
         return completed;
@@ -1312,6 +1390,7 @@ public sealed class TaskTransitionService
         }
         _mutations.SetJobPhase(reviewed.FolderPath, null);
         var current = _scanner.FindJob(reviewed.Id, reviewed.WatchPath) ?? reviewed;
+        TryWriteAcceptanceIntegrationFailure(current, outcome.ToString(), detail);
         RecordIntegrationEvent(
             current,
             TimelineEventKinds.IntegrationFailed,
@@ -1323,6 +1402,96 @@ public sealed class TaskTransitionService
             MoveJobStatus.IntegrationFailed,
             $"Integration failed ({outcome}); the task remains in Human Review. {detail}",
             current.FolderPath);
+    }
+
+    private void RecordOperatorIntegrationOverride(
+        TaskInfo accepted,
+        string? actor,
+        string? reason)
+    {
+        var tags = (accepted.Tags ?? [])
+            .Where(tag => !IntegrationStatuses.IsPendingTag(tag))
+            .ToList();
+        if (tags.Count != (accepted.Tags?.Count ?? 0))
+        {
+            _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
+            accepted = _scanner.FindJob(accepted.Id, accepted.WatchPath) ?? accepted;
+        }
+
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(accepted.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Skipped,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "operator-override",
+            VerdictSummary = "Operator explicitly completed acceptance without integration.",
+            Reason = reason,
+        });
+        try
+        {
+            AcceptanceIntegrationStatusDocument.WriteOperatorOverride(
+                accepted.FolderPath,
+                reason,
+                now);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "acceptance-integration-status-write-failed project={Project} job={JobId} outcome=OperatorOverride",
+                accepted.ProjectName,
+                accepted.Id);
+        }
+        RecordIntegrationEvent(
+            accepted,
+            TimelineEventKinds.IntegrationOverridden,
+            actor,
+            "Operator explicitly completed acceptance without integration.",
+            "OperatorOverride",
+            reason);
+    }
+
+    private void TryWriteAcceptanceIntegrationFailure(
+        TaskInfo task,
+        string outcome,
+        string? detail)
+    {
+        try
+        {
+            AcceptanceIntegrationStatusDocument.WriteFailure(
+                task.FolderPath,
+                outcome,
+                detail,
+                ResolveIntegrationBranch(task, _settings.Get(task.ProjectName)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "acceptance-integration-status-write-failed project={Project} job={JobId} outcome={Outcome}",
+                task.ProjectName,
+                task.Id,
+                outcome);
+        }
+    }
+
+    private void TryClearAcceptanceIntegrationStatus(TaskInfo task)
+    {
+        try
+        {
+            AcceptanceIntegrationStatusDocument.Clear(task.FolderPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "acceptance-integration-status-clear-failed project={Project} job={JobId}",
+                task.ProjectName,
+                task.Id);
+        }
     }
 
     private void RecordIntegrationEvent(

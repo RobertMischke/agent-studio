@@ -108,6 +108,15 @@ created scaffold emits a structured `result-scaffold-created` warning with
 count. Refreshing the same owned scaffold after a lane move does not increment
 the count.
 
+The rendered Result view recognizes this marker as presentation metadata. It
+replaces the scaffold's internal `## Overview` provenance prose with one compact
+notice that explains the missing `status.md`, shows the best available
+timestamp and stable card key, and links the task's artifacts. `## What Was
+Done`, `## Open Items`, and the remaining evidence body
+still render normally. Composite task ids, absolute paths, and the HTML marker
+do not appear in the rendered view; the source file and scaffold creation
+mechanic remain unchanged.
+
 Remote coding runs preserve the same application ownership. After the runner
 flushes `cli-output.log`, its final `/api/runner/artifacts` upload asks Studio to
 run `SummaryGenerationService` against that durable log. The response
@@ -319,11 +328,12 @@ Evidence screenshots are only trustworthy if the reviewer can tell **how** each 
 | `dashboard--mocked.png` | `mocked` | Captured from an e2e run whose API routes were mocked (for example Playwright `page.route`). Allowed, but labelled so nobody mistakes it for live proof. |
 | `before-after--composite.png` | `composite` | A stitched image; parts unspecified. |
 | `before-after--composite-real-mocked.png` | `composite` | A stitched image whose parts are a `real` shot and a `mocked` shot, in that order. |
+| `landing-board--pinned.png` | `pinned` | Documentation or marketing capture from the committed deterministic workspace snapshot. |
 | `dashboard.png` | `unlabeled` | No recognised suffix. The UI makes no real/mocked claim. |
 
-The base name may contain single dashes (`before-after`); only the `--` boundary introduces the source segment, so pre-existing filenames are always `unlabeled`. The parser lives in [`ScreenshotSourceParser`](../../../backend/Shared/Models/ScreenshotSource.cs); the label is surfaced text-only next to each thumbnail caption and in the lightbox. A composite spells out its part sources (for example `composite (real, mocked)`).
+The base name may contain single dashes (`before-after`); only the `--` boundary introduces the source segment, so pre-existing filenames are always `unlabeled`. The parser lives in [`ScreenshotSourceParser`](../../../backend/Shared/Models/ScreenshotSource.cs); the label is surfaced text-only next to each thumbnail caption and in the lightbox. A composite spells out its part sources (for example `composite (real, mocked)`). `Pinned` is a documentation-capture class and does not redefine task-run evidence: `real`, `mocked`, and `composite` retain their existing meanings.
 
-**Recommendation, not compulsion.** Mocked-route screenshots stay allowed; they are the right evidence for some changes. But for **UI-acceptance** evidence, prefer a shot against a running backend and name it `--real`. Composite / stitched before-after images are explicitly welcome; just label the parts. When `SummaryGenerationService` deterministically appends an image to the protocol's `## Images` section, it annotates the bullet with a plain-text source hint (for example `- ![](../results/dashboard--mocked.png) (source: mocked)`) so the provenance reads straight from `status.md`. Unlabeled files get no hint; the protocol never claims a source it cannot prove.
+**Recommendation, not compulsion.** Mocked-route screenshots stay allowed; they are the right evidence for some changes. But for **UI-acceptance** evidence, prefer a shot against a running backend and name it `--real`. Composite / stitched before-after images are explicitly welcome; just label the parts. Documentation and marketing images use `--pinned`. When `SummaryGenerationService` deterministically appends an image to the protocol's `## Images` section, it annotates the bullet with a plain-text source hint (for example `- ![](../results/dashboard--mocked.png) (source: mocked)`) so the provenance reads straight from `status.md`. Unlabeled files get no hint; the protocol never claims a source it cannot prove.
 
 **Reference validation.** Every regenerate runs [`ProtocolImageReferenceValidator`](../../../backend/Features/Review/ProtocolImageReferenceValidator.cs) over the finished `status.md`. Any job-local image link (`results/...`, `attachments/...`, or a bare filename resolved under `results/`) that points at a missing file is recorded as a `warn`-severity `review-evidence.jsonl` finding (`id = broken-image-ref:<path>`) instead of rendering as a silently empty `<img>`. The reviewer sees the broken link in the evidence panel; external URLs, `data:` URIs, and rooted/absolute paths are left alone.
 

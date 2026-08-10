@@ -59,6 +59,20 @@
     {{ openDecisionCount() }} open
   </span>
 
+  <button
+    type="button"
+    class="viewer-head__refresh"
+    data-testid="workbench-viewer-refresh"
+    aria-label="Refresh Dossier"
+    appTooltip="Refresh Dossier"
+    [disabled]="!document().workbench.key || refreshPending()"
+    [appPendingButton]="refreshPending()"
+    pendingLabel="Creating…"
+    (click)="requestRefreshCard()"
+  >
+    <app-studio-icon name="refresh" [size]="14" />
+  </button>
+
   <details #detailsDisclosure class="viewer-head__details">
     <summary
       class="viewer-head__details-trigger"

@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  computed,
   effect,
   inject,
   input,
@@ -16,13 +15,14 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
+import { ExplorerWorkbenchHistoryComponent } from '../explorer-workbench-history/explorer-workbench-history.component';
 
 const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expanded.v1';
 
 @Component({
   selector: 'app-explorer-workbench-list',
   standalone: true,
-  imports: [TreeRowComponent, AppTooltipDirective],
+  imports: [TreeRowComponent, AppTooltipDirective, ExplorerWorkbenchHistoryComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-list.component.html',
   styleUrl: './explorer-workbench-list.component.scss',
@@ -42,8 +42,6 @@ export class ExplorerWorkbenchListComponent {
   readonly catalogue = signal<WorkbenchCatalogue | null>(null);
   readonly historyCatalogue = signal<WorkbenchCatalogue | null>(null);
   readonly historyOpen = signal(false);
-  readonly settledHistory = computed(() => (this.historyCatalogue()?.items ?? [])
-    .filter(item => item.status === 'decided' || item.status === 'archived'));
   private readonly topics = viewChildren<ElementRef<HTMLButtonElement>>('workbenchTopic');
   private lastProjectName: string | null = null;
   private lastRevealedWorkbench: string | null = null;
@@ -167,8 +165,12 @@ export class ExplorerWorkbenchListComponent {
 
   secondaryMeta(item: WorkbenchListItem): string {
     if (!item.valid) return 'Needs attention';
+    if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
     if (item.status === 'active') return item.phase ?? 'Active';
+    if (item.status === 'decided') return 'Tracking';
+    if (item.status === 'documented') return 'Documented';
+    if (item.status === 'archived') return 'Archived';
     return item.status;
   }
 

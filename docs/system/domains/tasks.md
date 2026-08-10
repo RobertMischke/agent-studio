@@ -152,6 +152,18 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   SHA-deduplicated union across generations; a later attempt does not replace
   earlier valid commits, and inherited SHAs retain their original
   `runAttemptId`, `runnerId`, delivery `branch`, and proving `resultSha`.
+- Requeueing an integration-conflict or integration-error delivery marks that
+  generation's entries with `supersededByAttempt`. The entries remain in
+  `commits[]` for audit history, while attribution, aggregate diffs, provenance,
+  and integration status use only entries without that marker. The temporary
+  value `next-attempt` is replaced by the next fenced `runAttemptId` when its
+  remote attribution lands.
+- Startup runs the one-time `superseded-commits-v1` healing sweep over delivered
+  and archived cards. It marks only a missing runner salvage fence with a later
+  integrated commit from a proven different generation, at least 90 percent
+  changed-file overlap, no more than three omitted paths, and comparable total
+  breadth. Cases outside those bounds remain untouched and are listed in the
+  durable sweep report for manual review.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,
@@ -172,13 +184,21 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   label, operator-facing reason, and whether focused rebase recovery applies.
   This distinguishes a merge conflict, a delivery that needs rebasing, a build
   gate failure, unavailable task-key validation, an invalid review subject,
-  and a generic integration error without changing the legacy top-level
-  `conflict-skipped` compatibility status.
+  a missing task branch, and a generic integration error without changing the
+  legacy top-level `conflict-skipped` compatibility status.
 - The immutable current review subject selects the authoritative delivery
   generation for integration membership. When a reissue rebases an accepted
   commit to a replacement object id, target-branch ancestry of that reviewed
   result proves integration; attributed SHAs from superseded review epochs
   remain history and do not force a permanent `partial` card state.
+- A move may set `operatorOverride: true` only when targeting `6-completed`.
+  This is an explicit, one-shot operator waiver, never a default. Pipeline
+  history and `status.md` retain the override and reason. Concept and other
+  no-branch cards are exempt through their mode, kind, `taskType=concept|decision`,
+  or the explicit `noBranchExpected: true` card field.
+- The read-only startup `AcceptedIntegrationInventorySweep` lists historical
+  Completed and archived coding cards whose integration fact is absent, Error,
+  or NoTaskBranch. It does not mutate historical cards.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

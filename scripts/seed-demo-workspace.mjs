@@ -3,8 +3,9 @@
 //
 // Builds a small, reproducible TaskRepository the dev backend can point at
 // instead of the heavy production workspace (~1300 tasks / ~650 MB). The
-// generated store holds a handful of tasks per lane across two demo projects,
-// a few of them with run / token history so the statistics views have data.
+// generated store is built from the committed, sanitized pinned snapshot and
+// holds tasks per lane across two demo projects. A subset has run / token
+// history so the statistics views have data.
 //
 // Usage:
 //   node scripts/seed-demo-workspace.mjs [--root <path>] [--force]
@@ -13,16 +14,17 @@
 //   (override with --root <path> or the ATP_DEMO_ROOT env var).
 //
 // Re-running RESETS the demo store to a clean, known stand: every path this
-// script manages (projects/, .metadata/, the workspace-root usage / settings
-// files) is removed and rewritten. It never touches anything else under the
+// script manages (projects/, .metadata/, logs/, and the workspace-root usage /
+// settings files) is removed and rewritten. It never touches anything else under the
 // root, so an operator-added .git stays put. The registry under
 // .metadata/projects.json is intentionally NOT written here — the backend
 // seeds it from WatchPaths on first boot (ADR-0042); wiping it forces a fresh,
 // deterministic registry on the next dev start.
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
 
 const DEFAULT_ROOT = 'C:\\Projects\\agent-taskboard-workspace-demo';
 const OWNER = 'local-default';
@@ -35,54 +37,51 @@ function parseArgs(argv) {
   return args;
 }
 
-// Deterministic timestamps so a re-seed produces byte-identical files
-// (true idempotency, no clock drift between runs).
-const BASE = Date.parse('2026-06-01T08:00:00.000Z');
+const PINNED_SNAPSHOT_PATH = fileURLToPath(new URL('./presentation-capture/pinned-seed.json', import.meta.url));
+const PINNED_SNAPSHOT = JSON.parse(readFileSync(PINNED_SNAPSHOT_PATH, 'utf8'));
+
+// Deterministic timestamps so a re-seed produces byte-identical files and the
+// UI never derives capture-visible dates from a re-seed's wall clock.
+const BASE = Date.parse(PINNED_SNAPSHOT.fixedTimeBase);
 function iso(offsetMinutes) {
   return new Date(BASE + offsetMinutes * 60_000).toISOString();
 }
 
 // ---- Fixture definition -------------------------------------------------
 
-const PROJECTS = [
-  { key: 'demo-app', name: 'Demo App' },
-  { key: 'demo-platform', name: 'Demo Platform' },
-];
-
-// One slim card per lane. `hist` marks the cards that carry run + token
-// history (timeline, session events, pipeline execution, lastUsage).
-const TASKS = [
-  // Demo App — full lane spread (0-backlog .. 7-archive)
-  { project: 'demo-app', key: 'DEMO-1', state: '0-backlog', type: 'feature', title: 'Add dark-mode toggle to the settings page' },
-  { project: 'demo-app', key: 'DEMO-2', state: '1-preparation', type: 'feature', title: 'Design the onboarding wizard flow' },
-  { project: 'demo-app', key: 'DEMO-3', state: '2-ready', type: 'chore', title: 'Bump frontend dependencies to latest minor' },
-  { project: 'demo-app', key: 'DEMO-4', state: '3-progress', type: 'bug', title: 'Fix avatar upload failing on large images', hist: true },
-  { project: 'demo-app', key: 'DEMO-5', state: '4-auto-review', type: 'feature', title: 'Add CSV export to the reports table', hist: true },
-  { project: 'demo-app', key: 'DEMO-6', state: '5-human-review', type: 'bug', title: 'Correct timezone handling in the calendar view' },
-  { project: 'demo-app', key: 'DEMO-7', state: '6-completed', type: 'feature', title: 'Introduce keyboard shortcuts for the board', hist: true },
-  { project: 'demo-app', key: 'DEMO-8', state: '7-archive', type: 'chore', title: 'Retire the legacy notifications banner', hist: true },
-  // Demo Platform — a lighter spread
-  { project: 'demo-platform', key: 'PLAT-1', state: '0-backlog', type: 'feature', title: 'Expose a health-check endpoint' },
-  { project: 'demo-platform', key: 'PLAT-2', state: '2-ready', type: 'chore', title: 'Add structured request logging' },
-  { project: 'demo-platform', key: 'PLAT-3', state: '6-completed', type: 'feature', title: 'Cache catalog responses for 60s', hist: true },
-  { project: 'demo-platform', key: 'PLAT-4', state: '7-archive', type: 'bug', title: 'Stop double-counting retried jobs in metrics' },
-];
+const PROJECTS = PINNED_SNAPSHOT.projects;
+const TASKS = PINNED_SNAPSHOT.tasks;
+const DECISION = PINNED_SNAPSHOT.decision;
 
 // ---- Writers ------------------------------------------------------------
 
 function writeJson(path, obj) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+  stamp(path);
 }
 
 function writeText(path, text) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text, 'utf8');
+  stamp(path);
 }
 
 function writeJsonl(path, rows) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, rows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+  stamp(path);
+}
+
+function writeBuffer(path, body) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, body);
+  stamp(path);
+}
+
+function stamp(path) {
+  const at = new Date(BASE);
+  utimesSync(path, at, at);
 }
 
 function bucket(key) {
@@ -110,7 +109,7 @@ function writeTask(root, task, index) {
     createdAt: created,
     enteredLaneAt: entered,
     state: task.state,
-    order: (index + 1) * 10,
+    order: task.decision ? 1 : (index + 1) * 10,
     agent: 'claude',
     ownerClientId: OWNER,
     model: 'claude-opus-4-8',
@@ -121,9 +120,10 @@ function writeTask(root, task, index) {
     allowWebAccess: false,
     taskType: task.type,
     key: task.key,
+    noBranchExpected: task.state === '6-completed' || task.state === '7-archive',
   };
 
-  if (task.hist) {
+  if (task.history) {
     json.sessionName = `demo-session-${task.key.toLowerCase()}`;
     json.lastProgressAt = iso(index * 30 + 110);
     json.lastUsage = {
@@ -137,14 +137,30 @@ function writeTask(root, task, index) {
     }
   }
 
-  writeJson(join(dir, 'task.json'), json);
-  writeText(
-    join(dir, 'prompt.md'),
-    `# ${task.title}\n\nDemo task seeded by scripts/seed-demo-workspace.mjs for the slim DEV demo store (ADR-0056). Not real work — safe to edit, move, or delete; a re-seed restores it.\n`
-  );
+  if (task.decision) {
+    json.tags = ['demo', 'frontend', 'code-review:concerns', 'code-review:grade-b'];
+    json.commits = [
+      {
+        sha: 'd3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871',
+        shortSha: 'd3e0c9f8',
+        message: 'feat(reports): add bounded CSV export',
+        filesChanged: DECISION.diffFiles.length,
+        files: DECISION.diffFiles,
+        at: iso(274),
+        attribution: 'task-key',
+        attributionConfidence: 'high'
+      }
+    ];
+  }
 
-  if (task.hist) writeHistory(dir, task, id, index);
+  writeJson(join(dir, 'task.json'), json);
+  writeText(join(dir, 'prompt.md'), task.decision
+    ? DECISION.promptMarkdown
+    : `# ${task.title}\n\nPinned demo task seeded by scripts/seed-demo-workspace.mjs for the slim DEV demo store (ADR-0056). The data is sanitized and safe to reset; a re-seed restores the exact captured state.\n`);
+
+  if (task.history) writeHistory(dir, task, id, index);
   if (task.key === 'DEMO-5') writeReviewEvidence(dir);
+  if (task.decision) writeDecisionState(dir, task, id);
 }
 
 function writeReviewEvidence(dir) {
@@ -174,6 +190,257 @@ tag: code-review:grade-b
   );
 }
 
+function writeDecisionState(dir, task, id) {
+  const reviewFile = 'code-review-grade-2026-08-09T12-32-00Z.md';
+  writeText(
+    join(dir, reviewFile),
+    `---
+type: code-review-grade
+runAt: ${iso(272)}
+model: gpt-5.4-mini
+cliType: codex
+thinkingLevel: medium
+commit: d3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871
+grade: B
+verdict: concerns
+summary: ${DECISION.reviewSummary}
+tag: code-review:grade-b
+---
+
+# Code Review - Quality Grade: B
+
+> ${DECISION.reviewSummary}
+
+## Findings
+
+${DECISION.reviewFindings.map((finding) => `- **Medium:** ${finding}`).join('\n')}
+
+## Verified
+
+- CSV escaping and timezone formatting passed focused unit coverage.
+- The attached browser capture was reviewed in light and dark themes.
+`
+  );
+
+  const assessments = DECISION.reviewFindings.map((finding) => ({
+    finding,
+    action: 'Escalate',
+    reason: 'The bounded automatic review budget is exhausted; the operator owns the release decision.'
+  }));
+  const councilReaction = {
+    createdAt: iso(273),
+    reviewFileName: reviewFile,
+    grade: 'B',
+    disposition: 'Escalate',
+    summary: `Escalate ${assessments.length} open review findings; loop budget exhausted.`,
+    assessments,
+    startsNewRound: false,
+    targetJobId: null,
+    targetRunAttempt: null
+  };
+  writeJson(join(dir, `${reviewFile}.council-reaction.json`), councilReaction);
+
+  writeText(
+    join(dir, 'orchestrator-follow-up.md'),
+    `# Operator decision handoff
+
+The delivery is bounded and reviewable. Inspect the attached diff, browser proof, and Grade B verdict, then choose whether to request the one focused assertion, accept as-is, or abort.
+
+${DECISION.reviewFindings.map((finding) => `- ${finding}`).join('\n')}
+`
+  );
+  writeText(
+    join(dir, 'status.md'),
+    `# Status
+Result: Needs decision
+Case: review
+Model: codex / gpt-5.4
+
+## Overview
+The reports export is implemented and verified. One bounded empty-state assertion remains for the operator to accept or return.
+
+## What Was Done
+- Added deterministic CSV escaping and timezone formatting.
+- Attached the delivery diff, focused verification, and browser proof.
+- Recorded the Grade B review and explicit escalation verdict.
+
+## Tests
+- Focused unit tests: 18 passed.
+- Playwright: light and dark evidence captured.
+
+## Open Items
+- Decide whether the empty-table assertion blocks release.
+
+## Images
+- ![](../results/reports-export--real.png) (source: real)
+`
+  );
+  writeJson(join(dir, 'aspect-tests-and-evidence.json'), {
+    schemaVersion: 1,
+    aspect: 'tests-and-evidence',
+    verdict: 'concerns',
+    summary: 'Focused tests passed; one explicit empty-table regression assertion remains for operator review.',
+    findings: DECISION.reviewFindings,
+    evidence: ['results/reports-export--real.png', 'results/delivery.diff']
+  });
+
+  const screenshot = createEvidencePng(720, 405);
+  writeBuffer(join(dir, 'results', 'reports-export--real.png'), screenshot);
+  writeBuffer(join(dir, 'attachments', 'export-layout.png'), screenshot);
+  writeText(
+    join(dir, 'results', 'delivery.diff'),
+    `diff --git a/${DECISION.diffFiles[0]} b/${DECISION.diffFiles[0]}
+index 6a70b17..d3e0c9f 100644
+--- a/${DECISION.diffFiles[0]}
++++ b/${DECISION.diffFiles[0]}
+@@ -18,0 +19,4 @@
++export function escapeCsvCell(value: string): string {
++  const normalized = value.replaceAll('"', '""');
++  return /[",\\n]/.test(normalized) ? '"' + normalized + '"' : normalized;
++}
+diff --git a/${DECISION.diffFiles[1]} b/${DECISION.diffFiles[1]}
+index 0b15ad0..d3e0c9f 100644
+--- a/${DECISION.diffFiles[1]}
++++ b/${DECISION.diffFiles[1]}
+@@ -11,0 +12,2 @@
++it('escapes commas and quotes', () => expect(exportRow(fixture)).toMatchSnapshot());
++it.todo('keeps the empty-table export disabled');
+`
+  );
+  writeJsonl(join(dir, 'results', 'review-evidence.jsonl'), [
+    {
+      id: 'review-empty-table-assertion',
+      source: 'code-review',
+      severity: 'warn',
+      title: 'One focused empty-table assertion remains',
+      body: DECISION.reviewFindings[0],
+      createdAt: iso(272),
+      runIndex: 1,
+      artifacts: ['results/reports-export--real.png', 'results/delivery.diff'],
+      fileRefs: [`${DECISION.diffFiles[1]}:13`],
+      acknowledged: false,
+      followupJobId: null
+    },
+    {
+      id: 'browser-proof-both-themes',
+      source: 'task-check',
+      severity: 'info',
+      title: 'Browser proof attached in both themes',
+      body: 'The export affordance, review state, and evidence surface remain readable in light and dark themes.',
+      createdAt: iso(271),
+      runIndex: 1,
+      artifacts: ['results/reports-export--real.png'],
+      fileRefs: [DECISION.diffFiles[0]],
+      acknowledged: true,
+      followupJobId: null
+    }
+  ]);
+  writeJson(join(dir, 'results', 'decision.json'), {
+    version: 1,
+    id: 'reports-export-release',
+    title: DECISION.decisionTitle,
+    question: DECISION.decisionQuestion,
+    context: DECISION.decisionContext,
+    recommendation: {
+      optionId: 'request-assertion',
+      reason: 'Request the one focused assertion, then return directly to this release decision.'
+    },
+    options: [
+      {
+        id: 'request-assertion',
+        label: 'Request one assertion',
+        summary: 'Return the task for the named empty-table regression test only.',
+        consequences: ['Keeps the current implementation.', 'Adds one focused run before release.'],
+        action: { kind: 'steer', prompt: 'Add only the missing empty-table export assertion, run the focused tests, and preserve the attached evidence.' }
+      },
+      {
+        id: 'accept-as-is',
+        label: 'Accept as-is',
+        summary: 'Ship the reviewed implementation without another run.',
+        consequences: ['The existing coverage remains the release boundary.', 'The open finding is recorded as accepted risk.'],
+        action: { kind: 'move', targetState: '6-completed' }
+      },
+      {
+        id: 'abort-release',
+        label: 'Abort release',
+        summary: 'Archive the delivery and keep its evidence for later.',
+        consequences: ['No export reaches release.', 'The task remains auditable in Archive.'],
+        action: { kind: 'move', targetState: '7-archive' }
+      }
+    ],
+    steer: {
+      label: 'Additional guidance',
+      placeholder: 'Optional constraints for the selected path',
+      required: false
+    }
+  });
+
+  writeJsonl(join(dir, 'logs', 'timeline.jsonl'), [
+    { ts: iso(250), kind: 'prompt_created', actor: `human:${OWNER}`, payloadRef: 'prompt.md', summary: `Task created: ${task.title}`, details: { targetState: '0-backlog', agent: 'codex' } },
+    { ts: iso(252), kind: 'agent_run_started', actor: 'system', summary: 'codex CLI start', details: { cli: 'codex', intent: 'start', resumed: 'false' } },
+    { ts: iso(270), kind: 'agent_run_finished', actor: 'agent', summary: 'codex run completed', details: { cli: 'codex', status: 'completed' } },
+    { ts: iso(272), kind: 'code_review_grade_completed', actor: 'review', summary: 'Quality grade B with one focused gap', details: { grade: 'B', verdict: 'concerns', reviewFile } },
+    { ts: iso(273), kind: 'orchestrator_escalated', actor: 'orchestrator', summary: 'Escalated for operator decision', details: { reason: '[review-loop-budget-exhausted] One focused assertion remains.', cause: 'completion-gate', attempt: '3', maxAttempts: '3' } }
+  ]);
+}
+
+function createEvidencePng(width, height) {
+  const rowSize = width * 4 + 1;
+  const raw = Buffer.alloc(rowSize * height);
+  const fill = (x, y, w, h, color) => {
+    for (let yy = Math.max(0, y); yy < Math.min(height, y + h); yy++) {
+      for (let xx = Math.max(0, x); xx < Math.min(width, x + w); xx++) {
+        const offset = yy * rowSize + 1 + xx * 4;
+        raw[offset] = color[0];
+        raw[offset + 1] = color[1];
+        raw[offset + 2] = color[2];
+        raw[offset + 3] = color[3] ?? 255;
+      }
+    }
+  };
+  fill(0, 0, width, height, [20, 23, 31, 255]);
+  fill(28, 24, width - 56, 42, [37, 43, 57, 255]);
+  fill(48, 38, 142, 13, [119, 165, 255, 255]);
+  fill(28, 88, 184, height - 116, [29, 34, 45, 255]);
+  fill(232, 88, width - 260, height - 116, [29, 34, 45, 255]);
+  for (let index = 0; index < 5; index++) {
+    fill(48, 112 + index * 47, 132, 12, index === 2 ? [87, 214, 185, 255] : [105, 115, 137, 255]);
+    fill(252, 112 + index * 47, width - 320, 12, [77 + index * 6, 88 + index * 6, 108 + index * 5, 255]);
+    fill(width - 92, 108 + index * 47, 34, 20, index === 2 ? [44, 118, 99, 255] : [50, 57, 72, 255]);
+  }
+  for (let y = 0; y < height; y++) raw[y * rowSize] = 0;
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0))
+  ]);
+}
+
+function pngChunk(type, data) {
+  const typeBytes = Buffer.from(type, 'ascii');
+  const chunk = Buffer.concat([typeBytes, data]);
+  const output = Buffer.alloc(data.length + 12);
+  output.writeUInt32BE(data.length, 0);
+  chunk.copy(output, 4);
+  output.writeUInt32BE(crc32(chunk), data.length + 8);
+  return output;
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function writeHistory(dir, task, id, index) {
   const t0 = iso(index * 30 + 100);
   const t1 = iso(index * 30 + 104);
@@ -201,6 +468,44 @@ function writeHistory(dir, task, id, index) {
       { stepId: 'aspect-code-quality', kind: 2, model: 'claude-haiku-4-5', status: 2, startedAt: t2, completedAt: t2, durationMs: 8200, inputTokens: 1200, outputTokens: 540, cacheReadTokens: 18000, cacheCreationTokens: 0 },
     ],
   });
+}
+
+function writeDecisionJournal(root) {
+  const task = TASKS.find((candidate) => candidate.key === DECISION.taskKey);
+  if (!task) throw new Error(`Pinned decision task is missing: ${DECISION.taskKey}`);
+  const id = slug(task);
+  const reviewFileName = 'code-review-grade-2026-08-09T12-32-00Z.md';
+  writeJsonl(join(root, 'logs', 'decisions', 'Demo App.jsonl'), [{
+    createdAt: iso(273),
+    jobId: id,
+    project: 'Demo App',
+    kind: 'Escalate',
+    reason: '[review-loop-budget-exhausted] One focused assertion remains for the operator.',
+    prompt: 'Review the attached Grade B verdict and choose the bounded release path.',
+    response: 'The implementation is reviewable and one focused test gap remains. [[DECISION:ESCALATE]]',
+    followUp: '',
+    attemptChainId: 'demo-release-chain-1',
+    gateId: 'demo-release-decision',
+    subjectSha: 'd3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871',
+    failureFingerprint: 'empty-table-assertion',
+    failureKind: 'review-loop-budget-exhausted',
+    councilReaction: {
+      createdAt: iso(273),
+      reviewFileName,
+      grade: 'B',
+      disposition: 'Escalate',
+      summary: `Escalate ${DECISION.reviewFindings.length} open review findings; loop budget exhausted.`,
+      assessments: DECISION.reviewFindings.map((finding) => ({
+        finding,
+        action: 'Escalate',
+        reason: 'The bounded automatic review budget is exhausted; the operator owns the release decision.'
+      })),
+      startsNewRound: false,
+      targetJobId: null,
+      targetRunAttempt: null
+    },
+    attemptEpoch: 0
+  }]);
 }
 
 function writeWorkspaceRootFiles(root) {
@@ -263,8 +568,25 @@ function writeWorkspaceRootFiles(root) {
   );
 }
 
+function writePinnedRepositoryMarker(projectRoot) {
+  const gitDir = join(projectRoot, '.git');
+  if (!existsSync(gitDir)) {
+    mkdirSync(join(gitDir, 'objects'), { recursive: true });
+    mkdirSync(join(gitDir, 'refs', 'heads'), { recursive: true });
+    writeText(join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
+    writeText(
+      join(gitDir, 'config'),
+      '[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = false\n'
+    );
+  }
+  writeText(join(projectRoot, '.gitignore'), 'tasks/\n.orchestrator/\n');
+}
+
 function writePresentationStory(root) {
   const demoApp = join(root, 'projects', 'demo-app');
+  const demoPlatform = join(root, 'projects', 'demo-platform');
+  writePinnedRepositoryMarker(demoApp);
+  writePinnedRepositoryMarker(demoPlatform);
   writeText(
     join(demoApp, 'README.md'),
     '# Demo App\n\nA deterministic sample product used only for Agent Studio demonstrations.\n'
@@ -285,9 +607,19 @@ function writePresentationStory(root) {
 
 function reset(root) {
   // Remove only the paths this seed owns; leave an operator-added .git etc.
-  for (const managed of ['projects', '.metadata', 'adhoc-usage.jsonl', 'project-settings.json', 'tags.json', 'README.md']) {
+  for (const managed of ['projects', '.metadata', 'logs', 'adhoc-usage.jsonl', 'project-settings.json', 'tags.json', 'README.md']) {
     rmSync(join(root, managed), { recursive: true, force: true });
   }
+}
+
+function stampTree(root) {
+  if (!existsSync(root)) return;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) stampTree(path);
+    stamp(path);
+  }
+  stamp(root);
 }
 
 function main() {
@@ -305,11 +637,14 @@ function main() {
   TASKS.forEach((task, i) => writeTask(root, task, i));
   writeWorkspaceRootFiles(root);
   writePresentationStory(root);
+  writeDecisionJournal(root);
+  stampTree(root);
 
   const perLane = TASKS.reduce((acc, t) => ((acc[t.state] = (acc[t.state] || 0) + 1), acc), {});
   console.log(`Seeded demo store at: ${root}`);
   console.log(`  projects: ${PROJECTS.map((p) => p.name).join(', ')}`);
-  console.log(`  tasks:    ${TASKS.length} (${TASKS.filter((t) => t.hist).length} with run/token history)`);
+  console.log(`  tasks:    ${TASKS.length} (${TASKS.filter((t) => t.history).length} with run/token history)`);
+  console.log(`  pinned:   ${DECISION.taskKey} carries review, diff, screenshot, evidence, and decision state`);
   console.log(`  lanes:    ${Object.keys(perLane).sort().join(', ')}`);
   console.log('Registry (.metadata) is left to the backend to seed from WatchPaths on first boot (ADR-0042).');
 }

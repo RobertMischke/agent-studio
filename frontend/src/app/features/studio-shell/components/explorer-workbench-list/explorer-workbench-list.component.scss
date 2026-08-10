@@ -24,7 +24,6 @@
 .studio-workbench-topic__meta i[data-status='decision-pending'], .studio-workbench-topic__meta i[data-status='invalid'] { background: var(--studio-warn); }
 .studio-workbench-history { margin: var(--studio-spacing-1) 0 0; padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
 .studio-workbench-history:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
-.studio-workbench-topic--settled:not(.studio-workbench-topic--active) { color: var(--studio-fg-muted); }
 
 // `.studio button` has higher specificity than the component classes. Scope
 // these padding declarations so the intended nested band and action rhythm
