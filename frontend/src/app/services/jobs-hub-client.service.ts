@@ -30,6 +30,12 @@ export interface JobsHubHandlers {
   reconnected?: () => void;
 }
 
+export interface OrchestratorContextChangedEvent {
+  contextKey: string;
+  projectName: string;
+  updatedAt: string;
+}
+
 /**
  * Owns the single browser→backend SignalR connection for board-level task
  * mutation events. Push is the primary update path; the {@link TaskService}
@@ -51,6 +57,8 @@ export class JobsHubClient {
   readonly connected = signal(false);
   /** Latest Workbench change on the same shared hub connection. */
   readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
+  /** Monotonic refresh hint for the central Task Server Chat History view. */
+  readonly orchestratorContextsRevision = signal(0);
 
   private connection: HubConnection | null = null;
   private handlers: JobsHubHandlers | null = null;
@@ -77,7 +85,10 @@ export class JobsHubClient {
 
     if (handlers.jobCreated) conn.on('jobCreated', handlers.jobCreated);
     if (handlers.jobUpdated) conn.on('jobUpdated', handlers.jobUpdated);
-    if (handlers.jobMoved) conn.on('jobMoved', handlers.jobMoved);
+    conn.on('jobMoved', event => {
+      this.publishOrchestratorContextRefresh();
+      handlers.jobMoved?.(event);
+    });
     if (handlers.jobDeleted) conn.on('jobDeleted', handlers.jobDeleted);
     if (handlers.jobsReordered) conn.on('jobsReordered', handlers.jobsReordered);
     if (handlers.jobsBulkChanged) conn.on('jobsBulkChanged', handlers.jobsBulkChanged);
@@ -89,6 +100,9 @@ export class JobsHubClient {
     conn.on('workbenchUpdated', workbenchEvent);
     conn.on('workbenchDecisionRecorded', workbenchEvent);
     conn.on('workbenchStatusChanged', workbenchEvent);
+    conn.on('orchestratorContextChanged', () => {
+      this.publishOrchestratorContextRefresh();
+    });
 
     conn.onreconnecting(() => this.connected.set(false));
     conn.onreconnected(() => {
@@ -149,6 +163,10 @@ export class JobsHubClient {
       previousStatus: null,
       occurredAtUtc: new Date().toISOString(),
     });
+  }
+
+  private publishOrchestratorContextRefresh(): void {
+    this.orchestratorContextsRevision.update(revision => revision + 1);
   }
 
   private scheduleColdRetry(): void {

@@ -347,6 +347,8 @@ export class StudioTabStateService {
         return { kind: 'board', projectName: tab.projectName };
       case 'feed':
         return { kind: 'feed' };
+      case 'chat-history':
+        return { kind: 'chat-history' };
       case 'epics':
         return { kind: 'epics', projectName: tab.projectName };
       case 'epic':
