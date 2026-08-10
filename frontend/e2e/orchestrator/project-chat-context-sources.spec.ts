@@ -5,7 +5,7 @@ import { installOrchestratorChatBootstrap } from '../helpers/orchestrator-chat-b
 import { setTheme } from '../helpers/theme';
 
 const PROJECT = 'context-fixture';
-const RESULTS = resolve(process.env.JOB_RESULTS_DIR ?? resolve(process.cwd(), '..', 'results', 'AGT-2573'));
+const RESULTS = resolve(process.env.JOB_RESULTS_DIR ?? resolve(process.cwd(), '..', 'results', 'AGT-2506'));
 mkdirSync(RESULTS, { recursive: true });
 
 interface ContextReference {
@@ -68,7 +68,8 @@ async function installContextFixtures(page: Page) {
     turns.push(
       { id: `user-${turns.length}`, ts: now, role: 'user', text: body.text },
       {
-        id: `reply-${turns.length}`, ts: now, role: 'orchestrator', text: 'The selected sources were resolved at send time.',
+        id: `reply-${turns.length}`, ts: now, role: 'orchestrator',
+        text: 'The selected sources were resolved at send time.\n\n> Context note: `docs/missing.md` could not be resolved.',
         contextReceipt: {
           scope: 'project', contextKey: `project:${PROJECT}`, taskKey: null,
           includedBlocks: references.map(reference => reference.reference), capturedAt: body.contextEnvelope?.capturedAt ?? now,
@@ -102,12 +103,34 @@ async function openChat(page: Page) {
   await expect(page.getByTestId('chat-input')).toBeVisible();
 }
 
-test('project chat attaches known sources, inspects the persisted receipt, and keeps one permanent project chat', async ({ page }) => {
+test('project chat attaches context references, blocks images, and keeps one permanent project chat', async ({ page }) => {
   const captured = await installContextFixtures(page);
   await openChat(page);
 
-  await expect(page.getByTestId('orch-current-tab-chip')).toContainText('Current tab · Board');
-  await page.getByTestId('orch-add-context').click();
+  await expect(page.getByTestId('chat-toolbar')).toHaveCount(0);
+  await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await page.getByTestId('chat-input').evaluate(input => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['not-an-image'], 'blocked.png', { type: 'image/png' }));
+    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }));
+    input.closest('form')?.dispatchEvent(new DragEvent('drop', {
+      dataTransfer: transfer,
+      bubbles: true,
+      cancelable: true,
+    }));
+  });
+  await expect(page.getByTestId('chat-drafts')).toHaveCount(0);
+  await expect(page.getByTestId('chat-composer-foot').getByTestId('chat-send')).toHaveCount(1);
+
+  await expect(page.getByTestId('orch-composer-plus')).toBeVisible();
+  await expect(page.getByText('Upload from computer', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Browse the web', { exact: true })).toHaveCount(0);
+  await page.getByTestId('orch-composer-plus').click();
+  const composerMenu = page.getByTestId('orch-composer-menu-panel');
+  await expect(composerMenu).toBeVisible();
+  await expect(composerMenu.getByRole('menuitem')).toHaveCount(1);
+  await page.getByTestId('orch-composer-menu-item-add-context').click();
   await expect(page.getByTestId('orch-context-current-automatic')).toContainText('already included');
   await page.getByTestId('orch-context-source-search').fill('context');
 
@@ -117,12 +140,17 @@ test('project chat attaches known sources, inspects the persisted receipt, and k
   await expect(page.getByTestId('orch-context-group-commits')).toContainText('persist context receipts');
 
   await page.getByTestId('orch-context-group-wiki').getByRole('button', { name: /Context workbench/ }).click();
-  await page.getByTestId('orch-context-group-files').getByRole('button', { name: /context-envelope.ts/ }).click();
+  await page.getByTestId('orch-context-source-search').fill('docs/missing.md');
+  await page.getByTestId('orch-context-add-reference').click();
+  await page.getByTestId('orch-context-source-search').fill('context');
+  await expect(page.getByTestId('orch-context-group-commits')).toContainText('persist context receipts');
   await page.getByTestId('orch-context-group-commits').getByRole('button', { name: /persist context receipts/ }).click();
-  await expect(page.getByTestId('orch-context-estimate')).toContainText('4 sources');
+  await expect(page.getByTestId('chat-context-attachments')).toContainText('CTX-WB');
+  await expect(page.getByTestId('chat-context-attachments')).toContainText('docs/missing.md');
+  await expect(page.getByTestId('chat-context-attachments')).toContainText('persist context receipts');
 
   await setTheme(page, 'light');
-  await page.screenshot({ path: resolve(RESULTS, 'project-chat-context-picker--mocked-light.png'), fullPage: false });
+  await page.screenshot({ path: resolve(RESULTS, 'project-chat-context-picker--light--mocked.png'), fullPage: false });
   await page.getByRole('button', { name: 'Close context picker' }).click();
 
   await page.getByTestId('chat-input').fill('Compare these context sources.');
@@ -130,9 +158,10 @@ test('project chat attaches known sources, inspects the persisted receipt, and k
   await expect.poll(() => captured.length).toBe(1);
   expect(captured[0].contextEnvelope?.explicitReferences).toEqual([
     { kind: 'page', reference: `page:${PROJECT}/operations/context-workbench/index.html`, projectId: PROJECT },
-    { kind: 'repository-file', reference: 'src/context-envelope.ts', projectId: PROJECT },
+    { kind: 'repository-file', reference: 'docs/missing.md', projectId: PROJECT },
     { kind: 'commit', reference: `commit:${PROJECT}/9a11cbed0123456789abcdef`, projectId: PROJECT },
   ]);
+  await expect(page.getByText(/Context note.*docs\/missing\.md/s)).toBeVisible();
 
   await expect(page.getByTestId('orch-context-inspect-toggle')).toContainText('4 sources');
   await page.getByTestId('orch-context-inspect-toggle').click();
@@ -142,7 +171,7 @@ test('project chat attaches known sources, inspects the persisted receipt, and k
   await expect(inspector).toContainText('Included');
 
   await setTheme(page, 'dark');
-  await page.screenshot({ path: resolve(RESULTS, 'project-chat-context-inspector--mocked-dark.png'), fullPage: false });
+  await page.screenshot({ path: resolve(RESULTS, 'project-chat-context-inspector--dark--mocked.png'), fullPage: false });
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByTestId('orch-side-sheet-toggle').click();

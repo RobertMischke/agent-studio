@@ -81,6 +81,11 @@
   min-height: 0;
 }
 
+/* Task Chat has mandatory implicit task context and no context-picker flow. */
+:host ::ng-deep .task-chat__composer .chat__context-add-btn {
+  display: none;
+}
+
 .task-chat__composer-context {
   min-width: 0;
   overflow: hidden;

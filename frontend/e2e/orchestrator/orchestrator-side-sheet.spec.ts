@@ -68,7 +68,7 @@ test.describe('Orchestrator side sheet', () => {
     await expect(composer).toBeEnabled();
     await expect(composer).toHaveAttribute(
       'placeholder',
-      /Ask the orchestrator/
+      /Ask a question/
     );
 
     // Studio uses the standard CAC composer/footer with no host-only task
@@ -77,6 +77,8 @@ test.describe('Orchestrator side sheet', () => {
     await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
     await expect(page.getByTestId('chat-toolbar-task')).toHaveCount(0);
+    await expect(page.getByTestId('chat-toolbar')).toHaveCount(0);
+    await expect(page.getByTestId('chat-attach')).toHaveCount(0);
 
     // Compact-bubble polish demo: type into the composer so the layout
     // captures show the active state with text in the input.

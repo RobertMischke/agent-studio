@@ -279,8 +279,8 @@ test.describe('Orchestrator Chat standard project entry', () => {
 
     await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
     await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(ALPHA.name);
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(ALPHA.name);
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveCount(0);
     await expect(page.getByTestId('chat-input')).not.toBeFocused();
     await expect.poll(() => [...requestedChatContexts]).toContain(`project:${ALPHA.name}`);
     expect(requestedChatContexts).not.toContain(`project:${BETA.name}`);
@@ -298,8 +298,7 @@ test.describe('Orchestrator Chat standard project entry', () => {
       .getByText(ALPHA.name, { exact: true })
       .click();
     await page.getByTestId(`studio-project-picker-item-${BETA.name}`).click();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(BETA.name);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(BETA.name);
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(BETA.name);
     await expect.poll(() => [...requestedChatContexts]).toContain(`project:${BETA.name}`);
 
     await page.setViewportSize({ width: 430, height: 844 });
@@ -334,15 +333,15 @@ test.describe('Orchestrator Chat standard project entry', () => {
       .click();
     await page.getByTestId(`studio-project-picker-item-${ALPHA.name}`).click();
     await expect(page.getByTestId(`studio-tab-board:${ALPHA.name}`)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
+    await expect(page.locator('app-orchestrator-side-sheet')).not.toHaveClass(/is-open/);
 
     await page.getByTestId('orch-side-sheet-toggle').click();
     await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(ALPHA.name);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId(`studio-tab-board:${ALPHA.name}`)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
+    await expect(page.locator('app-orchestrator-side-sheet')).not.toHaveClass(/is-open/);
   });
 
   test('does not open the project side sheet over a task deep link', async ({ page }) => {
@@ -352,7 +351,7 @@ test.describe('Orchestrator Chat standard project entry', () => {
 
     await expect(page.getByTestId('studio-task')).toBeVisible();
     await expect(page.getByTestId('inspector-tab-activity')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
+    await expect(page.locator('app-orchestrator-side-sheet')).not.toHaveClass(/is-open/);
     await expect.poll(() => new URL(page.url()).hash).toBe(`#/tasks/${TASK.key}`);
   });
 });

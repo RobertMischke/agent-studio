@@ -274,6 +274,58 @@
   background: var(--orch-panel-bg);
 }
 
+/* CAC 0.4.1 owns the chips, model control, and Send placement. The host uses
+   its documented footer projection for the single operator-approved secondary
+   action, so the library's duplicate add controls stay out of this surface. */
+:host ::ng-deep .sheet__composer .chat__context-add-btn,
+:host ::ng-deep .sheet__composer .chat__context-attachment-add {
+  display: none;
+}
+
+:host ::ng-deep .sheet__composer .chat__context-attachments-prefix {
+  font-size: 0;
+}
+
+:host ::ng-deep .sheet__composer .chat__context-attachments-prefix::after {
+  content: var(--orch-context-summary, "Context");
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet__composer-plus {
+  order: -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sheet__composer-plus:hover:not(:disabled) {
+  border-color: var(--studio-border-strong);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+
+.sheet__composer-plus:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.sheet__composer-plus:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .sheet__event-action {
   align-self: flex-start;
 }

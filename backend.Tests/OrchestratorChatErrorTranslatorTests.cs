@@ -181,7 +181,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         var reply = await service.SendAsync(
             "project-a", _watchPath,
-            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            new SendOrchestratorChatRequest("Hi"),
             CancellationToken.None);
 
         Assert.Contains("codex: Not inside a trusted directory", reply.ErrorMessage);
@@ -239,7 +239,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
         // Act
         var reply = await service.SendAsync(
             "project-a", _watchPath,
-            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            new SendOrchestratorChatRequest("Hi"),
             CancellationToken.None);
 
         // Assert: the persisted turn carries the friendly message; the
@@ -305,7 +305,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         var reply = await service.SendAsync(
             "project-a", _watchPath,
-            new SendOrchestratorChatRequest("Hi", Attachments: null),
+            new SendOrchestratorChatRequest("Hi"),
             CancellationToken.None);
 
         Assert.NotNull(reply.ErrorMessage);
@@ -317,10 +317,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
     /// <summary>
     /// Test double: returns Success=false with a pre-canned error message.
     /// Overrides the 6-arg <see cref="OrchestratorRunner.ResumeAsync"/>
-    /// because <see cref="OrchestratorRunner.ResumeWithFallbackAsync"/>
-    /// (the entry point used by <see cref="OrchestratorChatService.SendAsync"/>)
-    /// always calls the inline-images variant; the 5-arg overload is dead
-    /// weight on this path.
+    /// because the GPT-only chat path invokes Codex directly.
     /// </summary>
     private sealed class PipeClosedRunner : OrchestratorRunner
     {
@@ -347,26 +344,9 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
                 CapturedSessionId: null,
                 ErrorMessage: _error));
 
-        public override Task<OrchestratorDecisionResult> ResumeAsync(
-            string sessionId, string prompt, string? model, string workingDirectory,
-            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
-            CancellationToken ct = default)
-            => Task.FromResult(new OrchestratorDecisionResult(
-                Success: false,
-                ReplyText: "",
-                Model: model ?? DefaultModel,
-                TokenUsage: null,
-                CapturedSessionId: null,
-                ErrorMessage: _error));
-
-        public override Task<OrchestratorDecisionResult> DecideAsync(
-            string prompt, string? model, string workingDirectory,
-            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
-            CancellationToken ct = default)
-            => ResumeAsync("", prompt, model, workingDirectory, inlineImages, ct);
     }
 
-    /// <summary>Test double: throws the configured exception inside ResumeAsync (6-arg overload).</summary>
+    /// <summary>Test double that throws the configured exception during the Codex call.</summary>
     private sealed class ThrowingRunner : OrchestratorRunner
     {
         private readonly Exception _exception;
@@ -386,16 +366,5 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
             CancellationToken ct = default)
             => throw _exception;
 
-        public override Task<OrchestratorDecisionResult> ResumeAsync(
-            string sessionId, string prompt, string? model, string workingDirectory,
-            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
-            CancellationToken ct = default)
-            => throw _exception;
-
-        public override Task<OrchestratorDecisionResult> DecideAsync(
-            string prompt, string? model, string workingDirectory,
-            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
-            CancellationToken ct = default)
-            => throw _exception;
     }
 }

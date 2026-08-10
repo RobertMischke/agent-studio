@@ -212,6 +212,10 @@ test('Task Chat keeps Activity separate and sends implicit context without task-
 
   const taskChat = page.getByTestId('task-chat');
   await expect(taskChat).toBeVisible();
+  await expect(taskChat.getByTestId('chat-toolbar')).toHaveCount(0);
+  await expect(taskChat.getByTestId('chat-attach')).toHaveCount(0);
+  await expect(taskChat.getByTestId('chat-context-attachment-add')).toBeHidden();
+  await expect(taskChat.locator('input[type="file"]')).toHaveCount(0);
   await expect(taskChat.getByTestId('task-chat-boundary')).toContainText(
     `Questions automatically refer to ${TASK_KEY}.`,
   );
@@ -233,6 +237,7 @@ test('Task Chat keeps Activity separate and sends implicit context without task-
     scope: { kind: 'task', contextKey: CONTEXT_KEY, projectId: PROJECT, taskKey: TASK_KEY },
     activeSurface: { kind: 'task', taskKey: TASK_KEY },
   });
+  expect(requestBody).not.toHaveProperty('attachments');
   expect(taskAgentMutations).toEqual([]);
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
 

@@ -495,26 +495,27 @@ test.describe('Orchestrator context header · where am I', () => {
     expect(unexpectedRequests).toEqual([]);
   });
 
-  test('standard footer receives Board context and keeps canonical keyboard order in light theme', async ({ page }) => {
+  test('compact footer keeps one Plus action and canonical keyboard order in light theme', async ({ page }) => {
     await seedActiveTab(page, { kind: 'board', projectName: PROJECT }, `board:${PROJECT}`, 'light');
     const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
     await openSideSheet(page, false);
 
     const sheet = page.getByTestId('orch-side-sheet');
     await expect(page.getByTestId('chat-composer-foot')).toHaveCount(1);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
-    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveCount(0);
+    await expect(page.getByTestId('chat-composer-context-surface')).toHaveCount(0);
+    await expect(page.getByTestId('orch-composer-plus')).toBeVisible();
+    await expect(page.getByTestId('chat-context-attachment-add')).toBeHidden();
     await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
 
     const input = page.getByTestId('chat-input');
     await input.fill('Keyboard order draft');
     await input.focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
-    await input.focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByTestId('chat-attach')).toBeFocused();
+    await expect(page.getByTestId('orch-composer-plus')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('chat-send')).toBeFocused();
 
@@ -522,7 +523,7 @@ test.describe('Orchestrator context header · where am I', () => {
     expect(unexpectedRequests).toEqual([]);
   });
 
-  test('standard footer receives Task context at mobile width in dark theme', async ({ page }) => {
+  test('panel header keeps Task context at mobile width with a compact dark composer', async ({ page }) => {
     const task = runningTask();
     await page.setViewportSize({ width: 390, height: 844 });
     await seedActiveTab(
@@ -535,9 +536,10 @@ test.describe('Orchestrator context header · where am I', () => {
     await openSideSheet(page, false);
 
     const sheet = page.getByTestId('orch-side-sheet');
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
-    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
-    await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('AGT-1916');
+    await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Task');
+    await expect(page.getByTestId('orch-panel-context-name')).toContainText('AGT-1916');
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveCount(0);
+    await expect(page.getByTestId('orch-composer-plus')).toBeVisible();
     const box = await sheet.boundingBox();
     expect(box?.width ?? 999).toBeLessThanOrEqual(390);
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
@@ -547,7 +549,7 @@ test.describe('Orchestrator context header · where am I', () => {
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`keeps the Dossier context chip row compact in ${variant.name}`, async ({ page }) => {
+    test(`opens Dossier context from one compact Plus action in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
@@ -573,63 +575,38 @@ test.describe('Orchestrator context header · where am I', () => {
         await showSideSheet(page, false);
       }
 
-      const draft = page.getByTestId('orch-context-draft');
-      const chip = page.getByTestId('orch-current-tab-chip');
-      const chipLabel = page.getByTestId('orch-current-tab-label');
-      const estimate = page.getByTestId('orch-context-estimate');
-      await expect(draft).toBeVisible();
-      await expect(chip).toHaveAttribute('data-context-type', 'Dossier');
-      await expect(page.getByTestId('orch-current-tab-type-icon')).toBeVisible();
-      await expect(chipLabel).toHaveText('AOW-W1');
-      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
-      await expect(estimate).toHaveText('~1.6k');
-      await expect(estimate).not.toContainText('resolved when you send');
-
-      const layout = await draft.evaluate((element) => {
-        const rowItems = [
-          element.querySelector<HTMLElement>('[data-testid="orch-current-tab-chip"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-add-context"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-context-estimate"]')!,
-        ];
-        const label = element.querySelector<HTMLElement>('[data-testid="orch-current-tab-label"]')!;
-        return {
-          fits: element.scrollWidth <= element.clientWidth + 1,
-          rowCount: new Set(rowItems.map(item => {
-            const box = item.getBoundingClientRect();
-            return Math.round(box.top + box.height / 2);
-          })).size,
-          chipWhiteSpace: getComputedStyle(rowItems[0]).whiteSpace,
-          labelOverflow: getComputedStyle(label).textOverflow,
-        };
-      });
-      expect(layout).toEqual({
-        fits: true,
-        rowCount: 1,
-        chipWhiteSpace: 'nowrap',
-        labelOverflow: 'ellipsis',
-      });
-
-      await page.mouse.move(1, 1);
+      const plus = page.getByTestId('orch-composer-plus');
+      await expect(plus).toBeVisible();
+      await expect(plus).toHaveAttribute('aria-label', 'More composer actions');
+      await expect(page.getByTestId('chat-context-attachment-add')).toBeHidden();
+      await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+      await expect(page.getByText('Upload from computer', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('Browse the web', { exact: true })).toHaveCount(0);
+      await plus.click();
+      const composerMenu = page.getByTestId('orch-composer-menu-panel');
+      await expect(composerMenu).toBeVisible();
+      await expect(composerMenu.getByRole('menuitem')).toHaveCount(1);
+      await expect(page.getByTestId('orch-composer-menu-item-add-context')).toHaveText('Add context');
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-context-chip--after--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-composer-plus-menu--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
+      await page.getByTestId('orch-composer-menu-item-add-context').click();
 
-      await chip.hover();
-      await expect(page.locator('.app-tooltip-overlay')).toContainText(LONG_CONTEXT_TITLE);
-      await expect(page.locator('.app-tooltip-overlay')).toContainText('Current tab · Dossier');
+      const picker = page.getByTestId('orch-context-source-picker');
+      await expect(picker).toBeVisible();
+      await expect(picker.getByRole('heading', { name: 'Add context' })).toBeVisible();
+      const currentContext = page.getByTestId('orch-context-current-automatic')
+        .or(page.getByTestId('orch-context-current-source'));
+      await expect(currentContext).toContainText('AOW-W1');
 
       await page.mouse.move(1, 1);
-      await expect(page.locator('.app-tooltip-overlay')).toHaveCount(0);
-      await estimate.hover();
-      await expect(page.locator('.app-tooltip-overlay'))
-        .toHaveText('1 source · about 1,600 tokens · resolved when you send');
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-context-chip-meta-tooltip--after--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-context-plus--after--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
 

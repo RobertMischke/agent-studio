@@ -80,38 +80,16 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect(root.textContent).toContain('Chat history');
   });
 
-  it('offers a repository page as the first stable current-tab source', async () => {
-    const fixture = await makeFixture();
-    fixture.componentRef.setInput('pageContext', {
-      projectName: 'demo-project', relPath: 'concepts/context.md', title: 'Context model',
-      pageType: 'concept', excerpt: 'Conversation scope and source receipts.',
-    });
-    fixture.componentRef.setInput('composerContext', {
-      project: 'demo-project', surface: 'Wiki', detail: 'Context model',
-    });
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.currentTabSource()?.reference).toEqual({
-      kind: 'page', reference: 'page:demo-project/concepts/context.md', projectId: 'demo-project',
-    });
-    const root = fixture.nativeElement as HTMLElement;
-    root.querySelector<HTMLButtonElement>('[data-testid="orch-add-context"]')!.click();
-    fixture.detectChanges();
-    expect(root.querySelector('[data-testid="orch-context-current-source"]')?.textContent)
-      .toContain('Context model');
-  });
-
-  it('renders the standard composer footer once and removes both host task workflows', async () => {
+  it('renders one compact composer footer without duplicate location or task workflows', async () => {
     const fixture = await makeFixture();
     fixture.componentRef.setInput('composerContext', { project: 'Agent Studio', surface: 'Board' });
     fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
 
     expect(root.querySelectorAll('[data-testid="chat-composer-foot"]')).toHaveLength(1);
-    expect(root.querySelector('[data-testid="chat-composer-context-project"]')?.textContent?.trim())
-      .toBe('Agent Studio');
-    expect(root.querySelector('[data-testid="chat-composer-context-surface"]')?.textContent?.trim())
-      .toBe('Board');
+    expect(root.querySelector('[data-testid="orch-composer-plus"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="chat-composer-context-project"]')).toBeNull();
+    expect(root.querySelector('[data-testid="chat-composer-context-surface"]')).toBeNull();
     expect(root.textContent).not.toContain('Make a task from your message');
     expect(root.textContent).not.toContain('Make a task from this reply');
     expect(root.querySelector('[data-testid="orch-side-sheet-draft-actions"]')).toBeNull();
@@ -139,10 +117,12 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     const secondChat = fixture.debugElement.query(By.directive(ChatComponent)).componentInstance as ChatComponent;
     expect(secondChat).toBe(firstChat);
     expect(textarea.value).toBe('Draft survives navigation');
+    expect(fixture.componentInstance.automaticContextPresentation()).toMatchObject({
+      typeLabel: 'Task',
+      label: 'AGT-2162',
+    });
     expect((fixture.nativeElement as HTMLElement)
-      .querySelector('[data-testid="chat-composer-context-surface"]')?.textContent?.trim()).toBe('Task');
-    expect((fixture.nativeElement as HTMLElement)
-      .querySelector('[data-testid="chat-composer-context-detail"]')?.textContent?.trim()).toBe('AGT-2162');
+      .querySelector('[data-testid="chat-composer-context-surface"]')).toBeNull();
   });
 
   it('shows the persisted context receipt for the latest orchestrator answer', async () => {
