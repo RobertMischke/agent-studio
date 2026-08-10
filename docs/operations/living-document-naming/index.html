@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Naming the Living Decision-to-Documentation Artifact | Decision Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #11110f;
+    --ink-2: #52514e;
+    --ink-3: #76746e;
+    --line: #d8d6cf;
+    --accent: #2768c7;
+    --accent-soft: #e8f0fb;
+    --green: #19723a;
+    --green-soft: #e4f2e8;
+    --amber: #805b0a;
+    --amber-soft: #f7edcf;
+    --red: #a63c3c;
+    --red-soft: #f8e7e7;
+    --code: #e8e7e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #f7f6f2;
+      --ink-2: #c3c2b7;
+      --ink-3: #97958d;
+      --line: #3d3d3a;
+      --accent: #78a9f4;
+      --accent-soft: #1d2b3d;
+      --green: #74c98c;
+      --green-soft: #203126;
+      --amber: #e1b34e;
+      --amber-soft: #332d1e;
+      --red: #ef8585;
+      --red-soft: #382424;
+      --code: #30302e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 15px/1.62 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+  header.page { padding: 44px 0 28px; border-bottom: 1px solid var(--line); }
+  .kicker {
+    margin: 0 0 9px;
+    color: var(--ink-3);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  h1 { max-width: 850px; margin: 0 0 12px; font-size: clamp(2rem, 4vw, 2.7rem); line-height: 1.14; }
+  h2 { margin: 54px 0 7px; font-size: 23px; line-height: 1.25; scroll-margin-top: 18px; }
+  h3 { margin: 30px 0 6px; font-size: 17px; }
+  h4 { margin: 0 0 5px; font-size: 14px; }
+  p, li { max-width: 78ch; }
+  p { margin: 0 0 13px; }
+  ul, ol { padding-left: 22px; }
+  li + li { margin-top: 5px; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  code {
+    border-radius: 4px;
+    background: var(--code);
+    padding: 1px 5px;
+    font: .88em/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+  .lede { max-width: 74ch; color: var(--ink-2); font-size: 18px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 18px; color: var(--ink-3); font-size: 13px; }
+  .meta b { color: var(--ink-2); }
+  .decision-strip { margin: 22px 0 0; background: var(--accent-soft); padding: 15px 18px; }
+  .decision-strip strong { display: block; margin-bottom: 2px; }
+  .decision-strip p { max-width: 88ch; margin: 0; color: var(--ink-2); }
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px 24px;
+    margin: 26px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .section-no { margin-right: 9px; color: var(--ink-3); font-weight: 600; }
+  .lifecycle {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    margin: 22px 0;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+  .stage { position: relative; min-height: 112px; background: var(--surface-2); padding: 16px 18px; }
+  .stage span { color: var(--accent); font: 700 11px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .08em; }
+  .stage p { margin: 5px 0 0; color: var(--ink-2); font-size: 13px; }
+  .stage + .stage::before {
+    position: absolute;
+    left: -8px;
+    top: 44px;
+    z-index: 1;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--surface-1);
+    color: var(--ink-3);
+    content: "›";
+    font: 700 16px/14px system-ui, sans-serif;
+    text-align: center;
+  }
+  .note { margin: 18px 0; background: var(--surface-2); padding: 14px 18px; }
+  .note p:last-child { margin-bottom: 0; }
+  .note.good { background: var(--green-soft); }
+  .note.warn { background: var(--amber-soft); }
+  .criteria {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 30px;
+    margin-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .criterion { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 13px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .weight { color: var(--accent); font: 700 12px/1.5 ui-monospace, Consolas, monospace; }
+  .criterion p { margin: 0; color: var(--ink-2); }
+  .criterion strong { color: var(--ink-1); }
+  .table-wrap { overflow-x: auto; margin-top: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  caption { max-width: 92ch; padding: 0 0 10px; color: var(--ink-2); text-align: left; }
+  th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--ink-3); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; }
+  td.numeric, th.numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.candidate { min-width: 126px; font-weight: 650; }
+  td.verdict { min-width: 310px; color: var(--ink-2); }
+  tr.recommended { background: var(--green-soft); }
+  tr.runner-up { background: var(--accent-soft); }
+  .score { font-weight: 750; color: var(--ink-1); }
+  .legend { margin-top: 10px; color: var(--ink-3); font-size: 12px; }
+  .shortlist {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    margin-top: 18px;
+    border: 1px solid var(--line);
+    background: var(--line);
+  }
+  .shortlist article { background: var(--surface-2); padding: 16px 18px; }
+  .shortlist p { margin: 5px 0 0; color: var(--ink-2); font-size: 13px; }
+  .rank { color: var(--accent); font: 700 11px/1.4 ui-monospace, Consolas, monospace; }
+  .culture-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 30px;
+    margin-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .culture { padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .culture p { margin: 4px 0 0; color: var(--ink-2); }
+  .fork th:first-child, .fork td:first-child { width: 18%; min-width: 140px; }
+  .fork td { min-width: 300px; }
+  .decision-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+  .option { background: var(--surface-2); padding: 17px 19px; }
+  .option.recommended { background: var(--green-soft); }
+  .option p { margin: 6px 0 0; color: var(--ink-2); }
+  .option .label { color: var(--accent); font: 700 11px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .08em; }
+  .source-list li { max-width: 92ch; }
+  footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }
+  @media (max-width: 850px) {
+    main { width: min(100% - 24px, 1160px); }
+    .toc { grid-template-columns: 1fr 1fr; }
+    .lifecycle, .shortlist { grid-template-columns: 1fr 1fr; }
+    .stage + .stage::before { display: none; }
+    .criteria, .culture-grid, .decision-options { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .toc, .lifecycle, .shortlist { grid-template-columns: 1fr; }
+    header.page { padding-top: 30px; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="page">
+    <p class="kicker">Decision dossier · Agent Studio · AGT-2584</p>
+    <h1>Naming the living decision-to-documentation artifact</h1>
+    <p class="lede">The artifact now carries one subject from exploration through decision and implementation into permanent documentation. The name must describe that whole record without pretending it is only a specification, a plan, or a log.</p>
+    <div class="meta">
+      <span><b>Status:</b> decision pending</span>
+      <span><b>Phase:</b> decision ready</span>
+      <span><b>Date:</b> 10 August 2026</span>
+      <span><b>Scope:</b> naming analysis only</span>
+    </div>
+    <div class="decision-strip">
+      <strong>Recommendation: keep Dossier</strong>
+      <p>Use “Dossier” as the stable product noun and “living dossier” as explanatory copy. A dossier can grow without semantic strain. “Living Dossier” is the runner-up if explicit liveness in every label is worth a longer, less natural name. Do not choose “Living Spec.”</p>
+    </div>
+    <nav aria-label="Dossier contents">
+      <ul class="toc">
+        <li><a href="#reality">01 · Product reality</a></li>
+        <li><a href="#criteria">02 · Criteria</a></li>
+        <li><a href="#alternatives">03 · Candidates</a></li>
+        <li><a href="#culture">04 · Adjacent culture</a></li>
+        <li><a href="#recommendation">05 · Recommendation</a></li>
+        <li><a href="#consequences">06 · Consequences</a></li>
+        <li><a href="#open-decisions">07 · Decision request</a></li>
+        <li><a href="#evidence">08 · Evidence</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <section id="reality" data-concept-section="evidence">
+    <h2><span class="section-no">01</span>The name has to cover the whole lifecycle</h2>
+    <p>The earlier “Workbench” label described a place where analysis happened. The product has moved past that model. The artifact is now a durable subject record with an active middle: it frames a question, holds decisions, relates implementation cards, receives delivery updates, and ends as documentation.</p>
+
+    <div class="lifecycle" role="list" aria-label="Artifact lifecycle">
+      <article class="stage" role="listitem"><span>01 · EXPLORE</span><p>Evidence, alternatives, unknowns, and operator questions are assembled.</p></article>
+      <article class="stage" role="listitem"><span>02 · DECIDE</span><p>Decisions are recorded in the same public, versioned artifact.</p></article>
+      <article class="stage" role="listitem"><span>03 · IMPLEMENT</span><p>Related cards, lane dots, refresh cards, and pipeline updates keep the record current.</p></article>
+      <article class="stage" role="listitem"><span>04 · DOCUMENT</span><p>The accepted outcome and its rationale remain as permanent documentation.</p></article>
+    </div>
+
+    <p>This makes the artifact broader than a requirements document and narrower than the whole project wiki. It is about one coherent case or initiative-sized subject. The product behavior, not an adjective, makes it living: card references expose current state, AGT-2580 writes delivery updates, and the documented lifecycle from AGT-2537 gives the record a quiet terminal state.</p>
+
+    <div class="note">
+      <h4>Current naming boundary</h4>
+      <p>The operator chose “Dossier” on 9 August. AGT-2539 contains the one UI and documentation rename and is held for this decision. Code identifiers, <code>workbench.json</code>, API routes, and the <code>AGT-W4</code> key family remain <code>workbench*</code> by prior decision. Choosing another public noun changes AGT-2539; it must not create a second rename card or a second code migration.</p>
+    </div>
+  </section>
+
+  <section id="criteria">
+    <h2><span class="section-no">02</span>Weighted evaluation criteria</h2>
+    <p>The weights deliberately favor meaning across time. A concise label that becomes false after the decision phase is worse than a slightly formal noun that remains accurate. Scores use a 1 to 5 comparative scale, where 5 is the best fit. Weighted totals are out of 100.</p>
+
+    <div class="criteria">
+      <article class="criterion"><span class="weight">25%</span><p><strong>Lifecycle fit.</strong> Covers exploration, decision, implementation, and permanent documentation. This is the highest weight because no stage is optional.</p></article>
+      <article class="criterion"><span class="weight">20%</span><p><strong>Truth-of-behavior fit.</strong> Does not hide that related tasks update the artifact. It should still make sense once updates stop because the outcome is documented.</p></article>
+      <article class="criterion"><span class="weight">15%</span><p><strong>Public open-source register.</strong> Understandable English for contributors outside one company, without implying a private corporate ceremony or a standard the project does not implement.</p></article>
+      <article class="criterion"><span class="weight">15%</span><p><strong>Collision resistance.</strong> Avoids confusion with <code>*.spec.ts</code> tests, the <code>docs/</code> wiki, Epics, runtime logs, the ADR archive, and established external processes.</p></article>
+      <article class="criterion"><span class="weight">10%</span><p><strong>UI brevity.</strong> Works in a navigation noun, a compact header, a copyable key row such as <code>AGT-W4</code>, empty states, and spoken references without abbreviation.</p></article>
+      <article class="criterion"><span class="weight">8%</span><p><strong>German operator ergonomics.</strong> Easy to say daily in a German-speaking operating context while the public product language remains English.</p></article>
+      <article class="criterion"><span class="weight">7%</span><p><strong>Rename attention cost.</strong> AGT-2539 makes the mechanical sweep relatively cheap. The score instead captures vocabulary churn, review attention, public copy changes, and muscle memory.</p></article>
+    </div>
+
+    <p class="legend">Weight order in the matrix: LF lifecycle fit, TB truth of behavior, UI brevity, OS open-source register, CL collision resistance, DE German ergonomics, RC rename attention cost.</p>
+  </section>
+
+  <section id="alternatives" data-concept-section="alternatives">
+    <h2><span class="section-no">03</span>Candidate field and weighted verdicts</h2>
+    <p>The table keeps weak candidates visible long enough to show why they fail, then discards them in one line. It does not reward familiarity with a particular company process when that process describes only the front of this lifecycle.</p>
+
+    <div class="table-wrap">
+      <table>
+        <caption>Comparative scores. Rows are sorted by weighted total, not by the order in which candidates were proposed.</caption>
+        <thead>
+          <tr>
+            <th>Candidate</th>
+            <th class="numeric">LF<br>25</th>
+            <th class="numeric">TB<br>20</th>
+            <th class="numeric">UI<br>10</th>
+            <th class="numeric">OS<br>15</th>
+            <th class="numeric">CL<br>15</th>
+            <th class="numeric">DE<br>8</th>
+            <th class="numeric">RC<br>7</th>
+            <th class="numeric">Total</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="recommended"><td class="candidate">Dossier</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">5</td><td class="numeric">5</td><td class="numeric score">93.0</td><td class="verdict"><strong>Keep.</strong> A collected record about one subject can grow, carry decisions and evidence, and settle as documentation without changing type.</td></tr>
+          <tr class="runner-up"><td class="candidate">Living Dossier</td><td class="numeric">5</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">3</td><td class="numeric score">87.0</td><td class="verdict"><strong>Runner-up.</strong> It makes updates explicit and preserves the strong noun, but reads like a coined hybrid and remains “living” after the artifact becomes quiet documentation.</td></tr>
+          <tr><td class="candidate">Case File</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric score">77.6</td><td class="verdict"><strong>Discard.</strong> The lifecycle fit is real, but legal, police, support, and HR associations are too strong for a neutral open-source product.</td></tr>
+          <tr><td class="candidate">Casebook</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric score">73.0</td><td class="verdict"><strong>Discard.</strong> Compact and case-oriented, but uncommon in software and awkward in daily German speech.</td></tr>
+          <tr><td class="candidate">Journal</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">2</td><td class="numeric score">70.8</td><td class="verdict"><strong>Discard.</strong> It suggests chronological authorship and reflection, not a structured decision surface with an accepted outcome.</td></tr>
+          <tr><td class="candidate">Project Record</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">3</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric score">70.6</td><td class="verdict"><strong>Discard.</strong> Accurate but archival in tone, longer in UI, and confusing beside Agent Studio’s existing Project entity.</td></tr>
+          <tr><td class="candidate">Workbook</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">3</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric score">69.6</td><td class="verdict"><strong>Discard.</strong> Strong during active work, weak as permanent documentation, and readily confused with spreadsheets, notebooks, and the former Workbench.</td></tr>
+          <tr><td class="candidate">Logbook</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">68.2</td><td class="verdict"><strong>Discard.</strong> Truthful about ongoing entries, but it overweights chronology and collides with runtime and operator logs.</td></tr>
+          <tr><td class="candidate">Living Doc</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">3</td><td class="numeric">1</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">67.2</td><td class="verdict"><strong>Discard.</strong> Behaviorally honest but too generic; “Docs” already names the repository wiki and the final lifecycle stage.</td></tr>
+          <tr><td class="candidate">Working Paper</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric score">65.6</td><td class="verdict"><strong>Discard.</strong> Good for public deliberation, but “working” implies a provisional draft rather than a retained implementation record.</td></tr>
+          <tr><td class="candidate">Playbook</td><td class="numeric">2</td><td class="numeric">3</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">65.2</td><td class="verdict"><strong>Discard.</strong> A playbook is reusable guidance for repeated situations; this artifact records one evolving subject.</td></tr>
+          <tr><td class="candidate">Living Spec</td><td class="numeric">3</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">1</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric score">63.6</td><td class="verdict"><strong>Discard.</strong> “Spec” promises normative or executable behavior and collides with test specifications; exploration, operator decisions, delivery state, and history are broader.</td></tr>
+          <tr><td class="candidate">Charter</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">63.2</td><td class="verdict"><strong>Discard.</strong> It authorizes and bounds a workstream at the start, but does not naturally become the implementation and documentation record.</td></tr>
+          <tr><td class="candidate">Initiative</td><td class="numeric">4</td><td class="numeric">3</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">1</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">63.2</td><td class="verdict"><strong>Discard.</strong> It names the work itself, not its document, and creates an unclear hierarchy beside Epics and Projects.</td></tr>
+          <tr><td class="candidate">Design Doc</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">5</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">61.2</td><td class="verdict"><strong>Discard.</strong> Familiar public engineering language, but limited to technical design and easily confused with ordinary <code>docs/</code> pages.</td></tr>
+          <tr><td class="candidate">Brief</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric score">58.0</td><td class="verdict"><strong>Discard.</strong> A brief is an upstream handoff that should be complete before execution; in German, <i>Brief</i> also means letter.</td></tr>
+          <tr><td class="candidate">PRD</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">57.2</td><td class="verdict"><strong>Discard.</strong> “Product Requirements Document” imposes product-management and requirements scope that many dossiers do not have.</td></tr>
+          <tr><td class="candidate">Blueprint</td><td class="numeric">2</td><td class="numeric">1</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">57.2</td><td class="verdict"><strong>Discard.</strong> It is a plan for a future build, not a record that changes with delivery and survives as documentation.</td></tr>
+          <tr><td class="candidate">Pitch</td><td class="numeric">2</td><td class="numeric">1</td><td class="numeric">5</td><td class="numeric">3</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">54.2</td><td class="verdict"><strong>Discard.</strong> Shape Up’s pitch is a bounded potential bet reused at kickoff; it does not claim to be the maintained implementation and final record.</td></tr>
+          <tr><td class="candidate">RFC</td><td class="numeric">2</td><td class="numeric">1</td><td class="numeric">5</td><td class="numeric">5</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric">2</td><td class="numeric score">54.2</td><td class="verdict"><strong>Discard.</strong> The public register is strong, but published RFCs are immutable and carry protocol or consensus expectations that this product does not promise.</td></tr>
+          <tr><td class="candidate">PR/FAQ</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">5</td><td class="numeric">1</td><td class="numeric">1</td><td class="numeric score">48.0</td><td class="verdict"><strong>Discard.</strong> Amazon’s customer-backwards narrative is a pre-build decision format, not a generic open-source lifecycle noun.</td></tr>
+          <tr><td class="candidate">ADR extension</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">3</td><td class="numeric">1</td><td class="numeric score">43.2</td><td class="verdict"><strong>Discard.</strong> An ADR captures one decision and rationale; stretching the repository’s ADR taxonomy would blur both artifacts.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="culture">
+    <h2><span class="section-no">04</span>What adjacent document cultures actually imply</h2>
+    <p>Borrowing a familiar label also imports its process. Those imports are useful evidence, but none covers the complete Agent Studio lifecycle.</p>
+
+    <div class="culture-grid">
+      <article class="culture">
+        <h4>Shape Up pitch</h4>
+        <p>Basecamp defines a pitch as the formal write-up of shaped work for a potential bet and reuses it at kickoff. The team then discovers and tracks tasks while building. This validates the shaping and handoff part of the dossier, but “Pitch” stops naming the artifact once delivery updates and permanent documentation become first-class. <a href="https://basecamp.com/shapeup/1.1-chapter-02">Principles of Shaping</a>; <a href="https://basecamp.com/shapeup/3.1-chapter-10">Hand Over Responsibility</a>.</p>
+      </article>
+      <article class="culture">
+        <h4>Amazon PR/FAQ</h4>
+        <p>Amazon describes PR/FAQ as the central Working Backwards narrative for defining the customer experience, vetting an idea, and reaching clarity before build approval. It is a strong decision instrument, but its launch narrative and company-specific ceremony would misname general technical, operational, and architectural dossiers. <a href="https://www.aboutamazon.com/news/workplace/an-insider-look-at-amazons-culture-and-processes">Amazon’s account of Working Backwards</a>.</p>
+      </article>
+      <article class="culture">
+        <h4>RFC processes</h4>
+        <p>The RFC series spans standards, methods, research, and information, but an RFC becomes an immutable publication. Updates and obsoletions are metadata or later RFCs. That is valuable archival discipline and the opposite of in-place task-driven maintenance. <a href="https://www.rfc-editor.org/series/rfc/">RFC Editor: What Is an RFC?</a></p>
+      </article>
+      <article class="culture">
+        <h4>ADR practice</h4>
+        <p>An ADR captures one significant decision and its rationale; a collection forms a decision log. A dossier can contain multiple decision points plus exploration and implementation evidence, so “ADR extension” would damage an already precise public term. <a href="https://adr.github.io/">Architectural Decision Records</a>.</p>
+      </article>
+      <article class="culture">
+        <h4>Living Documentation literature</h4>
+        <p>Cyrille Martraire’s work presents living documentation as knowledge that evolves across the development lifecycle and stays current through well-crafted artifacts and automation. The relevant lesson is operational: liveness must be maintained, not merely announced in a title. AGT-2580 is therefore stronger evidence than the adjective “Living.” <a href="https://leanpub.com/livingdocumentation">Living Documentation by design</a>.</p>
+      </article>
+      <article class="culture">
+        <h4>Executable specifications</h4>
+        <p>Cucumber uses “specification” for plain-text scenarios that can be executed to check whether system behavior conforms. Agent Studio dossiers may include behavior, but also policy choices, visual options, incidents, delivery state, and documentary outcomes. “Living Spec” would imply executable coverage that the artifact does not guarantee. <a href="https://cucumber.io/docs/">Cucumber introduction</a>.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="recommendation" data-concept-section="recommendation">
+    <h2><span class="section-no">05</span>Recommendation and runner-up</h2>
+
+    <div class="shortlist">
+      <article><span class="rank">01 · RECOMMENDED</span><h3>Dossier</h3><p>Short, durable, collision-resistant, and equally usable in English and German. It names the subject record rather than one phase or one update mechanism.</p></article>
+      <article><span class="rank">02 · RUNNER-UP</span><h3>Living Dossier</h3><p>Use only if explicit liveness in the nav is a hard requirement. It preserves the right noun, but adds length and an awkward permanent-state claim.</p></article>
+      <article><span class="rank">COPY RULE</span><h3>A living dossier</h3><p>Best explanatory phrase, lower-case when descriptive: “A dossier is a living record from exploration through documented outcome.” The UI noun remains Dossier.</p></article>
+    </div>
+
+    <h3>Is a second rename worth it?</h3>
+    <p><strong>No.</strong> There is no material semantic defect in “Dossier” to justify reopening the product noun. A dossier is a collected record about one subject; adding evidence, decisions, task state, and delivery notes is normal growth, not a category error. The documented end state also matters: a completed dossier remains accurate when it is stable and no longer “living” in the active sense.</p>
+    <p>Technically, the application has not performed two migrations because AGT-2539 is held. Cognitively, however, choosing a new label now would be a second naming reversal. It would invalidate newly written public copy, reopen operator vocabulary, and make the AGT-2539 sweep review more complex. That cost is modest but real, and the alternative needs a clear semantic gain to pay for it. “Living Dossier” adds explicitness, not enough new meaning.</p>
+
+    <div class="note good">
+      <h4>Why “Living Spec” is not the runner-up</h4>
+      <p>It wins only on the active-update signal. It loses on scope and collision: many dossiers are not normative behavior specifications, and this codebase already uses “spec” for tests. The name would tell contributors to expect executable truth that the product does not provide.</p>
+    </div>
+  </section>
+
+  <section id="consequences">
+    <h2><span class="section-no">06</span>Consequence chain for either decision</h2>
+    <p>Both branches use the existing AGT-2539 machinery. Neither branch authorizes a second rename card, code-identifier migration, API alias, descriptor rename, or key-prefix change.</p>
+
+    <div class="table-wrap">
+      <table class="fork">
+        <caption>Execution consequences after the operator chooses the product noun.</caption>
+        <thead><tr><th>Surface</th><th>Keep Dossier, recommended</th><th>Approve Living Dossier, runner-up</th></tr></thead>
+        <tbody>
+          <tr><td><strong>AGT-2539</strong></td><td>Resume the held card with its core wording intact: visible English UI uses “Dossier” and “Dossiers”; code identifiers remain <code>workbench*</code>. Replace the HOLD note with this decision reference.</td><td>Resume the same card, changing only its public target wording to “Living Dossier” and “Living Dossiers.” Do not create a new rename card. Add width coverage for nav, list, viewer header, tooltips, and empty states.</td></tr>
+          <tr><td><strong>Repository docs</strong></td><td>Sweep user-facing “Workbench” terminology as already planned. Define the noun once as a living record; do not capitalize “Living” as part of the name.</td><td>Sweep both legacy “Workbench” and newly committed “Dossier” product wording. Historical task titles and code symbols remain unchanged; current explanatory pages use the full two-word label.</td></tr>
+          <tr><td><strong>AGT-2580 and AGT-2537</strong></td><td>Keep “Dossier update” wording for the maintenance step and “documented Dossier” for the terminal state. Their behavior is the proof that the dossier is living.</td><td>Align any exposed strings through AGT-2539 after AGT-2580 lands. AGT-2537’s internal <code>workbench*</code> symbols remain untouched; only visible copy changes.</td></tr>
+          <tr><td><strong>AOW-13</strong></td><td>The archived website delivery already created <code>site/dossier/index.html</code>. Keep its noun and route; a short first-use explanation may call it a living dossier.</td><td>The delivered page becomes copy debt: update its heading and prose to “Living Dossier.” Keep <code>/dossier/</code> as the stable short URL unless a separate redirect-backed URL decision is explicitly made.</td></tr>
+          <tr><td><strong>WEB-18</strong></td><td>Leave the ready card’s “Dossier working model” wording intact. Its article explains the live lifecycle without changing the product noun.</td><td>Update the prompt before pickup to “Living Dossier working model” and audit diagram labels, headings, navigation copy, and metadata. Its dependency on WEB-16 does not change.</td></tr>
+          <tr><td><strong>Website and public register</strong></td><td>Use: “A Dossier follows work from exploration through decisions and implementation to a documented outcome.” Keep headings and navigation at the single noun.</td><td>Use the full name on first reference and product navigation. Avoid shortening it back to “Dossier” inconsistently, which would erase the only reason to rename.</td></tr>
+          <tr><td><strong>Keys and internals</strong></td><td colspan="2">Keep <code>AGT-W4</code>, <code>workbench.json</code>, <code>WorkbenchCatalogueService</code>, existing routes, repository paths, and stable public URLs unless independently decided. The key is an opaque stable identifier, not a reason to preserve “Workbench” in UI.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="open-decisions" data-concept-section="open-decisions">
+    <h2><span class="section-no">07</span>Decision request</h2>
+    <p>This dossier is decision-ready. Choose one of the two bounded options:</p>
+
+    <div class="decision-options">
+      <article class="option recommended">
+        <span class="label">OPTION A · RECOMMENDED</span>
+        <h3>Keep Dossier</h3>
+        <p>Resume AGT-2539 with “Dossier / Dossiers.” Use “living dossier” only as descriptive copy. Keep all <code>workbench*</code> identifiers and <code>AGT-W*</code> keys.</p>
+      </article>
+      <article class="option">
+        <span class="label">OPTION B · RUNNER-UP</span>
+        <h3>Approve Living Dossier</h3>
+        <p>Retarget the existing AGT-2539 card to “Living Dossier / Living Dossiers,” then update AOW-13’s delivered copy and WEB-18 before pickup. Do not open another rename card.</p>
+      </article>
+    </div>
+
+    <p class="note warn"><strong>Requested operator response:</strong> “Keep Dossier” or “Approve Living Dossier.” Any third name should reopen the matrix only if it solves a stated defect that both finalists miss.</p>
+  </section>
+
+  <section id="evidence">
+    <h2><span class="section-no">08</span>Evidence boundary and sources</h2>
+    <p>The scoring is a reasoned naming model, not a user-research statistic. Repository and task facts were checked on 10 August 2026. External sources establish the normal meanings of adjacent document practices; they do not prove a product preference.</p>
+
+    <ul class="source-list">
+      <li><strong>Repository lifecycle:</strong> <a href="../workbench-konzept/index.html">Workbenches: Name, patterns, and becoming an app</a>, plus the canonical <a href="../../system/domains/tasks.md">Tasks domain map</a> and <a href="../../system/domains/pipeline.md">Pipeline domain map</a>.</li>
+      <li><strong>Task state:</strong> Task API snapshot on 10 August 2026. AGT-2539 was held in Preparation; AGT-2580 was in Progress; AGT-2537 and AOW-13 were archived with deliveries; WEB-18 was Ready and waiting on WEB-16.</li>
+      <li><strong>Public process vocabulary:</strong> Basecamp Shape Up, Amazon Working Backwards, the RFC Editor, the ADR community, Living Documentation, and Cucumber sources linked in section 04.</li>
+      <li><strong>Collision observations:</strong> this repository already reserves <code>docs/</code> for documentation, <code>*.spec.ts</code> for tests, Epics for bundles of decided work, ADRs for architectural decisions, and logs for runtime evidence.</li>
+    </ul>
+  </section>
+
+  <footer>Prepared 10 August 2026. Source card AGT-2584. Related cards: AGT-2539, AGT-2580, and AGT-2537. Analysis only; no naming implementation is authorized by this dossier.</footer>
+</main>
+</body>
+</html>
