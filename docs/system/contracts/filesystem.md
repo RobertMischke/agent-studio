@@ -434,7 +434,11 @@ step through its `pre-prompt-enrichment` pipeline-step override; the resulting
 ### status.md
 
 `status.md` is application-owned. It is normally generated from
-`logs/cli-output.log` after a run. If it is missing at a move into
+`logs/cli-output.log` after a local run or from durable V1 run events and
+deliverables in the Task Server. Result generation is an awaited post-core
+gate with bounded summary-only retry. Exhaustion records a typed `Degraded`
+Result and leaves the completed core run reviewable. If the file is still
+missing at a move into
 `4-auto-review`, `5-human-review`, `5e-escalated`, or `6-completed`,
 `TaskTransitionService` creates an honest marked scaffold before the move and
 refuses the transition if that write fails. Startup also backfills missing

@@ -103,6 +103,12 @@ public sealed record PostStepPlanDto(
     string EligibleRunnerId,
     string Status);
 
+public static class HostPostStepIds
+{
+    public const string WorktreeContainment = "post-worktree-containment";
+    public const string ResultFinalization = "post-result-finalization";
+}
+
 public sealed record WorkPermitAcceptanceDto(
     string Status,
     string PermitId,

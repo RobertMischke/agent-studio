@@ -348,6 +348,9 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
                 "/api/runner/logs" => $$"""
                     {"taskKey":"{{lease.TaskKey}}","appended":2}
                     """,
+                "/api/runner/artifacts" => $$"""
+                    {"taskKey":"{{lease.TaskKey}}","uploaded":0,"files":[],"resultDocumentGenerated":true,"resultDocumentStatus":"generated"}
+                    """,
                 "/api/runner/completion" => $$"""
                     {"taskKey":"{{lease.TaskKey}}","outcome":"Done","targetState":"4-auto-review"}
                     """,

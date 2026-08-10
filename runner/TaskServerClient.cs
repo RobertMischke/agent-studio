@@ -476,7 +476,8 @@ public sealed class TaskServerClient : IDisposable
             var reportSequence = Volatile.Read(ref _lastHostReportSequence);
             foreach (var step in acceptance.PostProcessingPlan)
             {
-                if (!string.Equals(step.StepId, "post-worktree-containment", StringComparison.Ordinal))
+                if (!string.Equals(step.StepId, Contract.HostPostStepIds.WorktreeContainment, StringComparison.Ordinal)
+                    && !string.Equals(step.StepId, Contract.HostPostStepIds.ResultFinalization, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
                         $"Host post-step '{step.StepId}' has no runner implementation. " +
@@ -501,7 +502,23 @@ public sealed class TaskServerClient : IDisposable
                             ?? throw new TaskServerException(502, "Task Server returned an empty post-step claim.");
                 if (string.Equals(claim.Status, "completed", StringComparison.Ordinal)) continue;
 
-                var hashes = string.IsNullOrWhiteSpace(evidenceHash) ? [] : new[] { evidenceHash };
+                string outcome;
+                IReadOnlyList<string> hashes;
+                if (string.Equals(step.StepId, Contract.HostPostStepIds.ResultFinalization, StringComparison.Ordinal))
+                {
+                    var finalization = await FinalizeResultWithRetryAsync(taskKey, ct);
+                    outcome = finalization.Status == Contract.ResultFinalizationStatus.Ready
+                        ? "passed"
+                        : "degraded";
+                    hashes = string.IsNullOrWhiteSpace(finalization.ArtifactSha256)
+                        ? []
+                        : new[] { finalization.ArtifactSha256 };
+                }
+                else
+                {
+                    outcome = "passed";
+                    hashes = string.IsNullOrWhiteSpace(evidenceHash) ? [] : new[] { evidenceHash };
+                }
                 _ = await SendJsonAsync<Contract.PostStepCompleteRequest, Contract.PostStepCompleteResponse>(
                     HttpMethod.Post,
                     $"/api/v1/runs/{Uri.EscapeDataString(acceptance.Run.RunId)}/post-steps/{Uri.EscapeDataString(step.StepExecutionId)}/complete",
@@ -513,7 +530,7 @@ public sealed class TaskServerClient : IDisposable
                         acceptance.Lease.LeaseId,
                         acceptance.Lease.Fence,
                         claim.ClaimFence,
-                        "passed",
+                        outcome,
                         hashes,
                         $"host-post-complete:{acceptance.Run.RunId}:{step.StepExecutionId}:{acceptance.Lease.Fence}",
                         acceptance.Lease.InstanceId),
@@ -1136,7 +1153,52 @@ public sealed class TaskServerClient : IDisposable
                 ct);
             files.Add(artifact.Path);
         }
-        return new ArtifactIngestResponse(req.TaskKey, files.Count, files);
+        if (!req.FinalizeResult)
+            return new ArtifactIngestResponse(req.TaskKey, files.Count, files);
+
+        var finalization = await FinalizeResultWithRetryAsync(req.TaskKey, ct);
+        return new ArtifactIngestResponse(
+            req.TaskKey,
+            files.Count,
+            files,
+            ResultDocumentGenerated: finalization.Status == Contract.ResultFinalizationStatus.Ready,
+            ResultDocumentStatus: finalization.Status == Contract.ResultFinalizationStatus.Ready
+                ? "generated"
+                : $"degraded:{finalization.Error ?? "summary retry budget exhausted"}");
+    }
+
+    private async Task<Contract.ResultFinalizationDto> FinalizeResultWithRetryAsync(
+        string taskKey,
+        CancellationToken ct)
+    {
+        var authority = V1Authority(taskKey);
+        var attempt = 1;
+        while (true)
+        {
+            var response = await PostJsonAsync<Contract.ResultFinalizationRequest, Contract.ResultFinalizationDto>(
+                               $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/result-finalization",
+                               new Contract.ResultFinalizationRequest(
+                                   authority.Lease.RunnerId,
+                                   authority.InstanceId,
+                                   authority.Lease.LeaseId,
+                                   authority.Lease.FencingToken,
+                                   attempt,
+                                   $"result-finalization:{authority.RunId}:{authority.Lease.FencingToken}:{attempt}"),
+                               ct)
+                           ?? throw new TaskServerException(
+                               502,
+                               "Task Server returned an empty Result-finalization acknowledgement.");
+            if (response.Status is Contract.ResultFinalizationStatus.Ready
+                or Contract.ResultFinalizationStatus.Degraded)
+                return response;
+            if (response.Status != Contract.ResultFinalizationStatus.Retryable)
+                throw new InvalidDataException(
+                    $"Task Server returned unsupported Result-finalization status '{response.Status}'.");
+            if (response.Attempt >= response.MaxAttempts)
+                throw new InvalidDataException(
+                    "Task Server left Result finalization retryable after its retry budget was exhausted.");
+            attempt = response.Attempt + 1;
+        }
     }
 
     public async Task<RemoteRunCompletionResponse?> CompleteRunAsync(RemoteRunCompletionRequest req, CancellationToken ct)

@@ -757,7 +757,7 @@ export interface SessionUsage {
 // CliSessionInfo, CliUsageProjectGroup, CliUsageSection, CliUsageReport
 // now in features/cli/models/cli.model.ts; re-exported below.)
 
-export type TaskSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
+export type TaskSummaryStatus = 'none' | 'generating' | 'ready' | 'failed' | 'degraded';
 
 /**
  * How a follow-up sent through the chat box should be interpreted by the
@@ -859,6 +859,8 @@ export interface TaskSummaryState {
   finishedAt: string | null;
   errorMessage: string | null;
   bytesWritten: number | null;
+  attempt?: number | null;
+  maxAttempts?: number | null;
 }
 
 /**

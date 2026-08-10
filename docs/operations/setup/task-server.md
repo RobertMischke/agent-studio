@@ -95,6 +95,7 @@ settings.
 | `AUTH_TOKEN` | Direct secret alternative, mainly for ephemeral deployments | Unset |
 | `TaskServer:MinimumLeaseSeconds` | Lower clamp for Runner leases | `30` |
 | `TaskServer:MaximumLeaseSeconds` | Upper clamp for Runner leases | `600` |
+| `TaskServer:ResultFinalizationMaxAttempts` | Bounded application-owned summary attempts after CORE completion | `3` |
 | `TaskServer:InvariantReconciliationSeconds` | Interval for Tranche 0 invariant comparison | `30` |
 | `TaskServer:InventoryGraceSeconds` | Minimum age before inventory mismatches are actionable | `120` |
 | `TaskServer:MaximumEventPayloadBytes` | Hard UTF-8 size limit for one typed event payload | `262144` |
@@ -122,7 +123,11 @@ settings.
 - `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history?after={cursor}`
   is the canonical reconnect projection. It includes every run, cursor-ordered
   typed events after the requested cursor, artifacts, related audit records,
-  and the last returned cursor.
+  the latest typed Result-finalization state, and the last returned cursor.
+- `POST /api/v1/runs/{runId}/result-finalization` is the fenced, idempotent
+  awaited post-core gate. The Runner repeats only this request while the server
+  returns `Retryable`; `Ready` includes the generated `status.md` artifact hash,
+  and bounded exhaustion returns terminal `Degraded` without reissuing CORE.
 
 Every release answers `task-server --version` with the release and stamped Git
 SHA. This output is also used by deployment verification:

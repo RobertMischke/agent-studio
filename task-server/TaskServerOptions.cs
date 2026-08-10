@@ -10,6 +10,7 @@ public sealed class TaskServerOptions
     public int MinimumLeaseSeconds { get; set; } = 30;
     public int MaximumLeaseSeconds { get; set; } = 900;
     public int ResultRetentionDays { get; set; } = 30;
+    public int ResultFinalizationMaxAttempts { get; set; } = 3;
     public bool ResultRefGcEnabled { get; set; } = true;
     public int ResultRefGcSweepMinutes { get; set; } = 360;
     public int ResultRefGcBatchSize { get; set; } = 50;

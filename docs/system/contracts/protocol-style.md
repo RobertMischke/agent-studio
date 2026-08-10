@@ -118,13 +118,16 @@ do not appear in the rendered view; the source file and scaffold creation
 mechanic remain unchanged.
 
 Remote coding runs preserve the same application ownership. After the runner
-flushes `cli-output.log`, its final `/api/runner/artifacts` upload asks Studio to
-run `SummaryGenerationService` against that durable log. The response
-acknowledges every recursively uploaded `results/**` path and reports whether a
-real `status.md` was generated. The compatibility runner may tear down its
-worktree only after that acknowledgement. If summary generation genuinely
-fails, completion still reaches the transition backstop and receives the marked
-scaffold above.
+flushes `cli-output.log`, its final artifact upload carries Result-finalization
+intent through both transports. The compatibility endpoint awaits bounded
+`SummaryGenerationService` attempts against that durable log. V1 runs execute
+the Task Server's `post-result-finalization` step and persist `status.md` as an
+application-generated artifact from durable run events and deliverables. The
+runner may tear down its worktree only after the finalization acknowledgement.
+Only the summary step retries; the completed core agent run never reopens.
+Successful finalization is `Ready`. Exhaustion is the typed terminal state
+`Degraded`, remains reviewable, and may use the marked transition scaffold only
+as the explicit fallback described above.
 
 Hard rules:
 
