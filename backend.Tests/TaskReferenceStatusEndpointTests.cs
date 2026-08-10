@@ -28,6 +28,7 @@ public sealed class TaskReferenceStatusEndpointTests : IDisposable
             key = "ATP-42",
             title = "Living reference",
             state = TaskStates.Completed,
+            noBranchExpected = true,
             order = 1,
             agent = "codex",
             tags = new[] { "code-review:grade-a" }

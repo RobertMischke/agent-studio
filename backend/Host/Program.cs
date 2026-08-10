@@ -611,6 +611,7 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // optimizations; the backstops recover from phase and pipeline facts. Remote
 // deliveries use the same merge runner before Human Review.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
+builder.Services.AddSingleton<AcceptedIntegrationInventorySweep>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
@@ -922,6 +923,18 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("ResultDocumentBackfill", ex);
+}
+
+// One-time read-only inventory for legacy accepted coding cards that lack an
+// integration decision or ended with Error / NoTaskBranch. Findings are logged
+// individually so silent historical completions are visible to operators.
+try
+{
+    app.Services.GetRequiredService<AcceptedIntegrationInventorySweep>().Run();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("AcceptedIntegrationInventorySweep", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

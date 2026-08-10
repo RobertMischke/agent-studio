@@ -92,7 +92,8 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         WriteJob(TaskStates.Completed, "false-done", "False Done",
             "Fix the parser bug in TaskMergeEndpoints.",
             "Result: Success. Done.",
-            commitSha: null);
+            commitSha: null,
+            noBranchExpected: true);
 
         using var factory = BuildFactory();
         using var client = factory.CreateClient();
@@ -194,7 +195,8 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         string title,
         string promptBody,
         string statusBody = "Result: Success.",
-        string? commitSha = "abc1234")
+        string? commitSha = "abc1234",
+        bool noBranchExpected = false)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
@@ -202,8 +204,9 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         var commitJson = commitSha == null
             ? ""
             : $",\"commits\":[{{\"sha\":\"{commitSha}\",\"message\":\"work\",\"authorEmail\":\"x@y\",\"at\":\"2026-05-29T12:00:00Z\",\"fileCount\":1}}]";
+        var noBranchJson = noBranchExpected ? ",\"noBranchExpected\":true" : "";
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"{commitJson}}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"{commitJson}{noBranchJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "status.md"), statusBody);
     }

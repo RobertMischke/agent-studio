@@ -70,12 +70,21 @@ describe('IntegrationStatusBadgeComponent', () => {
   });
 
   it('renders conflict-skipped as a hard red integration-failed badge', () => {
-    const fixture = render(integration('conflict-skipped', { detail: 'Conflicted: a.txt' }));
+    const fixture = render(integration('conflict-skipped', {
+      detail: 'No reviewed delivery branch exists.',
+      failure: {
+        code: 'no-task-branch',
+        label: 'No task branch',
+        reason: 'No reviewed delivery branch exists.',
+        rebaseRecoveryAvailable: false,
+      },
+    }));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('Integration failed');
+    expect(badge.textContent).toContain('No task branch');
     expect(badge.dataset['kind']).toBe('conflict');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
-    expect(fixture.componentInstance.tooltip()).toContain('Conflicted: a.txt');
+    expect(fixture.componentInstance.tooltip()).toContain('No reviewed delivery branch exists.');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-integration-recovery"]')).toBeNull();
   });
 
   it('renders a classified task-key failure on the card and hides the unrelated rebase action', () => {

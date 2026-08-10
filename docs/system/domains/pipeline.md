@@ -111,7 +111,12 @@ pipeline view.
   not Passed. Immediate acceptance failures return the typed
   `IntegrationFailed` move outcome (HTTP 409 for the single-card API), while
   every failure preserves the concrete reason in the merge step and
-  `integration_failed` timeline event.
+  `integration_failed` timeline event. Worker outcomes `NoTaskBranch`, `Error`,
+  and `Conflict` also update an owned `status.md` section and the card's red
+  integration badge before ordinary Human Review resumes. A legacy Completed
+  card is moved back to Human Review. `operatorOverride: true` is the explicit,
+  target-Completed-only exception; no-branch task metadata is exempt without an
+  override.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
@@ -209,6 +214,9 @@ pipeline view.
   project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
   banner, and emit a warning event containing the affected task keys.
+  Startup also performs one read-only inventory of Completed and archived
+  integration-required cards whose merge attempt is absent, `Error`, or
+  `NoTaskBranch`, logging one row per finding without rewriting the card.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability

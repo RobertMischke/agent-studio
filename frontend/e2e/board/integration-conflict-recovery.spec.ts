@@ -1,4 +1,5 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
+import type { Page, Route } from '@playwright/test';
 import { setTheme } from '../helpers/theme';
 
 const PROJECT = 'Integration recovery';
@@ -50,6 +51,32 @@ function task(queued: boolean) {
   };
 }
 
+function noTaskBranchTask() {
+  const base = task(false);
+  return {
+    ...base,
+    id: 'missing-delivery-branch',
+    taskKey: `${WATCH_PATH}::missing-delivery-branch`,
+    key: 'AGT-2531',
+    title: 'Returned after NoTaskBranch',
+    state: '5-human-review',
+    folderPath: `${WATCH_PATH}/5-human-review/missing-delivery-branch`,
+    tags: ['integrationpending'],
+    integration: {
+      status: 'conflict-skipped',
+      sha: null,
+      integrationBranch: 'develop',
+      detail: 'No task branch to merge.',
+      failure: {
+        code: 'no-task-branch',
+        label: 'No task branch',
+        reason: 'No task branch to merge.',
+        rebaseRecoveryAvailable: false,
+      },
+    },
+  };
+}
+
 function json(route: Route, body: unknown) {
   return route.fulfill({
     status: 200,
@@ -66,6 +93,7 @@ async function installRoutes(
   await page.route('**/api/**', route => {
     const url = route.request().url();
     const current = task(queued());
+    const missingBranch = noTaskBranchTask();
     if (url.includes('/api/tasks/archive')) {
       return json(route, { items: [], total: 0, offset: 0, limit: 50 });
     }
@@ -89,13 +117,13 @@ async function installRoutes(
         codeNotComplete: [],
         review: [],
         autoReview: [],
-        humanReview: [],
+        humanReview: [missingBranch],
         escalated: [],
         completed: queued() ? [] : [current],
         archive: [],
       });
     }
-    if (/\/api\/tasks(\?|$)/.test(url)) return json(route, [current]);
+    if (/\/api\/tasks(\?|$)/.test(url)) return json(route, [current, missingBranch]);
     if (url.includes('/api/watch-paths')) {
       return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
     }
@@ -132,7 +160,9 @@ async function installRoutes(
   });
 }
 
-test('conflict card queues the focused rebase steer round', async ({ page }, testInfo) => {
+test('conflict card queues the focused rebase steer round', async ({ page, devBackend }, testInfo) => {
+  test.setTimeout(120_000);
+  void devBackend;
   await page.addInitScript(() => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
       v: 1,
@@ -145,7 +175,7 @@ test('conflict card queues the focused rebase steer round', async ({ page }, tes
   let releaseRecovery!: () => void;
   const recoveryGate = new Promise<void>(resolve => { releaseRecovery = resolve; });
   await installRoutes(page, () => queued, recoveryGate);
-  await page.goto('/?includeFixtures=true');
+  await page.goto('/?includeFixtures=true', { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
   const card = page.locator('[data-testid="task-card"]', {
     hasText: 'Accepted delivery with merge conflict',
@@ -157,12 +187,27 @@ test('conflict card queues the focused rebase steer round', async ({ page }, tes
   const action = card.getByTestId('task-card-integration-recovery');
   await expect(action).toHaveAccessibleName(/queue a steer round/i);
 
+  const missingBranch = page.locator('[data-testid="task-card"]', {
+    hasText: 'Returned after NoTaskBranch',
+  });
+  await expect(missingBranch).toBeVisible();
+  await expect(missingBranch.getByTestId('integration-status-badge')).toContainText('No task branch');
+  await expect(missingBranch.getByTestId('integration-status-badge'))
+    .toHaveAttribute('data-integration-failure-code', 'no-task-branch');
+  await expect(missingBranch.getByTestId('task-card-integration-recovery')).toHaveCount(0);
+
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     const path = testInfo.outputPath(`integration-conflict-recovery--${theme}--mocked.png`);
     await card.screenshot({ path });
     await testInfo.attach(`integration-conflict-recovery--${theme}--mocked.png`, {
       path,
+      contentType: 'image/png',
+    });
+    const missingBranchPath = testInfo.outputPath(`integration-no-task-branch--${theme}--mocked.png`);
+    await missingBranch.screenshot({ path: missingBranchPath });
+    await testInfo.attach(`integration-no-task-branch--${theme}--mocked.png`, {
+      path: missingBranchPath,
       contentType: 'image/png',
     });
   }
