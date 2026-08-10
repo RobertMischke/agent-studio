@@ -1,0 +1,95 @@
+<section class="context-picker" data-testid="orch-context-picker">
+  <div class="context-picker__bar">
+    <span class="context-picker__count" data-testid="orch-context-reference-count">
+      Context · {{ sourceCountLabel() }}
+    </span>
+    @for (reference of references(); track label(reference)) {
+      <span class="context-picker__chip" data-testid="orch-context-reference-chip">
+        <span>{{ label(reference) }}</span>
+        <button type="button"
+                [attr.aria-label]="'Remove ' + label(reference)"
+                (click)="remove(reference)">Remove</button>
+      </span>
+    }
+    <button type="button"
+            class="context-picker__add"
+            [attr.aria-expanded]="open()"
+            aria-controls="orch-known-source-picker"
+            data-testid="orch-context-add"
+            (click)="toggle()">{{ open() ? 'Close sources' : 'Add context' }}</button>
+  </div>
+
+  @if (open()) {
+    <section id="orch-known-source-picker"
+             class="context-picker__panel"
+             aria-label="Known source search"
+             data-testid="orch-known-source-picker">
+      <header>
+        <div>
+          <strong>Known sources</strong>
+          <span>References stay inside {{ projectId() }}</span>
+        </div>
+      </header>
+
+      @if (currentReference(); as current) {
+        <section class="context-picker__section" data-testid="orch-context-current-source">
+          <h3>Current tab</h3>
+          <div class="context-picker__row">
+            <span><strong>{{ label(current) }}</strong><small>Recommended from the active surface</small></span>
+            <button type="button"
+                    [disabled]="isSelected(current)"
+                    data-testid="orch-context-add-current"
+                    (click)="add(current)">{{ isSelected(current) ? 'Added' : 'Add current' }}</button>
+          </div>
+        </section>
+      }
+
+      <label class="context-picker__search">
+        <span>Search files and commits</span>
+        <input type="search"
+               autocomplete="off"
+               placeholder="Path, commit subject, or full SHA"
+               data-testid="orch-context-search"
+               [value]="query()"
+               (input)="onQuery($event)" />
+      </label>
+
+      @if (loading()) {
+        <p class="context-picker__message">Searching known project sources...</p>
+      } @else if (error()) {
+        <p class="context-picker__message context-picker__message--error">{{ error() }}</p>
+      } @else if (query().trim().length >= 2) {
+        <div class="context-picker__results">
+          <section class="context-picker__section" data-testid="orch-context-files">
+            <h3>Files</h3>
+            @for (item of files(); track trackItem(item)) {
+              <div class="context-picker__row">
+                <span><strong>{{ item.title }}</strong><small>{{ item.subtitle }}</small></span>
+                <button type="button" (click)="addFile(item)">Add file</button>
+              </div>
+            } @empty {
+              <p class="context-picker__message">No matching files.</p>
+            }
+          </section>
+
+          <section class="context-picker__section" data-testid="orch-context-commits">
+            <h3>Commits</h3>
+            @for (item of commits(); track trackItem(item)) {
+              <div class="context-picker__row">
+                <span><strong>{{ item.title }}</strong><small>{{ item.subtitle }}</small></span>
+                <span class="context-picker__row-actions">
+                  <button type="button" (click)="addCommit(item, 'commit')">Add commit</button>
+                  <button type="button" (click)="addCommit(item, 'diff')">Add diff</button>
+                </span>
+              </div>
+            } @empty {
+              <p class="context-picker__message">No matching commits.</p>
+            }
+          </section>
+        </div>
+      } @else {
+        <p class="context-picker__message">Type at least two characters.</p>
+      }
+    </section>
+  }
+</section>

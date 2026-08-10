@@ -1,9 +1,5 @@
 .receipt {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--studio-spacing-2);
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--studio-accent-3) 28%, var(--studio-border));
   border-radius: 7px;
   background: color-mix(in srgb, var(--studio-accent-3) 8%, var(--studio-bg-elevated));
@@ -11,7 +7,21 @@
   font-size: 11px;
 }
 
-.receipt strong {
+.receipt summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  cursor: pointer;
+}
+
+.receipt summary::marker {
+  color: var(--studio-fg-dim);
+}
+
+.receipt strong,
+.receipt code {
   color: var(--studio-fg);
 }
 
@@ -24,8 +34,61 @@
 }
 
 .receipt__blocks {
+  flex: 1 1 160px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.receipt__ledger {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  padding: 0 var(--studio-spacing-3) var(--studio-spacing-3);
+}
+
+.receipt__source {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-editor);
+}
+
+.receipt__source code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt__kind,
+.receipt__status {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  text-transform: lowercase;
+}
+
+.receipt__status[data-status='included'],
+.receipt__status[data-status='excerpted'] {
+  background: color-mix(in srgb, var(--studio-success) 14%, var(--studio-bg-hover));
+}
+
+.receipt__reason {
+  grid-column: 2 / -1;
+  color: var(--studio-warn);
+}
+
+@media (max-width: 760px) {
+  .receipt__source {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .receipt__revision {
+    display: none;
+  }
 }

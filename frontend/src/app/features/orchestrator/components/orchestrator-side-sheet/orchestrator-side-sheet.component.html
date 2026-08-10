@@ -160,6 +160,12 @@
               }
             }
 
+            <app-orchestrator-context-picker
+              [projectId]="effectiveProject()"
+              [currentReference]="composerContext()?.project === effectiveProject()
+                ? currentContextReference()
+                : null" />
+
             <!-- `cac-chat` is deliberately composer-only here. With no
                  messages/events and an empty state, the library suppresses
                  its legacy transcript body while retaining its composer. -->

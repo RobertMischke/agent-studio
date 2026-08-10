@@ -10,4 +10,8 @@ import type { OrchestratorContextReceipt } from '../../models/orchestrator.model
 })
 export class OrchestratorContextReceiptComponent {
   readonly receipt = input.required<OrchestratorContextReceipt>();
+
+  shortRevision(revision: string): string {
+    return revision.length > 12 ? revision.slice(0, 12) : revision;
+  }
 }

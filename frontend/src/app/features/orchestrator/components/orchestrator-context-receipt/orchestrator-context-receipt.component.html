@@ -1,10 +1,33 @@
-<div class="receipt"
-     role="status"
-     aria-label="Context used for the latest answer"
-     data-testid="orch-answer-context-receipt">
-  <span class="receipt__dot" aria-hidden="true"></span>
-  <strong>Context used</strong>
-  <span data-testid="orch-answer-context-scope">{{ receipt().taskKey || receipt().contextKey }}</span>
-  <span class="receipt__blocks"
-        data-testid="orch-answer-context-blocks">{{ receipt().includedBlocks.join(' · ') }}</span>
-</div>
+<details class="receipt"
+         aria-label="Context used for the latest answer"
+         data-testid="orch-answer-context-receipt">
+  <summary>
+    <span class="receipt__dot" aria-hidden="true"></span>
+    <strong>Context used</strong>
+    <span data-testid="orch-answer-context-scope">{{ receipt().taskKey || receipt().contextKey }}</span>
+    <span class="receipt__blocks"
+          data-testid="orch-answer-context-blocks">{{ receipt().includedBlocks.join(' · ') }}</span>
+    @if (receipt().sources?.length) {
+      <span>{{ receipt().sources?.length }} sources</span>
+    }
+  </summary>
+
+  @if (receipt().sources?.length) {
+    <div class="receipt__ledger" data-testid="orch-answer-context-sources">
+      @for (source of receipt().sources; track source.sourceId) {
+        <div class="receipt__source" data-testid="orch-answer-context-source">
+          <span class="receipt__kind">{{ source.kind }}</span>
+          <code>{{ source.sourceId }}</code>
+          <span class="receipt__status" [attr.data-status]="source.status">{{ source.status }}</span>
+          @if (source.revision) {
+            <code class="receipt__revision" [title]="source.revision">{{ shortRevision(source.revision) }}</code>
+          }
+          <span>{{ source.includedCharacters }} chars · ~{{ source.estimatedTokens }} tokens</span>
+          @if (source.reason) {
+            <span class="receipt__reason">{{ source.reason }}</span>
+          }
+        </div>
+      }
+    </div>
+  }
+</details>

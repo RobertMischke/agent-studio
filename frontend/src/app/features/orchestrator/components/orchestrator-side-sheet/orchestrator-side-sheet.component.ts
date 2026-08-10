@@ -10,6 +10,7 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
@@ -37,6 +38,7 @@ import { OrchestratorContextHeaderComponent } from '../orchestrator-context-head
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
 import { OrchestratorContextReceiptComponent } from '../orchestrator-context-receipt/orchestrator-context-receipt.component';
+import { OrchestratorContextPickerComponent } from '../orchestrator-context-picker/orchestrator-context-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
@@ -51,6 +53,7 @@ import {
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
 import type { PageContext } from '../../../../models/page-context.model';
+import { OrchestratorSurfaceContextService } from '../../../../services/orchestrator-surface-context.service';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -66,6 +69,7 @@ import type { PageContext } from '../../../../models/page-context.model';
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
     OrchestratorContextReceiptComponent,
+    OrchestratorContextPickerComponent,
     ChatSwitcherRailComponent,
     OrchestratorProjectPickerComponent
   ],
@@ -85,6 +89,8 @@ import type { PageContext } from '../../../../models/page-context.model';
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
   readonly composerModel = inject(OrchestratorComposerModelService);
+  private readonly surfaceContext = inject(OrchestratorSurfaceContextService);
+  private readonly contextPicker = viewChild(OrchestratorContextPickerComponent);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
   readonly watchPaths = input<WatchPathEntry[]>([]);
@@ -94,6 +100,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * the library exposes a first-class `composerContext` input).
    */
   readonly composerContext = input<ComposerLocationContext | null>(null);
+  readonly currentContextReference = computed(() => {
+    const reference = this.composerContext()?.contextReference ?? null;
+    if (reference?.kind !== 'diff') return reference;
+    const selection = this.surfaceContext.diffSelection();
+    if (!selection
+      || selection.projectName !== reference.projectId
+      || selection.commitSha !== reference.reference) return reference;
+    return { ...reference, path: selection.path, lineRanges: selection.lineRanges };
+  });
   /** Active repository page carried inside the existing project chat. */
   readonly pageContext = input<PageContext | null>(null);
 
@@ -150,6 +165,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly selectedContextKey = signal<string | null>(null);
   private readonly selectedContextNavigationKey = signal<string | null>(null);
   readonly contextSessions = signal<OrchestratorContextSession[]>([]);
+  private contextSessionsRefreshInFlight = false;
   readonly contextMenuOpen = signal(false);
   readonly contextDigestState = inject(OrchestratorContextDigestService);
   private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
@@ -570,9 +586,17 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.navigateToContext.emit(contextKey);
   }
   private refreshContextSessions(): void {
+    if (this.contextSessionsRefreshInFlight) return;
+    this.contextSessionsRefreshInFlight = true;
     this.jobService.getOrchestratorContextSessions().subscribe({
-      next: response => this.contextSessions.set(response.sessions ?? []),
-      error: () => this.contextSessions.set([]),
+      next: response => {
+        this.contextSessionsRefreshInFlight = false;
+        this.contextSessions.set(response.sessions ?? []);
+      },
+      error: () => {
+        this.contextSessionsRefreshInFlight = false;
+        this.contextSessions.set([]);
+      },
     });
   }
 
@@ -708,7 +732,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobTitle: this.effectiveJobTitle(),
       jobState: this.effectiveJobState(),
       page: this.pageContext(),
+      source: this.currentContextReference(),
     };
+    const explicitReferences = this.contextPicker()?.snapshot() ?? [];
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
 
@@ -810,7 +836,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       contextEnvelope: lazy.buildOrchestratorContextEnvelope(
         contextKey,
         contextPayload,
-        [],
+        explicitReferences,
+        navigationSnapshot.source,
         () => capturedAt,
       ),
       model: this.composerModel.effectiveSelection().model || null,
@@ -821,6 +848,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     send$.subscribe({
       next: (response) => {
         if (response.executionContext) this.executionContext.set(response.executionContext);
+        this.contextPicker()?.clear();
         if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
         this.sending.set(false);
         // Pre-decode the persisted attachment URL(s) so the upcoming swap

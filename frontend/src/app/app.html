@@ -444,7 +444,7 @@
             @case ('diff') {
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'diff') {
-                  <app-studio-diff-view [commitSha]="tab.commitSha" />
+                  <app-studio-diff-view [projectName]="tab.projectName" [commitSha]="tab.commitSha" />
                 }
               }
             }

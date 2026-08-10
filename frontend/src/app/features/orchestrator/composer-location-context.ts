@@ -1,6 +1,7 @@
 import type { TaskInfo } from '../../models/task.model';
 import { projectRailLabel } from '../project-detail';
 import type { StudioTab } from '../studio-shell';
+import type { OrchestratorContextReference } from './models/orchestrator.model';
 
 /**
  * Presentational location context the host feeds into the composer's
@@ -23,6 +24,8 @@ export interface ComposerLocationContext {
   taskTitle?: string;
   taskState?: string;
   taskWatchPath?: string;
+  /** Stable active-tab source offered first by the context picker. */
+  contextReference?: OrchestratorContextReference;
 }
 
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
@@ -58,6 +61,12 @@ function taskContext(surface: string, tabKey: string, tasks: readonly TaskInfo[]
 export function buildComposerLocationContext(
   tab: StudioTab | null,
   tasks: readonly TaskInfo[],
+  diffSelection: {
+    projectName: string;
+    commitSha: string;
+    path: string | null;
+    lineRanges?: { startLine: number; endLine: number }[];
+  } | null = null,
 ): ComposerLocationContext | null {
   if (!tab) return null;
 
@@ -86,7 +95,27 @@ export function buildComposerLocationContext(
     case 'url-preview':
       return { project: tab.projectName, surface: 'URL preview', detail: tab.urlId };
     case 'diff':
-      return { project: null, surface: 'Diff', detail: tab.commitSha.slice(0, 8) };
+      return {
+        project: tab.projectName,
+        surface: 'Diff',
+        detail: tab.commitSha.slice(0, 8),
+        contextReference: {
+          kind: 'diff',
+          reference: tab.commitSha,
+          projectId: tab.projectName,
+          repositoryId: tab.projectName,
+          revision: tab.commitSha,
+          path: diffSelection?.projectName === tab.projectName
+            && diffSelection.commitSha === tab.commitSha
+            ? diffSelection.path
+            : null,
+          ...(diffSelection?.projectName === tab.projectName
+            && diffSelection.commitSha === tab.commitSha
+            && diffSelection.lineRanges
+            ? { lineRanges: diffSelection.lineRanges }
+            : {}),
+        },
+      };
     case 'workspace-settings':
       return { project: null, surface: 'Workspace Settings' };
     case 'welcome':
