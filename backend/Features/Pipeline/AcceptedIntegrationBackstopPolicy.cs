@@ -26,6 +26,7 @@ internal sealed record AcceptedIntegrationAlertCandidate
 {
     public required TaskInfo Task { get; init; }
     public DateTime AcceptedAt { get; init; }
+    public bool HasIntegrationRecord { get; init; }
     public string? IntegrationStatus { get; init; }
     public string? LastOutcome { get; init; }
     public string? Detail { get; init; }
@@ -46,6 +47,20 @@ internal sealed record AcceptedIntegrationSweepSummary(
 /// </summary>
 internal static class AcceptedIntegrationBackstopPolicy
 {
+    public static bool IsAlertCandidate(AcceptedIntegrationAlertCandidate candidate)
+    {
+        if (!candidate.HasIntegrationRecord) return false;
+        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(candidate.Task)) return false;
+        if (candidate.Task.State == TaskStates.Archive) return false;
+        if (candidate.Task.State == TaskStates.Completed) return true;
+        return candidate.Task.State == TaskStates.HumanReview
+               && (string.Equals(
+                       candidate.Task.Phase,
+                       LifecyclePhases.Integrating,
+                       StringComparison.Ordinal)
+                   || (candidate.Task.Tags ?? []).Any(IntegrationStatuses.IsPendingTag));
+    }
+
     public static AcceptedIntegrationSweepSummary Summarize(
         IEnumerable<MergeIntoIntegrationOutcome> outcomes)
     {
@@ -84,6 +99,7 @@ internal static class AcceptedIntegrationBackstopPolicy
         IEnumerable<AcceptedIntegrationAlertCandidate> candidates)
     {
         var items = candidates
+            .Where(IsAlertCandidate)
             .Where(candidate => candidate.AcceptedAt != default)
             .Where(candidate => now - candidate.AcceptedAt.ToUniversalTime() >= threshold)
             .Where(candidate => !string.Equals(

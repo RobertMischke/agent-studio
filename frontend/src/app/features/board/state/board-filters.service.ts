@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { GroupedJobs, TaskInfo, taskDependencyKey } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { ClientService } from '../../../services/client.service';
@@ -27,7 +27,7 @@ import { kvValueOf, withKvSegment } from '../../../services/url-hash.util';
  */
 
 export interface ActiveFilterPill {
-  kind: 'owner' | 'project' | 'type' | 'tag' | 'dependsOn';
+  kind: 'owner' | 'project' | 'type' | 'tag' | 'dependsOn' | 'integration';
   kindLabel: string;
   /** Identifier used by the remove handler. */
   value: string;
@@ -42,6 +42,14 @@ export class BoardFiltersService {
   private readonly jobService = inject(TaskService);
   private readonly clientService = inject(ClientService);
   private readonly tagRegistryStore = inject(TagRegistryStore);
+  private readonly destroyRef = inject(DestroyRef);
+
+  constructor() {
+    if (typeof window === 'undefined') return;
+    const syncHashFilters = () => this.readFilterHash();
+    window.addEventListener('hashchange', syncHashFilters);
+    this.destroyRef.onDestroy(() => window.removeEventListener('hashchange', syncHashFilters));
+  }
 
   // ---------- raw filter state ----------
 
@@ -63,6 +71,8 @@ export class BoardFiltersService {
 
   readonly activeTypeFilter = signal<Set<string>>(new Set());
   readonly activeTagFilter = signal<Set<string>>(new Set());
+  readonly stalledIntegrationOnly = signal(false);
+  private readonly stalledIntegrationTaskRefs = signal<ReadonlySet<string>>(new Set());
 
   /** Single-select view of the type filter. Null = no type filter. */
   readonly activeType = computed<string | null>(() => {
@@ -79,14 +89,16 @@ export class BoardFiltersService {
     this.activeTypeFilter().size > 0
     || this.activeTagFilter().size > 0
     || !!this.activeClientFilter()
-    || !!this.activeDependsOnFilter());
+    || !!this.activeDependsOnFilter()
+    || this.stalledIntegrationOnly());
 
   readonly hasActiveFiltersOrSearch = computed(() =>
     this.searchQuery().trim().length > 0
     || this.activeClientFilter() !== null
     || this.activeDependsOnFilter() !== null
     || this.activeType() !== null
-    || this.activeTagFilter().size > 0);
+    || this.activeTagFilter().size > 0
+    || this.stalledIntegrationOnly());
 
   readonly activeFilterCount = computed(() => {
     let n = 0;
@@ -95,6 +107,7 @@ export class BoardFiltersService {
     if (this.activeDependsOnFilter()) n += 1;
     if (this.activeType()) n += 1;
     n += this.activeTagFilter().size;
+    if (this.stalledIntegrationOnly()) n += 1;
     return n;
   });
 
@@ -119,8 +132,11 @@ export class BoardFiltersService {
     const dependsOnKey = (this.activeDependsOnFilter() ?? '').trim().toUpperCase();
     const types = this.activeTypeFilter();
     const tagIds = this.activeTagFilter();
+    const stalledIntegrationOnly = this.stalledIntegrationOnly();
+    const stalledIntegrationTaskRefs = this.stalledIntegrationTaskRefs();
     const query = this.searchQuery().trim().toLowerCase();
-    const noFilters = active.size === 0 && !ownerId && !dependsOnKey && types.size === 0 && tagIds.size === 0 && !query;
+    const noFilters = active.size === 0 && !ownerId && !dependsOnKey && types.size === 0
+      && tagIds.size === 0 && !stalledIntegrationOnly && !query;
     if (noFilters) return grouped;
     const matchesQuery = (j: TaskInfo) => {
       if (!query) return true;
@@ -147,6 +163,8 @@ export class BoardFiltersService {
         const jobTags = new Set(j.tags ?? []);
         for (const tid of tagIds) if (!jobTags.has(tid)) return false;
       }
+      if (stalledIntegrationOnly
+          && !stalledIntegrationTaskRefs.has(integrationAlertTaskRef(j.projectName, j.id))) return false;
       if (!matchesQuery(j)) return false;
       return true;
     });
@@ -246,6 +264,12 @@ export class BoardFiltersService {
         swatch: entry?.color ?? null,
       });
     }
+    if (this.stalledIntegrationOnly()) {
+      pills.push({
+        kind: 'integration', kindLabel: 'Integration', value: 'stalled',
+        label: 'Stalled accepted tasks', swatch: null,
+      });
+    }
     return pills;
   });
 
@@ -265,6 +289,10 @@ export class BoardFiltersService {
         break;
       case 'tag':
         this.toggleTagFilter(pill.value);
+        break;
+      case 'integration':
+        this.stalledIntegrationOnly.set(false);
+        this.writeFilterHash();
         break;
     }
   }
@@ -390,9 +418,18 @@ export class BoardFiltersService {
     this.activeTagFilter.set(new Set());
     this.activeClientFilter.set(null);
     this.activeDependsOnFilter.set(null);
+    this.stalledIntegrationOnly.set(false);
     this.activeProjects.set(new Set());
     localStorage.setItem('activeProjects', '[]');
     this.writeFilterHash();
+  }
+
+  updateAcceptedIntegrationAlertItems(
+    items: readonly { taskId: string; projectName: string }[],
+  ): void {
+    this.stalledIntegrationTaskRefs.set(new Set(
+      items.map(item => integrationAlertTaskRef(item.projectName, item.taskId)),
+    ));
   }
 
   /**
@@ -445,6 +482,7 @@ export class BoardFiltersService {
       const projects = new Set<string>();
       const types = new Set<string>();
       const tags = new Set<string>();
+      let stalledIntegrationOnly = false;
       for (const p of parts) {
         const idx = p.indexOf(':');
         if (idx <= 0) continue;
@@ -456,6 +494,7 @@ export class BoardFiltersService {
         else if (k === 'projects') v.split(',').filter(Boolean).forEach(x => projects.add(x));
         else if (k === 'type') types.add(v);
         else if (k === 'tags') v.split(',').filter(Boolean).forEach(x => tags.add(x));
+        else if (k === 'integration' && v === 'stalled') stalledIntegrationOnly = true;
       }
       this.activeClientFilter.set(owner);
       this.activeDependsOnFilter.set(dependsOn);
@@ -464,6 +503,7 @@ export class BoardFiltersService {
       const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
       this.activeTypeFilter.set(oneType);
       this.activeTagFilter.set(tags);
+      this.stalledIntegrationOnly.set(stalledIntegrationOnly);
       return;
     }
     const rawLegacy = kvValueOf(hash, 'filter');
@@ -495,6 +535,7 @@ export class BoardFiltersService {
     if (t) segments.push(`type:${t}`);
     const tags = [...this.activeTagFilter()];
     if (tags.length > 0) segments.push(`tags:${tags.join(',')}`);
+    if (this.stalledIntegrationOnly()) segments.push('integration:stalled');
     // Segment-aware upsert: the route segment of an open overlay (workspace
     // settings, project shell, epics) and legacy segments survive; only the
     // filters= segment is owned here. See url-hash.util.ts for the contract.
@@ -556,6 +597,10 @@ function safeParseStringArray(raw: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+function integrationAlertTaskRef(projectName: string, taskId: string): string {
+  return `${projectName}\u0000${taskId}`.toLowerCase();
 }
 
 function typeFilterLabel(value: string): string {

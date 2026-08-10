@@ -210,13 +210,19 @@ pipeline view.
   Human Review. Its 15-minute sweep reports `attempted`, `merged`,
   `alreadyMerged`, and `failed` separately; only a `Merged` result contributes
   to the `integrated` count. The same sweep evaluates the 30-minute accepted
-  delivery invariant. Accepted cards without Git-proven integration publish a
+  delivery invariant. The alert evaluates only current, non-archived cards
+  whose acceptance has an `integration_started` timeline event or a durable
+  merge-step record; cards that predate that recording contract never become
+  acute alerts. Accepted cards without Git-proven integration publish a
   project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
-  banner, and emit a warning event containing the affected task keys.
+  banner capped at ten task keys with a link to the exact filtered board list,
+  and emit a warning event containing the affected task keys.
   Startup also performs one read-only inventory of Completed and archived
   integration-required cards whose merge attempt is absent, `Error`, or
   `NoTaskBranch`, logging one row per finding without rewriting the card.
+  Missing-record cases are inventory-only and carry the quiet
+  `PreInvariantNotEvaluated` classification.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability

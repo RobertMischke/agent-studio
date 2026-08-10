@@ -82,6 +82,25 @@ const stalledAcceptedTask = {
   tags: ['integrationpending'],
 };
 
+const stalledAcceptedTasks = Array.from({ length: 14 }, (_, index) => ({
+  ...stalledAcceptedTask,
+  id: `accepted-stalled-${index + 1}`,
+  taskKey: `${WATCH_PATH}::accepted-stalled-${index + 1}`,
+  key: `AGT-${2601 + index}`,
+  title: `Accepted delivery ${index + 1} is still missing`,
+  folderPath: `${WATCH_PATH}/accepted-stalled-${index + 1}`,
+}));
+
+const ordinaryReviewTask = {
+  ...stalledAcceptedTask,
+  id: 'ordinary-review',
+  taskKey: `${WATCH_PATH}::ordinary-review`,
+  key: 'AGT-2700',
+  title: 'Ordinary review is not stalled',
+  folderPath: `${WATCH_PATH}/ordinary-review`,
+  tags: [],
+};
+
 function json(route: Route, body: unknown) {
   return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 }
@@ -187,7 +206,7 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
       });
     }
     if (url.includes('/api/pipeline/accepted-integration-alert')) {
-      const stalled = currentTasks().filter(item => item.id === stalledAcceptedTask.id);
+      const stalled = currentTasks().filter(item => item.tags.includes('integrationpending'));
       return json(route, {
         active: stalled.length > 0,
         stalledTaskCount: stalled.length,
@@ -301,15 +320,27 @@ test('shows accepted deliveries that remain unintegrated beyond the threshold', 
   await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
-  await installRoutes(page, () => [stalledAcceptedTask]);
+  await installRoutes(page, () => [...stalledAcceptedTasks, ordinaryReviewTask]);
   await page.goto('/?includeFixtures=true');
   await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
 
   const banner = page.getByTestId('accepted-integration-alert-banner');
-  await expect(banner).toContainText('1 accepted task has not reached successful integration for over 30 minutes.');
-  await expect(banner).toContainText(`${PROJECT}: AGT-2531`);
+  await expect(banner).toContainText('14 accepted tasks have not reached successful integration for over 30 minutes.');
+  await page.screenshot({
+    path: join(RESULTS, 'accepted-integration-alert-after--mocked.png'),
+    fullPage: false,
+  });
+  await expect(banner).toContainText('AGT-2601');
+  await expect(banner).toContainText('AGT-2610');
+  await expect(banner).not.toContainText('AGT-2611');
+  await expect(banner.getByTestId('accepted-integration-full-list')).toHaveText('and 4 more');
   await expectFlatFullBleedNoticeBar(banner);
   await expectNoticeCopySharesWideLine(page, banner);
+
+  await banner.getByTestId('accepted-integration-full-list').click();
+  await expect(page).toHaveURL(/\/board/);
+  await expect(page.getByTestId('task-card')).toHaveCount(14);
+  await expect(page.getByTestId('task-card').filter({ hasText: ordinaryReviewTask.title })).toHaveCount(0);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
