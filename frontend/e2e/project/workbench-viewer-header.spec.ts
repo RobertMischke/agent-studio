@@ -9,6 +9,10 @@ const WORKBENCH_ID = 'compact-viewer-header';
 const WORKBENCH_KEY = 'VHE-W4';
 const WATCH_PATH = 'C:/evidence/viewer-header';
 
+// Route mocks are the complete backend for this visual contract. A production
+// build's service worker would bypass page.route after activation.
+test.use({ serviceWorkers: 'block' });
+
 const EMPTY_GROUPED = {
   backlog: [],
   preparation: [],
@@ -678,6 +682,9 @@ test('compact viewer head keeps live card state and details usable in both theme
   await expect(header).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('workbench-viewer-key')).toContainText(WORKBENCH_KEY);
   await expect(page.getByTestId('workbench-viewer-open-decisions')).toContainText('3 open');
+  await expect(page.getByTestId('workbench-viewer-implementation-status')).toHaveText(
+    'In implementation',
+  );
   await expect(page.getByTestId(/^workbench-viewer-task-VHE-(11|12|13)$/)).toHaveCount(3);
   await page.getByTestId('workbench-viewer-task-VHE-11').hover();
   await expect(page.getByTestId('workbench-viewer-task-VHE-11-tooltip')).toContainText(
