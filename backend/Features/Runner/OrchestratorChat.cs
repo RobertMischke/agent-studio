@@ -953,7 +953,12 @@ public class OrchestratorChatService
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var reference in envelope.ExplicitReferences)
         {
-            var canonicalId = $"{reference.Kind}:{reference.Reference}";
+            var canonicalId = string.Join(':',
+                reference.Kind,
+                reference.RepositoryId,
+                reference.Reference,
+                reference.Path,
+                RangeSuffix(reference.LineRanges));
             if (!seen.Add(canonicalId)) continue;
             switch (reference.Kind)
             {
@@ -1001,58 +1006,16 @@ public class OrchestratorChatService
                     break;
                 case OrchestratorContextReferenceKinds.RepositoryFile:
                     blocks.Add(ResolveRepositoryText(
-                        projectName, watchPath, reference.Reference, "repository-file", isExplicit: true));
+                        projectName, watchPath, reference, "repository-file", isExplicit: true));
                     break;
                 case OrchestratorContextReferenceKinds.Commit:
-                    blocks.Add(ResolveCommit(projectName, reference.Reference));
+                    blocks.Add(ResolveCommitContext(projectName, reference));
+                    break;
+                case OrchestratorContextReferenceKinds.Diff:
+                    blocks.Add(ResolveDiffContext(projectName, reference));
                     break;
             }
         }
-    }
-
-    private ResolvedContextBlock ResolveCommit(string projectName, string reference)
-    {
-        var sha = NormalizeCommitReference(projectName, reference);
-        if (_git is null)
-            return ResolvedContextBlock.Unavailable(
-                $"commit:{projectName}/{sha}",
-                "commit",
-                "unavailable",
-                "Git context is unavailable on this execution host.",
-                isExplicit: true);
-
-        var diff = _git.GetProjectCommitDiffResult(projectName, sha, path: null);
-        if (!diff.Success)
-            return ResolvedContextBlock.Unavailable(
-                $"commit:{projectName}/{sha}",
-                "commit",
-                "unresolved",
-                diff.Error ?? "The referenced commit could not be resolved.",
-                isExplicit: true);
-
-        var files = _git.GetProjectCommitFiles(projectName, sha);
-        var content = new StringBuilder()
-            .Append("Commit ").AppendLine(sha)
-            .Append("Changed files: ").AppendLine(files.Count.ToString());
-        foreach (var file in files.Take(80))
-            content.Append("- ").Append(file.Status).Append(' ')
-                .Append(file.Path).Append(" (+").Append(file.Added)
-                .Append(" / -").Append(file.Removed).AppendLine(")");
-        if (files.Count > 80)
-            content.Append("- ").Append(files.Count - 80).AppendLine(" more files omitted from the source summary");
-        if (!string.IsNullOrWhiteSpace(diff.Diff))
-        {
-            content.AppendLine().AppendLine("Bounded unified diff:");
-            var remaining = Math.Max(0, 64_000 - content.Length);
-            content.Append(diff.Diff.AsSpan(0, Math.Min(diff.Diff.Length, remaining)));
-        }
-        return ResolvedContextBlock.Included(
-            $"commit:{projectName}/{sha}",
-            "commit",
-            content.ToString(),
-            sha,
-            "current",
-            isExplicit: true);
     }
 
     private ResolvedContextBlock ResolveRepositoryText(
@@ -1061,56 +1024,216 @@ public class OrchestratorChatService
         string reference,
         string kind,
         bool isExplicit)
+        => ResolveRepositoryText(
+            projectName,
+            watchPath,
+            new OrchestratorContextReference(
+                OrchestratorContextReferenceKinds.RepositoryFile,
+                reference,
+                projectName,
+                RepositoryId: projectName),
+            kind,
+            isExplicit);
+
+    private ResolvedContextBlock ResolveRepositoryText(
+        string projectName,
+        string watchPath,
+        OrchestratorContextReference reference,
+        string kind,
+        bool isExplicit)
     {
-        var relative = NormalizeRepositoryReference(projectName, reference, kind);
-        var root = Path.GetFullPath(ResolveWorkingDirectory(projectName, watchPath));
+        ValidateRepositoryIdentity(projectName, reference);
+        var relative = NormalizeRepositoryReference(projectName, reference.Reference, kind);
+        var root = ResolveRepositoryContextRoot(projectName, watchPath);
         if (Path.IsPathRooted(relative)
             || relative.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Contains("..", StringComparer.Ordinal))
             throw new OrchestratorContextEnvelopeException(
                 "context-path-traversal",
-                $"Context reference '{reference}' escapes the active project checkout.");
+                $"Context reference '{reference.Reference}' escapes the active project checkout.");
         var fullPath = Path.GetFullPath(Path.Combine(root, relative));
         if (!IsWithinRoot(root, fullPath))
             throw new OrchestratorContextEnvelopeException(
                 "context-path-traversal",
-                $"Context reference '{reference}' escapes the active project checkout.");
-        if (!File.Exists(fullPath))
+                $"Context reference '{reference.Reference}' escapes the active project checkout.");
+        if (IsGeneratedPath(relative))
             return ResolvedContextBlock.Unavailable(
-                $"file:{projectName}/{relative.Replace('\\', '/')}",
+                FileSourceId(projectName, relative, reference.LineRanges),
+                kind,
+                "blocked",
+                "Generated repository files are not eligible for chat context.",
+                isExplicit,
+                reference.Revision);
+
+        string? content = null;
+        var revision = reference.Revision;
+        if (revision is not null)
+        {
+            content = _git?.GetProjectFileAtCommit(projectName, revision, relative.Replace('\\', '/'));
+        }
+        else if (File.Exists(fullPath))
+        {
+            EnsureResolvedPathWithinRoot(root, fullPath, reference.Reference);
+            var info = new FileInfo(fullPath);
+            if (info.Length > 1_000_000)
+                return ResolvedContextBlock.Unavailable(
+                    FileSourceId(projectName, relative, reference.LineRanges),
+                    kind,
+                    "oversize",
+                    "The referenced repository text exceeds the 1 MB resolver limit.",
+                    isExplicit,
+                    _git?.ReadHeadShaAt(root));
+            try
+            {
+                content = File.ReadAllText(fullPath, new UTF8Encoding(false, true));
+            }
+            catch (DecoderFallbackException)
+            {
+                return ResolvedContextBlock.Unavailable(
+                    FileSourceId(projectName, relative, reference.LineRanges),
+                    kind,
+                    "blocked",
+                    "Binary repository files are not eligible for text context.",
+                    isExplicit,
+                    _git?.ReadHeadShaAt(root));
+            }
+            revision = _git?.ReadHeadShaAt(root);
+        }
+        if (content is null)
+            return ResolvedContextBlock.Unavailable(
+                FileSourceId(projectName, relative, reference.LineRanges),
                 kind,
                 "unresolved",
-                "The referenced repository text does not exist.",
-                isExplicit);
-        EnsureResolvedPathWithinRoot(root, fullPath, reference);
-        var info = new FileInfo(fullPath);
-        if (info.Length > 1_000_000)
+                reference.Revision is null
+                    ? "The referenced repository text does not exist."
+                    : "The referenced repository text does not exist at the requested revision.",
+                isExplicit,
+                reference.Revision);
+        if (LooksBinary(content))
             return ResolvedContextBlock.Unavailable(
-                $"file:{projectName}/{relative.Replace('\\', '/')}",
-                kind,
-                "oversize",
-                "The referenced repository text exceeds the 1 MB resolver limit.",
-                isExplicit);
-        string content;
-        try
-        {
-            content = File.ReadAllText(fullPath, new UTF8Encoding(false, true));
-        }
-        catch (DecoderFallbackException)
-        {
-            return ResolvedContextBlock.Unavailable(
-                $"file:{projectName}/{relative.Replace('\\', '/')}",
+                FileSourceId(projectName, relative, reference.LineRanges),
                 kind,
                 "blocked",
                 "Binary repository files are not eligible for text context.",
-                isExplicit);
-        }
+                isExplicit,
+                revision);
+        if (Encoding.UTF8.GetByteCount(content) > 1_000_000)
+            return ResolvedContextBlock.Unavailable(
+                FileSourceId(projectName, relative, reference.LineRanges),
+                kind,
+                "oversize",
+                "The referenced repository text exceeds the 1 MB resolver limit.",
+                isExplicit,
+                revision);
+        content = SelectLineRanges(content, reference.LineRanges, reference.Reference);
         return ResolvedContextBlock.Included(
-            $"file:{projectName}/{relative.Replace('\\', '/')}",
+            FileSourceId(projectName, relative, reference.LineRanges),
             kind,
             content,
-            info.LastWriteTimeUtc.ToString("O"),
-            "current",
+            revision,
+            reference.Revision is null ? "execution-checkout" : "immutable-revision",
             isExplicit);
+    }
+
+    private ResolvedContextBlock ResolveCommitContext(
+        string projectName,
+        OrchestratorContextReference reference)
+    {
+        ValidateRepositoryIdentity(projectName, reference);
+        var sourceId = $"commit:{projectName}/{reference.Reference.ToLowerInvariant()}";
+        var commit = _git?.GetProjectResolvedCommit(projectName, reference.Reference);
+        if (commit is null)
+            return ResolvedContextBlock.Unavailable(
+                sourceId,
+                "commit",
+                "unresolved",
+                "The referenced full commit SHA does not exist in the active project repository.",
+                isExplicit: true,
+                revision: reference.Reference.ToLowerInvariant());
+
+        var diff = _git?.GetProjectCommitDiffResult(projectName, commit.Sha, path: null);
+        var content = RenderCommitMetadata(commit, diff is { Success: true } ? diff.Diff : null);
+        return ResolvedContextBlock.Included(
+            sourceId,
+            "commit",
+            content,
+            commit.Sha,
+            "immutable-revision",
+            isExplicit: true);
+    }
+
+    private ResolvedContextBlock ResolveDiffContext(
+        string projectName,
+        OrchestratorContextReference reference)
+    {
+        ValidateRepositoryIdentity(projectName, reference);
+        var path = string.IsNullOrWhiteSpace(reference.Path)
+            ? null
+            : NormalizeRepositoryReference(projectName, reference.Path, "repository-file");
+        if (path is not null
+            && (Path.IsPathRooted(path)
+                || path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Contains("..", StringComparer.Ordinal)))
+            throw new OrchestratorContextEnvelopeException(
+                "context-path-traversal",
+                $"Context reference '{reference.Path}' escapes the active project checkout.");
+        var sourceId = DiffSourceId(projectName, reference.Reference, path, reference.LineRanges);
+        if (path is not null && IsGeneratedPath(path))
+            return ResolvedContextBlock.Unavailable(
+                sourceId,
+                "diff",
+                "blocked",
+                "Generated repository files are not eligible for diff context.",
+                isExplicit: true,
+                revision: reference.Reference.ToLowerInvariant());
+
+        var commit = _git?.GetProjectResolvedCommit(projectName, reference.Reference);
+        if (commit is null)
+            return ResolvedContextBlock.Unavailable(
+                sourceId,
+                "diff",
+                "unresolved",
+                "The referenced full commit SHA does not exist in the active project repository.",
+                isExplicit: true,
+                revision: reference.Reference.ToLowerInvariant());
+        var result = _git!.GetProjectCommitDiffResult(projectName, commit.Sha, path);
+        if (!result.Success)
+            return ResolvedContextBlock.Unavailable(
+                sourceId,
+                "diff",
+                "unresolved",
+                result.Error ?? "The referenced diff could not be resolved.",
+                isExplicit: true,
+                revision: commit.Sha);
+        if (result.Diff.Contains("Binary files ", StringComparison.Ordinal)
+            || result.Diff.Contains("GIT binary patch", StringComparison.Ordinal))
+            return ResolvedContextBlock.Unavailable(
+                sourceId,
+                "diff",
+                "blocked",
+                "Binary diffs are not eligible for text context.",
+                isExplicit: true,
+                revision: commit.Sha);
+        if (Encoding.UTF8.GetByteCount(result.Diff) > 1_000_000)
+            return ResolvedContextBlock.Unavailable(
+                sourceId,
+                "diff",
+                "oversize",
+                "The referenced diff exceeds the 1 MB resolver limit.",
+                isExplicit: true,
+                revision: commit.Sha);
+
+        var selected = SelectLineRanges(result.Diff, reference.LineRanges, reference.Reference);
+        var content = new StringBuilder()
+            .Append(RenderCommitMetadata(commit, diff: null))
+            .AppendLine("Selected diff:")
+            .AppendLine(selected)
+            .ToString();
+        return ResolvedContextBlock.Included(
+            sourceId,
+            "diff",
+            content,
+            commit.Sha,
+            "immutable-revision",
+            isExplicit: true);
     }
 
     private static IReadOnlyList<AllocatedContextBlock> AllocateContext(
@@ -1302,6 +1425,131 @@ public class OrchestratorChatService
         return builder.ToString().TrimEnd();
     }
 
+    private void ValidateRepositoryIdentity(
+        string projectName,
+        OrchestratorContextReference reference)
+    {
+        if (string.Equals(reference.RepositoryId, projectName, StringComparison.OrdinalIgnoreCase))
+            return;
+        throw new OrchestratorContextEnvelopeException(
+            "context-repository-mismatch",
+            "The context reference repository identity does not match the active project repository.");
+    }
+
+    private string ResolveRepositoryContextRoot(string projectName, string watchPath)
+    {
+        var inventory = _git?.GetProjectInventory(projectName);
+        var candidate = inventory is { IsRepo: true, RepositoryPath: not null }
+            ? inventory.RepositoryPath
+            : ResolveWorkingDirectory(projectName, watchPath);
+        return Path.GetFullPath(candidate!);
+    }
+
+    private static string SelectLineRanges(
+        string content,
+        IReadOnlyList<OrchestratorContextLineRange>? ranges,
+        string reference)
+    {
+        if (ranges is not { Count: > 0 }) return content;
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var selected = new StringBuilder();
+        foreach (var range in ranges)
+        {
+            if (range.StartLine > lines.Length)
+                throw new OrchestratorContextEnvelopeException(
+                    "context-line-range-out-of-bounds",
+                    $"Selected line range for '{reference}' starts after the resolved source ends.");
+            var end = Math.Min(range.EndLine, lines.Length);
+            selected.Append("--- lines ").Append(range.StartLine).Append('-').Append(end).AppendLine(" ---");
+            for (var line = range.StartLine; line <= end; line++)
+                selected.Append(line).Append(": ").AppendLine(lines[line - 1]);
+        }
+        return selected.ToString().TrimEnd();
+    }
+
+    private static string FileSourceId(
+        string projectName,
+        string relative,
+        IReadOnlyList<OrchestratorContextLineRange>? ranges)
+        => $"file:{projectName}/{relative.Replace('\\', '/')}" + RangeSuffix(ranges);
+
+    private static string DiffSourceId(
+        string projectName,
+        string sha,
+        string? path,
+        IReadOnlyList<OrchestratorContextLineRange>? ranges)
+        => $"diff:{projectName}/{sha.ToLowerInvariant()}"
+           + (string.IsNullOrWhiteSpace(path) ? "" : $":{path.Replace('\\', '/')}")
+           + RangeSuffix(ranges);
+
+    private static string RangeSuffix(IReadOnlyList<OrchestratorContextLineRange>? ranges)
+        => ranges is not { Count: > 0 }
+            ? ""
+            : "#" + string.Join(',', ranges.Select(range => $"L{range.StartLine}-L{range.EndLine}"));
+
+    private static bool IsGeneratedPath(string path)
+    {
+        var normalized = "/" + path.Replace('\\', '/').TrimStart('/');
+        return normalized.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("/obj/", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("/dist/", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("/coverage/", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(".min.js", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(".min.css", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksBinary(string content)
+        => content.Contains('\0') || content.Contains('\uFFFD');
+
+    private static string RenderCommitMetadata(GitResolvedCommit commit, string? diff)
+    {
+        var builder = new StringBuilder()
+            .Append("Commit: ").AppendLine(commit.Sha)
+            .Append("Subject: ").AppendLine(commit.Subject)
+            .Append("Author: ").Append(commit.Author).Append(" at ").AppendLine(commit.AuthorDateUtc.ToString("O"))
+            .Append("Parents: ").AppendLine(commit.Parents.Count == 0 ? "none" : string.Join(' ', commit.Parents))
+            .Append("Stats: ").Append(commit.FilesChanged).Append(" files, +")
+            .Append(commit.Added).Append(" / -").AppendLine(commit.Removed.ToString())
+            .AppendLine("Changed paths:");
+        foreach (var file in commit.Files.Take(200))
+            builder.Append("- ").Append(file.Status).Append(' ').Append(file.Path)
+                .Append(" (+").Append(file.Added).Append(" / -").Append(file.Removed).AppendLine(")");
+        if (commit.Files.Count > 200)
+            builder.Append("- ... ").Append(commit.Files.Count - 200).AppendLine(" more paths omitted");
+
+        var hunks = CompactHunkSummary(diff);
+        if (hunks.Count > 0)
+        {
+            builder.AppendLine("Hunk summary:");
+            foreach (var hunk in hunks) builder.Append("- ").AppendLine(hunk);
+        }
+        return builder.ToString();
+    }
+
+    private static IReadOnlyList<string> CompactHunkSummary(string? diff)
+    {
+        if (string.IsNullOrWhiteSpace(diff)) return [];
+        var result = new List<string>();
+        string? path = null;
+        foreach (var line in diff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            if (line.StartsWith("diff --git a/", StringComparison.Ordinal))
+            {
+                var marker = line.IndexOf(" b/", StringComparison.Ordinal);
+                path = marker < 0 ? line[13..] : line[(marker + 3)..];
+            }
+            else if (line.StartsWith("@@", StringComparison.Ordinal))
+            {
+                result.Add($"{path ?? "unknown path"}: {line}");
+                if (result.Count == 24) break;
+            }
+        }
+        return result;
+    }
+
     private static string NormalizeTaskReference(string projectName, string reference)
     {
         var prefix = $"task:{projectName}/";
@@ -1330,20 +1578,6 @@ public class OrchestratorChatService
                 normalized = "docs/" + normalized;
         }
         return normalized;
-    }
-
-    private static string NormalizeCommitReference(string projectName, string reference)
-    {
-        var normalized = reference.Trim();
-        var prefix = $"commit:{projectName}/";
-        if (normalized.StartsWith("commit:", StringComparison.OrdinalIgnoreCase)
-            && !normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            throw new OrchestratorContextEnvelopeException(
-                "context-reference-cross-project",
-                "A commit reference cannot cross the active conversation project.");
-        return normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? normalized[prefix.Length..].Trim()
-            : normalized;
     }
 
     private static bool IsWithinRoot(string root, string candidate)
@@ -1404,8 +1638,9 @@ public class OrchestratorChatService
             string kind,
             string status,
             string reason,
-            bool isExplicit = false)
-            => new(sourceId, kind, string.Empty, null, null, "unknown", isExplicit, status, reason);
+            bool isExplicit = false,
+            string? revision = null)
+            => new(sourceId, kind, string.Empty, revision, null, "unknown", isExplicit, status, reason);
     }
 
     private sealed record AllocatedContextBlock(

@@ -59,8 +59,8 @@ export interface WorkbenchesTab { kind: 'workbenches'; projectName: string | nul
 /** Isolated read-only Workbench viewer, one tab per project + Workbench id. */
 export interface WorkbenchTab { kind: 'workbench'; projectName: string; workbenchId: string; title?: string; }
 
-/** Full-screen diff tab; key `diff:<commitSha>`. */
-export interface DiffTab { kind: 'diff'; commitSha: string; }
+/** Full-screen project-owned diff tab; key `diff:<projectName>:<commitSha>`. */
+export interface DiffTab { kind: 'diff'; projectName: string; commitSha: string; }
 
 /** Full-screen activity tab; key `activity:<taskKey>`. */
 export interface ActivityTab { kind: 'activity'; taskKey: string; }
@@ -102,7 +102,7 @@ export function studioTabKey(tab: StudioTab): string {
     }
     case 'workbenches': return `workbenches:${tab.projectName ?? '__all__'}`;
     case 'workbench': return `workbench:${tab.projectName}:${tab.workbenchId}`;
-    case 'diff':     return `diff:${tab.commitSha}`;
+    case 'diff':     return `diff:${tab.projectName}:${tab.commitSha}`;
     case 'activity': return `activity:${tab.taskKey}`;
     case 'url-preview': return `url-preview:${tab.projectName}:${tab.urlId}`;
     case 'workspace-settings': return 'workspace-settings';

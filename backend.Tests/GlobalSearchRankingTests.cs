@@ -21,7 +21,7 @@ public sealed class GlobalSearchRankingTests
     }
 
     [Fact]
-    public void ReadFiles_SearchesTrackedFilesInARealRepository()
+    public void ReadFiles_PinsTrackedFilesButLeavesUntrackedFilesAtTheWorkingTree()
     {
         var root = Path.Combine(Path.GetTempPath(), $"global-search-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -30,11 +30,14 @@ public sealed class GlobalSearchRankingTests
             RunGit(root, "init");
             File.WriteAllText(Path.Combine(root, "README-search-proof.md"), "proof");
             RunGit(root, "add", "README-search-proof.md");
+            File.WriteAllText(Path.Combine(root, "untracked-search-proof.md"), "working tree");
+            var revision = new string('a', 40);
 
-            var results = GlobalSearchService.ReadFiles(root, "Fixture", "search-proof", "#fff");
+            var results = GlobalSearchService.ReadFiles(root, "Fixture", "search-proof", "#fff", revision);
 
-            Assert.Single(results);
-            Assert.Equal("README-search-proof.md", results[0].Path);
+            Assert.Equal(2, results.Count);
+            Assert.Equal(revision, Assert.Single(results, item => item.Path == "README-search-proof.md").Revision);
+            Assert.Null(Assert.Single(results, item => item.Path == "untracked-search-proof.md").Revision);
         }
         finally
         {

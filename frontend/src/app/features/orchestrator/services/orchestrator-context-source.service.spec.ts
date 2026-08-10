@@ -17,8 +17,8 @@ describe('OrchestratorContextSourceService', () => {
         { domain: 'tasks', projectName: 'Demo', title: 'Context task', subtitle: 'Ready', taskKey: 'DEMO-4', lane: '2-ready' },
         { domain: 'tasks', projectName: 'Other', title: 'Cross-project task', subtitle: 'Ready', taskKey: 'OTHER-1' },
       ],
-      files: [{ domain: 'files', projectName: 'Demo', title: 'context.ts', subtitle: 'src/context.ts', path: 'src/context.ts' }],
-      commits: [{ domain: 'commits', projectName: 'Demo', title: 'feat: add context', subtitle: '01234567', sha: '0123456789abcdef' }],
+      files: [{ domain: 'files', projectName: 'Demo', title: 'context.ts', subtitle: 'src/context.ts', path: 'src/context.ts', repositoryId: 'Demo', revision: 'a'.repeat(40) }],
+      commits: [{ domain: 'commits', projectName: 'Demo', title: 'feat: add context', subtitle: '01234567', sha: '0123456789abcdef0123456789abcdef01234567', repositoryId: 'Demo', revision: '0123456789abcdef0123456789abcdef01234567' }],
     });
     http.expectOne(request => request.url === '/api/projects/Demo/wiki/search').flush({
       query: 'context', semanticUsed: false, expandedTerms: [], durationMs: 1,
@@ -31,8 +31,12 @@ describe('OrchestratorContextSourceService', () => {
 
     const result = await resultPromise;
     expect(result.tasks.map(item => item.reference.reference)).toEqual(['DEMO-4']);
-    expect(result.files[0].reference).toMatchObject({ kind: 'repository-file', reference: 'src/context.ts' });
-    expect(result.commits[0].reference).toMatchObject({ kind: 'commit', reference: 'commit:Demo/0123456789abcdef' });
+    expect(result.files[0].reference).toMatchObject({
+      kind: 'repository-file', reference: 'src/context.ts', repositoryId: 'Demo', revision: 'a'.repeat(40),
+    });
+    expect(result.commits[0].reference).toMatchObject({
+      kind: 'commit', reference: '0123456789abcdef0123456789abcdef01234567', repositoryId: 'Demo',
+    });
     expect(result.wiki.map(item => item.reference.kind)).toEqual(['page', 'page']);
   });
 });

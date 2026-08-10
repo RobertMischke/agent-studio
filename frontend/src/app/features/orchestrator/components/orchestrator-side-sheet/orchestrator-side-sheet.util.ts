@@ -95,8 +95,45 @@ function sameContextReceipt(
     && left.contextKey === right.contextKey
     && (left.taskKey ?? null) === (right.taskKey ?? null)
     && left.capturedAt === right.capturedAt
+    && (left.receiptId ?? null) === (right.receiptId ?? null)
+    && (left.userTurnId ?? null) === (right.userTurnId ?? null)
     && left.includedBlocks.length === right.includedBlocks.length
-    && left.includedBlocks.every((block, index) => block === right.includedBlocks[index]);
+    && left.includedBlocks.every((block, index) => block === right.includedBlocks[index])
+    && sameContextBudget(left.budget, right.budget)
+    && sameContextSources(left.sources, right.sources);
+}
+
+function sameContextBudget(
+  left: NonNullable<OrchestratorChatTurn['contextReceipt']>['budget'],
+  right: NonNullable<OrchestratorChatTurn['contextReceipt']>['budget'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  return left.automaticSoftCapTokens === right.automaticSoftCapTokens
+    && left.automaticHardCapTokens === right.automaticHardCapTokens
+    && left.totalHardCapTokens === right.totalHardCapTokens
+    && left.estimatedIncludedTokens === right.estimatedIncludedTokens;
+}
+
+function sameContextSources(
+  left: NonNullable<OrchestratorChatTurn['contextReceipt']>['sources'],
+  right: NonNullable<OrchestratorChatTurn['contextReceipt']>['sources'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  if (left.length !== right.length) return false;
+  return left.every((source, index) => {
+    const candidate = right[index];
+    return source.sourceId === candidate.sourceId
+      && source.kind === candidate.kind
+      && (source.revision ?? null) === (candidate.revision ?? null)
+      && (source.sha256 ?? null) === (candidate.sha256 ?? null)
+      && source.freshness === candidate.freshness
+      && source.includedCharacters === candidate.includedCharacters
+      && source.estimatedTokens === candidate.estimatedTokens
+      && source.status === candidate.status
+      && (source.reason ?? null) === (candidate.reason ?? null);
+  });
 }
 
 function sameTokenUsage(

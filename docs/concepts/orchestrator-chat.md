@@ -137,6 +137,24 @@ backend validates the envelope against the route before persisting the user
 turn. Scope mismatch, cross-project references, path traversal, and out-of-root
 symlink resolution stop before model invocation.
 
+Git-rich references use three wire kinds: `repository-file`, `commit`, and
+`diff`. Each carries project and repository identity. Commit and diff references
+require a full 40-character SHA; a diff may also name one project-relative path
+and bounded unified-diff line ranges. Repository files may pin the same bounded
+line ranges and an immutable commit revision. The composer offers the active
+Diff tab first, including its selected file and first complete hunk, and searches
+known file and commit sources through the existing project-scoped global-search
+endpoint. Chips carry identities only, never resolved file bodies.
+
+The backend Git resolver owns all content reads. It resolves commit metadata,
+parents, file stats, changed paths, compact hunk summaries, selected diff text,
+and repository file text from the project checkout or requested immutable
+revision. It rejects abbreviated or missing commits, traversal, out-of-root
+symlinks, repository mismatches, generated files, binary content, and sources
+above the text cap. The CLI receives only the assembled prompt and performs no
+Git or workspace artifact resolution. Immutable revisions make the resolved
+source independent of a mutable local or remote execution checkout.
+
 Prompt assembly is deterministic: scoped preamble, context ledger, automatic
 evidence, explicit attachments, bounded conversation continuity, then the new
 user message last. Automatic evidence has a 4,000-token soft cap and 6,000-token
@@ -146,7 +164,8 @@ four to eight semantic turns provide continuity on every stateless call.
 Each reply persists a receipt linked to its user turn id. The receipt records
 stable source id, kind, revision or hash, freshness, included characters and
 estimated tokens, status, omission reason, and applied budget. It stores no
-resolved source body.
+resolved source body. The expandable UI receipt renders this same source ledger,
+including file, commit, and selected-file or hunk diff entries.
 
 The project composer shows the active tab as automatic context and keeps
 explicit additions as removable reference chips. **Add context** opens a

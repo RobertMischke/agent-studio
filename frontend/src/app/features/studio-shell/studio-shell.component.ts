@@ -1153,7 +1153,7 @@ export class StudioShellComponent {
       case 'workbench':
         return tab.title || tab.workbenchId;
       case 'diff':
-        return tab.commitSha;
+        return `${this.projectShortLabel(tab.projectName)} · ${tab.commitSha}`;
       case 'activity': {
         const job = this.findJob(tab.taskKey);
         return `Activity · ${job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey)}`;
