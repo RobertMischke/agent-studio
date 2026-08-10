@@ -55,6 +55,12 @@ const primaryTask = {
   },
 };
 
+interface RefreshCapture {
+  linked: boolean;
+  taskRequest: Record<string, unknown> | null;
+  referenceRequest: Record<string, unknown> | null;
+}
+
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
     status: 200,
@@ -63,7 +69,12 @@ function json(route: Route, body: unknown): Promise<void> {
   });
 }
 
-async function installMocks(page: Page): Promise<void> {
+async function installMocks(page: Page): Promise<RefreshCapture> {
+  const capture: RefreshCapture = {
+    linked: false,
+    taskRequest: null,
+    referenceRequest: null,
+  };
   await page.route('**/healthz', (route) => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', (route) => json(route, []));
   await page.route('**/api/auth/status', (route) =>
@@ -154,6 +165,20 @@ async function installMocks(page: Page): Promise<void> {
       progress: [primaryTask],
     }),
   );
+  await page.route('**/api/tasks', (route) => {
+    capture.taskRequest = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
+    return json(route, { id: 'refresh-dossier' });
+  });
+  await page.route('**/api/tasks/refresh-dossier/references**', (route) => {
+    capture.referenceRequest = JSON.parse(
+      route.request().postData() ?? '{}',
+    ) as Record<string, unknown>;
+    capture.linked = true;
+    return json(route, {
+      references: capture.referenceRequest,
+      warnings: [],
+    });
+  });
   await page.route('**/api/tasks/reference-status', (route) => {
     const request = JSON.parse(route.request().postData() ?? '{"keys":[]}') as { keys?: string[] };
     const statuses = new Map([
@@ -172,6 +197,14 @@ async function installMocks(page: Page): Promise<void> {
           title: 'Review compact interaction',
           taskKey: `${PROJECT}::review-header`,
           lane: '5-human-review',
+        },
+      ],
+      [
+        'VHE-14',
+        {
+          title: 'Refresh: Compact viewer header keeps operational context in one quiet line',
+          taskKey: `${PROJECT}::refresh-dossier`,
+          lane: '1-preparation',
         },
       ],
     ]);
@@ -271,9 +304,20 @@ async function installMocks(page: Page): Promise<void> {
             sourceWatchPath: WATCH_PATH,
             kind: 'workbenches',
           },
+          ...(capture.linked
+            ? [{
+                sourceKey: 'VHE-14',
+                sourceJobId: 'refresh-dossier',
+                sourceTitle: 'Refresh: Compact viewer header keeps operational context in one quiet line',
+                sourceState: '1-preparation',
+                sourceWatchPath: WATCH_PATH,
+                kind: 'workbenches',
+              }]
+            : []),
         ],
       }),
   );
+  return capture;
 }
 
 async function seedWorkbench(page: Page): Promise<void> {
@@ -318,7 +362,7 @@ async function captureViewerTop(page: Page, testInfo: TestInfo, fileName: string
 test('compact viewer head keeps live card state and details usable in both themes and widths', async ({
   page,
 }, testInfo) => {
-  await installMocks(page);
+  const capture = await installMocks(page);
   await seedWorkbench(page);
   await page.goto('/');
   await page.addStyleTag({
@@ -369,4 +413,47 @@ test('compact viewer head keeps live card state and details usable in both theme
   await expect(details).toContainText('Source metadata, actions, and decision controls');
   await expect(details).toContainText('docs/operations/compact-viewer-header/index.html');
   await expect(details.getByTestId('workbench-decision-panel')).toBeVisible();
+
+  await details.getByRole('button', { name: 'Close details' }).click();
+  await setTheme(page, 'light');
+  await page.getByTestId('workbench-viewer-refresh').click();
+  const confirmation = page.getByTestId('confirm-dialog');
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText('Create Dossier refresh card?');
+  await expect(confirmation).toContainText(
+    'Refresh: Compact viewer header keeps operational context in one quiet line',
+  );
+  await expect(confirmation).toContainText(WORKBENCH_KEY);
+  await expect(confirmation).toContainText('docs/operations/compact-viewer-header/index.html');
+  await page.screenshot({
+    path: evidencePath(testInfo, 'dossier-refresh-confirmation-light--mocked.png'),
+    fullPage: true,
+  });
+  await confirmation.getByTestId('confirm-dialog-confirm').click();
+
+  await expect(page.getByTestId('workbench-viewer-task-VHE-14')).toBeVisible();
+  expect(capture.taskRequest).toMatchObject({
+    title: 'Refresh: Compact viewer header keeps operational context in one quiet line',
+    watchPath: WATCH_PATH,
+    targetState: '1-preparation',
+    taskType: 'chore',
+    mode: 'coding',
+  });
+  expect(String(capture.taskRequest?.['promptMarkdown'])).toContain(
+    'Dossier path: `docs/operations/compact-viewer-header/index.html`',
+  );
+  expect(String(capture.taskRequest?.['promptMarkdown'])).toContain(`Dossier key: \`${WORKBENCH_KEY}\``);
+  expect(String(capture.taskRequest?.['promptMarkdown'])).toContain(
+    'Update the document against reality (incorporate findings, mark completed sections, refresh figures).',
+  );
+  expect(capture.referenceRequest).toEqual({
+    dependsOn: [],
+    relatedTo: [],
+    blockedBy: [],
+    supersedes: [],
+    workbenches: [WORKBENCH_KEY],
+  });
+
+  await setTheme(page, 'dark');
+  await captureViewerTop(page, testInfo, 'dossier-refresh-card-dark--mocked.png');
 });
