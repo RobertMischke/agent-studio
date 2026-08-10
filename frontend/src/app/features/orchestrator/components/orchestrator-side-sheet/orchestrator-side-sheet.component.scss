@@ -341,32 +341,45 @@
   min-height: 0;
 }
 
-/* Location context projected into CAC's standard composer footer:
-   "project · surface · detail", muted, single line, ellipsized. */
+/* Let the context shrink around CAC's atomic model control. */
+:host ::ng-deep .sheet__composer .chat__composer-foot-start {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .sheet__composer-context {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  column-gap: var(--studio-spacing-2);
   min-width: 0;
   font-size: 11px;
   color: var(--studio-fg-dim);
-  white-space: nowrap;
 }
 
 .sheet__composer-context > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sheet__composer-context > span + span::before {
   content: '·';
-  margin-right: 6px;
+  margin-right: var(--studio-spacing-2);
   color: var(--studio-fg-dim);
 }
 
 .sheet__composer-context-project {
   color: var(--studio-fg);
   font-weight: 500;
+}
+
+.sheet__composer-context-detail {
+  flex: 1 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sheet__event-action {
@@ -384,6 +397,12 @@
 
   .sheet__context-actions {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .sheet__composer-context-detail {
+    flex: 1 1 0;
   }
 }
 
