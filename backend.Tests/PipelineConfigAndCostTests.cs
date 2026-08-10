@@ -389,13 +389,42 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void SummarizeByModel_Gpt56SolAfterCatalogRollout_IsPricedAndHasNoGap()
+    {
+        var record = new PipelineExecutionRecord
+        {
+            Attempt = 1,
+            StartedAt = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "gpt-5.6-sol", InputTokens = 500_000, OutputTokens = 100_000,
+                },
+            },
+        };
+
+        var summary = PipelineCostCalculator.SummarizeByModel(record);
+
+        Assert.Equal(5.50m, summary.TotalCostUsd);
+        Assert.False(summary.AnyModelUnknown);
+        Assert.Equal(0, summary.UnpricedRuns);
+        Assert.Empty(summary.PricingGaps);
+        var model = Assert.Single(summary.TotalByModel);
+        Assert.True(model.ModelKnown);
+        Assert.Equal(5.50m, model.CostUsd);
+        Assert.Empty(model.PricingGaps);
+    }
+
+    [Fact]
     public void SummarizeByModel_MixedRuns_ReportsPartialCostAndNoPriceForDateReason()
     {
         var priced = new PipelineExecutionRecord
         {
             Attempt = 1,
-            StartedAt = new DateTime(2026, 7, 11, 9, 0, 0, DateTimeKind.Utc),
-            CompletedAt = new DateTime(2026, 7, 11, 9, 5, 0, DateTimeKind.Utc),
+            StartedAt = new DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc),
+            CompletedAt = new DateTime(2026, 8, 1, 9, 5, 0, DateTimeKind.Utc),
             Steps =
             {
                 new PipelineStepExecution
@@ -408,13 +437,13 @@ public class PipelineConfigAndCostTests
         var current = new PipelineExecutionRecord
         {
             Attempt = 2,
-            StartedAt = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc),
+            StartedAt = new DateTime(2026, 8, 1, 10, 0, 0, DateTimeKind.Utc),
             Steps =
             {
                 new PipelineStepExecution
                 {
                     StepId = "core-agent-run", Kind = StepKind.Core,
-                    Model = "gpt-5.6-sol", InputTokens = 500_000, OutputTokens = 100_000,
+                    Model = "gpt-5-codex", InputTokens = 500_000, OutputTokens = 100_000,
                 },
             },
             PreviousAttempts = { priced },
@@ -426,7 +455,7 @@ public class PipelineConfigAndCostTests
         Assert.True(summary.AnyModelUnknown);
         Assert.Equal(1, summary.UnpricedRuns);
         var gap = Assert.Single(summary.PricingGaps);
-        Assert.Equal("gpt-5.6-sol", gap.ModelId);
+        Assert.Equal("gpt-5-codex", gap.ModelId);
         Assert.Equal("NoPriceForDate", gap.Reason);
         Assert.Equal(1, gap.AffectedRuns);
         Assert.True(summary.Runs[1].AnyModelUnknown);
@@ -643,7 +672,7 @@ public class PipelineConfigAndCostTests
     [Fact]
     public void PipelineTimeline_MixedRuns_ReportsPartialCostAndAffectedRunCount()
     {
-        var now = new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc);
+        var now = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
         var records = new[]
         {
             RunOn(now.AddHours(-2),
@@ -656,7 +685,7 @@ public class PipelineConfigAndCostTests
                 new PipelineStepExecution
                 {
                     StepId = "core-agent-run", Kind = StepKind.Core,
-                    Model = "gpt-5.6-sol", InputTokens = 500_000, OutputTokens = 100_000,
+                    Model = "gpt-5-codex", InputTokens = 500_000, OutputTokens = 100_000,
                 }),
         };
 
@@ -665,7 +694,7 @@ public class PipelineConfigAndCostTests
         Assert.Equal(2.00m, timeline.TotalCostUsd);
         Assert.Equal(1, timeline.UnpricedRuns);
         var gap = Assert.Single(timeline.PricingGaps);
-        Assert.Equal("gpt-5.6-sol", gap.ModelId);
+        Assert.Equal("gpt-5-codex", gap.ModelId);
         Assert.Equal("NoPriceForDate", gap.Reason);
         Assert.Equal(1, gap.AffectedRuns);
 

@@ -24,8 +24,8 @@ catalog pass-through for discovery consumers; it owns no price numbers.
 
 TokenEconomy distinguishes `Resolved`, `UnknownModel`, and `NoPriceForDate`.
 Studio maps only `Resolved` to a dollar value. The other states keep the token
-count and set the existing unknown-price flags so UI surfaces render `Unknown`,
-never a silent `$0.00`.
+count and set the existing unknown-price flags so UI surfaces render an explicit
+missing-price state, never a silent `$0.00`.
 
 Active `UnknownModel` usage also increments `unknownModelCount` in the project
 Token Summary, renders an acute `N models without price data` badge, and emits

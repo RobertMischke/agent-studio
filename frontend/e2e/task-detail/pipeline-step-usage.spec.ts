@@ -257,6 +257,55 @@ function pipelineWithMissingPrices(mixed: boolean) {
   };
 }
 
+function pipelineWithResolvedGpt56Price() {
+  const fixture = pipeline();
+  const priceRun = (run: ReturnType<typeof runRecord>) => ({
+    ...run,
+    steps: run.steps.map(step => ({ ...step, model: 'gpt-5.6-sol' })),
+  });
+  const pricedModels = [{
+    model: 'gpt-5.6-sol', modelKnown: true, unpricedRuns: 0, pricingGaps: [], steps: 2,
+    inputTokens: 1100000, outputTokens: 210000, cacheReadTokens: 0,
+    cacheCreationTokens: 0, totalTokens: 1310000, costUsd: 11.8,
+  }];
+  return {
+    ...fixture,
+    execution: {
+      ...priceRun(fixture.execution),
+      previousAttempts: fixture.execution.previousAttempts.map(priceRun),
+    },
+    cost: {
+      ...fixture.cost,
+      steps: [
+        { ...costStep('core-agent-run', 'core', 'gpt-5.6-sol', 110000, 0.8), pricingGaps: [] },
+        { ...costStep('aspect-code-quality', 'aspect', 'gpt-5.6-sol', 1200000, 11), pricingGaps: [] },
+      ],
+      totalInputCostUsd: 5.5,
+      totalOutputCostUsd: 6.3,
+      totalCostUsd: 11.8,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+    },
+    tokensByModel: {
+      runs: fixture.tokensByModel.runs.map(run => ({
+        ...run,
+        models: pricedModels,
+        totalCostUsd: 11.8,
+        anyModelUnknown: false,
+        pricingGaps: [],
+      })),
+      totalByModel: [{ ...pricedModels[0], steps: 4, inputTokens: 2200000,
+        outputTokens: 420000, totalTokens: 2620000, costUsd: 23.6 }],
+      totalTokens: 2620000,
+      totalCostUsd: 23.6,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+    },
+  };
+}
+
 function runTimeline() {
   return {
     runCount: 2,
@@ -389,6 +438,23 @@ test('missing historical prices never render as zero and mixed totals stay expli
   await savePipelineShot(page, 'pipeline-price-mixed-light--mocked.png');
   await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
   await savePipelineShot(page, 'pipeline-price-mixed-dark--mocked.png');
+
+  await page.route(pipelineRoute, route => route.fulfill(json(pipelineWithResolvedGpt56Price())));
+  await page.goto(url);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  const resolvedCoreCost = page.locator('[data-step-id="core-agent-run"]')
+    .getByTestId('overview-pipeline-step-cost');
+  const resolvedTotalCost = page.getByTestId('overview-pipeline-total-cost');
+  const resolvedLifetimeCost = page.getByTestId('pipeline-token-usage-grand-total-cost');
+  await expect(resolvedCoreCost).toContainText('$0.80');
+  await expect(resolvedTotalCost).toContainText('$11.80');
+  await expect(resolvedLifetimeCost).toContainText('$23.60');
+  await expect(resolvedTotalCost).not.toContainText('incomplete');
+  await expect(resolvedLifetimeCost).not.toContainText('incomplete');
+  await expect(resolvedLifetimeCost).not.toContainText('no price data');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'light'; });
+  await savePipelineShot(page, 'pipeline-price-gpt56-resolved-light--mocked.png');
 });
 
 test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page }) => {

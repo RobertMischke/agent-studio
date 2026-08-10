@@ -477,7 +477,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(host.querySelector('[data-step-id="aspect-tests-and-evidence"]')).toBeNull();
   });
 
-  it('pipeline totals render Unknown instead of a silent zero when every used model is unpriced', async () => {
+  it('pipeline totals render no price data instead of a silent zero when every used model is unpriced', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('future-unpriced-model');
     pipe.execution!.steps[0] = {
@@ -524,8 +524,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     const host = fixture.nativeElement as HTMLElement;
     const currentTotal = host.querySelector('[data-testid="overview-pipeline-total-cost"]');
     const lifetimeTotal = host.querySelector('[data-testid="pipeline-token-usage-grand-total-cost"]');
-    expect(currentTotal?.textContent?.trim()).toBe('Unknown');
-    expect(lifetimeTotal?.textContent?.trim()).toBe('Unknown');
+    expect(currentTotal?.textContent?.trim()).toBe('- no price data');
+    expect(lifetimeTotal?.textContent?.trim()).toBe('- no price data');
     expect(host.textContent).not.toContain('$0.00');
   });
 

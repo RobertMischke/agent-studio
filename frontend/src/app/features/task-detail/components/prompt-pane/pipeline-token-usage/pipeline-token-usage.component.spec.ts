@@ -215,6 +215,25 @@ describe('PipelineTokenUsageComponent', () => {
       .toContain('$0.00');
   });
 
+  it('shows the resolved gpt-5.6 amount without an incomplete marker after catalog rollout', () => {
+    const priced = model('gpt-5.6-sol', 600_000, 5.5);
+    const summary: PipelineModelUsageSummary = {
+      runs: [run(1, true, [priced])],
+      totalByModel: [priced],
+      totalTokens: 600_000,
+      totalCostUsd: 5.5,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+    };
+
+    const fixture = setup(summary);
+    const total = one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent ?? '';
+    expect(total).toContain('$5.50');
+    expect(total).not.toContain('incomplete');
+    expect(total).not.toContain('no price data');
+  });
+
   it('marks a mixed priced and unpriced lifetime aggregate as partial', () => {
     const summary: PipelineModelUsageSummary = {
       runs: [run(1, true, [
@@ -231,7 +250,8 @@ describe('PipelineTokenUsageComponent', () => {
     };
 
     const fixture = setup(summary);
-    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
-      .toContain('$0.25 partial');
+    const total = one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent ?? '';
+    expect(total).toContain('$0.25');
+    expect(total).toContain('incomplete (1 run without price)');
   });
 });

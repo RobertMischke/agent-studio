@@ -93,8 +93,9 @@ test.beforeEach(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 
-test('pipeline page: reworked panel shows health, steps, models, prompt bindings, per-step tokens', async ({ page }) => {
+test('pipeline page: reworked panel shows health, steps, models, prompt bindings, per-step tokens', async ({ page, devBackend }) => {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  expect(devBackend.port).toBe(5030);
   const preferred: WatchPath = { name: 'Agent Studio Worktree', path: '/fixtures/agent-studio-worktree' };
   projectName = preferred.name;
   projectSlug = slugFor(projectName);
