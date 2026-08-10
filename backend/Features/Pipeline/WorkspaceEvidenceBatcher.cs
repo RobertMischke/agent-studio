@@ -37,12 +37,10 @@ public sealed class WorkspaceEvidenceBatcher
     //
     // `*/.orchestrator/*` is load-bearing, not defense-in-depth: the
     // per-project .orchestrator/ runtime (orchestrator.jsonl ~1 MB and growing,
-    // orchestrator-session.json, orchestrator-chat.jsonl, chat-attachments/*.png)
+    // orchestrator-session.json, orchestrator-chat.jsonl, context-chats/*.jsonl)
     // lives INSIDE projects/<name> and is tracked (not gitignored) in the live
     // workspace repo, so scoping alone cannot keep this high-churn session state
-    // out of the evidence commits — only this exclude can. (`*/attachments/*`
-    // does not match `/chat-attachments/`; the nested .orchestrator glob covers
-    // those PNGs.)
+    // out of the evidence commits; only this exclude can.
     private static readonly string[] DefaultExcludeGlobs =
     {
         "*.tmp",

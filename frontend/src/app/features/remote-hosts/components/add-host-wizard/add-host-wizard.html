@@ -96,8 +96,8 @@
       </main>
 
       <aside class="wizard__chat" aria-label="Orchestrator setup chat">
-        <div class="wizard__chat-head"><span class="wizard__orb" aria-hidden="true">O</span><div><strong>Orchestrator</strong><small>Host setup companion</small></div><span class="wizard__online">Online</span></div>
-        <cac-chat variant="embedded" [messages]="messages()" [pending]="chatPending()" [disabled]="chatPending()" placeholder="Ask about this setup step..." emptyState="Ask the orchestrator for help." (submitMessage)="onSubmit($event)" />
+        <div class="wizard__chat-head"><span class="wizard__orb" aria-hidden="true">?</span><div><strong>Setup help</strong><small>Host setup companion</small></div><span class="wizard__online">Online</span></div>
+        <cac-chat variant="embedded" [messages]="messages()" [pending]="chatPending()" [disabled]="chatPending()" placeholder="Ask about this setup step..." emptyState="Ask for help with this setup step." (submitMessage)="onSubmit($event)" />
       </aside>
     </div>
   </section>

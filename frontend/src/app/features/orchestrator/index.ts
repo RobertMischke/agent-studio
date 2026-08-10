@@ -34,7 +34,6 @@ export type {
   OrchestratorContextReference,
   OrchestratorContextBudget,
   OrchestratorContextEnvelope,
-  OrchestratorChatAttachment,
   OrchestratorChatResponse,
   ChatExecutionContext,
   ChatNavigationContext,
