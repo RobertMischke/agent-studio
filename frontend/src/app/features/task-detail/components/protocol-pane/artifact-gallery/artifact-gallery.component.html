@@ -33,13 +33,13 @@
       @for (artifact of documents(); track artifact.id) {
         <section class="artifact-document"
                  [attr.data-artifact-kind]="artifact.kind"
-                 [attr.data-expanded]="isExpanded(artifact.id)"
+                 [attr.data-expanded]="isExpanded(artifact)"
                  [attr.data-testid]="'artifact-document-' + artifact.kind">
           <div class="artifact-document__row">
             <button type="button"
                     class="artifact-document__main"
                     [attr.data-testid]="'artifact-document-toggle-' + artifact.kind"
-                    [attr.aria-expanded]="artifact.kind === 'html' ? null : isExpanded(artifact.id)"
+                    [attr.aria-expanded]="artifact.kind === 'html' ? null : isExpanded(artifact)"
                     (click)="toggleDocument(artifact)">
               <span class="artifact-document__type">{{ typeLabel(artifact) }}</span>
               <span class="artifact-document__identity">
@@ -61,11 +61,11 @@
                     (click)="openInNewTab(artifact, $event)">↗</button>
           </div>
 
-          @if (isExpanded(artifact.id)) {
+          @if (isExpanded(artifact)) {
             <div class="artifact-document__preview" data-testid="artifact-document-preview">
-              @if (isLoading(artifact.id)) {
+              @if (isLoading(artifact)) {
                 <span class="artifact-document__state">Loading preview...</span>
-              } @else if (contentFor(artifact.id) === null) {
+              } @else if (contentFor(artifact) === null) {
                 <span class="artifact-document__state artifact-document__state--error">Preview unavailable.</span>
               } @else if (artifact.kind === 'markdown') {
                 <cac-markdown class="artifact-document__markdown"

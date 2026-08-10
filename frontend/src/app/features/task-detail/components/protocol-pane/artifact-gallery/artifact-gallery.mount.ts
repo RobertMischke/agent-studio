@@ -31,13 +31,10 @@ export class ArtifactGalleryMountController {
   ) {}
 
   sync(events: readonly ConversationEvent[]): void {
+    this.restoreRows();
     const rows = [...this.host.querySelectorAll<HTMLElement>(
       '[data-testid="conversation-artifact-image"]',
     )];
-    rows.forEach((row) => {
-      row.hidden = false;
-      row.removeAttribute('aria-hidden');
-    });
 
     const blocks = artifactBlocks(events);
     const activeIds = new Set<string>();
@@ -45,7 +42,7 @@ export class ArtifactGalleryMountController {
       const blockRows = rows.slice(block.startOrdinal, block.startOrdinal + block.rowCount);
       if (blockRows.length !== block.rowCount || blockRows.length === 0) continue;
       activeIds.add(block.id);
-      blockRows.forEach((row) => {
+      blockRows.slice(1).forEach((row) => {
         row.hidden = true;
         row.setAttribute('aria-hidden', 'true');
       });
@@ -61,6 +58,7 @@ export class ArtifactGalleryMountController {
 
   destroy(): void {
     this.destroyed = true;
+    this.restoreRows();
     for (const mount of this.galleries.values()) this.destroyMount(mount);
     this.galleries.clear();
   }
@@ -76,8 +74,8 @@ export class ArtifactGalleryMountController {
     if (!mount) {
       if (this.pendingIds.has(block.id) || this.destroyed || !firstRow.isConnected) return;
       this.pendingIds.add(block.id);
-      const host = firstRow.ownerDocument.createElement('li');
-      host.className = 'conv__row conv__row--artifact-gallery';
+      const host = firstRow.ownerDocument.createElement('div');
+      host.className = 'conv__artifact-gallery';
       host.dataset['testid'] = 'conversation-artifact-gallery-host';
       const ref = createComponent(ArtifactGalleryComponent, {
         environmentInjector: this.environmentInjector,
@@ -89,7 +87,15 @@ export class ArtifactGalleryMountController {
       this.pendingIds.delete(block.id);
     }
 
-    firstRow.parentElement?.insertBefore(mount.host, firstRow);
+    firstRow.dataset['artifactGalleryAnchor'] = block.id;
+    for (const child of [...firstRow.children]) {
+      if (child === mount.host) continue;
+      const element = child as HTMLElement;
+      element.dataset['artifactGalleryOriginal'] = 'true';
+      element.hidden = true;
+      element.setAttribute('aria-hidden', 'true');
+    }
+    firstRow.append(mount.host);
     if (mount.signature !== signature) {
       mount.ref.setInput('artifacts', block.artifacts);
       mount.ref.changeDetectorRef.detectChanges();
@@ -101,6 +107,23 @@ export class ArtifactGalleryMountController {
     this.applicationRef.detachView(mount.ref.hostView);
     mount.ref.destroy();
     mount.host.remove();
+  }
+
+  private restoreRows(): void {
+    const rows = this.host.querySelectorAll<HTMLElement>(
+      '[data-testid="conversation-artifact-image"]',
+    );
+    rows.forEach((row) => {
+      row.hidden = false;
+      row.removeAttribute('aria-hidden');
+      row.removeAttribute('data-artifact-gallery-anchor');
+      row.querySelectorAll<HTMLElement>('[data-artifact-gallery-original="true"]')
+        .forEach((element) => {
+          element.hidden = false;
+          element.removeAttribute('aria-hidden');
+          element.removeAttribute('data-artifact-gallery-original');
+        });
+    });
   }
 }
 

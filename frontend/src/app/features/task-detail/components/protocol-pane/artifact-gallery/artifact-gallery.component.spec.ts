@@ -74,6 +74,30 @@ describe('ArtifactGalleryComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-line-kind="add"]')?.textContent).toContain('+new');
   });
 
+  it('preserves an expanded preview while the polled gallery view is remounted', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ArtifactGalleryComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const artifact = documentArtifact('diff', 'diff');
+    const first = TestBed.createComponent(ArtifactGalleryComponent);
+    first.componentRef.setInput('artifacts', [artifact]);
+    await first.whenStable();
+
+    (first.nativeElement.querySelector('[data-testid="artifact-document-toggle-diff"]') as HTMLButtonElement).click();
+    const request = TestBed.inject(HttpTestingController).expectOne('/api/files/results/delivery.diff');
+    first.destroy();
+
+    const replacement = TestBed.createComponent(ArtifactGalleryComponent);
+    replacement.componentRef.setInput('artifacts', [artifact]);
+    await replacement.whenStable();
+    expect(replacement.nativeElement.textContent).toContain('Loading preview...');
+
+    request.flush('@@ -1 +1 @@\n-old\n+survives remount');
+    await replacement.whenStable();
+    expect(replacement.nativeElement.textContent).toContain('+survives remount');
+  });
+
   it('opens HTML through the artifact URL instead of embedding another viewer', async () => {
     await TestBed.configureTestingModule({
       imports: [ArtifactGalleryComponent],

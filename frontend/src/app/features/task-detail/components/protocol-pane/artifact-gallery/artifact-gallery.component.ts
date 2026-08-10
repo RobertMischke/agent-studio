@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import { MediaLightboxService } from '../../../../../services/media-lightbox.service';
 import type { ConversationArtifact } from './artifact-gallery.model';
+import { ArtifactGalleryState } from './artifact-gallery.state';
 
 interface DiffPreviewLine {
   readonly id: string;
@@ -23,11 +23,8 @@ interface DiffPreviewLine {
 export class ArtifactGalleryComponent {
   readonly artifacts = input.required<readonly ConversationArtifact[]>();
 
-  private readonly http = inject(HttpClient);
   private readonly lightbox = inject(MediaLightboxService);
-  private readonly expandedIds = signal<ReadonlySet<string>>(new Set());
-  private readonly loadingIds = signal<ReadonlySet<string>>(new Set());
-  private readonly content = signal<ReadonlyMap<string, string | null>>(new Map());
+  private readonly previewState = inject(ArtifactGalleryState);
   private readonly copyStates = signal<ReadonlyMap<string, 'idle' | 'copied' | 'failed'>>(new Map());
 
   readonly images = computed(() => this.artifacts().filter((artifact) => artifact.kind === 'image'));
@@ -65,27 +62,23 @@ export class ArtifactGalleryComponent {
       this.openInNewTab(artifact);
       return;
     }
-    const next = new Set(this.expandedIds());
-    if (next.has(artifact.id)) next.delete(artifact.id);
-    else next.add(artifact.id);
-    this.expandedIds.set(next);
-    if (next.has(artifact.id) && !this.content().has(artifact.id)) this.load(artifact);
+    if (this.previewState.toggle(artifact)) void this.previewState.load(artifact);
   }
 
-  isExpanded(id: string): boolean {
-    return this.expandedIds().has(id);
+  isExpanded(artifact: ConversationArtifact): boolean {
+    return this.previewState.isExpanded(artifact);
   }
 
-  isLoading(id: string): boolean {
-    return this.loadingIds().has(id);
+  isLoading(artifact: ConversationArtifact): boolean {
+    return this.previewState.isLoading(artifact);
   }
 
-  contentFor(id: string): string | null | undefined {
-    return this.content().get(id);
+  contentFor(artifact: ConversationArtifact): string | null | undefined {
+    return this.previewState.contentFor(artifact);
   }
 
   displayContent(artifact: ConversationArtifact): string {
-    const raw = this.content().get(artifact.id) ?? '';
+    const raw = this.previewState.contentFor(artifact) ?? '';
     if (artifact.kind !== 'json') return raw;
     try {
       return JSON.stringify(JSON.parse(raw), null, 2);
@@ -115,7 +108,7 @@ export class ArtifactGalleryComponent {
 
   rowActionLabel(artifact: ConversationArtifact): string {
     if (artifact.kind === 'html') return 'Open viewer';
-    return this.isExpanded(artifact.id) ? 'Collapse' : 'Preview';
+    return this.isExpanded(artifact) ? 'Collapse' : 'Preview';
   }
 
   copyLabel(id: string): string {
@@ -127,9 +120,7 @@ export class ArtifactGalleryComponent {
 
   async copyDocument(artifact: ConversationArtifact, event: Event): Promise<void> {
     event.stopPropagation();
-    if (!this.content().has(artifact.id)) {
-      await this.load(artifact);
-    }
+    await this.previewState.load(artifact);
     const ok = await copyTextToClipboard(this.displayContent(artifact));
     this.setCopyState(artifact.id, ok ? 'copied' : 'failed');
     setTimeout(() => this.setCopyState(artifact.id, 'idle'), 1800);
@@ -140,43 +131,12 @@ export class ArtifactGalleryComponent {
     if (typeof window !== 'undefined') window.open(artifact.url, '_blank', 'noopener,noreferrer');
   }
 
-  private load(artifact: ConversationArtifact): Promise<void> {
-    if (!artifact.contentUrl) return Promise.resolve();
-    this.updateSet(this.loadingIds, artifact.id, true);
-    return new Promise((resolve) => {
-      this.http.get(artifact.contentUrl!, { responseType: 'text' }).subscribe({
-        next: (body) => {
-          this.setContent(artifact.id, body);
-          this.updateSet(this.loadingIds, artifact.id, false);
-          resolve();
-        },
-        error: () => {
-          this.setContent(artifact.id, null);
-          this.updateSet(this.loadingIds, artifact.id, false);
-          resolve();
-        },
-      });
-    });
-  }
-
-  private setContent(id: string, body: string | null): void {
-    const next = new Map(this.content());
-    next.set(id, body);
-    this.content.set(next);
-  }
-
   private setCopyState(id: string, state: 'idle' | 'copied' | 'failed'): void {
     const next = new Map(this.copyStates());
     next.set(id, state);
     this.copyStates.set(next);
   }
 
-  private updateSet(target: { (): ReadonlySet<string>; set(value: ReadonlySet<string>): void }, id: string, present: boolean): void {
-    const next = new Set(target());
-    if (present) next.add(id);
-    else next.delete(id);
-    target.set(next);
-  }
 }
 
 function diffLineKind(text: string): DiffPreviewLine['kind'] {
