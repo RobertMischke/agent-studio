@@ -312,7 +312,7 @@
       "state": {
         "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An pinned DEMO-9 task is open and the protocol pane is visible.",
+        "relevantState": "A pinned DEMO-9 task is open and the protocol pane is visible.",
         "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
@@ -352,7 +352,7 @@
       "state": {
         "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An pinned DEMO-9 task is open and the Git pane has been toggled on.",
+        "relevantState": "A pinned DEMO-9 task is open and the Git pane has been toggled on.",
         "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {
@@ -434,7 +434,7 @@
       "state": {
         "route": "/tasks/DEMO-9",
         "viewport": "1440x900",
-        "relevantState": "An pinned DEMO-9 task with protocol, pipeline, and review context is visible.",
+        "relevantState": "A pinned DEMO-9 task with protocol, pipeline, and review context is visible.",
         "dataSource": "Pinned DEMO-9 task selected by the Playwright spec."
       },
       "capture": {

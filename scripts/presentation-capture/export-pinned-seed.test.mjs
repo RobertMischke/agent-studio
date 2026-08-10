@@ -43,6 +43,8 @@ test('export is deterministic and removes source names, keys, and paths', () => 
     const serialized = JSON.stringify(first);
     assert.doesNotMatch(serialized, /SECRET-4(?:1|2)?|private-product|Private Product|C:\/Users\/Private/);
     assert.match(serialized, /DEMO-9/);
+    assert.match(first.decision.promptMarkdown, /^# Approve DEMO-9 for Demo App/m);
+    assert.equal(first.decision.reviewSummary, 'Review DEMO-9 in Demo App.');
     assert.equal(first.fixedTimeBase, '2026-08-09T08:00:00.000Z');
   } finally {
     rmSync(root, { recursive: true, force: true });

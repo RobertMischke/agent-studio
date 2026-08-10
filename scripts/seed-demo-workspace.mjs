@@ -109,7 +109,7 @@ function writeTask(root, task, index) {
     createdAt: created,
     enteredLaneAt: entered,
     state: task.state,
-    order: (index + 1) * 10,
+    order: task.decision ? 1 : (index + 1) * 10,
     agent: 'claude',
     ownerClientId: OWNER,
     model: 'claude-opus-4-8',
@@ -120,6 +120,7 @@ function writeTask(root, task, index) {
     allowWebAccess: false,
     taskType: task.type,
     key: task.key,
+    noBranchExpected: task.state === '6-completed' || task.state === '7-archive',
   };
 
   if (task.history) {

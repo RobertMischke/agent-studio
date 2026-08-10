@@ -32,8 +32,8 @@ interface ShotAnnotation {
 
 const BOARD_HERO_ANNOTATIONS: readonly ShotAnnotation[] = [
   { label: 'Pinned workspace', left: 16, top: 14 },
-  { label: 'Bounded task', left: 57, top: 31 },
-  { label: 'Human decision', left: 80, top: 64 },
+  { label: 'Bounded task', left: 24, top: 31 },
+  { label: 'Human decision', left: 80, top: 31 },
 ];
 
 const TASK_DETAIL_ANNOTATIONS: readonly ShotAnnotation[] = [
@@ -256,7 +256,10 @@ test('presentation still 06 - project knowledge', async ({ page }, testInfo) => 
 
 test('presentation still 07 - landing board hero', async ({ page }, testInfo) => {
   await openBoard(page);
-  await expect(page.locator(TASK_CARD).filter({ hasText: 'DEMO-9' }).first()).toBeVisible();
+  const decisionCard = page.locator(TASK_CARD).filter({ hasText: 'DEMO-9' }).first();
+  await expect(decisionCard).toBeInViewport();
+  await expect(page.getByTestId('lane-5e-escalated').locator(TASK_CARD).first()).toContainText('DEMO-9');
+  await expect(page.getByTestId('accepted-integration-alert-banner')).toBeHidden();
   await captureBoth(page, testInfo, '07', 'landing-board-hero', BOARD_HERO_ANNOTATIONS);
 });
 
