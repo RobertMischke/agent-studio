@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, output, signal } from '@angular/core';
 import type { OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { OrchestratorContextSourceOption } from '../../models/orchestrator-context-source.model';
+import {
+  contextSourceId,
+  type OrchestratorContextSourceOption,
+} from '../../models/orchestrator-context-source.model';
 import {
   OrchestratorContextSourceService,
   type OrchestratorContextSourceSearchResult,
@@ -68,15 +71,34 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
     this.attachmentAdded.emit(source);
   }
 
+  addDiff(source: OrchestratorContextSourceOption): void {
+    this.add(this.diffSource(source));
+  }
+
   remove(id: string): void {
     this.attachmentRemoved.emit(id);
   }
 
   categoryLabel(source: OrchestratorContextSourceOption): string {
+    if (source.reference.kind === 'diff') return 'Diff';
     if (source.category === 'tasks') return 'Task';
     if (source.category === 'commits') return 'Commit';
     if (source.category === 'files') return 'File';
     return 'Page';
+  }
+
+  diffSource(source: OrchestratorContextSourceOption): OrchestratorContextSourceOption {
+    const reference = {
+      ...source.reference,
+      kind: 'diff' as const,
+      path: null,
+      lineRanges: null,
+    };
+    return {
+      ...source,
+      id: contextSourceId(reference),
+      reference,
+    };
   }
 
   onQuery(value: string): void {
