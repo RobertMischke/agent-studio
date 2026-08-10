@@ -103,21 +103,12 @@ public static class ArtifactIngestionEndpoints
             string? resultDocumentStatus = null;
             if (req.FinalizeResult)
             {
-                await summaries.GenerateAsync(task, ct);
-                var summaryState = summaries.GetState(task.TaskKey);
-                var statusPath = Path.Combine(task.FolderPath, "status.md");
-                var statusText = File.Exists(statusPath)
-                    ? await File.ReadAllTextAsync(statusPath, ct)
-                    : string.Empty;
-                resultDocumentGenerated = summaryState?.Status == TaskSummaryStatus.Ready
-                    && !string.IsNullOrWhiteSpace(statusText)
-                    && !statusText.Contains(TaskTransitionService.ResultScaffoldMarker, StringComparison.Ordinal);
+                var finalization = await summaries.FinalizeAsync(task, ct: ct);
+                resultDocumentGenerated = finalization.Generated;
                 resultDocumentStatus = resultDocumentGenerated
                     ? "generated"
                     : CredentialRedactor.Redact(
-                        summaryState?.ErrorMessage
-                        ?? summaryState?.Status.ToString().ToLowerInvariant()
-                        ?? "missing");
+                        $"degraded:{finalization.Error ?? "summary retry budget exhausted"}");
                 if (resultDocumentGenerated)
                 {
                     logger.LogInformation(

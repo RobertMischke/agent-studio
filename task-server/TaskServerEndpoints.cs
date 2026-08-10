@@ -277,6 +277,17 @@ public static class TaskServerEndpoints
         runs.MapPost("/{runId}/lease/release", async (
             HttpContext context, string runId, LeaseReleaseRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ReleaseLeaseAsync(runId, request, Actor(context), ct)));
+        runs.MapPost("/{runId}/result-finalization", async (
+            HttpContext context,
+            string runId,
+            ResultFinalizationRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.FinalizeResultAsync(
+                runId,
+                request,
+                Actor(context),
+                ct)));
         runs.MapPost("/{runId}/completion", async (
             HttpContext context, string runId, CompleteRunRequest request, TaskServerStore store, CancellationToken ct) =>
         {

@@ -157,7 +157,8 @@ public enum TaskSummaryStatus
     None,
     Generating,
     Ready,
-    Failed
+    Failed,
+    Degraded
 }
 
 public record TaskSummaryState
@@ -167,6 +168,8 @@ public record TaskSummaryState
     public DateTime? FinishedAt { get; init; }
     public string? ErrorMessage { get; init; }
     public int? BytesWritten { get; init; }
+    public int? Attempt { get; init; }
+    public int? MaxAttempts { get; init; }
 }
 
 public record ContextUsageSnapshot

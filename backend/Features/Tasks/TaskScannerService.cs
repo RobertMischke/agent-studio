@@ -1510,10 +1510,10 @@ public class TaskScannerService : ITaskScanner
 
     /// <summary>
     /// Returns the in-memory summary state if there is one, otherwise infers
-    /// a baseline from disk: <c>Ready</c> when status.md exists with content,
-    /// <c>None</c> when absent. After a backend restart any previous
-    /// <c>Generating</c> / <c>Failed</c> state is forgotten — acceptable, since
-    /// the user can simply re-run.
+    /// a baseline from disk: <c>Ready</c> for a generated status.md,
+    /// <c>Degraded</c> for the marked transition fallback, and <c>None</c> when
+    /// absent. A backend restart therefore preserves the honest distinction
+    /// without requiring another core run.
     /// </summary>
     private TaskSummaryState ResolveSummaryState(string jobKey, string? statusMarkdown)
     {
@@ -1521,7 +1521,11 @@ public class TaskScannerService : ITaskScanner
         if (live != null) return live;
         return new TaskSummaryState
         {
-            Status = string.IsNullOrWhiteSpace(statusMarkdown) ? TaskSummaryStatus.None : TaskSummaryStatus.Ready,
+            Status = string.IsNullOrWhiteSpace(statusMarkdown)
+                ? TaskSummaryStatus.None
+                : statusMarkdown.Contains(TaskTransitionService.ResultScaffoldMarker, StringComparison.Ordinal)
+                    ? TaskSummaryStatus.Degraded
+                    : TaskSummaryStatus.Ready,
             BytesWritten = statusMarkdown?.Length
         };
     }

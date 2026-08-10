@@ -1752,6 +1752,22 @@ describe('buildReviewBadge — active review status only', () => {
     });
     expect(badge?.label).toBe('summarizing');
   });
+
+  it('shows bounded summary exhaustion as a reviewable degraded Result', () => {
+    const badge = buildReviewBadge({
+      status: 'degraded',
+      startedAt: null,
+      finishedAt: null,
+      errorMessage: 'summary fixture failed',
+      bytesWritten: null,
+      attempt: 3,
+      maxAttempts: 3,
+    });
+
+    expect(badge?.label).toBe('result degraded');
+    expect(badge?.tooltip).toContain('3/3 summary attempts');
+    expect(badge?.tooltip).toContain('core run remains reviewable');
+  });
 });
 
 describe('buildHumanReviewBadge — current lane only', () => {

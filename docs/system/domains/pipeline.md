@@ -556,6 +556,15 @@ Task Server integration command plus execution on a Git-capable Agent Host. No
 automatic Post Processing verdict may bypass Human Review or mark a task
 Completed.
 
+Result finalization is a distinct awaited post-core gate on both execution
+paths. The local application retries only `SummaryGenerationService`; the V1
+Task Server exposes `post-result-finalization`, generates the application-owned
+`status.md` artifact from durable run events and deliverables, and persists its
+typed state in task history. `Retryable` consumes the bounded summary budget
+without reopening CORE. `Ready` carries the generated artifact hash.
+`Degraded` is terminal for this post-step, keeps the completed run reviewable,
+and never presents the transition scaffold as a normal generated Result.
+
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**
 means a project override (or the catalogue default) includes it in future task

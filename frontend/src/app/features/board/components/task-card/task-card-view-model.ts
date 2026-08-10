@@ -1254,6 +1254,13 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
     case 'failed':
       return { label: 'review failed', tone: 'failed',
                tooltip: summaryState.errorMessage ?? 'Auto-review failed.' };
+    case 'degraded': {
+      const attempts = summaryState.attempt && summaryState.maxAttempts
+        ? ` after ${summaryState.attempt}/${summaryState.maxAttempts} summary attempts`
+        : '';
+      return { label: 'result degraded', tone: 'failed',
+               tooltip: `Result summary degraded${attempts}. The completed core run remains reviewable. ${summaryState.errorMessage ?? ''}`.trim() };
+    }
     default:
       return null;
   }
