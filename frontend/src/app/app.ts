@@ -982,8 +982,7 @@ export class App implements OnInit, OnDestroy {
       if (!tab) return;
       // `null`  → workspace-wide ("All projects"): clear the project filter.
       // string  → narrow to exactly that project.
-      // `undefined` → context unknown (diff/welcome, or a task whose job
-      //               hasn't loaded yet): leave the current scope untouched.
+      // `undefined` → context unknown (welcome or unloaded task): preserve the current scope.
       let project: string | null | undefined;
       switch (tab.kind) {
         case 'board':
@@ -996,6 +995,7 @@ export class App implements OnInit, OnDestroy {
         case 'workbenches':
         case 'workbench':
         case 'hub':
+        case 'diff':
           project = tab.projectName;
           break;
         case 'epics':

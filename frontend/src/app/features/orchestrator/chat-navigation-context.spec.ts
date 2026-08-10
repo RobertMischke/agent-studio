@@ -121,7 +121,7 @@ describe('buildOrchestratorContextEnvelope', () => {
     });
 
     expect(buildOrchestratorContextEnvelope(
-      'task:Agent Studio/AGT-2572', navigation, [], fixedNow,
+      'task:Agent Studio/AGT-2572', navigation, [], null, fixedNow,
     )).toEqual({
       scope: {
         kind: 'task',
@@ -146,20 +146,45 @@ describe('buildOrchestratorContextEnvelope', () => {
     });
   });
 
-  it('pins explicit references to the active project', () => {
+  it('pins typed file, commit and selected-hunk diff references to the active project', () => {
+    const sha = '1234567890abcdef1234567890abcdef12345678';
     const envelope = buildOrchestratorContextEnvelope(
       'project:Agent Studio',
       null,
-      [{ kind: 'repository-file', reference: 'docs/start/README.md' }],
+      [
+        { kind: 'repository-file', reference: 'docs/start/README.md', revision: sha },
+        { kind: 'commit', reference: sha, repositoryId: 'Agent Studio' },
+        {
+          kind: 'diff',
+          reference: sha,
+          repositoryId: 'Agent Studio',
+          path: 'src/app.ts',
+          lineRanges: [{ startLine: 7, endLine: 18 }],
+        },
+      ],
+      {
+        kind: 'diff',
+        reference: sha,
+        repositoryId: 'Agent Studio',
+        path: 'src/app.ts',
+        lineRanges: [{ startLine: 7, endLine: 18 }],
+      },
       fixedNow,
     );
 
     expect(envelope.scope.kind).toBe('project');
-    expect(envelope.explicitReferences[0].projectId).toBe('Agent Studio');
+    expect(envelope.explicitReferences).toHaveLength(3);
+    expect(envelope.explicitReferences.every(reference => reference.projectId === 'Agent Studio')).toBe(true);
+    expect(envelope.activeSurface).toMatchObject({
+      kind: 'diff',
+      reference: sha,
+      path: 'src/app.ts',
+      selection: ['L7-L18'],
+    });
   });
 
   it('rejects invalid context keys before the network call starts', () => {
-    expect(() => buildOrchestratorContextEnvelope('global', null, [], fixedNow))
+    expect(() => buildOrchestratorContextEnvelope('global', null, [], null, fixedNow))
       .toThrow('selected orchestrator context is invalid');
   });
 });

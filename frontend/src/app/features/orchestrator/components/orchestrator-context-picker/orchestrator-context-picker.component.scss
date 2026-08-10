@@ -200,10 +200,10 @@ button.context-chip,
   color: var(--studio-fg);
   font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
-.source-row:hover:not(:disabled) { background: var(--studio-bg-hover); }
+button.source-row { cursor: pointer; }
+.source-row:hover { background: var(--studio-bg-hover); }
 .source-row:disabled { cursor: default; opacity: 0.58; }
 .source-row > span:first-child { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; }
 .source-row strong,
@@ -211,6 +211,32 @@ button.context-chip,
 .source-row strong { font-size: 11px; font-weight: 600; }
 .source-row small { color: var(--studio-fg-muted); font-size: 9px; }
 .source-row > span:last-child { color: var(--studio-accent-3-strong); font-size: 10px; }
+
+.source-row > button,
+.source-row__actions button {
+  min-height: 26px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 5px;
+  background: var(--studio-bg-editor);
+  color: var(--studio-accent-3-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.source-row > button:disabled,
+.source-row__actions button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.source-row__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: row !important;
+  gap: var(--studio-spacing-1);
+}
 
 .source-picker__hint,
 .source-picker__warning {
