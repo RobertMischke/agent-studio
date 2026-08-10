@@ -45,7 +45,7 @@ export class MediaLightboxComponent {
   private stackDispose: (() => void) | null = null;
 
   /**
-   * "Original size" toggle. Off (default) fits the image into the fixed
+   * Original-size toggle. Off (default) fits the image into the fixed
    * stage (`object-fit: contain`, never upscaled); on shows it at its
    * intrinsic pixel size inside a scrollable stage. Reset on every image
    * change so paging always starts from the fitted view.
@@ -126,7 +126,7 @@ export class MediaLightboxComponent {
     this.lightbox.close();
   }
 
-  /** Toggle intrinsic-size ("Originalgröße") view; click on the image. */
+  /** Toggle intrinsic-size view; click on the image. */
   toggleZoom(event: Event): void {
     event.stopPropagation();
     this.zoomed.update((v) => !v);

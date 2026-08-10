@@ -4,6 +4,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 using Xunit;
 
@@ -129,6 +131,38 @@ public sealed class TaskFileHistoryEndpointsTests : IDisposable
         binary.EnsureSuccessStatusCode();
         Assert.Equal("application/octet-stream", binary.Content.Headers.ContentType?.MediaType);
         Assert.Equal(new byte[] { 0, 1, 2, 255 }, await binary.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task ThumbnailRoute_ServesBoundedWebpWithoutChangingTheFullResult()
+    {
+        var job = WriteJob("ASS-THUMBNAIL");
+        var results = Path.Combine(job, "results", "gallery");
+        Directory.CreateDirectory(results);
+        var source = Path.Combine(results, "evidence.png");
+        using (var image = new Image<Rgba32>(1200, 800, new Rgba32(32, 80, 140)))
+            image.SaveAsPng(source);
+
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var watchPath = Uri.EscapeDataString(_workspaceProjectRoot);
+        using var response = await client.GetAsync(
+            $"/api/tasks/ASS-THUMBNAIL/thumbnail?path=gallery%2Fevidence.png&width=320&watchPath={watchPath}");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("image/webp", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(response.Headers.CacheControl?.Private == true);
+        using var thumbnail = Image.Load(await response.Content.ReadAsByteArrayAsync());
+        Assert.True(thumbnail.Width <= 320);
+        Assert.True(thumbnail.Height <= 320);
+
+        using var full = await client.GetAsync(
+            $"/api/tasks/ASS-THUMBNAIL/results/gallery/evidence.png?watchPath={watchPath}");
+        full.EnsureSuccessStatusCode();
+        Assert.Equal("image/png", full.Content.Headers.ContentType?.MediaType);
+        using var fullImage = Image.Load(await full.Content.ReadAsByteArrayAsync());
+        Assert.Equal(1200, fullImage.Width);
+        Assert.Equal(800, fullImage.Height);
     }
 
     [Fact]

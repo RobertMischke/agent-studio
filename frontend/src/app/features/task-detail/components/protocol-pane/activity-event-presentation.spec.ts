@@ -13,6 +13,10 @@ import {
   stripLegacyCompletionLines,
   type PresentedToolBurstEvent,
 } from './activity-event-presentation';
+import {
+  artifactBlocks,
+  presentArtifactEvents,
+} from './artifact-gallery/artifact-gallery.model';
 
 const range = { source: 'AGT-2088', start: 10, end: 12 };
 const burst: ToolBurstEvent = {
@@ -33,13 +37,145 @@ describe('presentActivityEvents', () => {
     expect((result[0] as ToolBurstEvent).commands?.[0].output).toContain('Expected event: tool-result');
   });
 
-  it('promotes image artifacts to named, renderable image rows and keeps other files listed', () => {
-    const result = presentActivityEvents([{ ...burst, artifacts: ['results/playwright/dark.png', 'results/report.json'] }], 'AGT-2088', 'watch');
-    expect((result[0] as ToolBurstEvent).artifacts).toEqual(['results/report.json']);
+  it('promotes supported image and document artifacts while keeping unknown files listed', () => {
+    const base = presentActivityEvents([{
+      ...burst,
+      artifacts: ['results/playwright/dark.png', 'results/report.json', 'results/archive.zip'],
+    }], 'AGT-2088', 'watch');
+    const result = presentArtifactEvents(base, 'AGT-2088', 'watch');
+    expect((result[0] as ToolBurstEvent).artifacts).toEqual(['results/archive.zip']);
     expect(result[1]).toMatchObject({
       kind: 'artifact.image', caption: 'results/playwright / dark.png',
-      url: '/api/tasks/AGT-2088/screenshot?path=playwright%2Fdark.png&watchPath=watch',
+      url: '/api/tasks/AGT-2088/thumbnail?path=playwright%2Fdark.png&watchPath=watch&width=360',
+      artifactPresentation: {
+        kind: 'image',
+        url: '/api/tasks/AGT-2088/screenshot?path=playwright%2Fdark.png&watchPath=watch',
+        thumbnailUrl: '/api/tasks/AGT-2088/thumbnail?path=playwright%2Fdark.png&watchPath=watch&width=360',
+      },
     });
+    expect(result[2]).toMatchObject({
+      kind: 'artifact.image',
+      url: null,
+      artifactPresentation: {
+        kind: 'json',
+        path: 'results/report.json',
+        contentUrl: '/api/tasks/AGT-2088/files/results/report.json?watchPath=watch&scope=workspace',
+      },
+    });
+  });
+
+  it('turns contiguous artifact lines in one agent message into one mixed block', () => {
+    const result = presentArtifactEvents([{
+      id: 'answer',
+      kind: 'message.taskAgent',
+      actor: 'Codex',
+      timestamp: '2026-08-09T10:00:00Z',
+      rawRange: range,
+      body: [
+        'The review bundle is ready:',
+        '- [Light view](results/gallery-light.png)',
+        '- [Dark view](results/gallery-dark.webp)',
+        '- [Delivery changes](results/delivery.diff)',
+        '- [Notes](results/gallery-notes.md)',
+        '- [Metrics](results/metrics.json)',
+        '- [Report](results/report.html)',
+      ].join('\n'),
+    }], 'AGT-2558', '/workspace');
+
+    expect(result[0]).toMatchObject({ kind: 'message.taskAgent', body: 'The review bundle is ready:' });
+    expect(result.slice(1).map((event) => event.kind)).toEqual([
+      'artifact.image', 'artifact.image', 'artifact.image', 'artifact.image', 'artifact.image',
+      'artifact.image',
+    ]);
+    const presentations = result.slice(1).map((event) =>
+      (event as unknown as { artifactPresentation: { kind: string } }).artifactPresentation.kind);
+    expect(presentations).toEqual(['image', 'image', 'diff', 'markdown', 'json', 'html']);
+    expect((result[6] as unknown as { artifactPresentation: { url: string } }).artifactPresentation.url)
+      .toBe('/api/tasks/AGT-2558/results/report.html?watchPath=%2Fworkspace');
+    expect(new Set(result.slice(1).map((event) =>
+      (event as unknown as { artifactGroupId: string }).artifactGroupId)).size).toBe(1);
+  });
+
+  it('keeps message-linked screenshots in the mixed block without catalogue duplicates', () => {
+    const body = [
+      'The evidence is ready:',
+      '- [Light](results/light.png)',
+      '- [Dark](results/dark.png)',
+      '- [Delivery](results/delivery.diff)',
+      '- [Notes](results/notes.md)',
+    ].join('\n');
+    const projected = projectConversation({
+      source: 'DEMO-5',
+      lines: [{
+        timestamp: '2026-08-09T10:00:00Z',
+        stream: 'stdout',
+        text: JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'gallery', type: 'agent_message', text: body },
+        }),
+      }],
+      screenshots: [{
+        caption: 'light.png', sourcePath: 'results/light.png', durablePath: 'results/light.png',
+        sourceTool: 'screenshot', timestamp: '2026-08-09T10:00:01Z',
+      }, {
+        caption: 'dark.png', sourcePath: 'results/dark.png', durablePath: 'results/dark.png',
+        sourceTool: 'screenshot', timestamp: '2026-08-09T10:00:02Z',
+      }],
+    });
+
+    const result = presentArtifactEvents(projected, 'DEMO-5', '/demo');
+    const artifacts = result.filter((event) => event.kind === 'artifact.image');
+    expect(artifacts).toHaveLength(4);
+    expect(artifacts.map((event) =>
+      (event as unknown as { artifactPresentation: { kind: string } }).artifactPresentation.kind))
+      .toEqual(['image', 'image', 'diff', 'markdown']);
+    expect(new Set(artifacts.map((event) =>
+      (event as unknown as { artifactGroupId: string }).artifactGroupId)).size).toBe(1);
+  });
+
+  it('keeps a single image and unknown artifact line in normal message markdown', () => {
+    const body = '- ![Only image](results/only.png)\n- [Archive](results/bundle.zip)';
+    const result = presentArtifactEvents([{
+      id: 'answer', kind: 'message.taskAgent', actor: 'Codex', timestamp: '2026-08-09T10:00:00Z',
+      rawRange: range, body,
+    }], 'AGT-2558', null);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ kind: 'message.taskAgent', body });
+  });
+
+  it('keeps a single tool image in the existing inline row', () => {
+    const base = presentActivityEvents([{
+      ...burst,
+      artifacts: ['results/only.png'],
+    }], 'AGT-2558', '/workspace');
+    const result = presentArtifactEvents(base, 'AGT-2558', '/workspace');
+
+    expect(result[1]).toMatchObject({
+      kind: 'artifact.image',
+      url: '/api/tasks/AGT-2558/results/only.png?watchPath=%2Fworkspace',
+    });
+    expect(artifactBlocks(result)).toEqual([]);
+  });
+
+  it('keeps separate contiguous-line groups as separate gallery blocks', () => {
+    const result = presentArtifactEvents([{
+      id: 'answer', kind: 'message.taskAgent', actor: 'Codex', timestamp: '2026-08-09T10:00:00Z',
+      rawRange: range,
+      body: [
+        '- [Light](results/first-light.png)',
+        '- [Dark](results/first-dark.png)',
+        '',
+        '- [Light](results/second-light.png)',
+        '- [Dark](results/second-dark.png)',
+      ].join('\n'),
+    }], 'AGT-2558', '/workspace');
+
+    expect(artifactBlocks(result).map((block) => block.artifacts.map((artifact) => artifact.path)))
+      .toEqual([
+        ['results/first-light.png', 'results/first-dark.png'],
+        ['results/second-light.png', 'results/second-dark.png'],
+      ]);
   });
 
   it('projects edit files relative to the run worktree and retains absolute tooltip paths', () => {

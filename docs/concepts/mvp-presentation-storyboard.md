@@ -27,6 +27,8 @@ for the demo-data guard, reset, tool settings, and review checklist.
 | 07b | Yes | Playwright | Populated landing-page board hero with up to three rendered labels, light theme | The same pinned operating state remains legible in light theme. | `07-landing-board-hero--light--pinned.png` |
 | 08a | Yes | Playwright | Large DEMO-9 detail with evidence, review verdict, and decision options, dark theme | See the work and evidence before making the decision. | `08-landing-task-detail--dark--pinned.png` |
 | 08b | Yes | Playwright | Large DEMO-9 detail with evidence, review verdict, and decision options, light theme | The complete decision context remains readable in light theme. | `08-landing-task-detail--light--pinned.png` |
+| 08c | Yes | Playwright | DEMO-5 Activity artifact gallery with images, diff, and Markdown, dark theme | Visual and document evidence stay reviewable inside the agent conversation. | `08c-activity-artifact-gallery--dark--pinned.png` |
+| 08d | Yes | Playwright | DEMO-5 Activity artifact gallery with images, diff, and Markdown, light theme | Mixed artifacts remain compact and readable in light theme. | `08c-activity-artifact-gallery--light--pinned.png` |
 | 09 | Optional | ScreenToGif | Open DEMO-9 from the board, reveal review evidence, return to board; dark theme, silent | From portfolio signal to review evidence in one motion. | `09-task-to-review-loop--dark--pinned.gif` |
 | 10 | Optional | ScreenToGif | Open orchestrator, read the seeded recommendation, move to token usage; light theme, silent | Steering connects priorities to operating cost. | `10-steering-to-tokens-loop--light--pinned.gif` |
 | 11 | Optional backup | OBS Studio | Narrated 60 to 90 second traversal of rows 01 through 08; dark theme, microphone only, no webcam | Agent Studio makes delegated work visible, steerable, and reviewable. | `11-mvp-walkthrough--dark--pinned.mp4` |
@@ -44,7 +46,9 @@ for the demo-data guard, reset, tool settings, and review checklist.
 5. Move to token economy. Show that orchestration cost is attributable.
 6. Show the populated landing board, then open DEMO-9 with Evidence and Result
    visible. Point out the review verdict, attached proof, and operator choice.
-7. End on project knowledge. Land the message that context, execution, and
+7. Return to DEMO-5 Activity and show the mixed artifact gallery, including
+   image navigation and the typed document rows.
+8. End on project knowledge. Land the message that context, execution, and
    evidence share one workspace.
 
 Use one theme per live slide according to the deck design, while retaining the
