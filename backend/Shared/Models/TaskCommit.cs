@@ -42,6 +42,13 @@ public record TaskCommitInfo
     /// </summary>
     public string? ResultSha { get; init; }
     /// <summary>
+    /// Exact replacement object produced when the platform replayed this commit
+    /// mechanically onto a newer integration base. The historical entry remains
+    /// readable but no longer participates in integration completeness checks.
+    /// </summary>
+    [JsonPropertyName("supersededBySha")]
+    public string? SupersededBySha { get; init; }
+    /// <summary>
     /// Run attempt that replaced this commit's delivery generation. A non-null
     /// value keeps the commit as readable history while removing it from the
     /// current integration expectation. <see cref="TaskCommitSupersession.PendingAttempt"/>
@@ -78,7 +85,8 @@ public static class TaskCommitSupersession
     public const string PendingAttempt = "next-attempt";
 
     public static bool IsSuperseded(TaskCommitInfo commit)
-        => !string.IsNullOrWhiteSpace(commit.SupersededByAttempt);
+        => !string.IsNullOrWhiteSpace(commit.SupersededBySha)
+            || !string.IsNullOrWhiteSpace(commit.SupersededByAttempt);
 }
 
 /// <summary>

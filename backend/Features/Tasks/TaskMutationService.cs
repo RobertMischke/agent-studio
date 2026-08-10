@@ -261,6 +261,8 @@ public class TaskMutationService
             {
                 chain[existingIdx] = commit with
                 {
+                    SupersededBySha = commit.SupersededBySha
+                        ?? chain[existingIdx].SupersededBySha,
                     SupersededByAttempt = commit.SupersededByAttempt
                         ?? chain[existingIdx].SupersededByAttempt,
                 };
@@ -306,6 +308,7 @@ public class TaskMutationService
                     RunAttemptId = commit.RunAttemptId ?? producer.RunAttemptId,
                     RunnerId = commit.RunnerId ?? producer.RunnerId,
                     ResultSha = commit.ResultSha ?? producer.ResultSha,
+                    SupersededBySha = commit.SupersededBySha ?? producer.SupersededBySha,
                     SupersededByAttempt = commit.SupersededByAttempt ?? producer.SupersededByAttempt,
                 };
             })
@@ -399,6 +402,61 @@ public class TaskMutationService
         }
 
         return WriteCommitState(folderPath, union, allowEmptyReplacement: true);
+    }
+
+    /// <summary>
+    /// Extends the attributed commit chain after a conflict-free platform rebase.
+    /// Each historical SHA remains visible and points at its exact replacement;
+    /// the replacement inherits producer attribution because no new agent attempt
+    /// authored it. Idempotent for a replay of the same replacement mapping.
+    /// </summary>
+    public bool RecordMechanicalRebaseOnFolder(
+        string folderPath,
+        IReadOnlyList<RebasedCommitReplacement> replacements)
+    {
+        if (!Directory.Exists(folderPath) || replacements.Count == 0) return false;
+        var persisted = ReadPersistedCommitChain(folderPath);
+        if (persisted is null || persisted.Count == 0) return false;
+
+        var replacementByOriginal = replacements
+            .Where(item => !string.IsNullOrWhiteSpace(item.OriginalSha)
+                && !string.IsNullOrWhiteSpace(item.RebasedSha))
+            .GroupBy(item => item.OriginalSha, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+        if (replacementByOriginal.Count == 0) return false;
+
+        var chain = new List<TaskCommitInfo>(persisted.Count + replacementByOriginal.Count);
+        var derived = new List<TaskCommitInfo>();
+        var matched = 0;
+        foreach (var commit in persisted)
+        {
+            if (!replacementByOriginal.TryGetValue(commit.Sha, out var replacement))
+            {
+                chain.Add(commit);
+                continue;
+            }
+
+            matched++;
+            chain.Add(commit with { SupersededBySha = replacement.RebasedSha });
+            if (persisted.Any(existing => string.Equals(
+                    existing.Sha,
+                    replacement.RebasedSha,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+            derived.Add(commit with
+            {
+                Sha = replacement.RebasedSha,
+                ShortSha = replacement.RebasedSha[..Math.Min(9, replacement.RebasedSha.Length)],
+                SupersededBySha = null,
+                SupersededByAttempt = null,
+            });
+        }
+
+        if (matched == 0) return false;
+        chain.AddRange(derived);
+        return WriteCommitState(folderPath, chain);
     }
 
     /// <summary>

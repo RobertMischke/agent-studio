@@ -281,15 +281,14 @@ public sealed class RemoteDeliveryIntegrationCoordinator
 
         var job = scanner.FindJob(request.JobId, request.WatchPath);
         if (job is null) return result;
-        if (result.Outcome == MergeIntoIntegrationOutcome.Merged
+        if (result.Outcome.IsFreshMerge()
             && !string.IsNullOrWhiteSpace(result.MergedSha))
         {
             provenance.RecordMerge(job, result.MergedSha);
             job = scanner.FindJob(request.JobId, request.WatchPath) ?? job;
         }
 
-        var success = result.Outcome is MergeIntoIntegrationOutcome.Merged
-            or MergeIntoIntegrationOutcome.AlreadyMerged;
+        var success = result.Outcome.IsSuccessfulIntegration();
         timeline.Append(
             job.FolderPath,
             success ? TimelineEventKinds.IntegrationSucceeded : TimelineEventKinds.IntegrationFailed,

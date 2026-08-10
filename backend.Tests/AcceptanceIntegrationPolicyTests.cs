@@ -11,6 +11,7 @@ public sealed class AcceptanceIntegrationPolicyTests
 {
     [Theory]
     [InlineData(MergeIntoIntegrationOutcome.Merged, false, true, AcceptedIntegrationLaneDecision.Complete)]
+    [InlineData(MergeIntoIntegrationOutcome.MergedAfterRebase, false, true, AcceptedIntegrationLaneDecision.Complete)]
     [InlineData(MergeIntoIntegrationOutcome.AlreadyMerged, false, true, AcceptedIntegrationLaneDecision.Complete)]
     [InlineData(MergeIntoIntegrationOutcome.NoTaskBranch, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]
     [InlineData(MergeIntoIntegrationOutcome.Error, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]

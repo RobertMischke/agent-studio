@@ -39,6 +39,7 @@ interface CommitFixture {
   files: string[];
   at: string;
   runAttemptId?: string;
+  supersededBySha?: string;
   supersededByAttempt?: string;
 }
 
@@ -266,11 +267,11 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }));
 }
 
-async function installSupersededRoundDetail(page: Page) {
+async function installMechanicallySupersededDetail(page: Page) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail();
   detail.info.commits = [
-    { ...COMMITS[0], runAttemptId: 'round-1', supersededByAttempt: 'round-2' },
+    { ...COMMITS[0], runAttemptId: 'round-1', supersededBySha: COMMITS[1].sha },
     { ...COMMITS[1], runAttemptId: 'round-2' },
     { ...COMMITS[2], runAttemptId: 'round-2' },
   ];
@@ -575,12 +576,12 @@ test.describe('Task-detail multi-commit chain', () => {
   });
 
   for (const theme of ['light', 'dark'] as const) {
-    test(`shows superseded delivery rounds separately in ${theme} theme`, async ({ page }) => {
+    test(`shows mechanically superseded delivery rounds separately in ${theme} theme`, async ({ page }) => {
       await page.addInitScript((selectedTheme) => {
         localStorage.setItem('atp.studio.theme', selectedTheme);
       }, theme);
       await installRoutes(page);
-      await installSupersededRoundDetail(page);
+      await installMechanicallySupersededDetail(page);
       await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
       await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
 
@@ -590,12 +591,12 @@ test.describe('Task-detail multi-commit chain', () => {
       await page.getByTestId('git-superseded-rounds').evaluate((details: HTMLDetailsElement) => {
         details.open = true;
       });
-      await expect(page.getByTestId('git-superseded-round')).toContainText('Round 1, replaced by round 2');
+      await expect(page.getByTestId('git-superseded-round')).toContainText('Round 1, mechanically replaced by SHA 222222222');
       await expect(page.getByTestId('git-superseded-commit')).toHaveAttribute('data-sha', COMMITS[0].sha);
 
       if (RESULTS_DIR) {
         await page.getByTestId('pane-git').screenshot({
-          path: path.join(RESULTS_DIR, `superseded-delivery-round-${theme}--mocked.png`),
+          path: path.join(RESULTS_DIR, `mechanically-superseded-delivery-round-${theme}--mocked.png`),
         });
       }
     });

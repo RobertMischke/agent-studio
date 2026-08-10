@@ -33,8 +33,7 @@ public static class AcceptanceIntegrationPolicy
         if (operatorOverride || !integrationRequired)
             return AcceptedIntegrationLaneDecision.Complete;
 
-        return outcome is MergeIntoIntegrationOutcome.Merged
-            or MergeIntoIntegrationOutcome.AlreadyMerged
+        return outcome.IsSuccessfulIntegration()
             ? AcceptedIntegrationLaneDecision.Complete
             : AcceptedIntegrationLaneDecision.ReturnToHumanReview;
     }
