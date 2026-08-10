@@ -234,15 +234,23 @@ public static class TestSelectionPlanner
         foreach (var command in verifyPlan.Commands.Where(command => command.Kind == VerifyCommandKind.Test))
             Add(map, command);
 
+        var frontendWorkPackage = FrontendWorkPackagePlanner.Plan(repositoryPath, changedFiles);
         foreach (var command in verifyPlan.Commands.Where(command =>
                      command.Kind == VerifyCommandKind.Test
                      && command.Ecosystem == VerifyEcosystem.Node))
         {
-            Add(map, command, string.IsNullOrEmpty(command.WorkingSubdir)
-                || PathMatches(changedFiles, command.WorkingSubdir)
-                    ? "diff touches this package/component"
-                    : null);
+            var replacedByFocusedAngularSlice = FrontendWorkPackagePlanner.TouchesFrontend(changedFiles)
+                && string.Equals(command.WorkingSubdir, "frontend", StringComparison.OrdinalIgnoreCase);
+            Add(map, command, replacedByFocusedAngularSlice
+                ? null
+                : (string.IsNullOrEmpty(command.WorkingSubdir)
+                    || PathMatches(changedFiles, command.WorkingSubdir))
+                        ? "diff touches this package/component"
+                        : null);
         }
+
+        if (frontendWorkPackage is not null)
+            Add(map, frontendWorkPackage, frontendWorkPackage.SelectionReason);
 
         foreach (var candidate in DotNetTestInventory(repositoryPath, verifyPlan, changedFiles))
             Add(map, candidate.Command, candidate.Impacted
@@ -324,7 +332,11 @@ public static class TestSelectionPlanner
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (match.Success) return " " + match.Value.Trim();
         }
-        return string.Empty;
+        // Repository-wide routine gates exclude machine-bound and Windows-host
+        // process/timing families. Preserve an explicit project filter when one
+        // exists; otherwise apply the canonical exclusion to every generated
+        // work-package test-project command.
+        return " --filter Category!=MachineBound";
     }
 
     private static string? OwningProject(string root, string changedFile, IReadOnlyList<string> projects)

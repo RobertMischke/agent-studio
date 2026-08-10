@@ -361,18 +361,7 @@ public sealed class MergeIntoDevelopRunner
         Func<MergeIntoIntegrationResult> merge)
     {
         var profile = BuildProfileFor(project);
-        var gateApplies = PreDevelopBuildGate.AppliesTo(profile);
-        var skipReason = gateApplies
-            ? null
-            : "the project declares no build-profile build commands";
         var result = merge();
-        if (skipReason is not null)
-        {
-            _logger.LogInformation(
-                "merge-into-develop build gate skipped for project={Project} job={JobId} integration={Integration}: {Reason}",
-                project, jobId, integrationBranch, skipReason);
-            return (result, null);
-        }
         if (!result.Outcome.IsSuccessfulIntegration())
             return (result, null);
 
@@ -393,9 +382,20 @@ public sealed class MergeIntoDevelopRunner
         // before the merge. The first parent of the new --no-ff merge commit is
         // the exact synchronized integration tip and therefore the authoritative
         // rollback anchor.
-        var preMergeTip = result.Outcome.IsFreshMerge()
-            ? _git.GetFirstParent(repoRoot, gatedSha)
-            : null;
+        var preMergeTip = _git.GetFirstParent(repoRoot, gatedSha);
+        var changedPaths = string.IsNullOrWhiteSpace(preMergeTip)
+            ? null
+            : _git.ChangedPathsAgainstMergeBase(repoRoot, preMergeTip, gatedSha);
+        var gateApplies = PreDevelopBuildGate.AppliesTo(profile, changedPaths);
+        if (!gateApplies && changedPaths is not null)
+        {
+            const string skipReason =
+                "the merge does not touch frontend/ and the project declares no build-profile build commands";
+            _logger.LogInformation(
+                "merge-into-develop build gate skipped for project={Project} job={JobId} integration={Integration}: {Reason}",
+                project, jobId, integrationBranch, skipReason);
+            return (result, null);
+        }
         if (result.Outcome.IsFreshMerge()
             && string.IsNullOrWhiteSpace(preMergeTip))
         {
@@ -432,7 +432,22 @@ public sealed class MergeIntoDevelopRunner
             : null;
         if (gate is null)
         {
-            if (_preDevelopBuildGate is null)
+            if (changedPaths is null)
+            {
+                gate = new BuildTestGateResult(
+                    BuildTestGateVerdict.Fail,
+                    null,
+                    0,
+                    string.Empty,
+                    "The pre-develop gate could not derive the exact merge-result changed-file set.",
+                    false,
+                    false)
+                {
+                    ExpectedSha = gatedSha,
+                    FailureKind = BuildTestGateFailureKind.MissingSource,
+                };
+            }
+            else if (_preDevelopBuildGate is null)
             {
                 gate = new BuildTestGateResult(
                     BuildTestGateVerdict.Fail,
@@ -459,6 +474,7 @@ public sealed class MergeIntoDevelopRunner
                         JobFolderPath = jobFolderPath,
                         SubjectRef = integrationBranch,
                     },
+                    changedPaths,
                     profile,
                     _preDevelopTimeout,
                     // Deliberately NOT the caller's token: once the background worker
@@ -520,7 +536,8 @@ public sealed class MergeIntoDevelopRunner
 
     /// <summary>
     /// The project's declared build profile, or null when no settings service is
-    /// wired (legacy fixtures) or the read fails. A null profile means "no gate".
+    /// wired (legacy fixtures) or the read fails. A null profile still permits
+    /// the convention-derived frontend work-package gate.
     /// </summary>
     private BuildProfile? BuildProfileFor(string project)
     {
