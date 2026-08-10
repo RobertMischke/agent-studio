@@ -136,6 +136,8 @@ public class PipelineConfigAndCostTests
         Assert.Equal(0, summary.TotalTokens);
         Assert.Equal(0m, summary.TotalCostUsd);
         Assert.False(summary.AnyModelUnknown);
+        Assert.Equal(0, summary.UnpricedRuns);
+        Assert.Empty(summary.PricingGaps);
     }
 
     [Fact]
@@ -210,12 +212,58 @@ public class PipelineConfigAndCostTests
 
         var summary = PipelineCostCalculator.Summarize(record);
         Assert.True(summary.AnyModelUnknown);
+        Assert.Equal(1, summary.UnpricedRuns);
         Assert.False(summary.Steps[0].ModelKnown);
         Assert.Equal(0m, summary.Steps[0].CostUsd);
+        var gap = Assert.Single(summary.PricingGaps);
+        Assert.Equal("unpriced-test-model", gap.ModelId);
+        Assert.Equal("UnknownModel", gap.Reason);
+        Assert.Equal(1, gap.AffectedRuns);
         // The zero-token tool step has an unknown (null) model but, because
         // it spent no tokens, it does not flip AnyModelUnknown on its own.
         Assert.False(summary.Steps[1].ModelKnown);
         Assert.Equal(700, summary.TotalTokens);
+    }
+
+    [Fact]
+    public void SummarizeWithLedger_RepricesPreviouslyUnpricedCallWhenCatalogNowResolvesIt()
+    {
+        var at = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc);
+        var record = new PipelineExecutionRecord
+        {
+            StartedAt = at,
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000,
+                },
+            },
+        };
+        IReadOnlyDictionary<string, IReadOnlyList<TaskTokenCall>> ledger =
+            new Dictionary<string, IReadOnlyList<TaskTokenCall>>
+            {
+                ["core-agent-run"] =
+                [
+                    new TaskTokenCall
+                    {
+                        Ts = at,
+                        Model = "claude-haiku-4-5",
+                        InputTokens = 1_000_000,
+                        OutputTokens = 200_000,
+                        EstimatedApiCostUsd = 0,
+                        ModelPriced = false,
+                    },
+                ],
+            };
+
+        var summary = PipelineCostCalculator.SummarizeWithLedger(record, ledger);
+
+        Assert.Equal(2.00m, summary.TotalCostUsd);
+        Assert.False(summary.AnyModelUnknown);
+        Assert.Equal(0, summary.UnpricedRuns);
+        Assert.Empty(summary.PricingGaps);
     }
 
     [Fact]
@@ -227,6 +275,8 @@ public class PipelineConfigAndCostTests
         Assert.Equal(0, summary.TotalTokens);
         Assert.Equal(0m, summary.TotalCostUsd);
         Assert.False(summary.AnyModelUnknown);
+        Assert.Equal(0, summary.UnpricedRuns);
+        Assert.Empty(summary.PricingGaps);
     }
 
     [Fact]
@@ -339,6 +389,51 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void SummarizeByModel_MixedRuns_ReportsPartialCostAndNoPriceForDateReason()
+    {
+        var priced = new PipelineExecutionRecord
+        {
+            Attempt = 1,
+            StartedAt = new DateTime(2026, 7, 11, 9, 0, 0, DateTimeKind.Utc),
+            CompletedAt = new DateTime(2026, 7, 11, 9, 5, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000,
+                },
+            },
+        };
+        var current = new PipelineExecutionRecord
+        {
+            Attempt = 2,
+            StartedAt = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "gpt-5.6-sol", InputTokens = 500_000, OutputTokens = 100_000,
+                },
+            },
+            PreviousAttempts = { priced },
+        };
+
+        var summary = PipelineCostCalculator.SummarizeByModel(current);
+
+        Assert.Equal(2.00m, summary.TotalCostUsd);
+        Assert.True(summary.AnyModelUnknown);
+        Assert.Equal(1, summary.UnpricedRuns);
+        var gap = Assert.Single(summary.PricingGaps);
+        Assert.Equal("gpt-5.6-sol", gap.ModelId);
+        Assert.Equal("NoPriceForDate", gap.Reason);
+        Assert.Equal(1, gap.AffectedRuns);
+        Assert.True(summary.Runs[1].AnyModelUnknown);
+        Assert.Equal("NoPriceForDate", Assert.Single(summary.Runs[1].PricingGaps).Reason);
+    }
+
+    [Fact]
     public void SummarizeByModel_CollapsesNullModelToUnknown_AndFlagsIt()
     {
         var record = new PipelineExecutionRecord
@@ -369,6 +464,8 @@ public class PipelineConfigAndCostTests
         Assert.Equal(700, model.TotalTokens);
         Assert.Equal(0m, model.CostUsd);
         Assert.True(summary.AnyModelUnknown);
+        Assert.Equal(1, summary.UnpricedRuns);
+        Assert.Equal("UnknownModel", Assert.Single(summary.PricingGaps).Reason);
     }
 
     private static PipelineExecutionRecord RunOn(DateTime day, params PipelineStepExecution[] steps)
@@ -507,6 +604,8 @@ public class PipelineConfigAndCostTests
         Assert.Equal(700, step.TotalTokens);
         Assert.Equal(0m, step.TotalCostUsd);
         Assert.True(step.AnyModelUnknown);
+        Assert.Equal(1, step.UnpricedRuns);
+        Assert.Equal("UnknownModel", Assert.Single(step.PricingGaps).Reason);
     }
 
     [Fact]
@@ -537,6 +636,42 @@ public class PipelineConfigAndCostTests
         Assert.True(timeline.AnyModelUnknown);
         Assert.Equal(0m, timeline.TotalCostUsd); // only the unpriced run survived
         Assert.Equal(700, timeline.TotalTokens);
+        Assert.Equal(1, timeline.UnpricedRuns);
+        Assert.Equal("UnknownModel", Assert.Single(timeline.PricingGaps).Reason);
+    }
+
+    [Fact]
+    public void PipelineTimeline_MixedRuns_ReportsPartialCostAndAffectedRunCount()
+    {
+        var now = new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc);
+        var records = new[]
+        {
+            RunOn(now.AddHours(-2),
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000,
+                }),
+            RunOn(now.AddHours(-1),
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "gpt-5.6-sol", InputTokens = 500_000, OutputTokens = 100_000,
+                }),
+        };
+
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", records, days: 7, nowUtc: now);
+
+        Assert.Equal(2.00m, timeline.TotalCostUsd);
+        Assert.Equal(1, timeline.UnpricedRuns);
+        var gap = Assert.Single(timeline.PricingGaps);
+        Assert.Equal("gpt-5.6-sol", gap.ModelId);
+        Assert.Equal("NoPriceForDate", gap.Reason);
+        Assert.Equal(1, gap.AffectedRuns);
+
+        var core = Assert.Single(timeline.Kinds);
+        Assert.Equal(1, core.UnpricedRuns);
+        Assert.Equal(1, core.Cells.Single(cell => cell.TotalTokens > 0).UnpricedRuns);
     }
 
     [Fact]

@@ -45,7 +45,10 @@ export function buildPipelineStepTokenTooltip(
     body: buildTokenCostTooltip({
       costUsd: cost.costUsd,
       priceKnown: cost.modelKnown,
+      totalTokens: cost.totalTokens,
       context: context.join('\n'),
+      unpricedRuns: cost.modelKnown ? 0 : 1,
+      pricingGaps: cost.pricingGaps,
     }),
   };
 }
@@ -68,7 +71,10 @@ export function buildPipelineStepCostTooltip(
     body: buildTokenCostTooltip({
       costUsd: cost.costUsd,
       priceKnown: cost.modelKnown,
+      totalTokens: cost.totalTokens,
       context,
+      unpricedRuns: cost.modelKnown ? 0 : 1,
+      pricingGaps: cost.pricingGaps,
     }),
   };
 }
@@ -98,7 +104,10 @@ export function buildPipelineTotalTokenTooltip(
     body: buildTokenCostTooltip({
       costUsd: cost.totalCostUsd,
       priceKnown: !cost.anyModelUnknown,
+      totalTokens: cost.totalTokens,
       context: context.join('\n'),
+      unpricedRuns: cost.unpricedRuns ?? (cost.anyModelUnknown ? 1 : 0),
+      pricingGaps: cost.pricingGaps,
     }),
   };
 }
@@ -121,7 +130,10 @@ export function buildPipelineTotalCostTooltip(
     body: buildTokenCostTooltip({
       costUsd: cost.totalCostUsd,
       priceKnown: !cost.anyModelUnknown,
+      totalTokens: cost.totalTokens,
       context: context.join('\n'),
+      unpricedRuns: cost.unpricedRuns ?? (cost.anyModelUnknown ? 1 : 0),
+      pricingGaps: cost.pricingGaps,
     }),
   };
 }

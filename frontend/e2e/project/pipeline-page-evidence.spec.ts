@@ -55,11 +55,21 @@ const SETTINGS_PROJECTION = {
 };
 
 function fakeCost(project: string) {
-  const k = (kind: string, tokens: number, cost: number, unknown = false) =>
-    ({ kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown, cells: [] });
+  const day = '2026-08-09';
+  const gap = { modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 2 };
+  const k = (kind: string, tokens: number, cost: number, unknown = false) => ({
+    kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown,
+    unpricedRuns: unknown ? 2 : 0, pricingGaps: unknown ? [gap] : [],
+    cells: [{
+      day, totalTokens: tokens, costUsd: cost,
+      unpricedRuns: unknown ? 2 : 0, pricingGaps: unknown ? [gap] : [],
+    }],
+  });
   const kinds = [k('core', 480000, 1.44), k('aspect', 96000, 0.31), k('module', 21000, 0.011, true)];
-  const s = (stepId: string, kind: string, tokens: number, cost: number, unknown = false) =>
-    ({ stepId, kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown });
+  const s = (stepId: string, kind: string, tokens: number, cost: number, unknown = false) => ({
+    stepId, kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown,
+    unpricedRuns: unknown ? 2 : 0, pricingGaps: unknown ? [gap] : [],
+  });
   const steps = [
     s('core-run', 'core', 480000, 1.44),
     s('aspect-code-quality', 'aspect', 64000, 0.21),
@@ -67,8 +77,11 @@ function fakeCost(project: string) {
     s('pre-context-scan', 'module', 21000, 0.011, true),
   ];
   return {
-    project, days: [], windowDays: 90, kinds, steps,
+    project, days: [day],
+    dayCosts: [{ day, totalTokens: 597000, costUsd: 1.761, unpricedRuns: 2, pricingGaps: [gap] }],
+    windowDays: 90, kinds, steps,
     totalTokens: 597000, totalCostUsd: 1.761, anyModelUnknown: true,
+    unpricedRuns: 2, pricingGaps: [gap],
     taskCount: 7, hasData: true, fetchedAt: '2026-06-10T00:00:00Z',
   };
 }
@@ -80,12 +93,9 @@ test.beforeEach(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 
-test('pipeline page: reworked panel shows health, steps, models, prompt bindings, per-step tokens', async ({ page, devBackend }) => {
+test('pipeline page: reworked panel shows health, steps, models, prompt bindings, per-step tokens', async ({ page }) => {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-  const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
-  const paths = await pathsResponse.json() as WatchPath[];
-  const preferred = paths.find(p => /playwright|worktree/i.test(p.name)) ?? paths[0];
-  expect(preferred, 'needs at least one watched project').toBeTruthy();
+  const preferred: WatchPath = { name: 'Agent Studio Worktree', path: '/fixtures/agent-studio-worktree' };
   projectName = preferred.name;
   projectSlug = slugFor(projectName);
 
@@ -130,6 +140,22 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(CATALOGUE)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
+  await page.route('**/token-usage/summary', r => r.fulfill(json({
+    project: projectName, hasData: true,
+    lifetimeTotalTokens: 597000, lifetimeJobTokens: 597000,
+    lifetimeSupportingTokens: 0, lifetimeOrchestratorTokens: 0, lifetimeCalls: 7,
+    last24hTotalTokens: 21000, last24hJobTokens: 21000,
+    last24hSupportingTokens: 0, last24hOrchestratorTokens: 0, last24hCalls: 1,
+    last7dTotalTokens: 597000, last7dJobTokens: 597000,
+    last7dSupportingTokens: 0, last7dOrchestratorTokens: 0, last7dCalls: 7,
+    firstActivity: '2026-08-01T00:00:00Z', lastActivity: '2026-08-09T00:00:00Z',
+    fetchedAt: '2026-08-09T00:00:00Z', disclaimer: 'Fixture data.',
+  })));
+  await page.route('**/token-usage/heatmap*', r => r.fulfill(json({
+    project: projectName, days: ['2026-08-09'], jobs: [], hasData: false,
+    fetchedAt: '2026-08-09T00:00:00Z',
+  })));
+  await page.route('**/token-usage/expensive*', r => r.fulfill(json({ project: projectName, jobs: [] })));
   await page.route('**/api/projects/*/pipeline-health', r => r.fulfill(json({
     project: projectName,
     capturedAtUtc: '2026-07-23T01:00:00Z',
@@ -213,6 +239,22 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full-dark--mocked.png'), fullPage: true });
   await setTheme(page, 'light');
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section-light--mocked.png') });
+
+  await page.goto(`/#/projects/${projectSlug}/token-usage`, { waitUntil: 'domcontentloaded' });
+  const projectTotal = page.getByTestId('pipeline-cost-total');
+  await expect(projectTotal).toContainText('$1.76');
+  await expect(projectTotal).toContainText('incomplete (2 runs without price)');
+  await projectTotal.hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('gpt-5.6-sol');
+  await expect(page.getByTestId('cac-tooltip')).toContainText('NoPriceForDate');
+  await setTheme(page, 'light');
+  await page.getByTestId('token-usage-pipeline-cost').screenshot({
+    path: path.join(SCREENSHOT_DIR, 'project-price-mixed-light--mocked.png'),
+  });
+  await setTheme(page, 'dark');
+  await page.getByTestId('token-usage-pipeline-cost').screenshot({
+    path: path.join(SCREENSHOT_DIR, 'project-price-mixed-dark--mocked.png'),
+  });
 });
 
 test('pipeline page: pure dotnet project keeps Angular stylelint visible but inapplicable', async ({ page, devBackend }) => {

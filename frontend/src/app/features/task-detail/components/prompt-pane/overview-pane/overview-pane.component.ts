@@ -13,6 +13,7 @@ import { TaskPipelinePollService } from '../../../../polling/services/task-pipel
 import { TaskTimelinePollService } from '../../../../polling/services/task-timeline-poll.service';
 import type {
   PipelineExecutionRecord,
+  PipelinePricingGap,
   PipelineStep,
   PipelineStepConfig,
   PipelineStepStatus,
@@ -45,7 +46,11 @@ import {
 import { cliTypeLabel } from '../../../../../services/format.util';
 import { projectIdentity } from '../../../../../services/project-identity.util';
 import { TaskService } from '../../../../../services/task.service';
-import { CostBreakdownTriggerDirective } from '../../../../tokens';
+import {
+  CostBreakdownTriggerDirective,
+  formatTokenCostDisplay,
+  incompleteTokenCostLabel,
+} from '../../../../tokens';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
@@ -168,8 +173,10 @@ interface PipelineRowVm {
   cacheReadCostUsd: number;
   cacheCreationCostUsd: number;
   costUsd: number;
-  /** False -> the model is not in the price table, render cost as n/a. */
+  /** False when the historical price resolver could not price all usage. */
   costKnown: boolean;
+  unpricedRuns: number;
+  pricingGaps: PipelinePricingGap[];
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
 }
@@ -194,6 +201,8 @@ interface PipelineTotalVm {
   totalCacheCreationCostUsd: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns: number;
+  pricingGaps: PipelinePricingGap[];
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
 }
@@ -977,6 +986,8 @@ export class OverviewPaneComponent {
         cacheCreationCostUsd: c?.cacheCreationCostUsd ?? 0,
         costUsd: c?.costUsd ?? 0,
         costKnown: c ? c.modelKnown : isCurrentRun,
+        unpricedRuns: c && c.totalTokens > 0 && !c.modelKnown ? 1 : 0,
+        pricingGaps: c?.pricingGaps ?? [],
         tokenTooltip,
         costTooltip,
       };
@@ -1295,7 +1306,9 @@ export class OverviewPaneComponent {
         model: row.model,
         durationLabel: row.durationMs > 0 ? this.formatStepDuration(row.durationMs) : null,
         tokensLabel: row.totalTokens > 0 ? this.formatTokens(row.totalTokens) : null,
-        costLabel: row.totalTokens > 0 && row.costKnown ? this.formatCost(row.costUsd) : null,
+        costLabel: row.totalTokens > 0
+          ? this.costDisplay(row.costUsd, row.totalTokens, row.unpricedRuns)
+          : null,
       },
     };
   }
@@ -1344,6 +1357,18 @@ export class OverviewPaneComponent {
     return 'Pipeline step usage';
   }
 
+  costDisplay(costUsd: number, totalTokens: number, unpricedRuns: number): string {
+    return formatTokenCostDisplay({ costUsd, totalTokens, unpricedRuns });
+  }
+
+  incompleteCostLabel(unpricedRuns: number): string {
+    return incompleteTokenCostLabel(unpricedRuns);
+  }
+
+  isPartialCost(costUsd: number, unpricedRuns: number): boolean {
+    return costUsd > 0 && unpricedRuns > 0;
+  }
+
   tokenStepTimeLabel(row: PipelineRowVm): string {
     const parts: string[] = [];
     if (row.startedAt) parts.push(`Started ${this.formatAbsoluteTime(row.startedAt)}`);
@@ -1370,6 +1395,8 @@ export class OverviewPaneComponent {
       totalCacheCreationCostUsd: c.totalCacheCreationCostUsd,
       totalCostUsd: c.totalCostUsd,
       anyModelUnknown: c.anyModelUnknown,
+      unpricedRuns: c.unpricedRuns ?? (c.anyModelUnknown ? 1 : 0),
+      pricingGaps: c.pricingGaps ?? [],
       tokenTooltip: buildPipelineTotalTokenTooltip(c),
       costTooltip: buildPipelineTotalCostTooltip(c),
     };

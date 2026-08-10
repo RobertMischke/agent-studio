@@ -484,14 +484,15 @@
                     data-testid="overview-pipeline-step-tokens">—</span>
             }
             <button type="button" class="ov-pl-step__cost ov-pl-step__cost-button ov-value--mono" data-testid="overview-pipeline-step-cost" [cacTooltip]="row.costTooltip"
-                  [disabled]="row.totalTokens <= 0 || !row.costKnown" [attr.aria-label]="'Open cost calculation for ' + row.label"
+                  [disabled]="row.totalTokens <= 0" [attr.aria-label]="'Open cost calculation for ' + row.label"
                   [appCostBreakdownTrigger]="[row]" [costBreakdownTitle]="row.label + ' cost calculation'" [costBreakdownRecordedAt]="pipelineStartedAt()">
               @if (row.totalTokens <= 0) {
                 —
-              } @else if (!row.costKnown) {
-                <span class="ov-dim">n/a</span>
               } @else {
-                {{ formatCost(row.costUsd) }}
+                {{ costDisplay(row.costUsd, row.totalTokens, row.unpricedRuns) }}
+                @if (isPartialCost(row.costUsd, row.unpricedRuns)) {
+                  <span class="ov-cost-incomplete">{{ incompleteCostLabel(row.unpricedRuns) }}</span>
+                }
               }
             </button>
           </div>
@@ -512,10 +513,9 @@
           <button type="button" class="ov-pl-total__cost ov-pl-total__cost-button ov-value--mono ov-value--strong" data-testid="overview-pipeline-total-cost" [cacTooltip]="total.costTooltip"
                 [appCostBreakdownTrigger]="pipelineRows()" costBreakdownTitle="Task pipeline cost calculation"
                 [costBreakdownRecordedAt]="pipelineStartedAt()">
-            {{ formatCost(total.totalCostUsd) }}
-            @if (total.anyModelUnknown) {
-              <span class="ov-dim"
-                    [cacTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
+            {{ costDisplay(total.totalCostUsd, total.totalTokens, total.unpricedRuns) }}
+            @if (isPartialCost(total.totalCostUsd, total.unpricedRuns)) {
+              <span class="ov-cost-incomplete">{{ incompleteCostLabel(total.unpricedRuns) }}</span>
             }
           </button>
         </div>
@@ -547,11 +547,12 @@
           </div>
           <div class="ov-token-modal__metric">
             <span class="ov-token-modal__label">Cost</span>
-            <span class="ov-token-modal__value ov-value--mono">
-              @if (!tokenRow.costKnown) {
-                n/a
-              } @else {
-                {{ formatCost(tokenRow.costUsd) }}
+            <span class="ov-token-modal__value ov-value--mono"
+                  data-testid="overview-step-token-modal-cost"
+                  [cacTooltip]="tokenRow.costTooltip">
+              {{ costDisplay(tokenRow.costUsd, tokenRow.totalTokens, tokenRow.unpricedRuns) }}
+              @if (isPartialCost(tokenRow.costUsd, tokenRow.unpricedRuns)) {
+                <span class="ov-cost-incomplete">{{ incompleteCostLabel(tokenRow.unpricedRuns) }}</span>
               }
             </span>
           </div>
@@ -576,11 +577,10 @@
                 <tr>
                   <td>{{ part.label }}</td>
                   <td class="ov-token-modal__num ov-value--mono">{{ formatTokens(part.tokens) }}</td>
-                  <td class="ov-token-modal__num ov-value--mono">
-                    @if (!tokenRow.costKnown) {
-                      n/a
-                    } @else {
-                      {{ formatCost(part.costUsd) }}
+                  <td class="ov-token-modal__num ov-value--mono" [cacTooltip]="tokenRow.costTooltip">
+                    {{ costDisplay(part.costUsd, part.tokens, tokenRow.unpricedRuns) }}
+                    @if (isPartialCost(part.costUsd, tokenRow.unpricedRuns)) {
+                      <span class="ov-cost-incomplete">{{ incompleteCostLabel(tokenRow.unpricedRuns) }}</span>
                     }
                   </td>
                 </tr>
@@ -588,11 +588,12 @@
               <tr class="ov-token-modal__total-row">
                 <td>Total</td>
                 <td class="ov-token-modal__num ov-value--mono">{{ formatTokens(tokenRow.totalTokens) }}</td>
-                <td class="ov-token-modal__num ov-value--mono">
-                  @if (!tokenRow.costKnown) {
-                    n/a
-                  } @else {
-                    {{ formatCost(tokenRow.costUsd) }}
+                <td class="ov-token-modal__num ov-value--mono"
+                    data-testid="overview-step-token-modal-total-cost"
+                    [cacTooltip]="tokenRow.costTooltip">
+                  {{ costDisplay(tokenRow.costUsd, tokenRow.totalTokens, tokenRow.unpricedRuns) }}
+                  @if (isPartialCost(tokenRow.costUsd, tokenRow.unpricedRuns)) {
+                    <span class="ov-cost-incomplete">{{ incompleteCostLabel(tokenRow.unpricedRuns) }}</span>
                   }
                 </td>
               </tr>
@@ -623,7 +624,7 @@
             @if (!tokenRow.costKnown) {
               <div>
                 <dt>Cost</dt>
-                <dd>No API price on file for this model.</dd>
+                <dd>No historical price data for this model and run date.</dd>
               </div>
             }
           </dl>

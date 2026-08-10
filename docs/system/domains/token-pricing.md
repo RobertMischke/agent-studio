@@ -26,6 +26,19 @@ Studio maps only `Resolved` to a dollar value. The other states keep the token
 count and set the existing unknown-price flags so UI surfaces render `Unknown`,
 never a silent `$0.00`.
 
+Pipeline cost contracts also carry `unpricedRuns` and grouped `pricingGaps`
+with the original display model id, resolver status, and affected-run count.
+An entirely unpriced non-empty amount renders `- no price data`; a mixed
+aggregate renders its priced subtotal plus
+`incomplete (n runs without price)`. `$0.00` is reserved for zero-token usage.
+Tooltips expose the model id and resolver reason, including `NoPriceForDate`.
+
+Ledger rows that were persisted before a model entered the catalog are checked
+again against the historical catalog on read. Once a later TokenEconomy release
+resolves the model at the original call timestamp, Studio uses that historical
+estimate and removes the missing-price marker. Already-priced ledger amounts
+remain authoritative.
+
 ## Cost surfaces
 
 The shared adapter feeds:
@@ -43,8 +56,9 @@ The shared adapter feeds:
   tokens are priced at the event timestamp and grouped by content hash.
 
 These surfaces may aggregate resolved costs, but an aggregate containing an
-unpriced call remains explicitly marked unknown or partial according to its
-wire contract. A per-model row with a missing price always renders `Unknown`.
+unpriced call remains explicitly marked unavailable or incomplete according to
+its wire contract. A per-model row with a missing price always renders
+`no price data`.
 
 Prompt-registry cost is a narrower estimate than a completed model call. It
 prices only the rendered prompt input, uses the existing four characters per

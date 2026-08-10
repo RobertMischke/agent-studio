@@ -34,7 +34,7 @@
   --ov-pipeline-flex-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
-  --ov-pipeline-cost-col: 64px;
+  --ov-pipeline-cost-col: 11rem;
   --ov-pipeline-step-indent: var(--studio-spacing-3);
 
   // Single source of truth for the per-step / header grid. Header and step
@@ -735,7 +735,7 @@
   }
   &__cost {
     grid-column: 10;
-    width: 64px;
+    width: 100%;
   }
 }
 
@@ -1133,7 +1133,7 @@
 
   &__cost {
     flex: 0 0 auto;
-    width: 64px;
+    width: 100%;
     text-align: right;
     color: var(--studio-fg-dim);
   }
@@ -1360,7 +1360,7 @@
 
   &__cost {
     flex: 0 0 auto;
-    width: 64px;
+    width: 11rem;
     text-align: right;
   }
 }
@@ -1615,6 +1615,9 @@
 }
 .ov-pl-step__cost-button,
 .ov-pl-total__cost-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1624,6 +1627,15 @@
   text-decoration: underline dotted;
   text-underline-offset: 3px;
   cursor: pointer;
+}
+
+.ov-cost-incomplete {
+  color: var(--studio-fg-muted);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .ov-pl-step__cost-button:disabled {

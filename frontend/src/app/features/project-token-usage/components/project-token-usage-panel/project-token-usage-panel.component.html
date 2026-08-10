@@ -86,60 +86,7 @@
       }
     </section>
 
-    <section class="tup__pipeline" data-testid="token-usage-pipeline-cost"
-             aria-label="Pipeline cost by step kind over time">
-      <h3 class="tup__section-title"
-          [cacTooltip]="'Per-step-kind token + cost trend, folded from durable task receipts and historical pipeline runs over the window. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
-        Pipeline cost by step kind
-      </h3>
-      @if (pipelineCost()?.freshness?.warning; as warning) {
-        <div class="tup__source-warning tup__source-warning--compact" data-testid="pipeline-cost-source-warning">
-          <strong>Pipeline cost data may be incomplete.</strong> {{ warning }}
-        </div>
-      }
-      @if (!pipelineCost()?.hasData) {
-        <p class="tup__section-empty" data-testid="pipeline-cost-empty">
-          No readable pipeline cost telemetry was recorded in this window.
-        </p>
-      } @else {
-        <div class="tup__pl-legend" data-testid="pipeline-cost-legend">
-          @for (row of pipelineKindLegend(); track row.kind) {
-            <span class="tup__pl-legend-item"
-                  [attr.data-kind]="row.kind"
-                  [attr.data-testid]="'pipeline-cost-legend-' + row.kind">
-              <span class="tup__pl-swatch" [class]="'tup__pl-swatch--' + row.kind" aria-hidden="true"></span>
-              <span class="tup__pl-legend-label">{{ row.label }}</span>
-              <span class="tup__pl-legend-cost">{{ formatCost(row.cost) }}@if (row.anyUnknown) {<span
-                    class="tup__pl-star"
-                    [cacTooltip]="'Some steps used a model with no price on file; cost is a lower bound.'">*</span>}</span>
-              <span class="tup__pl-legend-tokens">{{ formatTokens(row.tokens) }}</span>
-            </span>
-          }
-          <span class="tup__pl-legend-total" data-testid="pipeline-cost-total">
-            <span class="tup__pl-legend-label">Total</span>
-            <span class="tup__pl-legend-cost">{{ formatCost(pipelineCost()!.totalCostUsd) }}</span>
-            <span class="tup__pl-legend-tokens">{{ formatTokens(pipelineCost()!.totalTokens) }}</span>
-          </span>
-        </div>
-
-        <div class="tup__pl-bars" role="list" data-testid="pipeline-cost-bars">
-          @for (col of pipelineStackColumns(); track col.day) {
-            <div class="tup__pl-col" role="listitem"
-                 [attr.data-day]="col.day"
-                 [cacTooltip]="pipelineColumnTooltip(col)">
-              <div class="tup__pl-stack" [style.height.%]="col.heightPct">
-                @for (seg of col.segments; track seg.kind) {
-                  <span class="tup__pl-seg" [class]="'tup__pl-seg--' + seg.kind"
-                        [attr.data-kind]="seg.kind"
-                        [style.height.%]="seg.pctOfColumn"></span>
-                }
-              </div>
-              <span class="tup__pl-col-day">{{ col.shortDay }}</span>
-            </div>
-          }
-        </div>
-      }
-    </section>
+    <app-project-pipeline-cost-trend [timeline]="pipelineCost()" />
 
     <section class="tup__heatmap-section" aria-label="Per-task heatmap">
       <h3 class="tup__section-title">Heatmap (top tasks × days)</h3>

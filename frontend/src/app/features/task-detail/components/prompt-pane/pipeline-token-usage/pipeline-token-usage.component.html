@@ -13,7 +13,7 @@
               class="ptu__head ptu__head--sum"
               data-testid="pipeline-token-usage-total-toggle"
               [attr.aria-expanded]="summaryOpen()"
-              [cacTooltip]="totalTooltip(taskTotal().totalTokens, taskTotal().costUsd, taskTotal().anyModelUnknown, 'The whole task across every model and run')"
+              [cacTooltip]="totalTooltip(taskTotal().totalTokens, taskTotal().costUsd, taskTotal().anyModelUnknown, 'The whole task across every model and run', taskTotal().unpricedRuns, taskTotal().pricingGaps)"
               (click)="toggleSummary()">
         <span class="ptu__disclosure" aria-hidden="true">{{ summaryOpen() ? '▾' : '▸' }}</span>
         <span class="ptu__head-label">
@@ -23,7 +23,12 @@
         <span class="ptu__head-total ptu__num ptu__strong"
               data-testid="pipeline-token-usage-grand-total-tokens">{{ tokens(taskTotal().totalTokens) }}</span>
         <span class="ptu__head-cost ptu__num"
-              data-testid="pipeline-token-usage-grand-total-cost">{{ formatCost(taskTotal().costUsd) }}@if (taskTotal().anyModelUnknown) {<span class="ptu__na" [cacTooltip]="'One or more models have no price on file; the total excludes them.'">*</span>}</span>
+              data-testid="pipeline-token-usage-grand-total-cost">
+          <span>{{ costLabel(taskTotal().costUsd, taskTotal().totalTokens, taskTotal().unpricedRuns) }}</span>
+          @if (isPartial(taskTotal().costUsd, taskTotal().unpricedRuns)) {
+            <span class="ptu__incomplete">{{ incompleteLabel(taskTotal().unpricedRuns) }}</span>
+          }
+        </span>
       </button>
 
       @if (summaryOpen()) {
@@ -52,7 +57,12 @@
               <span class="ptu__cell ptu__num ptu__mono">{{ tokens(m.cacheReadTokens) }}</span>
               <span class="ptu__cell ptu__num ptu__mono">{{ tokens(m.cacheCreationTokens) }}</span>
               <span class="ptu__cell ptu__num ptu__mono ptu__cell--total">{{ tokens(m.totalTokens) }}</span>
-              <span class="ptu__cell ptu__num ptu__mono ptu__cell--cost" [class.ptu__na]="!m.modelKnown">{{ costLabel(m.costUsd, m.modelKnown) }}</span>
+              <span class="ptu__cell ptu__num ptu__mono ptu__cell--cost" [class.ptu__na]="!m.modelKnown">
+                <span>{{ costLabel(m.costUsd, m.totalTokens, unpricedRunsForModel(m)) }}</span>
+                @if (isPartial(m.costUsd, unpricedRunsForModel(m))) {
+                  <span class="ptu__incomplete">{{ incompleteLabel(unpricedRunsForModel(m)) }}</span>
+                }
+              </span>
             </div>
           }
         </div>
@@ -78,7 +88,7 @@
                 class="ptu__head ptu__head--run"
                 data-testid="pipeline-token-usage-run-toggle"
                 [attr.aria-expanded]="isRunOpen(run.attempt)"
-                [cacTooltip]="totalTooltip(run.totalTokens, run.totalCostUsd, run.anyModelUnknown, 'Run #' + run.attempt)"
+                [cacTooltip]="totalTooltip(run.totalTokens, run.totalCostUsd, run.anyModelUnknown, 'Run #' + run.attempt, unpricedRunsForRun(run), run.pricingGaps ?? [])"
                 (click)="toggleRun(run.attempt)">
           <span class="ptu__disclosure" aria-hidden="true">{{ isRunOpen(run.attempt) ? '▾' : '▸' }}</span>
           <span class="ptu__head-label">
@@ -93,7 +103,12 @@
           <span class="ptu__head-total ptu__num ptu__strong"
                 data-testid="pipeline-token-usage-run-total">{{ tokens(run.totalTokens) }}</span>
           <span class="ptu__head-cost ptu__num"
-                data-testid="pipeline-token-usage-run-cost">{{ formatCost(run.totalCostUsd) }}@if (run.anyModelUnknown) {<span class="ptu__na" [cacTooltip]="'A model in this run has no price on file; the cost excludes it.'">*</span>}</span>
+                data-testid="pipeline-token-usage-run-cost">
+            <span>{{ costLabel(run.totalCostUsd, run.totalTokens, unpricedRunsForRun(run)) }}</span>
+            @if (isPartial(run.totalCostUsd, unpricedRunsForRun(run))) {
+              <span class="ptu__incomplete">{{ incompleteLabel(unpricedRunsForRun(run)) }}</span>
+            }
+          </span>
         </button>
 
         @if (isRunOpen(run.attempt)) {
@@ -122,7 +137,12 @@
                 <span class="ptu__cell ptu__num ptu__mono">{{ tokens(m.cacheReadTokens) }}</span>
                 <span class="ptu__cell ptu__num ptu__mono">{{ tokens(m.cacheCreationTokens) }}</span>
                 <span class="ptu__cell ptu__num ptu__mono ptu__cell--total">{{ tokens(m.totalTokens) }}</span>
-                <span class="ptu__cell ptu__num ptu__mono ptu__cell--cost" [class.ptu__na]="!m.modelKnown">{{ costLabel(m.costUsd, m.modelKnown) }}</span>
+                <span class="ptu__cell ptu__num ptu__mono ptu__cell--cost" [class.ptu__na]="!m.modelKnown">
+                  <span>{{ costLabel(m.costUsd, m.totalTokens, unpricedRunsForModel(m)) }}</span>
+                  @if (isPartial(m.costUsd, unpricedRunsForModel(m))) {
+                    <span class="ptu__incomplete">{{ incompleteLabel(unpricedRunsForModel(m)) }}</span>
+                  }
+                </span>
               </div>
             }
           </div>

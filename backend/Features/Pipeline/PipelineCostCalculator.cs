@@ -3,10 +3,20 @@
 namespace AgentStudio.Pipeline;
 
 /// <summary>
+/// One model/reason pair that prevented historical price resolution. The run
+/// count lets aggregate UIs distinguish an unavailable amount from a priced
+/// subtotal without treating either state as zero dollars.
+/// </summary>
+public sealed record PipelinePricingGap(
+    string ModelId,
+    string Reason,
+    int AffectedRuns);
+
+/// <summary>
 /// Per-step cost (USD) breakdown for one step's recorded token usage.
-/// <see cref="ModelKnown"/> is false when the step's model is not in the
-/// <see cref="TokenPricing"/> catalogue (e.g. a Codex / Gemini step), so
-/// the UI can render "n/a" instead of a misleading $0.00.
+/// <see cref="ModelKnown"/> is false when the historical resolver has no
+/// price for the model and run date. <see cref="PricingGaps"/> carries the
+/// exact model id and resolver reason for an honest unavailable-price state.
 /// </summary>
 public sealed record PipelineStepCost(
     string StepId,
@@ -14,6 +24,7 @@ public sealed record PipelineStepCost(
     string? Model,
     string? TokenUsageSource,
     bool ModelKnown,
+    IReadOnlyList<PipelinePricingGap> PricingGaps,
     long InputTokens,
     long OutputTokens,
     long CacheReadTokens,
@@ -42,19 +53,23 @@ public sealed record PipelineCostSummary(
     decimal TotalCacheReadCostUsd,
     decimal TotalCacheCreationCostUsd,
     decimal TotalCostUsd,
-    bool AnyModelUnknown);
+    bool AnyModelUnknown,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);
 
 /// <summary>
 /// Token + cost rollup for a single model, summed across the steps that ran
 /// on it. A run uses several models (the core agent model, the aspect
 /// reviewer's Haiku, an orchestrator decision model), so the Overview RUNS
 /// view groups a run's step tokens by model into these rows.
-/// <see cref="ModelKnown"/> is false when the model is absent from the
-/// <see cref="TokenPricing"/> catalogue so the UI renders "n/a" cost.
+/// <see cref="ModelKnown"/> is false when the historical resolver has no
+/// price for at least one contributing run.
 /// </summary>
 public sealed record PipelineModelTokenUsage(
     string Model,
     bool ModelKnown,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps,
     int Steps,
     long InputTokens,
     long OutputTokens,
@@ -76,7 +91,8 @@ public sealed record PipelineRunTokenUsage(
     IReadOnlyList<PipelineModelTokenUsage> Models,
     long TotalTokens,
     decimal TotalCostUsd,
-    bool AnyModelUnknown);
+    bool AnyModelUnknown,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);
 
 /// <summary>
 /// Per-model token usage for one task across every run: a per-run breakdown
@@ -89,7 +105,9 @@ public sealed record PipelineModelUsageSummary(
     IReadOnlyList<PipelineModelTokenUsage> TotalByModel,
     long TotalTokens,
     decimal TotalCostUsd,
-    bool AnyModelUnknown);
+    bool AnyModelUnknown,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);
 
 /// <summary>
 /// Derives per-step and task-total cost from an already-recorded
@@ -109,7 +127,7 @@ public static class PipelineCostCalculator
                 Array.Empty<PipelineStepCost>(),
                 0, 0, 0, 0, 0,
                 0m, 0m, 0m, 0m, 0m,
-                false);
+                false, 0, Array.Empty<PipelinePricingGap>());
         }
 
         var steps = new List<PipelineStepCost>(record.Steps.Count);
@@ -131,8 +149,8 @@ public static class PipelineCostCalculator
                 s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens,
                 record.StartedAt);
             var stepTokens = s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheCreationTokens;
-            // Only a step that actually consumed tokens but has an unknown
-            // model should flag "n/a"; a tool step with 0 tokens is not a
+            // Only a step that actually consumed tokens but has no resolved
+            // historical price should flag a gap; a 0-token tool step is not a
             // pricing gap.
             if (stepTokens > 0 && !est.ModelKnown) anyUnknown = true;
 
@@ -142,6 +160,7 @@ public static class PipelineCostCalculator
                 Model: s.Model,
                 TokenUsageSource: s.TokenUsageSource,
                 ModelKnown: est.ModelKnown,
+                PricingGaps: PricingGapsFor(est, stepTokens, s.Model),
                 InputTokens: s.InputTokens,
                 OutputTokens: s.OutputTokens,
                 CacheReadTokens: s.CacheReadTokens,
@@ -177,7 +196,9 @@ public static class PipelineCostCalculator
             Round(totalCacheReadCost),
             Round(totalCacheCreationCost),
             Round(totalCost),
-            anyUnknown);
+            anyUnknown,
+            anyUnknown ? 1 : 0,
+            MergePricingGaps(steps.SelectMany(step => step.PricingGaps), oneRun: true));
     }
 
     /// <summary>
@@ -211,7 +232,9 @@ public static class PipelineCostCalculator
             Round(steps.Sum(step => step.CacheReadCostUsd)),
             Round(steps.Sum(step => step.CacheCreationCostUsd)),
             Round(steps.Sum(step => step.CostUsd)),
-            steps.Any(step => step.TotalTokens > 0 && !step.ModelKnown));
+            steps.Any(step => step.TotalTokens > 0 && !step.ModelKnown),
+            steps.Any(step => step.TotalTokens > 0 && !step.ModelKnown) ? 1 : 0,
+            MergePricingGaps(steps.SelectMany(step => step.PricingGaps), oneRun: true));
     }
 
     private static PipelineStepCost CostFromLedger(
@@ -227,6 +250,7 @@ public static class PipelineCostCalculator
         decimal cacheReadCost = 0;
         decimal cacheCreationCost = 0;
         var allPriced = true;
+        var pricingGaps = new List<PipelinePricingGap>();
 
         foreach (var call in calls)
         {
@@ -234,7 +258,6 @@ public static class PipelineCostCalculator
             output += call.OutputTokens;
             cacheRead += call.CacheReadTokens;
             cacheCreation += call.CacheCreationTokens;
-            allPriced &= call.ModelPriced;
 
             var estimate = TokenPricing.Estimate(
                 call.Model,
@@ -243,9 +266,25 @@ public static class PipelineCostCalculator
                 call.CacheReadTokens,
                 call.CacheCreationTokens,
                 call.Ts);
+            var priceResolved = call.ModelPriced || estimate.ModelKnown;
+            allPriced &= priceResolved;
+            if (!priceResolved)
+            {
+                pricingGaps.AddRange(PricingGapsFor(
+                    estimate,
+                    call.InputTokens + call.OutputTokens
+                        + call.CacheReadTokens + call.CacheCreationTokens,
+                    call.Model));
+            }
             if (estimate.ModelKnown && estimate.Total > 0)
             {
-                var scale = call.EstimatedApiCostUsd / estimate.Total;
+                // Preserve a historical ledger amount when one was recorded.
+                // If an older ledger row was unpriced but a newer catalogue
+                // version now resolves the same run date, use that historical
+                // catalogue estimate so rollout removes the missing-price state.
+                var scale = call.ModelPriced
+                    ? call.EstimatedApiCostUsd / estimate.Total
+                    : 1m;
                 inputCost += estimate.InputUsd * scale;
                 outputCost += estimate.OutputUsd * scale;
                 cacheReadCost += estimate.CacheReadUsd * scale;
@@ -273,6 +312,7 @@ public static class PipelineCostCalculator
             TokenUsageSource =
                 $"Remote token ledger · {calls.Count} call{(calls.Count == 1 ? "" : "s")}",
             ModelKnown = allPriced,
+            PricingGaps = MergePricingGaps(pricingGaps, oneRun: true),
             InputTokens = input,
             OutputTokens = output,
             CacheReadTokens = cacheRead,
@@ -282,7 +322,7 @@ public static class PipelineCostCalculator
             OutputCostUsd = Round(outputCost),
             CacheReadCostUsd = Round(cacheReadCost),
             CacheCreationCostUsd = Round(cacheCreationCost),
-            CostUsd = Round(calls.Sum(call => call.EstimatedApiCostUsd)),
+            CostUsd = Round(inputCost + outputCost + cacheReadCost + cacheCreationCost),
         };
     }
 
@@ -302,7 +342,7 @@ public static class PipelineCostCalculator
             return new PipelineModelUsageSummary(
                 Array.Empty<PipelineRunTokenUsage>(),
                 Array.Empty<PipelineModelTokenUsage>(),
-                0, 0m, false);
+                0, 0m, false, 0, Array.Empty<PipelinePricingGap>());
         }
 
         // Oldest first: archived attempts (newest-first on disk) ascending by
@@ -320,6 +360,8 @@ public static class PipelineCostCalculator
             .Select(g => new PipelineModelTokenUsage(
                 g.Key,
                 g.All(m => m.ModelKnown),
+                g.Sum(m => m.UnpricedRuns),
+                MergePricingGaps(g.SelectMany(m => m.PricingGaps)),
                 g.Sum(m => m.Steps),
                 g.Sum(m => m.InputTokens),
                 g.Sum(m => m.OutputTokens),
@@ -334,8 +376,11 @@ public static class PipelineCostCalculator
         long totalTokens = totalByModel.Sum(m => m.TotalTokens);
         decimal totalCost = Round(totalByModel.Sum(m => m.CostUsd));
         bool anyUnknown = totalByModel.Any(m => m.TotalTokens > 0 && !m.ModelKnown);
+        var unpricedRuns = runs.Count(run => run.AnyModelUnknown);
+        var pricingGaps = MergePricingGaps(runs.SelectMany(run => run.PricingGaps));
 
-        return new PipelineModelUsageSummary(runs, totalByModel, totalTokens, totalCost, anyUnknown);
+        return new PipelineModelUsageSummary(
+            runs, totalByModel, totalTokens, totalCost, anyUnknown, unpricedRuns, pricingGaps);
     }
 
     private static PipelineRunTokenUsage BuildRun(PipelineExecutionRecord run, bool current)
@@ -349,7 +394,9 @@ public static class PipelineCostCalculator
             Models: models,
             TotalTokens: models.Sum(m => m.TotalTokens),
             TotalCostUsd: Round(models.Sum(m => m.CostUsd)),
-            AnyModelUnknown: models.Any(m => m.TotalTokens > 0 && !m.ModelKnown));
+            AnyModelUnknown: models.Any(m => m.TotalTokens > 0 && !m.ModelKnown),
+            PricingGaps: MergePricingGaps(
+                models.SelectMany(model => model.PricingGaps), oneRun: true));
     }
 
     // Sum a flat list of steps into per-model rows, busiest model first.
@@ -374,6 +421,9 @@ public static class PipelineCostCalculator
             byModel.Add(new PipelineModelTokenUsage(
                 Model: g.Key,
                 ModelKnown: est.ModelKnown,
+                UnpricedRuns: est.ModelKnown ? 0 : 1,
+                PricingGaps: PricingGapsFor(
+                    est, input + output + cacheRead + cacheCreation, g.Key),
                 Steps: g.Count(),
                 InputTokens: input,
                 OutputTokens: output,
@@ -388,6 +438,32 @@ public static class PipelineCostCalculator
             .ThenBy(m => m.Model, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    private static IReadOnlyList<PipelinePricingGap> PricingGapsFor(
+        TokenCostEstimate estimate,
+        long totalTokens,
+        string? displayModel)
+    {
+        if (totalTokens <= 0 || estimate.ModelKnown)
+            return Array.Empty<PipelinePricingGap>();
+        var modelId = !string.IsNullOrWhiteSpace(displayModel)
+            ? displayModel.Trim()
+            : string.IsNullOrWhiteSpace(estimate.ModelId) ? "unknown" : estimate.ModelId.Trim();
+        return [new PipelinePricingGap(modelId, estimate.Status.ToString(), 1)];
+    }
+
+    private static IReadOnlyList<PipelinePricingGap> MergePricingGaps(
+        IEnumerable<PipelinePricingGap> gaps,
+        bool oneRun = false)
+        => gaps
+            .GroupBy(gap => (gap.ModelId, gap.Reason))
+            .Select(group => new PipelinePricingGap(
+                group.Key.ModelId,
+                group.Key.Reason,
+                oneRun ? 1 : group.Sum(gap => gap.AffectedRuns)))
+            .OrderBy(gap => gap.ModelId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(gap => gap.Reason, StringComparer.Ordinal)
+            .ToList();
 
     // Costs are fractions of a cent for a single task; keep 6 dp so the
     // sub-cent detail survives the round-trip and the UI decides display
