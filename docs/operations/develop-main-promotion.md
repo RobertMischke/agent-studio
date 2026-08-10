@@ -135,7 +135,7 @@ packaged installations. Run it from a host scheduler with an external lock so
 long updates cannot overlap:
 
 ```cron
-* * * * * flock -n /var/lock/agent-studio-main-deploy.lock env ATP_RESTART_TRIGGER=main-advance ATP_WORKSPACE=/srv/agent-taskboard-workspace ATP_STABLE_CHECKOUT=/srv/agent-taskboard-stable ATP_UPDATE_SCRIPT=/srv/agent-taskboard-devspace/update-stable.sh /srv/agent-taskboard-dev/scripts/supervisor/restart-stable-after-batch.sh >>/var/log/agent-studio-main-deploy.log 2>&1
+* * * * * flock -n /var/lock/agent-studio-main-deploy.lock env ATP_RESTART_TRIGGER=main-advance ATP_WORKSPACE=/srv/agent-taskboard-workspace ATP_STABLE_CHECKOUT=/srv/agent-taskboard-stable ATP_UPDATE_SCRIPT=/srv/agent-taskboard-dev/scripts/update-stable.sh /srv/agent-taskboard-dev/scripts/supervisor/restart-stable-after-batch.sh >>/var/log/agent-studio-main-deploy.log 2>&1
 ```
 
 The tick is a no-op while Stable already matches remote `main`. When `main`
