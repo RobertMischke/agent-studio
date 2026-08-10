@@ -251,7 +251,7 @@
     <p class="kicker">Article document</p>
     <h1>{{title}}</h1>
     <p class="lede">{{summary}}</p>
-    <div class="meta"><span><b>Pattern</b> {{pattern}}</span><span><b>Status</b> shaping</span></div>
+    <div class="meta"><span><b>Pattern</b> {{pattern}}</span><span><b>Status</b> {{status}}</span><span><b>Phase</b> {{phase}}</span></div>
   </header>
 
   <section data-document-section="alternatives">
@@ -281,6 +281,17 @@
     <h2><span class="number">04</span> Open decisions</h2>
     <p>List only choices that still need human review.</p>
   </section>
+
+  <!-- agent-studio:implementation-section:start -->
+  <section id="implementation" data-document-section="implementation">
+    <h2><span class="number">05</span> Implementation</h2>
+    <p>Delivery slices append their current implementation status here. Decision content above remains unchanged.</p>
+    <ol class="implementation-log">
+<!-- agent-studio:implementation-log:start -->
+<!-- agent-studio:implementation-log:end -->
+    </ol>
+  </section>
+  <!-- agent-studio:implementation-section:end -->
 </main>
 </body>
 </html>
