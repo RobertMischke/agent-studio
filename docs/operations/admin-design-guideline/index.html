@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Surface Design Guideline | Decision Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #11110f;
+    --ink-2: #52514e;
+    --ink-3: #76746e;
+    --line: #d8d6cf;
+    --accent: #2768c7;
+    --accent-soft: #e8f0fb;
+    --violet: #6750a4;
+    --violet-soft: #eee9f8;
+    --amber: #8a5d00;
+    --amber-soft: #f7edcf;
+    --green: #19723a;
+    --green-soft: #e4f2e8;
+    --red: #b63838;
+    --red-soft: #f8e7e7;
+    --code: #e8e7e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #f7f6f2;
+      --ink-2: #c3c2b7;
+      --ink-3: #97958d;
+      --line: #3d3d3a;
+      --accent: #78a9f4;
+      --accent-soft: #1d2b3d;
+      --violet: #b7a5e8;
+      --violet-soft: #2c2639;
+      --amber: #e1b34e;
+      --amber-soft: #332d1e;
+      --green: #74c98c;
+      --green-soft: #203126;
+      --red: #ef8585;
+      --red-soft: #382424;
+      --code: #30302e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+  header.page { padding: 44px 0 28px; border-bottom: 1px solid var(--line); }
+  .kicker {
+    margin: 0 0 9px;
+    color: var(--ink-3);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  h1 { max-width: 820px; margin: 0 0 12px; font-size: clamp(2rem, 4vw, 2.7rem); line-height: 1.14; }
+  h2 { margin: 54px 0 7px; font-size: 23px; line-height: 1.25; scroll-margin-top: 18px; }
+  h3 { margin: 30px 0 6px; font-size: 17px; }
+  h4 { margin: 0 0 5px; font-size: 14px; }
+  p, li { max-width: 76ch; }
+  p { margin: 0 0 13px; }
+  ul, ol { padding-left: 22px; }
+  li + li { margin-top: 5px; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  code {
+    border-radius: 4px;
+    background: var(--code);
+    padding: 1px 5px;
+    font: .88em/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+  .lede { max-width: 72ch; color: var(--ink-2); font-size: 18px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 18px; color: var(--ink-3); font-size: 13px; }
+  .meta b { color: var(--ink-2); }
+  .decision-strip {
+    margin: 22px 0 0;
+    background: var(--accent-soft);
+    padding: 14px 18px;
+  }
+  .decision-strip strong { display: block; margin-bottom: 2px; }
+  .decision-strip p { margin: 0; color: var(--ink-2); }
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 24px;
+    margin: 26px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .section-no { margin-right: 9px; color: var(--ink-3); font-weight: 600; }
+  .rule-list { margin-top: 18px; }
+  .rule {
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 18px;
+    padding: 17px 0;
+    border-top: 1px solid var(--line);
+  }
+  .rule:last-child { border-bottom: 1px solid var(--line); }
+  .rule-id {
+    color: var(--accent);
+    font: 700 12px/1.4 ui-monospace, "SFMono-Regular", Consolas, monospace;
+    letter-spacing: .08em;
+  }
+  .rule p { margin: 0; color: var(--ink-2); }
+  .rule strong { color: var(--ink-1); }
+  .rule ul { margin: 8px 0 0; color: var(--ink-2); }
+  .token-row { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 0; }
+  .token {
+    border-radius: 999px;
+    background: var(--surface-2);
+    padding: 3px 9px;
+    color: var(--ink-2);
+    font-size: 12px;
+  }
+  .note { margin: 18px 0; background: var(--surface-2); padding: 14px 18px; }
+  .note p:last-child { margin-bottom: 0; }
+  .reference-figure { margin: 22px 0 0; }
+  .theme-proof { display: grid; gap: 18px; }
+  .proof-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 7px;
+    color: var(--ink-3);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .reference-svg { display: block; width: 100%; height: auto; background: transparent; }
+  .reference-svg.theme-light {
+    --m-shell: #e8e8e6;
+    --m-rail: #eeeeec;
+    --m-side: #f5f5f3;
+    --m-canvas: #ffffff;
+    --m-canvas-soft: #f7f7f5;
+    --m-ink: #171717;
+    --m-muted: #686865;
+    --m-faint: #979792;
+    --m-accent: #2869c8;
+    --m-accent-soft: #e8f0fb;
+    --m-violet: #6750a4;
+    --m-violet-soft: #f0ebf8;
+    --m-amber: #775300;
+    --m-amber-soft: #f7edcf;
+    --m-green: #176b36;
+    --m-green-soft: #e4f2e8;
+    --m-chip: #e9e9e6;
+    --m-ring: #585854;
+  }
+  .reference-svg.theme-dark {
+    --m-shell: #181818;
+    --m-rail: #1c1c1c;
+    --m-side: #202020;
+    --m-canvas: #252525;
+    --m-canvas-soft: #2c2c2c;
+    --m-ink: #f3f3f3;
+    --m-muted: #b8b8b2;
+    --m-faint: #898984;
+    --m-accent: #83b3ff;
+    --m-accent-soft: #24344a;
+    --m-violet: #c0acee;
+    --m-violet-soft: #352e43;
+    --m-amber: #e5bd64;
+    --m-amber-soft: #3a321f;
+    --m-green: #7bd193;
+    --m-green-soft: #243a2a;
+    --m-chip: #343434;
+    --m-ring: #cfcfc9;
+  }
+  .canvas { fill: var(--m-canvas); }
+  .shell { fill: var(--m-shell); }
+  .rail { fill: var(--m-rail); }
+  .side { fill: var(--m-side); }
+  .soft { fill: var(--m-canvas-soft); }
+  .notice { fill: var(--m-amber-soft); }
+  .global-line, .decision-row { fill: var(--m-violet-soft); }
+  .detail-row { fill: var(--m-canvas-soft); }
+  .chip { fill: var(--m-chip); }
+  .chip-green { fill: var(--m-green-soft); }
+  .text { fill: var(--m-ink); font: 500 13px Inter, "Segoe UI", sans-serif; }
+  .text-strong { fill: var(--m-ink); font: 650 13px Inter, "Segoe UI", sans-serif; }
+  .title { fill: var(--m-ink); font: 650 22px Inter, "Segoe UI", sans-serif; }
+  .label { fill: var(--m-muted); font: 650 10px Inter, "Segoe UI", sans-serif; letter-spacing: .08em; }
+  .meta-text { fill: var(--m-muted); font: 500 11px Inter, "Segoe UI", sans-serif; }
+  .faint-text { fill: var(--m-faint); font: 500 10px Inter, "Segoe UI", sans-serif; }
+  .mono { fill: var(--m-muted); font: 500 11px "JetBrains Mono", Consolas, monospace; }
+  .accent-text { fill: var(--m-accent); }
+  .violet-text { fill: var(--m-violet); }
+  .amber-text { fill: var(--m-amber); }
+  .green-text { fill: var(--m-green); }
+  .identity { fill: var(--identity); stroke: var(--m-ring); stroke-width: .8; }
+  figcaption { max-width: 90ch; margin-top: 10px; color: var(--ink-2); font-size: 13px; }
+  .spec-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 30px;
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+  .spec { padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .spec p { margin: 0; color: var(--ink-2); }
+  .audit-wrap { overflow-x: auto; margin-top: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { padding: 10px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--ink-3); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  td p { margin: 0 0 5px; }
+  .state { white-space: nowrap; }
+  .status {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .status.owned { background: var(--green-soft); color: var(--green); }
+  .status.gap { background: var(--amber-soft); color: var(--amber); }
+  .adoption-flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 20px 0;
+    background: var(--surface-2);
+  }
+  .adoption-step { padding: 15px 17px; }
+  .adoption-step + .adoption-step { border-left: 1px solid var(--line); }
+  .adoption-step span { color: var(--accent); font: 700 11px ui-monospace, Consolas, monospace; }
+  .adoption-step p { margin: 4px 0 0; color: var(--ink-2); font-size: 13px; }
+  .decision-list { margin-top: 15px; }
+  .decision-list li { padding: 4px 0; }
+  footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }
+  @media (max-width: 820px) {
+    main { width: min(100% - 24px, 1160px); }
+    .toc { grid-template-columns: 1fr 1fr; }
+    .rule { grid-template-columns: 58px minmax(0, 1fr); gap: 10px; }
+    .spec-grid { grid-template-columns: 1fr; }
+    .adoption-flow { grid-template-columns: 1fr 1fr; }
+    .adoption-step:nth-child(3) { border-left: 0; }
+    .adoption-step:nth-child(n+3) { border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 520px) {
+    .toc, .adoption-flow { grid-template-columns: 1fr; }
+    .adoption-step + .adoption-step { border-left: 0; border-top: 1px solid var(--line); }
+    header.page { padding-top: 30px; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="page">
+    <p class="kicker">Decision dossier · Agent Studio · AGT-2583</p>
+    <h1>Admin Surface Design Guideline</h1>
+    <p class="lede">A binding visual and copy standard for dense operator surfaces. Admin pages stay flat, use the available width, expose detail on demand, and present one calm statement for each fact.</p>
+    <div class="meta">
+      <span><b>Status:</b> decision pending</span>
+      <span><b>Phase:</b> decision ready</span>
+      <span><b>Evidence:</b> operator captures from 9 and 10 August 2026</span>
+      <span><b>Scope:</b> guideline and reference, no broad restyling</span>
+    </div>
+    <div class="decision-strip">
+      <strong>Recommendation</strong>
+      <p>Approve this dossier as the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them.</p>
+    </div>
+    <nav aria-label="Dossier contents">
+      <ul class="toc">
+        <li><a href="#decision">01 · Decision</a></li>
+        <li><a href="#rules">02 · Binding rules</a></li>
+        <li><a href="#reference">03 · Reference surface</a></li>
+        <li><a href="#audit">04 · Violation audit</a></li>
+        <li><a href="#adoption">05 · Adoption contract</a></li>
+        <li><a href="#open-decisions">06 · Open decision</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <section id="decision" data-concept-section="alternatives">
+    <h2><span class="section-no">01</span>Decision and rejected alternatives</h2>
+    <p>The standard applies to operational views such as Activity, pipeline and planning status, settings, workbench viewers, notices, diagnostics, and other administrative control surfaces. It does not turn content documents into dashboards.</p>
+
+    <h3>Selected direction: one flat admin grammar</h3>
+    <p>Hierarchy comes from alignment, spacing, typography, and restrained whole-surface tints. A page is a workspace, not a stack of cards. Stream rows share one grid. Headers summarize one line and disclose detail only when requested.</p>
+
+    <h3>Alternatives not selected</h3>
+    <ul>
+      <li><strong>Cards as the default container.</strong> Rejected because repeated borders, radii, headings, and inset margins fragment one operational surface into competing boxes.</li>
+      <li><strong>Fix only Activity across projects.</strong> Rejected because the same drift appears in planning, pipeline, notice, workbench, and enrichment surfaces.</li>
+      <li><strong>Restyle every admin page at once.</strong> Rejected because a large visual migration obscures behavior regressions and creates review scope without product value.</li>
+    </ul>
+  </section>
+
+  <section id="rules" data-concept-section="recommendation">
+    <h2><span class="section-no">02</span>Binding rules</h2>
+    <p>These rules use MUST and MUST NOT deliberately. Rule identifiers are stable review references.</p>
+
+    <div class="rule-list">
+      <article class="rule">
+        <div class="rule-id">ADM-01</div>
+        <div>
+          <h4>Flat composition</h4>
+          <p><strong>Admin content MUST remain flat.</strong> Do not wrap a section, row group, banner, or status summary in a decorative card, border, radius, or resting shadow. Separate content with spacing, alignment, typography, or a low-contrast tint across the complete surface. Borders remain valid only for controls, focus, resizable shell boundaries, and data structures that require a boundary.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-02</div>
+        <div>
+          <h4>Full-width notices</h4>
+          <p>An acute notice MUST span the full available content width with no outer margin, rounded corners, floating shadow, or decorative frame. Use one status dot, one short statement, and at most one action. A settled notice becomes quiet or disappears.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-03</div>
+        <div>
+          <h4>One grid for one stream</h4>
+          <p>Every entry type in a stream MUST occupy the same time, identity, type, summary, state, and disclosure columns. Decision, supervisor, gate, runner, task, and system entries may use different whole-row tints, but MUST NOT change width, indentation, or corner geometry. Cross-project Activity is one chronological stream, not project sections.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-04</div>
+        <div>
+          <h4>Compact headers, detail on demand</h4>
+          <p>A normal header or status summary MUST fit one line at desktop widths. Show identity, current state, and the primary action. Put model, session, token, audit, explanation, and other secondary facts behind one accessible disclosure. The narrow layout may wrap to two lines; it MUST NOT become a stack of mini-panels.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-05</div>
+        <div>
+          <h4>One visible statement per fact</h4>
+          <p>Do not restate a fact already visible in the page, filter, lane, row, or action. Counts MUST reconcile with visible children and appear only where they help a decision. A status chip, warning paragraph, and action label MUST NOT all repeat the same outcome.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-06</div>
+        <div>
+          <h4>Sober operational copy</h4>
+          <p>UI copy MUST state the current fact and, when needed, the next action. Do not use narrative paragraphs, quotations, personification, conversational prompts, or speculative explanations in persistent chrome. Put cause, history, and diagnostics in disclosed detail.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-07</div>
+        <div>
+          <h4>Project identity is mark plus short code</h4>
+          <p>Cross-project rows and tabs MUST pair the shared project color mark with the registry <code>shortCode</code>. Color is never the only carrier. Preserve the full project name in an accessible label or tooltip, reuse the shared identity palette, and maintain a contrast ring in both themes.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-08</div>
+        <div>
+          <h4>Operator density, bounded prose</h4>
+          <p>Admin lists default to the existing compact row tokens. Interactive rows keep the 32 px minimum; static rows use the compact 20 px floor. Chrome uses the established 30 px title and tab bars and 28 px pane headers. Streams, tables, and diagrams use the available width. Narrative and Markdown use a 76ch default reading measure, up to 90ch where content benefits. Code blocks scroll internally.</p>
+          <div class="token-row" aria-label="Canonical density values">
+            <span class="token">row padding 3px / 6px</span>
+            <span class="token">interactive floor 32px</span>
+            <span class="token">section gap 10px</span>
+            <span class="token">prose 76ch</span>
+            <span class="token">wide prose ceiling 90ch</span>
+          </div>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-09</div>
+        <div>
+          <h4>Theme structure is invariant</h4>
+          <p>Light and dark themes MUST use the same hierarchy, geometry, density, and disclosure behavior. Read semantic <code>--studio-*</code> variables for color and spacing. Do not introduce a one-theme literal. Status tints remain quiet, and motion collapses under reduced-motion preferences.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-10</div>
+        <div>
+          <h4>Fonts are local product assets</h4>
+          <p>Inter and JetBrains Mono MUST be served as versioned local font assets with their license files and <code>font-display: swap</code>. Production surfaces MUST NOT fetch fonts from Google Fonts, another CDN, or a runtime network dependency. System fallbacks remain mandatory. This dossier itself makes no font request.</p>
+        </div>
+      </article>
+    </div>
+
+    <h3>Decision provenance</h3>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>Rule</th><th>Established decision</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>ADM-01, ADM-02</td><td>Stay flat; use the full available width; remove floating notice chrome.</td><td>AGT-2568 and operator direction from 10.08.</td></tr>
+          <tr><td>ADM-03</td><td>Every activity type uses one entry grid; cross-project Activity is chronological.</td><td>AGT-2565 and AGT-2579.</td></tr>
+          <tr><td>ADM-04</td><td>Keep the normal header to one compact line and reveal detail on demand.</td><td>AGT-2534 and AGT-2549.</td></tr>
+          <tr><td>ADM-05, ADM-06</td><td>State each operational fact once and remove explanatory narrative from persistent UI.</td><td>AGT-2547, AGT-2579, and the repository language policy.</td></tr>
+          <tr><td>ADM-07</td><td>Project origin is the shared color mark plus registry short code; full name remains accessible.</td><td>AGT-2034 and AGT-2579.</td></tr>
+          <tr><td>ADM-08</td><td>Use compact system density while letting Markdown occupy the panel up to a useful reading measure.</td><td>AGT-2549, density tokens, and product design principles.</td></tr>
+          <tr><td>ADM-09</td><td>Light and dark change semantic tokens, not structure or behavior.</td><td>Style-guide hard rule R5.</td></tr>
+          <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="reference">
+    <h2><span class="section-no">03</span>Exemplary reference surface</h2>
+    <p><strong>Activity across projects</strong> is the canonical admin reference. The two proofs below use one shared geometry and content. Only semantic theme values change.</p>
+
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+      <defs>
+        <symbol id="activity-surface" viewBox="0 0 1440 820">
+          <rect class="shell" x="0" y="0" width="1440" height="34"/>
+          <text class="label" x="18" y="22">AGENT STUDIO</text>
+          <text class="meta-text" x="1260" y="22">Workspace</text>
+
+          <rect class="rail" x="0" y="34" width="48" height="762"/>
+          <rect class="side" x="48" y="34" width="240" height="762"/>
+          <rect class="canvas" x="288" y="34" width="1152" height="762"/>
+          <text class="label accent-text" x="18" y="74">A</text>
+          <text class="label" x="18" y="116">B</text>
+          <text class="label" x="18" y="158">D</text>
+
+          <text class="label" x="68" y="66">ACTIVITY</text>
+          <rect class="soft" x="56" y="78" width="224" height="34"/>
+          <text class="text-strong" x="70" y="100">Across projects</text>
+          <text class="meta-text" x="70" y="138">All activity</text>
+          <text class="meta-text" x="70" y="166">Decisions</text>
+          <text class="meta-text" x="70" y="194">Runs</text>
+          <text class="faint-text" x="70" y="238">PROJECT FILTERS</text>
+          <circle class="identity" style="--identity:#6f8fc9" cx="74" cy="268" r="4"/>
+          <text class="meta-text" x="86" y="272">AST</text>
+          <circle class="identity" style="--identity:#d4866a" cx="74" cy="296" r="4"/>
+          <text class="meta-text" x="86" y="300">MKT</text>
+          <circle class="identity" style="--identity:#67a783" cx="74" cy="324" r="4"/>
+          <text class="meta-text" x="86" y="328">API</text>
+
+          <text class="title" x="316" y="72">Activity across projects</text>
+          <text class="meta-text" x="1132" y="69">All projects · All activity</text>
+          <rect class="chip" x="1321" y="51" width="91" height="28" rx="4"/>
+          <text class="meta-text" x="1340" y="69">Filters</text>
+
+          <rect class="notice" x="288" y="90" width="1152" height="38"/>
+          <circle cx="312" cy="109" r="4" fill="var(--m-amber)"/>
+          <text class="text amber-text" x="326" y="114">Runner capacity is available while queued work is waiting.</text>
+          <text class="text-strong amber-text" x="1286" y="114">Review</text>
+
+          <rect class="global-line" x="288" y="128" width="1152" height="42"/>
+          <circle cx="312" cy="149" r="4" fill="var(--m-violet)"/>
+          <text class="label violet-text" x="326" y="153">GLOBAL ORCHESTRATOR</text>
+          <text class="text" x="492" y="153">Available</text>
+          <text class="meta-text" x="586" y="153">gpt-5.6-sol</text>
+          <text class="meta-text" x="705" y="153">Booted 09:58</text>
+          <rect class="chip" x="824" y="136" width="216" height="26" rx="4"/>
+          <text class="mono" x="838" y="153">Copy claude -r session_7f2a</text>
+          <text class="text-strong violet-text" x="1337" y="153">⌃</text>
+
+          <rect class="detail-row" x="288" y="170" width="1152" height="54"/>
+          <text class="label" x="326" y="191">SCOPE</text>
+          <text class="text" x="384" y="191">All watched projects</text>
+          <text class="label" x="326" y="211">LAST CHECK</text>
+          <text class="text" x="412" y="211">10:42 · No intervention active</text>
+          <text class="faint-text" x="1088" y="201">Expanded status detail</text>
+
+          <text class="label" x="316" y="258">TIME</text>
+          <text class="label" x="394" y="258">PROJECT</text>
+          <text class="label" x="494" y="258">TYPE</text>
+          <text class="label" x="620" y="258">SUMMARY</text>
+          <text class="label" x="1254" y="258">STATE</text>
+
+          <rect class="decision-row" x="288" y="270" width="1152" height="44"/>
+          <text class="mono" x="316" y="297">10:42</text>
+          <circle class="identity" style="--identity:#6f8fc9" cx="401" cy="292" r="4"/>
+          <text class="text-strong" x="414" y="297">AST</text>
+          <text class="label violet-text" x="494" y="297">DECISION</text>
+          <text class="text-strong" x="620" y="297">AGT-2567 requires human review</text>
+          <rect class="chip" x="1244" y="279" width="132" height="26" rx="13"/>
+          <text class="meta-text" x="1261" y="297">Human review</text>
+          <text class="text-strong violet-text" x="1401" y="297">⌃</text>
+
+          <rect class="detail-row" x="288" y="314" width="1152" height="68"/>
+          <text class="label" x="620" y="337">REASON</text>
+          <text class="text" x="620" y="359">The final-verdict row still collides at narrow width. Review the compact routing treatment.</text>
+          <text class="meta-text accent-text" x="1244" y="359">Open AGT-2567</text>
+
+          <text class="mono" x="316" y="418">10:39</text>
+          <circle class="identity" style="--identity:#d4866a" cx="401" cy="413" r="4"/>
+          <text class="text-strong" x="414" y="418">MKT</text>
+          <text class="label" x="494" y="418">TASK COMPLETE</text>
+          <text class="text" x="620" y="418">Pipeline evidence saved</text>
+          <rect class="chip-green" x="1282" y="400" width="94" height="26" rx="13"/>
+          <text class="meta-text green-text" x="1303" y="418">Passed</text>
+          <text class="text-strong" x="1401" y="418">⌄</text>
+
+          <rect class="soft" x="288" y="438" width="1152" height="44"/>
+          <text class="mono" x="316" y="466">10:36</text>
+          <circle class="identity" style="--identity:#67a783" cx="401" cy="461" r="4"/>
+          <text class="text-strong" x="414" y="466">API</text>
+          <text class="label" x="494" y="466">RUNNER FINISHED</text>
+          <text class="text" x="620" y="466">Remote run completed</text>
+          <rect class="chip" x="1294" y="448" width="82" height="26" rx="13"/>
+          <text class="meta-text" x="1312" y="466">Done</text>
+          <text class="text-strong" x="1401" y="466">⌄</text>
+
+          <text class="mono" x="316" y="518">10:31</text>
+          <circle class="identity" style="--identity:#6f8fc9" cx="401" cy="513" r="4"/>
+          <text class="text-strong" x="414" y="518">AST</text>
+          <text class="label" x="494" y="518">NOTICE</text>
+          <text class="text" x="620" y="518">Runner capacity returned to normal</text>
+          <rect class="chip" x="1274" y="500" width="102" height="26" rx="13"/>
+          <text class="meta-text" x="1290" y="518">Resolved</text>
+          <text class="text-strong" x="1401" y="518">⌄</text>
+
+          <rect class="soft" x="288" y="538" width="1152" height="44"/>
+          <text class="mono" x="316" y="566">10:28</text>
+          <circle class="identity" style="--identity:#d4866a" cx="401" cy="561" r="4"/>
+          <text class="text-strong" x="414" y="566">MKT</text>
+          <text class="label" x="494" y="566">CODEX</text>
+          <text class="text" x="620" y="566">Documentation verification completed</text>
+          <rect class="chip-green" x="1282" y="548" width="94" height="26" rx="13"/>
+          <text class="meta-text green-text" x="1303" y="566">Passed</text>
+          <text class="text-strong" x="1401" y="566">⌄</text>
+
+          <text class="mono" x="316" y="618">10:22</text>
+          <circle class="identity" style="--identity:#8e78c6" cx="401" cy="613" r="4"/>
+          <text class="text-strong" x="414" y="618">DOC</text>
+          <text class="label" x="494" y="618">PUBLISHED</text>
+          <text class="text" x="620" y="618">Dossier index refreshed</text>
+          <rect class="chip" x="1288" y="600" width="88" height="26" rx="13"/>
+          <text class="meta-text" x="1305" y="618">Current</text>
+          <text class="text-strong" x="1401" y="618">⌄</text>
+
+          <text class="faint-text" x="316" y="680">One chronological grid · newest first · detail rows stay within the same columns</text>
+          <text class="faint-text" x="316" y="704">Full-bleed outer surface · narrative detail capped at 76ch · no repeated counts</text>
+          <rect class="shell" x="0" y="796" width="1440" height="24"/>
+          <text class="faint-text" x="18" y="812">Connected</text>
+          <text class="faint-text" x="1254" y="812">Light + dark · local fonts</text>
+        </symbol>
+      </defs>
+    </svg>
+
+    <figure class="reference-figure">
+      <div class="theme-proof">
+        <div>
+          <div class="proof-label"><span>Light theme</span><span>Reference state · wide · details open</span></div>
+          <svg class="reference-svg theme-light" viewBox="0 0 1440 820" role="img" aria-label="Light theme reference for Activity across projects"><use href="#activity-surface"/></svg>
+        </div>
+        <div>
+          <div class="proof-label"><span>Dark theme</span><span>Same geometry and hierarchy</span></div>
+          <svg class="reference-svg theme-dark" viewBox="0 0 1440 820" role="img" aria-label="Dark theme reference for Activity across projects"><use href="#activity-surface"/></svg>
+        </div>
+      </div>
+      <figcaption>The reference shows every binding rule in one surface. The notice uses the entire workspace width. The global orchestrator is a status line, not a card or quotation. Every event type occupies one grid. Project identity is color plus short code. One decision is expanded without changing the row geometry. No project or task total is repeated.</figcaption>
+    </figure>
+
+    <div class="spec-grid" aria-label="Reference surface specification">
+      <article class="spec"><h4>Page and order</h4><p>Default filter is All activity. Entries are globally chronological, newest first. Project filters narrow the stream but never regroup it.</p></article>
+      <article class="spec"><h4>Global status</h4><p>Collapsed: actor, availability, model, boot time, copy action, disclosure. Expanded: scope, last check, and current intervention only.</p></article>
+      <article class="spec"><h4>Entry grid</h4><p><code>time | project | type | summary | state | disclosure</code>. The same columns serve every event kind at every density.</p></article>
+      <article class="spec"><h4>Disclosure</h4><p>Use a native button or <code>details/summary</code> with <code>aria-expanded</code>. Expanded content begins under Summary and remains within the prose measure.</p></article>
+      <article class="spec"><h4>Narrow behavior</h4><p>Below the grid breakpoint, time, identity, and state remain the first scan line; summary becomes the second. Do not turn rows into bordered cards.</p></article>
+      <article class="spec"><h4>Copy</h4><p>Use event facts such as “Remote run completed.” Remove greetings, quoted agent voice, speculative help text, and totals visible elsewhere.</p></article>
+      <article class="spec"><h4>State</h4><p>Acute state uses a whole-row or full-width tint. Historical entries use neutral surfaces. Status never changes entry width.</p></article>
+      <article class="spec"><h4>Typography</h4><p>UI 12 to 13 px, metadata 11 px, IDs in local JetBrains Mono, all other copy in local Inter with system fallbacks. Numeric columns use tabular figures.</p></article>
+    </div>
+  </section>
+
+  <section id="audit" data-concept-section="evidence">
+    <h2><span class="section-no">04</span>Violation audit and card ownership</h2>
+    <p>The audit uses the operator prompts and task screenshot indices available through the Task API on 10 August 2026. “Before” captures establish the visual problem; “after” captures are delivery evidence and do not change the adoption rule.</p>
+
+    <div class="audit-wrap">
+      <table>
+        <thead>
+          <tr><th>Surface</th><th>Observed violation</th><th>Evidence</th><th>Existing card</th><th>Ownership</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Activity across projects: global orchestrator</strong></td>
+            <td>Bordered deck panel, pill heading, quoted agent voice, narrative empty copy, and repeated project/task totals. It competes with the event stream.</td>
+            <td>Operator capture and follow-up recorded 10.08.; current component is <code>global-orchestrator-card</code>. Card has no preserved screenshots yet.</td>
+            <td><strong>AGT-2579</strong><br>Chronological Activity plus compact flat global status.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+          <tr>
+            <td><strong>Planning follow-up</strong></td>
+            <td>The same “no follow-ups” fact appears as an oversized badge, warning block, explanatory paragraph, and actions.</td>
+            <td><code>planning-spawn-panel--light--mocked.png</code>, dark and narrow variants, 09.08.</td>
+            <td><strong>AGT-2547</strong><br>Compress to one status statement and two actions.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+          <tr>
+            <td><strong>Activity decision entry width</strong></td>
+            <td>The lavender Orchestrator DECISION entry is wider and more inset than task, Codex, and runner entries.</td>
+            <td><code>AGT-2565--activity-entry-grid-before-light--mocked.png</code>, dark variant, plus light/dark rendered review captures, 10.08.</td>
+            <td><strong>AGT-2565</strong><br>One entry grid for every stream type.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+          <tr>
+            <td><strong>Pipeline DECISION / FINAL VERDICT row</strong></td>
+            <td>ACTIVE, FINAL VERDICT, and HUMAN REVIEW LANE compete as large adjacent tiles, changing row height and rhythm.</td>
+            <td><code>pipeline-decision-human-review-before-light--mocked.png</code> and dark variant, 10.08.</td>
+            <td><strong>AGT-2567</strong><br>One compact routing state with detail in a tooltip.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+          <tr>
+            <td><strong>Runner starvation notice</strong></td>
+            <td>The notice floats as a rounded, inset box instead of using the available header width.</td>
+            <td><code>notice-bar-before-starvation-narrow-light--mocked.png</code> and dark variant, 10.08.</td>
+            <td><strong>AGT-2568</strong><br>Full-width flat notice family.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+          <tr>
+            <td><strong>Prompt enrichment side column</strong></td>
+            <td>The report sits beside Markdown, reducing the prompt to a word column and wasting the panel width.</td>
+            <td><code>mkt-17-task-layout-before-wide-light--mocked.png</code>, dark and narrow variants, 09.08.</td>
+            <td><strong>AGT-2549</strong><br>One compact enrichment line above full-width Markdown; details expand below.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Gaps without cards</h3>
+    <ul>
+      <li><strong>Self-hosted font packaging.</strong> No <code>.woff</code> or <code>.woff2</code> asset exists under <code>frontend/</code> in this checkout. The tokens name Inter and JetBrains Mono but depend on installed-font or system fallbacks. There is no dedicated asset, license, and loading card.</li>
+      <li><strong>Full admin inventory.</strong> The named screenshot set is fully mapped, but no card owns a systematic audit of every settings, diagnostics, and project administration view. This dossier does not authorize that big-bang sweep.</li>
+    </ul>
+
+    <div class="note">
+      <h4>Evidence boundary</h4>
+      <p>The planning, decision-width, final-verdict, notice, and enrichment evidence includes mocked captures. The screenshot index labels those files accordingly. AGT-2565 also preserves rendered light/dark review captures with unlabeled provenance. The dossier does not relabel mocked evidence as real.</p>
+    </div>
+  </section>
+
+  <section id="adoption">
+    <h2><span class="section-no">05</span>Adoption and agent contract</h2>
+    <p>Adoption is incremental and reviewable. It does not create a migration program.</p>
+
+    <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
+      <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-10 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
+      <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
+    </div>
+
+    <h3>Prompt-known path</h3>
+    <p>Repository and frontend agent instructions link this dossier directly at <code>docs/operations/admin-design-guideline/index.html</code>. The short mandatory baseline remains <code>docs/quality/design/style-guide-hard-rules.md</code>. Agents cite ADM rule IDs in review notes and use Activity across projects as the reference when a local admin pattern is unclear.</p>
+
+    <h3>Definition of done for a touched admin surface</h3>
+    <ol>
+      <li>The view remains full-bleed; prose alone receives a reading-width cap.</li>
+      <li>No decorative card, frame, left status stripe, or floating notice is introduced.</li>
+      <li>Repeated facts and narrative chrome are removed within the touched scope.</li>
+      <li>Rows track stable identity and use the same grid for comparable entries.</li>
+      <li>Both themes and relevant widths are covered by Playwright and preserved screenshots.</li>
+      <li>Any intentional exception names the user need, scope, and review evidence. Existing drift is not precedent.</li>
+    </ol>
+  </section>
+
+  <section id="open-decisions" data-concept-section="open-decisions">
+    <h2><span class="section-no">06</span>Open decision</h2>
+    <p>This dossier is decision-ready. One operator decision remains to change its lifecycle status:</p>
+    <ul class="decision-list">
+      <li><strong>Approve the recommended standard</strong> as binding for new and touched admin surfaces, keep incremental adoption, and create separate cards only for the two unowned gaps when they become delivery priorities.</li>
+    </ul>
+    <p>The recommendation is approval. No product implementation, migration wave, or bulk task creation is part of this dossier.</p>
+  </section>
+
+  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+</main>
+</body>
+</html>

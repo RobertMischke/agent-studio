@@ -4,6 +4,10 @@
 
 The non-negotiable design rules live in
 [docs/quality/design/style-guide-hard-rules.md](../docs/quality/design/style-guide-hard-rules.md).
+New or touched admin surfaces also use the flat-surface contract and reference
+mockup in
+[docs/operations/admin-design-guideline/index.html](../docs/operations/admin-design-guideline/index.html).
+Adoption is incremental, not a broad restyling mandate.
 The technology-aware navigation entry and prompt applicability contract live in
 [docs/quality/](../docs/quality/README.md); UI work uses its
 [Angular component guide](../docs/quality/angular-components.md).

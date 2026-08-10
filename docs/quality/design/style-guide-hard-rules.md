@@ -93,6 +93,21 @@ hidden for the first 200 ms, shows a structural skeleton after that threshold,
 and adds contextual loading copy after one second. Loading feedback never
 blocks unrelated navigation or controls.
 
+### R7 - Admin surfaces use the flat admin grammar
+
+New or touched admin surfaces follow the binding
+[Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html).
+They stay full-bleed and flat, use one grid for comparable stream entries,
+keep normal headers to one line with detail disclosed on demand, avoid
+repeating implied facts, and use sober operational copy. Cross-project
+identity is the shared project colour mark plus registry short code. The
+guideline also owns compact density, reading-width, theme-token, and
+self-hosted-font rules for this surface family.
+
+Adoption is incremental. Apply the rule to the new or touched surface and its
+immediate component family. Record unrelated legacy drift separately instead
+of turning one UI card into a broad restyling pass.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and
@@ -104,3 +119,6 @@ blocks unrelated navigation or controls.
   [docs/quality/frontend/style-guide/](../frontend/style-guide/README.md).
 - **Product principles:** the "why" behind R2/R4/R5 lives in
   [docs/quality/design-principles.md](../design-principles.md).
+- **Admin reference:** the fully specified light/dark Activity surface,
+  violation audit, and adoption contract live in the
+  [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html).
