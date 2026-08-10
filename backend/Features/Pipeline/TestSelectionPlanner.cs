@@ -128,7 +128,8 @@ public static class TestSelectionPlanner
                 : conservativeFullSuite
                     ? "diff input is unavailable; conservative fallback runs the full suite"
                     : "lane policy selected the full suite";
-            var fullBaseline = ContinuousCommands(policy, blocksWorkPackage: true);
+            var fullBaseline = ContinuousCommands(
+                policy, blocksWorkPackage: true, omitBroadFrontendTests: false);
             var selected = MergeTestCommands(fullBaseline.Concat(fullTests.Select(command => command with
             {
                 TestScope = TestExecutionLevels.Full,
@@ -155,7 +156,10 @@ public static class TestSelectionPlanner
             });
         }
 
-        var candidates = BuildCandidates(repositoryPath, verifyPlan, diff, policy, history);
+        var frontendWorkPackage = FrontendWorkPackagePlanner.Plan(repositoryPath, diff);
+        var frontendTouched = FrontendWorkPackagePlanner.TouchesFrontend(diff);
+        var candidates = BuildCandidates(
+            repositoryPath, verifyPlan, diff, policy, history, frontendWorkPackage);
         var selectedIds = new HashSet<string>(StringComparer.Ordinal);
         var reasons = new List<string>();
 
@@ -176,7 +180,10 @@ public static class TestSelectionPlanner
             ? []
             : candidates.Where(candidate => selectedIds.Contains(candidate.Id)).ToList();
         var advisedIds = advice?.CandidateIds.ToHashSet(StringComparer.Ordinal) ?? [];
-        var continuous = ContinuousCommands(policy, blocksWorkPackage: false);
+        var continuous = ContinuousCommands(
+            policy,
+            blocksWorkPackage: false,
+            omitBroadFrontendTests: frontendTouched);
 
         var selectedTests = level == TestExecutionLevels.Continuous
             ? new List<VerifyCommand>()
@@ -223,26 +230,41 @@ public static class TestSelectionPlanner
         VerifyPlan verifyPlan,
         IReadOnlyList<string> changedFiles,
         TestExecutionPolicy? policy,
-        IReadOnlyList<TestHubHistoryEntry> history)
+        IReadOnlyList<TestHubHistoryEntry> history,
+        VerifyCommand? frontendWorkPackage = null)
     {
         var map = new Dictionary<string, CandidateBuilder>(StringComparer.OrdinalIgnoreCase);
+        frontendWorkPackage ??= FrontendWorkPackagePlanner.Plan(repositoryPath, changedFiles);
+        var omitBroadFrontendTests = FrontendWorkPackagePlanner.TouchesFrontend(changedFiles);
 
         // Build a safe inventory first. Deterministic matching and the optional
         // adviser may select from this inventory, but neither may invent a shell
         // command. Candidates without reasons remain unselected unless the LLM
         // explicitly adds their stable id.
-        foreach (var command in verifyPlan.Commands.Where(command => command.Kind == VerifyCommandKind.Test))
+        foreach (var command in verifyPlan.Commands.Where(command =>
+                     command.Kind == VerifyCommandKind.Test
+                     && (!omitBroadFrontendTests
+                         || !FrontendWorkPackagePlanner.IsBroadFrontendTest(command))))
             Add(map, command);
 
         foreach (var command in verifyPlan.Commands.Where(command =>
                      command.Kind == VerifyCommandKind.Test
-                     && command.Ecosystem == VerifyEcosystem.Node))
+                     && command.Ecosystem == VerifyEcosystem.Node
+                     && (!omitBroadFrontendTests
+                         || !FrontendWorkPackagePlanner.IsBroadFrontendTest(command))))
         {
-            Add(map, command, string.IsNullOrEmpty(command.WorkingSubdir)
-                || PathMatches(changedFiles, command.WorkingSubdir)
-                    ? "diff touches this package/component"
-                    : null);
+            var replacedByFocusedAngularSlice = FrontendWorkPackagePlanner.TouchesFrontend(changedFiles)
+                && string.Equals(command.WorkingSubdir, "frontend", StringComparison.OrdinalIgnoreCase);
+            Add(map, command, replacedByFocusedAngularSlice
+                ? null
+                : (string.IsNullOrEmpty(command.WorkingSubdir)
+                    || PathMatches(changedFiles, command.WorkingSubdir))
+                        ? "diff touches this package/component"
+                        : null);
         }
+
+        if (frontendWorkPackage is not null)
+            Add(map, frontendWorkPackage, frontendWorkPackage.SelectionReason);
 
         foreach (var candidate in DotNetTestInventory(repositoryPath, verifyPlan, changedFiles))
             Add(map, candidate.Command, candidate.Impacted
@@ -254,8 +276,14 @@ public static class TestSelectionPlanner
             var matched = rule.PathPrefixes.Any(prefix => PathMatches(changedFiles, prefix));
             foreach (var raw in rule.TestCommands.Where(value => !string.IsNullOrWhiteSpace(value)))
             {
-                Add(map, new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", raw.Trim()),
-                    matched ? rule.Reason ?? "configured impact rule matched the diff" : null);
+                var command = new VerifyCommand(
+                    VerifyEcosystem.Custom, VerifyCommandKind.Test, "", raw.Trim());
+                if (!omitBroadFrontendTests
+                    || !FrontendWorkPackagePlanner.IsBroadFrontendTest(command))
+                {
+                    Add(map, command,
+                        matched ? rule.Reason ?? "configured impact rule matched the diff" : null);
+                }
             }
         }
 
@@ -324,7 +352,11 @@ public static class TestSelectionPlanner
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (match.Success) return " " + match.Value.Trim();
         }
-        return string.Empty;
+        // Repository-wide routine gates exclude machine-bound and Windows-host
+        // process/timing families. Preserve an explicit project filter when one
+        // exists; otherwise apply the canonical exclusion to every generated
+        // work-package test-project command.
+        return " --filter Category!=MachineBound";
     }
 
     private static string? OwningProject(string root, string changedFile, IReadOnlyList<string> projects)
@@ -407,7 +439,8 @@ public static class TestSelectionPlanner
 
     private static IReadOnlyList<VerifyCommand> ContinuousCommands(
         TestExecutionPolicy? policy,
-        bool blocksWorkPackage)
+        bool blocksWorkPackage,
+        bool omitBroadFrontendTests)
         => (policy?.ContinuousCommands ?? [])
             .Where(command => !string.IsNullOrWhiteSpace(command))
             .Select(command => new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", command.Trim())
@@ -416,6 +449,8 @@ public static class TestSelectionPlanner
                 BlocksWorkPackage = blocksWorkPackage,
                 SelectionReason = "configured fixed continuous baseline",
             })
+            .Where(command => !omitBroadFrontendTests
+                || !FrontendWorkPackagePlanner.IsBroadFrontendTest(command))
             .ToList();
 
     private static IReadOnlyList<VerifyCommand> MergeTestCommands(IEnumerable<VerifyCommand> commands)

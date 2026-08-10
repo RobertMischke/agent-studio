@@ -52,6 +52,193 @@ public sealed class TestSelectionPlannerTests : IDisposable
     }
 
     [Fact]
+    public void WorkPackage_GeneratedDotNetCommandExcludesMachineBoundRunnerCancellationFamilyByDefault()
+    {
+        Write("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        Write("tests/App.Tests/App.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>
+              <ItemGroup><ProjectReference Include="../../src/App/App.csproj" /></ItemGroup>
+            </Project>
+            """);
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.DotNet, VerifyCommandKind.Test, "", "dotnet test"),
+        ], VerifyPlan.SourceAutoDiscovery);
+
+        var result = TestSelectionPlanner.Plan(
+            _root, verify, ["src/App/Service.cs"], policy: null,
+            TaskStates.Completed, TestExecutionLevels.WorkPackage);
+
+        Assert.Contains(result.Commands, command =>
+            command.Command ==
+            "dotnet test \"tests/App.Tests/App.Tests.csproj\" --filter Category!=MachineBound");
+        Assert.DoesNotContain(result.Commands, command => command.Command == "dotnet test");
+    }
+
+    [Fact]
+    public void WorkPackage_FrontendDiffSelectsTouchedFolderAndCollisionHotspotsWithoutFullSuite()
+    {
+        Write("frontend/package.json", """
+            {
+              "scripts": {
+                "test": "ng test",
+                "test:ci": "ng test frontend --watch=false --progress=false"
+              }
+            }
+            """);
+        Write("frontend/src/app/app.spec.ts", "// app barrel collision probe");
+        Write("frontend/src/app/features/studio-shell/studio-shell.component.spec.ts", "// shell collision probe");
+        Write("frontend/src/app/features/task-detail/task-detail.spec.ts", "// task-detail barrel probe");
+        Write("frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts", "// changed");
+        Write("frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.spec.ts", "// touched spec");
+        Write("frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.model.spec.ts", "// touched spec");
+        Write("frontend/src/app/features/project-detail/components/unrelated/unrelated.component.spec.ts", "// omitted");
+        var fullDotNet = "dotnet test --filter Category!=MachineBound";
+        var fullFrontend = "npm run test:ci";
+        var profileFullFrontend = "npm --prefix frontend run test:ci";
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.DotNet, VerifyCommandKind.Build, "", "dotnet build"),
+            new(VerifyEcosystem.DotNet, VerifyCommandKind.Test, "", fullDotNet),
+            new(VerifyEcosystem.Node, VerifyCommandKind.Test, "frontend", fullFrontend),
+            new(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", profileFullFrontend),
+        ], VerifyPlan.SourceBuildProfile);
+
+        var result = TestSelectionPlanner.Plan(
+            _root,
+            verify,
+            ["frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts"],
+            new TestExecutionPolicy
+            {
+                ContinuousCommands = [profileFullFrontend, "test-smoke"],
+                ImpactRules =
+                [
+                    new TestImpactRule
+                    {
+                        PathPrefixes = ["frontend/"],
+                        TestCommands = [profileFullFrontend],
+                        Reason = "frontend impact",
+                    },
+                ],
+            },
+            TaskStates.Completed,
+            TestExecutionLevels.WorkPackage);
+
+        var frontend = Assert.Single(result.Commands, command =>
+            command.Ecosystem == VerifyEcosystem.Node && command.Kind == VerifyCommandKind.Test);
+        Assert.Equal("frontend", frontend.WorkingSubdir);
+        Assert.Equal(TestExecutionLevels.WorkPackage, frontend.TestScope);
+        Assert.True(frontend.BlocksWorkPackage);
+        Assert.Contains("project-git-panel/*.spec.ts", frontend.Command);
+        Assert.Contains("src/app/app.spec.ts", frontend.Command);
+        Assert.Contains("studio-shell.component.spec.ts", frontend.Command);
+        Assert.Contains("features/task-detail/task-detail.spec.ts", frontend.Command);
+        Assert.DoesNotContain("unrelated.component.spec.ts", frontend.Command);
+        Assert.DoesNotContain(result.Commands, command => command.Command == fullFrontend);
+        Assert.DoesNotContain(result.Commands, command => command.Command == profileFullFrontend);
+        Assert.DoesNotContain(result.Commands, command => command.Command == fullDotNet);
+        Assert.Contains(result.Commands, command => command.Command == "test-smoke");
+        Assert.DoesNotContain(result.Audit.Candidates,
+            candidate => candidate.Command.Command == fullFrontend
+                || candidate.Command.Command == profileFullFrontend);
+        Assert.Contains(result.Audit.OmittedTestCommands, command => command.Contains(fullFrontend));
+        Assert.Contains(result.Audit.OmittedTestCommands, command => command.Contains(profileFullFrontend));
+        Assert.Contains(fullDotNet, result.Audit.OmittedTestCommands);
+        Assert.False(result.Audit.FullSuiteRan);
+    }
+
+    [Fact]
+    public void WorkPackage_NonFrontendDiffDoesNotAddFrontendCollisionSet()
+    {
+        Write("frontend/package.json", """
+            { "scripts": { "test:ci": "ng test frontend --watch=false --progress=false" } }
+            """);
+        Write("frontend/src/app/app.spec.ts", "// collision probe");
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.Node, VerifyCommandKind.Test, "frontend", "npm run test:ci"),
+        ], VerifyPlan.SourceBuildProfile);
+
+        var result = TestSelectionPlanner.Plan(
+            _root, verify, ["backend/Features/Pipeline/Worker.cs"], policy: null,
+            TaskStates.Completed, TestExecutionLevels.WorkPackage);
+
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Audit.SelectedCommands);
+    }
+
+    [Theory]
+    [InlineData(
+        "frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts",
+        "src/app/features/project-detail/components/project-git-panel/*.spec.ts")]
+    [InlineData(
+        "frontend/src/app/features/task-detail/components/concept-dossier-notice/concept-dossier-notice.component.ts",
+        "src/app/features/task-detail/components/concept-dossier-notice/*.spec.ts")]
+    [InlineData(
+        "frontend/src/app/features/project-detail/components/workbench-overview/workbench-overview.component.ts",
+        "src/app/features/project-detail/components/workbench-overview/*.spec.ts")]
+    public void PromotionIncidentRetro_SelectsEachFailingComponentFolder(
+        string changedPath,
+        string expectedInclude)
+    {
+        Write("frontend/package.json", """
+            { "scripts": { "test:ci": "ng test frontend --watch=false --progress=false" } }
+            """);
+        Write("frontend/src/app/app.spec.ts", "// app barrel collision probe");
+        Write("frontend/src/app/features/studio-shell/studio-shell.component.spec.ts", "// shell collision probe");
+        Write("frontend/src/app/features/task-detail/task-detail.spec.ts", "// task-detail barrel probe");
+        var componentSpec = expectedInclude.Replace("/*.spec.ts", "/fixture.component.spec.ts");
+        Write("frontend/" + componentSpec, "// affected folder spec");
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.Node, VerifyCommandKind.Test, "frontend", "npm run test:ci"),
+        ], VerifyPlan.SourceBuildProfile);
+
+        var result = TestSelectionPlanner.Plan(
+            _root, verify, [changedPath], policy: null,
+            TaskStates.Completed, TestExecutionLevels.WorkPackage);
+
+        var command = Assert.Single(result.Commands);
+        Assert.Contains(expectedInclude, command.Command);
+        Assert.Contains("src/app/app.spec.ts", command.Command);
+        Assert.Contains("studio-shell.component.spec.ts", command.Command);
+        Assert.Contains("features/task-detail/task-detail.spec.ts", command.Command);
+    }
+
+    [Fact]
+    public void PromotionIncidentRetro_StudioShellCycleSelectsTheCompleteHistoricalWorkPackage()
+    {
+        Write("frontend/package.json", """
+            { "scripts": { "test:ci": "ng test frontend --watch=false --progress=false" } }
+            """);
+        Write("frontend/src/app/app.spec.ts", "// app barrel collision probe");
+        Write("frontend/src/app/features/studio-shell/studio-shell.component.spec.ts", "// shell collision probe");
+        Write("frontend/src/app/features/task-detail/task-detail.spec.ts", "// task-detail barrel probe");
+        Write("frontend/src/app/features/studio-shell/services/studio-route.spec.ts", "// touched service spec");
+        Write("frontend/src/app/features/task-detail/components/concept-dossier-notice/concept-dossier-notice.component.spec.ts", "// touched component spec");
+        Write("frontend/src/app/services/project-identity.util.spec.ts", "// touched shared-service folder spec");
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.Node, VerifyCommandKind.Test, "frontend", "npm run test:ci"),
+        ], VerifyPlan.SourceBuildProfile);
+
+        var result = TestSelectionPlanner.Plan(
+            _root,
+            verify,
+            [
+                "frontend/src/app/features/studio-shell/services/studio-route.ts",
+                "frontend/src/app/features/task-detail/components/concept-dossier-notice/concept-dossier-notice.component.ts",
+                "frontend/src/app/services/studio-project-slug.util.ts",
+            ],
+            policy: null,
+            TaskStates.Completed,
+            TestExecutionLevels.WorkPackage);
+
+        var command = Assert.Single(result.Commands);
+        Assert.Contains("src/app/features/studio-shell/services/*.spec.ts", command.Command);
+        Assert.Contains("src/app/features/task-detail/components/concept-dossier-notice/*.spec.ts", command.Command);
+        Assert.Contains("src/app/services/*.spec.ts", command.Command);
+        Assert.Contains("src/app/features/studio-shell/studio-shell.component.spec.ts", command.Command);
+        Assert.Contains("src/app/features/task-detail/task-detail.spec.ts", command.Command);
+    }
+
+    [Fact]
     public void TestHubHistory_SelectsOnlyACommandFromTheSafeInventory()
     {
         var historyDir = Path.Combine(_root, ".test-hub");
@@ -258,6 +445,48 @@ public sealed class PreMainTestGateTests
         Assert.Equal(BuildTestGateVerdict.Fail, result.Verdict);
         Assert.Equal(BuildTestGateFailureKind.Code, result.FailureKind);
         Assert.Contains("mandatory full-suite evidence is missing", result.Reason);
+    }
+
+    [Fact]
+    public async Task PreDevelopRunAsync_FrontendDiffForcesExactBlockingWorkPackage()
+    {
+        var runner = new CapturingGateRunner();
+        var gate = new PreDevelopBuildGate(runner);
+        var changedFiles = new[]
+        {
+            "frontend/src/app/features/project-detail/components/workbench-overview/workbench-overview.component.ts",
+        };
+
+        await gate.RunAsync(
+            new BuildTestGateRequest("/repo", "abc", "develop"),
+            changedFiles,
+            new BuildProfile { BuildCmds = ["build"] },
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+
+        Assert.NotNull(runner.Request);
+        Assert.True(runner.Request!.RequireExactSubject);
+        Assert.Equal(TestExecutionLevels.WorkPackage, runner.Request.RequiredTestLevel);
+        Assert.Equal(changedFiles, runner.ChangedFiles);
+        Assert.Equal(PostStepMode.Fail, runner.Mode);
+    }
+
+    [Fact]
+    public async Task PreDevelopRunAsync_NonFrontendDiffStaysBuildOnly()
+    {
+        var runner = new CapturingGateRunner();
+        var gate = new PreDevelopBuildGate(runner);
+        var changedFiles = new[] { "backend/Features/Pipeline/Worker.cs" };
+
+        await gate.RunAsync(
+            new BuildTestGateRequest("/repo", "abc", "develop"),
+            changedFiles,
+            new BuildProfile { BuildCmds = ["build"] },
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+
+        Assert.Equal(TestExecutionLevels.BuildOnly, runner.Request!.RequiredTestLevel);
+        Assert.Equal(changedFiles, runner.ChangedFiles);
     }
 
     private sealed class CapturingGateRunner : IBuildTestGateRunner

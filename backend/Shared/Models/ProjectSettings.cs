@@ -923,9 +923,9 @@ public static class TestExecutionLevels
     /// <summary>
     /// Compile evidence only: the derived build / lint commands run, every test
     /// command (including the continuous baseline) is deliberately left out.
-    /// This is the cheap stage the pre-develop merge gate uses - the full test
-    /// evidence for a card was already produced by the auto-review gate, so
-    /// re-running the suite on the merge result would only duplicate it.
+    /// This is the cheap stage the pre-develop merge gate keeps for non-frontend
+    /// deliveries. Frontend merge results use the bounded work-package level;
+    /// the full suite remains a promotion-only boundary.
     /// </summary>
     public const string BuildOnly = "build-only";
     public const string Continuous = "continuous";

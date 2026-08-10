@@ -1257,6 +1257,40 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_DevelopTarget_FrontendDiffRunsWorkPackageAgainstExactChangedFiles()
+    {
+        var repo = SeedRepo("develop-gate-frontend-work-package");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/61-front");
+        var component = Path.Combine(
+            repo, "frontend", "src", "app", "features", "project-detail", "components",
+            "project-git-panel", "project-git-panel.component.ts");
+        Directory.CreateDirectory(Path.GetDirectoryName(component)!);
+        File.WriteAllText(component, "export const changed = true;");
+        Commit(repo, "feat: change frontend component");
+        RunGit(repo, "checkout -q develop");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok, 0, 20, "", "verify gate passed (build-profile)", true, true));
+        var jobFolder = BeginRun(log, repo, jobId: "61-front");
+        var runner = new MergeIntoDevelopRunner(
+            git, log, NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preDevelopBuildGate: new PreDevelopBuildGate(gateRunner),
+            preDevelopTimeout: TimeSpan.FromSeconds(30));
+
+        var outcome = await runner.RunAsync(
+            "Fixture", "61-front", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Equal(TestExecutionLevels.WorkPackage, gateRunner.Request!.RequiredTestLevel);
+        Assert.Equal(
+            ["frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts"],
+            gateRunner.ChangedFiles);
+    }
+
+    [Fact]
     public async Task RunAsync_DevelopTarget_BuildGateRunsBuildCommandsWithoutTheSuite()
     {
         // Build-only stage against the REAL gate runner: the declared build
@@ -1491,6 +1525,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
 
         public int Invocations { get; private set; }
         public BuildTestGateRequest? Request { get; private set; }
+        public IReadOnlyList<string>? ChangedFiles { get; private set; }
 
         public Task<BuildTestGateResult> RunAsync(
             BuildTestGateRequest request,
@@ -1502,6 +1537,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         {
             Invocations++;
             Request = request;
+            ChangedFiles = changedFiles;
             _duringRun?.Invoke();
             return Task.FromResult(_result with
             {
