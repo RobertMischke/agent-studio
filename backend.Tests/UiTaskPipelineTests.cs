@@ -49,11 +49,14 @@ public sealed class UiTaskPipelineTests : IDisposable
     public void Catalogue_UiPipeline_HasMandatoryDependentIterationSteps()
     {
         var pipeline = PipelineCatalogue.UiIteration;
+        var dossier = pipeline.Post.Single(step => step.Id == PipelineCatalogue.DossierMaintenanceStepId);
         var artifact = pipeline.Post.Single(step => step.Id == PipelineCatalogue.UiIterationArtifactStepId);
         var review = pipeline.Post.Single(step => step.Id == PipelineCatalogue.UiHumanReviewGateStepId);
 
         Assert.Equal(PipelineCatalogue.UiPipelineId, pipeline.Id);
-        Assert.Contains(PipelineCatalogue.CoreAgentRunStepId, artifact.DependsOn);
+        Assert.Contains(PipelineCatalogue.CoreAgentRunStepId, dossier.DependsOn);
+        Assert.Contains(PipelineCatalogue.DossierMaintenanceStepId, artifact.DependsOn);
+        Assert.False(PipelineStepConfigResolver.CanDisable(dossier));
         Assert.Contains(PipelineCatalogue.UiIterationArtifactStepId, review.DependsOn);
         Assert.False(PipelineStepConfigResolver.CanDisable(artifact));
         Assert.False(PipelineStepConfigResolver.CanDisable(review));

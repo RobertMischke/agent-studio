@@ -267,7 +267,9 @@ public static class ConceptWorkbenchContract
         return reader.ReadToEnd()
             .Replace("{{title}}", title, StringComparison.Ordinal)
             .Replace("{{summary}}", summary, StringComparison.Ordinal)
-            .Replace("{{pattern}}", pattern, StringComparison.Ordinal);
+            .Replace("{{pattern}}", pattern, StringComparison.Ordinal)
+            .Replace("{{status}}", WebUtility.HtmlEncode(descriptor.Status), StringComparison.Ordinal)
+            .Replace("{{phase}}", WebUtility.HtmlEncode(descriptor.Phase), StringComparison.Ordinal);
     }
 
     private static bool HasSection(string html, string attribute, string section) =>

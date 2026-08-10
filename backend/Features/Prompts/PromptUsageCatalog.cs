@@ -85,6 +85,11 @@ internal static class PromptUsageCatalog
         {
             new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Docs-only Workbench framing injected for concept mode."),
         },
+        ["mode-framing-dossier-maintenance.md"] = new[]
+        {
+            new PromptUsageRef("ProjectRunner", "RenderPrompt", "Append-only Dossier delivery contract injected for referenced cards."),
+            new PromptUsageRef("RuntimePromptService", "RenderDossierMaintenanceFraming", "Fills the stable card key and resolved Dossier targets."),
+        },
         ["mode-framing-web.md"] = new[]
         {
             new PromptUsageRef("RuntimePromptService", "RenderModeFraming", "Web-access framing injected via {{mode_framing}}."),

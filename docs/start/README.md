@@ -39,6 +39,7 @@ its path and format only change together with the code that reads it.
 | [`app/schemas/`](../app/schemas/README.md) | JSON schemas for wire and disk shapes (validated by the backend). |
 | `app/help/` | Short Markdown help bodies served by the app next to non-obvious UI surfaces (`GET /api/concept-docs/{topic}`). |
 | `app/config/` | Wiki configuration: the curated home (`home.json`) and saved category/document order (`wiki-order.json`). |
+| [`app/templates/`](../app/templates/article-document-v2.html) | Embedded document templates consumed together with their backend rendering contracts. |
 
 **Rule:** `app/` = Code-Vertrag — Pfad und Format nur zusammen mit Code ändern.
 A guard test (`WikiPathCentralizationGuardTests`) keeps every hardcoded `docs/`
@@ -78,7 +79,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Workbench](../operations/installer-story/index.html) |
 | Global Orchestrator Watcher decision dossier: triggers, recovery authority, Activity visibility, model economy, and observe-first slices (AGT-2557) | [decision dossier](../operations/orchestrator-waechter/index.html) |
 | Public demo instance decision dossier: pinned content, Dossier lifecycle gallery, execution denial, security, hosting, reset operations, and slices (AGT-2582) | [decision dossier](../operations/demo-instanz/index.html) |
-| Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and five follow-up slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
+| Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and six linked delivery slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
 | Admin surface design guideline: flat composition, compact disclosure, one stream grid, light/dark Activity reference, and incremental adoption (AGT-2583) | [decision dossier](../operations/admin-design-guideline/index.html) |
 | Naming the living decision-to-documentation artifact: weighted comparison, Dossier recommendation, Living Dossier runner-up, and rename consequence chains (AGT-2584) | [decision dossier](../operations/living-document-naming/index.html) |
 | Missing generated status.md on Concept and Planning cards: scaffold inventory, root-cause chain, and repair decision (AGT-2555) | [decision dossier](../operations/statusmd-konzept-karten/index.html) |
