@@ -197,7 +197,7 @@
 .orch-feed__group {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-1);
+  gap: 0;
 }
 .orch-feed__group-head {
   position: sticky;
