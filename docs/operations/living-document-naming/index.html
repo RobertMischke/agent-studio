@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Naming the Living Document | Decision Dossier</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --surface-1: #fcfcfb;
+      --surface-2: #f2f1ee;
+      --surface-3: #e9e8e3;
+      --ink-1: #0b0b0b;
+      --ink-2: #52514e;
+      --ink-3: #77766f;
+      --line: #d8d6cf;
+      --blue: #2a78d6;
+      --blue-soft: #eaf1fb;
+      --green: #087b43;
+      --green-soft: #e8f4ec;
+      --amber: #8a6200;
+      --amber-soft: #f8f0dd;
+      --red: #b73535;
+      --red-soft: #fbecec;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --surface-1: #1a1a19;
+        --surface-2: #232322;
+        --surface-3: #2c2c2a;
+        --ink-1: #ffffff;
+        --ink-2: #c3c2b7;
+        --ink-3: #97968f;
+        --line: #3d3d3a;
+        --blue: #68a4ea;
+        --blue-soft: #1e2a3a;
+        --green: #66c88f;
+        --green-soft: #1f3326;
+        --amber: #d8aa47;
+        --amber-soft: #36301d;
+        --red: #ec8585;
+        --red-soft: #3a2323;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      padding: 0 0 80px;
+      background: var(--surface-1);
+      color: var(--ink-1);
+      font: 16px/1.62 system-ui, "Segoe UI", sans-serif;
+    }
+    main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+    header.page {
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      padding: 44px 0 28px;
+    }
+    .kicker {
+      margin: 0 0 10px;
+      color: var(--ink-3);
+      font-size: 13px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1 { max-width: 780px; margin: 0 0 12px; font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.08; letter-spacing: -.035em; }
+    h2 { margin: 0 0 8px; font-size: 1.55rem; line-height: 1.25; }
+    h3 { margin: 0 0 5px; font-size: 1.05rem; }
+    h4 { margin: 0 0 5px; font-size: .95rem; }
+    p { max-width: 78ch; }
+    p:first-child { margin-top: 0; }
+    p:last-child { margin-bottom: 0; }
+    .lede { max-width: 69ch; margin: 0; color: var(--ink-2); font-size: 1.12rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .pill, .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 27px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-2);
+      padding: 3px 10px;
+      color: var(--ink-2);
+      font: 700 .72rem/1.2 ui-monospace, Consolas, monospace;
+    }
+    .status::before { width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--amber); content: ""; }
+    nav.toc {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 22px 0 36px;
+    }
+    nav.toc a {
+      min-height: 68px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-2);
+      padding: 12px;
+      color: var(--ink-1);
+      text-decoration: none;
+    }
+    nav.toc span { display: block; color: var(--ink-3); font: 700 .68rem/1.2 ui-monospace, Consolas, monospace; }
+    nav.toc b { display: block; margin-top: 4px; font-size: .88rem; }
+    section.report-section { margin-top: 52px; scroll-margin-top: 20px; }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
+      gap: 30px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+    .section-head p { margin: 0; color: var(--ink-2); }
+    .section-kicker { display: block; margin-bottom: 6px; color: var(--ink-3); font: 700 .73rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .verdict-grid, .grid-2, .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .panel, .callout, .decision-option {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-2);
+      padding: 18px 20px;
+    }
+    .panel.primary { background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 34%, var(--line)); }
+    .panel.runner { background: var(--surface-2); }
+    .label { display: block; margin-bottom: 10px; color: var(--ink-3); font: 700 .7rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .verdict-name { margin: 0 0 5px; font-size: 1.35rem; }
+    .score-large { color: var(--blue); font: 750 1.7rem/1 ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    .callout { margin: 18px 0; }
+    .callout.recommend { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 34%, var(--line)); }
+    .callout.caution { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 34%, var(--line)); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .lifecycle {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 18px 0;
+    }
+    .stage { position: relative; min-height: 94px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 13px; }
+    .stage + .stage::before { position: absolute; top: 42px; left: -9px; width: 9px; border-top: 1px solid var(--ink-3); content: ""; }
+    .stage b { display: block; margin-bottom: 4px; }
+    .stage span { display: block; color: var(--ink-2); font-size: .84rem; }
+    .table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+    table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+    caption { padding: 12px 14px; color: var(--ink-2); text-align: left; font-size: .81rem; }
+    th, td { border-top: 1px solid var(--line); padding: 9px 11px; text-align: left; vertical-align: top; }
+    thead th { border-top: 0; color: var(--ink-3); font: 750 .7rem/1.35 ui-monospace, Consolas, monospace; letter-spacing: .04em; text-transform: uppercase; }
+    tbody th { min-width: 132px; font-weight: 720; }
+    .number { text-align: right; font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    .total { color: var(--ink-1); font-weight: 800; }
+    tr.recommended { background: var(--green-soft); }
+    tr.runner-up { background: var(--blue-soft); }
+    .verdict { min-width: 330px; color: var(--ink-2); }
+    .criteria-table th:first-child { min-width: 165px; }
+    .criteria-table td:nth-child(2) { width: 70px; }
+    .legend { margin: 10px 0 0; color: var(--ink-2); font-size: .83rem; }
+    code { border-radius: 4px; background: var(--surface-3); padding: 1px 5px; font: .88em/1.45 ui-monospace, Consolas, monospace; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .shortlist article { min-height: 175px; }
+    .source-list { display: grid; gap: 9px; padding: 0; list-style: none; }
+    .source-list li { margin: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 13px 15px; }
+    .source-list strong { display: block; margin-bottom: 3px; }
+    .chain { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+    .chain-step { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 13px 15px; }
+    .chain-step b { display: block; color: var(--ink-1); }
+    .chain-step p { margin: 3px 0 0; color: var(--ink-2); }
+    .decision-option { min-height: 208px; }
+    .decision-option.recommended { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 34%, var(--line)); }
+    .decision-option h3 { font-size: 1.2rem; }
+    .decision-option ul { margin-bottom: 0; }
+    .decision-note { margin-top: 14px; color: var(--ink-2); font-size: .87rem; }
+    footer { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--ink-3); font-size: .82rem; }
+    @media (max-width: 850px) {
+      nav.toc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .section-head, .verdict-grid, .grid-2, .decision-grid { grid-template-columns: 1fr; }
+      .lifecycle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stage:nth-child(3)::before { display: none; }
+    }
+    @media (max-width: 560px) {
+      main { width: min(100% - 24px, 1120px); }
+      nav.toc, .lifecycle { grid-template-columns: 1fr; }
+      .stage + .stage::before { display: none; }
+      .chain { grid-template-columns: 1fr; }
+      h1 { font-size: 2rem; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: #fff; }
+      main { width: 100%; }
+      nav.toc { display: none; }
+      .panel, .callout, .table-wrap, .decision-option, .source-list li { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="page">
+    <p class="kicker">AGT-2584 · Decision dossier · 10 August 2026</p>
+    <h1>Naming the Living Document</h1>
+    <p class="lede">The artifact now spans exploration, an operator decision, live implementation tracking, and permanent documentation. This dossier asks whether that broader lifecycle justifies replacing the newly chosen public name, <strong>Dossier</strong>, before the held rename card runs.</p>
+    <div class="meta" aria-label="Dossier state">
+      <span class="status">Decision pending</span>
+      <span class="pill">Analysis only</span>
+      <span class="pill">21 candidates</span>
+      <span class="pill">Code identifiers remain workbench*</span>
+    </div>
+  </header>
+
+  <div class="verdict-grid" aria-label="Recommendation summary">
+    <article class="panel primary">
+      <span class="label">Recommendation</span>
+      <h2 class="verdict-name">Keep Dossier</h2>
+      <p><span class="score-large">90.4</span> / 100</p>
+      <p>A dossier can grow as evidence, decisions, delivery facts, and durable knowledge accumulate. The live behavior needs one explanatory sentence, not another product rename.</p>
+    </article>
+    <article class="panel runner">
+      <span class="label">Runner-up if behavior must be in the name</span>
+      <h2 class="verdict-name">Living Spec</h2>
+      <p><span class="score-large">71.2</span> / 100</p>
+      <p>It makes task-driven updates explicit, but <em>spec</em> overstates prescription during exploration, understates the final documentation role, and collides with test and specification language.</p>
+    </article>
+  </div>
+
+  <nav class="toc" aria-label="Dossier sections">
+    <a href="#problem"><span>01</span><b>Naming problem</b></a>
+    <a href="#criteria"><span>02</span><b>Weighted criteria</b></a>
+    <a href="#alternatives"><span>03</span><b>Candidate space</b></a>
+    <a href="#recommendation"><span>04</span><b>Recommendation</b></a>
+    <a href="#evidence"><span>05</span><b>Adjacent practice</b></a>
+    <a href="#consequences"><span>06</span><b>Consequence chains</b></a>
+    <a href="#open-decisions"><span>07</span><b>Decision request</b></a>
+    <a href="#sources"><span>08</span><b>Sources and bounds</b></a>
+  </nav>
+
+  <section id="problem" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">01 · Naming problem</span>
+        <h2>One Artifact, Four Lifecycle Jobs</h2>
+      </div>
+      <p>The noun must describe the same artifact before and after the operator decision. A name that fits only the center of the lifecycle is incomplete.</p>
+    </div>
+
+    <div class="lifecycle" aria-label="Artifact lifecycle">
+      <article class="stage"><b>Explore</b><span>Evidence, alternatives, uncertainty, and problem framing.</span></article>
+      <article class="stage"><b>Decide</b><span>Recommendation, operator choices, receipts, and consequences.</span></article>
+      <article class="stage"><b>Deliver</b><span>Referenced task lanes, refresh cards, and pipeline-driven updates.</span></article>
+      <article class="stage"><b>Document</b><span>Permanent knowledge after delivery, preserved with lifecycle history.</span></article>
+    </div>
+
+    <div class="callout caution">
+      <strong>The rename window is narrow but real</strong>
+      <p><code>Workbench</code> was replaced by operator decision with <code>Dossier</code> on 9 August. AGT-2539 contains the rename machinery but is held for this analysis. AGT-2580 adds task-driven updates, and AGT-2537 establishes the documented lifecycle stage. The technical sweep can be redirected cheaply; a second public vocabulary change still spends attention, documentation coherence, and muscle memory.</p>
+    </div>
+
+    <p><strong>Fixed boundary:</strong> this is a public English label only. Identifiers, types, routes, filenames, and schema terms remain <code>workbench*</code>, including <code>workbench.json</code>. Stable document keys such as <code>AGT-W4</code> also remain unchanged.</p>
+  </section>
+
+  <section id="criteria" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">02 · Weighted criteria</span>
+        <h2>Meaning Carries More Weight Than Novelty</h2>
+      </div>
+      <p>Scores use a 1 to 5 judgment scale. Weighted totals are comparative decision aids, not measured product telemetry.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="criteria-table">
+        <caption>Weights sum to 100 percent. A higher score is better.</caption>
+        <thead><tr><th>Criterion</th><th class="number">Weight</th><th>Why it matters</th><th>What earns a 5</th></tr></thead>
+        <tbody>
+          <tr><th>Lifecycle fit (L)</th><td class="number">24%</td><td>The artifact begins before a decision and survives after implementation.</td><td>The noun remains truthful through exploration, decision, delivery tracking, and durable documentation.</td></tr>
+          <tr><th>Truth of behavior (A)</th><td class="number">18%</td><td>Referenced tasks and pipeline steps update the artifact. “Living” is implemented behavior, not aspiration.</td><td>The name naturally suggests current, revisable knowledge without implying uncontrolled prose churn.</td></tr>
+          <tr><th>UI brevity (UI)</th><td class="number">12%</td><td>The label appears in navigation, chips, headings, empty states, and conversation context.</td><td>Short singular and plural forms work without abbreviations; the separate key remains compact.</td></tr>
+          <tr><th>Open-source register (OSS)</th><td class="number">12%</td><td>The project is public and English. The name must travel beyond one company’s internal process.</td><td>Clear international software-project language with no false legal, consulting, or enterprise promise.</td></tr>
+          <tr><th>Collision resistance (C)</th><td class="number">12%</td><td><em>Spec</em>, <em>docs</em>, and <em>initiative</em> already carry strong meanings in repositories and this product.</td><td>Search, speech, routes, and mental models distinguish the artifact from tests/specs, Wiki docs, tasks, and Epics.</td></tr>
+          <tr><th>German operator ergonomics (DE)</th><td class="number">8%</td><td>The English label is spoken daily by a German operator.</td><td>Easy pronunciation, inflection, and plural use in mixed German and English conversation.</td></tr>
+          <tr><th>Rename attention cost (R)</th><td class="number">14%</td><td>AGT-2539 makes file and string changes cheap, but public vocabulary churn is not automated.</td><td>No second rename, no retitling of downstream cards, and no new muscle-memory reset.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="alternatives" class="report-section" data-concept-section="alternatives">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">03 · Alternatives</span>
+        <h2>Candidate Space and Weighted Verdicts</h2>
+      </div>
+      <p>Weak candidates are retained only long enough to show why they fail. The shortlist is Dossier, Living Spec, and Living Doc; only the first two warrant an operator choice.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <caption>Scores: 1 weak, 3 mixed, 5 strong. Total = weighted score out of 100.</caption>
+        <thead>
+          <tr><th>Candidate</th><th class="number">L</th><th class="number">A</th><th class="number">UI</th><th class="number">OSS</th><th class="number">C</th><th class="number">DE</th><th class="number">R</th><th class="number">Total</th><th>Verdict</th></tr>
+        </thead>
+        <tbody>
+          <tr class="recommended"><th>Dossier</th><td class="number">5</td><td class="number">3</td><td class="number">5</td><td class="number">4</td><td class="number">5</td><td class="number">5</td><td class="number">5</td><td class="number total">90.4</td><td class="verdict"><strong>Keep.</strong> A collected case record can grow; only the live behavior needs supporting copy.</td></tr>
+          <tr class="runner-up"><th>Living Spec</th><td class="number">4</td><td class="number">5</td><td class="number">4</td><td class="number">5</td><td class="number">2</td><td class="number">3</td><td class="number">1</td><td class="number total">71.2</td><td class="verdict"><strong>Runner-up.</strong> Makes automation explicit, but <em>spec</em> is too prescriptive and collides with test/spec language.</td></tr>
+          <tr><th>Living Doc</th><td class="number">5</td><td class="number">5</td><td class="number">3</td><td class="number">4</td><td class="number">1</td><td class="number">3</td><td class="number">1</td><td class="number total">68.8</td><td class="verdict"><strong>Discard.</strong> Broad and truthful, but too generic to distinguish a product surface from the Wiki and repository docs.</td></tr>
+          <tr><th>Journal</th><td class="number">3</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">3</td><td class="number">1</td><td class="number total">65.2</td><td class="verdict"><strong>Discard.</strong> Suggests chronological entries, not a curated decision and implementation surface.</td></tr>
+          <tr><th>Living Documentation</th><td class="number">5</td><td class="number">5</td><td class="number">1</td><td class="number">5</td><td class="number">1</td><td class="number">2</td><td class="number">1</td><td class="number total">64.8</td><td class="verdict"><strong>Use as a principle, not the label.</strong> Accurate literature term, poor chip and navigation noun.</td></tr>
+          <tr><th>Case File</th><td class="number">4</td><td class="number">3</td><td class="number">3</td><td class="number">3</td><td class="number">5</td><td class="number">3</td><td class="number">1</td><td class="number total">64.0</td><td class="verdict"><strong>Discard.</strong> Dossier with a stronger legal or investigative tone and worse daily speech.</td></tr>
+          <tr><th>Living Record</th><td class="number">4</td><td class="number">4</td><td class="number">3</td><td class="number">3</td><td class="number">4</td><td class="number">2</td><td class="number">1</td><td class="number total">63.6</td><td class="verdict"><strong>Discard.</strong> Avoids spec/doc collisions but sounds retrospective and unnatural in German daily use.</td></tr>
+          <tr><th>Project Book</th><td class="number">4</td><td class="number">3</td><td class="number">3</td><td class="number">3</td><td class="number">4</td><td class="number">3</td><td class="number">1</td><td class="number total">61.6</td><td class="verdict"><strong>Discard.</strong> Broad, but implies a handbook or long-form publication rather than a decision surface.</td></tr>
+          <tr><th>Logbook</th><td class="number">2</td><td class="number">3</td><td class="number">5</td><td class="number">3</td><td class="number">5</td><td class="number">4</td><td class="number">1</td><td class="number total">60.8</td><td class="verdict"><strong>Discard.</strong> Fits operations chronology, not alternatives, decisions, or normative implementation intent.</td></tr>
+          <tr><th>Playbook</th><td class="number">2</td><td class="number">3</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">1</td><td class="number total">58.4</td><td class="verdict"><strong>Discard.</strong> Promises a repeatable procedure; many dossiers describe a one-off product or architecture decision.</td></tr>
+          <tr><th>RFC</th><td class="number">2</td><td class="number">1</td><td class="number">5</td><td class="number">5</td><td class="number">4</td><td class="number">5</td><td class="number">1</td><td class="number total">57.6</td><td class="verdict"><strong>Discard.</strong> Excellent public register, but “request” expires at approval and published RFCs are immutable.</td></tr>
+          <tr><th>Brief</th><td class="number">3</td><td class="number">2</td><td class="number">5</td><td class="number">4</td><td class="number">2</td><td class="number">4</td><td class="number">1</td><td class="number total">57.2</td><td class="verdict"><strong>Discard.</strong> Clean and short, but describes the pre-decision package rather than the lasting artifact.</td></tr>
+          <tr><th>Workbook</th><td class="number">2</td><td class="number">4</td><td class="number">4</td><td class="number">3</td><td class="number">3</td><td class="number">4</td><td class="number">1</td><td class="number total">57.2</td><td class="verdict"><strong>Discard.</strong> Feels editable, but connotes exercises or spreadsheets and weakens the permanent-record role.</td></tr>
+          <tr><th>Design Doc</th><td class="number">3</td><td class="number">3</td><td class="number">3</td><td class="number">5</td><td class="number">2</td><td class="number">3</td><td class="number">1</td><td class="number total">56.8</td><td class="verdict"><strong>Discard.</strong> Familiar in software, but excludes operational, research, policy, and marketing dossiers.</td></tr>
+          <tr><th>Initiative</th><td class="number">3</td><td class="number">4</td><td class="number">4</td><td class="number">2</td><td class="number">1</td><td class="number">5</td><td class="number">1</td><td class="number total">56.4</td><td class="verdict"><strong>Discard.</strong> Names the work, not its document, and collides with the product’s Epic and task containers.</td></tr>
+          <tr><th>Charter</th><td class="number">2</td><td class="number">2</td><td class="number">5</td><td class="number">3</td><td class="number">4</td><td class="number">4</td><td class="number">1</td><td class="number total">54.8</td><td class="verdict"><strong>Discard.</strong> Authorizes scope and purpose at the start; it does not naturally become implementation evidence or final documentation.</td></tr>
+          <tr><th>Blueprint</th><td class="number">2</td><td class="number">2</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">1</td><td class="number total">54.8</td><td class="verdict"><strong>Discard.</strong> Suggests a settled future design and makes exploratory or retrospective dossiers sound over-specified.</td></tr>
+          <tr><th>Pitch</th><td class="number">1</td><td class="number">1</td><td class="number">5</td><td class="number">4</td><td class="number">4</td><td class="number">4</td><td class="number">1</td><td class="number total">48.8</td><td class="verdict"><strong>Discard.</strong> Strong for gaining commitment, then semantically finished once the work is selected.</td></tr>
+          <tr><th>ADR extension</th><td class="number">2</td><td class="number">2</td><td class="number">2</td><td class="number">4</td><td class="number">3</td><td class="number">3</td><td class="number">1</td><td class="number total">46.0</td><td class="verdict"><strong>Discard.</strong> Captures one architecture decision and its rationale; extension would overload an intentionally narrow record type.</td></tr>
+          <tr><th>Shape Up Pitch</th><td class="number">1</td><td class="number">1</td><td class="number">3</td><td class="number">4</td><td class="number">5</td><td class="number">3</td><td class="number">1</td><td class="number total">44.8</td><td class="verdict"><strong>Discard.</strong> Precise borrowed process language, but tied to shaping and betting rather than the whole lifecycle.</td></tr>
+          <tr><th>PR/FAQ</th><td class="number">1</td><td class="number">1</td><td class="number">2</td><td class="number">3</td><td class="number">4</td><td class="number">2</td><td class="number">1</td><td class="number total">36.0</td><td class="verdict"><strong>Discard.</strong> A customer-outcome framing template, not a general technical and operational knowledge object.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="legend">Weight order: lifecycle 24, alive behavior 18, UI brevity 12, open-source register 12, collision resistance 12, German ergonomics 8, rename attention cost 14.</p>
+
+    <div class="grid-2 shortlist" style="margin-top:18px">
+      <article class="panel">
+        <span class="label">Why Living Doc stops short</span>
+        <h3>Correct Category, Weak Product Noun</h3>
+        <p>It truthfully covers the lifecycle and behavior, but it gives up distinctiveness. “Open the Living Doc” does not tell the operator whether to open the Dossier surface, the Wiki, a Markdown page, or external documentation. The collision is structural, not cosmetic.</p>
+      </article>
+      <article class="panel">
+        <span class="label">Why Living Spec remains the runner-up</span>
+        <h3>Best Rename, Not Best Overall Name</h3>
+        <p>If the public noun must advertise task-driven freshness, Living Spec is the clearest compact option. Its cost is semantic: early exploration is not yet a specification, and a documented postmortem or operating record may never be one.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="recommendation" class="report-section" data-concept-section="recommendation">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">04 · Recommendation</span>
+        <h2>Keep Dossier and Explain the Living Behavior</h2>
+      </div>
+      <p>The second rename is not worth its attention cost. Dossier has a small discoverability gap, not a truth problem.</p>
+    </div>
+
+    <div class="callout recommend">
+      <strong>Explicit answer: no second rename</strong>
+      <p>A dossier that grows is not absurd. The word denotes a collected body of material about a subject; it does not imply a frozen snapshot. In this product, the dossier gains analysis, decision receipts, linked delivery state, and final documentation over time. That behavior stretches the name, but does not break it.</p>
+    </div>
+
+    <div class="grid-2">
+      <article class="panel">
+        <span class="label">Naming layer</span>
+        <h3>Dossier / Dossiers</h3>
+        <p>Short in navigation, distinctive beside Tasks, Epics, and Wiki, natural in English and German speech, and compatible with the stable <code>AGT-W4</code> key model.</p>
+      </article>
+      <article class="panel">
+        <span class="label">Behavioral explanation</span>
+        <h3>One Sentence Does the Missing Work</h3>
+        <p>Recommended public copy: “Dossiers bring analysis, decisions, delivery tracking, and durable documentation together, and stay current as linked work ships.”</p>
+      </article>
+    </div>
+
+    <p>The phrase <em>living dossier</em> may be used descriptively in long-form documentation, but it should not become a second official label or a longer navigation term. Product nouns need stability; behavior can be taught in copy.</p>
+  </section>
+
+  <section id="evidence" class="report-section" data-concept-section="evidence">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">05 · Evidence</span>
+        <h2>Adjacent Practices Validate Pieces, Not the Whole</h2>
+      </div>
+      <p>Established artifacts each optimize for a phase or knowledge shape. None of them combines all four jobs without borrowing or stretching its conventional meaning.</p>
+    </div>
+
+    <ul class="source-list">
+      <li><strong><a href="https://basecamp.com/shapeup/1.5-chapter-06">Shape Up pitch</a></strong>Basecamp defines a pitch around problem, appetite, solution, rabbit holes, and no-gos so a team can make an informed bet. That is an excellent model for the dossier’s shaping phase, but the pitch has done its naming job once the bet is made.</li>
+      <li><strong><a href="https://aws.amazon.com/blogs/smb/propelling-innovation-the-people-culture-and-process-imperatives/">Amazon PR/FAQ</a></strong>The Working Backwards practice begins with a future press release and customer FAQ to clarify a desired outcome. It is a framing format for a proposed product, not a durable implementation and operational record.</li>
+      <li><strong><a href="https://www.rfc-editor.org/series/rfc/">RFC processes</a></strong>Internet-Drafts evolve, but the RFC Editor states that published RFC contents do not change; updates and obsoletions are separate metadata or documents. The familiar label therefore points in the opposite direction from task-driven live updates after publication.</li>
+      <li><strong><a href="https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions">Architecture Decision Records</a></strong>Michael Nygard’s original form intentionally stores one architecturally significant decision in a short modular record. That narrowness is its strength and the reason an ADR extension is the wrong umbrella for non-architecture exploration and delivery tracking.</li>
+      <li><strong><a href="https://leanpub.com/livingdocumentation">Living Documentation</a></strong>Cyrille Martraire’s formulation spans goals, domain knowledge, architecture, design, process, and deployment through continuous investment in knowledge. It validates the product behavior, but “Living Documentation” is a discipline and category rather than a concise, collision-free UI noun.</li>
+    </ul>
+
+    <p>The transferable lesson is structural: borrow pitch-like problem framing, RFC-like public review, ADR-like decision receipts, and living-documentation freshness. Do not inherit any one culture’s name when its lifecycle boundary is narrower than the product’s.</p>
+  </section>
+
+  <section id="consequences" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">06 · Consequences</span>
+        <h2>One Existing Rename Card, Two Possible Wordings</h2>
+      </div>
+      <p>Either decision must reuse AGT-2539. Creating a second rename card or running Dossier and then Living Spec would duplicate the sweep and create avoidable churn.</p>
+    </div>
+
+    <div class="grid-2">
+      <article class="panel primary">
+        <span class="label">If the operator keeps Dossier</span>
+        <h3>Resume AGT-2539 as Authored</h3>
+        <ol>
+          <li>Replace the HOLD note with the final decision and resume AGT-2539 using <strong>Dossier / Dossiers</strong>.</li>
+          <li>Keep every <code>workbench*</code> identifier, schema name, path, and API route unchanged.</li>
+          <li>Use the AGT-2539 sweep once for UI strings and user-facing repository documentation.</li>
+          <li>Describe the living behavior in product and website copy rather than lengthening the label.</li>
+          <li>Keep AOW-13 and WEB-18 titled with <strong>Dossier</strong>; add “stays current as linked work ships” to their explanatory copy.</li>
+        </ol>
+      </article>
+      <article class="panel">
+        <span class="label">If the operator approves Living Spec</span>
+        <h3>Redirect AGT-2539 Before It Runs</h3>
+        <ol>
+          <li>Edit the existing AGT-2539 title and decision preface to <strong>Living Spec / Living Specs</strong>; do not create another rename card.</li>
+          <li>Keep every <code>workbench*</code> identifier, schema name, path, and API route unchanged.</li>
+          <li>Make its one sweep cover both remaining <strong>Workbench</strong> strings and any already-landed <strong>Dossier</strong> wording.</li>
+          <li>Explain that a Living Spec may begin as exploration and finish as documentation, since this is broader than conventional specification usage.</li>
+          <li>Retitle AOW-13 and WEB-18 from <strong>Dossier</strong> to <strong>Living Spec</strong> before their public copy ships.</li>
+        </ol>
+      </article>
+    </div>
+
+    <div class="chain" aria-label="Shared consequence chain">
+      <div class="chain-step"><b>Operator decision</b><p>Choose one public noun.</p></div>
+      <div class="chain-step"><b>AGT-2539</b><p>Remove HOLD, adjust wording if needed, run one sweep only.</p></div>
+      <div class="chain-step"><b>Studio docs and UI</b><p>Use the final singular and plural consistently; preserve workbench identifiers.</p></div>
+      <div class="chain-step"><b>AOW-13 and WEB-18</b><p>Align the website narrative before publication.</p></div>
+    </div>
+  </section>
+
+  <section id="open-decisions" class="report-section" data-concept-section="open-decisions" data-decision-id="public-name" data-decision-kind="single" data-decision-label="Final public artifact name">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">07 · Open decision</span>
+        <h2>Operator Decision Request</h2>
+      </div>
+      <p>Approve exactly one option. Both paths preserve code identifiers and execute the public rename machinery only once.</p>
+    </div>
+
+    <div class="decision-grid">
+      <article class="decision-option recommended" data-option-id="dossier" data-option-label="Keep Dossier">
+        <span class="label">Recommended</span>
+        <h3>Keep Dossier</h3>
+        <ul>
+          <li>Resume AGT-2539 with Dossier / Dossiers.</li>
+          <li>Teach the live lifecycle in descriptive copy.</li>
+          <li>Keep AOW-13 and WEB-18 wording.</li>
+          <li>Avoid a second vocabulary reset.</li>
+        </ul>
+      </article>
+      <article class="decision-option" data-option-id="living-spec" data-option-label="Approve Living Spec">
+        <span class="label">Runner-up</span>
+        <h3>Approve Living Spec</h3>
+        <ul>
+          <li>Redirect AGT-2539 before execution.</li>
+          <li>Sweep Workbench and Dossier wording together.</li>
+          <li>Retitle AOW-13 and WEB-18.</li>
+          <li>Accept spec/docs collision and lifecycle caveats.</li>
+        </ul>
+      </article>
+    </div>
+    <span data-comment="Optional rationale or wording constraints"></span>
+    <p class="decision-note"><strong>Decision boundary:</strong> this dossier does not authorize the rename, card edits, lane moves, or website changes. It prepares the wording for the operator’s sight review.</p>
+  </section>
+
+  <section id="sources" class="report-section">
+    <div class="section-head">
+      <div>
+        <span class="section-kicker">08 · Sources and bounds</span>
+        <h2>Repository Evidence and Analysis Limits</h2>
+      </div>
+      <p>The recommendation combines product-specific constraints with adjacent public practices. The numeric model makes judgment visible; it does not turn naming into an objective measurement.</p>
+    </div>
+    <div class="grid-2">
+      <article class="panel">
+        <h3>Binding Product Context</h3>
+        <ul>
+          <li>AGT-2539: held public rename; code identifiers remain <code>workbench*</code>.</li>
+          <li>AGT-2580: pipeline update step for task-referenced dossiers.</li>
+          <li>AGT-2537: documented lifecycle stage and completion behavior.</li>
+          <li><code>docs/operations/workbench-konzept/</code>: lifecycle, key, central-list, and website rationale.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>Deliberate Non-Actions</h3>
+        <ul>
+          <li>No UI, backend, pipeline, website, or prompt implementation.</li>
+          <li>No task creation, movement, rename, or reissue.</li>
+          <li>No change to AGT-2539, AOW-13, WEB-18, or their current lanes.</li>
+          <li>No change to schemas, routes, filenames, stable keys, or code identifiers.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <footer>Decision-ready analysis for AGT-2584. Status remains decision-pending until the operator selects the public name.</footer>
+</main>
+</body>
+</html>

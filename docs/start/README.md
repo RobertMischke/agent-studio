@@ -77,6 +77,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Workbench](../operations/installer-story/index.html) |
 | Global Orchestrator Watcher decision dossier: triggers, recovery authority, Activity visibility, model economy, and observe-first slices (AGT-2557) | [decision dossier](../operations/orchestrator-waechter/index.html) |
 | Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and five follow-up slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
+| Public name for the living document across exploration, decision, delivery tracking, and durable documentation (AGT-2584) | [decision dossier](../operations/living-document-naming/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |

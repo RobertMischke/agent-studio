@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "living-document-naming",
+  "title": "Naming the Living Document",
+  "summary": "Decision dossier for the public name of an artifact that spans exploration, decisions, task-driven implementation tracking, and permanent documentation. It evaluates 21 candidates against weighted lifecycle, behavior, UI, register, collision, operator, and rename-cost criteria; recommends keeping Dossier; and names Living Spec as the runner-up.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-10T01:32:03Z",
+  "sourceTaskKeys": ["AGT-2584"],
+  "relatedTaskKeys": ["AGT-2539", "AGT-2580", "AGT-2537"],
+  "implementationTasks": []
+}
