@@ -1926,6 +1926,30 @@
             repository-embedded flat storage, the failure matrix, the card projection, and source-needs-rebase recovery.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-09/10</td>
+          <td><code>AGT-2571</code><br><span class="small">three consecutive promotion runs exposed frontend spec drift<br>(fix cards <code>AGT-2554</code>, <code>AGT-2561</code>, <code>AGT-2570</code>)</span></td>
+          <td>
+            Three develop-to-main promotion attempts reached frontend unit tests and stopped on a different integration
+            regression each time: the project Git panel spec no longer matched its component contract, a task-detail to
+            studio-shell barrel import formed a runtime cycle, and the workbench overview live-event spec used a timing-sensitive
+            wait. Each failure required a new blocker card, delivery, acceptance, and promotion attempt.
+          </td>
+          <td>
+            The pre-develop integration boundary forced <code>build-only</code> and discarded the merge changed-file set.
+            AGT-2518 already supplied work-package selection, but the merge boundary could not activate it. The promotion
+            full suite was therefore the first combined revision that executed the affected component specs. Routine .NET
+            selection also needed the same <code>Category!=MachineBound</code> exclusion as the full gate to avoid replacing
+            frontend false negatives with Windows/process false positives.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the exact merge diff now selects a blocking Angular work package for
+            every <code>frontend/</code> delivery: specs in touched source folders plus fixed app, studio-shell, and task-detail
+            barrel collision probes. The generic frontend suite remains omitted and full stays promotion-only. The three
+            incident folders are pinned by a selector regression matrix. A missing merge diff fails closed; a red gate rolls
+            back the new merge and reaches <code>GateFailed</code> in Human Review without releasing a push.
+          </td>
+        </tr>
       </tbody>
     </table>
 

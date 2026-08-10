@@ -4,17 +4,19 @@ namespace AgentStudio.Pipeline;
 /// Build boundary in front of the integration branch. Where
 /// <see cref="PreMainTestGate"/> guards the release branch with the mandatory
 /// full suite BEFORE a fast-forward, this gate guards <c>develop</c> with the
-/// cheap compile stage AFTER the merge commit exists: the interesting subject is
+/// cheap staged verification AFTER the merge commit exists: the interesting subject is
 /// the MERGE RESULT (delivery + current integration tip), which no earlier gate
-/// has ever built. The full test evidence for the card itself was already
-/// produced by the auto-review gate, so this stage deliberately runs
-/// <see cref="TestExecutionLevels.BuildOnly"/> - build / lint commands, no test
-/// commands, no continuous baseline.
+/// has ever verified. Non-frontend deliveries keep the compile-only level.
+/// Deliveries whose exact merge diff touches <c>frontend/</c> run the bounded
+/// <see cref="TestExecutionLevels.WorkPackage"/> slice: touched-folder Angular
+/// specs plus the fixed studio-shell and task-detail barrel collision probes.
+/// The full suite remains exclusive to the promotion boundary.
 ///
 /// <para>
-/// Convention instead of a settings switch: the gate applies exactly when the
-/// project declares build commands in its <see cref="BuildProfile"/>
-/// (<see cref="AppliesTo"/>). A project without one merges exactly as before.
+/// Convention instead of a settings switch: the gate applies when the project
+/// declares build commands in its <see cref="BuildProfile"/>, or when an exact
+/// frontend diff provides an Angular work package (<see cref="AppliesTo"/>).
+/// A non-frontend project without a declared build command merges as before.
 /// The verification itself always runs against the exact merged SHA in an
 /// isolated worktree (<c>RequireExactSubject</c>), so the live checkout is never
 /// used as a command workspace.
@@ -27,23 +29,25 @@ public sealed class PreDevelopBuildGate
     public PreDevelopBuildGate(IBuildTestGateRunner runner) => _runner = runner;
 
     /// <summary>
-    /// True when the project's build profile yields build commands, i.e. there is
-    /// something deterministic to compile. Without one the merge stays ungated
-    /// (and the runner logs that it skipped the gate) rather than inventing a
-    /// build command for a repo whose layout we only guessed at.
+    /// True when the project's build profile yields build commands, or when the
+    /// exact merge diff touches <c>frontend/</c> and therefore has a convention-
+    /// derived Angular work package. A non-frontend project without a declared
+    /// build command stays ungated rather than receiving an invented command.
     /// </summary>
-    public static bool AppliesTo(BuildProfile? profile)
-        => VerifyCommandPlanner.HasProfileBuildCommands(profile);
+    public static bool AppliesTo(
+        BuildProfile? profile,
+        IReadOnlyList<string>? changedFiles = null)
+        => VerifyCommandPlanner.HasProfileBuildCommands(profile)
+            || FrontendWorkPackagePlanner.TouchesFrontend(changedFiles);
 
     /// <summary>
-    /// Builds <paramref name="request"/>'s exact subject. The test level is
-    /// overwritten with <see cref="TestExecutionLevels.BuildOnly"/> and the
-    /// subject is pinned, so neither caller input nor lane configuration can turn
-    /// this into a full suite (cost) or into a HEAD-drifting run (dishonest
-    /// evidence).
+    /// Verifies <paramref name="request"/>'s exact subject. The level is pinned
+    /// to work-package for a known frontend diff and build-only otherwise, so
+    /// lane configuration cannot turn this into the promotion-only full suite.
     /// </summary>
     public Task<BuildTestGateResult> RunAsync(
         BuildTestGateRequest request,
+        IReadOnlyList<string> changedFiles,
         BuildProfile? profile,
         TimeSpan timeout,
         CancellationToken ct)
@@ -51,9 +55,11 @@ public sealed class PreDevelopBuildGate
             request with
             {
                 RequireExactSubject = true,
-                RequiredTestLevel = TestExecutionLevels.BuildOnly,
+                RequiredTestLevel = FrontendWorkPackagePlanner.TouchesFrontend(changedFiles)
+                    ? TestExecutionLevels.WorkPackage
+                    : TestExecutionLevels.BuildOnly,
             },
-            changedFiles: null,
+            changedFiles,
             profile,
             PostStepMode.Fail,
             timeout,

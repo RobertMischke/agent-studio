@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-02
+Version: 2026-08-10
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -262,6 +262,13 @@ pipeline view.
   that forces the full test level before a configured merge can advance
   `main`, irrespective of lane settings, diff input, history, or adviser
   output.
+- `backend/Features/Pipeline/PreDevelopBuildGate.cs` and
+  `FrontendWorkPackagePlanner.cs`: exact-merge develop boundary. Non-frontend
+  deliveries retain the build-only level. A merge result that touches
+  `frontend/` runs a blocking Angular work package made from every spec in each
+  touched source folder plus the fixed app, studio-shell, and task-detail
+  barrel collision probes. The generic frontend test command stays omitted, so
+  this boundary cannot silently become the promotion full suite.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
@@ -356,6 +363,16 @@ pipeline view.
   when no mapping exists; an unavailable diff falls back to `full`. A configured
   continuous baseline also runs for documentation-only diffs, and an explicitly
   required `full` level can never be bypassed by the no-code-diff optimization.
+- The pre-develop gate derives changed files from the exact merge commit and
+  its first parent. A missing diff fails closed and rolls back a merge created
+  by that attempt. Frontend paths force a blocking `work-package` level even
+  when no project build profile exists; non-frontend paths keep `build-only`.
+  Focused Angular includes cover touched source folders and the fixed collision
+  set (`app.spec.ts`, `studio-shell.component.spec.ts`, and
+  `task-detail.spec.ts`). Generated .NET work-package commands preserve an
+  explicit test filter or default to `Category!=MachineBound`, keeping
+  machine- and Windows-bound process/timing families out of develop admission.
+  Only the pre-main promotion boundary may force `full`.
 - The build/test step reason always states the effective level, selected count,
   whether the full suite ran, and how many full-suite commands were omitted.
   The task Overview exposes that reason from the passed status icon as well, so

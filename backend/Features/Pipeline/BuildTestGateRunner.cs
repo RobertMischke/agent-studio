@@ -241,6 +241,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         if (changedFiles is { Count: > 0 }
             && !HasCodeDiff(changedFiles)
             && requestedLevel != TestExecutionLevels.Full
+            && requestedLevel != TestExecutionLevels.BuildOnly
             && !hasContinuousBaseline)
             return Skipped("no code diff");
 
@@ -280,9 +281,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 && SafeSha.IsMatch(remoteSha))
             {
                 var remotePlan = VerifyCommandPlanner.Plan(repositoryPath, profile);
-                List<VerifyCommand> remoteCommands = remotePlan.IsEmpty
+                var remoteStaged = remotePlan.IsEmpty
+                    ? null
+                    : TestSelectionPlanner.Plan(
+                        repositoryPath, remotePlan, changedFiles, request.TestExecution,
+                        request.Lane, request.RequiredTestLevel);
+                List<VerifyCommand> remoteCommands = remoteStaged is null
                     ? new()
-                    : remotePlan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
+                    : remoteStaged.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
                 if (remoteCommands.Count > 0)
                 {
                     var remotePreparation = GatePreparationPlanner.Plan(
@@ -294,7 +300,13 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                         infrastructureTimeout, ct).ConfigureAwait(false);
                     if (remote is not null)
                     {
-                        completed = remote.Result;
+                        var audit = CompleteAudit(
+                            remoteStaged!.Audit, remoteCommands, remote.Result.Processes);
+                        completed = remote.Result with
+                        {
+                            TestSelection = audit,
+                            Reason = CoverageReason(remote.Result.Reason, audit),
+                        };
                         workspace = remote.Workspace;
                         testedSha = remote.TestedSha;
                         selfHealed = remote.Result.SelfHealed;
