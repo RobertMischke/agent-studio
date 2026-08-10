@@ -18,6 +18,16 @@ const REVIEW_OUTPUT = [
     '2026-07-24T19:23:30.120Z',
   ),
   line(
+    '[watchdog] agent quiet for 35s, allowing one more window',
+    'orchestrator',
+    '2026-07-24T19:23:30.420Z',
+  ),
+  line(
+    '[worktree-containment] Completion gate kept review inside the task worktree boundary.',
+    'orchestrator',
+    '2026-07-24T19:23:30.720Z',
+  ),
+  line(
     '[reissue] Completion evidence needs one more pass.',
     'orchestrator',
     '2026-07-24T19:23:31.120Z',
@@ -32,6 +42,12 @@ const REVIEW_OUTPUT = [
   line('  tokens used', 'stderr', '2026-07-24T19:23:59.220Z'),
   line('  60,162', 'stderr', '2026-07-24T19:23:59.320Z'),
   line('Error: command exited with code 1', 'stderr', '2026-07-24T19:24:00.120Z'),
+  line('[[TASK_DONE]]', 'stdout', '2026-07-24T19:24:00.420Z'),
+  line(
+    '[runner] CLI exited 0; typedOutcome=ExplicitAgentDone classifier=execution-outcome/v1',
+    'system',
+    '2026-07-24T19:24:00.720Z',
+  ),
 ];
 
 function line(text: string, stream = 'stdout', timestamp = '2026-06-07T12:00:00.000Z') {
@@ -91,8 +107,35 @@ async function installRoutes(
   output = OUTPUT,
   queued = false,
 ) {
+  await page.route('**/hubs/jobs/negotiate**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        connectionId: 'activity-grid-e2e',
+        connectionToken: 'activity-grid-e2e',
+        negotiateVersion: 1,
+        availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+      }),
+    }));
+  await page.routeWebSocket('**/hubs/jobs**', (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+    });
+  });
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/projects/fixture/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        projectName: 'fixture',
+        includesHistory: true,
+        count: 0,
+        items: [],
+      }),
+    }));
   await page.route('**/api/auth/status', (route) =>
     route.fulfill({
       status: 200,
@@ -164,6 +207,13 @@ async function evidence(page: Page, fileName: string) {
   await page.screenshot({ path: path.join(RESULTS_DIR, fileName), fullPage: false });
 }
 
+async function dismissErrorDialog(page: Page): Promise<void> {
+  const dialog = page.getByTestId('error-dialog-overlay');
+  if (!await dialog.isVisible().catch(() => false)) return;
+  await dialog.getByRole('button').first().click();
+  await expect(dialog).toBeHidden();
+}
+
 test('Codex JSONL Activity Log Conversation renders readable agent text and summarized tools', async ({ page }) => {
   await page.setViewportSize({ width: 1500, height: 980 });
   await page.addInitScript(() => {
@@ -175,7 +225,7 @@ test('Codex JSONL Activity Log Conversation renders readable agent text and summ
   await installRoutes(page);
 
   await page.goto(`/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`);
-  await page.getByTestId('activity-log-mode-conversation').click({ force: true });
+  await page.getByTestId('inspector-tab-activity').click();
 
   const conversation = page.getByTestId('activity-log-conversation');
   await expect(conversation).toContainText('I will make the frontend change.');
@@ -183,13 +233,14 @@ test('Codex JSONL Activity Log Conversation renders readable agent text and summ
   await expect(page.getByTestId('convo-turn-tools')).toHaveCount(0);
   await evidence(page, 'codex-activity-log-conversation.png');
 
-  await page.getByTestId('activity-log-show-tools').click();
-  await expect(page.getByTestId('convo-turn-tools')).toBeVisible();
-  await expect(conversation).toContainText('Commands');
+  await page.getByTestId('activity-toolbar-menu').click();
+  await page.getByTestId('activity-toolbar-menu-item-debug').click();
+  await expect(page.getByTestId('convo-turn-tools')).toContainText('Run');
   await expect(conversation).not.toContainText('{"type"');
   await evidence(page, 'codex-activity-log-tools-visible.png');
 
-  await page.getByTestId('activity-log-mode-trace').click({ force: true });
+  await page.getByTestId('activity-toolbar-menu').click();
+  await page.getByTestId('activity-toolbar-menu-item-trace').click();
   await expect(page.getByTestId('activity-log-trace')).toContainText('git status --short');
   await expect(page.getByTestId('activity-log-trace')).not.toContainText('{"type"');
   await evidence(page, 'codex-activity-log-trace.png');
@@ -215,6 +266,7 @@ for (const theme of ['light', 'dark'] as const) {
       `/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`,
       { waitUntil: 'domcontentloaded' },
     );
+    await dismissErrorDialog(page);
     await page.getByTestId('inspector-tab-activity').click();
 
     const conversation = page
@@ -247,9 +299,46 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(decision).toContainText('Reissue');
     await expect(decision.getByText('→ reissue', { exact: true })).toHaveCount(0);
     await expect(decision.getByTestId('conversation-decision-open-trace')).toBeVisible();
-    const decisionBox = await decision.boundingBox();
-    const feedBox = await conversation.getByTestId('conversation-feed').boundingBox();
-    expect(decisionBox?.width ?? 0).toBeGreaterThan((feedBox?.width ?? 0) * 0.9);
+
+    const supervisorWait = conversation.getByTestId('conversation-supervisor-wait');
+    const gate = conversation.getByTestId('conversation-system-status')
+      .filter({ hasText: 'Completion gate kept review inside the task worktree boundary.' });
+    const runner = conversation.getByTestId('conversation-system-status')
+      .filter({ hasText: 'Runner finished' });
+    await expect(supervisorWait).toBeVisible();
+    await expect(gate).toBeVisible();
+    await expect(runner).toBeVisible();
+
+    // Preserve a deterministic rendering of the reported pre-fix geometry.
+    // The stylesheet is removed immediately afterwards; all assertions exercise
+    // the product CSS, not this evidence-only reproduction.
+    const beforeStyle = await page.addStyleTag({
+      content: `
+        [data-testid="conversation-decision-orchestrator"] {
+          width: 100% !important;
+          margin-inline: 0 !important;
+          padding-inline: 0 !important;
+        }
+      `,
+    });
+    await evidence(page, `AGT-2565--activity-entry-grid-before-${theme}--mocked.png`);
+    await beforeStyle.evaluate((style) => style.remove());
+
+    const decisionSurface = decision.locator(':scope > div').first();
+    const gridSurfaces = [decisionSurface, supervisorWait, gate, runner];
+    const boxes = await Promise.all(gridSurfaces.map((surface) => surface.boundingBox()));
+    expect(boxes.every((box) => box !== null)).toBe(true);
+    const reference = boxes[0]!;
+    for (const box of boxes.slice(1)) {
+      expect(Math.abs(box!.x - reference.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs((box!.x + box!.width) - (reference.x + reference.width)))
+        .toBeLessThanOrEqual(1);
+    }
+    const radii = await Promise.all(gridSurfaces.map((surface) =>
+      surface.evaluate((element) => getComputedStyle(element).borderRadius)));
+    expect(new Set(radii).size).toBe(1);
+
+    await evidence(page, `AGT-2565--activity-entry-grid-after-${theme}--mocked.png`);
 
     await expect(conversation.getByTestId('conversation-task-marker')).toHaveCount(0);
     await expect(conversation.getByTestId('conversation-status-queued')).toContainText(

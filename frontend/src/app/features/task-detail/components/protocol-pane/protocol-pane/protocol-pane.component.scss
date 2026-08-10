@@ -81,15 +81,6 @@
   min-width: 0;
 }
 
-.activity-panel__title {
-  flex: 1 1 auto;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--studio-fg-dim);
-  margin: 0;
-}
-
 .activity-panel__actions {
   display: inline-flex;
   align-items: center;
@@ -258,11 +249,6 @@
   border-radius: 4px;
   max-width: 100%;
   white-space: pre-wrap;
-}
-
-.notes-panel__hint {
-  font-size: 0.85em;
-  opacity: 0.8;
 }
 
 /* Inline failure banner — replaces the previously tooltip-only error so the
@@ -929,8 +915,6 @@ cac-conversation-view {
  */
 :host ::ng-deep cac-conversation-view {
   .conv__row--decision {
-    width: 100%;
-    margin-inline: 0;
     padding-inline: 0;
   }
 
