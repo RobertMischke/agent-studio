@@ -1,5 +1,5 @@
     <aside class="context"
-           aria-label="Workbench context pane"
+           aria-label="Workspace context pane"
            [attr.data-pane]="pane()"
            [attr.data-testid]="'prototype-pane-' + pane() + '-view'">
       <header class="context__head">
@@ -118,10 +118,10 @@
                 <strong>Source editor / diff</strong>
                 <span>{{ activeGitFile() }}</span>
                 <code>{{ selectedGitFile().delta }} · staged preview</code>
-                <pre>@@ next-gen chat workbench
+                <pre>@@ next-gen chat workspace
 + Chat can be closed as an optional pane.
 + Git changes own the source editor and diff preview.
-+ Split width is controlled by the vertical workbench splitter.</pre>
++ Split width is controlled by the vertical workspace splitter.</pre>
               </article>
             </div>
           </section>

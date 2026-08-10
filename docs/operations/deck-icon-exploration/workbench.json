@@ -7,11 +7,14 @@
   "status": "active",
   "phase": "decision-ready",
   "updatedAt": "2026-07-28T00:00:00Z",
-  "sourceTaskKeys": ["AGT-2355"],
+  "sourceTaskKeys": [
+    "AGT-2355"
+  ],
   "implementationTasks": [
     {
-      "title": "Apply Robert's selected Deck icon",
-      "promptMarkdown": "Implement the Round 2 Deck icon selected in docs/operations/deck-icon-exploration/index.html. Do not use any rejected Round 1 path. Add the selected 24 by 24 path to the canonical Studio icon component, change the Explorer Deck row from `layout` to the new icon in one place, preserve the existing `studio-explorer-project-hub-*` and `studio-explorer-project-deck-*` test IDs, and add focused regression coverage. Do not change the active-section icon used by Deck tabs."
+      "title": "Apply Robert\u0027s selected Deck icon",
+      "promptMarkdown": "Implement the Round 2 Deck icon selected in docs/operations/deck-icon-exploration/index.html. Do not use any rejected Round 1 path. Add the selected 24 by 24 path to the canonical Studio icon component, change the Explorer Deck row from \u0060layout\u0060 to the new icon in one place, preserve the existing \u0060studio-explorer-project-hub-*\u0060 and \u0060studio-explorer-project-deck-*\u0060 test IDs, and add focused regression coverage. Do not change the active-section icon used by Deck tabs."
     }
-  ]
+  ],
+  "key": "ASW-W4"
 }

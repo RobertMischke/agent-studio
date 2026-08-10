@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "log-retention",
-  "title": "Task-Logs: Aufbewahrung, Deckelung & Bereinigung",
-  "summary": "Nachhaltige Log-Retention-Politik nach dem Workspace-Push-Block vom 27.07. (170-MB-cli-output.log sprengt GitHubs 100-MB-Limit, blockiert die ganze Welle). Belegt: HEAD-Baum bereits sauber, Block nur aus Zwischen-Commits der unpushed Historie; Log-Inhalt = roher CLI-Transkript (564k Zeilen, stdout+stderr timestamp-praefixiert). Prinzip: Log bleibt relevant + sichtbar, nur die Groesse wird an der Quelle gedeckelt. Politik deckt Roberts Punkte A-E: Archiv-Logs ab 10 Tagen stark reduzieren, konfigurierbarer transparenter Tail-Cap (25MB aktiv / 90MB Cleanup / 100MB Hard), Tail-Einheit letzte 50 Messages, komprimiertes rollierendes Runner-Backup, History-Reparatur bei Live-Input (Collapse lock-sicher, Backup-Ref). Plus Hochbubbeln der Push-Failures als sichtbarer Health-Alert. Vier offene Entscheidungen E1-E4, Schnitt in 5 Tickets (Quell-Cap, Archiv-Sweep, Runner-Backup, Push-Sichtbarkeit, Altlast-Repair). Wird spaeter Live-Doku.",
+  "title": "Task-Logs: Aufbewahrung, Deckelung \u0026 Bereinigung",
+  "summary": "Nachhaltige Log-Retention-Politik nach dem Workspace-Push-Block vom 27.07. (170-MB-cli-output.log sprengt GitHubs 100-MB-Limit, blockiert die ganze Welle). Belegt: HEAD-Baum bereits sauber, Block nur aus Zwischen-Commits der unpushed Historie; Log-Inhalt = roher CLI-Transkript (564k Zeilen, stdout\u002Bstderr timestamp-praefixiert). Prinzip: Log bleibt relevant \u002B sichtbar, nur die Groesse wird an der Quelle gedeckelt. Politik deckt Roberts Punkte A-E: Archiv-Logs ab 10 Tagen stark reduzieren, konfigurierbarer transparenter Tail-Cap (25MB aktiv / 90MB Cleanup / 100MB Hard), Tail-Einheit letzte 50 Messages, komprimiertes rollierendes Runner-Backup, History-Reparatur bei Live-Input (Collapse lock-sicher, Backup-Ref). Plus Hochbubbeln der Push-Failures als sichtbarer Health-Alert. Vier offene Entscheidungen E1-E4, Schnitt in 5 Tickets (Quell-Cap, Archiv-Sweep, Runner-Backup, Push-Sichtbarkeit, Altlast-Repair). Wird spaeter Live-Doku.",
   "entrypoint": "index.html",
   "status": "decided",
   "phase": "decision-ready",
   "updatedAt": "2026-07-27T00:20:00Z",
-  "sourceTaskKeys": []
+  "sourceTaskKeys": [],
+  "key": "ASW-W10"
 }

@@ -2,10 +2,13 @@
   "schemaVersion": 1,
   "id": "visual-styleguide-workbench-wiki",
   "title": "Visual StyleGuide: page action bar",
-  "summary": "Review the shared page-head action bar across document, concept, Workbench, incident, and report page types in light and dark themes.",
+  "summary": "Review the shared page-head action bar across document, concept, Dossier, incident, and report page types in light and dark themes.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
   "updatedAt": "2026-07-23T00:00:00Z",
-  "sourceTaskKeys": ["AGT-2282"]
+  "sourceTaskKeys": [
+    "AGT-2282"
+  ],
+  "key": "ASW-W30"
 }

@@ -215,7 +215,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
       id: 'agent-1',
       actor: 'agent',
       title: 'Task Agent',
-      body: 'The workbench treats Chat, Result, Git, Preview, and Debug as pinable panes. They can be combined without turning the task view into a full docking system.',
+      body: 'The workspace treats Chat, Result, Git, Preview, and Debug as pinable panes. They can be combined without turning the task view into a full docking system.',
       actions: ['Show technical layer', 'Open Verbose Debug'],
     },
     {
@@ -407,7 +407,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { tool: 'read', target: 'activity-log.parser.ts', result: 'ok', tone: 'ok' },
     { tool: 'search', target: '136 cli-output.log fixtures', result: 'ok', tone: 'ok' },
     { tool: 'shell', target: 'playwright chromium', result: 'failed once', tone: 'danger' },
-    { tool: 'browser', target: 'v7 workbench screenshots', result: 'passed', tone: 'ok' },
+    { tool: 'browser', target: 'v7 workspace screenshots', result: 'passed', tone: 'ok' },
   ];
 
   readonly gitFiles: GitFileRow[] = [

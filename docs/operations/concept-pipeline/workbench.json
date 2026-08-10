@@ -1,11 +1,15 @@
 {
   "schemaVersion": 1,
   "id": "concept-pipeline",
-  "title": "Konzept-Pipeline: Karten, die Workbench-Dokumente liefern",
-  "summary": "Ein eigener Pipeline-Typ für Konzept-/Design-Karten. Ihr Ergebnis ist ein erstklassiges Workbench-Konzept (Ordner + workbench.json + Hausstil-Seite), nicht gemergter Code. Gate ist Konzept-Review + Sichtblick statt Build/Test/Merge. Baut additiv auf den Planning/Research-Task-Kinds (2026-05) auf und schließt die Lücke, an der Design-Karten heute bouncen.",
+  "title": "Konzept-Pipeline: Karten, die Dossier-Dokumente liefern",
+  "summary": "Ein eigener Pipeline-Typ f\u00FCr Konzept-/Design-Karten. Ihr Ergebnis ist ein erstklassiges Dossier-Konzept (Ordner \u002B workbench.json \u002B Hausstil-Seite), nicht gemergter Code. Gate ist Konzept-Review \u002B Sichtblick statt Build/Test/Merge. Baut additiv auf den Planning/Research-Task-Kinds (2026-05) auf und schlie\u00DFt die L\u00FCcke, an der Design-Karten heute bouncen.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
   "updatedAt": "2026-07-26T00:00:00Z",
-  "sourceTaskKeys": ["AGT-2301", "AGT-2355"]
+  "sourceTaskKeys": [
+    "AGT-2301",
+    "AGT-2355"
+  ],
+  "key": "ASW-W3"
 }

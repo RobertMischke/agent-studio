@@ -7,6 +7,14 @@
   "status": "decision-pending",
   "phase": "decision-ready",
   "updatedAt": "2026-08-09T17:12:04Z",
-  "sourceTaskKeys": ["AGT-2557"],
-  "relatedTaskKeys": ["AGT-2543", "AGT-2544", "AGT-2545", "AGT-2555"]
+  "sourceTaskKeys": [
+    "AGT-2557"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2543",
+    "AGT-2544",
+    "AGT-2545",
+    "AGT-2555"
+  ],
+  "key": "ASW-W14"
 }

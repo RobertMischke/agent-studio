@@ -7,6 +7,11 @@
   "status": "active",
   "phase": "decision-ready",
   "updatedAt": "2026-07-24T11:17:19.372Z",
-  "sourceTaskKeys": ["AGT-2293"],
-  "relatedTaskKeys": ["AGT-2200"]
+  "sourceTaskKeys": [
+    "AGT-2293"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2200"
+  ],
+  "key": "ASW-W29"
 }

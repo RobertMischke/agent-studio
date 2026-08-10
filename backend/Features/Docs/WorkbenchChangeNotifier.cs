@@ -32,7 +32,7 @@ public sealed class WorkbenchChangeNotifier
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Workbench DecisionRecorded subscriber threw for {Project} {WorkbenchId}",
+                "Dossier DecisionRecorded subscriber threw for {Project} {WorkbenchId}",
                 projectName, workbenchId);
         }
     }

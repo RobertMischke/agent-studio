@@ -64,17 +64,17 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Remote infrastructure scenario result contract | [contracts/remote-run-result.md](../system/contracts/remote-run-result.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](../system/architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](../system/architecture/model.md) |
-| Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
-| Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
-| Pipeline time and token economy evidence | [interactive Workbench](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
-| Reissue prompt sharpness and convergence evidence (AGT-2380) | [interactive Workbench](../quality/reissue-prompt-convergence/index.html) · [evidence snapshot](../quality/reissue-prompt-convergence/evidence-snapshot.json) · [analysis script](../quality/reissue-prompt-convergence/analyze.mjs) |
+| Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Dossier](../quality/architecture-quality-layer/index.html) |
+| Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Dossier](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
+| Pipeline time and token economy evidence | [interactive Dossier](../quality/pipeline-time-economy/index.html) · [brief](../quality/pipeline-time-economy/brief.md) |
+| Reissue prompt sharpness and convergence evidence (AGT-2380) | [interactive Dossier](../quality/reissue-prompt-convergence/index.html) · [evidence snapshot](../quality/reissue-prompt-convergence/evidence-snapshot.json) · [analysis script](../quality/reissue-prompt-convergence/analyze.mjs) |
 | Remote Run infrastructure testsuite report (acceptance matrix, phase timing, incident recovery, and raw evidence) | [2026-07-29 acceptance canary](../quality/remote-run-testsuite-report/2026-07-29/index.html) · [report workbench](../quality/remote-run-testsuite-report/index.html) · [validated fixture](../../tools/remote-test-suite/fixtures/report/validated-runs.json) · [schema](../../tools/remote-test-suite/run-result.schema.json) |
 | Finding-first reissue prompt experiment | [design and predeclared analysis](../quality/pipeline-time-economy/reissue-prompt-experiment.md) · [current report](../quality/pipeline-time-economy/reissue-prompt-experiment-analysis.md) |
-| Async validation and test staging lane proposal | [interactive Workbench](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
-| Concept task pipeline and sight-review defaults | [interactive Workbench](../operations/concept-pipeline/index.html) |
-| Board status model, lane-transition map, and integration/archive guard decisions (AGT-2424) | [interactive Workbench](../operations/board-statusmodell-ist-soll/index.html) |
-| Deck icon alternatives for a multi-faceted project console (AGT-2355, Round 2) | [interactive Workbench](../operations/deck-icon-exploration/index.html) · [standalone SVG proof](../operations/deck-icon-exploration/results/deck-icon-options-round-2.svg) |
-| Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Workbench](../operations/installer-story/index.html) |
+| Async validation and test staging lane proposal | [interactive Dossier](../operations/async-validation-staging-lane/index.html) · [brief](../operations/async-validation-staging-lane/brief.md) |
+| Concept task pipeline and sight-review defaults | [interactive Dossier](../operations/concept-pipeline/index.html) |
+| Board status model, lane-transition map, and integration/archive guard decisions (AGT-2424) | [interactive Dossier](../operations/board-statusmodell-ist-soll/index.html) |
+| Deck icon alternatives for a multi-faceted project console (AGT-2355, Round 2) | [interactive Dossier](../operations/deck-icon-exploration/index.html) · [standalone SVG proof](../operations/deck-icon-exploration/results/deck-icon-options-round-2.svg) |
+| Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Dossier](../operations/installer-story/index.html) |
 | Global Orchestrator Watcher decision dossier: triggers, recovery authority, Activity visibility, model economy, and observe-first slices (AGT-2557) | [decision dossier](../operations/orchestrator-waechter/index.html) |
 | Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and five follow-up slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
@@ -87,13 +87,13 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](../quality/design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](../quality/design/angular-performance-report-2026-07.html) |
 | Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](../quality/design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](../concepts/tree-project-indicator-alternatives.md) |
-| Visual Style Guide Workbench (current tokens and live patterns, Empty State / Mini Indicator / Runner Card comparisons, and vNext decisions) | [visual Style Guide](../concepts/visual-style-guide.html) · [Workbench folder](../concepts/visual-style-guide/README.md) · [Empty States](../concepts/visual-style-guide/empty-states.html) · [Mini Indicators](../concepts/visual-style-guide/mini-indicators.html) · [Runner Cards](../concepts/visual-style-guide/runner-cards.html) · [vNext](../concepts/visual-style-guide/vnext.md) |
-| Narrative task view (proactive PRE/POST pipeline generation, versioned cache, fixed AHP report template, measured cost model) | [interactive Workbench](../quality/design/narrative-task-view/index.html) |
+| Visual Style Guide Dossier (current tokens and live patterns, Empty State / Mini Indicator / Runner Card comparisons, and vNext decisions) | [visual Style Guide](../concepts/visual-style-guide.html) · [Dossier folder](../concepts/visual-style-guide/README.md) · [Empty States](../concepts/visual-style-guide/empty-states.html) · [Mini Indicators](../concepts/visual-style-guide/mini-indicators.html) · [Runner Cards](../concepts/visual-style-guide/runner-cards.html) · [vNext](../concepts/visual-style-guide/vnext.md) |
+| Narrative task view (proactive PRE/POST pipeline generation, versioned cache, fixed AHP report template, measured cost model) | [interactive Dossier](../quality/design/narrative-task-view/index.html) |
 | UX doctrine | [product/design-principles.md](../quality/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](../concepts/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](../concepts/orchestrator-in-app.md) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](../concepts/wiki-pulse-dashboard.md) |
-| Wiki as a cognitive interface (AIP-4 page backchannel, page context, archive semantics) | [concept](../concepts/wiki-as-cognitive-interface.md) · [Visual StyleGuide Workbench](../quality/visual-styleguide-workbench-wiki/index.html) |
+| Wiki as a cognitive interface (AIP-4 page backchannel, page context, archive semantics) | [concept](../concepts/wiki-as-cognitive-interface.md) · [Visual StyleGuide Dossier](../quality/visual-styleguide-workbench-wiki/index.html) |
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](../concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |
 | UI task iteration pipeline and Human Gate hand-off | [contracts/ui-task-pipeline.md](../system/contracts/ui-task-pipeline.md) |
@@ -104,7 +104,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](../system/reports/git-info-performance-agt-2007.md) |
 | Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](../concepts/planning-task-lifecycle.md) |
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](../concepts/experimentier-workbench.md) · [interactive mockup](../concepts/mockups/experimentier-workbench.html) |
-| Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
+| Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Dossier-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
 | Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
 | Distributed runtime packaging and installation decisions | [distributable concept](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.html) |
 | Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369) | [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
@@ -116,7 +116,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](../concepts/deployment-first-class.md) · [interactive mockup](../concepts/mockups/deployment-first-class.html) |
 | Release semantics (integration vs acceptance vs release vs stable freeze; transparent watering-can model) | [concept](../concepts/release-semantics.md) |
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](../concepts/project-overview-dashboard/README.md) · [interactive mockup](../concepts/project-overview-dashboard/ui.html) |
-| Studio route restoration (Board, Hub, Wiki pages, Workbenches, Task tabs, Epics, Settings) | [concept and route map](../concepts/studio-route-restoration.md) · [ownership diagram](../concepts/studio-route-restoration-diagram.html) |
+| Studio route restoration (Board, Hub, Wiki pages, Dossiers, Task tabs, Epics, Settings) | [concept and route map](../concepts/studio-route-restoration.md) · [ownership diagram](../concepts/studio-route-restoration-diagram.html) |
 | Wiki classification | [product/wiki-document-classification.md](./wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](./wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |

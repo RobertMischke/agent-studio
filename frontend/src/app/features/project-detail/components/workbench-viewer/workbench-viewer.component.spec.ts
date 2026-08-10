@@ -90,6 +90,7 @@ describe('WorkbenchViewerComponent', () => {
       '[data-testid="workbench-viewer-frame"]',
     ) as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('title')).toBe('Dossier artifact: Boundary probe');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
     expect(srcdoc).toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);

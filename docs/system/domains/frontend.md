@@ -48,7 +48,7 @@ groups, and a failed domain reports an error without hiding successful domains.
 ## Studio route restoration
 
 The active Studio surface is described by one canonical hash path. Board and
-project scope, Hub rail, Wiki page or folder, Workbench id, public task key and
+project scope, Hub rail, Wiki page or folder, Dossier id, public task key and
 active detail tabs, Epics scope, and Settings section restore from that route.
 The top-level query string is no longer an application routing surface. Legacy
 `task`, `job`, and `watchPath` query parameters remain read-only migration
@@ -173,7 +173,7 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   and archived cards. Readiness and last-start diagnosis remain independent, so
   a failed preview keeps both the source context and its compact failure detail.
 - `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
-  isolated Workbench host. The workspace-wide `#/workbenches` overview and
+  isolated Dossier host. The workspace-wide `#/workbenches` overview and
   project-scoped `#/projects/<project>/workbenches` overview share one ordered
   projection: decision-pending items sort by open gate count, active items sort
   by latest movement, and discarded and completed history remain separate.
@@ -183,17 +183,17 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   decision-recorded, and status-changed events travel over the existing jobs
   hub and converge the Explorer catalogue, both overview scopes, and an open
   viewer without a page reload. Pulse reuses the same catalogue as a thinking
-  inbox. An active Workbench is
-  the selected leaf in the Explorer rather than making its Workbenches disclosure
+  inbox. An active Dossier is
+  the selected leaf in the Explorer rather than making its Dossiers disclosure
   parent current. Opening one expands the owning workspace, project, and
-  project-specific Workbenches section, persists that section state, and scrolls
-  the selected leaf into view. Settled Workbenches keep the same selection
+  project-specific Dossiers section, persists that section state, and scrolls
+  the selected leaf into view. Settled Dossiers keep the same selection
   semantics but are revealed under the existing History disclosure. Repository
   HTML runs only
-  in an opaque-origin `srcdoc` iframe with the Workbench CSP. A source-checked
+  in an opaque-origin `srcdoc` iframe with the Dossier CSP. A source-checked
   message boundary maps docs-relative links to the in-app Wiki and opens absolute
   HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
-  DOM parse moves artifact nodes into a fixed policy-first wrapper. Workbench
+  DOM parse moves artifact nodes into a fixed policy-first wrapper. Dossier
   pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
   revision. Canonical entries expose their stable project reference key as a

@@ -12,7 +12,7 @@ public sealed record ConceptWorkbenchReview(
     IReadOnlyList<string> Findings)
 {
     public string Summary => IsComplete
-        ? $"Concept Workbench '{Descriptor?.Title ?? Topic}' is complete and evidence-ready."
+        ? $"Concept Dossier '{Descriptor?.Title ?? Topic}' is complete and evidence-ready."
         : string.Join(" ", Findings);
 }
 
@@ -39,7 +39,7 @@ public static class ConceptWorkbenchContract
     };
 
     /// <summary>
-    /// Creates a valid house-style Workbench skeleton. The concept agent owns the
+    /// Creates a valid house-style Dossier skeleton. The concept agent owns the
     /// substantive content; this helper gives the pipeline a deterministic
     /// materialization contract and makes the required two-file deliverable
     /// directly testable.
@@ -83,7 +83,7 @@ public static class ConceptWorkbenchContract
             .ToList();
         var findings = new List<string>();
         if (normalized.Count == 0)
-            findings.Add("The concept run produced no Workbench files.");
+            findings.Add("The concept run produced no Dossier files.");
 
         var outside = normalized.Where(path =>
             !path.StartsWith(DossierPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -103,7 +103,7 @@ public static class ConceptWorkbenchContract
             .Cast<string>()
             .ToList();
         if (topicRoots.Count != 1)
-            findings.Add($"Exactly one concept Workbench is required; found {topicRoots.Count} topic directories.");
+            findings.Add($"Exactly one concept Dossier is required; found {topicRoots.Count} topic directories.");
 
         if (findings.Count > 0)
             return new ConceptWorkbenchReview(false, null, null, null, findings);
@@ -136,7 +136,7 @@ public static class ConceptWorkbenchContract
         var root = Path.GetFullPath(checkoutRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!directory.StartsWith(root, PathComparison()))
         {
-            findings.Add("Workbench directory escapes the repository root.");
+            findings.Add("Dossier directory escapes the repository root.");
             return new ConceptWorkbenchReview(false, topic, rel, null, findings);
         }
 
@@ -262,7 +262,7 @@ public static class ConceptWorkbenchContract
             <head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>{{title}} | Concept Workbench</title>
+              <title>{{title}} | Concept Dossier</title>
               <style>
                 :root { color-scheme: light; --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3; --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf; }
                 @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a; --ink-1: #fff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a; } }
@@ -278,7 +278,7 @@ public static class ConceptWorkbenchContract
               </style>
             </head>
             <body><main>
-              <header><p>Concept Workbench</p><h1>{{title}}</h1><p class="lede">{{summary}}</p></header>
+              <header><p>Concept Dossier</p><h1>{{title}}</h1><p class="lede">{{summary}}</p></header>
               <section data-concept-section="alternatives"><h2>Alternatives</h2><p>Document the credible alternatives and tradeoffs.</p></section>
               <section data-concept-section="recommendation"><h2>Recommendation</h2><p>State the recommended default and why.</p></section>
               <section data-concept-section="evidence"><h2>Evidence</h2><p>Link observations, measurements, and constraints.</p></section>

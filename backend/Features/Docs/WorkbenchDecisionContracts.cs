@@ -45,10 +45,10 @@ public static class WorkbenchDecisionContracts
         if (expectedFingerprint != null)
             return expectedFingerprint == currentFingerprint
                 ? null
-                : "The Workbench content changed since the decision was taken.";
+                : "The Dossier content changed since the decision was taken.";
         return expectedRevision == currentRevision
             ? null
-            : "The Workbench revision changed since the decision was taken.";
+            : "The Dossier revision changed since the decision was taken.";
     }
 
     public static string? ValidateResponses(IReadOnlyList<WorkbenchDecisionResponse>? responses)

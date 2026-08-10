@@ -1,4 +1,4 @@
-<app-tree-row level="child" glyph="eye" label="Workbenches"
+<app-tree-row level="child" glyph="eye" label="Dossiers"
               [chevron]="expanded() ? 'expanded' : 'collapsed'"
               [count]="catalogue()?.count ?? null"
               [active]="overviewActive()"
@@ -26,7 +26,7 @@
             @if (openCount(workbench) > 0) { <strong>{{ openCount(workbench) }} open</strong> }
           </span>
         </button>
-      } @empty { <span class="studio-workbench-topics__state">No open Workbenches</span> }
+      } @empty { <span class="studio-workbench-topics__state">No open Dossiers</span> }
       <button type="button" class="studio-workbench-history"
               [attr.data-testid]="'studio-explorer-workbench-wiki-' + projectName()"
               (click)="openWiki.emit()">
@@ -49,7 +49,7 @@
               <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
               <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
             </button>
-          } @empty { <span class="studio-workbench-topics__state">No settled Workbenches</span> }
+          } @empty { <span class="studio-workbench-topics__state">No settled Dossiers</span> }
         </div>
       }
     }

@@ -1,12 +1,22 @@
 {
   "schemaVersion": 1,
   "id": "lagebild-2026-08",
-  "title": "Lagebild 03.08.2026 — Wo wir stehen",
-  "summary": "Datierter Schnappschuss des Betriebs, ausserhalb des Zielbilds. Komponenten und ihre Standorte (lokales Backend 127.0.0.1:5031, Agent Studio [::1]:4011, Linux-Host agent-runner-01 mit Coding- und Review-Daemon, SSH-Rueckwaertstunnel mit Keeper als einzige Strecke, Auslagerung des Task-Servers als Zielbild), Stand der Ausfuehrungsschicht (engine=car produktiv, T1/T2 integriert, T3 auf develop mit pending-Badge, T4 geparkt), Lane-Verteilung der 81 Karten vom Morgen des 03.08. mit Human-Review als groesstem Posten, Host-Log-Befunde zu blockiertem Projekt-Claim und schwingender Review-Zulassung, sowie fuenf offene Grossthemen mit Kartenbezug. Verlinkt Nordstern, Zielbild-Workbench und Brechpunkt-Glossar; ersetzt den Nordstern ausdruecklich nicht.",
+  "title": "Lagebild 03.08.2026 \u2014 Wo wir stehen",
+  "summary": "Datierter Schnappschuss des Betriebs, ausserhalb des Zielbilds. Komponenten und ihre Standorte (lokales Backend 127.0.0.1:5031, Agent Studio [::1]:4011, Linux-Host agent-runner-01 mit Coding- und Review-Daemon, SSH-Rueckwaertstunnel mit Keeper als einzige Strecke, Auslagerung des Task-Servers als Zielbild), Stand der Ausfuehrungsschicht (engine=car produktiv, T1/T2 integriert, T3 auf develop mit pending-Badge, T4 geparkt), Lane-Verteilung der 81 Karten vom Morgen des 03.08. mit Human-Review als groesstem Posten, Host-Log-Befunde zu blockiertem Projekt-Claim und schwingender Review-Zulassung, sowie fuenf offene Grossthemen mit Kartenbezug. Verlinkt Nordstern, Zielbild-Dossier und Brechpunkt-Glossar; ersetzt den Nordstern ausdruecklich nicht.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "informational",
   "updatedAt": "2026-08-03T04:00:00Z",
   "sourceTaskKeys": [],
-  "relatedTaskKeys": ["AGT-2370", "AGT-2371", "AGT-2372", "AGT-2373", "AGT-2469", "AGT-2470", "AGT-2487", "AGT-2488"]
+  "relatedTaskKeys": [
+    "AGT-2370",
+    "AGT-2371",
+    "AGT-2372",
+    "AGT-2373",
+    "AGT-2469",
+    "AGT-2470",
+    "AGT-2487",
+    "AGT-2488"
+  ],
+  "key": "ASW-W9"
 }

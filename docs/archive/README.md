@@ -5,8 +5,8 @@ surfaces during explicit inventory passes. Archived pages remain readable and
 keep their Git history, but they are not current product guidance.
 
 The former path keeps a short pointer to the archived page and to the current
-source of truth. Workbenches are not moved here: their descriptor lifecycle
-marks them as settled history so the Workbench History view can still find
+source of truth. Dossiers are not moved here: their descriptor lifecycle
+marks them as settled history so the Dossier History view can still find
 them.
 
 ## July 2026 inventory

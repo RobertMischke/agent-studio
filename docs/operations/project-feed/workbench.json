@@ -1,11 +1,15 @@
 {
   "schemaVersion": 1,
   "id": "project-feed",
-  "title": "Projekt-Feed: High-Level-Timeline aus Entscheidungen & Ereignissen",
-  "summary": "Ein Feed pro Projekt (und projektübergreifend): wichtige Entscheidungen und Ereignisse als verlinkte Timeline. Zwei Publika — Menschen sehen high-level, was passiert; Tasks/Agenten finden einen Einstieg und den zuletzt relevanten Kontext. Token-Kosten überall sichtbar; kostenbewusste, inkrementelle Zusammenstellung; tägliche/wöchentliche Zusammenfassungen als Stakeholder-News. Datenlage-Lücke: viele Entscheidungen fallen heute in externen Chats außerhalb des Tools.",
+  "title": "Projekt-Feed: High-Level-Timeline aus Entscheidungen \u0026 Ereignissen",
+  "summary": "Ein Feed pro Projekt (und projekt\u00FCbergreifend): wichtige Entscheidungen und Ereignisse als verlinkte Timeline. Zwei Publika \u2014 Menschen sehen high-level, was passiert; Tasks/Agenten finden einen Einstieg und den zuletzt relevanten Kontext. Token-Kosten \u00FCberall sichtbar; kostenbewusste, inkrementelle Zusammenstellung; t\u00E4gliche/w\u00F6chentliche Zusammenfassungen als Stakeholder-News. Datenlage-L\u00FCcke: viele Entscheidungen fallen heute in externen Chats au\u00DFerhalb des Tools.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "shaping",
   "updatedAt": "2026-07-26T00:00:00Z",
-  "sourceTaskKeys": ["TE-8", "MKT-14"]
+  "sourceTaskKeys": [
+    "TE-8",
+    "MKT-14"
+  ],
+  "key": "ASW-W15"
 }

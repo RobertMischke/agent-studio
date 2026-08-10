@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Konzept-Pipeline | Konzept-Workbench</title>
+<title>Konzept-Pipeline | Konzept-Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -66,9 +66,9 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Prozess</p>
+  <p class="kicker">Konzept-Dossier · Prozess</p>
   <h1>Konzept-Pipeline</h1>
-  <p class="lede">Manche Karten liefern kein Code-Diff, sondern eine Entscheidung: ein Design, eine Analyse, ein Vorschlag. Ihr Ergebnis soll ein erstklassiges Workbench-Konzept sein — und ihr Weg dorthin braucht eine andere Pipeline als Build → Test → Merge.</p>
+  <p class="lede">Manche Karten liefern kein Code-Diff, sondern eine Entscheidung: ein Design, eine Analyse, ein Vorschlag. Ihr Ergebnis soll ein erstklassiges Dossier-Konzept sein - und ihr Weg dorthin braucht eine andere Pipeline als Build → Test → Merge.</p>
   <div class="meta">
     <span><b>Anlass</b> Design-Karten bouncen in der Code-Pipeline (AGT-2355)</span>
     <span><b>Basis</b> Planning/Research-Task-Kinds (2026-05)</span>
@@ -87,12 +87,12 @@
 <p>Wir müssen nicht bei null anfangen. Zwei Bausteine liegen vor:</p>
 <ul>
   <li><b>Planning/Research-Task-Kinds</b> (<code>docs/concepts/planning-research-task-kinds-2026-05.md</code>): Kinds mit read-only-Pipeline, deren Agent nur einen Report schreibt (<code>status.md</code>) statt Quellcode zu ändern — plus ein <b>Promote-Flow</b>, der ein fertiges Planning-Ergebnis in eine Coding-Karte überführt (<code>PlanningPromotion</code>).</li>
-  <li><b>Konzept-Workbench-Konvention</b>: Analyse-Dokumente als Workbench (Ordner + <code>workbench.json</code> + Hausstil-<code>index.html</code>), wie dieses hier.</li>
+  <li><b>Konzept-Dossier-Konvention</b>: Analyse-Dokumente als Dossier (Ordner + <code>workbench.json</code> + Hausstil-<code>index.html</code>), wie dieses hier.</li>
 </ul>
 <p class="dim">Die Lücke: Der read-only-Kind landet in <code>status.md</code> — flüchtig, nicht als erstklassiges, im Wiki sichtbares Konzept. Und es gibt kein Gate, das „Konzept fertig, Sichtblick nötig" von „Code fertig, Merge nötig" unterscheidet.</p>
 
 <h2 id="loesung"><span class="no">3</span>Die Konzept-Pipeline</h2>
-<p>Ein Pipeline-Typ, dessen <b>Deliverable ein Workbench-Konzept ist</b> und dessen Gate ein <b>Konzept-Review + Sichtblick</b> ist — kein Build, kein Test, kein Merge.</p>
+<p>Ein Pipeline-Typ, dessen <b>Deliverable ein Dossier-Konzept ist</b> und dessen Gate ein <b>Konzept-Review + Sichtblick</b> ist - kein Build, kein Test, kein Merge.</p>
 <figure>
   <svg viewBox="0 0 960 250" role="img" aria-label="Vergleich Code-Pipeline und Konzept-Pipeline">
     <text x="30" y="30" class="s-label">Code-Pipeline (heute)</text>
@@ -103,19 +103,19 @@
     <path d="M180 64 L200 64 M330 64 L350 64 M500 64 L520 64" class="s-flow" marker-end="url(#a)"/>
     <text x="30" y="140" class="s-label">Konzept-Pipeline (neu)</text>
     <rect x="30" y="154" width="150" height="40" rx="7" class="s-conc"/><text x="45" y="173" class="s-label">Konzept-Run</text><text x="45" y="187" class="s-sub">read-only, schreibt Doc</text>
-    <rect x="200" y="154" width="130" height="40" rx="7" class="s-node"/><text x="215" y="173" class="s-label">Workbench-Fix</text><text x="215" y="187" class="s-sub">Ordner + json + Seite</text>
+    <rect x="200" y="154" width="130" height="40" rx="7" class="s-node"/><text x="215" y="173" class="s-label">Dossier-Fix</text><text x="215" y="187" class="s-sub">Ordner + json + Seite</text>
     <rect x="350" y="154" width="150" height="40" rx="7" class="s-node"/><text x="365" y="173" class="s-label">Konzept-Review</text><text x="365" y="187" class="s-sub">Vollständig? Belegt?</text>
     <rect x="520" y="154" width="150" height="40" rx="7" class="s-conc"/><text x="535" y="173" class="s-label">Sichtblick</text><text x="535" y="187" class="s-sub">Mensch entscheidet</text>
     <rect x="690" y="154" width="150" height="40" rx="7" class="s-node"/><text x="705" y="173" class="s-label">Promote</text><text x="705" y="187" class="s-sub">→ Umsetzungs-Karten</text>
     <path d="M180 174 L200 174 M330 174 L350 174 M500 174 L520 174 M670 174 L690 174" class="s-flow" marker-end="url(#a)"/>
     <defs><marker id="a" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1,1 L7,4 L1,7" fill="none" stroke="var(--ink-3)" stroke-width="1.3"/></marker></defs>
   </svg>
-  <figcaption><b>Gleiches Board, andere Schritte.</b> Der Konzept-Run ist read-only; sein Ergebnis wird als Workbench-Konzept abgelegt; das Review prüft Vollständigkeit/Beleg statt Compile/Test; das Gate ist menschlicher Sichtblick; und der Abschluss ist keine Integration, sondern ein <b>Promote</b> in konkrete Umsetzungs-Karten (wie der Planning→Coding-Flow, nur mit Workbench-Doc als Zwischenprodukt).</figcaption>
+  <figcaption><b>Gleiches Board, andere Schritte.</b> Der Konzept-Run ist read-only; sein Ergebnis wird als Dossier-Konzept abgelegt; das Review prüft Vollständigkeit/Beleg statt Compile/Test; das Gate ist menschlicher Sichtblick; und der Abschluss ist keine Integration, sondern ein <b>Promote</b> in konkrete Umsetzungs-Karten (wie der Planning→Coding-Flow, nur mit Dossier-Doc als Zwischenprodukt).</figcaption>
 </figure>
 
 <h3>Was der Konzept-Run konkret tut</h3>
 <ul>
-  <li>Legt einen Workbench-Ordner unter <code>docs/operations/&lt;topic&gt;/</code> an: <code>workbench.json</code> (Registrierung) + <code>index.html</code> (Hausstil, deutsch, SVG wo es hilft).</li>
+  <li>Legt einen Dossier-Ordner unter <code>docs/operations/&lt;topic&gt;/</code> an: <code>workbench.json</code> (Registrierung) + <code>index.html</code> (Hausstil, deutsch, SVG wo es hilft).</li>
   <li>Schreibt das Konzept dorthin — Alternativen, Empfehlung, offene Entscheidungen — statt in <code>status.md</code>.</li>
   <li>Ändert keinen Produktcode. Der Worktree-Diff betrifft nur <code>docs/</code>.</li>
 </ul>
@@ -123,7 +123,7 @@
 <h2 id="gate"><span class="no">4</span>Outcome- und Gate-Semantik</h2>
 <table>
   <tr><th>Dimension</th><th>Code-Karte</th><th>Konzept-Karte</th></tr>
-  <tr><td><b>Deliverable</b></td><td>Merge auf develop</td><td>Workbench-Konzept im Wiki</td></tr>
+  <tr><td><b>Deliverable</b></td><td>Merge auf develop</td><td>Dossier-Konzept im Wiki</td></tr>
   <tr><td><b>Erfolg-Signal</b></td><td>Build+Test grün, Grade</td><td>Konzept vollständig + belegt (Konzept-Review)</td></tr>
   <tr><td><b>Gate</b></td><td>Aspekt-Verdikt → Integration</td><td>Sichtblick (Mensch entscheidet)</td></tr>
   <tr><td><b>Abschluss</b></td><td>integrate-Commit, 6-completed</td><td>Promote → 0..n Umsetzungs-Karten; Konzept bleibt als Referenz</td></tr>
@@ -137,10 +137,10 @@
 <h2 id="umsetzung"><span class="no">5</span>Umsetzung &amp; erste Nutzer</h2>
 <table>
   <tr><th>Arbeitspaket</th><th>Was</th><th>Status</th></tr>
-  <tr><td><b>Task kind <code>concept</code></b></td><td>Additive to Planning/Research: a docs-only mode whose deliverable is a Workbench folder.</td><td><span class="pill done">implemented</span></td></tr>
-  <tr><td><b>Pipeline steps</b></td><td>Read-only core run → Workbench placement → concept completeness/evidence review → sight-review gate → promotion.</td><td><span class="pill done">implemented</span></td></tr>
+  <tr><td><b>Task kind <code>concept</code></b></td><td>Additive to Planning/Research: a docs-only mode whose deliverable is a Dossier folder.</td><td><span class="pill done">implemented</span></td></tr>
+  <tr><td><b>Pipeline steps</b></td><td>Read-only core run → Dossier placement → concept completeness/evidence review → sight-review gate → promotion.</td><td><span class="pill done">implemented</span></td></tr>
   <tr><td><b>Outcome and lane</b></td><td><code>concept delivered, awaiting sight review</code> is success, including <code>NEEDS_INPUT</code>; it is not a 5e escalation.</td><td><span class="pill done">implemented</span></td></tr>
-  <tr><td><b>Promotion</b></td><td>Workbench document → idempotent coding cards in Preparation, with the document as source.</td><td><span class="pill done">implemented</span></td></tr>
+  <tr><td><b>Promotion</b></td><td>Dossier document → idempotent coding cards in Preparation, with the document as source.</td><td><span class="pill done">implemented</span></td></tr>
   <tr><td><b>Erster Nutzer</b></td><td>AGT-2355 (Deck-Icon-Exploration) als Konzept-Karte; danach die Container-Mount-Konzepte aus execution-model-shift.</td><td><span class="pill queued">wartet</span></td></tr>
 </table>
 
@@ -149,7 +149,7 @@
   <ul>
     <li><b>Eigene Lane oder Marker?</b> Bekommen Konzept-Karten eine eigene „Sichtblick"-Lane, oder einen Marker in 5-human-review, der sie von Code-Abnahmen unterscheidet?</li>
     <li><b>Wie viel darf der Agent selbst entscheiden?</b> Nur Alternativen vorlegen (immer Sichtblick), oder bei klaren Fällen selbst eine Empfehlung als Default setzen, die nur bei Widerspruch aufgehalten wird?</li>
-    <li><b>Ein Konzept = ein Workbench, oder Sammel-Workbenches?</b> Kleine Konzepte (Icon) einzeln vs. in ein thematisches Sammel-Workbench (z.B. „Board-UX") einsortiert?</li>
+    <li><b>Ein Konzept = ein Dossier, oder Sammel-Dossiers?</b> Kleine Konzepte (Icon) einzeln vs. in ein thematisches Sammel-Dossier (z.B. „Board-UX") einsortiert?</li>
   </ul>
 </div>
 <div class="box">
@@ -157,11 +157,11 @@
   <ul>
     <li><b>Lane:</b> reuse <code>5-human-review</code> and distinguish concepts with a durable <code>concept-sight-review</code> marker. No new lane is introduced.</li>
     <li><b>Agent autonomy:</b> the agent may recommend and mark a default, but human sight review remains mandatory before completion or promotion.</li>
-    <li><b>Workbench cardinality:</b> one concept card produces exactly one Workbench directory. Shared or collected Workbenches are not written automatically.</li>
+    <li><b>Dossier cardinality:</b> one concept card produces exactly one Dossier directory. Shared or collected Dossiers are not written automatically.</li>
   </ul>
   <p class="dim">These are reversible defaults, not final product decisions. Robert's answer supersedes them.</p>
 </div>
-<p class="dim">Dieses Dokument ist selbst nach der beschriebenen Konzept-Pipeline entstanden (dogfooded): read-only, Ergebnis ist dieses Workbench, Abschluss ist dein Sichtblick.</p>
+<p class="dim">Dieses Dokument ist selbst nach der beschriebenen Konzept-Pipeline entstanden (dogfooded): read-only, Ergebnis ist dieses Dossier, Abschluss ist dein Sichtblick.</p>
 
 </main>
 </body>

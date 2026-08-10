@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/wiki-page-lifecycle.schema.json",
   "title": "Wiki Page Lifecycle",
-  "description": "Shared authoring contract for lifecycle-aware designs, concepts, explorations, and Workbenches. Markdown stores these fields in leading YAML frontmatter. HTML Workbenches store the same fields in their sole workbench.json descriptor because leading YAML would invalidate HTML. Companion sidecars do not duplicate lifecycle state.",
+  "description": "Shared authoring contract for lifecycle-aware designs, concepts, explorations, and Dossiers. Markdown stores these fields in leading YAML frontmatter. HTML Dossiers store the same fields in their sole workbench.json descriptor because leading YAML would invalidate HTML. Companion sidecars do not duplicate lifecycle state.",
   "oneOf": [
     { "$ref": "#/$defs/markdownLifecycle" },
     { "$ref": "#/$defs/workbenchLifecycle" }
@@ -73,7 +73,7 @@
             ]
           },
           "properties": {
-            "schemaVersion": { "type": "integer", "const": 2, "description": "Workbench descriptor version that adopts the shared lifecycle." },
+            "schemaVersion": { "type": "integer", "const": 2, "description": "Dossier descriptor version that adopts the shared lifecycle." },
             "pageKind": { "type": "string", "const": "workbench" },
             "key": {
               "type": "string",

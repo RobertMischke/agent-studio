@@ -21,7 +21,7 @@ function item(id: string, valid = true): WorkbenchListItem {
 }
 
 describe('WorkbenchInboxComponent', () => {
-  it('groups lifecycle pages by state and opens Wiki pages or Workbenches directly', async () => {
+  it('groups lifecycle pages by state and opens Wiki pages or Dossiers directly', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchInboxComponent],
       providers: [provideZonelessChangeDetection()],

@@ -237,7 +237,7 @@ silently borrowing a project's conversation.
 The side sheet is a host of the canonical `coding-agent-chat` composer. Studio
 derives a location context from the active `StudioTabStateService` tab
 (`buildComposerLocationContext`): the large scope is the project, while the
-local scope names the active Board, Task, Workbench, Project Hub, Wiki, URL
+local scope names the active Board, Task, Dossier, Project Hub, Wiki, URL
 preview, or other tab surface. The side sheet renders that value inside CAC's
 standard composer footer — currently via the `[chat-foot-start]` projection
 slot, until the library exposes a first-class `composerContext` input — and

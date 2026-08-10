@@ -15,7 +15,7 @@ short visual baseline that the Angular guide incorporates.
 | [angular-performance-report-2026-07.html](angular-performance-report-2026-07.html) | Measured Angular 21 performance and best-practice review, focused on the 123-card Human Review lane observed on Stable. |
 | [tree-indicator-exploration-2026-07.html](tree-indicator-exploration-2026-07.html) | Interactive light/dark Explorer mockup comparing eight project-level state indicators. |
 | [model-level-indicator.md](model-level-indicator.md) | Shared model-family colours, abbreviations, thinking-level codes, and tooltip contract for taskboard and coding-agent-chat indicators. |
-| [narrative-task-view/index.html](narrative-task-view/index.html) | Concept Workbench for proactive PRE/POST narrative pipeline steps, a versioned material-state cache, fixed AHP presentation, real-card mock reports, and measured per-card economics. |
+| [narrative-task-view/index.html](narrative-task-view/index.html) | Concept Dossier for proactive PRE/POST narrative pipeline steps, a versioned material-state cache, fixed AHP presentation, real-card mock reports, and measured per-card economics. |
 
 The concrete component vocabulary (tokens, primitives, canonical components) and
 the "why" behind the shell look live under

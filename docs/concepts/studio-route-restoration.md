@@ -10,7 +10,7 @@ The Studio previously restored its open editor tabs primarily from local
 storage. Some surfaces had separate URL conventions: board filters used hash
 key-value segments, task detail used top-level query parameters, and the legacy
 Project Shell used a hash path. A Wiki page was addressable only while mounted
-in the legacy shell. The same page inside a Studio Hub tab, and every Workbench,
+in the legacy shell. The same page inside a Studio Hub tab, and every Dossier,
 depended on local tab state.
 
 That split made the address bar an unreliable description of the visible
@@ -29,7 +29,7 @@ https://studio.example/#/<surface>/<stable-public-identifiers>?<route-local-stat
 The convention is:
 
 1. **Hash path for identity and hierarchy.** Surface, project slug, task key,
-   Workbench id, Hub section, and settings section are path segments.
+   Dossier id, Hub section, and settings section are path segments.
 2. **One route-local hash query value for replaceable substate.** Wiki uses
    `page=` or `folder=`. Task detail uses one `view=<left-tab>:<right-tab>`
    value. One value avoids ambiguity with the shared hash segment delimiter.
@@ -41,7 +41,7 @@ The convention is:
    Successful resolution rewrites them to the canonical hash route and never
    republishes a filesystem path.
 5. **Public identifiers only.** Routes contain project slugs, public task keys,
-   and repository-defined Workbench ids. Internal `watchPath::id` keys stay out
+   and repository-defined Dossier ids. Internal `watchPath::id` keys stay out
    of browser history.
 
 Primary surface changes use `history.pushState`, so Browser Back and Forward
@@ -66,9 +66,9 @@ such as `AGT-2291`. Values are percent encoded.
 | Wiki Overview | `#/projects/<project>/wiki` | Project Hub, Wiki rail, Wiki landing | Tree expansion, scroll, search draft, hover state |
 | Wiki page | `#/projects/<project>/wiki?page=<relative-path>` | Exact repository-relative Wiki document | Reading scroll, history flyout, editor draft, lightbox |
 | Wiki folder | `#/projects/<project>/wiki?folder=<relative-path>` | Exact Wiki folder overview | Folder scroll, transient selection and hover |
-| Workspace Workbenches | `#/workbenches` | Workspace-wide ordered overview | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
-| Project Workbenches | `#/projects/<project>/workbenches` | Project-scoped ordered overview | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
-| Workbench | `#/projects/<project>/workbenches/<workbench-id>` | Project, exact Workbench, repository HTML artifact | iframe scroll, in-artifact anchor, runtime script state |
+| Workspace Dossiers | `#/workbenches` | Workspace-wide ordered overview | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
+| Project Dossiers | `#/projects/<project>/workbenches` | Project-scoped ordered overview | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
+| Dossier | `#/projects/<project>/workbenches/<workbench-id>` | Project, exact Dossier, repository HTML artifact | iframe scroll, in-artifact anchor, runtime script state |
 | Task detail | `#/tasks/<task>` | Exact task and default Overview / Result tabs | Pane sizes, visible pane set, maximized pane, edit drafts, open menus, poll cache |
 | Task detail with active tabs | `#/tasks/<task>?view=<detail-tab>:<inspector-tab>` | Exact task, left detail tab (`overview`, `timeline`, `evidence`, `code-review`, `description`) and right inspector tab (`protocol`, `activity`) | Activity subview, selected run, source viewer, splitter positions, composer draft |
 | Epics overview | `#/epics` | Workspace-wide Epics overview | Expanded rows, sort hover, scroll |
@@ -97,7 +97,7 @@ Route-in has priority over local persistence:
 5. Enable state-to-route mirroring only after hydration has completed.
 
 This gate is required. Without it, a locally persisted active tab can replace a
-shared Wiki or Workbench route during cold boot before project data arrives.
+shared Wiki or Dossier route during cold boot before project data arrives.
 
 Local storage still owns workspace preferences and the open-tab collection. It
 may seed the shell only when the URL does not identify another surface. URL
@@ -110,7 +110,7 @@ the current shell destination. The shared tab key is the target identity:
 
 - Tasks use the canonical task key, regardless of whether the entry point was a
   board card, search result, task reference, feed item, or public route.
-- Workbenches use project identity plus Workbench id.
+- Dossiers use project identity plus Dossier id.
 - Wiki destinations use project identity plus target kind and exact repository
   path. The Wiki overview is its own target.
 - Project Deck rails share one project target and adopt the newly requested
@@ -135,7 +135,7 @@ previous last-tab fallback applies.
   falls back to `protocol`.
 - An unknown Workspace Settings section is not treated as a settings route.
 - A missing Wiki document is handled by the Wiki's existing not-found state.
-- A missing Workbench is handled by the Workbench viewer's existing error
+- A missing Dossier is handled by the Dossier viewer's existing error
   state.
 - Legacy task query routes are accepted once and canonicalized after the server
   resolves the public task.
@@ -155,7 +155,7 @@ review screenshots under the managed task's `results/` directory.
 
 ## Implementation slices
 
-1. **Core:** Wiki page and Workbench routes, including cold reload and copied
+1. **Core:** Wiki page and Dossier routes, including cold reload and copied
    URLs.
 2. **Task detail:** public task path plus both active tab strips.
 3. **Remaining named surfaces:** Board, Hub sections, Epics, and Settings use
@@ -165,12 +165,12 @@ review screenshots under the managed task's `results/` directory.
 ## Living knowledge log
 
 - **2026-07-24:** Established the canonical hash-path contract, route hydration
-  precedence, Wiki and Workbench deep links, Task detail tab state, and the
+  precedence, Wiki and Dossier deep links, Task detail tab state, and the
   route/state/reload test matrix.
 - **2026-07-30:** Promoted the workspace Activity Feed to the embedded
   `#/feed` main route. Kept the existing project modal as a quick-access
   compatibility surface rather than a second primary route.
 - **2026-08-09:** Defined internal application-tab target identity, exact Wiki
   path deduplication, and session-only MRU return when the active tab closes.
-- **2026-08-09:** Added workspace-wide and project-scoped Workbench overview
+- **2026-08-09:** Added workspace-wide and project-scoped Dossier overview
   routes while retaining the existing item route for the viewer.

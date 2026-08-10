@@ -57,6 +57,8 @@ describe('WorkbenchOverviewComponent', () => {
     ]));
     fixture.detectChanges();
 
+    expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain('Dossiers');
+
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-decision-pending"]')?.textContent)
       .toContain('3 open');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)

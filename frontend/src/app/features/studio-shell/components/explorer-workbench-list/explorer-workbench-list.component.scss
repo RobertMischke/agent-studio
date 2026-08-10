@@ -1,11 +1,11 @@
 :host {
   display: contents;
-  // One more visible step than the Workbenches disclosure row. This keeps the
+  // One more visible step than the Dossiers disclosure row. This keeps the
   // project -> section -> entry hierarchy legible without a decorative guide
   // line, which the product style rules prohibit.
   --workbench-topics-indent: calc(var(--studio-spacing-7) + var(--studio-spacing-6));
 }
-// Nest the expanded workbench items under the "Workbenches" child row.
+// Nest the expanded workbench items under the "Dossiers" child row.
 .studio-workbench-topics { padding-left: var(--workbench-topics-indent); padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3)); }
 .studio-workbench-topics__state { display: block; padding: var(--studio-spacing-1) var(--studio-spacing-2); color: var(--studio-fg-muted); font-size: 11px; }
 .studio-workbench-topic { width: calc(100% - var(--studio-spacing-4)); margin-left: var(--studio-spacing-4); display: flex; flex-direction: column; align-items: flex-start; padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; }
