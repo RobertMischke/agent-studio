@@ -8,7 +8,10 @@
         <h2 class="orch-feed__title">Activity across projects</h2>
         <span class="orch-feed__scope orch-feed__scope--project" data-testid="orchestrator-feed-scope">Workspace scope</span>
       </div>
-      <p class="orch-feed__sub">{{ projects().length }} projects · {{ visibleEntries().length }} signal events</p>
+      <p class="orch-feed__sub">
+        {{ visibleProjectCount() }} {{ visibleProjectCount() === 1 ? 'project' : 'projects' }} ·
+        {{ visibleEntries().length }} events · newest first
+      </p>
     </div>
     <div class="orch-feed__views" role="group" aria-label="Transparency view">
       <button type="button" [class.orch-feed__view--active]="activeView() === 'activity'"
@@ -37,15 +40,15 @@
       <div class="orch-feed__filter-group">
         <h3>Projects</h3>
         <button type="button" class="orch-feed__filter"
-                [class.orch-feed__filter--active]="projectFilter() === 'all'"
+                [class.orch-feed__filter--active]="projectFilter().size === 0"
                 (click)="selectProject('all')" data-testid="feed-project-all">
           <span>All projects</span><strong>{{ projects().length }}</strong>
         </button>
         @for (project of projects(); track project) {
           <button type="button" class="orch-feed__filter"
-                  [class.orch-feed__filter--active]="projectFilter() === project"
+                  [class.orch-feed__filter--active]="isProjectSelected(project)"
                   (click)="selectProject(project)">
-            <span class="orch-feed__project-label"><i [style.--project-hue]="projectHue(project)"></i>{{ project }}</span>
+            <span class="orch-feed__project-label"><i [style.background]="projectColor(project)"></i>{{ project }}</span>
           </button>
         }
       </div>
@@ -60,7 +63,7 @@
           </button>
         }
       </div>
-      <p class="orch-feed__quiet-note">Signal hides passive observations that already read like the task timeline.</p>
+      <p class="orch-feed__quiet-note">All activity is chronological. Signal is an optional quieter view without passive observations.</p>
     </aside>
 
     <section #stream class="orch-feed__stream" data-testid="orchestrator-feed-stream">
@@ -68,46 +71,17 @@
         <div class="orch-feed__empty">No orchestrator activity in this section yet.</div>
       }
       <div class="orch-feed__list">
-        @for (group of groupedEntries(); track group.key) {
-          <section class="orch-feed__group" [attr.aria-label]="group.day + ', ' + group.project">
-            <header class="orch-feed__group-head">
-              <span>{{ group.day }}</span>
-              <span class="orch-feed__project-label"><i [style.--project-hue]="projectHue(group.project)"></i>{{ group.project }}</span>
-            </header>
-            @for (entry of group.entries; track entry.ts + entry.summary) {
-              <article class="orch-feed__entry"
-                      role="button"
-                      tabindex="0"
-                      data-testid="orchestrator-feed-entry"
-                      [class.orch-feed__entry--selected]="isSelected(entry)"
-                      [class.orch-feed__entry--alert]="entry.kind === 'alert'"
-                      [class.orch-feed__entry--decision]="entry.kind === 'decision'"
-                      [class.orch-feed__entry--action]="entry.kind === 'action'"
-                      [class.orch-feed__entry--observation]="entry.kind === 'observation'"
-                      [class.orch-feed__entry--intervention]="entry.kind === 'intervention'"
-                      (click)="selectEntry(entry)"
-                      (keydown.enter)="selectEntry(entry)"
-                      (keydown.space)="selectEntry(entry); $event.preventDefault()">
-                <div class="orch-feed__entry-top">
-                  <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
-                  <span class="orch-feed__topic">{{ entry.topic }}</span>
-                  <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
-                </div>
-                <span class="orch-feed__summary">{{ entry.summary }}</span>
-                @if (entry.jobId && entry.watchPath) {
-                  <span class="orch-feed__task-row">
-                    <span>Task</span>
-                    <button type="button"
-                            class="orch-feed__task-link"
-                            (click)="navigateToTask(entry); $event.stopPropagation()"
-                            [attr.aria-label]="'Open task ' + entry.jobId"
-                            data-testid="orchestrator-entry-task">{{ entry.jobId }}</button>
-                  </span>
-                }
-                @if (entry.tokenUsage; as tu) {
-                  <span class="orch-feed__tokens" [cacTooltip]="tokenTooltip(tu)">{{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}</span>
-                }
-              </article>
+        @for (group of dayGroups(); track group.key) {
+          <section class="orch-feed__group" [attr.aria-label]="'Events for ' + group.day">
+            <header class="orch-feed__group-head" data-testid="orchestrator-feed-day">{{ group.day }}</header>
+            @for (entry of group.entries; track entryKey(entry)) {
+              <app-orchestrator-feed-entry
+                [entry]="entry"
+                [projectFallback]="projectName()"
+                [selected]="isSelected(entry)"
+                (selectRequest)="selectEntry($event)"
+                (projectFilterRequest)="selectProject($event)"
+                (openTaskRequest)="navigateToTask($event)" />
             }
           </section>
         }
