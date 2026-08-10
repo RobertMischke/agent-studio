@@ -9,12 +9,13 @@ import {
   viewChildren,
 } from '@angular/core';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
-import type { WorkbenchListItem } from '../../../../models/project-docs.model';
+import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import type { ArticlePattern, WorkbenchListItem } from '../../../../models/project-docs.model';
 
 @Component({
   selector: 'app-explorer-workbench-history',
   standalone: true,
-  imports: [AppTooltipDirective],
+  imports: [AppTooltipDirective, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-history.component.html',
   styleUrl: './explorer-workbench-history.component.scss',
@@ -55,7 +56,17 @@ export class ExplorerWorkbenchHistoryComponent {
     return item.status === 'documented' ? 'Documented' : 'Archived';
   }
 
+  documentPattern(item: WorkbenchListItem): ArticlePattern {
+    return item.pattern === 'ui' ? 'ui' : 'concept';
+  }
+
+  patternIcon(item: WorkbenchListItem): StudioIconName {
+    return this.documentPattern(item) === 'ui' ? 'grid' : 'book';
+  }
+
   tooltip(item: WorkbenchListItem): string {
-    return [item.key, item.title, this.secondaryMeta(item)].filter(Boolean).join(' · ');
+    return [item.key, item.title, `${this.documentPattern(item)} pattern`, this.secondaryMeta(item)]
+      .filter(Boolean)
+      .join(' · ');
   }
 }

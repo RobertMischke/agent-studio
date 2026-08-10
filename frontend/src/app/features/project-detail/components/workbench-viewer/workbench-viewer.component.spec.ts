@@ -27,6 +27,7 @@ const DOCUMENT: WorkbenchDocument = {
     error: null,
     sourceTaskKeys: ['AGT-2123'],
     relatedTaskKeys: [],
+    pattern: 'ui',
   },
   html: '<script id="early">document.body.dataset.ran="true"</script><html><head><base href="https://example.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body class="artifact"><meta http-equiv="refresh" content="0;url=https://example.invalid/"><h1>Probe</h1><section data-decision-id="route" data-decision-kind="single"><strong>Choose route</strong><span data-option-id="direct">Direct</span><span data-option-id="queue">Queue</span><span data-comment="Optional note"></span></section></body></html>',
   branch: 'develop',
@@ -116,6 +117,7 @@ describe('WorkbenchViewerComponent', () => {
     expect(parsed.querySelector('meta[http-equiv="refresh"]')).toBeNull();
     expect(parsed.querySelector('base')?.getAttribute('href')).toBe('about:blank');
     expect(parsed.body.classList.contains('artifact')).toBe(true);
+    expect(parsed.documentElement.dataset['documentPattern']).toBe('ui');
 
     const frame = fixture.nativeElement.querySelector(
       '[data-testid="workbench-viewer-frame"]',
