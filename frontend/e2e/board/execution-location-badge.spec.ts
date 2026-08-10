@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -84,6 +84,58 @@ const stalledAcceptedTask = {
 
 function json(route: Route, body: unknown) {
   return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+}
+
+async function expectFlatFullBleedNoticeBar(banner: Locator): Promise<void> {
+  const geometry = await banner.evaluate(element => {
+    const workspaceBanner = element.closest('app-workspace-banner');
+    const icon = element.querySelector('[data-testid="notification-icon"]');
+    if (!workspaceBanner || !icon) throw new Error('Notice-bar shell or status point is missing.');
+
+    const rect = element.getBoundingClientRect();
+    const workspaceRect = workspaceBanner.getBoundingClientRect();
+    const iconRect = icon.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      left: rect.left,
+      right: rect.right,
+      workspaceLeft: workspaceRect.left,
+      workspaceRight: workspaceRect.right,
+      borderRadius: style.borderRadius,
+      marginBlockStart: style.marginBlockStart,
+      marginBlockEnd: style.marginBlockEnd,
+      marginInlineStart: style.marginInlineStart,
+      marginInlineEnd: style.marginInlineEnd,
+      boxShadow: style.boxShadow,
+      paddingBlockStart: Number.parseFloat(style.paddingBlockStart),
+      paddingBlockEnd: Number.parseFloat(style.paddingBlockEnd),
+      iconWidth: iconRect.width,
+      iconHeight: iconRect.height,
+    };
+  });
+
+  expect(geometry.left).toBeCloseTo(geometry.workspaceLeft, 0);
+  expect(geometry.right).toBeCloseTo(geometry.workspaceRight, 0);
+  expect(geometry.borderRadius).toBe('0px');
+  expect(geometry.marginBlockStart).toBe('0px');
+  expect(geometry.marginBlockEnd).toBe('0px');
+  expect(geometry.marginInlineStart).toBe('0px');
+  expect(geometry.marginInlineEnd).toBe('0px');
+  expect(geometry.boxShadow).toBe('none');
+  expect(geometry.paddingBlockStart).toBeLessThanOrEqual(8);
+  expect(geometry.paddingBlockEnd).toBeLessThanOrEqual(8);
+  expect(geometry.iconWidth).toBe(9);
+  expect(geometry.iconHeight).toBe(9);
+}
+
+async function expectNoticeCopySharesWideLine(page: Page, banner: Locator): Promise<void> {
+  await page.setViewportSize({ width: 1920, height: 800 });
+  const headline = await banner.getByTestId('notice-bar-headline').boundingBox();
+  const detail = await banner.getByTestId('notice-bar-detail').boundingBox();
+  expect(headline).not.toBeNull();
+  expect(detail).not.toBeNull();
+  expect(detail!.y).toBeCloseTo(headline!.y, 0);
+  await page.setViewportSize({ width: 720, height: 800 });
 }
 
 async function installRoutes(page: Page, currentTasks: () => typeof initialTasks): Promise<void> {
@@ -213,6 +265,7 @@ test('shows each concurrent task owner and limits warnings to the stale remote r
 
 test('shows a durable remote refusal on the card and the starvation banner', async ({ page }) => {
   mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 720, height: 800 });
   await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
@@ -228,13 +281,15 @@ test('shows a durable remote refusal on the card and the starvation banner', asy
   const banner = page.getByTestId('remote-queue-starvation-banner');
   await expect(banner).toContainText('1 task is waiting despite free Runner capacity.');
   await expect(banner).toContainText('8 slots are available.');
+  await expectFlatFullBleedNoticeBar(banner);
+  await expectNoticeCopySharesWideLine(page, banner);
 
   for (const theme of ['dark', 'light'] as const) {
     await setTheme(page, theme);
     await dismissDevErrorDialog(page);
     await expect(rejection).toBeVisible();
     await page.screenshot({
-      path: join(RESULTS, `remote-refusal-starvation-${theme}--mocked.png`),
+      path: join(RESULTS, `notice-bar-after-starvation-narrow-${theme}--mocked.png`),
       fullPage: false,
     });
   }
@@ -242,6 +297,7 @@ test('shows a durable remote refusal on the card and the starvation banner', asy
 
 test('shows accepted deliveries that remain unintegrated beyond the threshold', async ({ page }) => {
   mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 720, height: 800 });
   await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
@@ -252,13 +308,15 @@ test('shows accepted deliveries that remain unintegrated beyond the threshold', 
   const banner = page.getByTestId('accepted-integration-alert-banner');
   await expect(banner).toContainText('1 accepted task has not reached successful integration for over 30 minutes.');
   await expect(banner).toContainText(`${PROJECT}: AGT-2531`);
+  await expectFlatFullBleedNoticeBar(banner);
+  await expectNoticeCopySharesWideLine(page, banner);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     await dismissDevErrorDialog(page);
     await expect(banner).toBeVisible();
     await page.screenshot({
-      path: join(RESULTS, `accepted-integration-alert-${theme}--mocked.png`),
+      path: join(RESULTS, `notice-bar-after-integration-narrow-${theme}--mocked.png`),
       fullPage: false,
     });
   }
