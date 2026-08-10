@@ -124,15 +124,15 @@ test.describe('studio-shell · navigation has no dead end', () => {
     await expect(board).toHaveCount(0);
 
     // No closable editor tabs remain — but instead of a blank dead end the
-    // shell shows the creative idle empty-state inside the welcome screen,
+    // shell shows a bounded idle empty-state inside the welcome screen,
     // which offers explicit ways back in. That is the recovery path the bug
     // was filed against.
     await expect(page.locator('.studio-tab[data-tab-key]')).toHaveCount(0);
     await expect(page.getByTestId('studio-welcome')).toBeVisible();
     await expect(page.getByTestId('studio-empty-state')).toBeVisible();
-    await expect(page.getByTestId('studio-empty-subtitle')).toBeVisible();
+    await expect(page.getByTestId('studio-empty-subtitle')).toHaveText('No tabs open.');
     await expect(page.getByTestId('studio-welcome-chat-hint'))
-      .toContainText('Describe your first task in the project chat.');
+      .toContainText('Open project chat');
     await expect(page.getByTestId('studio-welcome-open-chat')).toBeVisible();
     await expect(page.getByTestId('studio-welcome-add-task')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New task', exact: true })).toHaveCount(0);

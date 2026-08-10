@@ -2,10 +2,15 @@
      data-testid="studio-empty-state"
      [attr.data-phase]="phase()"
      [attr.data-progress]="phaseProgress()">
-  <div class="empty__stage" [class.empty__stage--static]="reducedMotion()">
-    <canvas #canvas class="empty__canvas" aria-hidden="true" data-testid="studio-empty-canvas"></canvas>
+  <div class="empty__stage"
+       data-testid="studio-empty-stage"
+       [class.empty__stage--static]="reducedMotion()">
+    <canvas #canvas
+            class="empty__canvas"
+            aria-hidden="true"
+            data-testid="studio-empty-canvas"></canvas>
   </div>
   <p class="empty__punchline" data-testid="studio-empty-subtitle">
-    404 tabs found. Have some cellular automata instead.
+    No tabs open.
   </p>
 </div>
