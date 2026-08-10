@@ -3,6 +3,7 @@ export { OrchestratorFeedComponent } from './components/orchestrator-feed/orches
 export { GlobalOrchestratorCardComponent } from './components/global-orchestrator-card/global-orchestrator-card';
 export { LoadDistributionComponent } from './components/load-distribution/load-distribution.component';
 export { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
+export { OrchestratorChatHistoryComponent } from './components/orchestrator-chat-history/orchestrator-chat-history.component';
 export { OrchestratorContextHeaderComponent } from './components/orchestrator-context-header/orchestrator-context-header.component';
 export { ChatSwitcherRailComponent } from './components/chat-switcher-rail/chat-switcher-rail.component';
 export { OrchestratorProjectPickerComponent } from './components/orchestrator-project-picker/orchestrator-project-picker.component';

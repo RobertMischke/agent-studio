@@ -563,6 +563,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.contextMenuOpen.set(false);
   }
 
+  /** Open one Task Server-managed context from the workspace Chat History. */
+  openManagedContext(contextKey: string): void {
+    this.show();
+    if (this.contextSessions().some(context => context.contextKey === contextKey)) {
+      this.selectChatContext(contextKey);
+      return;
+    }
+    this.jobService.getOrchestratorContextSessions().subscribe({
+      next: response => {
+        const sessions = response.sessions ?? [];
+        this.contextSessions.set(sessions);
+        if (sessions.some(context => context.contextKey === contextKey)) {
+          this.selectChatContext(contextKey);
+        }
+      },
+    });
+  }
+
   onNavigateToContext(contextKey: string): void {
     this.selectedContextKey.set(null);
     this.selectedContextNavigationKey.set(null);
