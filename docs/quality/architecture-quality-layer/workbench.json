@@ -17,5 +17,10 @@
       "note": "Migrated the active decision-ready state to the shared page lifecycle."
     }
   ],
-  "sourceTaskKeys": ["AGT-2126", "AGT-2127", "AGT-2128"]
+  "sourceTaskKeys": [
+    "AGT-2126",
+    "AGT-2127",
+    "AGT-2128"
+  ],
+  "key": "AGT-W26"
 }

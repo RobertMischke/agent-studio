@@ -7,7 +7,16 @@
   "status": "decision-pending",
   "phase": "decision-ready",
   "updatedAt": "2026-08-09T17:13:00Z",
-  "sourceTaskKeys": ["AGT-2555"],
+  "sourceTaskKeys": [
+    "AGT-2555"
+  ],
   "implementationTasks": [],
-  "relatedTaskKeys": ["AGT-2514", "MKT-21", "AGT-2355", "AGT-2548", "AGT-2552"]
+  "relatedTaskKeys": [
+    "AGT-2514",
+    "MKT-21",
+    "AGT-2355",
+    "AGT-2548",
+    "AGT-2552"
+  ],
+  "key": "AGT-W20"
 }

@@ -1,12 +1,34 @@
 {
   "schemaVersion": 1,
   "id": "haertung-verteilte-ausfuehrung",
-  "title": "Verteilte Ausführung",
-  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Vorfälle vom 08.07. bis 03.08., Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie. Nachtrag 03.08. (§0): Ausführungsschicht produktiv über die CodingAgentRunner-Library (engine=car, Rückfall legacy, T4-Abriss geparkt), Rollen-Dreiklang Task-Server / Host-Orchestrator / Agent Studio als Zielbegriffe mit einseitig fertiger Host-Orchestrator-Strecke, Post-Processing weiterhin am lokalen Backend, lastbewusste Review-Slot-Admission integriert.",
+  "title": "Verteilte Ausf\u00FChrung",
+  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Vorf\u00E4lle vom 08.07. bis 03.08., Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie. Nachtrag 03.08. (\u00A70): Ausf\u00FChrungsschicht produktiv \u00FCber die CodingAgentRunner-Library (engine=car, R\u00FCckfall legacy, T4-Abriss geparkt), Rollen-Dreiklang Task-Server / Host-Orchestrator / Agent Studio als Zielbegriffe mit einseitig fertiger Host-Orchestrator-Strecke, Post-Processing weiterhin am lokalen Backend, lastbewusste Review-Slot-Admission integriert.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
   "updatedAt": "2026-08-03T04:00:00Z",
-  "sourceTaskKeys": ["AGT-2147", "AGT-2148", "AGT-2149", "AGT-2177", "AGT-2182", "AGT-2183", "AGT-2184", "AGT-2155", "AGT-2222", "AGT-2229", "AGT-2260"],
-  "relatedTaskKeys": ["AGT-2370", "AGT-2371", "AGT-2372", "AGT-2373", "AGT-2469", "AGT-2470", "AGT-2487", "AGT-2488"]
+  "sourceTaskKeys": [
+    "AGT-2147",
+    "AGT-2148",
+    "AGT-2149",
+    "AGT-2177",
+    "AGT-2182",
+    "AGT-2183",
+    "AGT-2184",
+    "AGT-2155",
+    "AGT-2222",
+    "AGT-2229",
+    "AGT-2260"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2370",
+    "AGT-2371",
+    "AGT-2372",
+    "AGT-2373",
+    "AGT-2469",
+    "AGT-2470",
+    "AGT-2487",
+    "AGT-2488"
+  ],
+  "key": "AGT-W7"
 }

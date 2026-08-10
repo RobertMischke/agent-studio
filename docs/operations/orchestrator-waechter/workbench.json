@@ -7,6 +7,18 @@
   "status": "decision-pending",
   "phase": "decision-ready",
   "updatedAt": "2026-08-10T01:23:01Z",
-  "sourceTaskKeys": ["AGT-2557", "AGT-2581"],
-  "relatedTaskKeys": ["AGT-2543", "AGT-2544", "AGT-2545", "AGT-2555", "AGT-2565", "AGT-2569", "AGT-2579"]
+  "sourceTaskKeys": [
+    "AGT-2557",
+    "AGT-2581"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2543",
+    "AGT-2544",
+    "AGT-2545",
+    "AGT-2555",
+    "AGT-2565",
+    "AGT-2569",
+    "AGT-2579"
+  ],
+  "key": "AGT-W15"
 }

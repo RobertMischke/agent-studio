@@ -7,5 +7,10 @@
   "status": "active",
   "phase": "decision-ready",
   "updatedAt": "2026-07-24T00:00:00Z",
-  "sourceTaskKeys": ["AGT-2281", "AGT-2222", "AGT-2135"]
+  "sourceTaskKeys": [
+    "AGT-2281",
+    "AGT-2222",
+    "AGT-2135"
+  ],
+  "key": "AGT-W27"
 }
