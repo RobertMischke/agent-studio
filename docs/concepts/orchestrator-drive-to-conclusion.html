@@ -1996,6 +1996,27 @@
             back the new merge and reaches <code>GateFailed</code> in Human Review without releasing a push.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-10</td>
+          <td><code>AGT-2585 / AGT-2555</code><br><span class="small">remote-v1-result-finalization-gap</span></td>
+          <td>
+            Successful remote Concept and Planning runs could reach Auto Review with durable artifacts and a terminal
+            sentinel but without a generated <code>status.md</code>. The transition backstop then created a scaffold,
+            which made an application finalization failure look like the normal Result path.
+          </td>
+          <td>
+            The V1 artifact client uploaded files individually and dropped <code>FinalizeResult</code>. The Task Server
+            had no awaited summary action, even though the compatibility endpoint invoked the application summarizer.
+            Treating the missing Result as a core failure would have repeated completed work, matching the MKT-21
+            reissue-loop pattern.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> V1 now has a fenced <code>post-result-finalization</code> gate with
+            summary-only retry. Success reaches typed <code>Ready</code> with a real <code>status.md</code> artifact.
+            Bounded exhaustion reaches typed <code>Degraded</code> while the single completed core run remains reviewable
+            in <span class="lane">4-auto-review</span>.
+          </td>
+        </tr>
       </tbody>
     </table>
 
