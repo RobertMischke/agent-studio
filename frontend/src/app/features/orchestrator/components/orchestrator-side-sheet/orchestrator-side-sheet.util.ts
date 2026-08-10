@@ -1,4 +1,10 @@
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
+import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
+import {
+  contextSourceId,
+  type OrchestratorContextSourceOption,
+} from '../../models/orchestrator-context-source.model';
+import type { OrchestratorContextReference } from '../../models/orchestrator.model';
 import type { ChatEvent, ConversationEvent, RawLineRange } from 'coding-agent-chat/core';
 
 /**
@@ -8,6 +14,42 @@ import type { ChatEvent, ConversationEvent, RawLineRange } from 'coding-agent-ch
  * belongs. These functions carry no Angular dependency and are unit-tested
  * directly.
  */
+
+export function buildCurrentTabSource(
+  contextKind: 'project' | 'task',
+  project: string | null,
+  activeReference: OrchestratorContextReference | null,
+  page: PageContext | null,
+): OrchestratorContextSourceOption | null {
+  if (contextKind !== 'project') return null;
+  if (project && activeReference?.projectId === project) {
+    const ranges = activeReference.lineRanges
+      ?.map(range => `L${range.startLine}-L${range.endLine}`)
+      .join(', ');
+    return {
+      id: contextSourceId(activeReference),
+      category: 'current',
+      label: activeReference.path ?? `${activeReference.kind} ${activeReference.reference.slice(0, 8)}`,
+      detail: [
+        activeReference.kind === 'diff' ? 'Diff' : 'File',
+        activeReference.reference.slice(0, 8),
+        ranges,
+      ].filter(Boolean).join(' · '),
+      estimateTokens: 900,
+      reference: activeReference,
+    };
+  }
+  if (!project || !page || page.projectName !== project) return null;
+  const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
+  return {
+    id: `${reference.kind}:${project}:${reference.reference}`,
+    category: 'current',
+    label: page.title,
+    detail: `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.relPath}`,
+    estimateTokens: 1_200,
+    reference,
+  };
+}
 
 /**
  * Hide any server user turn that an in-flight local turn already represents.
@@ -95,8 +137,45 @@ function sameContextReceipt(
     && left.contextKey === right.contextKey
     && (left.taskKey ?? null) === (right.taskKey ?? null)
     && left.capturedAt === right.capturedAt
+    && (left.receiptId ?? null) === (right.receiptId ?? null)
+    && (left.userTurnId ?? null) === (right.userTurnId ?? null)
     && left.includedBlocks.length === right.includedBlocks.length
-    && left.includedBlocks.every((block, index) => block === right.includedBlocks[index]);
+    && left.includedBlocks.every((block, index) => block === right.includedBlocks[index])
+    && sameContextBudget(left.budget, right.budget)
+    && sameContextSources(left.sources, right.sources);
+}
+
+function sameContextBudget(
+  left: NonNullable<OrchestratorChatTurn['contextReceipt']>['budget'],
+  right: NonNullable<OrchestratorChatTurn['contextReceipt']>['budget'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  return left.automaticSoftCapTokens === right.automaticSoftCapTokens
+    && left.automaticHardCapTokens === right.automaticHardCapTokens
+    && left.totalHardCapTokens === right.totalHardCapTokens
+    && left.estimatedIncludedTokens === right.estimatedIncludedTokens;
+}
+
+function sameContextSources(
+  left: NonNullable<OrchestratorChatTurn['contextReceipt']>['sources'],
+  right: NonNullable<OrchestratorChatTurn['contextReceipt']>['sources'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  if (left.length !== right.length) return false;
+  return left.every((source, index) => {
+    const candidate = right[index];
+    return source.sourceId === candidate.sourceId
+      && source.kind === candidate.kind
+      && (source.revision ?? null) === (candidate.revision ?? null)
+      && (source.sha256 ?? null) === (candidate.sha256 ?? null)
+      && source.freshness === candidate.freshness
+      && source.includedCharacters === candidate.includedCharacters
+      && source.estimatedTokens === candidate.estimatedTokens
+      && source.status === candidate.status
+      && (source.reason ?? null) === (candidate.reason ?? null);
+  });
 }
 
 function sameTokenUsage(

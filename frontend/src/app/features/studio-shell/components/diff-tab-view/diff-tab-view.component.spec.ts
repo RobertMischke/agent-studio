@@ -4,10 +4,26 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { StudioDiffViewComponent } from './diff-tab-view.component';
+import { firstDiffHunkLineRange, StudioDiffViewComponent } from './diff-tab-view.component';
 import { TaskService } from '../../../../services/task.service';
 import type { TaskInfo } from '../../../../models/task.model';
 import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../utils/large-diff-gate';
+
+describe('firstDiffHunkLineRange', () => {
+  it('selects the first complete unified-diff hunk by resolver line number', () => {
+    expect(firstDiffHunkLineRange([
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,2 @@',
+      '-old',
+      '+new',
+      '@@ -8 +8 @@',
+      '-before',
+      '+after',
+    ].join('\n'))).toEqual([{ startLine: 4, endLine: 6 }]);
+  });
+});
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -34,10 +50,11 @@ describe('StudioDiffViewComponent (smoke)', () => {
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(StudioDiffViewComponent);
+      fixture.componentRef.setInput('projectName', undefined);
       fixture.componentRef.setInput('commitSha', undefined);
 
       // Required inputs seeded with undefined — replace with realistic defaults if needed:
-    // commitSha
+    // projectName, commitSha
     try { fixture.detectChanges(); } catch (e) {
         console.warn('[smoke] StudioDiffViewComponent initial render skipped:', (e as Error).message);
       }
@@ -93,6 +110,7 @@ describe('StudioDiffViewComponent (smoke)', () => {
     ]);
 
     const fixture = TestBed.createComponent(StudioDiffViewComponent);
+    fixture.componentRef.setInput('projectName', 'Foo');
     fixture.componentRef.setInput('commitSha', sha);
     fixture.detectChanges();
 
@@ -163,6 +181,7 @@ describe('StudioDiffViewComponent (smoke)', () => {
     ]);
 
     const fixture = TestBed.createComponent(StudioDiffViewComponent);
+    fixture.componentRef.setInput('projectName', 'Foo');
     fixture.componentRef.setInput('commitSha', sha);
     fixture.detectChanges();
 

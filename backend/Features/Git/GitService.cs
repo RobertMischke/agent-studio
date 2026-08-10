@@ -179,6 +179,22 @@ public record GitCommitInfo(
     int Added,
     int Removed);
 
+/// <summary>
+/// Immutable, project-scoped commit facts used by bounded context resolvers.
+/// The full SHA is resolved and verified inside the owning repository before
+/// any metadata or diff is returned.
+/// </summary>
+public sealed record GitResolvedCommit(
+    string Sha,
+    IReadOnlyList<string> Parents,
+    DateTime AuthorDateUtc,
+    string Author,
+    string Subject,
+    int FilesChanged,
+    int Added,
+    int Removed,
+    IReadOnlyList<GitFileChange> Files);
+
 public sealed record RemoteDeliveryCommitRange(
     bool Success,
     string? IntegrationBranch,
@@ -1624,6 +1640,59 @@ public class GitService
         var root = ResolveProjectRoot(projectName);
         if (root == null) return [];
         return GetCommitFilesAtRoot(root, sha);
+    }
+
+    /// <summary>
+    /// Resolve one full immutable commit inside one project's configured
+    /// repository. Abbreviated SHAs are deliberately rejected because they are
+    /// not stable context identities across repositories.
+    /// </summary>
+    public GitResolvedCommit? GetProjectResolvedCommit(string projectName, string sha)
+    {
+        sha = sha?.Trim() ?? "";
+        if (sha.Length != 40 || sha.Any(character => !Uri.IsHexDigit(character))) return null;
+        var root = ResolveProjectRoot(projectName);
+        if (root == null) return null;
+
+        const char separator = '\x1f';
+        var (output, _, code) = RunGitArgs(
+            root,
+            "show",
+            "-s",
+            "--no-patch",
+            "--format=%H%x1f%P%x1f%aI%x1f%an%x1f%s",
+            sha);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        var parts = output.Trim().Split(separator);
+        if (parts.Length < 5
+            || parts[0].Length != 40
+            || !string.Equals(parts[0], sha, StringComparison.OrdinalIgnoreCase)
+            || !DateTime.TryParse(
+                parts[2],
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal
+                | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var authoredAt))
+            return null;
+
+        var files = GetCommitFilesAtRoot(root, parts[0]);
+        return new GitResolvedCommit(
+            parts[0],
+            parts[1].Split(' ', StringSplitOptions.RemoveEmptyEntries),
+            DateTime.SpecifyKind(authoredAt, DateTimeKind.Utc),
+            parts[3],
+            parts[4].Trim(),
+            files.Count,
+            files.Sum(file => file.Added),
+            files.Sum(file => file.Removed),
+            files);
+    }
+
+    /// <summary>Read one repository file at an immutable project commit.</summary>
+    public string? GetProjectFileAtCommit(string projectName, string sha, string repoRelPath)
+    {
+        var root = ResolveProjectRoot(projectName);
+        return root is null ? null : GetFileAtCommitCached(root, sha, repoRelPath);
     }
 
     /// <summary>
