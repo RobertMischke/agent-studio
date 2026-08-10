@@ -27,6 +27,7 @@ public static class ConceptWorkbenchContract
     public const string DossierPrefix = "docs/";
     public const string DescriptorFileName = "workbench.json";
     public const string EntryFileName = "index.html";
+    private const string ArticleTemplateResource = "AgentStudio.Templates.ArticleDocumentV2";
 
     private static readonly string[] RequiredSections =
         ["alternatives", "recommendation", "evidence", "open-decisions"];
@@ -206,7 +207,9 @@ public static class ConceptWorkbenchContract
                 findings.Add("index.html must include its house-style CSS.");
             foreach (var section in RequiredSections)
             {
-                if (!html.Contains($"data-concept-section=\"{section}\"", StringComparison.OrdinalIgnoreCase)
+                if (!html.Contains($"data-document-section=\"{section}\"", StringComparison.OrdinalIgnoreCase)
+                    && !html.Contains($"data-document-section='{section}'", StringComparison.OrdinalIgnoreCase)
+                    && !html.Contains($"data-concept-section=\"{section}\"", StringComparison.OrdinalIgnoreCase)
                     && !html.Contains($"data-concept-section='{section}'", StringComparison.OrdinalIgnoreCase))
                     findings.Add($"index.html is missing the {section} concept section.");
             }
@@ -256,36 +259,16 @@ public static class ConceptWorkbenchContract
     {
         var title = WebUtility.HtmlEncode(descriptor.Title);
         var summary = WebUtility.HtmlEncode(descriptor.Summary);
-        return $$"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>{{title}} | Concept Workbench</title>
-              <style>
-                :root { color-scheme: light; --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3; --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf; }
-                @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a; --ink-1: #fff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a; } }
-                * { box-sizing: border-box; }
-                body { margin: 0; padding: 0 0 5rem; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
-                main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
-                header { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
-                h1 { margin: 0 0 12px; font-size: 34px; line-height: 1.2; }
-                h2 { margin: 0 0 6px; font-size: 24px; }
-                p { max-width: 76ch; }
-                section { margin-top: 2rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; }
-                .lede { max-width: 62ch; margin: 0; color: var(--ink-2); font-size: 18px; }
-              </style>
-            </head>
-            <body><main>
-              <header><p>Concept Workbench</p><h1>{{title}}</h1><p class="lede">{{summary}}</p></header>
-              <section data-concept-section="alternatives"><h2>Alternatives</h2><p>Document the credible alternatives and tradeoffs.</p></section>
-              <section data-concept-section="recommendation"><h2>Recommendation</h2><p>State the recommended default and why.</p></section>
-              <section data-concept-section="evidence"><h2>Evidence</h2><p>Link observations, measurements, and constraints.</p></section>
-              <section data-concept-section="open-decisions"><h2>Open decisions</h2><p>List the choices that require human sight review.</p></section>
-            </main></body>
-            </html>
-            """;
+        using var stream = typeof(ConceptWorkbenchContract).Assembly
+            .GetManifestResourceStream(ArticleTemplateResource)
+            ?? throw new InvalidOperationException("The canonical article document template is unavailable.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd()
+            .Replace("{{title}}", title, StringComparison.Ordinal)
+            .Replace("{{summary}}", summary, StringComparison.Ordinal)
+            .Replace("{{pattern}}", "concept", StringComparison.Ordinal)
+            .Replace("{{status}}", WebUtility.HtmlEncode(descriptor.Status), StringComparison.Ordinal)
+            .Replace("{{phase}}", WebUtility.HtmlEncode(descriptor.Phase), StringComparison.Ordinal);
     }
 
     private static string NormalizeTopic(string topic)

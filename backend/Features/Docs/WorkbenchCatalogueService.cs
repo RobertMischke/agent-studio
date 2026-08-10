@@ -164,7 +164,10 @@ public sealed class WorkbenchCatalogueService
             projectName,
             item.Key,
             item.Id,
-            item.RelatedTaskKeys,
+            item.SourceTaskKeys
+                .Concat(item.RelatedTaskKeys)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
             links);
     }
 
@@ -459,6 +462,7 @@ public sealed class WorkbenchCatalogueService
                     updated.UtcDateTime, repoRel, true, null, DescriptorTaskKeys(obj))
                 {
                     Key = key,
+                    DescriptorSourceTaskKeys = StringArray(obj, "sourceTaskKeys"),
                     RelatedTaskKeys = StringArray(obj, "relatedTaskKeys"),
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
@@ -1006,7 +1010,9 @@ public sealed class WorkbenchCatalogueService
 
             var references = new Dictionary<string, WorkbenchDocumentationReference>(
                 StringComparer.OrdinalIgnoreCase);
-            foreach (var key in item.RelatedTaskKeys.Concat(item.Decision?.SpawnedTaskKeys ?? []))
+            foreach (var key in item.SourceTaskKeys
+                         .Concat(item.RelatedTaskKeys)
+                         .Concat(item.Decision?.SpawnedTaskKeys ?? []))
             {
                 if (string.IsNullOrWhiteSpace(key)) continue;
                 var normalized = key.Trim();
@@ -1053,6 +1059,8 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
 {
     public string? Key { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string[] DescriptorSourceTaskKeys { get; init; } = [];
     public string[] RelatedTaskKeys { get; init; } = [];
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }

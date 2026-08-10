@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-09
+Version: 2026-08-10
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -23,25 +23,23 @@ or commit attribution.
   task `results/` is optional. `workbench.json` names the source card in
   `sourceTaskKeys` and remains `status=decision-pending` until sight review.
   The published document, not `status.md`, is the promotion source.
-- The concept prompt names the current house-style fallback explicitly:
-  `docs/operations/haertung-verteilte-ausfuehrung/index.html` in agent-taskboard.
-  Dossiers reuse its style block until the AGT-2536 article template is
-  integrated. The contract requires calm noun headings, factual copy, bounded
-  reading width, theme variables, inline SVG diagrams, and no dossier-specific
-  colour or font system.
-- Until AGT-2533 supplies `references.workbenches`, `TaskInfo.ConceptDossier`
-  detects a repository-relative `docs/.../index.html` path from
+- New concept dossiers use the embedded Article document v2 template. It keeps
+  the house-style rules for calm noun headings, factual copy, bounded reading
+  width, theme variables, and inline SVG diagrams, and includes a bounded
+  append-only Implementation section.
+- `references.workbenches` is the canonical typed card-to-Dossier edge.
+  `TaskInfo.ConceptDossier` still detects a repository-relative
+  `docs/.../index.html` path from
   `results/deliverables.md` first and `status.md` second. Task detail renders
-  that one path as the dossier link. A concept in `5-human-review` or
+  that one path only as a compatibility fallback. A concept in `5-human-review` or
   `6-completed` with neither a link nor a deliberate no-dossier explanation
   gets one compact `No dossier linked` notice with the two correction actions.
   Existing cards are not bulk-migrated. MKT-21 is the reference example and
   remains a manual backfill rather than an application migration.
-- The AGT-2533 handoff replaces this write/read adapter with the Workbench-key
-  reference. It must reuse the same detail row and operator actions, not add a
-  second Dossier block. The Markdown detector may remain read-only compatibility
-  for already-linked cards during the transition, but it must never produce a
-  duplicate visible reference.
+- The Workbench-key reference reuses the same detail row and operator actions,
+  not a second Dossier block. The Markdown detector remains read-only
+  compatibility for already-linked cards and never produces a duplicate visible
+  reference.
 - A delivered concept waits in `5-human-review` with a
   `concept-sight-review` marker. This is a successful delivery state, including
   when the agent reports `NEEDS_INPUT`; it is not an escalation.
@@ -527,6 +525,14 @@ cannot erase an operator decision.
   query `GET /api/projects/{projectName}/workbenches/{key}/references` returns
   every referencing card. Descriptor `relatedTaskKeys` remain a separately
   labelled legacy bridge and do not replace the derived keyed edges.
+- A delivering card resolved through `references.workbenches` or a descriptor
+  `sourceTaskKeys` back edge receives the Dossier maintenance prompt contract.
+  It appends only its own dated implementation entry between the canonical log
+  markers. The review gate rejects rewrites outside that log or changes to prior
+  entries and records the outcome as `post-dossier-maintenance` in the task's
+  pipeline timeline. The same source and typed references feed the existing
+  documented-lifecycle policy, so all terminal references produce the quiet
+  `Ready to document` proposal.
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

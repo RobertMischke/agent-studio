@@ -2,13 +2,19 @@
   "schemaVersion": 1,
   "id": "kontext-orchestrator-chats",
   "title": "Context-Aware Orchestrator Chats",
-  "summary": "Decision dossier for project Chat as the primary context workspace: current implementation evidence, a typed context model, the Task Chat boundary, token-budget policy, two UX sketches, and five follow-up slices.",
+  "summary": "Living decision dossier for project Chat as the primary context workspace: current implementation evidence, a typed context model, the Task Chat boundary, token-budget policy, two UX sketches, and six linked delivery slices.",
   "entrypoint": "index.html",
-  "status": "decision-pending",
+  "status": "decided",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-09T16:53:46Z",
+  "updatedAt": "2026-08-10T10:00:00Z",
   "sourceTaskKeys": [
-    "AGT-2514"
+    "AGT-2514",
+    "AGT-2572",
+    "AGT-2573",
+    "AGT-2574",
+    "AGT-2575",
+    "AGT-2576",
+    "AGT-2577"
   ],
   "relatedTaskKeys": [
     "AGT-2506",

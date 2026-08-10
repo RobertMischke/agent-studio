@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-02
+Version: 2026-08-10
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -57,6 +57,11 @@ pipeline view.
   commit boundary, verifies the source-card key plus `decision-pending` status
   and task-file links, waits for human sight review, then creates coding cards
   from the descriptor.
+- `backend/Features/Docs/DossierMaintenanceService.cs` and
+  `DossierImplementationContract.cs`: resolve a delivery card's Dossiers from
+  `references.workbenches` or descriptor `sourceTaskKeys`, frame the CORE run,
+  and prove at review that one dated card entry was appended inside the
+  canonical implementation log without changing decision content.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`,
   `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
   `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
@@ -707,6 +712,16 @@ operator changes cause the step to fail before its writer runs.
   a shared checkout and its linked worktrees cannot launch overlapping full
   builds or test suites. Admission and host-load waits are cancellable and do
   not consume the per-command execution timeout.
+- `post-dossier-maintenance` is a mandatory deterministic row in the standard
+  and UI pipelines. Cards without a Dossier reference record `NotApplicable`.
+  Referenced cards receive `mode-framing-dossier-maintenance.md` in their CORE
+  prompt and must append one `<li data-implementation-entry>` carrying the card
+  key, delivery date, slice name, and compact shipped summary. Auto Review
+  compares the first touching commit's parent with the delivered revision. The
+  bytes outside the bounded implementation log and the complete prior log must
+  remain unchanged. A missing or non-append-only update fails the visible row
+  and follows the existing completion-gate reissue or escalation budget before
+  build and aspect review continue.
 - `PipelineHealthService` is the visibility-only sensor for pipeline-wide
   failure modes. `BuildTestGateRunner` reports acquired/completed pairs into
   it, and the service reads the existing append-only `lane_changed` ledgers.
@@ -738,7 +753,9 @@ operator changes cause the step to fail before its writer runs.
   recommendation, evidence, open decisions, implementation-card source data,
   the own-card `sourceTaskKeys` entry, `status=decision-pending`, and the dossier
   path in both `results/deliverables.md` and `status.md`. It deliberately does
-  not run build, test, code aspects, or integration.
+  not run build, test, code aspects, or integration. New dossiers render from
+  the embedded Article document v2 template, which includes the canonical
+  append-only Implementation section and log markers.
   A complete Workbench moves to `5-human-review` with a durable
   `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
   successful delivery at this gate. Sight-review acceptance completes the
