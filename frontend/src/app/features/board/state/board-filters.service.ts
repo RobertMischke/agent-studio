@@ -400,6 +400,18 @@ export class BoardFiltersService {
     this.writeFilterHash();
   }
 
+  /**
+   * Idempotently narrow a shareable filter URL to one project. Unlike
+   * setSoleProject(), this scope is user-selected and therefore remains in the
+   * filters=projects:... segment for reloads and shared links.
+   */
+  setExplicitSoleProject(name: string): void {
+    this.activeProjects.set(new Set([name]));
+    this.explicitProjectFilter.set(true);
+    localStorage.setItem('activeProjects', JSON.stringify([name]));
+    this.writeFilterHash();
+  }
+
   /** Clear only the project scope while preserving every other board filter. */
   clearProjectScope(): void {
     this.explicitProjectFilter.set(false);
