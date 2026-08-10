@@ -101,6 +101,32 @@ describe('ExplorerWorkbenchListComponent', () => {
     http.verify();
   });
 
+  it('keeps an invalid descriptor non-openable and shows its repair reason', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ExplorerWorkbenchListComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const broken: WorkbenchListItem = {
+      ...item('broken', 'invalid'),
+      valid: false,
+      error: 'entrypoint is missing or escapes its Workbench folder.',
+    };
+
+    fixture.componentInstance.toggle();
+    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([broken], false));
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-Demo-broken"]') as HTMLButtonElement;
+    expect(row.disabled).toBe(true);
+    expect(row.textContent).toContain('entrypoint is missing or escapes its Workbench folder.');
+    http.verify();
+  });
+
   it('renders archived and documented entries in separate history sections', async () => {
     await TestBed.configureTestingModule({
       imports: [ExplorerWorkbenchListComponent],

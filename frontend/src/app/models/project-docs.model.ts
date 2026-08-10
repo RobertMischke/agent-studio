@@ -324,7 +324,7 @@ export interface ConfirmWorkbenchDecisionRequest {
 
 export interface WorkbenchListItem {
   id: string;
-  /** Stable project-scoped reference key. Null only for legacy pilot entries. */
+  /** Stable project-scoped reference key. Null for legacy entries or a read-only source awaiting checkout backfill. */
   key?: string | null;
   title: string;
   summary: string;

@@ -247,6 +247,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   }
   readonly openedContent = signal<string>('');
   readonly loadingDoc = signal(false);
+  readonly loadError = signal<string | null>(null);
   readonly viewerTab = signal<WikiViewerTab>('doc');
   readonly reportContent = signal('');
   readonly reportAnchor = signal<string | null>(null);
@@ -937,6 +938,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.openedType.set(type);
     this.viewerTab.set(tab);
     this.openedContent.set('');
+    this.loadError.set(null);
     this.reportContent.set('');
     this.reportAnchor.set(reportAnchor);
     this.reportError.set(null);
@@ -955,10 +957,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.docs.getWikiFile(this.projectName(), rel).subscribe({
       next: r => {
         this.openedContent.set(r.content);
+        this.loadError.set(null);
         this.loadingDoc.set(false);
       },
-      error: () => {
-        this.openedContent.set('(failed to load)');
+      error: error => {
+        this.openedContent.set('');
+        this.loadError.set(error?.error?.error ?? `Page '${rel}' could not be loaded.`);
         this.loadingDoc.set(false);
       },
     });
@@ -1053,14 +1057,18 @@ export class ProjectWikiSectionComponent implements OnDestroy {
       next: response => {
         if (this.openedRel() !== rel) return;
         this.openedContent.set(response.content);
+        this.loadError.set(null);
         this.revisionSha.set(null);
         this.revisionContent.set('');
         this.pageUpdated.set(false);
         this.pageReloading.set(false);
         this.reloadHistory(rel);
       },
-      error: () => {
-        if (this.openedRel() === rel) this.pageReloading.set(false);
+      error: error => {
+        if (this.openedRel() === rel) {
+          this.loadError.set(error?.error?.error ?? `Page '${rel}' could not be reloaded.`);
+          this.pageReloading.set(false);
+        }
       },
     });
   }
