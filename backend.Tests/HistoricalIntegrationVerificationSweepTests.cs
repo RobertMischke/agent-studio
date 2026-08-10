@@ -63,6 +63,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
     public async Task RunOnceAsync_ClassifiesInBatches_WritesCompactReport_AndIsIdempotent()
     {
         var root = Path.Combine(

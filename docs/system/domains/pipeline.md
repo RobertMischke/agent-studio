@@ -212,13 +212,13 @@ pipeline view.
   Completed only after successful integration and returns decided failures to
   Human Review. Its 15-minute sweep reports `attempted`, `merged`,
   `alreadyMerged`, and `failed` separately; `MergedAfterRebase` contributes to
-  the existing `merged` and `integrated` counters. The same sweep evaluates the 30-minute accepted
-  delivery invariant. The alert evaluates only current, non-archived cards
+  the existing `merged` and `integrated` counters. The same sweep evaluates the
+  30-minute accepted delivery invariant. The alert evaluates only current,
+  non-archived cards
   whose acceptance has a native integration record or an operator-facing
   historical verification record. Verified legacy integration and explicit
   no-code delivery records never become acute alerts. Accepted cards without
-  Git-proven integration publish a
-  project-filtered snapshot at
+  Git-proven integration publish a project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
   banner capped at ten task keys with a link to the exact filtered board list,
   and emit a warning event containing the affected task keys.
