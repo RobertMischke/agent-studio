@@ -58,7 +58,9 @@ Route hydration wins over the locally persisted tab collection. State-to-route
 mirroring is enabled only after public project slugs or task keys have resolved,
 preventing a stale local tab from erasing a copied route during cold boot.
 Surface and subview synchronization uses `replaceState`; board filters remain an
-orthogonal sibling hash segment. Workspace Settings sections use the same
+orthogonal sibling hash segment. Active board expressions render as removable
+chips, and a board route without that sibling segment restores the unfiltered
+view. Workspace Settings sections use the same
 `#/workspace/settings[/<section>]` path convention; older loose token and
 screenshot routes remain migration inputs. The full schema, transient-state
 boundary, route map, and visual ownership diagram are in

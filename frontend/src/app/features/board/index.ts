@@ -15,6 +15,7 @@ export { EpicOverviewService } from './state/epic-overview.service';
 // components
 export { EpicOverviewScreenComponent, type EpicOverviewScope } from './components/epic-overview-screen/epic-overview-screen.component';
 export { BoardSearchIconComponent } from './components/board-search-icon/board-search-icon.component';
+export { ActiveBoardFiltersComponent } from './components/active-board-filters/active-board-filters.component';
 export { CreateTaskDialogComponent, type PendingAttachment } from './components/create-task-dialog/create-task-dialog.component';
 export { DecisionBacklogHintComponent } from './components/decision-backlog-hint/decision-backlog-hint.component';
 export { FiltersDropdownComponent, type TypeFilterOption } from './components/filters-dropdown/filters-dropdown.component';

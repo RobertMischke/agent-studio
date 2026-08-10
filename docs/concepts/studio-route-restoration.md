@@ -35,7 +35,8 @@ The convention is:
    value. One value avoids ambiguity with the shared hash segment delimiter.
 3. **Sibling hash key-value segments for orthogonal state.** Board filters keep
    the established `filters=<encoded-expression>` segment and coexist with the
-   route.
+   route. Active expressions remain visible as removable chips above the board;
+   the absence of `filters=` on a board route means the unfiltered view.
 4. **No application route in the top-level query string.** The former
    `?task=`, `?job=`, and `?watchPath=` forms remain readable migration inputs.
    Successful resolution rewrites them to the canonical hash route and never
@@ -174,3 +175,5 @@ review screenshots under the managed task's `results/` directory.
   path deduplication, and session-only MRU return when the active tab closes.
 - **2026-08-09:** Added workspace-wide and project-scoped Workbench overview
   routes while retaining the existing item route for the viewer.
+- **2026-08-10:** Made board filter state visible and removable on the board and
+  defined a board route without `filters=` as the unfiltered state.

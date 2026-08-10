@@ -263,20 +263,7 @@
               @if (boardLoading() && jobService.jobs().length === 0) {
                 <app-loading-surface kind="board" label="Loading board…" />
               } @else {
-              @if (hasActiveFiltersOrSearch() && filteredTaskCount() === 0) {
-                <div class="board-filter-empty-hint" data-testid="board-filter-empty-hint">
-                  <span class="board-filter-empty-hint__text">
-                    No tasks match the current filter
-                    @if (activeFilterCount() > 0) {
-                      ({{ activeFilterCount() }} {{ activeFilterCount() === 1 ? 'filter' : 'filters' }} active)
-                    }
-                  </span>
-                  <button type="button"
-                          class="board-filter-empty-hint__clear"
-                          data-testid="board-filter-empty-hint-clear"
-                          (click)="onSidesheetClearAll()">Clear filters</button>
-                </div>
-              }
+              <app-active-board-filters [resultCount]="filteredTaskCount()" />
               @if (groupByEpic()) {
                 <main class="dashboard dashboard--studio dashboard--epic-board"
                       data-testid="studio-board">
@@ -334,7 +321,7 @@
               </main>
               }
               }
-            }
+              }
             @case ('task') {
               @if (detailLoading()) {
                 <app-loading-surface kind="task-detail" label="Loading task details…" />

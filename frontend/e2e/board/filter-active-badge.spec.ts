@@ -104,7 +104,7 @@ test.describe('Filter-active badge (F59)', () => {
 
     const banner = page.getByTestId('board-filter-empty-hint');
     await expect(banner).toBeVisible({ timeout: 5000 });
-    await expect(banner).toContainText('No tasks match');
+    await expect(banner).toContainText('0 tasks for filter Search:');
 
     const clearBtn = page.getByTestId('board-filter-empty-hint-clear');
     await expect(clearBtn).toBeVisible();
@@ -123,7 +123,8 @@ test.describe('Filter-active badge (F59)', () => {
 
     const banner = page.getByTestId('board-filter-empty-hint');
     await expect(banner).toBeVisible({ timeout: 5000 });
-    await expect(banner).toContainText('1 filter active');
+    await expect(banner).toContainText('0 tasks for filters Search:');
+    await expect(banner).toContainText('Type:');
   });
 
   test('sidebar header shows "Clear all" button when filters are active', async ({ page }) => {

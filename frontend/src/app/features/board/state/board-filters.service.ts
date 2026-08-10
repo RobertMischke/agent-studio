@@ -27,7 +27,7 @@ import { kvValueOf, withKvSegment } from '../../../services/url-hash.util';
  */
 
 export interface ActiveFilterPill {
-  kind: 'owner' | 'project' | 'type' | 'tag' | 'dependsOn' | 'integration';
+  kind: 'search' | 'owner' | 'project' | 'type' | 'tag' | 'dependsOn' | 'integration';
   kindLabel: string;
   /** Identifier used by the remove handler. */
   value: string;
@@ -58,6 +58,9 @@ export class BoardFiltersService {
   readonly activeProjects = signal<Set<string>>(
     new Set(safeParseStringArray(localStorage.getItem('activeProjects')))
   );
+  private readonly explicitProjectFilter = signal(false);
+  readonly hasExplicitProjectFilter = computed(() =>
+    this.explicitProjectFilter() && this.activeProjects().size > 0);
 
   /** null = no filter; otherwise show only jobs whose ownerClientId matches. */
   readonly activeClientFilter = signal<string | null>(null);
@@ -223,12 +226,20 @@ export class BoardFiltersService {
 
   readonly activeFilterPills = computed<ActiveFilterPill[]>(() => {
     const pills: ActiveFilterPill[] = [];
+    const query = this.searchQuery().trim();
+    if (query) {
+      pills.push({
+        kind: 'search', kindLabel: 'Search', value: query,
+        label: `Search: ${query}`,
+        swatch: null,
+      });
+    }
     const owner = this.activeClientFilter();
     if (owner) {
       const c = this.clientService.resolve(owner);
       pills.push({
         kind: 'owner', kindLabel: 'Owner', value: owner,
-        label: c.displayName || owner,
+        label: `Owner: ${c.displayName || owner}`,
         swatch: c.colour || null,
       });
     }
@@ -236,22 +247,24 @@ export class BoardFiltersService {
     if (dependsOn) {
       pills.push({
         kind: 'dependsOn', kindLabel: 'Depends on', value: dependsOn,
-        label: dependsOn,
+        label: `Depends on: ${dependsOn}`,
         swatch: null,
       });
     }
-    for (const name of this.activeProjects()) {
-      const id = projectIdentity(name);
-      pills.push({
-        kind: 'project', kindLabel: 'Project', value: name,
-        label: name, swatch: id.color,
-      });
+    if (this.hasExplicitProjectFilter()) {
+      for (const name of this.activeProjects()) {
+        const id = projectIdentity(name);
+        pills.push({
+          kind: 'project', kindLabel: 'Project', value: name,
+          label: `projects:${name}`, swatch: id.color,
+        });
+      }
     }
     const t = this.activeType();
     if (t) {
       pills.push({
         kind: 'type', kindLabel: 'Type', value: t,
-        label: typeFilterLabel(t),
+        label: `Type: ${typeFilterLabel(t)}`,
         swatch: null,
       });
     }
@@ -260,14 +273,14 @@ export class BoardFiltersService {
       const entry = byId.get(id);
       pills.push({
         kind: 'tag', kindLabel: 'Tag', value: id,
-        label: entry?.label ?? id,
+        label: `Tag: ${entry?.label ?? id}`,
         swatch: entry?.color ?? null,
       });
     }
     if (this.stalledIntegrationOnly()) {
       pills.push({
         kind: 'integration', kindLabel: 'Integration', value: 'stalled',
-        label: 'Stalled accepted tasks', swatch: null,
+        label: 'integration:stalled', swatch: null,
       });
     }
     return pills;
@@ -275,6 +288,9 @@ export class BoardFiltersService {
 
   removeFilterPill(pill: ActiveFilterPill): void {
     switch (pill.kind) {
+      case 'search':
+        this.clearSearch();
+        break;
       case 'owner':
         this.setClientFilter(null);
         break;
@@ -363,6 +379,7 @@ export class BoardFiltersService {
     const current = new Set(this.activeProjects());
     if (current.has(name)) current.delete(name); else current.add(name);
     this.activeProjects.set(current);
+    this.explicitProjectFilter.set(current.size > 0);
     localStorage.setItem('activeProjects', JSON.stringify([...current]));
     this.writeFilterHash();
   }
@@ -372,8 +389,12 @@ export class BoardFiltersService {
    * repeated invocations with the same name must not toggle the filter off.
    */
   setSoleProject(name: string): void {
+    this.explicitProjectFilter.set(false);
     const current = this.activeProjects();
-    if (current.size === 1 && current.has(name)) return;
+    if (current.size === 1 && current.has(name)) {
+      this.writeFilterHash();
+      return;
+    }
     this.activeProjects.set(new Set([name]));
     localStorage.setItem('activeProjects', JSON.stringify([name]));
     this.writeFilterHash();
@@ -381,6 +402,7 @@ export class BoardFiltersService {
 
   /** Clear only the project scope while preserving every other board filter. */
   clearProjectScope(): void {
+    this.explicitProjectFilter.set(false);
     if (this.activeProjects().size === 0) return;
     this.activeProjects.set(new Set());
     localStorage.setItem('activeProjects', '[]');
@@ -405,6 +427,7 @@ export class BoardFiltersService {
     const isSoleActive = current.size === 1 && current.has(name);
     const next = isSoleActive ? new Set<string>() : new Set<string>([name]);
     this.activeProjects.set(next);
+    this.explicitProjectFilter.set(next.size > 0);
     localStorage.setItem('activeProjects', JSON.stringify([...next]));
     this.writeFilterHash();
   }
@@ -420,6 +443,7 @@ export class BoardFiltersService {
     this.activeDependsOnFilter.set(null);
     this.stalledIntegrationOnly.set(false);
     this.activeProjects.set(new Set());
+    this.explicitProjectFilter.set(false);
     localStorage.setItem('activeProjects', '[]');
     this.writeFilterHash();
   }
@@ -454,6 +478,7 @@ export class BoardFiltersService {
     const cleaned = new Set([...current].filter(n => validNames.has(n)));
     if (cleaned.size !== current.size) {
       this.activeProjects.set(cleaned);
+      this.explicitProjectFilter.set(this.explicitProjectFilter() && cleaned.size > 0);
       localStorage.setItem('activeProjects', JSON.stringify([...cleaned]));
       this.writeFilterHash();
     }
@@ -473,6 +498,19 @@ export class BoardFiltersService {
 
   private readFilterHash(): void {
     const hash = window.location.hash || '';
+    // The route is authoritative. A board URL without a filters= segment is
+    // the unfiltered board, so a hash navigation must not leave the previous
+    // in-memory facets stuck on screen. Project-scoped board tabs restore
+    // their own scope after route hydration through the shell tab effect.
+    this.activeClientFilter.set(null);
+    this.activeDependsOnFilter.set(null);
+    this.activeProjects.set(new Set());
+    this.explicitProjectFilter.set(false);
+    localStorage.setItem('activeProjects', '[]');
+    this.activeTypeFilter.set(new Set());
+    this.activeTagFilter.set(new Set());
+    this.stalledIntegrationOnly.set(false);
+
     const rawFilters = kvValueOf(hash, 'filters');
     if (rawFilters != null) {
       const decoded = decodeURIComponent(rawFilters);
@@ -499,6 +537,7 @@ export class BoardFiltersService {
       this.activeClientFilter.set(owner);
       this.activeDependsOnFilter.set(dependsOn);
       this.activeProjects.set(projects);
+      this.explicitProjectFilter.set(projects.size > 0);
       localStorage.setItem('activeProjects', JSON.stringify([...projects]));
       const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
       this.activeTypeFilter.set(oneType);
@@ -529,7 +568,7 @@ export class BoardFiltersService {
     if (owner) segments.push(`owner:${owner}`);
     const dependsOn = this.activeDependsOnFilter();
     if (dependsOn) segments.push(`dependsOn:${dependsOn}`);
-    const projects = [...this.activeProjects()];
+    const projects = this.hasExplicitProjectFilter() ? [...this.activeProjects()] : [];
     if (projects.length > 0) segments.push(`projects:${projects.join(',')}`);
     const t = this.activeType();
     if (t) segments.push(`type:${t}`);
