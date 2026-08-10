@@ -215,6 +215,48 @@ function pipeline() {
   };
 }
 
+function pipelineWithMissingPrices(mixed: boolean) {
+  const fixture = pipeline();
+  const gap = { modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 };
+  const executionSteps = fixture.execution.steps.map((step, index) =>
+    !mixed || index === 0 ? { ...step, model: 'gpt-5.6-sol' } : step);
+  const unavailable = (step: ReturnType<typeof costStep>) => ({
+    ...step,
+    model: 'gpt-5.6-sol',
+    modelKnown: false,
+    pricingGaps: [gap],
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cacheReadCostUsd: 0,
+    cacheCreationCostUsd: 0,
+    costUsd: 0,
+  });
+  const core = unavailable(fixture.cost.steps[0]);
+  const aspect = mixed ? fixture.cost.steps[1] : unavailable(fixture.cost.steps[1]);
+  return {
+    ...fixture,
+    execution: {
+      ...fixture.execution,
+      steps: executionSteps,
+      previousAttempts: fixture.execution.previousAttempts.map(run => ({
+        ...run,
+        steps: run.steps.map((step, index) =>
+          !mixed || index === 0 ? { ...step, model: 'gpt-5.6-sol' } : step),
+      })),
+    },
+    cost: {
+      ...fixture.cost,
+      steps: [core, aspect],
+      totalInputCostUsd: mixed ? 1.2 : 0,
+      totalOutputCostUsd: mixed ? 0.8 : 0,
+      totalCostUsd: mixed ? 2 : 0,
+      anyModelUnknown: true,
+      unpricedRuns: 1,
+      pricingGaps: [gap],
+    },
+  };
+}
+
 function runTimeline() {
   return {
     runCount: 2,
@@ -286,6 +328,68 @@ async function saveShot(page: Page, name: string) {
   await mkdir(RESULTS_DIR, { recursive: true });
   await writeFile(join(RESULTS_DIR, name), buf);
 }
+
+async function savePipelineShot(page: Page, name: string) {
+  const target = RESULTS_DIR ? join(RESULTS_DIR, name) : join('test-results', name);
+  if (RESULTS_DIR) await mkdir(RESULTS_DIR, { recursive: true });
+  await page.getByTestId('overview-pipeline').screenshot({ path: target });
+}
+
+test('missing historical prices never render as zero and mixed totals stay explicit', async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.removeItem('atp.studio.tabs.v1');
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    }
+    catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  const pipelineRoute = new RegExp(`/api/tasks/${JOB_ID}/pipeline(\\?|$)`);
+  await page.route(pipelineRoute, route => route.fulfill(json(pipelineWithMissingPrices(false))));
+  const url = `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`;
+  await page.goto(url);
+
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  const coreCost = page.locator('[data-step-id="core-agent-run"]').getByTestId('overview-pipeline-step-cost');
+  const totalCost = page.getByTestId('overview-pipeline-total-cost');
+  await expect(coreCost).toContainText('no price data');
+  await expect(totalCost).toContainText('no price data');
+  await expect(totalCost).not.toContainText('$0.00');
+  await coreCost.hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('gpt-5.6-sol');
+  await expect(page.getByTestId('cac-tooltip')).toContainText('NoPriceForDate');
+
+  // Recreate the legacy silent-zero projection solely for before/after visual
+  // evidence. Reload immediately afterwards to restore the real renderer.
+  await coreCost.evaluate(element => { element.textContent = '$0.00'; });
+  await totalCost.evaluate(element => { element.textContent = '$0.00'; });
+  await savePipelineShot(page, 'pipeline-price-before-legacy-zero-light--mocked.png');
+
+  await page.goto(url);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('no price data');
+  await savePipelineShot(page, 'pipeline-price-after-no-data-light--mocked.png');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
+  await savePipelineShot(page, 'pipeline-price-after-no-data-dark--mocked.png');
+
+  await page.route(pipelineRoute, route => route.fulfill(json(pipelineWithMissingPrices(true))));
+  await page.goto(url);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  await page.getByText('ASPECT', { exact: true }).click();
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.00');
+  await expect(page.getByTestId('overview-pipeline-total-cost'))
+    .toContainText('incomplete (1 run without price)');
+  await page.getByTestId('overview-pipeline-total-cost').hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('gpt-5.6-sol');
+  await expect(page.getByTestId('cac-tooltip')).toContainText('NoPriceForDate');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'light'; });
+  await savePipelineShot(page, 'pipeline-price-mixed-light--mocked.png');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
+  await savePipelineShot(page, 'pipeline-price-mixed-dark--mocked.png');
+});
 
 test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page }) => {
   await page.addInitScript(() => {

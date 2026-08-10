@@ -128,15 +128,19 @@ public sealed class ProjectPipelineCostService
             dayList.Add(endDay.AddDays(-(d - 1 - i)).ToString("yyyy-MM-dd"));
 
         var perKindDay = new Dictionary<(StepKind Kind, string Day), Acc>();
+        var perDay = new Dictionary<string, Acc>(StringComparer.Ordinal);
         var perKind = new Dictionary<StepKind, Acc>();
         var perStep = new Dictionary<string, StepAcc>(StringComparer.Ordinal);
         long grandTokens = 0;
         decimal grandCost = 0m;
         var grandUnknown = false;
+        var grandUnpricedRuns = new HashSet<int>();
+        var grandPricingGaps = new PriceGapAccumulator();
         var contributingTasks = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var rec in records)
+        for (var runIndex = 0; runIndex < records.Count; runIndex++)
         {
+            var rec = records[runIndex];
             // Bucket the whole run by its completion (or, while still
             // running, its start) so a task's spend lands on the day it ran.
             var ts = (rec.CompletedAt ?? rec.StartedAt).ToUniversalTime();
@@ -151,15 +155,36 @@ public sealed class ProjectPipelineCostService
                 var est = TokenPricing.Estimate(
                     s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens, ts);
 
-                Add(perKindDay, (s.Kind, dayKey), stepTokens, est);
-                Add(perKind, s.Kind, stepTokens, est);
-                AddStep(perStep, s.StepId, s.Kind, stepTokens, est);
+                Add(perKindDay, (s.Kind, dayKey), stepTokens, est, runIndex, s.Model);
+                Add(perDay, dayKey, stepTokens, est, runIndex, s.Model);
+                Add(perKind, s.Kind, stepTokens, est, runIndex, s.Model);
+                AddStep(perStep, s.StepId, s.Kind, stepTokens, est, runIndex, s.Model);
                 grandTokens += stepTokens;
-                if (est.ModelKnown) grandCost += est.Total; else grandUnknown = true;
+                if (est.ModelKnown)
+                {
+                    grandCost += est.Total;
+                }
+                else
+                {
+                    grandUnknown = true;
+                    grandUnpricedRuns.Add(runIndex);
+                    grandPricingGaps.Add(est, runIndex, s.Model);
+                }
                 contributed = true;
             }
             if (contributed) contributingTasks.Add(rec.JobId);
         }
+
+        var dayCosts = dayList.Select(day =>
+        {
+            perDay.TryGetValue(day, out var cell);
+            return new PipelineDayCostCell(
+                Day: day,
+                TotalTokens: cell?.Tokens ?? 0,
+                CostUsd: Round(cell?.Cost ?? 0m),
+                UnpricedRuns: cell?.UnpricedRuns.Count ?? 0,
+                PricingGaps: cell?.PricingGaps.Build() ?? Array.Empty<PipelinePricingGap>());
+        }).ToList();
 
         var series = new List<PipelineKindSeries>();
         foreach (var kind in KindOrder)
@@ -172,13 +197,17 @@ public sealed class ProjectPipelineCostService
                 cells.Add(new PipelineKindDayCell(
                     Day: day,
                     TotalTokens: cell?.Tokens ?? 0,
-                    CostUsd: Round(cell?.Cost ?? 0m)));
+                    CostUsd: Round(cell?.Cost ?? 0m),
+                    UnpricedRuns: cell?.UnpricedRuns.Count ?? 0,
+                    PricingGaps: cell?.PricingGaps.Build() ?? Array.Empty<PipelinePricingGap>()));
             }
             series.Add(new PipelineKindSeries(
                 Kind: KindKey(kind),
                 TotalTokens: kindAcc.Tokens,
                 TotalCostUsd: Round(kindAcc.Cost),
                 AnyModelUnknown: kindAcc.AnyUnknown,
+                UnpricedRuns: kindAcc.UnpricedRuns.Count,
+                PricingGaps: kindAcc.PricingGaps.Build(),
                 Cells: cells));
         }
 
@@ -191,7 +220,9 @@ public sealed class ProjectPipelineCostService
                 Kind: KindKey(kv.Value.Kind),
                 TotalTokens: kv.Value.Tokens,
                 TotalCostUsd: Round(kv.Value.Cost),
-                AnyModelUnknown: kv.Value.AnyUnknown))
+                AnyModelUnknown: kv.Value.AnyUnknown,
+                UnpricedRuns: kv.Value.UnpricedRuns.Count,
+                PricingGaps: kv.Value.PricingGaps.Build()))
             .OrderByDescending(s => s.TotalTokens)
             .ThenBy(s => s.StepId, StringComparer.Ordinal)
             .ToList();
@@ -203,12 +234,15 @@ public sealed class ProjectPipelineCostService
         return new ProjectPipelineCostTimeline(
             Project: projectName,
             Days: dayList,
+            DayCosts: dayCosts,
             WindowDays: d,
             Kinds: series,
             Steps: steps,
             TotalTokens: grandTokens,
             TotalCostUsd: Round(grandCost),
             AnyModelUnknown: grandUnknown,
+            UnpricedRuns: grandUnpricedRuns.Count,
+            PricingGaps: grandPricingGaps.Build(),
             TaskCount: contributingTasks.Count,
             HasData: grandTokens > 0,
             FetchedAt: DateTime.UtcNow.ToString("o"),
@@ -289,7 +323,13 @@ public sealed class ProjectPipelineCostService
         _ => "module",
     };
 
-    private static void Add<TKey>(Dictionary<TKey, Acc> map, TKey key, long tokens, TokenCostEstimate est)
+    private static void Add<TKey>(
+        Dictionary<TKey, Acc> map,
+        TKey key,
+        long tokens,
+        TokenCostEstimate est,
+        int runIndex,
+        string? model)
         where TKey : notnull
     {
         if (!map.TryGetValue(key, out var acc))
@@ -298,11 +338,26 @@ public sealed class ProjectPipelineCostService
             map[key] = acc;
         }
         acc.Tokens += tokens;
-        if (est.ModelKnown) acc.Cost += est.Total; else acc.AnyUnknown = true;
+        if (est.ModelKnown)
+        {
+            acc.Cost += est.Total;
+        }
+        else
+        {
+            acc.AnyUnknown = true;
+            acc.UnpricedRuns.Add(runIndex);
+            acc.PricingGaps.Add(est, runIndex, model);
+        }
     }
 
     private static void AddStep(
-        Dictionary<string, StepAcc> map, string stepId, StepKind kind, long tokens, TokenCostEstimate est)
+        Dictionary<string, StepAcc> map,
+        string stepId,
+        StepKind kind,
+        long tokens,
+        TokenCostEstimate est,
+        int runIndex,
+        string? model)
     {
         // Steps with no id are runtime noise; fold them under their kind key so
         // they still contribute to the project totals without a blank row.
@@ -313,7 +368,16 @@ public sealed class ProjectPipelineCostService
             map[key] = acc;
         }
         acc.Tokens += tokens;
-        if (est.ModelKnown) acc.Cost += est.Total; else acc.AnyUnknown = true;
+        if (est.ModelKnown)
+        {
+            acc.Cost += est.Total;
+        }
+        else
+        {
+            acc.AnyUnknown = true;
+            acc.UnpricedRuns.Add(runIndex);
+            acc.PricingGaps.Add(est, runIndex, model);
+        }
     }
 
     private static decimal Round(decimal value) => Math.Round(value, 6, MidpointRounding.AwayFromZero);
@@ -332,6 +396,8 @@ public sealed class ProjectPipelineCostService
         public long Tokens;
         public decimal Cost;
         public bool AnyUnknown;
+        public HashSet<int> UnpricedRuns { get; } = [];
+        public PriceGapAccumulator PricingGaps { get; } = new();
     }
 
     private sealed class StepAcc
@@ -340,6 +406,38 @@ public sealed class ProjectPipelineCostService
         public long Tokens;
         public decimal Cost;
         public bool AnyUnknown;
+        public HashSet<int> UnpricedRuns { get; } = [];
+        public PriceGapAccumulator PricingGaps { get; } = new();
+    }
+
+    private sealed class PriceGapAccumulator
+    {
+        private readonly Dictionary<(string ModelId, string Reason), HashSet<int>> _runs = [];
+
+        public void Add(TokenCostEstimate estimate, int runIndex, string? displayModel)
+        {
+            if (estimate.ModelKnown) return;
+            var modelId = !string.IsNullOrWhiteSpace(displayModel)
+                ? displayModel.Trim()
+                : string.IsNullOrWhiteSpace(estimate.ModelId) ? "unknown" : estimate.ModelId.Trim();
+            var key = (modelId, estimate.Status.ToString());
+            if (!_runs.TryGetValue(key, out var affectedRuns))
+            {
+                affectedRuns = [];
+                _runs[key] = affectedRuns;
+            }
+            affectedRuns.Add(runIndex);
+        }
+
+        public IReadOnlyList<PipelinePricingGap> Build()
+            => _runs
+                .Select(pair => new PipelinePricingGap(
+                    pair.Key.ModelId,
+                    pair.Key.Reason,
+                    pair.Value.Count))
+                .OrderBy(gap => gap.ModelId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(gap => gap.Reason, StringComparer.Ordinal)
+                .ToList();
     }
 }
 
@@ -353,16 +451,26 @@ public sealed class ProjectPipelineCostService
 public sealed record ProjectPipelineCostTimeline(
     string Project,
     IReadOnlyList<string> Days,
+    IReadOnlyList<PipelineDayCostCell> DayCosts,
     int WindowDays,
     IReadOnlyList<PipelineKindSeries> Kinds,
     IReadOnlyList<PipelineStepCostSeries> Steps,
     long TotalTokens,
     decimal TotalCostUsd,
     bool AnyModelUnknown,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps,
     int TaskCount,
     bool HasData,
     string FetchedAt,
     ProjectTokenDataFreshness Freshness);
+
+public sealed record PipelineDayCostCell(
+    string Day,
+    long TotalTokens,
+    decimal CostUsd,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);
 
 /// <summary>
 /// One pipeline step's token + cost rollup over the whole window, folded
@@ -378,7 +486,9 @@ public sealed record PipelineStepCostSeries(
     string Kind,
     long TotalTokens,
     decimal TotalCostUsd,
-    bool AnyModelUnknown);
+    bool AnyModelUnknown,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);
 
 /// <summary>
 /// One step-kind's series over the window. <see cref="Kind"/> is the
@@ -393,9 +503,13 @@ public sealed record PipelineKindSeries(
     long TotalTokens,
     decimal TotalCostUsd,
     bool AnyModelUnknown,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps,
     IReadOnlyList<PipelineKindDayCell> Cells);
 
 public sealed record PipelineKindDayCell(
     string Day,
     long TotalTokens,
-    decimal CostUsd);
+    decimal CostUsd,
+    int UnpricedRuns,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);

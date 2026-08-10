@@ -563,7 +563,6 @@
     --pp-settings-columns: minmax(6rem, 0.55fr) minmax(12rem, 1fr) minmax(14rem, 1fr);
   }
 }
-
 @media (max-width: 720px) {
   .pp__head { grid-template-columns: 1fr; row-gap: var(--studio-spacing-1); }
   .pp__summary { grid-template-columns: auto var(--pp-kind-column) minmax(0, 1fr) auto auto; }

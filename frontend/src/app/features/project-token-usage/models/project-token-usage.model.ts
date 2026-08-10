@@ -124,17 +124,29 @@ export interface ProjectJobTokenDetail {
  */
 export type PipelineStepKindKey = 'core' | 'aspect' | 'tool' | 'orchestrator' | 'drift' | 'module';
 
+export interface PipelinePricingGap {
+  modelId: string;
+  reason: string;
+  affectedRuns: number;
+}
+
 export interface PipelineKindDayCell {
   day: string;
   totalTokens: number;
   costUsd: number;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
 }
+
+export type PipelineDayCostCell = PipelineKindDayCell;
 
 export interface PipelineKindSeries {
   kind: PipelineStepKindKey;
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
   cells: PipelineKindDayCell[];
 }
 
@@ -150,17 +162,22 @@ export interface PipelineStepCostSeries {
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
 }
 
 export interface ProjectPipelineCostTimeline {
   project: string;
   days: string[];
+  dayCosts?: PipelineDayCostCell[];
   windowDays: number;
   kinds: PipelineKindSeries[];
   steps: PipelineStepCostSeries[];
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
   taskCount: number;
   hasData: boolean;
   fetchedAt: string;

@@ -23,6 +23,7 @@ import {
   formatTokens,
   stepTokenLabel,
   stepTokenTooltip,
+  pipelineTokenCostByStep,
 } from './pipeline-config.util';
 import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-health-block';
@@ -84,10 +85,7 @@ export class ProjectPipelinePanelComponent {
     const overrides = this.overrides();
     const drafts = this.conditionDraft();
     const catalogue = orderedPipelineCatalogue(this.catalogue(), this.order());
-    const tokenByStep = new Map<string, { tokens: number; costUsd: number; unknown: boolean }>();
-    for (const s of this.pipelineCost()?.steps ?? []) {
-      tokenByStep.set(s.stepId, { tokens: s.totalTokens, costUsd: s.totalCostUsd, unknown: s.anyModelUnknown });
-    }
+    const tokenByStep = pipelineTokenCostByStep(this.pipelineCost());
     return catalogue.map((step, index) => {
       const ov = overrides[step.id];
       const draft = drafts[step.id];
@@ -129,6 +127,8 @@ export class ProjectPipelinePanelComponent {
         tokenSum: tok?.tokens ?? null,
         tokenUnknown: tok?.unknown ?? false,
         tokenCostUsd: tok?.costUsd ?? null,
+        tokenUnpricedRuns: tok?.unpricedRuns ?? 0,
+        tokenPricingGaps: tok?.pricingGaps ?? [],
       };
     });
   });

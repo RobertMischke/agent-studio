@@ -138,24 +138,81 @@ describe('PipelineTokenUsageComponent', () => {
     expect(all(root(fixture), 'pipeline-token-usage-total-model').length).toBe(0);
   });
 
-  it('renders "n/a" cost for a model with no price on file', () => {
+  it('renders an explicit no-price state for a model with no price on file', () => {
     const summary: PipelineModelUsageSummary = {
-      runs: [run(1, true, [model('unpriced-test-model', 700, 0, false)])],
-      totalByModel: [model('unpriced-test-model', 700, 0, false)],
+      runs: [{
+        ...run(1, true, [model('gpt-5.6-sol', 700, 0, false)]),
+        pricingGaps: [{ modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 }],
+      }],
+      totalByModel: [{
+        ...model('gpt-5.6-sol', 700, 0, false),
+        unpricedRuns: 1,
+        pricingGaps: [{ modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 }],
+      }],
       totalTokens: 700,
       totalCostUsd: 0,
       anyModelUnknown: true,
+      unpricedRuns: 1,
+      pricingGaps: [{ modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 }],
     };
     const fixture = setup(summary);
-    // A fully unpriced lifetime aggregate is explicit and never renders $0.00.
-    const totalCost = one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent ?? '';
-    expect(totalCost).toContain('Unknown');
-    expect(totalCost).not.toContain('$0.00');
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .toContain('no price data');
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .not.toContain('$0.00');
+    expect(fixture.componentInstance.totalTooltip(
+      summary.totalTokens,
+      summary.totalCostUsd,
+      summary.anyModelUnknown,
+      'Task total',
+      summary.unpricedRuns,
+      summary.pricingGaps,
+    )).toContain('gpt-5.6-sol');
 
     fixture.componentInstance.toggleSummary();
     fixture.detectChanges();
     const modelRow = one(root(fixture), 'pipeline-token-usage-total-model');
-    expect(modelRow?.textContent).toContain('n/a');
+    expect(modelRow?.textContent).toContain('no price data');
+  });
+
+  it('shows the priced subtotal plus an explicit incomplete-run marker for mixed runs', () => {
+    const gap = { modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 };
+    const summary: PipelineModelUsageSummary = {
+      runs: [
+        run(1, false, [model('claude-haiku-4-5', 1_200_000, 2)]),
+        { ...run(2, true, [model('gpt-5.6-sol', 700, 0, false)]), pricingGaps: [gap] },
+      ],
+      totalByModel: [
+        model('claude-haiku-4-5', 1_200_000, 2),
+        { ...model('gpt-5.6-sol', 700, 0, false), unpricedRuns: 1, pricingGaps: [gap] },
+      ],
+      totalTokens: 1_200_700,
+      totalCostUsd: 2,
+      anyModelUnknown: true,
+      unpricedRuns: 1,
+      pricingGaps: [gap],
+    };
+
+    const fixture = setup(summary);
+    const total = one(root(fixture), 'pipeline-token-usage-grand-total-cost');
+    expect(total?.textContent).toContain('$2.00');
+    expect(total?.textContent).toContain('incomplete (1 run without price)');
+  });
+
+  it('keeps a real zero-dollar value when the run consumed no tokens', () => {
+    const summary: PipelineModelUsageSummary = {
+      runs: [run(1, true, [])],
+      totalByModel: [],
+      totalTokens: 0,
+      totalCostUsd: 0,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+    };
+
+    const fixture = setup(summary);
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .toContain('$0.00');
   });
 
   it('marks a mixed priced and unpriced lifetime aggregate as partial', () => {

@@ -92,7 +92,11 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         { kind: 'aspect', totalTokens: 80_000, totalCostUsd: 0.08, anyModelUnknown: true, cells: [] },
       ],
       steps: [
-        { stepId: 'aspect-requirement-fit', kind: 'aspect', totalTokens: 80_000, totalCostUsd: 0.08, anyModelUnknown: true },
+        {
+          stepId: 'aspect-requirement-fit', kind: 'aspect', totalTokens: 80_000,
+          totalCostUsd: 0.08, anyModelUnknown: true, unpricedRuns: 2,
+          pricingGaps: [{ modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 2 }],
+        },
         { stepId: 'core-run', kind: 'core', totalTokens: 300_000, totalCostUsd: 0.75, anyModelUnknown: false },
         { stepId: 'post-build-test-gate', kind: 'tool', totalTokens: 10_000, totalCostUsd: 0.01, anyModelUnknown: false },
       ],
@@ -191,6 +195,12 @@ describe('ProjectPipelinePanelComponent (render)', () => {
       .toContain('historical list prices');
     expect(fixture.componentInstance.stepTokenTooltip(fixture.componentInstance.rows().find(r => r.id === 'aspect-code-quality')!))
       .toContain('Estimated cost: no price data');
+    const mixedTooltip = fixture.componentInstance.stepTokenTooltip(
+      fixture.componentInstance.rows().find(r => r.id === 'aspect-requirement-fit')!,
+    );
+    expect(mixedTooltip).toContain('$0.08 (partial');
+    expect(mixedTooltip).toContain('gpt-5.6-sol');
+    expect(mixedTooltip).toContain('NoPriceForDate');
     expect(host.querySelector('[data-testid="pipeline-step-setting-tokens-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-tokens-post-build-test-gate"]')).toBeNull();
     expect(host.querySelector('[data-testid="pipeline-step-setting-tokens-post-build-test-gate"]')).toBeNull();
