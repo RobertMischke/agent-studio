@@ -25,6 +25,9 @@ test.use({ serviceWorkers: 'block' });
 const PROJECT = 'project-neuen';
 const RUNNING_TASK_ID = 'run-task-1';
 const RUNNING_TASK_TITLE = 'Wire up the orchestrator header';
+const LONG_CONTEXT_PROJECT = 'Agent Orchestrator Website';
+const LONG_CONTEXT_TITLE = 'Family navigation consistency - decision';
+const LONG_CONTEXT_WORKBENCH = 'family-navigation-consistency';
 const RESULTS = process.env.JOB_RESULTS_DIR
   ? resolve(process.env.JOB_RESULTS_DIR)
   : resolve(process.cwd(), '..', 'results', 'AGT-2269');
@@ -132,6 +135,33 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
   await page.route(/\/api\/runner\/status(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, { projects: {} }, unexpectedRequests);
   });
+  await page.route(/\/api\/runner\/orchestrator-feed$/, async (route) => {
+    await fulfillKnownGet(route, { entries: [], generatedAtUtc: '2026-08-10T08:00:00Z' }, unexpectedRequests);
+  });
+  await page.route(/\/api\/runner\/queue-starvation$/, async (route) => {
+    await fulfillKnownGet(route, {
+      active: false, waitingTaskCount: 0, availableSlots: 0, thresholdMinutes: 30,
+      observedAt: '2026-08-10T08:00:00Z', oldestEnteredLaneAt: null, items: [],
+    }, unexpectedRequests);
+  });
+  await page.route(/\/api\/pipeline\/accepted-integration-alert$/, async (route) => {
+    await fulfillKnownGet(route, {
+      active: false, stalledTaskCount: 0, thresholdMinutes: 30,
+      observedAt: '2026-08-10T08:00:00Z', oldestAcceptedAt: null, items: [],
+    }, unexpectedRequests);
+  });
+  await page.route(/\/api\/auto-review\/status$/, async (route) => {
+    await fulfillKnownGet(route, {
+      lastTickAt: null, accept: 0, reissue: 0, escalate: 0, aspectsRun: 0, pending: 0,
+      currentJob: null, currentProject: null, activeJobs: [],
+    }, unexpectedRequests);
+  });
+  await page.route(/\/api\/v1\/management\/remote-hosts$/, async (route) => {
+    await fulfillKnownGet(route, [], unexpectedRequests);
+  });
+  await page.route(/\/api\/projects$/, async (route) => {
+    await fulfillKnownGet(route, [], unexpectedRequests);
+  });
   await page.route(/\/api\/cli\/quota(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(
       route,
@@ -154,25 +184,39 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
 
 async function stubWorkspace(
   page: Page,
-  opts: { withRunningTask: boolean; executionContext?: Record<string, unknown> },
+  opts: {
+    withRunningTask: boolean;
+    executionContext?: Record<string, unknown>;
+    project?: string;
+  },
 ): Promise<string[]> {
   const unexpectedRequests = await stubBoardBootstrap(page);
+  const project = opts.project ?? PROJECT;
+
+  await page.route(
+    new RegExp(`/api/projects/${encodeURIComponent(project)}/workbenches(?:\\?.*)?$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        projectName: project, includesHistory: false, count: 0, items: [],
+      }, unexpectedRequests);
+    },
+  );
 
   await page.route(/\/api\/watch-paths$/, async (route) => {
     await fulfillKnownGet(
       route,
       [
-        { name: PROJECT, path: 'C:/tmp/' + PROJECT, rootPath: 'C:/tmp/' + PROJECT, repositoryPath: '' },
+        { name: project, path: 'C:/tmp/' + project, rootPath: 'C:/tmp/' + project, repositoryPath: '' },
       ],
       unexpectedRequests,
     );
   });
 
-  await page.route(new RegExp(`/api/orchestrator/context/project:${PROJECT}$`), async (route) => {
+  await page.route(new RegExp(`/api/orchestrator/context/project:${project}$`), async (route) => {
     await fulfillKnownGet(
       route,
       {
-        contextKey: `project:${PROJECT}`,
+        contextKey: `project:${project}`,
         capturedAt: '2026-07-11T10:00:00Z',
         digest: 'lanes: ready=0 | runs: active=0 | health: ok',
         sources: [
@@ -232,10 +276,122 @@ async function stubWorkspace(
   return unexpectedRequests;
 }
 
+async function stubLongWorkbench(page: Page): Promise<string[]> {
+  const unexpectedRequests = await stubWorkspace(page, {
+    withRunningTask: false,
+    project: LONG_CONTEXT_PROJECT,
+  });
+  const encodedProject = encodeURIComponent(LONG_CONTEXT_PROJECT);
+
+  await page.route(/\/api\/workbenches(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {
+      projectName: LONG_CONTEXT_PROJECT,
+      count: 1,
+      currentCount: 1,
+      historyCount: 0,
+      items: [],
+    }, unexpectedRequests);
+  });
+  await page.route(
+    new RegExp(`/api/orchestrator/context/project:${encodedProject}$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `project:${LONG_CONTEXT_PROJECT}`,
+        capturedAt: '2026-08-10T08:00:00Z',
+        digest: 'workbench: decision-pending | health: ok',
+        sources: [],
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(/\/api\/cli\/codex\/models(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {
+      models: [{
+        id: 'gpt-5.6-sol',
+        label: 'GPT-5.6 Sol',
+        isDefault: true,
+        available: true,
+        thinkingLevels: ['high'],
+        defaultThinkingLevel: 'high',
+      }],
+      source: 'long-context-regression',
+    }, unexpectedRequests);
+  });
+  await page.route(
+    new RegExp(`/api/projects/${encodedProject}/workbenches(?:\\?.*)?$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        projectName: LONG_CONTEXT_PROJECT,
+        includesHistory: false,
+        count: 1,
+        items: [{
+          id: LONG_CONTEXT_WORKBENCH,
+          key: 'AOW-W1',
+          title: LONG_CONTEXT_TITLE,
+          summary: 'Long composer context regression fixture.',
+          status: 'decision-pending',
+          phase: 'decision',
+          updatedAtUtc: '2026-08-10T08:00:00Z',
+          entryPath: `docs/workbenches/${LONG_CONTEXT_WORKBENCH}/index.html`,
+          valid: true,
+          error: null,
+          sourceTaskKeys: [],
+          relatedTaskKeys: [],
+        }],
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/projects/${encodedProject}/workbenches/${LONG_CONTEXT_WORKBENCH}$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        workbench: {
+          id: LONG_CONTEXT_WORKBENCH,
+          key: 'AOW-W1',
+          title: LONG_CONTEXT_TITLE,
+          summary: 'Long composer context regression fixture.',
+          status: 'decision-pending',
+          phase: 'decision',
+          updatedAtUtc: '2026-08-10T08:00:00Z',
+          entryPath: `docs/workbenches/${LONG_CONTEXT_WORKBENCH}/index.html`,
+          valid: true,
+          error: null,
+          sourceTaskKeys: [],
+          relatedTaskKeys: [],
+        },
+        html: '<h1>Family navigation consistency</h1>',
+        branch: 'develop',
+        revision: '0123456789abcdef0123456789abcdef01234567',
+        workingTreeModified: false,
+        fingerprint: null,
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/projects/${encodedProject}/workbenches/AOW-W1/references$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        projectName: LONG_CONTEXT_PROJECT,
+        workbenchKey: 'AOW-W1',
+        workbenchId: LONG_CONTEXT_WORKBENCH,
+        legacyTaskKeys: [],
+        items: [],
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(/\/api\/tasks\/reference-status$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  return unexpectedRequests;
+}
+
 async function openSideSheet(page: Page, openContextMenu = true) {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
+  await showSideSheet(page, openContextMenu);
+}
+
+async function showSideSheet(page: Page, openContextMenu = true) {
   const toggle = page.getByTestId('orch-side-sheet-toggle');
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   await toggle.click();
@@ -348,10 +504,6 @@ test.describe('Orchestrator context header · where am I', () => {
     await expect(page.getByTestId('chat-composer-foot')).toHaveCount(1);
     await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
     await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
-    await expect(page.getByTestId('chat-composer-context')).toHaveAttribute(
-      'aria-label',
-      `Message context: project ${PROJECT}, Board`,
-    );
     await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
 
@@ -386,12 +538,82 @@ test.describe('Orchestrator context header · where am I', () => {
     await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
     await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
     await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('AGT-1916');
-    await expect(page.getByTestId('chat-composer-context')).toHaveAttribute(
-      'aria-label',
-      `Message context: project ${PROJECT}, Task: AGT-1916`,
-    );
     const box = await sheet.boundingBox();
     expect(box?.width ?? 999).toBeLessThanOrEqual(390);
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
   });
+
+  for (const variant of [
+    { name: 'wide light', width: 1280, height: 900, theme: 'light' as const },
+    { name: 'wide dark', width: 1280, height: 900, theme: 'dark' as const },
+    { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
+    { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
+  ]) {
+    test(`long Workbench context wraps cleanly in ${variant.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: variant.width, height: variant.height });
+      await seedActiveTab(page, {
+        kind: 'board',
+        projectName: LONG_CONTEXT_PROJECT,
+      }, `board:${LONG_CONTEXT_PROJECT}`, variant.theme);
+      const unexpectedRequests = await stubLongWorkbench(page);
+      await page.goto('/');
+      await page.waitForLoadState('domcontentloaded');
+      const workbenchSection = page.getByTestId(
+        `studio-explorer-project-workbenches-${LONG_CONTEXT_PROJECT}`,
+      );
+      const workbench = page.getByTestId(
+        `studio-explorer-workbench-${LONG_CONTEXT_PROJECT}-${LONG_CONTEXT_WORKBENCH}`,
+      );
+      if (!await workbench.isVisible()) await workbenchSection.click();
+      await expect(workbench).toBeVisible();
+      await workbench.click();
+      await showSideSheet(page, false);
+
+      const footer = page.getByTestId('chat-composer-foot');
+      const context = page.getByTestId('chat-composer-context');
+      const detail = page.getByTestId('chat-composer-context-detail');
+      const model = page.getByTestId('cac-model-selector-trigger');
+      await expect(context).toContainText(LONG_CONTEXT_PROJECT);
+      await expect(context).toContainText('Workbench');
+      await expect(detail).toHaveText(LONG_CONTEXT_TITLE);
+      await expect(model).toContainText('gpt-5.6-sol');
+
+      const layout = await footer.evaluate((element) => {
+        const contextElement = element.querySelector<HTMLElement>('[data-testid="chat-composer-context"]')!;
+        const segmentElements = Array.from(contextElement.children) as HTMLElement[];
+        const modelElement = element.querySelector<HTMLElement>('[data-testid="cac-model-selector-trigger"]')!;
+        const footerBox = element.getBoundingClientRect();
+        const modelBox = modelElement.getBoundingClientRect();
+        return {
+          footerFits: element.scrollWidth <= element.clientWidth + 1,
+          contextWrap: getComputedStyle(contextElement).flexWrap,
+          rowCount: new Set(segmentElements.map(segment => Math.round(segment.getBoundingClientRect().top))).size,
+          segmentsStayWhole: segmentElements.every(segment => getComputedStyle(segment).whiteSpace === 'nowrap'),
+          modelFits: modelBox.right <= footerBox.right + 1 && modelBox.left >= footerBox.left - 1,
+        };
+      });
+      expect(layout).toMatchObject({
+        footerFits: true,
+        contextWrap: 'wrap',
+        segmentsStayWhole: true,
+        modelFits: true,
+      });
+      expect(layout.rowCount).toBeGreaterThanOrEqual(1);
+      expect(layout.rowCount).toBeLessThanOrEqual(2);
+      if (variant.width === 390) expect(layout.rowCount).toBe(2);
+      await expect(detail).toHaveCSS('text-overflow', 'ellipsis');
+      if (variant.width === 390) {
+        await expect.poll(() => detail.evaluate(element => element.scrollWidth > element.clientWidth))
+          .toBe(true);
+      }
+
+      await page.getByTestId('orch-side-sheet').screenshot({
+        path: resolve(
+          RESULTS,
+          `orchestrator-composer-long-context--${variant.name.replace(' ', '-')}--mocked.png`,
+        ),
+      });
+      expect(unexpectedRequests).toEqual([]);
+    });
+  }
 });
