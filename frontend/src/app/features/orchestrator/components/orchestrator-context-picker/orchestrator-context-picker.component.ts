@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, output, signal } from '@angular/core';
 import type { OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
-import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import type { OrchestratorContextSourceOption } from '../../models/orchestrator-context-source.model';
+import { contextSourceId } from '../../models/orchestrator-context-source.model';
+import type { OrchestratorContextReference } from '../../models/orchestrator.model';
 import {
   OrchestratorContextSourceService,
   type OrchestratorContextSourceSearchResult,
@@ -17,7 +16,7 @@ const EMPTY_RESULTS: OrchestratorContextSourceSearchResult = {
 @Component({
   selector: 'app-orchestrator-context-picker',
   standalone: true,
-  imports: [AppTooltipDirective, FormsModule, StudioIconComponent],
+  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-context-picker.component.html',
   styleUrl: './orchestrator-context-picker.component.scss',
@@ -26,16 +25,10 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
   private readonly sources = inject(OrchestratorContextSourceService);
   readonly project = input.required<string>();
   readonly automaticLabel = input.required<string>();
-  readonly automaticKey = input<string | null>(null);
-  readonly automaticTypeLabel = input.required<string>();
-  readonly automaticIcon = input.required<StudioIconName>();
-  readonly automaticIncluded = input(true);
   readonly currentSource = input<OrchestratorContextSourceOption | null>(null);
-  readonly attachments = input<readonly OrchestratorContextSourceOption[]>([]);
+  readonly selectedIds = input<ReadonlySet<string>>(new Set<string>());
   readonly disabled = input(false);
   readonly attachmentAdded = output<OrchestratorContextSourceOption>();
-  readonly attachmentRemoved = output<string>();
-  readonly automaticIncludedChange = output<boolean>();
 
   readonly open = signal(false);
   readonly query = signal('');
@@ -44,21 +37,6 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private requestVersion = 0;
 
-  readonly selectedIds = computed(() => new Set(this.attachments().map(item => item.id)));
-  readonly estimatedTokens = computed(() =>
-    (this.automaticIncluded() ? 1_600 : 0)
-      + this.attachments().reduce((sum, item) => sum + item.estimateTokens, 0));
-  readonly sourceCount = computed(() => (this.automaticIncluded() ? 1 : 0) + this.attachments().length);
-  readonly automaticShortLabel = computed(() => this.automaticKey()?.trim() || this.automaticLabel());
-  readonly automaticTooltip = computed(() =>
-    `Current tab · ${this.automaticTypeLabel()}: ${this.automaticLabel()}`);
-  readonly contextMetaTooltip = computed(() => {
-    const count = this.sourceCount();
-    const sourceLabel = count === 1 ? 'source' : 'sources';
-    const tokens = new Intl.NumberFormat('en-US').format(this.estimatedTokens());
-    return `${count} ${sourceLabel} · about ${tokens} tokens · resolved when you send`;
-  });
-  readonly compactTokenEstimate = computed(() => formatCompactTokens(this.estimatedTokens()));
   readonly groups = computed(() => [
     { id: 'tasks', label: 'Tasks', items: this.results().tasks },
     { id: 'wiki', label: 'Wiki and Dossiers', items: this.results().wiki },
@@ -75,39 +53,57 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
     this.open.set(false);
   }
 
-  toggleAutomatic(): void {
-    this.automaticIncludedChange.emit(!this.automaticIncluded());
-  }
-
   add(source: OrchestratorContextSourceOption): void {
     if (this.selectedIds().has(source.id)) return;
     this.attachmentAdded.emit(source);
   }
 
-  remove(id: string): void {
-    this.attachmentRemoved.emit(id);
-  }
+  addTypedReference(): void {
+    const value = this.query().trim();
+    if (!value) return;
+    const project = this.project();
+    const lower = value.toLocaleLowerCase();
+    let category: OrchestratorContextSourceOption['category'];
+    let label: string;
+    let detail: string;
+    let estimateTokens: number;
+    let reference: OrchestratorContextReference;
 
-  categoryLabel(source: OrchestratorContextSourceOption): string {
-    if (source.category === 'tasks') return 'Task';
-    if (source.category === 'commits') return 'Commit';
-    if (source.category === 'files') return 'File';
-    return 'Page';
-  }
+    if (lower.startsWith('task:') || /^[a-z][a-z0-9]*-\d+$/i.test(value)) {
+      const taskKey = value.replace(/^task:/i, '').replace(new RegExp(`^${escapeRegExp(project)}/`, 'i'), '').trim();
+      category = 'tasks';
+      label = taskKey;
+      detail = 'Task key';
+      estimateTokens = 900;
+      reference = { kind: 'task', reference: taskKey, projectId: project };
+    } else if (lower.startsWith('wiki:') || lower.startsWith('page:')) {
+      const path = value.replace(/^(?:wiki|page):/i, '')
+        .replace(new RegExp(`^${escapeRegExp(project)}/`, 'i'), '')
+        .replace(/^docs\//i, '')
+        .trim();
+      category = 'wiki';
+      label = path;
+      detail = 'Wiki page';
+      estimateTokens = 1_200;
+      reference = { kind: 'page', reference: `page:${project}/${path}`, projectId: project };
+    } else {
+      const path = value.replace(/^(?:repo|file):/i, '').trim();
+      category = 'files';
+      label = path;
+      detail = 'Repository file';
+      estimateTokens = 700;
+      reference = { kind: 'repository-file', reference: path, projectId: project };
+    }
 
-  sourceIcon(source: OrchestratorContextSourceOption): StudioIconName {
-    if (source.category === 'tasks') return 'backlog';
-    if (source.category === 'commits') return 'branch';
-    if (source.category === 'files') return 'file';
-    return 'book';
-  }
-
-  sourceShortLabel(source: OrchestratorContextSourceOption): string {
-    return source.key?.trim() || source.label;
-  }
-
-  sourceTooltip(source: OrchestratorContextSourceOption): string {
-    return `${this.categoryLabel(source)}: ${source.label}`;
+    if (!reference.reference) return;
+    this.add({
+      id: contextSourceId(reference),
+      category,
+      label,
+      detail,
+      estimateTokens,
+      reference,
+    });
   }
 
   onQuery(value: string): void {
@@ -146,8 +142,6 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
   }
 }
 
-function formatCompactTokens(tokens: number): string {
-  if (tokens < 1_000) return `~${tokens}`;
-  const thousands = tokens / 1_000;
-  return `~${thousands.toFixed(Number.isInteger(thousands) ? 0 : 1)}k`;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

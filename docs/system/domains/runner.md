@@ -684,7 +684,7 @@ state.
   shows the latest receipt below the answer transcript.
 - Side-sheet chat sends one route-bound typed context envelope on every turn.
   Prompt order is scoped preamble, source ledger, automatic evidence, explicit
-  attachments, bounded central transcript continuity, and the new user message
+  references, bounded central transcript continuity, and the new user message
   last. The Task Server owns project/task chat contexts, turns, receipts,
   lifecycle visibility, usage, and short summaries. Project contexts are
   permanent; archived task contexts are retained with `hiddenAt` and omitted
@@ -693,7 +693,9 @@ state.
   project-qualified commit ids only. The backend resolves them on the selected
   execution checkout after route and project validation. The UI exposes the
   resulting Task Server receipt through the Used context inspector instead of
-  trusting browser-supplied source bodies.
+  trusting browser-supplied source bodies. The shared composer renders these
+  references in its native context-attachment row and disables image picker,
+  paste, and drop staging.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this

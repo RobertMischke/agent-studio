@@ -511,10 +511,10 @@ test.describe('Orchestrator context header · where am I', () => {
     await input.fill('Keyboard order draft');
     await input.focus();
     await page.keyboard.press('Shift+Tab');
-    await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
+    await expect(page.getByTestId('chat-context-attachment-add')).toBeFocused();
     await input.focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByTestId('chat-attach')).toBeFocused();
+    await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('chat-send')).toBeFocused();
 

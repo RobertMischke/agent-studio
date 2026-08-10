@@ -11,7 +11,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
-import type { ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
+import type { ChatSubmitEvent } from 'coding-agent-chat/core';
 import type { TaskDetail } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import {
@@ -69,12 +69,10 @@ export class TaskChatComponent {
       this.turns(),
       [],
       [],
-      this.projectName(),
       this.contextKey(),
     ),
   );
   readonly placeholder = computed(() => `Ask about ${this.taskKey()}`);
-  readonly composerToolbar: readonly ChatToolbarItem[] = [];
 
   constructor() {
     effect(() => {
@@ -91,34 +89,26 @@ export class TaskChatComponent {
   async onSubmit(event: ChatSubmitEvent): Promise<void> {
     if (this.sending()) return;
     const text = event.text.trim();
-    if (!text && event.attachments.length === 0) return;
+    if (!text) return;
 
     const contextKey = this.contextKey();
-    const projectName = this.projectName();
     const taskKey = this.taskKey();
     const detail = this.detail();
     const capturedAt = new Date();
     const localTurnId = `task-chat-local-${capturedAt.getTime()}`;
-    const displayText = text || '(attachments)';
     this.turns.update(turns => [
       ...turns,
       {
         id: localTurnId,
         ts: capturedAt.toISOString(),
         role: 'user',
-        text: displayText,
+        text,
       },
     ]);
     this.sending.set(true);
     this.error.set(null);
 
     try {
-      const attachments = await Promise.all(event.attachments.map(async attachment => {
-        const uploaded = await firstValueFrom(
-          this.tasks.uploadOrchestratorChatAttachment(projectName, attachment.file),
-        );
-        return { alt: attachment.alt, relativePath: uploaded.relativePath };
-      }));
       const navigationContext = buildChatNavigationContext({
         activeJobId: detail.info.id,
         activeTaskKey: taskKey,
@@ -129,8 +119,7 @@ export class TaskChatComponent {
       });
 
       await firstValueFrom(this.tasks.sendOrchestratorChatByContext(contextKey, {
-        text: displayText,
-        attachments: attachments.length > 0 ? attachments : undefined,
+        text,
         navigationContext,
         contextEnvelope: buildOrchestratorContextEnvelope(
           contextKey,
