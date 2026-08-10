@@ -39,6 +39,7 @@ its path and format only change together with the code that reads it.
 | [`app/schemas/`](../app/schemas/README.md) | JSON schemas for wire and disk shapes (validated by the backend). |
 | `app/help/` | Short Markdown help bodies served by the app next to non-obvious UI surfaces (`GET /api/concept-docs/{topic}`). |
 | `app/config/` | Wiki configuration: the curated home (`home.json`) and saved category/document order (`wiki-order.json`). |
+| [`app/templates/`](../app/templates/article-document-v2.html) | Embedded document templates consumed together with their backend rendering contracts. |
 
 **Rule:** `app/` = Code-Vertrag — Pfad und Format nur zusammen mit Code ändern.
 A guard test (`WikiPathCentralizationGuardTests`) keeps every hardcoded `docs/`
@@ -76,7 +77,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Deck icon alternatives for a multi-faceted project console (AGT-2355, Round 2) | [interactive Workbench](../operations/deck-icon-exploration/index.html) · [standalone SVG proof](../operations/deck-icon-exploration/results/deck-icon-options-round-2.svg) |
 | Guided installer story for an all-Docker install on a fresh Linux or Windows machine, with per-step failure modes and a test protocol template (AGT-2503) | [interactive Workbench](../operations/installer-story/index.html) |
 | Global Orchestrator Watcher decision dossier: triggers, recovery authority, Activity visibility, model economy, and observe-first slices (AGT-2557) | [decision dossier](../operations/orchestrator-waechter/index.html) |
-| Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and five follow-up slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
+| Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and six linked delivery slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |

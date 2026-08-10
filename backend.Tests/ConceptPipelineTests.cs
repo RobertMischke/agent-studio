@@ -40,9 +40,11 @@ public sealed class ConceptPipelineTests : IDisposable
         Assert.Equal("concept-pipeline", review.Topic);
         Assert.True(File.Exists(Path.Combine(directory, "workbench.json")));
         Assert.True(File.Exists(Path.Combine(directory, "index.html")));
-        Assert.Contains(
-            "data-concept-section=\"evidence\"",
-            File.ReadAllText(Path.Combine(directory, "index.html")));
+        var html = File.ReadAllText(Path.Combine(directory, "index.html"));
+        Assert.Contains("data-article-template=\"v2\"", html);
+        Assert.Contains("data-document-section=\"evidence\"", html);
+        Assert.Contains(DossierImplementationContract.SectionStartMarker, html);
+        Assert.Contains(DossierImplementationContract.LogStartMarker, html);
         var descriptor = JsonSerializer.Deserialize<ConceptWorkbenchDescriptor>(
             File.ReadAllText(Path.Combine(directory, "workbench.json")),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -59,7 +61,7 @@ public sealed class ConceptPipelineTests : IDisposable
         File.WriteAllText(
             entrypoint,
             File.ReadAllText(entrypoint).Replace(
-                "data-concept-section=\"evidence\"",
+                "data-document-section=\"evidence\"",
                 "data-removed-section=\"evidence\"",
                 StringComparison.Ordinal));
 

@@ -89,6 +89,24 @@ public sealed class WorkbenchLifecycleServiceTests : IDisposable
     }
 
     [Fact]
+    public void DocumentationProposal_UsesDescriptorSourceTaskBackEdges()
+    {
+        WriteWorkbench("delivery", "decided", []);
+        var descriptor = JsonNode.Parse(File.ReadAllText(Descriptor("delivery")))!.AsObject();
+        descriptor["sourceTaskKeys"] = new JsonArray("AGT-1");
+        File.WriteAllText(Descriptor("delivery"), descriptor.ToJsonString());
+        WriteTask("AGT-1", TaskStates.Completed);
+        var (catalogue, _) = Services();
+
+        var document = catalogue.Read("Project", "delivery")!;
+
+        Assert.True(document.Workbench.Documentation!.Eligible);
+        var reference = Assert.Single(document.Workbench.Documentation.References);
+        Assert.Equal("AGT-1", reference.Key);
+        Assert.True(reference.Terminal);
+    }
+
+    [Fact]
     public void Document_RefusesOpenOrMissingReferencesWithoutChangingTheDescriptor()
     {
         WriteWorkbench("delivery", "decided", ["AGT-1", "AGT-404"]);

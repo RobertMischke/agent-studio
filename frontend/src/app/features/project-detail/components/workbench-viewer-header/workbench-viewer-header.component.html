@@ -20,6 +20,16 @@
     <i aria-hidden="true"></i>
   </span>
 
+  @if (implementationStatus(); as implementationLabel) {
+    <span
+      class="viewer-head__implementation-status"
+      role="status"
+      data-testid="workbench-viewer-implementation-status"
+    >
+      {{ implementationLabel }}
+    </span>
+  }
+
   @if (taskStatusesLoading() || taskStatuses().length > 0) {
     <span
       class="viewer-head__tasks"

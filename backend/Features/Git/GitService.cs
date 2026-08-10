@@ -5330,6 +5330,25 @@ public class GitService
         return code == 0 ? output : null;
     }
 
+    /// <summary>
+    /// Reads one tracked file from the first parent of a validated commit. The
+    /// Dossier maintenance gate uses this as the immutable baseline for proving
+    /// that a delivery only appended inside its bounded implementation log.
+    /// </summary>
+    public string? GetFileAtParentOfCommit(string repoRoot, string sha, string repoRelPath)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return null;
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return null;
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return null;
+
+        var (output, _, code) = RunGitArgs(
+            root,
+            "show",
+            $"{sha}^:{repoRelPath.Replace('\\', '/')}");
+        return code == 0 ? output : null;
+    }
+
     // ---- HEAD-cached wiki git reads (AGT-2013) ----
     //
     // The wiki dashboard + per-doc panels re-ask for the same recent-edits walk

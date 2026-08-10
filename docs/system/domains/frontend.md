@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-09
+Version: 2026-08-10
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -203,7 +203,12 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   mutations use the two-phase decision gate. A decided item
   remains current while its referenced cards are still moving. References are
   derived from the Slice-1 `references.workbenches` index, with descriptor
-  `relatedTaskKeys` and decision receipts retained as compatibility bridges.
+  `sourceTaskKeys`, `relatedTaskKeys`, and decision receipts retained as
+  compatibility bridges. The compact viewer head shows every resolved card as
+  a live lane dot. While a decision-pending or decided Workbench has at least
+  one reference beyond Ready and not every reference is terminal, it also shows
+  the derived `In implementation` summary marker. This is a live read-model
+  marker and does not add a descriptor lifecycle state.
   Once every referenced card is in `6-completed` or `7-archive`, the catalogue
   projects a quiet `Ready to document` suggestion in the viewer header and list
   surfaces. `POST /api/projects/{projectName}/workbenches/{id}/document`

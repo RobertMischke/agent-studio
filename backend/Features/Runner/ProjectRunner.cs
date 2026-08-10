@@ -105,6 +105,7 @@ public class ProjectRunner
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly PromptEnrichmentService? _promptEnrichment;
+    private readonly DossierMaintenanceService? _dossierMaintenance;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -449,7 +450,8 @@ public class ProjectRunner
         AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
         CliQuotaWaitPolicyService? quotaWaitPolicy = null,
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
-        PromptEnrichmentService? promptEnrichment = null)
+        PromptEnrichmentService? promptEnrichment = null,
+        DossierMaintenanceService? dossierMaintenance = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -494,6 +496,7 @@ public class ProjectRunner
         _integrationPushQueue = integrationPushQueue;
         _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
         _promptEnrichment = promptEnrichment;
+        _dossierMaintenance = dossierMaintenance;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -7215,10 +7218,23 @@ public class ProjectRunner
         if (string.IsNullOrWhiteSpace(worktreeCheckout) && IsWorktreePath(runWorkingDir))
             worktreeCheckout = runWorkingDir;
 
+        var dossierTargets = !TaskModes.IsReportOnly(info.Mode) && !TaskModes.IsConcept(info.Mode)
+            ? _dossierMaintenance?.ResolveTargets(ProjectName, info)
+                ?? Array.Empty<DossierMaintenanceTarget>()
+            : Array.Empty<DossierMaintenanceTarget>();
+        var dossierFraming = dossierTargets.Count == 0
+            ? string.Empty
+            : _prompts.RenderDossierMaintenanceFraming(
+                string.IsNullOrWhiteSpace(info.Key) ? info.Id : info.Key,
+                DossierMaintenanceService.RenderTargetList(dossierTargets),
+                new PromptCallContext(info.ProjectName, PipelineCatalogue.DossierMaintenanceStepId, info.Model));
+
         if (plan.PromptOverride != null)
         {
             var rewrittenOverride = RewriteMainCheckoutPathsForRun(
                 plan.PromptOverride, runWorkingDir, worktreeCheckout);
+            if (dossierFraming.Length > 0)
+                rewrittenOverride = rewrittenOverride.TrimEnd() + "\n\n" + dossierFraming;
             return IsWorktreePath(runWorkingDir)
                 ? BuildWorktreeContainmentNotice(runWorkingDir, worktreeCheckout) + rewrittenOverride
                 : rewrittenOverride;
@@ -7237,7 +7253,8 @@ public class ProjectRunner
             _prompts.RenderModeFraming(
                 info.Mode,
                 info.AllowWebAccess,
-                new PromptCallContext(info.ProjectName, "core", info.Model)),
+                new PromptCallContext(info.ProjectName, "core", info.Model))
+                + dossierFraming,
             preparedPromptEnrichment?.ContextMarkdown);
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {

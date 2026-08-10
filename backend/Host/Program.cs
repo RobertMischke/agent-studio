@@ -662,6 +662,7 @@ builder.Services.AddSingleton<WikiSearchService>();
 builder.Services.AddSingleton<ProjectStyleGuideService>();
 builder.Services.AddSingleton<PromptEnrichmentService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
+builder.Services.AddSingleton<DossierMaintenanceService>();
 builder.Services.AddSingleton<WorkbenchChangeNotifier>();
 builder.Services.AddSingleton<WorkbenchDecisionService>();
 builder.Services.AddSingleton<WorkbenchLifecycleService>();
