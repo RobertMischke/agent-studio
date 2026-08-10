@@ -35,7 +35,6 @@ describe('TaskChatComponent', () => {
     const fixture = await createFixture({
       getOrchestratorChatByContext,
       sendOrchestratorChatByContext: vi.fn(),
-      uploadOrchestratorChatAttachment: vi.fn(),
     });
 
     expect(getOrchestratorChatByContext).toHaveBeenCalledWith(
@@ -61,7 +60,6 @@ describe('TaskChatComponent', () => {
     const fixture = await createFixture({
       getOrchestratorChatByContext,
       sendOrchestratorChatByContext,
-      uploadOrchestratorChatAttachment: vi.fn(),
     });
 
     await fixture.componentInstance.onSubmit({
@@ -98,13 +96,15 @@ describe('TaskChatComponent', () => {
       },
     });
     expect(getOrchestratorChatByContext).toHaveBeenCalledTimes(2);
+    expect(request).not.toHaveProperty('attachments');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chat-attach"]')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chat-toolbar"]')).toBeNull();
   });
 });
 
 async function createFixture(service: {
   getOrchestratorChatByContext: ReturnType<typeof vi.fn>;
   sendOrchestratorChatByContext: ReturnType<typeof vi.fn>;
-  uploadOrchestratorChatAttachment: ReturnType<typeof vi.fn>;
 }) {
   await TestBed.configureTestingModule({
     imports: [TaskChatComponent],

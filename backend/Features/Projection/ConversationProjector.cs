@@ -119,8 +119,7 @@ public sealed class ConversationProjector
         var imageCtx = new ImageContext
         {
             JobId = info.Id,
-            WatchPath = info.WatchPath,
-            ProjectName = info.ProjectName
+            WatchPath = info.WatchPath
         };
 
         var collected = new List<RawSourceEvent>();

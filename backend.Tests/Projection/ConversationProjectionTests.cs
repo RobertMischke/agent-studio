@@ -62,15 +62,6 @@ public class ConversationProjectionTests
     }
 
     [Fact]
-    public void ImageRewriter_ChatAttachments_UsesProjectScopedHandler()
-    {
-        var html = "<img src=\"chat-attachments/screen.png\" alt=\"c\" />";
-        var ctx = new ImageContext { JobId = "job-1", ProjectName = "agent-taskboard" };
-        Assert.Contains("/api/runner/agent-taskboard/orchestrator-chat/attachments/screen.png",
-            ImageUrlRewriter.Rewrite(html, ctx));
-    }
-
-    [Fact]
     public void ImageRewriter_AbsoluteHttp_StaysIntact()
     {
         var html = "<img src=\"https://example.com/x.png\" alt=\"x\" />";

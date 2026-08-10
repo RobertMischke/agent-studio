@@ -30,7 +30,6 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var route));
         var request = new SendOrchestratorChatRequest(
             "Question",
-            null,
             new ChatNavigationContext(CurrentTaskKey: "A-2"));
 
         var result = OrchestratorContextEnvelopePolicy.Snapshot(
@@ -56,7 +55,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         var crossProjectError = Assert.Throws<OrchestratorContextEnvelopeException>(() =>
             OrchestratorContextEnvelopePolicy.Snapshot(
                 "project-a", route,
-                new SendOrchestratorChatRequest("Question", null, ContextEnvelope: crossProject),
+                new SendOrchestratorChatRequest("Question", ContextEnvelope: crossProject),
                 DateTime.UtcNow));
         Assert.Equal("context-reference-cross-project", crossProjectError.Code);
 
@@ -68,7 +67,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         var activeTaskError = Assert.Throws<OrchestratorContextEnvelopeException>(() =>
             OrchestratorContextEnvelopePolicy.Snapshot(
                 "project-a", route,
-                new SendOrchestratorChatRequest("Question", null, ContextEnvelope: wrongTask),
+                new SendOrchestratorChatRequest("Question", ContextEnvelope: wrongTask),
                 DateTime.UtcNow));
         Assert.Equal("context-active-task-mismatch", activeTaskError.Code);
     }
@@ -81,7 +80,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         var envelope = Envelope("project:project-a", "project-a", null, capturedAt, []);
         var result = OrchestratorContextEnvelopePolicy.Snapshot(
             "project-a", route,
-            new SendOrchestratorChatRequest("Question", null, ContextEnvelope: envelope),
+            new SendOrchestratorChatRequest("Question", ContextEnvelope: envelope),
             DateTime.UtcNow);
         Assert.Equal(capturedAt, result.CapturedAt);
 
@@ -92,7 +91,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         var error = Assert.Throws<OrchestratorContextEnvelopeException>(() =>
             OrchestratorContextEnvelopePolicy.Snapshot(
                 "project-a", route,
-                new SendOrchestratorChatRequest("Question", null, ContextEnvelope: invalid),
+                new SendOrchestratorChatRequest("Question", ContextEnvelope: invalid),
                 DateTime.UtcNow));
         Assert.Equal("context-budget-invalid", error.Code);
     }
@@ -110,7 +109,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
 
         var result = OrchestratorContextEnvelopePolicy.Snapshot(
             "project-a", route,
-            new SendOrchestratorChatRequest("Question", null, ContextEnvelope: envelope),
+            new SendOrchestratorChatRequest("Question", ContextEnvelope: envelope),
             DateTime.UtcNow);
 
         var reference = Assert.Single(result.ExplicitReferences);
@@ -145,7 +144,6 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             _watchPath,
             new SendOrchestratorChatRequest(
                 "Current question",
-                null,
                 navigation,
                 Model: "gpt-5.4-mini",
                 ThinkingLevel: "low",
@@ -210,7 +208,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
                 "project-a",
                 _watchPath,
                 new SendOrchestratorChatRequest(
-                    "Question", null, Model: "gpt-5.4-mini", ContextEnvelope: envelope),
+                    "Question", Model: "gpt-5.4-mini", ContextEnvelope: envelope),
                 clientId: null,
                 context,
                 CancellationToken.None));
@@ -245,7 +243,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             "project-a",
             _watchPath,
             new SendOrchestratorChatRequest(
-                "Question", null, Model: "gpt-5.4-mini", ContextEnvelope: envelope),
+                "Question", Model: "gpt-5.4-mini", ContextEnvelope: envelope),
             clientId: null,
             context,
             CancellationToken.None);
@@ -263,6 +261,9 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             sources.Where(source => source.Kind is "project-base" or "active-surface"),
             source => Assert.Equal(0, source.IncludedCharacters));
         Assert.Contains("status=unresolved", runner.Prompt);
+        Assert.Contains("Context note", reply.Text);
+        Assert.Contains("docs/missing.md", reply.Text);
+        Assert.Contains("does not exist", reply.Text);
     }
 
     [Fact]
@@ -287,7 +288,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             "project-a",
             _watchPath,
             new SendOrchestratorChatRequest(
-                "Question", null, Model: "gpt-5.4-mini", ContextEnvelope: sharedExcerptEnvelope),
+                "Question", Model: "gpt-5.4-mini", ContextEnvelope: sharedExcerptEnvelope),
             clientId: null,
             context,
             CancellationToken.None);
@@ -316,7 +317,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
                 "project-a",
                 _watchPath,
                 new SendOrchestratorChatRequest(
-                    "Question", null, Model: "gpt-5.4-mini", ContextEnvelope: tooSmallEnvelope),
+                    "Question", Model: "gpt-5.4-mini", ContextEnvelope: tooSmallEnvelope),
                 clientId: null,
                 context,
                 CancellationToken.None));
