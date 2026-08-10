@@ -202,6 +202,7 @@ public class WikiPerformanceCacheTests : IDisposable
 
         var tree = docs.GetWikiTreeResult("Configured");
         var content = docs.ReadWikiFile("Configured", "source.md");
+        var missing = docs.ReadWikiFileResult("Configured", "missing.md");
         var history = docs.GetWikiHistory("Configured", "source.md", git);
 
         Assert.NotNull(tree);
@@ -210,6 +211,8 @@ public class WikiPerformanceCacheTests : IDisposable
         Assert.False(tree.Tree.Source?.Writable);
         Assert.Equal("Develop", Assert.Single(tree.Tree.Root).Title);
         Assert.Contains("develop", content?.Content);
+        Assert.Null(missing.File);
+        Assert.Contains("Wiki source 'develop'", missing.Error);
         Assert.Equal("develop docs", history?.History.Commits[0].Subject);
         Assert.Contains("main", File.ReadAllText(Path.Combine(docsDir, "source.md")));
         Assert.Equal("main", git.GetStatusForRepoRoot(repoRoot).Branch);

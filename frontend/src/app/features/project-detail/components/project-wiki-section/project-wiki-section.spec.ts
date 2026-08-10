@@ -423,6 +423,28 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('shows the backend source reason when a listed page cannot be loaded', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>(
+      '[data-testid="project-wiki-file-concepts/overview.md"]',
+    )?.click();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md').flush({
+      error: "Page 'concepts/overview.md' is not available in Wiki source 'origin/develop'.",
+    }, { status: 404, statusText: 'Not Found' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush({
+      error: 'File not found or path rejected',
+    }, { status: 404, statusText: 'Not Found' });
+    fixture.detectChanges();
+
+    const error = el(fixture).querySelector('[data-testid="project-wiki-load-error"]');
+    expect(error?.getAttribute('role')).toBe('alert');
+    expect(error?.textContent).toContain(
+      "Page 'concepts/overview.md' is not available in Wiki source 'origin/develop'.",
+    );
+    http.verify();
+  });
+
   it('shows the update banner on an ETag change and reloads only after confirmation', async () => {
     vi.useFakeTimers();
     const { fixture, http } = await setup();
