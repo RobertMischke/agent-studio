@@ -34,6 +34,7 @@ const STORAGE_KEY_TASK_NAV = 'taskNavCollapsed';
 const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
 const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
 const STORAGE_KEY_GROUP_BY_EPIC = 'boardGroupByEpic';
+const STORAGE_KEY_OPEN_PROJECT_CHAT_ON_ENTRY = 'atp.studio.openProjectChatOnEntry.v1';
 // AGT-1812: the standalone Orchestrator-settings modal was retired into the
 // consolidated Settings view (Global → Orchestrator, deep-linkable by URL hash),
 // so its bespoke localStorage open-flag is no longer a live preference; the key
@@ -49,6 +50,10 @@ export class UiPreferencesService {
   );
   readonly sideSheetWidth = signal<number>(
     parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
+  );
+  /** Project Chat is the standard project entry unless the operator opts out. */
+  readonly openProjectChatOnEntry = signal<boolean>(
+    localStorage.getItem(STORAGE_KEY_OPEN_PROJECT_CHAT_ON_ENTRY) !== '0',
   );
 
   /**
@@ -96,6 +101,9 @@ export class UiPreferencesService {
       case STORAGE_KEY_GROUP_BY_EPIC:
         this.groupByEpic.set(e.newValue === '1');
         return;
+      case STORAGE_KEY_OPEN_PROJECT_CHAT_ON_ENTRY:
+        this.openProjectChatOnEntry.set(e.newValue !== '0');
+        return;
       case STORAGE_KEY_TREE_METRICS:
         this.treeMetricView.set(e.newValue === 'dots' ? 'dots' : 'numbers');
         return;
@@ -113,6 +121,12 @@ export class UiPreferencesService {
     this.treeMetricView.set(value);
     localStorage.setItem(STORAGE_KEY_TREE_METRICS, value);
   }
+
+  setOpenProjectChatOnEntry(open: boolean): void {
+    this.openProjectChatOnEntry.set(open);
+    localStorage.setItem(STORAGE_KEY_OPEN_PROJECT_CHAT_ON_ENTRY, open ? '1' : '0');
+  }
+
   toggleGroupByEpic(): void {
     const value = !this.groupByEpic();
     this.groupByEpic.set(value);

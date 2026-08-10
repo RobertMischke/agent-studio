@@ -40,6 +40,31 @@ describe('UiPreferencesService', () => {
     expect(localStorage.getItem('atp.studio.explorer.metrics')).toBe('dots');
   });
 
+  it('opens Project Chat on project entry by default and persists an opt-out', () => {
+    const svc = TestBed.inject(UiPreferencesService);
+
+    expect(svc.openProjectChatOnEntry()).toBe(true);
+    svc.setOpenProjectChatOnEntry(false);
+
+    expect(svc.openProjectChatOnEntry()).toBe(false);
+    expect(localStorage.getItem('atp.studio.openProjectChatOnEntry.v1')).toBe('0');
+  });
+
+  it('restores and mirrors the Project Chat entry preference across tabs', () => {
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
+    const svc = TestBed.inject(UiPreferencesService);
+    expect(svc.openProjectChatOnEntry()).toBe(false);
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'atp.studio.openProjectChatOnEntry.v1',
+        newValue: '1',
+        storageArea: localStorage,
+      }),
+    );
+    expect(svc.openProjectChatOnEntry()).toBe(true);
+  });
+
   it('mirrors a sibling tab tree metric write via the storage event', () => {
     const svc = TestBed.inject(UiPreferencesService);
     expect(svc.treeMetricView()).toBe('numbers');

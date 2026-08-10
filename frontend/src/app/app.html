@@ -56,6 +56,7 @@
           #orchSideSheet
           [projects]="projectNames()"
           [preferredProject]="orchSideSheetPreferredProject()"
+          [projectEntryReady]="studioRouteReady()"
           [watchPaths]="watchPaths()" [pageContext]="pageContext.activePage()"
           [activeJobId]="pageContext.activePage() ? null : (selectedJob()?.info?.id ?? null)" [activeJobTitle]="pageContext.activePage() ? null : (selectedJob()?.info?.title ?? null)"
           [activeWatchPath]="pageContext.activePage() ? null : (selectedJob()?.info?.watchPath ?? null)" [activeJobKey]="pageContext.activePage() ? null : (selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null)" [activeJobState]="pageContext.activePage() ? null : (selectedJob()?.info?.state ?? null)"

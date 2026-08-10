@@ -104,6 +104,15 @@ Local storage still owns workspace preferences and the open-tab collection. It
 may seed the shell only when the URL does not identify another surface. URL
 state always wins for the active surface.
 
+The Orchestrator Chat side sheet is deliberately not another route owner. Once
+a project route has resolved, the default-on local **Open project Chat on
+project entry** preference opens the existing push-layout sheet in that exact
+project context. The project route continues to identify the selected Board or
+Hub surface behind it. The preference, panel visibility, width, pin, transcript
+scroll, and composer draft are transient browser state. Task routes do not
+apply the project-entry preference. This ordering also prevents persisted tab
+state from briefly exposing a different project's transcript during cold boot.
+
 ## Shell tab target identity
 
 Internal navigation opens or focuses an application tab. It does not replace
@@ -177,3 +186,6 @@ review screenshots under the managed task's `results/` directory.
   routes while retaining the existing item route for the viewer.
 - **2026-08-10:** Made board filter state visible and removable on the board and
   defined a board route without `filters=` as the unfiltered state.
+- **2026-08-10:** Made the existing Orchestrator Chat side sheet the default
+  project entry after route hydration, while keeping its visibility out of the
+  canonical URL and preserving task deep links.
