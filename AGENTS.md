@@ -34,6 +34,10 @@ apply only under `frontend/`.
   [docs/quality/design/style-guide-hard-rules.md](./docs/quality/design/style-guide-hard-rules.md).
   Most-cited: no coloured left accent line or bar on cards, panels, rows,
   banners, or pill groups (encode status via background tint, badge, or dot).
+- New or touched admin UI also obeys the flat-surface contract and reference
+  mockup in
+  [docs/operations/admin-design-guideline/index.html](./docs/operations/admin-design-guideline/index.html).
+  Apply it incrementally; do not turn a scoped card into a broad restyling pass.
 - Work only in the active dev checkout or assigned task worktree. Never edit
   `agent-taskboard-stable/`; stable updates only by the parent
   `update-stable.sh` after a verified dev batch.
