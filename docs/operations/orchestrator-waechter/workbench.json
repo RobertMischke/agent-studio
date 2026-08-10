@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "orchestrator-waechter",
   "title": "Global Orchestrator Watcher",
-  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. It defines six trigger classes, the inspect-rescue-analyze-report capability ladder, a durable Problem and Decision projection into Activity across projects, uncertainty-based model routing with per-trigger planning costs, human and mechanical authority boundaries, a Control Plane plus Runner operating model, and an observe-first implementation plan with recipe-specific autonomy promotion.",
+  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. The central event bus is the shared substrate: the Watcher consumes typed escalation, integration, delivery, starvation, stale, loop, and contradiction signals, then publishes findings, recipe receipts, analyses, and decision needs into the same All-Activity-default stream. Three theme-aware mockups show interleaved Activity entries, persistent Studio-shell presence, and an AGT-2531 NoTaskBranch finding detail. The observe-first recommendation and approval-gated fence policy remain unchanged.",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-09T17:12:04Z",
-  "sourceTaskKeys": ["AGT-2557"],
-  "relatedTaskKeys": ["AGT-2543", "AGT-2544", "AGT-2545", "AGT-2555"]
+  "updatedAt": "2026-08-10T01:23:01Z",
+  "sourceTaskKeys": ["AGT-2557", "AGT-2581"],
+  "relatedTaskKeys": ["AGT-2543", "AGT-2544", "AGT-2545", "AGT-2555", "AGT-2565", "AGT-2569", "AGT-2579"]
 }

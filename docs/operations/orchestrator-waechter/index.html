@@ -120,6 +120,24 @@
   .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
   .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
   .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  .s-shell { fill: var(--surface-2); stroke: var(--line); }
+  .s-panel { fill: var(--surface-1); stroke: var(--line); }
+  .s-panel-soft { fill: var(--surface-3); stroke: var(--line); }
+  .s-accent { fill: var(--accent-soft); stroke: color-mix(in srgb, var(--develop) 42%, var(--line)); }
+  .s-problem { fill: var(--bad-soft); stroke: color-mix(in srgb, var(--bad) 42%, var(--line)); }
+  .s-decision { fill: var(--warn-soft); stroke: color-mix(in srgb, var(--warn) 42%, var(--line)); }
+  .s-resolved { fill: var(--surface-2); stroke: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .s-strong { fill: var(--ink-1); font: 700 14px system-ui, sans-serif; }
+  .s-body { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-mono { fill: var(--ink-3); font: 11px ui-monospace, Consolas, monospace; }
+  .s-chip { fill: var(--ink-2); font: 700 10px system-ui, sans-serif; letter-spacing: .06em; }
+  .s-count { fill: var(--ink-1); font: 700 16px ui-monospace, Consolas, monospace; }
+  .s-rule { stroke: var(--line); stroke-width: 1; }
+  .s-dot-problem { fill: var(--bad); }
+  .s-dot-decision { fill: var(--warn); }
+  .s-dot-resolved { fill: var(--ok); }
+  .s-dot-info { fill: var(--develop); }
+  .mockup-caption-note { color: var(--ink-3); }
   @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
   .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
   .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
@@ -142,10 +160,10 @@
 <header class="page">
   <p class="kicker">Decision dossier · Global orchestration</p>
   <h1>Global Orchestrator Watcher</h1>
-  <p class="lede">An intelligent layer above hard delivery invariants: it detects troubled cards across projects, assembles evidence, applies only proven recovery recipes, asks a strong model for bounded analysis when uncertainty remains, and publishes every problem, decision, action, and resolution in Activity across projects.</p>
+  <p class="lede">An intelligent layer above hard delivery invariants: it consumes typed events from the central event bus, detects troubled cards across projects, applies only proven recovery recipes, and publishes its findings, actions, analyses, and decision needs back into the same chronological activity stream.</p>
   <div class="meta">
-    <span><b>Date</b> 09 August 2026</span>
-    <span><b>Source</b> AGT-2557</span>
+    <span><b>Date</b> 10 August 2026</span>
+    <span><b>Source</b> AGT-2557 · AGT-2581</span>
     <span><b>Status</b> Decision pending</span>
     <span><b>Scope</b> Planning only, no implementation</span>
   </div>
@@ -158,6 +176,7 @@
     <li><a href="#triggers">§2 Trigger catalogue</a></li>
     <li><a href="#capabilities">§3 Capability ladder</a></li>
     <li><a href="#visibility">§4 Visibility model</a></li>
+    <li><a href="#event-bus">§4a Event-bus substrate</a></li>
     <li><a href="#economy">§5 Model economy</a></li>
     <li><a href="#boundaries">§6 Authority boundary</a></li>
     <li><a href="#operations">§7 Operating model</a></li>
@@ -201,7 +220,7 @@
 <p>One <code>WatcherCase</code> is keyed by <code>projectId + taskKey + attemptChainId + triggerClass + evidenceFingerprint</code>. At-least-once inputs may reopen or append evidence, but they must not start duplicate model calls or repeat an action. The durable case stores its trigger, current phase, evidence references, action receipts, verification, model route, token use, operator epoch, and terminal reason.</p>
 
 <h2 id="triggers"><span class="no">§2</span>Trigger catalogue</h2>
-<p class="stx stx-part">Event adapters wake immediately on typed failures. A bounded reconciliation sweep covers silent cross-source contradictions. Threshold ownership stays with the mechanical producer, not with the Watcher.</p>
+<p class="stx stx-part">Event-bus adapters wake immediately on typed failures. A bounded reconciliation sweep covers silent cross-source contradictions. Threshold ownership stays with the mechanical producer, not with the Watcher; §4a defines the exact bus mapping.</p>
 
 <table>
   <thead>
@@ -365,7 +384,7 @@
 <p>The strong model receives only the evidence pack and a fixed response schema. Its receipt contains competing hypotheses, evidence for and against each, confidence, root cause, affected scope, a recommended recipe or decision, required approvals, verification, rollback, and unknowns. The pure action policy independently evaluates the receipt. Free-form prose cannot grant authority.</p>
 
 <h2 id="visibility"><span class="no">§4</span>Visibility model</h2>
-<p class="stx stx-part">One durable case projects to the card and to Activity across projects. SignalR is delivery acceleration, not the source of truth.</p>
+<p class="stx stx-part">One durable case projects to the card and, through the shared <a href="#event-bus">event-bus substrate in §4a</a>, to Activity across projects. SignalR is delivery acceleration, not the source of truth.</p>
 
 <table>
   <thead><tr><th>Case state</th><th>Existing feed kind</th><th>Presentation</th><th>Lifecycle</th></tr></thead>
@@ -382,15 +401,260 @@
 <p>The task shows one compact current Watcher panel, not a duplicate transcript: case id, status, last verified finding, current or proposed action, evidence links, and decision owner. Each Watcher transition also appends a structured timeline note through the application API. The panel deep-links to the case and the dossier or postmortem when one exists. Missing <code>status.md</code> remains a separate evidence fact owned by AGT-2555; the Watcher must not treat a generated scaffold as agent-authored proof.</p>
 
 <h3>Workspace aggregate</h3>
-<p>The global header shows <b>open problems</b>, <b>decisions required</b>, <b>actions running</b>, and <b>rescues verified in 24 hours</b>. Counts are sums of visible cases and respect project access. The normal feed retains its project and event filters. Strong-model tokens and historical cost state appear on the analysis row; unknown price is shown as unknown, never zero.</p>
+<p>The global header shows <b>open problems</b>, <b>decisions required</b>, <b>actions running</b>, and <b>rescues verified in 24 hours</b>. Counts are sums of visible cases and respect project access. Activity retains its project and entry-type filters, with <b>All activity</b> selected by default as established by AGT-2579. Strong-model tokens and historical cost state appear on the analysis row; unknown price is shown as unknown, never zero.</p>
 
 <h3>Live delivery</h3>
-<p>AGT-2535's proposed SignalR seam provides the pattern to reuse: persist first, publish a project-scoped event on the existing TaskHub, treat subscriber failure as best-effort, and refresh a complete snapshot after reconnect. The Watcher adds a stable <code>watcherCaseUpdated</code> envelope and an append-only feed projection. Authorized clients join project groups; the workspace feed merges only the groups they may read. A dropped socket cannot lose the incident because the snapshot endpoint rehydrates from the durable case store.</p>
+<p>The bus append and the durable <code>WatcherCase</code> transition are the replayable records. AGT-2535's proposed SignalR seam provides the delivery pattern: persist first, publish a project-scoped notification on the existing TaskHub, treat subscriber failure as best-effort, and refresh a complete snapshot after reconnect. Authorized clients join project groups; the workspace feed merges only the groups they may read. A dropped socket cannot lose the incident because the snapshot endpoint rehydrates from the bus projection and case store.</p>
 
 <div class="box warn">
   <h4>Noise rule</h4>
   <p>Every state-changing Watcher action is traceable, but identical checks are rollups, not feed rows. A periodic check that finds no new evidence updates counters on the case. It does not create an Observation every five minutes.</p>
 </div>
+
+<h2 id="event-bus"><span class="no">§4a</span>Event-bus substrate</h2>
+<p class="stx stx-part"><b>Activity across projects is the chronological view of the central event bus, not a second monitoring system.</b> The Watcher reads typed bus events, correlates them into cases, and writes its own monitoring events back to the same stream.</p>
+
+<p>The <a href="../../system/architecture/bus/agent-message-bus.md">Agent Message Bus contract</a> remains the field-level and storage authority. Domain facts still belong to the task state machine, run records, delivery envelopes, integration evidence, and Git. The bus is their append-only, typed communication and observability substrate. Producing a bus event never moves a card or performs a recovery; those mutations continue to use the application authorities in §6.</p>
+
+<h3>Watcher as bus consumer</h3>
+<p>Every direct trigger in §2 arrives through a durable bus subscription. Producer-owned thresholds stay producer-owned: the Watcher consumes the resulting signal instead of running a competing timer. The five-minute reconciliation sweep remains a bounded backstop for contradictions that no single producer can emit.</p>
+
+<table>
+  <thead><tr><th>§2 trigger</th><th>Bus input</th><th>Correlation and guard</th><th>Watcher response</th></tr></thead>
+  <tbody>
+    <tr><td><b>5e escalation</b></td><td><code>decision</code> or <code>lifecycle</code>, topic <code>escalation-opened</code>, with category and current attempt.</td><td>Group by task, attempt chain, operator epoch, and evidence fingerprint.</td><td>Open or update one Problem case and collect the bounded evidence pack.</td></tr>
+    <tr><td><b>Integration failure</b></td><td><code>error</code> or <code>lifecycle</code>, topic <code>integration-failed</code>, payload outcome <code>Error</code>, <code>Conflict</code>, or <code>NoTaskBranch</code>.</td><td>Reject stale target-head, delivery-epoch, or attempt references before recipe matching.</td><td>Inspect refs and ancestry; route semantic conflict directly to Decision.</td></tr>
+    <tr><td><b>Unverified delivery</b></td><td><code>error</code>, topic <code>unverified-delivery</code>, with missing envelope fields and the trusted fence reference when known.</td><td>Envelope digest, fence, result SHA, and attempt must agree.</td><td>Report recoverability; let AGT-2544 own its regular requeue path.</td></tr>
+    <tr><td><b>Starvation or stale work</b></td><td><code>advisory</code>, topics such as <code>accepted-not-integrated</code>, <code>claim-starvation</code>, or <code>worktree-blocked</code>.</td><td>Consume the producer timestamp and threshold; confirm persistence across two snapshots only before model use.</td><td>Apply an exact infrastructure recipe or publish a decision packet.</td></tr>
+    <tr><td><b>Repeated grade loop</b></td><td><code>decision</code> and <code>lifecycle</code> rows sharing task and attempt-chain correlation, including grade fingerprints.</td><td>Wake on the second identical fingerprint or before a third evidence-free round.</td><td>Stop blind reissue and run one bounded comparison.</td></tr>
+    <tr><td><b>Silent anomaly</b></td><td>A reconciler-produced <code>observation</code>, topic <code>cross-source-contradiction</code>, referencing the bus rows and domain snapshots that disagree.</td><td>Require two snapshots and an explicit missing or conflicting authority fact.</td><td>Freeze Watcher mutation, publish a Problem, and reconstruct the sequence.</td></tr>
+  </tbody>
+</table>
+
+<h3>Watcher as bus producer</h3>
+<p>The Watcher registers as <code>orchestrator:global-watcher</code>. Case events carry the affected <code>project</code>, <code>jobId</code>, and <code>runId</code> when available; workspace health events alone use <code>project: null</code>. Every event in one case shares its <code>correlationId</code> with the durable case id and references evidence rather than copying it.</p>
+
+<table>
+  <thead><tr><th>Monitoring event</th><th>Bus envelope</th><th>Activity projection from the AGT-2565 entry grid</th><th>Visibility rule</th></tr></thead>
+  <tbody>
+    <tr><td><b>Finding raised</b></td><td><code>observation</code> or acute <code>error</code>, topic <code>watcher-finding-raised</code>.</td><td><code>alert</code> presented as <b>Problem</b>.</td><td>Acute only while unresolved; shows impact, age, phase, and evidence.</td></tr>
+    <tr><td><b>Recipe applied</b></td><td><code>intervention</code>, topic <code>watcher-recipe-applied</code>, with API receipt and authority class.</td><td><code>action</code> presented as <b>Watcher action</b>.</td><td>Chronological receipt, never success until verification lands.</td></tr>
+    <tr><td><b>Analysis complete</b></td><td><code>observation</code>, topic <code>watcher-analysis-complete</code>, with model route, token attribution, and report artifact.</td><td><code>observation</code> presented as <b>Finding</b> or quiet <b>Resolved finding</b>.</td><td>Result and unknowns remain reviewable; settled history is visually quiet.</td></tr>
+    <tr><td><b>Decision required</b></td><td><code>decision</code>, topic <code>watcher-decision-required</code>, with one question and safe options.</td><td><code>decision</code> presented as <b>Decision</b>.</td><td>Pending until an attributable operator answer; counted globally.</td></tr>
+  </tbody>
+</table>
+
+<div class="box accent">
+  <h4>Projection contract</h4>
+  <p>No new bus kind or competing Watcher-only feed is required. Stable bus kinds carry Watcher topics and payloads; the Activity read model maps them into the existing entry-type grid. <b>All activity</b> is the default, so ordinary runtime events and Watcher events remain interleaved by bus id and creation time. Problem and Decision views are filters over that same stream, not separate stores.</p>
+</div>
+
+<h3>Mockup A: Watcher events in Activity across projects</h3>
+<figure id="mockup-activity-stream">
+<svg viewBox="0 0 1040 650" role="img" aria-label="Activity across projects showing ordinary bus events interleaved with Watcher Problems, Decisions, actions, and a resolved finding">
+  <rect class="s-shell" x="16" y="16" width="1008" height="618" rx="12"/>
+  <rect class="s-panel-soft" x="16" y="16" width="1008" height="58" rx="12"/>
+  <text class="s-strong" x="40" y="44">Activity across projects</text>
+  <text class="s-mono" x="40" y="62">Workspace scope · chronological event-bus view</text>
+  <rect class="s-accent" x="824" y="30" width="176" height="29" rx="14"/>
+  <text class="s-chip" x="912" y="49" text-anchor="middle">ALL ACTIVITY · DEFAULT</text>
+
+  <rect class="s-panel" x="30" y="90" width="208" height="524" rx="9"/>
+  <text class="s-label" x="48" y="118">Projects</text>
+  <rect class="s-accent" x="42" y="132" width="184" height="34" rx="7"/>
+  <text class="s-body" x="56" y="154">All projects</text><text class="s-mono" x="208" y="154" text-anchor="end">3</text>
+  <text class="s-body" x="56" y="190">Agent Studio</text><circle class="s-dot-info" cx="210" cy="186" r="4"/>
+  <text class="s-body" x="56" y="220">MVP Site</text><circle class="s-dot-resolved" cx="210" cy="216" r="4"/>
+  <text class="s-body" x="56" y="250">Open Source Prep</text><circle class="s-dot-decision" cx="210" cy="246" r="4"/>
+  <line class="s-rule" x1="42" y1="272" x2="226" y2="272"/>
+  <text class="s-label" x="48" y="300">Entry type</text>
+  <rect class="s-accent" x="42" y="314" width="184" height="34" rx="7"/>
+  <text class="s-body" x="56" y="336">All activity</text><text class="s-mono" x="208" y="336" text-anchor="end">6</text>
+  <text class="s-body" x="56" y="374">Alerts</text><text class="s-mono" x="208" y="374" text-anchor="end">1</text>
+  <text class="s-body" x="56" y="406">Decisions</text><text class="s-mono" x="208" y="406" text-anchor="end">1</text>
+  <text class="s-body" x="56" y="438">Actions</text><text class="s-mono" x="208" y="438" text-anchor="end">1</text>
+  <text class="s-body" x="56" y="470">Observations</text><text class="s-mono" x="208" y="470" text-anchor="end">2</text>
+  <text class="s-body" x="56" y="502">Lifecycle</text><text class="s-mono" x="208" y="502" text-anchor="end">1</text>
+  <text class="s-mono" x="48" y="550">Counts sum to the six</text>
+  <text class="s-mono" x="48" y="568">visible rows.</text>
+
+  <rect class="s-panel" x="254" y="90" width="754" height="524" rx="9"/>
+  <text class="s-mono" x="276" y="118">10 AUGUST · NEWEST FIRST</text>
+
+  <rect class="s-problem" x="270" y="132" width="722" height="68" rx="8"/>
+  <circle class="s-dot-problem" cx="290" cy="153" r="5"/>
+  <text class="t-bad" x="306" y="157">PROBLEM · GLOBAL WATCHER</text><text class="s-mono" x="972" y="157" text-anchor="end">09:18</text>
+  <text class="s-strong" x="290" y="179">AGT-2531 accepted without Git-proven integration</text>
+  <text class="s-body" x="290" y="194">NoTaskBranch · incomplete ResultEnvelope · case WCH-0007</text>
+
+  <rect class="s-panel" x="270" y="210" width="722" height="58" rx="8"/>
+  <circle class="s-dot-info" cx="290" cy="231" r="5"/>
+  <text class="s-chip" x="306" y="235">LIFECYCLE · AGENT STUDIO</text><text class="s-mono" x="972" y="235" text-anchor="end">09:16</text>
+  <text class="s-strong" x="290" y="257">AGT-2580 entered Auto Review after its run settled</text>
+
+  <rect class="s-decision" x="270" y="278" width="722" height="68" rx="8"/>
+  <circle class="s-dot-decision" cx="290" cy="299" r="5"/>
+  <text class="t-warn" x="306" y="303">DECISION · GLOBAL WATCHER</text><text class="s-mono" x="972" y="303" text-anchor="end">09:12</text>
+  <text class="s-strong" x="290" y="325">Approve the prepared AGT-2531 fence candidate?</text>
+  <text class="s-body" x="290" y="340">Recommended: inspect exact SHA and gate receipt · owner: operator</text>
+
+  <rect class="s-accent" x="270" y="356" width="722" height="68" rx="8"/>
+  <circle class="s-dot-info" cx="290" cy="377" r="5"/>
+  <text class="s-chip" x="306" y="381">ACTION · GLOBAL WATCHER</text><text class="s-mono" x="972" y="381" text-anchor="end">09:07</text>
+  <text class="s-strong" x="290" y="403">Evidence pack collected and fence-salvage recipe matched</text>
+  <text class="s-body" x="290" y="418">Read-only A0 · 12 artifacts · exact attempt and SHA verified</text>
+
+  <rect class="s-panel" x="270" y="434" width="722" height="58" rx="8"/>
+  <circle class="s-dot-info" cx="290" cy="455" r="5"/>
+  <text class="s-chip" x="306" y="459">OBSERVATION · MVP SITE</text><text class="s-mono" x="972" y="459" text-anchor="end">08:58</text>
+  <text class="s-strong" x="290" y="481">Deployment evidence attached to MKT-31</text>
+
+  <rect class="s-resolved" x="270" y="502" width="722" height="86" rx="8"/>
+  <circle class="s-dot-resolved" cx="290" cy="523" r="5"/>
+  <text class="t-ok" x="306" y="527">RESOLVED FINDING · GLOBAL WATCHER</text><text class="s-mono" x="972" y="527" text-anchor="end">08:42</text>
+  <text class="s-strong" x="290" y="549">Runner registration restored for Open Source Prep</text>
+  <text class="s-body" x="290" y="567">Recipe applied once · heartbeat and claim eligibility verified</text>
+  <text class="s-mono" x="290" y="582">case WCH-0006 · duration 6m · no model call</text>
+</svg>
+<figcaption><b>Mockup A, shared stream.</b> Ordinary lifecycle and observation rows stay interleaved with Watcher output. Problem, Decision, action, and resolved finding remain distinguishable through type text, a status dot, and a full-surface tint. <span class="mockup-caption-note">The inline SVG uses the dossier's light and dark tokens; All activity is the default.</span></figcaption>
+</figure>
+
+<h3>Mockup B: persistent global presence in the Studio shell</h3>
+<figure id="mockup-studio-presence">
+<svg viewBox="0 0 1040 620" role="img" aria-label="Studio shell with a persistent global Watcher status strip above all project tabs">
+  <rect class="s-shell" x="16" y="16" width="1008" height="588" rx="12"/>
+  <rect class="s-panel-soft" x="16" y="16" width="1008" height="42" rx="12"/>
+  <text class="s-mono" x="38" y="42">Studio / Workspace Alpha / All projects</text>
+  <rect class="s-panel" x="376" y="25" width="286" height="24" rx="12"/>
+  <text class="s-mono" x="519" y="42" text-anchor="middle">Search tasks, commits, files…</text>
+  <rect class="s-decision" x="780" y="23" width="220" height="28" rx="14"/>
+  <circle class="s-dot-decision" cx="796" cy="37" r="4"/>
+  <text class="s-chip" x="810" y="41">GLOBAL WATCHER · 2 DECISIONS</text>
+
+  <rect class="s-accent" x="16" y="58" width="1008" height="72"/>
+  <circle class="s-dot-info" cx="44" cy="83" r="6"/>
+  <text class="s-strong" x="60" y="87">Global Watcher</text>
+  <rect class="s-panel" x="182" y="72" width="94" height="24" rx="12"/>
+  <text class="s-chip" x="229" y="88" text-anchor="middle">MONITORING</text>
+  <text class="s-body" x="60" y="112">Watching 3 projects · event watermark current · next reconciliation 09:20</text>
+  <text class="s-mono" x="405" y="79">WHAT IT SEES</text>
+  <text class="s-strong" x="405" y="99">2 problems · 1 action running</text>
+  <text class="s-mono" x="672" y="79">LAST VERIFIED ACTION</text>
+  <text class="s-strong" x="672" y="99">Runner re-registered · 7m ago</text>
+  <rect class="s-decision" x="892" y="72" width="108" height="40" rx="8"/>
+  <text class="s-count" x="914" y="98">2</text><text class="s-chip" x="940" y="96">OPEN</text>
+  <text class="s-mono" x="940" y="108">DECISIONS</text>
+
+  <rect class="s-panel-soft" x="16" y="130" width="52" height="450"/>
+  <rect class="s-accent" x="25" y="148" width="34" height="34" rx="8"/>
+  <text class="s-label" x="42" y="170" text-anchor="middle">W</text>
+  <text class="s-label" x="42" y="219" text-anchor="middle">⌂</text>
+  <text class="s-label" x="42" y="263" text-anchor="middle">◎</text>
+  <text class="s-label" x="42" y="307" text-anchor="middle">⌁</text>
+  <circle class="s-dot-decision" cx="55" cy="150" r="6"/>
+
+  <rect class="s-panel" x="68" y="130" width="218" height="450"/>
+  <text class="s-mono" x="86" y="158">EXPLORER</text>
+  <text class="s-strong" x="86" y="190">Workspace Alpha</text>
+  <text class="s-body" x="102" y="224">Agent Studio</text>
+  <text class="s-body" x="102" y="254">MVP Site</text>
+  <text class="s-body" x="102" y="284">Open Source Prep</text>
+  <line class="s-rule" x1="86" y1="306" x2="268" y2="306"/>
+  <text class="s-mono" x="86" y="334">OPEN TABS</text>
+  <rect class="s-accent" x="82" y="348" width="190" height="34" rx="6"/>
+  <text class="s-body" x="96" y="370">Activity across projects</text>
+  <text class="s-body" x="96" y="408">AGT-2581 · Dossier</text>
+
+  <rect class="s-panel" x="286" y="130" width="738" height="450"/>
+  <rect class="s-panel-soft" x="286" y="130" width="738" height="38"/>
+  <rect class="s-panel" x="304" y="139" width="204" height="29" rx="6"/>
+  <text class="s-body" x="320" y="159">Activity across projects</text>
+  <text class="s-strong" x="320" y="208">All projects</text>
+  <text class="s-body" x="320" y="230">The Watcher stays visible while Board, Task, Wiki, and result tabs change below it.</text>
+  <rect class="s-problem" x="320" y="258" width="322" height="116" rx="9"/>
+  <circle class="s-dot-problem" cx="342" cy="282" r="5"/>
+  <text class="t-bad" x="358" y="286">2 OPEN PROBLEMS</text>
+  <text class="s-strong" x="342" y="316">Oldest case · 18m</text>
+  <text class="s-body" x="342" y="339">AGT-2531 · integration proof missing</text>
+  <text class="s-mono" x="342" y="359">Open Activity → Problems</text>
+  <rect class="s-decision" x="662" y="258" width="322" height="116" rx="9"/>
+  <circle class="s-dot-decision" cx="684" cy="282" r="5"/>
+  <text class="t-warn" x="700" y="286">2 DECISIONS REQUIRED</text>
+  <text class="s-strong" x="684" y="316">Fence candidate needs approval</text>
+  <text class="s-body" x="684" y="339">Exact SHA and gate receipts are ready</text>
+  <text class="s-mono" x="684" y="359">Open decision queue</text>
+  <rect class="s-resolved" x="320" y="394" width="664" height="96" rx="9"/>
+  <circle class="s-dot-resolved" cx="342" cy="418" r="5"/>
+  <text class="s-chip" x="358" y="422">LAST VERIFIED ACTION</text>
+  <text class="s-strong" x="342" y="451">Existing runner identity re-registered; heartbeat and claim eligibility verified</text>
+  <text class="s-mono" x="342" y="473">Open receipt · WCH-0006 · completed 7 minutes ago</text>
+  <rect class="s-panel-soft" x="16" y="580" width="1008" height="24" rx="6"/>
+  <text class="s-mono" x="38" y="597">Watcher healthy · bus lag 1.2s · 2 decisions · 1 action · last analysis 09:14</text>
+</svg>
+<figcaption><b>Mockup B, above-everything presence.</b> A compact title-bar control is always reachable; the persistent status strip immediately below it answers three questions without opening a panel: what is being watched, what was last done, and how many decisions await the operator. The Activity destination remains the full chronological drill-down.</figcaption>
+</figure>
+
+<h3>Mockup C: finding detail from the 9 August NoTaskBranch incident</h3>
+<figure id="mockup-watcher-finding">
+<svg viewBox="0 0 1040 680" role="img" aria-label="Watcher finding detail reconstructed from the AGT-2531 incomplete envelope and NoTaskBranch incident on 9 August 2026">
+  <rect class="s-shell" x="16" y="16" width="1008" height="648" rx="12"/>
+  <rect class="s-panel-soft" x="16" y="16" width="1008" height="54" rx="12"/>
+  <text class="s-mono" x="40" y="39">ACTIVITY / WATCHER CASE WCH-0007</text>
+  <text class="s-body" x="40" y="58">Reconstructed from the AGT-2531 incident on 9 August 2026</text>
+
+  <rect class="s-resolved" x="34" y="88" width="972" height="88" rx="10"/>
+  <circle class="s-dot-resolved" cx="58" cy="112" r="6"/>
+  <text class="s-chip" x="74" y="116">RESOLVED FINDING</text>
+  <text class="s-strong" x="58" y="143">Completed state had no Git-proven delivery after NoTaskBranch</text>
+  <text class="s-body" x="58" y="163">Agent Studio · AGT-2531 · integration failure · opened 13:41 · verified after manual recovery</text>
+  <rect class="s-panel" x="820" y="105" width="162" height="46" rx="8"/>
+  <text class="s-mono" x="836" y="124">IMPACT</text><text class="s-strong" x="836" y="145">Delivery absent</text>
+
+  <rect class="s-panel" x="34" y="194" width="628" height="218" rx="10"/>
+  <text class="s-label" x="54" y="222">Finding</text>
+  <text class="s-strong" x="54" y="252">Two facts contradicted the Completed projection</text>
+  <circle class="s-dot-problem" cx="60" cy="280" r="4"/>
+  <text class="s-body" x="76" y="284">Runner completion lacked BaseSha, immutable result ref, and artifact digest.</text>
+  <circle class="s-dot-problem" cx="60" cy="310" r="4"/>
+  <text class="s-body" x="76" y="314">Accepted-integration worker returned NoTaskBranch in 1,075 ms.</text>
+  <circle class="s-dot-info" cx="60" cy="340" r="4"/>
+  <text class="s-body" x="76" y="344">Card stayed in Completed with integration = null.</text>
+  <circle class="s-dot-info" cx="60" cy="370" r="4"/>
+  <text class="s-body" x="76" y="374">The implemented work existed only on the trusted salvage fence.</text>
+  <text class="s-mono" x="54" y="397">Fingerprint: task + attempt + NoTaskBranch + missing-envelope-fields</text>
+
+  <rect class="s-decision" x="680" y="194" width="326" height="218" rx="10"/>
+  <circle class="s-dot-decision" cx="702" cy="218" r="5"/>
+  <text class="t-warn" x="718" y="222">DECISION PACKET</text>
+  <text class="s-strong" x="702" y="252">Approve fence salvage?</text>
+  <text class="s-body" x="702" y="279">Recommended in the reconstructed case:</text>
+  <text class="s-body" x="702" y="301">review the exact candidate SHA, changed</text>
+  <text class="s-body" x="702" y="321">paths, gate receipts, and rollback.</text>
+  <text class="s-mono" x="702" y="352">Authority · A2 approval-gated</text>
+  <text class="s-mono" x="702" y="374">Owner · operator</text>
+  <text class="s-mono" x="702" y="396">No automatic semantic merge</text>
+
+  <rect class="s-panel" x="34" y="430" width="972" height="202" rx="10"/>
+  <text class="s-label" x="54" y="458">Evidence and resolution</text>
+  <line class="s-rule" x1="75" y1="487" x2="950" y2="487"/>
+  <circle class="s-dot-problem" cx="76" cy="487" r="6"/>
+  <circle class="s-dot-decision" cx="357" cy="487" r="6"/>
+  <circle class="s-dot-info" cx="646" cy="487" r="6"/>
+  <circle class="s-dot-resolved" cx="948" cy="487" r="6"/>
+  <text class="s-mono" x="54" y="512">13:31 · COMPLETION</text>
+  <text class="s-body" x="54" y="532">Incomplete envelope;</text><text class="s-body" x="54" y="549">work on salvage fence</text>
+  <text class="s-mono" x="324" y="512">13:41 · FAILURE</text>
+  <text class="s-body" x="324" y="532">NoTaskBranch;</text><text class="s-body" x="324" y="549">integration stayed null</text>
+  <text class="s-mono" x="600" y="512">RECOVERY</text>
+  <text class="s-body" x="600" y="532">Card-scoped manual</text><text class="s-body" x="600" y="549">salvage merge</text>
+  <text class="s-mono" x="858" y="512">VERIFIED</text>
+  <text class="s-body" x="858" y="532">720129404 on</text><text class="s-body" x="858" y="549">develop</text>
+  <rect class="s-resolved" x="54" y="570" width="932" height="42" rx="7"/>
+  <text class="s-body" x="70" y="589">Proof: 40 regression tests and 2 fresh-workspace fixtures; baseline counter-run found 7 pre-existing Windows fixture failures and no regression.</text>
+  <text class="s-mono" x="70" y="605">Historical action was manual. The mockup shows how the proposed Watcher would correlate and present it.</text>
+</svg>
+<figcaption><b>Mockup C, finding detail.</b> The page distinguishes observed facts, the approval boundary, the historical action, and exact verification. It does not rewrite the incident as an autonomous Watcher success: the 9 August recovery was manual, while the proposed fence recipe remains A2 and approval-gated.</figcaption>
+</figure>
 
 <h2 id="economy"><span class="no">§5</span>Model economy</h2>
 <p>The repository's <a href="../../system/domains/model-routing-policy.md">model routing policy</a> remains authoritative. Cost follows uncertainty after the correctness floor is established. No model is used for typed trigger detection, ancestry, hashes, counters, thresholds, allowlist checks, or idempotency.</p>
@@ -466,29 +730,31 @@
 
 <h2 id="operations"><span class="no">§7</span>Operating model</h2>
 <h3>Placement</h3>
-<p><b>The logical coordinator belongs beside the global Control Plane, not inside the local Studio UI and not inside one project runner.</b> It needs workspace-wide task facts, a durable case store, global deduplication, and one lifecycle lease. Model and repository work is dispatched as bounded, attributable jobs to a runner with a <code>watcher-analysis</code> or read-only evidence capability. Existing pipeline services execute approved mutations.</p>
+<p><b>The logical coordinator belongs beside the global Control Plane, not inside the local Studio UI and not inside one project runner.</b> It subscribes to the central event bus, keeps a durable case store, deduplicates globally, and owns one lifecycle lease. Model and repository work is dispatched as bounded, attributable jobs to a runner with a <code>watcher-analysis</code> or read-only evidence capability. Existing pipeline services execute approved mutations. Studio is the persistent status and drill-down surface shown in Mockup B, not the runtime host.</p>
 
 <table>
   <thead><tr><th>Component</th><th>Placement</th><th>Reason</th></tr></thead>
   <tbody>
-    <tr><td><b>Watcher coordinator</b></td><td>Singleton hosted service in the Task Server or global orchestrator control process.</td><td>Workspace truth, durable inbox/outbox, cross-project dedupe, no dependency on an open Studio client.</td></tr>
+    <tr><td><b>Central event bus</b></td><td>Workspace and project streams in the existing bus store, with TaskHub delivery acceleration.</td><td>One typed substrate for producer signals, Watcher subscriptions, replay, and Activity projection.</td></tr>
+    <tr><td><b>Watcher coordinator</b></td><td>Singleton hosted service in the Task Server or global orchestrator control process.</td><td>Durable subscription watermark, case inbox/outbox, cross-project dedupe, no dependency on an open Studio client.</td></tr>
     <tr><td><b>Evidence collector</b></td><td>Runner or host capability close to the repository and logs.</td><td>Read refs and bounded artifacts without copying whole repositories into the Control Plane.</td></tr>
     <tr><td><b>Strong analyzer</b></td><td>Dedicated analysis slot on an eligible runner.</td><td>Uses live catalogue routing, records actual model and tokens, and cannot hold a coding or merge authority.</td></tr>
     <tr><td><b>Action executor</b></td><td>Existing task API, runner registration API, pipeline, merge queue, and transition services.</td><td>Preserves fences, permissions, budgets, audit, and state-machine ownership.</td></tr>
-    <tr><td><b>Projection</b></td><td>Durable case/read model plus TaskHub push.</td><td>Card and Activity views converge after reconnect and remain access-scoped.</td></tr>
+    <tr><td><b>Projection</b></td><td>Durable case read model plus bus-backed Activity projection and TaskHub push.</td><td>Card, persistent shell status, and Activity views converge after reconnect and remain access-scoped.</td></tr>
   </tbody>
 </table>
 
-<h3>Cadence</h3>
+<h3>Event-driven loop and reconciliation</h3>
 <ul>
-  <li><b>Immediate:</b> typed escalations, delivery failures, integration outcomes, and AGT-2545 alerts enter the durable inbox.</li>
-  <li><b>Five minutes:</b> reconciliation joins task lane, attempt, Git integration, fence, runner registration, and open-case state to find silent anomalies.</li>
+  <li><b>Immediate from the bus:</b> typed escalations, delivery failures, integration outcomes, and AGT-2545 alerts advance the durable subscription watermark and enter the case inbox.</li>
+  <li><b>Five minutes:</b> reconciliation joins task lane, attempt, Git integration, fence, runner registration, bus watermark, and open-case state to find silent anomalies. A confirmed contradiction is appended to the bus before case handling continues.</li>
   <li><b>Thirty minutes:</b> AGT-2545 owns the accepted-without-integration threshold and repeated warning cadence. The Watcher consumes the emitted fact rather than starting a parallel timer.</li>
-  <li><b>Daily:</b> a deterministic operating rollup reports trigger volume, resolution time, automatic actions, decisions, strong calls, tokens, and unknown-price rows. A model-authored news summary is optional and separately budgeted.</li>
+  <li><b>On every material phase change:</b> the Watcher emits finding-raised, recipe-applied, analysis-complete, or decision-required back to the bus. Identical checks update the case only.</li>
+  <li><b>Daily:</b> a deterministic bus-and-case rollup reports trigger volume, resolution time, automatic actions, decisions, strong calls, tokens, and unknown-price rows. A model-authored news summary is optional and separately budgeted.</li>
 </ul>
 
 <h3>Self-monitoring</h3>
-<p>An independent health monitor, not the Watcher itself, evaluates a one-minute heartbeat and event watermark. Three missed heartbeats or a five-minute input lag produces a workspace <b>Watcher unavailable</b> Problem in Activity and system health. The coordinator reports queue depth, oldest unclaimed case, phase age, action retries, dedupe rate, recipe success, human reversals, strong-call latency, tokens, and spend status.</p>
+<p>An independent health monitor, not the Watcher itself, evaluates the Watcher's one-minute bus heartbeat and subscription watermark. Three missed heartbeats or a five-minute input lag produces a workspace <b>Watcher unavailable</b> Problem in the same bus-backed Activity stream and in system health. The coordinator reports queue depth, oldest unclaimed case, phase age, action retries, dedupe rate, recipe success, human reversals, strong-call latency, tokens, and spend status.</p>
 <ul>
   <li>Restart replays the durable inbox and resumes cases by idempotency key.</li>
   <li>An unavailable analyzer pauses only analysis-required cases. Mechanical invariants and normal pipeline recovery continue.</li>
@@ -504,14 +770,14 @@
   <tbody>
     <tr>
       <td><b>W0 · Contracts</b></td>
-      <td>Version <code>WatcherTrigger</code>, <code>WatcherCase</code>, evidence-pack, analysis-receipt, action-receipt, authority, and feed projection schemas. Define fingerprints and terminals.</td>
-      <td>Fixture matrix covers all six trigger classes, duplicate delivery, stale evidence, operator epoch change, and every autonomy class without a model call.</td>
+      <td>Version <code>WatcherTrigger</code>, <code>WatcherCase</code>, evidence-pack, analysis-receipt, action-receipt, authority, bus topic, and Activity projection schemas. Define fingerprints and terminals without adding a competing bus kind.</td>
+      <td>Fixture matrix covers all six trigger classes, the four Watcher-produced events, duplicate delivery, stale evidence, operator epoch change, and every autonomy class without a model call.</td>
       <td>3 to 4 days</td>
     </tr>
     <tr>
       <td><b>W1 · Observation</b><br><span class="pill queued">recommended first</span></td>
-      <td>Durable global case inbox, event adapters for 5e, integration, delivery, and AGT-2545; five-minute anomaly reconciliation; card note; Activity Problem and resolved finding; independent heartbeat.</td>
-      <td>Shadow mode changes no task or Git state. Every fixture becomes one deduplicated case, survives restart, rehydrates after SignalR reconnect, and reaches an explicit terminal.</td>
+      <td>Durable bus subscription and global case inbox; adapters for 5e, integration, delivery, and AGT-2545; five-minute anomaly reconciliation; card note; Watcher event producer; Activity Problem and resolved finding; shell status projection; independent heartbeat.</td>
+      <td>Shadow mode changes no task or Git state. Every fixture becomes one deduplicated case, survives restart, appears once in All activity, rehydrates after SignalR reconnect, and reaches an explicit terminal.</td>
       <td>5 to 8 days</td>
     </tr>
     <tr>
@@ -551,14 +817,17 @@
   <li><b>AGT-2545:</b> honest outcome counts and stale accepted-delivery signal. It is the Watcher's low-cost wake source.</li>
   <li><b>AGT-2555:</b> reliable <code>status.md</code> completion evidence and scaffold distinction. The Watcher reports missing proof without manufacturing it.</li>
   <li><b>AGT-2535:</b> durable-first, project-scoped SignalR projection and reconnect convergence pattern. It is an implementation seam, not a source task of this dossier.</li>
+  <li><b>AGT-2565:</b> the Activity entry-type grid. Watcher topics project into its existing Problem, Decision, action, and observation presentations.</li>
+  <li><b>AGT-2569:</b> stable linked-element identities. Existing dossier anchors stay unchanged; the new bus and mockup ids are additive.</li>
+  <li><b>AGT-2579:</b> <b>All activity</b> is the chronological default; Problem and Decision remain explicit filters over the same stream.</li>
 </ul>
 
 <h2 id="decision"><span class="no">§9</span>Decision request</h2>
 <div class="box warn">
   <h4>Requested operator decision</h4>
   <ol>
-    <li><b>Architecture:</b> approve the global Control Plane coordinator with runner-hosted evidence and model jobs.</li>
-    <li><b>First release:</b> approve W0 to W2 as observe-only, with no task or Git mutations.</li>
+    <li><b>Architecture:</b> approve the global Control Plane coordinator as a consumer and producer of the central event bus, with runner-hosted evidence and model jobs. Activity across projects is the shared chronological view; Studio provides the persistent global status and access point.</li>
+    <li><b>First release:</b> approve W0 to W2 as observe-only, with the bus mappings and Activity/shell projections in §4a but no task or Git mutations.</li>
     <li><b>Autonomy:</b> approve A1 re-registration and rebase-steer or policy-requeue for W3, subject to the stated guards and kill switches.</li>
     <li><b>Fence policy:</b> keep fence salvage A2 and approval-gated until recipe-specific promotion evidence exists.</li>
     <li><b>Model policy:</b> approve Mini/high only for bounded compression, Sol/medium for ambiguous analysis, and Sol/xhigh for the existing hard-floor cases.</li>
@@ -567,7 +836,7 @@
 
 <p><b>Recommended answer:</b> approve all five items. This creates useful visibility and analysis before granting mutation authority, preserves the mechanical guarantees now being added, and turns today's manual rescue pattern into a measured, auditable progression rather than an all-at-once autonomous agent.</p>
 
-<p class="dim">Related reading: <a href="../project-feed/index.html">Project Feed</a>, <a href="../../concepts/orchestrator-supervision-loop.html">Orchestrator Supervision Loop</a>, <a href="../../concepts/orchestrator-drive-to-conclusion.html">Drive to Conclusion</a>, and <a href="../../concepts/model-escalation-and-companion-routing.md">Model Escalation and Companion Routing</a>.</p>
+<p class="dim">Related reading: <a href="../../system/architecture/bus/agent-message-bus.md">Agent Message Bus</a>, <a href="../project-feed/index.html">Project Feed</a>, <a href="../../concepts/orchestrator-supervision-loop.html">Orchestrator Supervision Loop</a>, <a href="../../concepts/orchestrator-drive-to-conclusion.html">Drive to Conclusion</a>, and <a href="../../concepts/model-escalation-and-companion-routing.md">Model Escalation and Companion Routing</a>.</p>
 
 </main>
 </body>
