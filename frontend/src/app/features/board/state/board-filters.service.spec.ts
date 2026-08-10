@@ -152,6 +152,19 @@ describe('BoardFiltersService project selection', () => {
     expect(svc.hasActiveFilters()).toBe(true);
     expect(svc.hasActiveFiltersOrSearch()).toBe(true);
   });
+
+  it('shows exactly the accepted-integration alert tasks when the filter link changes the hash', () => {
+    svc.updateAcceptedIntegrationAlertItems([
+      { projectName: 'Agent Task Processor', taskId: 'atp-r-2' },
+      { projectName: 'Lotta Dashboard', taskId: 'lot-r-1' },
+    ]);
+    window.location.hash = '#/board&filters=integration%3Astalled';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+    const grouped = svc.filteredGrouped();
+    expect(grouped.ready.map(job => job.id)).toEqual(['atp-r-2', 'lot-r-1']);
+    expect(svc.activeFilterPills().map(pill => pill.label)).toContain('Stalled accepted tasks');
+  });
 });
 
 /**
@@ -283,6 +296,14 @@ describe('BoardFiltersService URL-hash coexistence with a route overlay', () => 
     svc.hydrateFromUrl();
 
     expect(svc.activeType()).toBe('bug');
+  });
+
+  it('hydrates the stalled-integration filter link', () => {
+    history.replaceState(null, '', '/#/board&filters=integration%3Astalled');
+
+    svc.hydrateFromUrl();
+
+    expect(svc.stalledIntegrationOnly()).toBe(true);
   });
 
   it('hydrates the filter even when the route segment is written after filters=', () => {

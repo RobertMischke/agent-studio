@@ -5,6 +5,12 @@
     ariaLive="polite"
     testid="accepted-integration-alert-banner">
     <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> accepted {{ visibleItems().length === 1 ? 'task has' : 'tasks have' }} not reached successful integration for over <span class="notification__number">{{ thresholdMinutes() }}</span> minutes.</strong>
-    <span class="notification__detail" data-testid="notice-bar-detail">{{ projectTaskKeys() }}. Open a task to inspect its integration outcome.</span>
+    <span class="notification__detail" data-testid="notice-bar-detail">
+      {{ displayedTaskKeys() }} ·
+      <a
+        class="accepted-integration-alert__link"
+        data-testid="accepted-integration-full-list"
+        [attr.href]="fullListHref()">{{ remainingTaskCount() > 0 ? 'and ' + remainingTaskCount() + ' more' : 'View on board' }}</a>
+    </span>
   </app-notification>
 }

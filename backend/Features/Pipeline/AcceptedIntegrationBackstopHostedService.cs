@@ -162,8 +162,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             _configuration.GetValue<int?>("Integration:AcceptedAlertThresholdMinutes") ?? 30,
             1,
             24 * 60);
-        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
-            .Where(IsAcceptedAlertCandidate)
+        var candidates = _scanner.ScanAllAutomationJobs()
+            .Where(IsPotentialAlertLane)
             .OrderBy(job => job.EnteredLaneAt)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -176,16 +176,20 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             var recovery = _integrationStatus.ResolveAcceptedIntegrationRecovery(job, status);
             if (recovery.Action == AcceptedIntegrationRecoveryAction.Ignore)
                 continue;
-            policyCandidates.Add(new AcceptedIntegrationAlertCandidate
+            var acceptanceRecord = ResolveAcceptanceRecord(job, recovery.LastMergeAttempt);
+            var candidate = new AcceptedIntegrationAlertCandidate
             {
                 Task = job,
-                AcceptedAt = ResolveAcceptedAt(job),
+                AcceptedAt = acceptanceRecord.RecordedAt,
+                HasIntegrationRecord = acceptanceRecord.Exists,
                 IntegrationStatus = status?.Status,
                 LastOutcome = NormalizeOutcome(recovery.LastMergeAttempt?.Verdict),
                 Detail = recovery.LastMergeAttempt?.Reason
                          ?? recovery.LastMergeAttempt?.VerdictSummary
                          ?? status?.Detail,
-            });
+            };
+            if (AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate))
+                policyCandidates.Add(candidate);
         }
 
         var next = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
@@ -200,16 +204,17 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         }
     }
 
-    private static bool IsAcceptedAlertCandidate(TaskInfo job)
+    private static bool IsPotentialAlertLane(TaskInfo job)
     {
-        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(job)) return false;
-        if (job.State is TaskStates.Completed or TaskStates.Archive) return true;
+        if (job.State == TaskStates.Completed) return true;
         return job.State == TaskStates.HumanReview
                && (string.Equals(job.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal)
                    || (job.Tags ?? []).Any(IntegrationStatuses.IsPendingTag));
     }
 
-    private DateTime ResolveAcceptedAt(TaskInfo job)
+    private (bool Exists, DateTime RecordedAt) ResolveAcceptanceRecord(
+        TaskInfo job,
+        PipelineStepExecution? lastMergeAttempt)
     {
         var integrationStarted = _timeline?.ReadAll(job.FolderPath)
             .Where(item => string.Equals(
@@ -218,7 +223,13 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 StringComparison.Ordinal))
             .OrderByDescending(item => item.Ts)
             .FirstOrDefault();
-        return integrationStarted?.Ts ?? job.EnteredLaneAt;
+        if (integrationStarted is not null)
+            return (true, integrationStarted.Ts.ToUniversalTime());
+
+        var mergeRecordedAt = lastMergeAttempt?.StartedAt ?? lastMergeAttempt?.CompletedAt;
+        return mergeRecordedAt is { } recordedAt
+            ? (true, recordedAt.ToUniversalTime())
+            : (lastMergeAttempt is not null, default);
     }
 
     private static string? NormalizeOutcome(string? verdict)

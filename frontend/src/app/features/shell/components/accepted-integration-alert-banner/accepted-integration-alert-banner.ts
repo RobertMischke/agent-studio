@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { NotificationComponent } from '../../../../components/notification/notification.component';
+import { BoardFiltersService } from '../../../board';
+
+const DISPLAYED_TASK_LIMIT = 10;
 
 interface AcceptedIntegrationAlertItem {
   taskKey: string;
@@ -32,6 +35,7 @@ interface AcceptedIntegrationAlertSnapshot {
 })
 export class AcceptedIntegrationAlertBannerComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
+  private readonly boardFilters = inject(BoardFiltersService);
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly projects = input<readonly string[]>([]);
@@ -45,16 +49,19 @@ export class AcceptedIntegrationAlertBannerComponent implements OnInit, OnDestro
     return snapshot.items.filter(item => visible.has(item.projectName.toLowerCase()));
   });
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 30);
-  readonly projectTaskKeys = computed(() => {
-    const groups = new Map<string, string[]>();
-    for (const item of this.visibleItems()) {
-      const keys = groups.get(item.projectName) ?? [];
-      keys.push(item.taskKey);
-      groups.set(item.projectName, keys);
-    }
-    return [...groups.entries()]
-      .map(([project, keys]) => `${project}: ${keys.join(', ')}`)
-      .join(' · ');
+  readonly displayedTaskKeys = computed(() => this.visibleItems()
+    .slice(0, DISPLAYED_TASK_LIMIT)
+    .map(item => item.taskKey)
+    .join(', '));
+  readonly remainingTaskCount = computed(() => Math.max(
+    0,
+    this.visibleItems().length - DISPLAYED_TASK_LIMIT,
+  ));
+  readonly fullListHref = computed(() => {
+    const projects = [...new Set(this.visibleItems().map(item => item.projectName))];
+    const filters = ['integration:stalled'];
+    if (projects.length > 0) filters.push(`projects:${projects.join(',')}`);
+    return `#/board&filters=${encodeURIComponent(filters.join(';'))}`;
   });
 
   ngOnInit(): void {
@@ -68,8 +75,14 @@ export class AcceptedIntegrationAlertBannerComponent implements OnInit, OnDestro
 
   private refresh(): void {
     this.http.get<AcceptedIntegrationAlertSnapshot>('/api/pipeline/accepted-integration-alert').subscribe({
-      next: snapshot => this.snapshot.set(snapshot),
-      error: () => this.snapshot.set(null),
+      next: snapshot => {
+        this.snapshot.set(snapshot);
+        this.boardFilters.updateAcceptedIntegrationAlertItems(snapshot.active ? snapshot.items : []);
+      },
+      error: () => {
+        this.snapshot.set(null);
+        this.boardFilters.updateAcceptedIntegrationAlertItems([]);
+      },
     });
   }
 }

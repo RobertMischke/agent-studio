@@ -198,7 +198,9 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   or the explicit `noBranchExpected: true` card field.
 - The read-only startup `AcceptedIntegrationInventorySweep` lists historical
   Completed and archived coding cards whose integration fact is absent, Error,
-  or NoTaskBranch. It does not mutate historical cards.
+  or NoTaskBranch. A missing acceptance integration record is classified as
+  `PreInvariantNotEvaluated`, remains inventory-only, and never contributes to
+  the acute accepted-integration alert. It does not mutate historical cards.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`
