@@ -36,6 +36,71 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerComponent', () => {
+  it('ends loading and renders the backend reason when a dossier cannot be read', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'missing');
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/projects/Demo/workbenches/missing')
+      .flush(
+        { error: 'Dossier file is missing from the project repository.' },
+        { status: 404, statusText: 'Not Found' },
+      );
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.componentInstance.document()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-loading"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-error"]')?.textContent)
+      .toContain('Dossier file is missing from the project repository.');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('ignores a superseded response after the route inputs change', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    const http = TestBed.inject(HttpTestingController);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'first');
+    fixture.detectChanges();
+    const first = http.expectOne('/api/projects/Demo/workbenches/first');
+
+    fixture.componentRef.setInput('workbenchId', 'second');
+    fixture.detectChanges();
+    const second = http.expectOne('/api/projects/Demo/workbenches/second');
+    second.flush({
+      ...DOCUMENT,
+      workbench: { ...DOCUMENT.workbench, id: 'second', title: 'Second dossier' },
+    });
+    fixture.detectChanges();
+    first.flush({
+      ...DOCUMENT,
+      workbench: { ...DOCUMENT.workbench, id: 'first', title: 'First dossier' },
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.componentInstance.document()?.workbench.title).toBe('Second dossier');
+    http.verify();
+  });
+
   it('normalises artifact HTML behind a policy-first fixed wrapper', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
