@@ -648,7 +648,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const key = this.contextKey();
     if (!key || this.contextDigestState.refreshing()) return;
     this.contextDigestState.load(key, true);
-    if (this.effectiveProject()) this.refresh(false);
+    if (this.effectiveProject()) this.refreshChat(false, false);
     this.refreshContextSessions();
   }
 
@@ -744,6 +744,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   refresh(silent = false): void {
+    this.refreshChat(silent, true);
+  }
+
+  private refreshChat(silent: boolean, reconcileMissingSession: boolean): void {
     const proj = this.effectiveProject();
     if (!proj) return;
     const key = this.contextKey();
@@ -757,7 +761,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.turns.set(resp.turns ?? []);
         this.executionContext.set(resp.executionContext ?? null);
         this.errorMsg.set(null);
-        if (!this.contextSessions().some((session) => session.contextKey === key)) {
+        if (reconcileMissingSession
+          && !this.contextSessions().some((session) => session.contextKey === key)) {
           this.refreshContextSessions();
         }
         if (!silent) this.loading.set(false);
