@@ -2,9 +2,9 @@
 # Operator-owned, fail-closed develop -> main promotion train.
 #
 # This is not a worker-run Git step. Run it from a clean checkout whose HEAD is
-# the fetched origin/develop tip. It prepares an exact merge candidate in a
-# temporary worktree, runs the mandatory full gate there, rechecks both remote
-# refs, then atomically pushes main and an annotated release marker.
+# the fetched origin/develop tip. It fixes that exact commit as the candidate,
+# runs the mandatory full gate in a temporary worktree, rechecks remote
+# ancestry, then atomically pushes main and an annotated release marker.
 
 set -Eeuo pipefail
 
@@ -15,17 +15,17 @@ Usage:
   promote-develop-to-main.sh --execute [options]
 
 Options:
-  --dry-run                         Prepare and inspect the merge; do not gate or push (default).
+  --dry-run                         Prepare and inspect the candidate; do not gate or push (default).
   --execute                         Run the full gate and atomically push main plus the release tag.
   --required-ancestor <sha>         Require this commit to be reachable from origin/develop.
   --tag <release/name>              Annotated marker name (default: release/<UTC timestamp>).
   --evidence-dir <directory>        Durable output directory for manifest, logs, and record.
-  --prefer-develop-conflicts        Resolve every merge conflict from develop. Bootstrap-only.
+  --prefer-develop-conflicts        Deprecated compatibility option; exact-SHA promotion never merges.
   --remote <name>                   Git remote (default: origin).
   -h, --help                        Show this help.
 
-The execute path has no gate bypass. A conflict, a red or incomplete gate, a
-moved branch, a tag collision, or a non-atomic push leaves main unchanged.
+The execute path has no gate bypass. A non-fast-forward candidate, a red or
+incomplete gate, a tag collision, or a non-atomic push leaves main unchanged.
 EOF
 }
 
@@ -108,6 +108,7 @@ git -C "$repo" fetch --prune --tags "$remote" \
 develop_ref="refs/remotes/$remote/develop"
 main_ref="refs/remotes/$remote/main"
 develop_sha=$(git -C "$repo" rev-parse "$develop_ref^{commit}")
+candidate_sha=$develop_sha
 main_sha=$(git -C "$repo" rev-parse "$main_ref^{commit}")
 operator_sha=$(git -C "$repo" rev-parse HEAD)
 
@@ -171,7 +172,7 @@ write_record() {
     "$(json_escape "$candidate_sha")" \
     "$(json_escape "$tag_name")" \
     "$(json_escape "$required_ancestor")" \
-    "$([[ "$prefer_develop_conflicts" == 1 ]] && printf develop || printf block)" \
+    exact-sha \
     "$(json_escape "$conflicts")" \
     "$(json_escape "$gate_status")" \
     "$(json_escape "$gate_blob")" \
@@ -186,6 +187,7 @@ merge_base=$(git -C "$repo" merge-base "$main_sha" "$develop_sha")
   printf 'merge-base\t%s\n' "$merge_base"
   printf 'previous-main\t%s\n' "$main_sha"
   printf 'develop\t%s\n' "$develop_sha"
+  printf 'candidate\t%s\n' "$candidate_sha"
   printf 'commits\t%s\n' "$(git -C "$repo" rev-list --count "$merge_base..$develop_sha")"
   printf 'main-only\t%s\n' "$(git -C "$repo" rev-list --count "$develop_sha..$main_sha")"
 } > "$evidence_dir/manifest-summary.tsv"
@@ -197,13 +199,23 @@ git -C "$repo" diff --stat "$merge_base..$develop_sha" \
 git -C "$repo" log --cherry-mark --right-only --format='%m %H %s' \
   "$develop_sha...$main_sha" > "$evidence_dir/main-only-patch-review.txt"
 
-log "mode=$mode remote=$remote develop=$develop_sha main=$main_sha"
+log "mode=$mode remote=$remote develop=$develop_sha candidate=$candidate_sha main=$main_sha"
 log "manifest=$(wc -l < "$evidence_dir/manifest-commits.tsv" | tr -d ' ') commits merge-base=$merge_base"
 
-if git -C "$repo" merge-base --is-ancestor "$develop_sha" "$main_sha"; then
+if git -C "$repo" merge-base --is-ancestor "$candidate_sha" "$main_sha"; then
   log 'main already contains develop; promotion is a no-op'
-  write_record no-op "$main_sha" not-required '' false
+  write_record no-op "$candidate_sha" not-required '' false
   exit 0
+fi
+
+if ! git -C "$repo" merge-base --is-ancestor "$main_sha" "$candidate_sha"; then
+  log "candidate=$candidate_sha is not a descendant of main=$main_sha; main remains unchanged"
+  write_record blocked-non-fast-forward "$candidate_sha" not-run '' false
+  exit 3
+fi
+
+if [[ "$prefer_develop_conflicts" == 1 ]]; then
+  log '--prefer-develop-conflicts is ignored because exact-SHA promotion does not create a merge commit'
 fi
 
 if git -C "$repo" show-ref --verify --quiet "refs/tags/$tag_name" \
@@ -224,63 +236,16 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-git -C "$repo" worktree add --detach "$candidate_checkout" "$main_sha" \
+conflict_text=
+
+git -C "$repo" worktree add --detach "$candidate_checkout" "$candidate_sha" \
   > "$evidence_dir/worktree-add.log" 2>&1
 worktree_added=1
 
-set +e
-git -C "$candidate_checkout" merge --no-ff --no-commit "$develop_sha" \
-  > "$evidence_dir/merge.log" 2>&1
-merge_rc=$?
-set -e
-
-mapfile -d '' conflicted_paths < <(
-  git -C "$candidate_checkout" diff --name-only --diff-filter=U -z
-)
-conflict_text=$(printf '%s\n' "${conflicted_paths[@]:-}" | sed '/^$/d' | paste -sd ',' -)
-
-if ((merge_rc != 0)); then
-  if ((${#conflicted_paths[@]} == 0)); then
-    log "merge preparation failed without resolvable file conflicts; see merge.log"
-    write_record blocked-merge '' not-run '' false
-    exit 3
-  fi
-  if [[ "$prefer_develop_conflicts" != 1 ]]; then
-    printf '%s\n' "${conflicted_paths[@]}" > "$evidence_dir/conflicts.txt"
-    log "merge blocked by ${#conflicted_paths[@]} conflict(s): $conflict_text"
-    write_record blocked-conflict '' not-run "$conflict_text" false
-    exit 3
-  fi
-
-  printf '%s\n' "${conflicted_paths[@]}" > "$evidence_dir/conflicts-resolved-from-develop.txt"
-  for path in "${conflicted_paths[@]}"; do
-    if git -C "$repo" cat-file -e "$develop_sha:$path" 2>/dev/null; then
-      git -C "$candidate_checkout" restore --source="$develop_sha" --staged --worktree -- "$path"
-    else
-      git -C "$candidate_checkout" rm --quiet -- "$path"
-    fi
-  done
-  if [[ -n $(git -C "$candidate_checkout" diff --name-only --diff-filter=U) ]]; then
-    log 'develop-preferred conflict resolution was incomplete'
-    write_record blocked-conflict-resolution '' not-run "$conflict_text" false
-    exit 3
-  fi
-  log "resolved ${#conflicted_paths[@]} bootstrap conflict(s) from develop: $conflict_text"
-fi
-
-if ! git -C "$candidate_checkout" diff --check --cached \
+if ! git -C "$candidate_checkout" diff --check "$main_sha..$candidate_sha" \
   > "$evidence_dir/candidate-whitespace-review.txt" 2>&1; then
   log 'candidate contains committed whitespace findings; recorded for review while the mandatory full gate remains authoritative'
 fi
-commit_message="release: promote develop to main ($timestamp)"
-git -C "$candidate_checkout" -c commit.gpgsign=false commit --no-verify \
-  -m "$commit_message" \
-  -m "Promotion-Source: $develop_sha
-Previous-Main: $main_sha
-Required-Ancestor: ${required_ancestor:-none}
-Conflict-Policy: $([[ "$prefer_develop_conflicts" == 1 ]] && printf develop || printf block)" \
-  > "$evidence_dir/merge-commit.log" 2>&1
-candidate_sha=$(git -C "$candidate_checkout" rev-parse HEAD)
 git -C "$candidate_checkout" show --no-patch --format=fuller HEAD \
   > "$evidence_dir/candidate-commit.txt"
 git -C "$candidate_checkout" diff --stat "$main_sha..$candidate_sha" \
@@ -314,16 +279,28 @@ if [[ -n $(git -C "$candidate_checkout" status --porcelain --untracked-files=all
   write_record blocked-dirty-gate "$candidate_sha" dirty "$conflict_text" false
   exit 4
 fi
+gated_head=$(git -C "$candidate_checkout" rev-parse HEAD)
+if [[ "$gated_head" != "$candidate_sha" ]]; then
+  log "candidate checkout moved during the gate: expected=$candidate_sha actual=$gated_head; main remains unchanged"
+  write_record blocked-gate-subject "$candidate_sha" invalid-subject "$conflict_text" false
+  exit 4
+fi
 
 git -C "$repo" fetch "$remote" \
   "+refs/heads/develop:refs/remotes/$remote/develop" \
   "+refs/heads/main:refs/remotes/$remote/main"
 develop_after=$(git -C "$repo" rev-parse "$develop_ref^{commit}")
 main_after=$(git -C "$repo" rev-parse "$main_ref^{commit}")
-if [[ "$develop_after" != "$develop_sha" || "$main_after" != "$main_sha" ]]; then
-  log "branch moved during gate: develop=$develop_after main=$main_after; main remains unchanged"
-  write_record blocked-ref-moved "$candidate_sha" passed "$conflict_text" false
+if ! git -C "$repo" merge-base --is-ancestor "$main_after" "$candidate_sha"; then
+  log "gated candidate=$candidate_sha is not a descendant of current main=$main_after; main remains unchanged"
+  write_record blocked-non-fast-forward "$candidate_sha" passed "$conflict_text" false
   exit 5
+fi
+if [[ "$develop_after" != "$develop_sha" ]]; then
+  log "develop advanced to $develop_after during gate; promoting gated candidate $candidate_sha"
+fi
+if [[ "$main_after" != "$main_sha" ]]; then
+  log "main advanced to $main_after during gate and remains an ancestor of candidate $candidate_sha"
 fi
 
 tag_message="Agent Studio develop -> main promotion
@@ -333,7 +310,7 @@ Previous main: $main_sha
 Candidate: $candidate_sha
 Full gate: passed
 Gate script blob: $(git -C "$repo" hash-object "$gate_script")
-Conflict policy: $([[ "$prefer_develop_conflicts" == 1 ]] && printf develop || printf block)"
+Candidate policy: exact develop SHA"
 git -C "$candidate_checkout" -c tag.gpgSign=false tag -a "$tag_name" \
   -m "$tag_message" "$candidate_sha"
 
@@ -358,5 +335,5 @@ if [[ "$remote_main" != "$candidate_sha" || "$remote_tag" != "$candidate_sha" ]]
 fi
 
 write_record promoted "$candidate_sha" passed "$conflict_text" true
-log "promoted develop=$develop_sha to main=$candidate_sha with tag=$tag_name"
+log "promoted develop=$develop_sha to main=$candidate_sha with tag=$tag_name candidate=$candidate_sha"
 log 'deployment handoff is ready: the main-advance cron watcher can deploy this main SHA'

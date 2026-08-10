@@ -10,7 +10,7 @@ trap 'rm -rf -- "$test_root"' EXIT HUP INT TERM
 make_fixture() {
   local name=$1
   local gate_mode=$2
-  local conflict_mode=${3:-none}
+  local topology_mode=${3:-linear}
   local fixture="$test_root/$name"
   local remote="$fixture/remote.git"
   local seed="$fixture/seed"
@@ -49,7 +49,31 @@ EOF
 set -eu
 test "${1:-}" = --repo
 candidate=$2
-git -C "$candidate" push origin HEAD:refs/heads/develop >/dev/null
+remote_url=$(git -C "$candidate" remote get-url origin)
+advance_checkout=$(mktemp -d 2>/dev/null || mktemp -d -t promotion-develop-advance)
+trap 'rm -rf -- "$advance_checkout"' EXIT HUP INT TERM
+git clone --quiet --branch develop "$remote_url" "$advance_checkout"
+git -C "$advance_checkout" config user.name 'Promotion Test Gate'
+git -C "$advance_checkout" config user.email 'promotion-test-gate@example.invalid'
+git -C "$advance_checkout" commit --quiet --allow-empty -m 'develop advances during gate'
+git -C "$advance_checkout" push --quiet origin HEAD:refs/heads/develop
+printf '%s\n' PROMOTION_FULL_GATE=passed
+EOF
+      ;;
+    move-main)
+      cat > "$seed/scripts/release/promotion-full-gate.sh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+test "${1:-}" = --repo
+candidate=$2
+remote_url=$(git -C "$candidate" remote get-url origin)
+advance_checkout=$(mktemp -d 2>/dev/null || mktemp -d -t promotion-main-advance)
+trap 'rm -rf -- "$advance_checkout"' EXIT HUP INT TERM
+git clone --quiet --branch main "$remote_url" "$advance_checkout"
+git -C "$advance_checkout" config user.name 'Promotion Test Gate'
+git -C "$advance_checkout" config user.email 'promotion-test-gate@example.invalid'
+git -C "$advance_checkout" commit --quiet --allow-empty -m 'main advances during gate'
+git -C "$advance_checkout" push --quiet origin HEAD:refs/heads/main
 printf '%s\n' PROMOTION_FULL_GATE=passed
 EOF
       ;;
@@ -74,7 +98,7 @@ EOF
   git -C "$seed" push --quiet -u origin main
   git --git-dir="$remote" symbolic-ref HEAD refs/heads/main
 
-  if [[ "$conflict_mode" == conflict ]]; then
+  if [[ "$topology_mode" == diverged ]]; then
     printf '%s\n' main > "$seed/payload.txt"
     git -C "$seed" commit --quiet -am 'main-only change'
     git -C "$seed" push --quiet origin main
@@ -110,8 +134,8 @@ run_expect_rc() {
   fi
 }
 
-# A normal execute run produces one two-parent merge, one annotated marker,
-# full-gate evidence, and an atomic remote update.
+# A normal execute run promotes the exact develop tip, produces one annotated
+# marker, records full-gate evidence, and performs an atomic remote update.
 green_operator=$(make_fixture green pass)
 green_remote="$test_root/green/remote.git"
 green_evidence="$test_root/green/evidence"
@@ -121,9 +145,8 @@ develop=$(git --git-dir="$green_remote" rev-parse refs/heads/develop)
   --execute --tag release/test-green --required-ancestor "$develop" \
   --evidence-dir "$green_evidence" >/dev/null
 new_main=$(git --git-dir="$green_remote" rev-parse refs/heads/main)
-test "$new_main" != "$old_main"
-test "$(git --git-dir="$green_remote" rev-parse "$new_main^1")" = "$old_main"
-test "$(git --git-dir="$green_remote" rev-parse "$new_main^2")" = "$develop"
+test "$new_main" = "$develop"
+git --git-dir="$green_remote" merge-base --is-ancestor "$old_main" "$new_main"
 test "$(git --git-dir="$green_remote" cat-file -t refs/tags/release/test-green)" = tag
 test "$(git --git-dir="$green_remote" rev-parse refs/tags/release/test-green^{})" = "$new_main"
 grep -q '"status":"promoted"' "$green_evidence/promotion-record.json"
@@ -143,33 +166,59 @@ for gate_mode in fail incomplete; do
   ! git --git-dir="$remote" show-ref --verify --quiet "refs/tags/release/test-$gate_mode"
 done
 
-# Ref movement after a green gate invalidates the tested candidate.
+# A develop advance during the gate is informational. The exact candidate that
+# started the gate is promoted, while the newer develop commit waits for the
+# next train.
 move_operator=$(make_fixture ref-moved move-develop)
 move_remote="$test_root/ref-moved/remote.git"
 move_evidence="$test_root/ref-moved/evidence"
 move_main=$(git --git-dir="$move_remote" rev-parse refs/heads/main)
-run_expect_rc 5 "$move_operator/scripts/release/promote-develop-to-main.sh" \
-  --execute --tag release/test-ref-moved --evidence-dir "$move_evidence" >/dev/null 2>&1
-test "$(git --git-dir="$move_remote" rev-parse refs/heads/main)" = "$move_main"
-! git --git-dir="$move_remote" show-ref --verify --quiet refs/tags/release/test-ref-moved
-grep -q '"status":"blocked-ref-moved"' "$move_evidence/promotion-record.json"
+move_candidate=$(git --git-dir="$move_remote" rev-parse refs/heads/develop)
+"$move_operator/scripts/release/promote-develop-to-main.sh" \
+  --execute --tag release/test-ref-moved --evidence-dir "$move_evidence" >/dev/null
+advanced_develop=$(git --git-dir="$move_remote" rev-parse refs/heads/develop)
+test "$advanced_develop" != "$move_candidate"
+test "$(git --git-dir="$move_remote" rev-parse refs/heads/main)" = "$move_candidate"
+test "$(git --git-dir="$move_remote" rev-parse refs/tags/release/test-ref-moved^{})" = "$move_candidate"
+git --git-dir="$move_remote" merge-base --is-ancestor "$move_main" "$move_candidate"
+grep -Fxq 'PROMOTION_FULL_GATE=passed' "$move_evidence/full-gate.log"
+grep -Fq "develop advanced to $advanced_develop during gate; promoting gated candidate $move_candidate" \
+  "$move_evidence/promotion.log"
+grep -Fq "promoted develop=$move_candidate to main=$move_candidate with tag=release/test-ref-moved candidate=$move_candidate" \
+  "$move_evidence/promotion.log"
+grep -q '"status":"promoted"' "$move_evidence/promotion-record.json"
 
-# Conflicts block by default. The bootstrap-only policy resolves the same
-# fixture from develop and records the exceptional choice without pushing.
-conflict_operator=$(make_fixture conflict pass conflict)
-conflict_evidence="$test_root/conflict/evidence-blocked"
-run_expect_rc 3 "$conflict_operator/scripts/release/promote-develop-to-main.sh" \
-  --dry-run --tag release/test-conflict-blocked \
-  --evidence-dir "$conflict_evidence" >/dev/null 2>&1
-grep -q '"status":"blocked-conflict"' "$conflict_evidence/promotion-record.json"
-grep -Fxq payload.txt "$conflict_evidence/conflicts.txt"
+# A concurrent main advance that is not an ancestor of the gated candidate
+# fails the final ancestry check. The external main commit remains untouched.
+main_move_operator=$(make_fixture main-moved move-main)
+main_move_remote="$test_root/main-moved/remote.git"
+main_move_evidence="$test_root/main-moved/evidence"
+main_move_candidate=$(git --git-dir="$main_move_remote" rev-parse refs/heads/develop)
+run_expect_rc 5 "$main_move_operator/scripts/release/promote-develop-to-main.sh" \
+  --execute --tag release/test-main-moved --evidence-dir "$main_move_evidence" >/dev/null 2>&1
+main_after_gate=$(git --git-dir="$main_move_remote" rev-parse refs/heads/main)
+test "$main_after_gate" != "$main_move_candidate"
+! git --git-dir="$main_move_remote" merge-base --is-ancestor "$main_after_gate" "$main_move_candidate"
+! git --git-dir="$main_move_remote" show-ref --verify --quiet refs/tags/release/test-main-moved
+grep -Fxq 'PROMOTION_FULL_GATE=passed' "$main_move_evidence/full-gate.log"
+grep -q '"status":"blocked-non-fast-forward"' "$main_move_evidence/promotion-record.json"
+grep -q '"gate":"passed"' "$main_move_evidence/promotion-record.json"
 
-resolved_evidence="$test_root/conflict/evidence-resolved"
-"$conflict_operator/scripts/release/promote-develop-to-main.sh" \
-  --dry-run --prefer-develop-conflicts --tag release/test-conflict-resolved \
-  --evidence-dir "$resolved_evidence" >/dev/null
-grep -q '"status":"preview"' "$resolved_evidence/promotion-record.json"
-grep -q '"conflictPolicy":"develop"' "$resolved_evidence/promotion-record.json"
-grep -Fxq payload.txt "$resolved_evidence/conflicts-resolved-from-develop.txt"
+# A develop tip that is not a descendant of main is never gated or pushed.
+diverged_operator=$(make_fixture diverged pass diverged)
+diverged_remote="$test_root/diverged/remote.git"
+diverged_evidence="$test_root/diverged/evidence"
+diverged_main=$(git --git-dir="$diverged_remote" rev-parse refs/heads/main)
+diverged_candidate=$(git --git-dir="$diverged_remote" rev-parse refs/heads/develop)
+if git --git-dir="$diverged_remote" merge-base --is-ancestor "$diverged_main" "$diverged_candidate"; then
+  printf '%s\n' 'Diverged fixture unexpectedly produced a fast-forward candidate.' >&2
+  exit 1
+fi
+run_expect_rc 3 "$diverged_operator/scripts/release/promote-develop-to-main.sh" \
+  --execute --tag release/test-diverged --evidence-dir "$diverged_evidence" >/dev/null 2>&1
+test "$(git --git-dir="$diverged_remote" rev-parse refs/heads/main)" = "$diverged_main"
+! git --git-dir="$diverged_remote" show-ref --verify --quiet refs/tags/release/test-diverged
+grep -q '"status":"blocked-non-fast-forward"' "$diverged_evidence/promotion-record.json"
+test ! -e "$diverged_evidence/full-gate.log"
 
 printf '%s\n' 'develop -> main promotion tests passed'

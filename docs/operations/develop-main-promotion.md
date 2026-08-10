@@ -1,9 +1,9 @@
 # Develop to main promotion
 
 `develop` is the work line. `main` is the release line. The standard promotion
-train prepares one exact merge commit, runs the complete blocking gate against
-that commit, publishes an annotated release marker with `main`, and hands the
-new `main` SHA to the external Stable deploy watcher.
+train fixes the fetched `develop` tip as its exact candidate, runs the complete
+blocking gate against that commit, publishes an annotated release marker with
+`main`, and hands the new `main` SHA to the external Stable deploy watcher.
 
 Use [the promotion command](../../scripts/release/promote-develop-to-main.sh)
 for this repository. It is an operator command, not a worker pipeline step.
@@ -19,26 +19,28 @@ The command fails closed when any of these facts is false:
   `origin/develop`;
 - an optional required convergence commit is reachable from `develop`;
 - the annotated `release/*` marker does not already exist;
-- the `develop` to `main` merge has no conflict, unless the operator explicitly
-  enables and records the bootstrap-only develop-preferred policy;
+- the candidate is a descendant of `main` before the gate and remains a
+  descendant of the freshly fetched `main` immediately before the push;
 - every command in
   [promotion-full-gate.sh](../../scripts/release/promotion-full-gate.sh) passes
-  against the exact candidate merge commit;
+  against the exact candidate commit;
 - the gate emits its completion marker and leaves the candidate checkout clean;
-- neither remote branch moves while the gate is running;
 - the server accepts one atomic push containing both `main` and the annotated
   release marker; and
 - remote verification resolves both refs to the tested candidate SHA.
 
-The command never force-pushes. A red or incomplete gate has no override. The
-temporary merge commit and tag are removed with the temporary worktree after a
-blocked run, while the durable evidence directory remains.
+An advance of `develop` during the gate is informational: the train logs the
+new tip and still promotes the gated candidate. The newer commit waits for the
+next train. A concurrent `main` update is safe only when the current `main`
+remains an ancestor of the candidate. The command never force-pushes, and the
+atomic non-force push closes the race after the final fetch. A red or incomplete
+gate has no override. The temporary tag is removed with the temporary worktree
+after a blocked run, while the durable evidence directory remains.
 
 ## Operator checklist
 
-1. Pause new Agent Studio pickup in the operator UI and let active integration
-   work settle. This avoids spending a full gate on a `develop` tip that is
-   likely to move.
+1. Ensure no other operator is promoting `main`. Normal Agent Studio pickup and
+   integration may continue; this train promotes only its gated start candidate.
 2. Update the operator checkout to the current `origin/develop`. Confirm
    `git status --short --branch` is clean.
 3. Preview the graph and manifest:
@@ -50,8 +52,8 @@ blocked run, while the durable evidence directory remains.
    ```
 
 4. Review `manifest-summary.tsv`, `manifest-commits.tsv`,
-   `main-only-patch-review.txt`, `candidate-whitespace-review.txt`, the
-   candidate commit, and any conflict list in the reported evidence directory.
+   `main-only-patch-review.txt`, `candidate-whitespace-review.txt`, and the
+   candidate commit in the reported evidence directory.
    Historical committed whitespace is review evidence rather than a release
    veto; the mandatory build and test gate remains blocking. This file-level
    manifest is the manual bridge until the in-product REL-1 surface adds live
@@ -69,29 +71,14 @@ blocked run, while the durable evidence directory remains.
 6. Verify `promotion-record.json` says `status=promoted`, `gate=passed`, and
    `atomicPush=true`. Verify the remote `main` and peeled tag resolve to the
    recorded `candidateSha`.
-7. Resume normal pickup. The deploy cron described below detects the new
+7. Monitor the deploy handoff. The deploy cron described below detects the new
    `main`, waits for Stable to become safe to restart, runs `update-stable.sh`,
-   verifies the deployed checkout, and resumes the runner.
+   and verifies the deployed checkout.
 
 The 1 August pre-promotion convergence at `0d8d6794a` merged the remaining
-`main` fixes into `develop`. The first promotion after that convergence must use
-the normal conflict-blocking path shown above. The bootstrap-only escape hatch
-is retained for recovery rehearsals and older repository states, but is not
-required for the current train. If an explicitly reviewed historic bootstrap
-does need it, use:
-
-```sh
-./scripts/release/promote-develop-to-main.sh \
-  --execute \
-  --required-ancestor 0f5372fce \
-  --prefer-develop-conflicts \
-  --tag "release/$(date -u +%Y%m%d-%H%M%SZ)"
-```
-
-That option replaces every conflicted path with the exact `develop` version and
-records both the policy and path list. It is not the routine release policy. A
-current conflict requires a fresh review and should normally be converged on
-`develop` before promotion.
+`main` fixes into `develop`. Any later `main`-only change must likewise be
+converged into `develop` before promotion. The exact-SHA train does not create a
+merge commit and cannot override a divergent branch graph.
 
 ## Mandatory full gate
 
@@ -122,9 +109,9 @@ claim still requires the separate stable-freeze evidence described in
 By default the command writes evidence beneath Git's local
 `promotion-results` path. Set `PROMOTION_EVIDENCE_DIR` or pass
 `--evidence-dir` to use an operator-owned durable location. The record includes
-the old and new branch SHAs, required ancestor, merge policy, conflict paths,
-gate-script blob, gate result, tag, and atomic-push result. Logs include the
-full gate output and remote push response.
+the start `develop`, previous `main`, exact candidate, required ancestor,
+gate-script blob, gate result, tag, and atomic-push result. Logs include the full
+gate output and remote push response.
 
 ## Deploy cron handoff
 
@@ -146,14 +133,14 @@ condition and a later cron tick retries. The watcher never changes task state.
 
 ## Failure and recovery
 
-- Conflict, gate, or ref-movement failure: inspect the evidence, converge the
-  branch if needed, fetch the new tips, and start a new run. Do not reuse the
-  stale candidate.
+- Candidate-ancestry or gate failure: inspect the evidence, converge the branch
+  if needed, fetch the new tips, and start a new run. A `develop` advance alone
+  does not invalidate a gated candidate.
 - Atomic push failure: remote `main` and the release marker remain unchanged.
   Fix credentials or branch policy, then rerun from fresh refs.
 - Deploy failure: the promotion remains a valid release fact. Diagnose the
   external updater and use its rollback procedure; do not rewrite `main` or
   move the release marker.
-- Released regression: revert the merge through normal `develop` work and run
-  a new promotion. Reserve an immutable Stable rollback for the deployment
-  incident response path.
+- Released regression: revert the offending change through normal `develop`
+  work and run a new promotion. Reserve an immutable Stable rollback for the
+  deployment incident response path.
