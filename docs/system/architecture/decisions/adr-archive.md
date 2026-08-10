@@ -435,6 +435,17 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 
 **Decision.** The runner is the only entity in the system that runs `git commit`. The CLI agent never commits, never pushes, never branches. Commits land deterministically on the `3-progress -> 4-review` transition through `JobTransitionService.MoveAsync`, are gated by a per-project `AutoCommit` setting, use a Haiku-rendered Conventional Commit message from [`prompts/runtime/commit-message.md`](../../../../prompts/runtime/commit-message.md), and stamp the resulting SHA onto `JobInfo.Commit`. Push is the runner's job too; today it is a known gap, deliberately tracked rather than delegated to the CLI.
 
+**Amendment (2026-08-10).** The platform, not only task transitions, owns Git
+history for its own repository mutations. A backend service that changes a
+tracked project file must either use a non-versioned ignored runtime sidecar or
+write through `ManagedRepositoryMutationService`. That boundary commits the
+declared paths immediately, restores them to `HEAD` on commit failure, and
+queues the exact SHA for background push. Task-run output still commits only at
+the runner lifecycle boundary, and worker CLIs and LLM supervisors still never
+own Git history. This amendment closes the discovery-scan incident where
+automatic Workbench keys dirtied the integration checkout and caused accepted
+task integrations to refuse their merges.
+
 **Context.** Modern coding CLIs (Claude / Codex / Copilot / Gemini) each ship with their own opinion about whether to commit when they "finish": some will, some won't, none agree on message style, and none align with our state-machine transition. Letting the model commit splits authority over the same working tree between the CLI's own heuristics and the runner's lifecycle policy. The product needs a single author of git history per project so the run timeline, the per-run change set, and `JobInfo.Commit` all line up against the same SHA. The user's framing was explicit: "der Task Prozessor macht den Commit, der Task Prozessor pusht."
 
 **Non-goals.**

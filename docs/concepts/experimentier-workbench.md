@@ -222,6 +222,31 @@ The chat transcript remains in the existing orchestrator store. The descriptor
 may record source and related task keys, but it does not copy chat history into
 Git.
 
+Backend-owned writes to tracked project files use
+`ManagedRepositoryMutationService`. The service serializes by repository,
+refuses to overwrite a target path that was already dirty, writes and commits
+only the declared paths, and restores those paths to `HEAD` if the commit
+fails. A successful commit queues its exact SHA and checked-out branch on the
+existing background auto-push path unless project auto-push is disabled. This
+boundary owns discovery key assignment, Workbench decisions, Workbench
+lifecycle transitions, Wiki grading companions, automatic Wiki task-link
+companions, and source-checkout prompt-review companions.
+
+The remaining repository-write classes have explicit durability ownership:
+
+- Interactive Wiki CRUD, curation, order, and classification endpoints commit
+  their source and content-metadata companion paths before returning success.
+- Pipeline Wiki maintenance, learnings, designated-topic sync, and Concept
+  Workbench placement run inside `ManagedProjectArtifactCommitService`, which
+  commits, stamps, and queues their task-attributed changes.
+- Package publishing commits the bounded version file and performs its atomic
+  commit-and-tag push as the publish transaction.
+- Observational `agentReads` telemetry is not document metadata. It writes only
+  below the gitignored `.orchestrator/wiki-agent-reads/` runtime tree. Adjacent
+  tracked `.meta.json` files remain authoritative for grading, classification,
+  and task links, so those content-metadata writes are committed rather than
+  ignored.
+
 ## 4. Explorer integration
 
 Under each expanded project, **Workbenches** is a first-class row immediately

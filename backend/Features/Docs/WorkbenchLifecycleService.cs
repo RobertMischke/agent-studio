@@ -34,17 +34,19 @@ public sealed class WorkbenchLifecycleService
         new(StringComparer.Ordinal);
 
     private readonly WorkbenchCatalogueService _catalogue;
-    private readonly GitService _git;
+    private readonly ManagedRepositoryMutationService _repositoryMutations;
     private readonly IAtomicJsonFileWriter _writer;
 
     public WorkbenchLifecycleService(
         WorkbenchCatalogueService catalogue,
         GitService git,
-        IAtomicJsonFileWriter? writer = null)
+        IAtomicJsonFileWriter? writer = null,
+        ManagedRepositoryMutationService? repositoryMutations = null)
     {
         _catalogue = catalogue;
-        _git = git;
         _writer = writer ?? new AtomicJsonFileWriter();
+        _repositoryMutations = repositoryMutations
+            ?? new ManagedRepositoryMutationService(git);
     }
 
     public DocumentWorkbenchResult Document(
@@ -140,25 +142,23 @@ public sealed class WorkbenchLifecycleService
             return Failure(id, "stale-revision",
                 "The content changed while the lifecycle transition was being applied.");
 
-        try
-        {
-            _writer.Write(snapshot.DescriptorPath, descriptor.ToJsonString(
-                new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return Failure(id, "write-failed", $"The descriptor could not be written: {ex.Message}");
-        }
+        var mutation = _repositoryMutations.Execute(
+            projectName,
+            snapshot.Root,
+            $"workbench-lifecycle-{id}",
+            $"chore(workbench): document {id}",
+            [snapshot.DescriptorRelPath],
+            () => _writer.Write(snapshot.DescriptorPath, descriptor.ToJsonString(
+                new JsonSerializerOptions { WriteIndented = true })));
+        if (!mutation.Success)
+            return Failure(id, "write-failed", $"The descriptor could not be persisted: {mutation.Error}");
 
-        var commit = _git.CommitPaths(snapshot.Root,
-            $"workbench: document {id}", [snapshot.DescriptorRelPath]);
         return new DocumentWorkbenchResult
         {
             Success = true,
-            Error = commit.Success ? null : commit.Error,
             WorkbenchId = id,
             Status = "documented",
-            Revision = commit.Success ? commit.Sha : snapshot.Revision,
+            Revision = mutation.CommitSha ?? snapshot.Revision,
             Fingerprint = WorkbenchCatalogueService.ComputeWorkbenchFingerprint(
                 snapshot.DescriptorPath, snapshot.EntryPath),
         };

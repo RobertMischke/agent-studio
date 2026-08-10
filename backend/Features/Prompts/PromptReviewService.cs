@@ -21,15 +21,18 @@ public sealed partial class PromptReviewService
     private readonly RuntimePromptService _prompts;
     private readonly ProjectSettingsService _projectSettings;
     private readonly ILogger<PromptReviewService> _logger;
+    private readonly ManagedRepositoryMutationService? _repositoryMutations;
 
     public PromptReviewService(
         RuntimePromptService prompts,
         ProjectSettingsService projectSettings,
-        ILogger<PromptReviewService> logger)
+        ILogger<PromptReviewService> logger,
+        ManagedRepositoryMutationService? repositoryMutations = null)
     {
         _prompts = prompts;
         _projectSettings = projectSettings;
         _logger = logger;
+        _repositoryMutations = repositoryMutations;
     }
 
     public PromptReviewSnapshot GetSnapshot(IReadOnlyList<string> names)
@@ -317,9 +320,36 @@ public sealed partial class PromptReviewService
         var path = SidecarPath(name)
             ?? throw new InvalidOperationException(
                 $"No shipped prompt path exists for '{name}'.");
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(metadata, SidecarJson));
-        File.Move(temp, path, overwrite: true);
+        void Write()
+        {
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(metadata, SidecarJson));
+            File.Move(temp, path, overwrite: true);
+        }
+
+        var repoRoot = Path.GetFullPath(DriftRepoRootLocator.Resolve());
+        var fullPath = Path.GetFullPath(path);
+        var rootPrefix = repoRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? repoRoot
+            : repoRoot + Path.DirectorySeparatorChar;
+        if (_repositoryMutations == null
+            || !fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            Write();
+            return;
+        }
+
+        var relativePath = Path.GetRelativePath(repoRoot, fullPath).Replace('\\', '/');
+        var mutation = _repositoryMutations.Execute(
+            "runtime-prompts",
+            repoRoot,
+            $"prompt-review-{name}",
+            $"chore(prompts): review {name}",
+            [relativePath],
+            Write);
+        if (!mutation.Success)
+            throw new InvalidOperationException(
+                $"Prompt review metadata could not be persisted: {mutation.Error}");
     }
 
     private string? SidecarPath(string name)

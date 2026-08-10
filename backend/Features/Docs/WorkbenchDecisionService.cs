@@ -87,7 +87,7 @@ public sealed class WorkbenchDecisionService
         new(StringComparer.Ordinal);
 
     private readonly WorkbenchCatalogueService _catalogue;
-    private readonly GitService _git;
+    private readonly ManagedRepositoryMutationService _repositoryMutations;
     private readonly IAtomicJsonFileWriter _fileWriter;
     private readonly WorkbenchChangeNotifier? _notifier;
 
@@ -95,12 +95,14 @@ public sealed class WorkbenchDecisionService
         WorkbenchCatalogueService catalogue,
         GitService git,
         IAtomicJsonFileWriter? fileWriter = null,
-        WorkbenchChangeNotifier? notifier = null)
+        WorkbenchChangeNotifier? notifier = null,
+        ManagedRepositoryMutationService? repositoryMutations = null)
     {
         _catalogue = catalogue;
-        _git = git;
         _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
         _notifier = notifier;
+        _repositoryMutations = repositoryMutations
+            ?? new ManagedRepositoryMutationService(git);
     }
 
     public WorkbenchDecisionResult Prepare(
@@ -282,29 +284,27 @@ public sealed class WorkbenchDecisionService
             return Failure(id, body.OperationId, "stale-revision",
                 "The Workbench content changed while the decision was being confirmed.");
 
-        try
-        {
-            _fileWriter.Write(snapshot.DescriptorPath, descriptor.ToJsonString(
-                new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        var mutation = _repositoryMutations.Execute(
+            projectName,
+            snapshot.Root,
+            $"workbench-decision-{id}",
+            $"chore(workbench): {(archive ? "archive" : "record decision for")} {id}",
+            [snapshot.DescriptorRelPath],
+            () => _fileWriter.Write(snapshot.DescriptorPath, descriptor.ToJsonString(
+                new JsonSerializerOptions { WriteIndented = true })));
+        if (!mutation.Success)
         {
             return Failure(id, body.OperationId, "write-failed",
-                $"The Workbench descriptor could not be written: {ex.Message}");
+                $"The Workbench decision could not be persisted: {mutation.Error}");
         }
 
-        // Best effort: the durable decision is the file itself. A failing commit
-        // (no repo, hook refusal) must not roll the decision back or 500.
-        var commit = _git.CommitPaths(snapshot.Root,
-            $"workbench: {(archive ? "archive" : "decide")} {id}", [snapshot.DescriptorRelPath]);
-        var revision = commit.Success ? commit.Sha : snapshot.Revision;
+        var revision = mutation.CommitSha ?? snapshot.Revision;
         var currentStatus = archive ? "archived" : "decided";
         _notifier?.PublishDecisionRecorded(projectName, id, snapshot.Item.Status, currentStatus);
 
         return new WorkbenchDecisionResult
         {
             Success = true,
-            Error = commit.Success ? null : commit.Error,
             WorkbenchId = id,
             OperationId = body.OperationId,
             Outcome = body.Outcome,

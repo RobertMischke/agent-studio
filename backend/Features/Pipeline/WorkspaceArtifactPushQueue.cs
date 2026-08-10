@@ -2,7 +2,12 @@ using System.Threading.Channels;
 
 namespace AgentStudio.Pipeline;
 
-public sealed record WorkspaceArtifactPushRequest(string RepositoryRoot, string JobId);
+public sealed record WorkspaceArtifactPushRequest(
+    string RepositoryRoot,
+    string JobId,
+    string TargetBranch = "main",
+    string? Sha = null,
+    string? Project = null);
 
 /// <summary>Non-blocking hand-off from workspace commits to the remote push worker.</summary>
 public sealed class WorkspaceArtifactPushQueue

@@ -3,7 +3,8 @@ using System.Diagnostics;
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// Pushes every workspace artifact commit to origin/main off the run path.
+/// Pushes workspace artifacts and other bounded platform-owned repository
+/// commits off the run path.
 /// Failures are visible and retried with bounded exponential backoff; a later
 /// commit also acts as a natural retry for all still-ahead commits.
 /// </summary>
@@ -45,7 +46,7 @@ public sealed class WorkspaceArtifactPushWorker : BackgroundService
         for (var attempt = 1; attempt <= 3; attempt++)
         {
             var result = await RunGitAsync(request.RepositoryRoot,
-                ["push", "origin", "HEAD:refs/heads/main"], ct);
+                ["push", "origin", $"{request.Sha ?? "HEAD"}:refs/heads/{request.TargetBranch}"], ct);
             if (result.Code == 0)
             {
                 _logger.LogInformation(
@@ -61,10 +62,10 @@ public sealed class WorkspaceArtifactPushWorker : BackgroundService
                 await Task.Delay(TimeSpan.FromTicks(_baseBackoff.Ticks * (1L << (attempt - 1))), ct);
             else if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
-                    project: null,
+                    project: request.Project,
                     jobId: request.JobId,
                     repository: request.RepositoryRoot,
-                    branch: "main",
+                    branch: request.TargetBranch,
                     status: "failed",
                     error: result.Error,
                     attempts: attempt,

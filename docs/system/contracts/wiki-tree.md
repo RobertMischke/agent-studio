@@ -133,6 +133,12 @@ is persisted if needed and the legacy block is removed. This copy-on-write
 migration preserves the history while keeping telemetry-only writes outside
 Git from the first read after deployment.
 
+Content-metadata companion writes remain versioned. Autonomous grading and
+task-link producers commit their exact companion paths through the managed
+repository mutation boundary and queue the resulting SHA for background push;
+interactive classification writes use the commit-backed Wiki endpoint. Only
+the runtime `agentReads` projection belongs under the ignored sidecar tree.
+
 The persistence and initialization contract is:
 
 - startup scans the complete current and archived task inventory before CLI

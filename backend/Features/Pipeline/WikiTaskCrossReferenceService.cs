@@ -11,8 +11,15 @@ public sealed class WikiTaskCrossReferenceService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly ILogger<WikiTaskCrossReferenceService> _logger;
+    private readonly ManagedRepositoryMutationService? _repositoryMutations;
 
-    public WikiTaskCrossReferenceService(ILogger<WikiTaskCrossReferenceService> logger) => _logger = logger;
+    public WikiTaskCrossReferenceService(
+        ILogger<WikiTaskCrossReferenceService> logger,
+        ManagedRepositoryMutationService? repositoryMutations = null)
+    {
+        _logger = logger;
+        _repositoryMutations = repositoryMutations;
+    }
 
     public int LinkAuto(string repositoryRoot, TaskInfo task, IEnumerable<string> changedFiles)
     {
@@ -53,12 +60,29 @@ public sealed class WikiTaskCrossReferenceService
         {
             var fullPath = Path.Combine(repositoryRoot, relPath.Replace('/', Path.DirectorySeparatorChar));
             var title = ReadTitle(fullPath, relPath);
+            var sidecarPath = fullPath + ".meta.json";
+            var persisted = _repositoryMutations?.Execute(
+                task.ProjectName,
+                repositoryRoot,
+                $"wiki-task-reference-{task.Id}-{relPath}",
+                $"chore(wiki): link {task.Key ?? task.Id} to {relPath}",
+                [Path.GetRelativePath(repositoryRoot, sidecarPath).Replace('\\', '/')],
+                () => UpsertSidecar(sidecarPath, task.Key ?? task.Id, task.Title, now));
+            if (persisted is { Success: false })
+            {
+                _logger.LogWarning(
+                    "wiki-task-cross-reference persistence failed project={Project} job={JobId} page={Page} error={Error}",
+                    task.ProjectName, task.Id, relPath, persisted.Error);
+                continue;
+            }
+            if (persisted == null)
+                UpsertSidecar(sidecarPath, task.Key ?? task.Id, task.Title, now);
+
             if (!taskPages.Any(p => string.Equals(p.RelPath, relPath, StringComparison.OrdinalIgnoreCase)))
             {
                 taskPages.Add(new RelatedWikiPage { RelPath = relPath, Title = title, LinkedAt = now, Source = WikiTaskReferenceSources.Auto });
                 added++;
             }
-            UpsertSidecar(fullPath + ".meta.json", task.Key ?? task.Id, task.Title, now);
         }
 
         if (added > 0) TaskJsonFile.UpdateField(task.FolderPath, "relatedWikiPages", taskPages, _logger);
