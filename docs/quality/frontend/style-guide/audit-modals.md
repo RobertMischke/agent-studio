@@ -60,7 +60,12 @@ Documented in [`frontend/AGENTS.md`](../../../../frontend/AGENTS.md) "Side-sheet
 
 ## Notification — canonical: `<app-notification>`
 
-F37. Toast + banner layouts. Tints + borders per severity.
+F37. Toast + banner layouts. Tints + borders per severity. Toasts use floating
+chrome. The banner layout is the single persistent workspace-alarm treatment:
+a compact full-bleed notice bar with a status dot, no outer margin, no radius,
+and no shadow. Runner queue starvation and accepted-delivery integration
+alarms both consume this layout; future workspace integration alarms do the
+same instead of adding feature-local banner surfaces.
 
 **Findings.** Canonical works.
 

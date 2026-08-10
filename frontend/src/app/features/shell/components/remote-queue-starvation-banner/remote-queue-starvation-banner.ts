@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import type { RemoteDispatchRejection } from '../../../../models/task.model';
+import { NotificationComponent } from '../../../../components/notification/notification.component';
 
 interface RemoteQueueStarvationItem {
   taskKey: string;
@@ -24,6 +25,7 @@ interface RemoteQueueStarvationSnapshot {
 @Component({
   selector: 'app-remote-queue-starvation-banner',
   standalone: true,
+  imports: [NotificationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './remote-queue-starvation-banner.html',
   styleUrl: './remote-queue-starvation-banner.scss',

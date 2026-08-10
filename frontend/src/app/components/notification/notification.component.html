@@ -3,7 +3,7 @@
      role="status"
      [attr.aria-live]="resolvedAriaLive()"
      [attr.data-testid]="testid()">
-  <span class="notification__icon" aria-hidden="true">{{ resolvedIcon() }}</span>
+  <span class="notification__icon" aria-hidden="true" data-testid="notification-icon">{{ resolvedIcon() }}</span>
   <div class="notification__body">
     @if (title(); as t) {
       <div class="notification__title" data-testid="notification-title">{{ t }}</div>

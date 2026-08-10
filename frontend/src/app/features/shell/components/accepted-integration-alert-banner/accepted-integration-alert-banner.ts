@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { NotificationComponent } from '../../../../components/notification/notification.component';
 
 interface AcceptedIntegrationAlertItem {
   taskKey: string;
@@ -24,6 +25,7 @@ interface AcceptedIntegrationAlertSnapshot {
 @Component({
   selector: 'app-accepted-integration-alert-banner',
   standalone: true,
+  imports: [NotificationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './accepted-integration-alert-banner.html',
   styleUrl: './accepted-integration-alert-banner.scss',

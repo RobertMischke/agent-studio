@@ -1,12 +1,10 @@
 @if (visibleItems().length > 0) {
-  <aside class="starvation"
-         data-testid="remote-queue-starvation-banner"
-         role="status"
-         aria-live="polite">
-    <span class="starvation__signal" aria-hidden="true"></span>
-    <p>
-      <strong><span class="starvation__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
-      <span class="starvation__detail"><span class="starvation__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. Open a task to inspect its latest rejection.</span>
-    </p>
-  </aside>
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="remote-queue-starvation-banner">
+    <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
+    <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. Open a task to inspect its latest rejection.</span>
+  </app-notification>
 }

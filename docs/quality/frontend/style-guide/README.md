@@ -65,7 +65,7 @@ A change at layer N must not duplicate a fact at layer N-1. A button never hardc
 | Side sheet         | [`<app-sidesheet>`](../../../../frontend/src/app/components/sidesheet/sidesheet.component.ts)                         | `[width]`                         | ✅ shipped        |
 | Page action bar    | [`<app-page-action-bar>`](../../../../frontend/src/app/features/project-detail/components/page-action-bar/page-action-bar.ts) | document / concept / Workbench / incident / report | ✅ shipped |
 | Menu               | [`<app-menu>`](../../../../frontend/src/app/components/menu/menu.component.ts)                                        | text-only rows                    | ✅ shipped        |
-| Notification       | [`<app-notification>`](../../../../frontend/src/app/components/notification/notification.component.ts)                | toast / banner                    | ✅ shipped (F37)  |
+| Notification       | [`<app-notification>`](../../../../frontend/src/app/components/notification/notification.component.ts)                | floating toast / full-bleed notice bar | ✅ shipped (F37)  |
 | Tooltip            | [`[appTooltip]`](../../../../frontend/src/app/components/tooltip/app-tooltip.directive.ts) directive   | instant HTML body                 | ✅ shipped        |
 | Empty state        | [`<app-empty-state>`](../../../../frontend/src/app/components/empty-state/empty-state.component.ts)                    | default + named                   | ✅ shipped        |
 | Free-form button   | _none_                                                                                                          | —                                 | ⚠️ **gap** — see [buttons.md](./buttons.md) "Open question: do we need `<app-button>`?" |
