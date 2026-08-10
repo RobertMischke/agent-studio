@@ -788,6 +788,24 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RenderDossierMaintenanceFraming_CarriesTargetsAndAppendOnlyContract()
+    {
+        var framing = Prompts().RenderDossierMaintenanceFraming(
+            "AGT-2580",
+            "- `docs/operations/context/index.html` (ASW-W8, Context chat)");
+
+        Assert.Contains("Dossier implementation update", framing);
+        Assert.Contains("post-dossier-maintenance", framing);
+        Assert.Contains("AGT-2580", framing);
+        Assert.Contains("docs/operations/context/index.html", framing);
+        Assert.Contains(DossierImplementationContract.SectionStartMarker, framing);
+        Assert.Contains(DossierImplementationContract.LogStartMarker, framing);
+        Assert.Contains("append-only", framing);
+        Assert.Contains("YYYY-MM-DD", framing);
+        Assert.DoesNotContain('\u2014', framing);
+    }
+
+    [Fact]
     public void RenderModeFraming_CodingWithWeb_AddsWebHintOnly()
     {
         // Decision 2: the web toggle is independent of the mode. A coding task

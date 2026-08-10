@@ -54,7 +54,26 @@ public class PipelineCatalogueTests
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(25, p.Post.Count);
+        Assert.Equal(26, p.Post.Count);
+    }
+
+    [Fact]
+    public void StandardPipeline_DossierMaintenance_IsVisibleMandatoryAndGatesBuild()
+    {
+        var pipeline = PipelineCatalogue.Standard;
+        var dossier = pipeline.Post.Single(step =>
+            step.Id == PipelineCatalogue.DossierMaintenanceStepId);
+        var build = pipeline.Post.Single(step =>
+            step.Id == PipelineCatalogue.BuildTestGateStepId);
+
+        Assert.Equal("Dossier maintenance", dossier.DisplayName);
+        Assert.Equal(StepKind.Tool, dossier.Kind);
+        Assert.Equal(StepRunMode.Sequential, dossier.RunMode);
+        Assert.True(dossier.DefaultEnabled);
+        Assert.True(dossier.Idempotent);
+        Assert.False(PipelineStepConfigResolver.CanDisable(dossier));
+        Assert.Contains(PipelineCatalogue.CoreAgentRunStepId, dossier.DependsOn);
+        Assert.Contains(PipelineCatalogue.DossierMaintenanceStepId, build.DependsOn);
     }
 
     [Fact]

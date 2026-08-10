@@ -214,6 +214,15 @@ public static class PipelineCatalogue
     /// </summary>
     public const string BuildTestGateStepId = "post-build-test-gate";
     /// <summary>
+    /// Deterministic delivery gate for cards linked to a Dossier through
+    /// <c>references.workbenches</c> or the descriptor's
+    /// <c>sourceTaskKeys</c> back edge. CORE receives the append-only authoring
+    /// contract; auto review then verifies that the task's dated slice entry is
+    /// present and that decision content outside the implementation log stayed
+    /// byte-identical. Cards without a Dossier reference record NotApplicable.
+    /// </summary>
+    public const string DossierMaintenanceStepId = "post-dossier-maintenance";
+    /// <summary>
     /// Post-step that runs <c>npx stylelint</c> over the frontend SCSS tree
     /// after the agent run finishes. Verdict drives the
     /// <see cref="AgentStudio.Pipeline.LintScssRunner"/> mode
@@ -606,11 +615,20 @@ public static class PipelineCatalogue
                 },
                 new PipelineStep
                 {
+                    Id = DossierMaintenanceStepId,
+                    DisplayName = "Dossier maintenance",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
                     Id = BuildTestGateStepId,
                     DisplayName = "Build/test gate",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
-                    DependsOn = [CoreAgentRunStepId],
+                    DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
                 },
                 .. aspects,
@@ -907,13 +925,18 @@ public static class PipelineCatalogue
             Core = StandardPipeline.Core.Select(step => step with { }).ToList(),
             Post =
             [
+                StandardPipeline.Post.Single(step =>
+                    step.Id == DossierMaintenanceStepId) with
+                {
+                    DependsOn = [CoreAgentRunStepId],
+                },
                 new PipelineStep
                 {
                     Id = UiIterationArtifactStepId,
                     DisplayName = "UI iteration evidence",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
-                    DependsOn = [CoreAgentRunStepId],
+                    DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
                     DefaultEnabled = true,
                 },

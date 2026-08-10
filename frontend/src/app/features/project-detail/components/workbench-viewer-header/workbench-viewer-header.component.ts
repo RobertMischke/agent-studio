@@ -83,9 +83,18 @@ export class WorkbenchViewerHeaderComponent {
       (point) => (answered.get(point.id)?.selectedOptionIds.length ?? 0) === 0,
     ).length;
   });
+  readonly implementationStatus = computed(() => {
+    return implementationStatusFor(
+      this.document().workbench.status,
+      this.taskStatuses(),
+    );
+  });
   readonly statusLabel = computed(() => {
     const workbench = this.document().workbench;
-    return [humanize(workbench.status), workbench.phase ? humanize(workbench.phase) : null]
+    return [
+      this.implementationStatus() ?? humanize(workbench.status),
+      workbench.phase ? humanize(workbench.phase) : null,
+    ]
       .filter(Boolean)
       .join(' · ');
   });
@@ -95,7 +104,10 @@ export class WorkbenchViewerHeaderComponent {
       this.referenceReload();
       const workbench = this.document().workbench;
       const projectName = this.projectName();
-      const fallbackKeys = uniqueKeys(workbench.relatedTaskKeys ?? []);
+      const fallbackKeys = uniqueKeys([
+        ...workbench.sourceTaskKeys,
+        ...(workbench.relatedTaskKeys ?? []),
+      ]);
       const workbenchKey = normalizeKey(workbench.key);
       this.referenceKeys.set([]);
       this.taskStatuses.set([]);
@@ -254,6 +266,32 @@ function normalizeKey(value: string | null | undefined): string {
 function humanize(value: string): string {
   const words = value.replaceAll('-', ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function implementationStatusFor(
+  workbenchStatus: string,
+  references: readonly TaskReferenceStatus[],
+): string | null {
+  if (workbenchStatus !== 'decision-pending' && workbenchStatus !== 'decided') return null;
+  const known = references.filter((task) => task.exists && task.lane);
+  if (known.length === 0) return null;
+  const allTerminal = references.every(
+    (task) => task.exists && task.lane !== null && isTerminalLane(task.lane),
+  );
+  return !allTerminal && known.some((task) => hasImplementationStarted(task.lane))
+    ? 'In implementation'
+    : null;
+}
+
+function isTerminalLane(lane: string | null): boolean {
+  return lane === TaskState.Completed || lane === TaskState.Archive;
+}
+
+function hasImplementationStarted(lane: string | null): boolean {
+  return lane !== null
+    && lane !== TaskState.Backlog
+    && lane !== TaskState.Preparation
+    && lane !== TaskState.Ready;
 }
 
 function ghostStatus(key: string, projectName: string): TaskReferenceStatus {
