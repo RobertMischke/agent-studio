@@ -41,9 +41,9 @@ namespace AgentStudio.Tasks;
 /// ancestor SHA set, cached against the resolved target HEAD fingerprint, and
 /// answers every card in that repo with in-memory lookups. Provenance merge
 /// records, pipeline success, lane state, and curated merge subjects never
-/// override commit membership. A current review subject only selects the
-/// authoritative delivery generation; target-branch ancestry still proves the
-/// result. This also detects out-of-band merges on the next read. Per-card local
+/// override commit membership. A current review subject is an ancestry fallback
+/// only when no attributed commit exists; it cannot hide a missing current
+/// commit. This also detects out-of-band merges on the next read. Per-card local
 /// reads resolve the delivery ref from the same task card
 /// and review-subject truth as acceptance; the not-integrated subset also reads
 /// <c>pipeline-execution.json</c> best-effort (integration-failed vs. plain
@@ -259,14 +259,14 @@ public sealed class TaskIntegrationStatusService
         var branchName = reach.IntegrationBranch;
         var deliveryRef = DeliveryRefFor(job);
 
-        // A reissue may replace a previously reviewed commit with a rebased
-        // object id while preserving the reviewed content. The immutable
-        // current review subject selects the authoritative delivery generation;
-        // target-branch ancestry still supplies the proof. Historical attributed
-        // SHAs from superseded review epochs must not leave a successfully
-        // accepted replacement looking partially integrated forever.
+        // Anchor = integrable entries in the attributed commits[] list. Zero-file
+        // runner lifecycle markers are metadata, not delivery expectations.
+        // A current review subject is only a fallback when attribution is empty;
+        // it must never hide a genuine missing, non-superseded commit.
+        var attributed = AttributedCommits(job, reach.DevelopAncestors);
         var reviewedResultSha = ReviewSubjectStore.Read(job.FolderPath)?.ResultSha;
-        if (!string.IsNullOrWhiteSpace(reviewedResultSha)
+        if (attributed.Count == 0
+            && !string.IsNullOrWhiteSpace(reviewedResultSha)
             && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
         {
             return Integrated(
@@ -276,9 +276,6 @@ public sealed class TaskIntegrationStatusService
                 "reviewed-result-ancestor");
         }
 
-        // Anchor = integrable entries in the attributed commits[] list. Zero-file
-        // runner lifecycle markers are metadata, not delivery expectations.
-        var attributed = AttributedCommits(job, reach.DevelopAncestors);
         if (attributed.Count == 0)
             return ClassifyNotIntegrated(job, branchName, deliveryRef);
 
@@ -501,8 +498,10 @@ public sealed class TaskIntegrationStatusService
     /// newest), read entirely from the persisted board payload (no git spawn).
     /// Falls back to the legacy single <see cref="TaskInfo.Commit"/> when the list
     /// is empty, and drops blank SHAs plus zero-file platform lifecycle markers.
-    /// A marker-shaped commit with changed files remains integrable work. Empty
-    /// when the card committed nothing.
+    /// A marker-shaped commit with changed files remains integrable work unless
+    /// a later delivery attempt explicitly superseded it. Superseded entries
+    /// remain in <c>commits[]</c> as history but are not current integration
+    /// expectations. Empty when the card committed nothing.
     /// </summary>
     internal static IReadOnlyList<string> AttributedCommits(TaskInfo job)
         => AttributedCommits(job, null);
@@ -521,12 +520,14 @@ public sealed class TaskIntegrationStatusService
         {
             foreach (var c in job.Commits)
                 if (!string.IsNullOrWhiteSpace(c.Sha)
+                    && !TaskCommitSupersession.IsSuperseded(c)
                     && (!IsZeroFileLifecycleMarker(c)
                         || integrationAncestors is not null
                         && AncestorSetContains(integrationAncestors, c.Sha)))
                     result.Add(c.Sha);
         }
         else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha)
+                 && !TaskCommitSupersession.IsSuperseded(job.Commit!)
                  && (!IsZeroFileLifecycleMarker(job.Commit!)
                      || integrationAncestors is not null
                      && AncestorSetContains(integrationAncestors, job.Commit!.Sha)))

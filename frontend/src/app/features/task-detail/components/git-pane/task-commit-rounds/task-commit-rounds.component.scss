@@ -1,0 +1,175 @@
+:host {
+  display: block;
+}
+
+.commit-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  padding: var(--studio-spacing-1);
+  background: var(--studio-bg-hover);
+}
+
+.commit-group--collapsed {
+  padding: 2px var(--studio-spacing-1);
+}
+
+.commit-group__toggle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  width: 100%;
+  min-width: 0;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg);
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.commit-group__toggle:hover {
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
+}
+
+.commit-group__toggle:focus-visible,
+.commit-chain__button:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+
+.commit-group__caret,
+.commit-group__title {
+  flex: 0 0 auto;
+}
+
+.commit-group__caret {
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+
+.commit-group__title {
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+}
+
+.commit-group__summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--studio-fg-dim);
+}
+
+.commit-chain {
+  list-style: none;
+  margin: 0;
+  padding: var(--studio-spacing-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.commit-chain__item {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+}
+
+.commit-chain__item--all {
+  padding-bottom: var(--studio-spacing-1);
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--studio-border);
+}
+
+.commit-chain__item--all .commit-chain__subject {
+  font-weight: 600;
+}
+
+.commit-chain__button {
+  display: flex;
+  gap: var(--studio-spacing-2);
+  align-items: baseline;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--studio-fg);
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.commit-chain__button:hover {
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
+}
+
+.commit-chain__item--selected .commit-chain__button {
+  border-color: var(--studio-accent);
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+}
+
+.commit-chain__step,
+.commit-chain__meta {
+  color: var(--studio-fg-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.commit-chain__sha {
+  color: var(--studio-accent);
+  font-family: var(--font-mono, monospace);
+  flex: 0 0 auto;
+}
+
+.commit-chain__subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.superseded {
+  border-top: 1px solid var(--studio-border);
+  padding: var(--studio-spacing-2);
+  color: var(--studio-fg-dim);
+  font-size: 12px;
+}
+
+.superseded summary {
+  cursor: pointer;
+  color: var(--studio-fg-muted);
+  font-weight: 600;
+}
+
+.superseded__round {
+  margin-top: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+}
+
+.superseded__round h4 {
+  margin: 0;
+  padding: var(--studio-spacing-2);
+  color: var(--studio-fg-strong);
+  font-size: 12px;
+}
+
+.commit-chain__item--superseded:not(.commit-chain__item--selected) {
+  opacity: 0.72;
+}

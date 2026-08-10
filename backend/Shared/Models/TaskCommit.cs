@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentStudio.Shared;
 
 /// <summary>
@@ -39,6 +41,15 @@ public record TaskCommitInfo
     /// Verified result tip whose delivery range proved this commit reachable.
     /// </summary>
     public string? ResultSha { get; init; }
+    /// <summary>
+    /// Run attempt that replaced this commit's delivery generation. A non-null
+    /// value keeps the commit as readable history while removing it from the
+    /// current integration expectation. <see cref="TaskCommitSupersession.PendingAttempt"/>
+    /// is used between an explicit requeue and publication of the replacement
+    /// attempt, then resolved to the new fenced run attempt id.
+    /// </summary>
+    [JsonPropertyName("supersededByAttempt")]
+    public string? SupersededByAttempt { get; init; }
     public int FilesChanged { get; init; }
     public List<string> Files { get; init; } = [];
     public DateTime At { get; init; }
@@ -55,6 +66,19 @@ public record TaskCommitInfo
     /// the operator can see where the system was uncertain.
     /// </summary>
     public double? Confidence { get; init; }
+}
+
+/// <summary>Durable values used by commit-generation supersession.</summary>
+public static class TaskCommitSupersession
+{
+    /// <summary>
+    /// Replacement identity used after an integration-failure requeue but
+    /// before the next remote delivery has supplied its run attempt id.
+    /// </summary>
+    public const string PendingAttempt = "next-attempt";
+
+    public static bool IsSuperseded(TaskCommitInfo commit)
+        => !string.IsNullOrWhiteSpace(commit.SupersededByAttempt);
 }
 
 /// <summary>

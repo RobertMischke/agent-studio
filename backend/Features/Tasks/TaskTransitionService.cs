@@ -264,6 +264,8 @@ public sealed class TaskTransitionService
             : MoveCore();
         var operatorRequeue = outcome.Status == MoveJobStatus.Success
             && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
+        var supersedeFailedDelivery = operatorRequeue && HasFailedIntegrationRound(
+            outcome.NewFolderPath ?? info.FolderPath);
         if (operatorRequeue && _operatorReviewRequeue != null)
         {
             var movedFolder = outcome.NewFolderPath
@@ -278,6 +280,31 @@ public sealed class TaskTransitionService
                 reason,
                 cause!);
             _scanner.InvalidateCache();
+        }
+        if (supersedeFailedDelivery)
+        {
+            var movedFolder = outcome.NewFolderPath
+                ?? _scanner.FindJob(jobId, watchPath)?.FolderPath
+                ?? info.FolderPath;
+            var supersession = _mutations.SupersedeCurrentDeliveryOnFolder(
+                movedFolder,
+                TaskCommitSupersession.PendingAttempt);
+            if (!supersession.Succeeded)
+            {
+                _logger.LogError(
+                    "integration-requeue commit supersession failed project={Project} job={JobId} folder={Folder}",
+                    projectName,
+                    jobId,
+                    movedFolder);
+            }
+            else if (supersession.MarkedCommits > 0)
+            {
+                _logger.LogInformation(
+                    "integration-requeue superseded commits project={Project} job={JobId} count={Count}",
+                    projectName,
+                    jobId,
+                    supersession.MarkedCommits);
+            }
         }
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
@@ -529,6 +556,34 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    private bool HasFailedIntegrationRound(string folderPath)
+    {
+        if (_pipelineLog is null) return false;
+        try
+        {
+            var step = _pipelineLog.Read(folderPath)?.Steps.LastOrDefault(candidate =>
+                string.Equals(
+                    candidate.StepId,
+                    AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId,
+                    StringComparison.Ordinal));
+            return step is not null
+                && AgentStudio.Pipeline.AcceptedIntegrationFailurePolicy.Classify(
+                    step.Status,
+                    step.Verdict,
+                    step.Reason,
+                    step.VerdictSummary,
+                    step.FailureCode) is not null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-requeue could not inspect the prior integration round folder={Folder}",
+                folderPath);
+            return false;
+        }
     }
 
     /// <summary>

@@ -158,6 +158,10 @@ export class GitPaneService implements OnDestroy {
    * commit's detail to display.
    */
   readonly commitChain = signal<TaskCommitInfo[]>([]);
+  /** Commits still expected to land, excluding replaced delivery rounds. */
+  readonly activeCommitChain = computed<TaskCommitInfo[]>(() =>
+    this.commitChain().filter((commit) => !commit.supersededByAttempt?.trim()),
+  );
   /**
    * SHA of the commit the detail view is filtered to. `null` is the
    * default for multi-commit tasks and means "all commits aggregated":
@@ -187,7 +191,7 @@ export class GitPaneService implements OnDestroy {
    * never shown.
    */
   readonly isAggregate = computed<boolean>(
-    () => this.commitChain().length > 1 && this.selectedCommitSha() === null,
+    () => this.activeCommitChain().length > 1 && this.selectedCommitSha() === null,
   );
 
   /** Files backing the commit-mode tree: aggregated set, or the single commit's. */
@@ -235,7 +239,7 @@ export class GitPaneService implements OnDestroy {
       this.currentJob.id === info.id &&
       this.currentJob.watchPath === info.watchPath;
     if (sameJob) {
-      const oldChainLen = this.commitChain().length;
+      const oldChainSignature = commitChainSignature(this.commitChain());
       this.currentJob = info!;
       const chain = info!.commits ?? (info!.commit ? [info!.commit] : []);
       this.commitChain.set(chain);
@@ -244,8 +248,8 @@ export class GitPaneService implements OnDestroy {
       // Load the snapshot lazily when that happens. Also reload when a
       // new commit lands on the chain (continue-mode follow-up, recovery
       // commit, operator-driven steer).
-      const newChainLen = chain.length;
-      if ((oldChainLen === 0 && newChainLen > 0) || newChainLen > oldChainLen) {
+      const chainChanged = oldChainSignature !== commitChainSignature(chain);
+      if (chainChanged) {
         this.applyCommitDefault(chain);
         // A new commit (or a just-landed merge) can move the landed-state, so
         // re-pull the graph-derived provenance when the chain grows.
@@ -330,11 +334,13 @@ export class GitPaneService implements OnDestroy {
       this.aggregateFiles.set([]);
       return;
     }
-    if (chain.length > 1) {
+    const active = chain.filter((commit) => !commit.supersededByAttempt?.trim());
+    if (active.length > 1) {
       this.selectedCommitSha.set(null);
       this.loadAggregate();
     } else {
-      this.selectedCommitSha.set(chain[0].sha);
+      const selected = active[0] ?? chain[chain.length - 1];
+      this.selectedCommitSha.set(selected.sha);
       this.loadCommitDetail();
     }
   }
@@ -590,7 +596,8 @@ export class GitPaneService implements OnDestroy {
 
   /** Newest SHA on the task's commit chain (the chain is oldest -> newest). */
   private newestCommitSha(): string | null {
-    const chain = this.commitChain();
+    const active = this.activeCommitChain();
+    const chain = active.length > 0 ? active : this.commitChain();
     return chain.length ? chain[chain.length - 1].sha : null;
   }
 
@@ -667,6 +674,12 @@ export class GitPaneService implements OnDestroy {
         this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` }),
     });
   }
+}
+
+function commitChainSignature(chain: TaskCommitInfo[]): string {
+  return chain
+    .map((commit) => `${commit.sha}:${commit.supersededByAttempt?.trim() ?? ''}`)
+    .join('|');
 }
 
 /**

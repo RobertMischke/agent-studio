@@ -152,6 +152,18 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   SHA-deduplicated union across generations; a later attempt does not replace
   earlier valid commits, and inherited SHAs retain their original
   `runAttemptId`, `runnerId`, delivery `branch`, and proving `resultSha`.
+- Requeueing an integration-conflict or integration-error delivery marks that
+  generation's entries with `supersededByAttempt`. The entries remain in
+  `commits[]` for audit history, while attribution, aggregate diffs, provenance,
+  and integration status use only entries without that marker. The temporary
+  value `next-attempt` is replaced by the next fenced `runAttemptId` when its
+  remote attribution lands.
+- Startup runs the one-time `superseded-commits-v1` healing sweep over delivered
+  and archived cards. It marks only a missing runner salvage fence with a later
+  integrated commit from a proven different generation, at least 90 percent
+  changed-file overlap, no more than three omitted paths, and comparable total
+  breadth. Cases outside those bounds remain untouched and are listed in the
+  durable sweep report for manual review.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,

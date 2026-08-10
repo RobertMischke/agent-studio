@@ -160,6 +160,64 @@ describe('GitPaneService.loadCodeReviews (defensive shape guard)', () => {
   });
 });
 
+describe('GitPaneService superseded delivery rounds', () => {
+  let service: GitPaneService;
+  let http: HttpTestingController;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        GitPaneService,
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    service = TestBed.inject(GitPaneService);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  it('uses only current commits for the default and aggregate decision', () => {
+    const oldRound = {
+      sha: 'a'.repeat(40),
+      shortSha: 'aaaaaaa',
+      message: 'wip(runner): salvage before teardown - outcome Done',
+      filesChanged: 1,
+      files: ['src/a.ts'],
+      at: '2026-08-09T10:00:00Z',
+      runAttemptId: 'round-1',
+      supersededByAttempt: 'round-2',
+    };
+    const replacement = {
+      sha: 'b'.repeat(40),
+      shortSha: 'bbbbbbb',
+      message: 'feat(AGT-2533): replacement',
+      filesChanged: 1,
+      files: ['src/a.ts'],
+      at: '2026-08-09T11:00:00Z',
+      runAttemptId: 'round-2',
+    };
+    service.setJob({
+      id: 'job-x',
+      watchPath: '/wp',
+      commits: [oldRound, replacement],
+      commit: replacement,
+    } as unknown as TaskInfo);
+
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/provenance')).flush(null);
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/commit')).flush({ commit: replacement, files: [] });
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/code-review/list')).flush({ entries: [] });
+
+    expect(service.commitChain()).toHaveLength(2);
+    expect(service.activeCommitChain()).toEqual([replacement]);
+    expect(service.isAggregate()).toBe(false);
+    expect(service.selectedCommitSha()).toBe(replacement.sha);
+  });
+});
+
 /**
  * md/html preview (AGT-2008): the git-pane fetches a file's full text so it
  * can render a formatted preview instead of the diff. The source ref follows

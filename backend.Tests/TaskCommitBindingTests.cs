@@ -339,6 +339,69 @@ public class TaskCommitBindingTests : IDisposable
     }
 
     [Fact]
+    public void RequeueSupersession_PreservesHistory_AndResolvesToNextRunAttempt()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("supersession", "5-human-review", legacyCommit: null);
+        var fence = MakeCommit(
+            "aaaaaaaa",
+            "wip(runner): salvage before teardown - outcome Done",
+            2,
+            "2026-08-09T10:00:00Z") with { RunAttemptId = "round-1" };
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, fence));
+
+        var marked = mutations.SupersedeCurrentDeliveryOnFolder(
+            jobDir,
+            TaskCommitSupersession.PendingAttempt);
+
+        Assert.True(marked.Succeeded);
+        Assert.Equal(1, marked.MarkedCommits);
+        var pending = scanner.FindJob("supersession", _watchPath);
+        Assert.NotNull(pending);
+        Assert.Equal(TaskCommitSupersession.PendingAttempt, pending!.Commits[0].SupersededByAttempt);
+
+        var replacement = MakeCommit(
+            "bbbbbbbb",
+            "feat(AGT-2533): complete replacement delivery",
+            2,
+            "2026-08-09T11:00:00Z");
+        Assert.True(mutations.SetRemoteCommitAttributionOnFolder(
+            jobDir,
+            "round-2",
+            "runner-b",
+            replacement.Sha,
+            [replacement]));
+
+        var persisted = scanner.FindJob("supersession", _watchPath);
+        Assert.NotNull(persisted);
+        Assert.Equal([fence.Sha, replacement.Sha], persisted!.Commits.Select(commit => commit.Sha));
+        Assert.Equal("round-2", persisted.Commits[0].SupersededByAttempt);
+        Assert.Null(persisted.Commits[1].SupersededByAttempt);
+        Assert.Equal("round-2", persisted.Commits[1].RunAttemptId);
+    }
+
+    [Fact]
+    public void AppendCommit_RefreshDoesNotEraseSupersessionMarker()
+    {
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("supersession-refresh", "5-human-review", legacyCommit: null);
+        var original = MakeCommit(
+            "aaaaaaaa",
+            "wip(runner): salvage before teardown - outcome Done",
+            1,
+            "2026-08-09T10:00:00Z") with { SupersededByAttempt = "round-2" };
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, original));
+
+        Assert.True(mutations.AppendJobCommitOnFolder(
+            jobDir,
+            original with { Message = "refreshed metadata", SupersededByAttempt = null }));
+
+        var persisted = scanner.FindJob("supersession-refresh", _watchPath);
+        Assert.NotNull(persisted);
+        Assert.Equal("round-2", Assert.Single(persisted!.Commits).SupersededByAttempt);
+    }
+
+    [Fact]
     public void SetRemoteCommitAttribution_LocalThenRemote_PreservesBothGenerations()
     {
         var (scanner, mutations) = Build();

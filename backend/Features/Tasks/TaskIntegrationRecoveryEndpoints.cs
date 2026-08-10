@@ -104,6 +104,15 @@ public static class TaskIntegrationRecoveryEndpoints
             }
 
             mutations.AppendContinuationNote(job.Id, prompt, job.WatchPath);
+            var supersession = mutations.SupersedeCurrentDeliveryOnFolder(
+                job.FolderPath,
+                TaskCommitSupersession.PendingAttempt);
+            if (!supersession.Succeeded)
+            {
+                return Results.Json(
+                    new { error = "The recovery intent was persisted, but the superseded delivery history could not be marked." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
             var position = states.PromoteToReadyTop(job.Id, job.WatchPath);
             var queued = scanner.FindJob(job.Id, job.WatchPath);
             if (queued is null || queued.State != TaskStates.Ready)
@@ -125,6 +134,8 @@ public static class TaskIntegrationRecoveryEndpoints
                     ["resultSha"] = subject.ResultSha,
                     ["integrationBranch"] = integrationBranch,
                     ["mode"] = ContinueModes.Steer,
+                    ["supersededCommits"] = supersession.MarkedCommits.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
                 });
 
             return Results.Accepted(value: new
