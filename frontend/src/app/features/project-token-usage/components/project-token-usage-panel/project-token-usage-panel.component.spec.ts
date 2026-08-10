@@ -4,7 +4,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { ProjectTokenUsagePanelComponent } from './project-token-usage-panel.component';
+import { ProjectPipelineCostTrendComponent } from '../project-pipeline-cost-trend/project-pipeline-cost-trend.component';
 import type { ProjectPipelineCostTimeline, ProjectTokenUsageSummary } from '../../../../features/project-token-usage';
 
 /**
@@ -150,11 +152,67 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
     const total = host.querySelector('[data-testid="pipeline-cost-total"]');
     expect(total?.textContent).toContain('$0.87');
 
-    const cols = host.querySelectorAll('[data-testid="pipeline-cost-bars"] .tup__pl-col');
+    const cols = host.querySelectorAll('[data-testid="pipeline-cost-bars"] .trend__column');
     expect(cols.length).toBe(3);
     // Busiest day (3rd: 160k tokens) carries core, aspect, and drift segments.
-    const lastColSegs = cols[2].querySelectorAll('.tup__pl-seg');
+    const lastColSegs = cols[2].querySelectorAll('.trend__segment');
     expect(lastColSegs.length).toBe(3);
+  });
+
+  it('renders no-price and mixed project aggregates without a silent zero', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectTokenUsagePanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectTokenUsagePanelComponent);
+    fixture.componentRef.setInput('projectName', 'demo');
+    try { fixture.detectChanges(); } catch { /* pending HTTP, ignore */ }
+
+    const timeline = fakeTimeline();
+    const gap = { modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 };
+    timeline.kinds[1] = {
+      ...timeline.kinds[1],
+      totalCostUsd: 0,
+      anyModelUnknown: true,
+      unpricedRuns: 1,
+      pricingGaps: [gap],
+      cells: timeline.kinds[1].cells.map((cell, index) => index === 2
+        ? { ...cell, costUsd: 0, unpricedRuns: 1, pricingGaps: [gap] }
+        : { ...cell, costUsd: 0 }),
+    };
+    timeline.totalCostUsd = 0.79;
+    timeline.anyModelUnknown = true;
+    timeline.unpricedRuns = 1;
+    timeline.pricingGaps = [gap];
+    timeline.dayCosts = [
+      { day: timeline.days[0], totalTokens: 120_000, costUsd: 0.25 },
+      { day: timeline.days[1], totalTokens: 120_000, costUsd: 0.25 },
+      {
+        day: timeline.days[2], totalTokens: 160_000, costUsd: 0.29,
+        unpricedRuns: 1, pricingGaps: [gap],
+      },
+    ];
+    fixture.componentInstance.pipelineCost.set(timeline);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="pipeline-cost-legend-aspect"]')?.textContent)
+      .toContain('no price data');
+    const total = host.querySelector('[data-testid="pipeline-cost-total"]');
+    expect(total?.textContent).toContain('$0.79');
+    expect(total?.textContent).toContain('incomplete (1 run without price)');
+
+    const trend = fixture.debugElement.query(By.directive(ProjectPipelineCostTrendComponent))
+      .componentInstance as ProjectPipelineCostTrendComponent;
+    const affectedDay = trend.stackColumns()[2];
+    expect(trend.columnTooltip(affectedDay)).toContain('gpt-5.6-sol');
+    expect(trend.columnTooltip(affectedDay)).toContain('NoPriceForDate');
   });
 });
 

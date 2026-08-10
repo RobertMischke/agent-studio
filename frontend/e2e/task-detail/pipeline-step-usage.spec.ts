@@ -215,6 +215,97 @@ function pipeline() {
   };
 }
 
+function pipelineWithMissingPrices(mixed: boolean) {
+  const fixture = pipeline();
+  const gap = { modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 };
+  const executionSteps = fixture.execution.steps.map((step, index) =>
+    !mixed || index === 0 ? { ...step, model: 'gpt-5.6-sol' } : step);
+  const unavailable = (step: ReturnType<typeof costStep>) => ({
+    ...step,
+    model: 'gpt-5.6-sol',
+    modelKnown: false,
+    pricingGaps: [gap],
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cacheReadCostUsd: 0,
+    cacheCreationCostUsd: 0,
+    costUsd: 0,
+  });
+  const core = unavailable(fixture.cost.steps[0]);
+  const aspect = mixed ? fixture.cost.steps[1] : unavailable(fixture.cost.steps[1]);
+  return {
+    ...fixture,
+    execution: {
+      ...fixture.execution,
+      steps: executionSteps,
+      previousAttempts: fixture.execution.previousAttempts.map(run => ({
+        ...run,
+        steps: run.steps.map((step, index) =>
+          !mixed || index === 0 ? { ...step, model: 'gpt-5.6-sol' } : step),
+      })),
+    },
+    cost: {
+      ...fixture.cost,
+      steps: [core, aspect],
+      totalInputCostUsd: mixed ? 1.2 : 0,
+      totalOutputCostUsd: mixed ? 0.8 : 0,
+      totalCostUsd: mixed ? 2 : 0,
+      anyModelUnknown: true,
+      unpricedRuns: 1,
+      pricingGaps: [gap],
+    },
+  };
+}
+
+function pipelineWithResolvedGpt56Price() {
+  const fixture = pipeline();
+  const priceRun = (run: ReturnType<typeof runRecord>) => ({
+    ...run,
+    steps: run.steps.map(step => ({ ...step, model: 'gpt-5.6-sol' })),
+  });
+  const pricedModels = [{
+    model: 'gpt-5.6-sol', modelKnown: true, unpricedRuns: 0, pricingGaps: [], steps: 2,
+    inputTokens: 1100000, outputTokens: 210000, cacheReadTokens: 0,
+    cacheCreationTokens: 0, totalTokens: 1310000, costUsd: 11.8,
+  }];
+  return {
+    ...fixture,
+    execution: {
+      ...priceRun(fixture.execution),
+      previousAttempts: fixture.execution.previousAttempts.map(priceRun),
+    },
+    cost: {
+      ...fixture.cost,
+      steps: [
+        { ...costStep('core-agent-run', 'core', 'gpt-5.6-sol', 110000, 0.8), pricingGaps: [] },
+        { ...costStep('aspect-code-quality', 'aspect', 'gpt-5.6-sol', 1200000, 11), pricingGaps: [] },
+      ],
+      totalInputCostUsd: 5.5,
+      totalOutputCostUsd: 6.3,
+      totalCostUsd: 11.8,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+    },
+    tokensByModel: {
+      runs: fixture.tokensByModel.runs.map(run => ({
+        ...run,
+        models: pricedModels,
+        totalCostUsd: 11.8,
+        anyModelUnknown: false,
+        pricingGaps: [],
+      })),
+      totalByModel: [{ ...pricedModels[0], steps: 4, inputTokens: 2200000,
+        outputTokens: 420000, totalTokens: 2620000, costUsd: 23.6 }],
+      totalTokens: 2620000,
+      totalCostUsd: 23.6,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+    },
+  };
+}
+
 function runTimeline() {
   return {
     runCount: 2,
@@ -286,6 +377,85 @@ async function saveShot(page: Page, name: string) {
   await mkdir(RESULTS_DIR, { recursive: true });
   await writeFile(join(RESULTS_DIR, name), buf);
 }
+
+async function savePipelineShot(page: Page, name: string) {
+  const target = RESULTS_DIR ? join(RESULTS_DIR, name) : join('test-results', name);
+  if (RESULTS_DIR) await mkdir(RESULTS_DIR, { recursive: true });
+  await page.getByTestId('overview-pipeline').screenshot({ path: target });
+}
+
+test('missing historical prices never render as zero and mixed totals stay explicit', async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.removeItem('atp.studio.tabs.v1');
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    }
+    catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  const pipelineRoute = new RegExp(`/api/tasks/${JOB_ID}/pipeline(\\?|$)`);
+  await page.route(pipelineRoute, route => route.fulfill(json(pipelineWithMissingPrices(false))));
+  const url = `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`;
+  await page.goto(url);
+
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  const coreCost = page.locator('[data-step-id="core-agent-run"]').getByTestId('overview-pipeline-step-cost');
+  const totalCost = page.getByTestId('overview-pipeline-total-cost');
+  await expect(coreCost).toContainText('no price data');
+  await expect(totalCost).toContainText('no price data');
+  await expect(totalCost).not.toContainText('$0.00');
+  await coreCost.hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('gpt-5.6-sol');
+  await expect(page.getByTestId('cac-tooltip')).toContainText('NoPriceForDate');
+
+  // Recreate the legacy silent-zero projection solely for before/after visual
+  // evidence. Reload immediately afterwards to restore the real renderer.
+  await coreCost.evaluate(element => { element.textContent = '$0.00'; });
+  await totalCost.evaluate(element => { element.textContent = '$0.00'; });
+  await savePipelineShot(page, 'pipeline-price-before-legacy-zero-light--mocked.png');
+
+  await page.goto(url);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('no price data');
+  await savePipelineShot(page, 'pipeline-price-after-no-data-light--mocked.png');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
+  await savePipelineShot(page, 'pipeline-price-after-no-data-dark--mocked.png');
+
+  await page.route(pipelineRoute, route => route.fulfill(json(pipelineWithMissingPrices(true))));
+  await page.goto(url);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  await page.getByText('ASPECT', { exact: true }).click();
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.00');
+  await expect(page.getByTestId('overview-pipeline-total-cost'))
+    .toContainText('incomplete (1 run without price)');
+  await page.getByTestId('overview-pipeline-total-cost').hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('gpt-5.6-sol');
+  await expect(page.getByTestId('cac-tooltip')).toContainText('NoPriceForDate');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'light'; });
+  await savePipelineShot(page, 'pipeline-price-mixed-light--mocked.png');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
+  await savePipelineShot(page, 'pipeline-price-mixed-dark--mocked.png');
+
+  await page.route(pipelineRoute, route => route.fulfill(json(pipelineWithResolvedGpt56Price())));
+  await page.goto(url);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  const resolvedCoreCost = page.locator('[data-step-id="core-agent-run"]')
+    .getByTestId('overview-pipeline-step-cost');
+  const resolvedTotalCost = page.getByTestId('overview-pipeline-total-cost');
+  const resolvedLifetimeCost = page.getByTestId('pipeline-token-usage-grand-total-cost');
+  await expect(resolvedCoreCost).toContainText('$0.80');
+  await expect(resolvedTotalCost).toContainText('$11.80');
+  await expect(resolvedLifetimeCost).toContainText('$23.60');
+  await expect(resolvedTotalCost).not.toContainText('incomplete');
+  await expect(resolvedLifetimeCost).not.toContainText('incomplete');
+  await expect(resolvedLifetimeCost).not.toContainText('no price data');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'light'; });
+  await savePipelineShot(page, 'pipeline-price-gpt56-resolved-light--mocked.png');
+});
 
 test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page }) => {
   await page.addInitScript(() => {

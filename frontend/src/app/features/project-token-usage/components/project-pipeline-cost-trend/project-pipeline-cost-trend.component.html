@@ -1,0 +1,63 @@
+<section class="trend" data-testid="token-usage-pipeline-cost"
+         aria-label="Pipeline cost by step kind over time">
+  <h3 class="trend__title"
+      [cacTooltip]="'Per-step-kind token + cost trend, folded from durable task receipts and historical pipeline runs over the window. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
+    Pipeline cost by step kind
+  </h3>
+  @if (timeline()?.freshness?.warning; as warning) {
+    <div class="trend__warning" data-testid="pipeline-cost-source-warning">
+      <strong>Pipeline cost data may be incomplete.</strong> {{ warning }}
+    </div>
+  }
+  @if (!timeline()?.hasData) {
+    <p class="trend__empty" data-testid="pipeline-cost-empty">
+      No readable pipeline cost telemetry was recorded in this window.
+    </p>
+  } @else {
+    <div class="trend__legend" data-testid="pipeline-cost-legend">
+      @for (row of kindLegend(); track row.kind) {
+        <span class="trend__legend-item" [attr.data-kind]="row.kind"
+              [attr.data-testid]="'pipeline-cost-legend-' + row.kind"
+              [cacTooltip]="costTooltip(row.cost, row.tokens, row.unpricedRuns, row.pricingGaps, row.label)">
+          <span class="trend__swatch" [class]="'trend__swatch trend__swatch--' + row.kind" aria-hidden="true"></span>
+          <span class="trend__legend-label">{{ row.label }}</span>
+          <span class="trend__legend-cost">
+            <span>{{ costDisplay(row.cost, row.tokens, row.unpricedRuns) }}</span>
+            @if (isPartialCost(row.cost, row.unpricedRuns)) {
+              <span class="trend__incomplete">{{ incompleteCostLabel(row.unpricedRuns) }}</span>
+            }
+          </span>
+          <span class="trend__legend-tokens">{{ formatTokens(row.tokens) }}</span>
+        </span>
+      }
+      @let total = timeline()!;
+      @let unpricedRuns = total.unpricedRuns ?? (total.anyModelUnknown ? 1 : 0);
+      <span class="trend__legend-total" data-testid="pipeline-cost-total"
+            [cacTooltip]="costTooltip(total.totalCostUsd, total.totalTokens, unpricedRuns, total.pricingGaps ?? [], 'Project total')">
+        <span class="trend__legend-label">Total</span>
+        <span class="trend__legend-cost">
+          <span>{{ costDisplay(total.totalCostUsd, total.totalTokens, unpricedRuns) }}</span>
+          @if (isPartialCost(total.totalCostUsd, unpricedRuns)) {
+            <span class="trend__incomplete">{{ incompleteCostLabel(unpricedRuns) }}</span>
+          }
+        </span>
+        <span class="trend__legend-tokens">{{ formatTokens(total.totalTokens) }}</span>
+      </span>
+    </div>
+
+    <div class="trend__bars" role="list" data-testid="pipeline-cost-bars">
+      @for (column of stackColumns(); track column.day) {
+        <div class="trend__column" role="listitem" [attr.data-day]="column.day"
+             [cacTooltip]="columnTooltip(column)">
+          <div class="trend__stack" [style.height.%]="column.heightPct">
+            @for (segment of column.segments; track segment.kind) {
+              <span class="trend__segment" [class]="'trend__segment trend__segment--' + segment.kind"
+                    [attr.data-kind]="segment.kind" [style.height.%]="segment.pctOfColumn"></span>
+            }
+          </div>
+          <span class="trend__day">{{ column.shortDay }}</span>
+        </div>
+      }
+    </div>
+  }
+</section>

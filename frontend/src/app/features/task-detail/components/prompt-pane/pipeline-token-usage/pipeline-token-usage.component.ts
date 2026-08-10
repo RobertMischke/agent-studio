@@ -4,16 +4,22 @@ import { formatTokens } from '../../../../../services/format.util';
 import type {
   PipelineModelTokenUsage,
   PipelineModelUsageSummary,
+  PipelinePricingGap,
   PipelineRunTokenUsage,
 } from '../../../../task-pipeline';
-import { buildTokenCostTooltip } from '../../../../tokens';
-import { formatPipelineAggregateCost } from '../overview-pane/pipeline-cost-tooltip.util';
+import {
+  buildTokenCostTooltip,
+  formatTokenCostDisplay,
+  incompleteTokenCostLabel,
+} from '../../../../tokens';
 
 /** The task-wide total (every model summed over every run). */
 interface TaskTotal {
   totalTokens: number;
   costUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns: number;
+  pricingGaps: PipelinePricingGap[];
 }
 
 /**
@@ -38,7 +44,8 @@ interface TaskTotal {
  * Purely presentational: the backend (`PipelineCostCalculator.SummarizeByModel`)
  * does the grouping + lifetime sum and ships it as `tokensByModel` on the
  * pipeline read endpoint. Cost is the theoretical API price (runs go through
- * CLI subscriptions, so the real bill is $0); an unpriced model renders "n/a".
+ * CLI subscriptions, so the real bill is $0); an unpriced model renders an
+ * explicit missing-price state.
  */
 @Component({
   selector: 'app-pipeline-token-usage',
@@ -69,6 +76,9 @@ export class PipelineTokenUsageComponent {
     totalTokens: this.summary()?.totalTokens ?? 0,
     costUsd: this.summary()?.totalCostUsd ?? 0,
     anyModelUnknown: this.summary()?.anyModelUnknown ?? false,
+    unpricedRuns: this.summary()?.unpricedRuns
+      ?? (this.summary()?.anyModelUnknown ? 1 : 0),
+    pricingGaps: this.summary()?.pricingGaps ?? [],
   }));
 
   /** TASK TOTAL SUM is collapsed by default (the lifetime number is enough). */
@@ -98,27 +108,41 @@ export class PipelineTokenUsageComponent {
     return formatTokens(n);
   }
 
-  /** Cost label; "n/a" when the model is not in the price table. */
-  costLabel(usd: number, modelKnown: boolean): string {
-    if (!modelKnown) return 'n/a';
-    return this.formatCost(usd);
+  costLabel(usd: number, totalTokens: number, unpricedRuns: number): string {
+    return formatTokenCostDisplay({ costUsd: usd, totalTokens, unpricedRuns });
   }
 
-  formatCost(usd: number): string {
-    if (usd <= 0) return '$0.00';
-    if (usd < 0.01) return `$${usd.toFixed(4)}`;
-    return `$${usd.toFixed(2)}`;
+  unpricedRunsForRun(run: PipelineRunTokenUsage): number {
+    return run.anyModelUnknown ? 1 : 0;
   }
 
-  aggregateCostLabel(usd: number, anyModelUnknown: boolean): string {
-    return formatPipelineAggregateCost(usd, anyModelUnknown);
+  unpricedRunsForModel(model: PipelineModelTokenUsage): number {
+    return model.unpricedRuns ?? (model.totalTokens > 0 && !model.modelKnown ? 1 : 0);
   }
 
-  totalTooltip(totalTokens: number, costUsd: number, anyModelUnknown: boolean, scope: string): string {
+  incompleteLabel(unpricedRuns: number): string {
+    return incompleteTokenCostLabel(unpricedRuns);
+  }
+
+  isPartial(costUsd: number, unpricedRuns: number): boolean {
+    return costUsd > 0 && unpricedRuns > 0;
+  }
+
+  totalTooltip(
+    totalTokens: number,
+    costUsd: number,
+    anyModelUnknown: boolean,
+    scope: string,
+    unpricedRuns = anyModelUnknown ? 1 : 0,
+    pricingGaps: readonly PipelinePricingGap[] = [],
+  ): string {
     return buildTokenCostTooltip({
       costUsd,
       priceKnown: !anyModelUnknown,
+      totalTokens,
       context: `${scope}: ${totalTokens.toLocaleString()} total tokens.`,
+      unpricedRuns,
+      pricingGaps,
     });
   }
 
@@ -147,6 +171,13 @@ export class PipelineTokenUsageComponent {
       `Cache read ${this.tokens(m.cacheReadTokens)} / Cache write ${this.tokens(m.cacheCreationTokens)}`,
       `Total ${this.tokens(m.totalTokens)}`,
     ].join('\n');
-    return buildTokenCostTooltip({ costUsd: m.costUsd, priceKnown: m.modelKnown, context });
+    return buildTokenCostTooltip({
+      costUsd: m.costUsd,
+      priceKnown: m.modelKnown,
+      totalTokens: m.totalTokens,
+      context,
+      unpricedRuns: this.unpricedRunsForModel(m),
+      pricingGaps: m.pricingGaps,
+    });
   }
 }

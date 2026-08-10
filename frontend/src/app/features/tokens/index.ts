@@ -15,9 +15,16 @@ export type { CostBreakdownRequestItem } from './services/cost-breakdown.service
 export {
   TOKEN_COST_ESTIMATE_NOTICE,
   buildTokenCostTooltip,
+  formatTokenCostDisplay,
   formatTokenCostUsd,
+  incompleteTokenCostLabel,
+  tokenPriceGapReason,
 } from './token-cost-tooltip.util';
-export type { TokenCostTooltipOptions } from './token-cost-tooltip.util';
+export type {
+  TokenCostDisplayOptions,
+  TokenCostTooltipOptions,
+  TokenPricingGap,
+} from './token-cost-tooltip.util';
 export type {
   TaskTokenCall,
   TaskTokenSummary,

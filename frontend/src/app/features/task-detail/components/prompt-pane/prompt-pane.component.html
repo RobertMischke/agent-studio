@@ -18,19 +18,21 @@
   <div class="pane__body">
     @switch (activeTab()) {
       @case ('overview') {
-        @if (job(); as info) {
-          <app-overview-pane
-            [job]="info"
-            [promptMarkdown]="markdown()"
-            [availableModels]="availableModels()"
-            [isRunning]="isRunning()"
-            [cliTypeOverride]="cliTypeOverride()"
-            [modelOverride]="modelOverride()"
-            [thinkingLevelOverride]="thinkingLevelOverride()"
-            [runOutcome]="runOutcome()"
-            (agentConfigCommit)="agentConfigCommit.emit($event)"
-            (referencesChanged)="referencesChanged.emit()"
-            (titleSaved)="titleSaved.emit()" />
+        @defer (on immediate) {
+          @if (job(); as info) {
+            <app-overview-pane
+              [job]="info"
+              [promptMarkdown]="markdown()"
+              [availableModels]="availableModels()"
+              [isRunning]="isRunning()"
+              [cliTypeOverride]="cliTypeOverride()"
+              [modelOverride]="modelOverride()"
+              [thinkingLevelOverride]="thinkingLevelOverride()"
+              [runOutcome]="runOutcome()"
+              (agentConfigCommit)="agentConfigCommit.emit($event)"
+              (referencesChanged)="referencesChanged.emit()"
+              (titleSaved)="titleSaved.emit()" />
+          }
         }
       }
 

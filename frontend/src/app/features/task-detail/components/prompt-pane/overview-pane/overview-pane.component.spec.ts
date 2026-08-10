@@ -477,7 +477,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(host.querySelector('[data-step-id="aspect-tests-and-evidence"]')).toBeNull();
   });
 
-  it('pipeline totals render Unknown instead of a silent zero when every used model is unpriced', async () => {
+  it('pipeline totals render no price data instead of a silent zero when every used model is unpriced', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('future-unpriced-model');
     pipe.execution!.steps[0] = {
@@ -524,8 +524,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     const host = fixture.nativeElement as HTMLElement;
     const currentTotal = host.querySelector('[data-testid="overview-pipeline-total-cost"]');
     const lifetimeTotal = host.querySelector('[data-testid="pipeline-token-usage-grand-total-cost"]');
-    expect(currentTotal?.textContent?.trim()).toBe('Unknown');
-    expect(lifetimeTotal?.textContent?.trim()).toBe('Unknown');
+    expect(currentTotal?.textContent?.trim()).toBe('- no price data');
+    expect(lifetimeTotal?.textContent?.trim()).toBe('- no price data');
     expect(host.textContent).not.toContain('$0.00');
   });
 
@@ -1018,6 +1018,70 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(el.querySelector('[data-testid="overview-pipeline-step-tokens"]')?.textContent?.trim()).toBe('19.7m');
     expect(el.querySelector('[data-testid="overview-pipeline-agent-runs"]')?.textContent?.trim()).toBe('8 runs');
     expect(el.querySelector('.ov-pl-total__label')?.textContent).toContain('SUM');
+  });
+
+  it('pipeline block: missing and mixed prices never render as a silent zero', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('gpt-5.6-sol');
+    pipe.execution!.steps.push({
+      stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5',
+      status: 'passed', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+      durationMs: 10, inputTokens: 1_000_000, outputTokens: 200_000,
+      cacheReadTokens: 0, cacheCreationTokens: 0,
+    });
+    const gap = { modelId: 'gpt-5.6-sol', reason: 'NoPriceForDate', affectedRuns: 1 };
+    pipe.cost = emptyCost({
+      steps: [
+        stepCost({
+          stepId: 'core-agent-run', kind: 'core', model: 'gpt-5.6-sol', modelKnown: false,
+          inputTokens: 500_000, outputTokens: 100_000, totalTokens: 600_000,
+          pricingGaps: [gap],
+        }),
+        stepCost({
+          stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', modelKnown: true,
+          inputTokens: 1_000_000, outputTokens: 200_000, totalTokens: 1_200_000,
+          inputCostUsd: 1, outputCostUsd: 1, costUsd: 2,
+        }),
+      ],
+      totalInputTokens: 1_500_000,
+      totalOutputTokens: 300_000,
+      totalTokens: 1_800_000,
+      totalInputCostUsd: 1,
+      totalOutputCostUsd: 1,
+      totalCostUsd: 2,
+      anyModelUnknown: true,
+      unpricedRuns: 1,
+      pricingGaps: [gap],
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.componentInstance.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const host = fixture.nativeElement as HTMLElement;
+    const coreCost = host.querySelector(
+      '[data-step-id="core-agent-run"] [data-testid="overview-pipeline-step-cost"]',
+    );
+    expect(coreCost?.textContent).toContain('no price data');
+    expect(coreCost?.textContent).not.toContain('$0.00');
+
+    const total = host.querySelector('[data-testid="overview-pipeline-total-cost"]');
+    expect(total?.textContent).toContain('$2.00');
+    expect(total?.textContent).toContain('incomplete (1 run without price)');
+    expect(fixture.componentInstance.pipelineTotal()?.costTooltip?.body).toContain('gpt-5.6-sol');
+    expect(fixture.componentInstance.pipelineTotal()?.costTooltip?.body).toContain('NoPriceForDate');
+
+    const coreTokens = host.querySelector<HTMLButtonElement>(
+      '[data-step-id="core-agent-run"] [data-testid="overview-pipeline-step-tokens"]',
+    );
+    coreTokens?.click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    const modal = document.body.querySelector<HTMLElement>('[data-testid="overview-step-token-modal"]');
+    expect(modal?.textContent).toContain('Calls');
+    const modalCost = modal?.querySelector('[data-testid="overview-step-token-modal-cost"]');
+    const modalTotalCost = modal?.querySelector('[data-testid="overview-step-token-modal-total-cost"]');
+    expect(modalCost?.textContent).toContain('- no price data');
+    expect(modalTotalCost?.textContent).toContain('- no price data');
+    expect(modalCost?.textContent).not.toContain('$0.00');
   });
 
   it('pipeline block: clicking CORE tokens opens a step-scoped token modal', async () => {

@@ -102,14 +102,22 @@ export interface PipelineExecutionRecord {
   previousAttempts?: PipelineExecutionRecord[];
 }
 
+/** One unresolved historical model-price reason and the runs it affects. */
+export interface PipelinePricingGap {
+  modelId: string;
+  reason: string;
+  affectedRuns: number;
+}
+
 /** Derived per-step cost (USD) for one recorded step. */
 export interface PipelineStepCost {
   stepId: string;
   kind: StepKind;
   model?: string | null;
   tokenUsageSource?: string | null;
-  /** False when the model is not in the price table -> render "n/a". */
+  /** False when the historical resolver has no price for this usage. */
   modelKnown: boolean;
+  pricingGaps?: PipelinePricingGap[];
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -136,16 +144,20 @@ export interface PipelineCostSummary {
   totalCacheCreationCostUsd: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
 }
 
 /**
  * Token + cost rollup for one model, summed across the steps that ran on
  * it within a run (or across all runs for the grand total). Mirrors backend
- * `PipelineModelTokenUsage`. `modelKnown` false -> render "n/a" cost.
+ * `PipelineModelTokenUsage`. `modelKnown` false means price data is unavailable.
  */
 export interface PipelineModelTokenUsage {
   model: string;
   modelKnown: boolean;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
   steps: number;
   inputTokens: number;
   outputTokens: number;
@@ -169,6 +181,7 @@ export interface PipelineRunTokenUsage {
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  pricingGaps?: PipelinePricingGap[];
 }
 
 /**
@@ -183,6 +196,8 @@ export interface PipelineModelUsageSummary {
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
+  unpricedRuns?: number;
+  pricingGaps?: PipelinePricingGap[];
 }
 
 /** Per-project override resolved for one step (from project-settings.json). */

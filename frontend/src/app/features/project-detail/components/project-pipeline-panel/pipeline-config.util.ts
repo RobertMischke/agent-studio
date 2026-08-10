@@ -5,7 +5,8 @@
  * touches Angular — it operates on the catalogue + order arrays directly.
  */
 import type { PipelineCatalogueStep, PipelineStepSetting, PipelineType } from '../../../task-pipeline';
-import { buildTokenCostTooltip } from '../../../tokens';
+import type { ProjectPipelineCostTimeline } from '../../../project-token-usage';
+import { buildTokenCostTooltip, type TokenPricingGap } from '../../../tokens';
 
 /** Pipeline type selector, ordered per the settings convention. */
 export const PIPELINE_TYPES: readonly { id: PipelineType; label: string; hint: string }[] = [
@@ -108,6 +109,31 @@ export interface PipelineAdminRow {
   tokenUnknown: boolean;
   /** Historical list-price sum for the priced usage rows in the window. */
   tokenCostUsd: number | null;
+  /** Runs in the window with token usage but no historical price. */
+  tokenUnpricedRuns?: number;
+  /** Concrete model and resolver reasons for the missing historical prices. */
+  tokenPricingGaps?: TokenPricingGap[];
+}
+
+export interface PipelineStepTokenCost {
+  tokens: number;
+  costUsd: number;
+  unknown: boolean;
+  unpricedRuns: number;
+  pricingGaps: TokenPricingGap[];
+}
+
+/** Index the project price aggregate once before joining it to catalogue rows. */
+export function pipelineTokenCostByStep(
+  timeline: ProjectPipelineCostTimeline | null,
+): Map<string, PipelineStepTokenCost> {
+  return new Map((timeline?.steps ?? []).map(step => [step.stepId, {
+    tokens: step.totalTokens,
+    costUsd: step.totalCostUsd,
+    unknown: step.anyModelUnknown,
+    unpricedRuns: step.unpricedRuns ?? (step.anyModelUnknown ? 1 : 0),
+    pricingGaps: step.pricingGaps ?? [],
+  }]));
 }
 
 /** One pre/core/post phase grouping for the grid. */
@@ -215,7 +241,8 @@ export function stepTokenLabel(row: Pick<PipelineAdminRow, 'tokenSum'>): string 
 }
 
 /** Verbose tooltip behind a step's token sum chip. */
-export function stepTokenTooltip(row: Pick<PipelineAdminRow, 'tokenSum' | 'tokenUnknown' | 'tokenCostUsd'>): string {
+export function stepTokenTooltip(row: Pick<PipelineAdminRow,
+  'tokenSum' | 'tokenUnknown' | 'tokenCostUsd' | 'tokenUnpricedRuns' | 'tokenPricingGaps'>): string {
   const d = PIPELINE_TOKEN_WINDOW_DAYS;
   const context = row.tokenSum == null
     ? `No token usage recorded for this step in the last ${d} days.`
@@ -223,6 +250,9 @@ export function stepTokenTooltip(row: Pick<PipelineAdminRow, 'tokenSum' | 'token
   return buildTokenCostTooltip({
     costUsd: row.tokenCostUsd,
     priceKnown: row.tokenSum != null && !row.tokenUnknown,
+    totalTokens: row.tokenSum ?? 0,
     context,
+    unpricedRuns: row.tokenUnpricedRuns ?? 0,
+    pricingGaps: row.tokenPricingGaps ?? [],
   });
 }

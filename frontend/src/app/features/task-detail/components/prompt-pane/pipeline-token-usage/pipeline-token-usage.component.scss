@@ -7,16 +7,17 @@
   // disclosed level (task total + per run). The model column flexes; the six
   // numeric columns share one width.
   --ptu-num-col: minmax(3.5rem, 1fr);
+  --ptu-cost-col: minmax(11rem, 1.6fr);
   --ptu-grid: minmax(6rem, 1.4fr) var(--ptu-num-col) var(--ptu-num-col)
-    var(--ptu-num-col) var(--ptu-num-col) var(--ptu-num-col) var(--ptu-num-col);
+    var(--ptu-num-col) var(--ptu-num-col) var(--ptu-num-col) var(--ptu-cost-col);
   // The breakdown (and only the breakdown) refuses to shrink past this, so a
   // narrow pane scrolls the seven columns as one block while the always-visible
   // head lines above keep their at-a-glance Total/Cost pinned in view.
-  --ptu-breakdown-min: 33rem;
+  --ptu-breakdown-min: 42rem;
   // Fixed width for the two at-a-glance numbers on every head line; sizing them
   // alike keeps Total over Total and Cost over Cost down the whole stack.
   --ptu-total-w: 5rem;
-  --ptu-cost-w: 4.5rem;
+  --ptu-cost-w: 12rem;
   // Indent that lines a disclosed row's model name up under its parent label,
   // past the disclosure triangle - the only indentation the hierarchy uses.
   --ptu-indent: 1.1rem;
@@ -84,6 +85,9 @@
   &__head-cost {
     flex: 0 0 auto;
     width: var(--ptu-cost-w);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
   }
 
   &__disclosure {
@@ -265,9 +269,21 @@
 
   &__cell--cost {
     color: var(--studio-fg-dim);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
   }
 
   &__na {
     color: var(--studio-fg-muted);
+  }
+
+  &__incomplete {
+    color: var(--studio-fg-muted);
+    font-family: var(--font-sans);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: normal;
   }
 }

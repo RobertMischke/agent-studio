@@ -9,9 +9,9 @@ import {
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TaskService } from '../../../../services/task.service';
-import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectPipelineCostTimeline, ProjectTokenCategory, ProjectTokenDataFreshness, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary, PipelineStepKindKey } from '../../../../features/project-token-usage';
-
+import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectPipelineCostTimeline, ProjectTokenCategory, ProjectTokenDataFreshness, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../../features/project-token-usage';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { ProjectPipelineCostTrendComponent } from '../project-pipeline-cost-trend/project-pipeline-cost-trend.component';
 interface CardSpec {
   testid: string;
   label: string;
@@ -29,32 +29,6 @@ interface TimelineBucket {
 }
 
 /** One step kind's window rollup for the legend + per-kind cost table. */
-interface PipelineKindLegendRow {
-  kind: PipelineStepKindKey;
-  label: string;
-  tokens: number;
-  cost: number;
-  anyUnknown: boolean;
-}
-
-/** One vertical day column in the stacked per-step-kind cost trend. */
-interface PipelineStackSegment {
-  kind: PipelineStepKindKey;
-  label: string;
-  tokens: number;
-  cost: number;
-  pctOfColumn: number;
-}
-
-interface PipelineStackColumn {
-  day: string;
-  shortDay: string;
-  total: number;
-  cost: number;
-  heightPct: number;
-  segments: PipelineStackSegment[];
-}
-
 /**
  * Project Token Usage panel (slice 8 of the quality-system mockup,
  * docs/mockups/quality-system/, "Token Usage" surface). Renders the
@@ -74,7 +48,7 @@ interface PipelineStackColumn {
 @Component({
   selector: 'app-project-token-usage-panel',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, ProjectPipelineCostTrendComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-token-usage-panel.component.html',
   styleUrl: './project-token-usage-panel.component.scss',
@@ -184,71 +158,6 @@ export class ProjectTokenUsagePanelComponent {
     });
   });
 
-  private static readonly KIND_LABELS: Record<PipelineStepKindKey, string> = {
-    core: 'Core run',
-    aspect: 'Aspects',
-    tool: 'Tool steps',
-    orchestrator: 'Orchestrator',
-    drift: 'Drift',
-    module: 'Modules',
-  };
-
-  /** Per-step-kind window rollup (legend + cost table). */
-  readonly pipelineKindLegend = computed<PipelineKindLegendRow[]>(() => {
-    const t = this.pipelineCost();
-    if (!t) return [];
-    return t.kinds.map(k => ({
-      kind: k.kind,
-      label: this.kindLabel(k.kind),
-      tokens: k.totalTokens,
-      cost: k.totalCostUsd,
-      anyUnknown: k.anyModelUnknown,
-    }));
-  });
-
-  /**
-   * One vertical column per day; each column is a stack of step-kind
-   * segments. Column height scales to the busiest day's total tokens so
-   * the trend reads as "how spend develops"; within a column each kind's
-   * segment scales to its share of that day. Idle days render a flat
-   * baseline so the x-axis stays dense.
-   */
-  readonly pipelineStackColumns = computed<PipelineStackColumn[]>(() => {
-    const t = this.pipelineCost();
-    if (!t || t.days.length === 0) return [];
-    const dayTotals = t.days.map(() => 0);
-    for (const k of t.kinds) {
-      k.cells.forEach((c, i) => { dayTotals[i] += c.totalTokens; });
-    }
-    const maxDay = dayTotals.reduce((m, v) => (v > m ? v : m), 0);
-    return t.days.map((day, i) => {
-      const total = dayTotals[i];
-      const cost = t.kinds.reduce((sum, k) => sum + (k.cells[i]?.costUsd ?? 0), 0);
-      const segments: PipelineStackSegment[] = total > 0
-        ? t.kinds
-            .filter(k => (k.cells[i]?.totalTokens ?? 0) > 0)
-            .map(k => {
-              const cellTokens = k.cells[i]?.totalTokens ?? 0;
-              return {
-                kind: k.kind,
-                label: this.kindLabel(k.kind),
-                tokens: cellTokens,
-                cost: k.cells[i]?.costUsd ?? 0,
-                pctOfColumn: Math.round((cellTokens / total) * 100),
-              };
-            })
-        : [];
-      return {
-        day,
-        shortDay: this.shortDay(day),
-        total,
-        cost,
-        heightPct: maxDay > 0 ? Math.max(2, Math.round((total / maxDay) * 100)) : 0,
-        segments,
-      };
-    });
-  });
-
   constructor() {
     effect(() => {
       const name = this.projectName();
@@ -307,28 +216,6 @@ export class ProjectTokenUsagePanelComponent {
       next: (t: ProjectPipelineCostTimeline) => { this.pipelineCost.set(t); done(); },
       error: fail,
     });
-  }
-
-  kindLabel(kind: PipelineStepKindKey): string {
-    return ProjectTokenUsagePanelComponent.KIND_LABELS[kind] ?? kind;
-  }
-
-  /**
-   * Theoretical USD cost. Sub-cent values still read as a number rather
-   * than "$0.00" so a cheap Haiku step does not look free.
-   */
-  formatCost(usd: number | null | undefined): string {
-    const v = usd ?? 0;
-    if (v <= 0) return '$0.00';
-    if (v < 0.01) return `$${v.toFixed(4)}`;
-    if (v < 1) return `$${v.toFixed(3)}`;
-    return `$${v.toFixed(2)}`;
-  }
-
-  pipelineColumnTooltip(col: PipelineStackColumn): string {
-    if (col.total <= 0) return `${col.day}: no pipeline activity`;
-    const parts = col.segments.map(s => `${s.label} ${this.formatTokens(s.tokens)} (${this.formatCost(s.cost)})`);
-    return `${col.day}: ${this.formatTokens(col.total)} tokens, ${this.formatCost(col.cost)}\n${parts.join('\n')}`;
   }
 
   onSelectJob(jobId: string): void {

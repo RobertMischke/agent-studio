@@ -7,6 +7,7 @@ export type {
   TaskPipeline,
   PipelineStepExecution,
   PipelineExecutionRecord,
+  PipelinePricingGap,
   PipelineStepCost,
   PipelineCostSummary,
   PipelineModelTokenUsage,
