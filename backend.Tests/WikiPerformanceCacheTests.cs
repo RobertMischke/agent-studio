@@ -182,10 +182,13 @@ public class WikiPerformanceCacheTests : IDisposable
         Directory.CreateDirectory(docsDir);
         InitRepo(repoRoot);
         File.WriteAllText(Path.Combine(docsDir, "source.md"), "# Main\nmain\n");
+        WriteWorkbench(docsDir, "checkout-only", "Checkout only");
         RunGit(repoRoot, "add -A");
         RunGitArgs(repoRoot, "commit", "-q", "-m", "main docs");
         RunGit(repoRoot, "checkout -q -b develop");
         File.WriteAllText(Path.Combine(docsDir, "source.md"), "# Develop\ndevelop\n");
+        Directory.Delete(Path.Combine(docsDir, "operations", "checkout-only"), recursive: true);
+        WriteWorkbench(docsDir, "branch-only", "Branch only");
         RunGit(repoRoot, "add -A");
         RunGitArgs(repoRoot, "commit", "-q", "-m", "develop docs");
         RunGit(repoRoot, "checkout -q main");
@@ -198,24 +201,56 @@ public class WikiPerformanceCacheTests : IDisposable
             Path.Combine(repoRoot, ".orchestrator", "jobs"), "Configured", DefaultWorkspace.Id);
         registry.SetWikiSourceBranch(project.Id, "develop");
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
-        var docs = new ProjectDocsService(scanner, registry, NullLogger<ProjectDocsService>.Instance, git);
+        var workbenches = new WorkbenchCatalogueService(scanner, registry, git);
+        var docs = new ProjectDocsService(
+            scanner,
+            registry,
+            NullLogger<ProjectDocsService>.Instance,
+            git,
+            workbenches);
 
         var tree = docs.GetWikiTreeResult("Configured");
         var content = docs.ReadWikiFile("Configured", "source.md");
         var missing = docs.ReadWikiFileResult("Configured", "missing.md");
+        var catalogue = docs.GetWikiWorkbenchCatalogue("Configured", includeHistory: true);
         var history = docs.GetWikiHistory("Configured", "source.md", git);
 
         Assert.NotNull(tree);
         Assert.Equal("branch", tree!.Tree.Source?.Mode);
         Assert.Equal("develop", tree.Tree.Source?.Branch);
         Assert.False(tree.Tree.Source?.Writable);
-        Assert.Equal("Develop", Assert.Single(tree.Tree.Root).Title);
+        Assert.Equal("Develop", Assert.Single(
+            tree.Tree.Root,
+            node => node.RelPath == "source.md").Title);
         Assert.Contains("develop", content?.Content);
         Assert.Null(missing.File);
         Assert.Contains("Wiki source 'develop'", missing.Error);
+        var workbench = Assert.Single(catalogue!.Items);
+        Assert.Equal("branch-only", workbench.Id);
+        Assert.Contains("Branch only", docs.ReadWikiWorkbench("Configured", workbench.Id)!.Html);
+        Assert.DoesNotContain(catalogue.Items, item => item.Id == "checkout-only");
         Assert.Equal("develop docs", history?.History.Commits[0].Subject);
         Assert.Contains("main", File.ReadAllText(Path.Combine(docsDir, "source.md")));
         Assert.Equal("main", git.GetStatusForRepoRoot(repoRoot).Branch);
+    }
+
+    private static void WriteWorkbench(string docsDir, string id, string title)
+    {
+        var directory = Path.Combine(docsDir, "operations", id);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "index.html"), $"<h1>{title}</h1>");
+        File.WriteAllText(Path.Combine(directory, "workbench.json"), $$"""
+          {
+            "schemaVersion": 1,
+            "id": "{{id}}",
+            "title": "{{title}}",
+            "summary": "Source convergence fixture.",
+            "entrypoint": "index.html",
+            "status": "active",
+            "phase": "testing",
+            "updatedAt": "2026-08-10T10:00:00Z"
+          }
+          """);
     }
 
     // ---- Recent edits: HEAD-memoized, zero spawns while HEAD is unchanged ----

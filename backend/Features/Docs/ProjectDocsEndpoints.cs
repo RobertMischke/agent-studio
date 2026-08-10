@@ -84,9 +84,9 @@ public static class ProjectDocsEndpoints
         // migration the workbench folders are theme-distributed, e.g. under
         // operations/ and quality/); HTML is returned as data and is never
         // executed by the backend origin.
-        app.MapGet("/api/projects/{projectName}/workbenches", (string projectName, bool? history, WorkbenchCatalogueService workbenches) =>
+        app.MapGet("/api/projects/{projectName}/workbenches", (string projectName, bool? history, ProjectDocsService docs) =>
         {
-            var catalogue = workbenches.List(projectName, history == true);
+            var catalogue = docs.GetWikiWorkbenchCatalogue(projectName, history == true);
             return catalogue == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
                 : Results.Ok(catalogue);
@@ -98,6 +98,7 @@ public static class ProjectDocsEndpoints
         // projects assigned to their account.
         app.MapGet("/api/workbenches", (string? project, HttpContext context,
             WorkbenchCatalogueService workbenches,
+            ProjectDocsService docs,
             AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var requested = string.IsNullOrWhiteSpace(project)
@@ -114,14 +115,18 @@ public static class ProjectDocsEndpoints
                     .Where(name => ProjectAccessAuthorization.Allows(human.User, name, projects))
                     .ToList();
             }
-            return Results.Ok(workbenches.ListOverview(names, requested));
+            return Results.Ok(docs.GetWikiWorkbenchOverview(names, requested));
         });
 
-        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, WorkbenchCatalogueService workbenches) =>
+        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, ProjectDocsService docs) =>
         {
-            var document = workbenches.Read(projectName, id);
+            var item = docs.GetWikiWorkbenchCatalogue(projectName, includeHistory: true)?.Items
+                .FirstOrDefault(candidate => candidate.Id == id);
+            if (item is { Valid: false })
+                return Results.UnprocessableEntity(new { error = item.Error ?? "Dossier descriptor is invalid." });
+            var document = docs.ReadWikiWorkbench(projectName, id);
             return document == null
-                ? Results.NotFound(new { error = "Dossier not found, invalid, or path rejected" })
+                ? Results.NotFound(new { error = "Dossier is not available in the selected Wiki source." })
                 : Results.Ok(document);
         });
 

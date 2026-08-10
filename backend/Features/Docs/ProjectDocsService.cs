@@ -21,7 +21,7 @@ public class ProjectDocsService
     private readonly ProjectRegistry _registry;
     private readonly GitService? _git;
     private readonly ILogger<ProjectDocsService> _logger;
-    private readonly WorkbenchCatalogueService? _workbenches;
+    private WorkbenchCatalogueService? _workbenches;
     private readonly WikiAgentReadStore _agentReads;
     private WikiContentCache _wikiContentCache;
 
@@ -112,6 +112,16 @@ public class ProjectDocsService
     public void SetWikiContentCache(WikiContentCache cache)
     {
         _wikiContentCache = cache;
+    }
+
+    /// <summary>
+    /// Binds the process-wide Workbench reader before the Wiki cache warmup.
+    /// Direct unit fixtures may omit it, while the host always publishes
+    /// Workbenches as part of the central Wiki snapshot.
+    /// </summary>
+    public void SetWorkbenchCatalogue(WorkbenchCatalogueService workbenches)
+    {
+        _workbenches = workbenches;
     }
 
     public bool PreloadWikiContent(string projectName) => _wikiContentCache.Preload(projectName);
@@ -569,8 +579,41 @@ public class ProjectDocsService
             _workbenches?.ListFromSource(projectName, source, includeHistory: true));
     }
 
-    public WorkbenchCatalogue? GetWikiWorkbenchCatalogue(string projectName)
-        => _wikiContentCache.GetSnapshot(projectName)?.Workbenches;
+    public WorkbenchCatalogue? GetWikiWorkbenchCatalogue(
+        string projectName,
+        bool includeHistory = false)
+    {
+        var catalogue = _wikiContentCache.GetSnapshot(projectName)?.Workbenches;
+        return catalogue == null
+            ? null
+            : WorkbenchCatalogueService.FilterCatalogue(catalogue, includeHistory);
+    }
+
+    public WorkbenchOverview GetWikiWorkbenchOverview(
+        IEnumerable<string> projectNames,
+        string? projectName = null)
+    {
+        var items = new List<WorkbenchOverviewItem>();
+        foreach (var name in projectNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var catalogue = GetWikiWorkbenchCatalogue(name, includeHistory: true);
+            if (catalogue == null) continue;
+            items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)));
+        }
+        return WorkbenchCatalogueService.BuildOverview(items, projectName);
+    }
+
+    public WorkbenchDocument? ReadWikiWorkbench(string projectName, string id)
+    {
+        var snapshot = _wikiContentCache.GetSnapshot(projectName);
+        return snapshot == null || _workbenches == null
+            ? null
+            : _workbenches.ReadFromSource(
+                projectName,
+                id,
+                snapshot.Source,
+                snapshot.Workbenches);
+    }
 
     /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
     // The token can carry arbitrary bytes (the tree source key joins its parts
