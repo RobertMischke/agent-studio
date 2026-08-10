@@ -8,5 +8,6 @@
   "phase": "decision-ready",
   "updatedAt": "2026-08-10T12:00:00Z",
   "sourceTaskKeys": ["AGT-2582"],
+  "implementationTasks": [],
   "relatedTaskKeys": ["AGT-2530", "AGT-2558", "WEB-17"]
 }
