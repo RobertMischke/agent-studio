@@ -133,38 +133,13 @@ public class ProjectDocsService
         => ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
 
     private ProjectRecord? FindProject(string projectName) =>
-        _registry.FindByIdOrDisplayName(projectName) ?? _registry.FindByShortCode(projectName);
+        ProjectWikiSourceResolver.ResolveProject(projectName, _scanner, _registry);
 
     internal string ResolveWikiCacheKey(string projectName) =>
         FindProject(projectName)?.Id ?? projectName;
 
-    private WikiSourceContext? ResolveWikiSource(string projectName)
-    {
-        var checkout = ResolveBaseDir(projectName);
-        if (checkout == null) return null;
-        var configured = FindProject(projectName)?.WikiSourceBranch;
-        var repoRoot = _git?.ResolveRepoRootForProject(projectName) ?? checkout;
-        if (string.IsNullOrWhiteSpace(configured))
-        {
-            var status = _git?.GetStatusForRepoRoot(repoRoot);
-            var sha = _git?.GetHeadShaCached(repoRoot);
-            return new(checkout, new WikiSourceInfo(
-                "checkout", status?.Branch ?? "checkout", sha, ShortSha(sha), true, null));
-        }
-
-        if (_git == null)
-            return new(Path.Combine(Path.GetTempPath(), "agent-studio", "wiki-unavailable"),
-                new WikiSourceInfo("branch", configured, null, null, false, "Git service is unavailable."));
-        var snapshot = _git.GetWikiBranchSnapshotCached(repoRoot, configured);
-        var snapshotRoot = string.IsNullOrWhiteSpace(snapshot.RootPath)
-            ? Path.Combine(Path.GetTempPath(), "agent-studio", "wiki-unavailable")
-            : snapshot.RootPath;
-        return new(snapshotRoot, new WikiSourceInfo(
-            "branch", configured, snapshot.Sha, snapshot.ShortSha, false, snapshot.Error));
-    }
-
-    private static string? ShortSha(string? sha) =>
-        string.IsNullOrWhiteSpace(sha) ? null : sha[..Math.Min(8, sha.Length)];
+    private WikiSourceContext? ResolveWikiSource(string projectName) =>
+        ProjectWikiSourceResolver.Resolve(projectName, _scanner, _registry, _git);
 
     public string? WikiWriteBlockReason(string projectName)
     {
@@ -294,12 +269,48 @@ public class ProjectDocsService
             Files: snapshot.Files);
     }
 
-    public WikiFileContent? ReadWikiFile(string projectName, string relPath)
+    public WikiFileContent? ReadWikiFile(string projectName, string relPath) =>
+        ReadWikiFileResult(projectName, relPath).File;
+
+    public WikiFileReadResult ReadWikiFileResult(string projectName, string relPath)
     {
-        var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
-        if (full == null || !File.Exists(full)) return null;
-        GitProcessTelemetry.RecordFileRead();
-        return new WikiFileContent(relPath.Replace('\\', '/'), File.ReadAllText(full));
+        var normalized = relPath?.Replace('\\', '/').Trim().TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalized)
+            || normalized.Contains("..", StringComparison.Ordinal)
+            || Path.IsPathRooted(relPath)
+            || !WikiDocExtensions.Contains(Path.GetExtension(normalized)))
+            return WikiFileReadResult.Fail("Wiki page path is invalid or rejected.");
+
+        var snapshot = _wikiContentCache.GetSnapshot(projectName);
+        if (snapshot == null)
+            return WikiFileReadResult.Fail($"Unknown project '{projectName}'.");
+        if (snapshot.Source.Info.Error is { } sourceError)
+        {
+            return WikiFileReadResult.Fail(
+                $"Wiki source '{snapshot.Source.Info.Branch}' is unavailable: {sourceError}");
+        }
+
+        var full = ResolveWikiPathUnderRoot(snapshot.WikiDir, normalized);
+        if (full == null || !File.Exists(full))
+        {
+            var revision = snapshot.Source.Info.ShortCommit is { } shortCommit
+                ? $" at {shortCommit}"
+                : string.Empty;
+            return WikiFileReadResult.Fail(
+                $"Page '{normalized}' is not available in Wiki source '{snapshot.Source.Info.Branch}'{revision}.");
+        }
+
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            return WikiFileReadResult.Ok(
+                new WikiFileContent(normalized, File.ReadAllText(full)));
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "Wiki page read failed project={Project} path={Path}", projectName, normalized);
+            return WikiFileReadResult.Fail($"Page '{normalized}' could not be read from Wiki source '{snapshot.Source.Info.Branch}'.");
+        }
     }
 
     public WikiSaveResult WriteWikiFile(string projectName, string relPath, string content)
@@ -355,6 +366,23 @@ public class ProjectDocsService
         // Append a separator to the root so "docs-other/" can't satisfy the prefix.
         var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
         return full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
+    private static string? ResolveWikiPathUnderRoot(string wikiRoot, string relPath)
+    {
+        try
+        {
+            var root = Path.GetFullPath(wikiRoot);
+            var full = Path.GetFullPath(Path.Combine(root, relPath));
+            var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar)
+                ? root
+                : root + Path.DirectorySeparatorChar;
+            return full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? full : null;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -452,7 +480,7 @@ public class ProjectDocsService
                 new WikiPulseInbox(false, "No docs/ folder for this project yet.", 0, []),
                 WikiPulseCritical.Unavailable("No docs/ folder for this project yet."),
                 WikiPulseWarnings.Unavailable("No docs/ folder for this project yet."),
-                _workbenches?.List(projectName, includeHistory: true));
+                _workbenches?.ListFromSource(projectName, source, includeHistory: true));
         }
 
         var signature = ComputeDocsSignature(wikiDir) ?? "unavailable";
@@ -538,7 +566,7 @@ public class ProjectDocsService
             BuildPulseInbox(files),
             BuildPulseCritical(files, metadata),
             BuildPulseWarnings(wikiDir, files),
-            _workbenches?.List(projectName, includeHistory: true));
+            _workbenches?.ListFromSource(projectName, source, includeHistory: true));
     }
 
     public WorkbenchCatalogue? GetWikiWorkbenchCatalogue(string projectName)
@@ -3163,6 +3191,11 @@ public class ProjectDocsService
 public record WikiFileEntry(string Name, string RelPath, string Title, DateTime UpdatedAt, long Size);
 public record WikiOverview(string ProjectName, string BaseDir, bool Exists, List<WikiFileEntry> Files);
 public record WikiFileContent(string RelPath, string Content);
+public sealed record WikiFileReadResult(WikiFileContent? File, string? Error)
+{
+    public static WikiFileReadResult Ok(WikiFileContent file) => new(file, null);
+    public static WikiFileReadResult Fail(string error) => new(null, error);
+}
 
 /// <summary>Provenance distilled from a wiki doc's YAML frontmatter.</summary>
 public record WikiDocMetadata(

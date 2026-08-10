@@ -406,6 +406,9 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         RunGit("add", ".");
         RunGit("commit", "-m", "seed workbench");
         var head = RunGit("rev-parse", "HEAD").Trim();
+        // Rebuild the Git boundary after the external test commit so this test
+        // does not observe the short-lived pre-commit status cache.
+        service = Service();
 
         var clean = service.Read("Project", "provenance")!;
         Assert.Equal(head, clean.Revision);
@@ -420,6 +423,43 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.True(dirty.WorkingTreeModified);
         Assert.NotEqual(clean.Fingerprint, dirty.Fingerprint);
         Assert.Contains("Uncommitted bytes", dirty.Html);
+    }
+
+    [Fact]
+    public void ConfiguredWikiBranch_DrivesCatalogueAndDocumentRead_InsteadOfCheckout()
+    {
+        RunGit("init");
+        RunGit("config", "user.email", "tests@example.invalid");
+        RunGit("config", "user.name", "Workbench Tests");
+        WriteWorkbench("checkout-only", "Checkout only", "active", "2026-07-12T10:00:00Z");
+        SetWorkbenchKey("checkout-only", "PRO-W1");
+        RunGit("add", ".");
+        RunGit("commit", "-m", "seed checkout workbench");
+        var checkoutBranch = RunGit("branch", "--show-current").Trim();
+
+        RunGit("checkout", "-b", "wiki-source");
+        Directory.Delete(Path.Combine(_root, "docs", "workbenches", "checkout-only"), recursive: true);
+        WriteWorkbench("branch-only", "Branch only", "active", "2026-07-13T10:00:00Z");
+        SetWorkbenchKey("branch-only", "PRO-W2");
+        RunGit("add", ".");
+        RunGit("commit", "-m", "seed branch workbench");
+        var branchRevision = RunGit("rev-parse", "HEAD").Trim();
+        RunGit("checkout", checkoutBranch);
+
+        var (service, registry) = ServiceWithRegistry();
+        var project = registry.FindByIdOrDisplayName("Project")!;
+        registry.SetWikiSourceBranch(project.Id, "wiki-source");
+
+        var catalogue = service.List("Project", includeHistory: true)!;
+        var item = Assert.Single(catalogue.Items);
+        var document = service.Read("Project", item.Id)!;
+
+        Assert.Equal("branch-only", item.Id);
+        Assert.DoesNotContain(catalogue.Items, candidate => candidate.Id == "checkout-only");
+        Assert.Contains("Branch only", document.Html);
+        Assert.Equal("wiki-source", document.Branch);
+        Assert.Equal(branchRevision, document.Revision);
+        Assert.False(document.WorkingTreeModified);
     }
 
     [Fact]
@@ -558,6 +598,10 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     private WorkbenchCatalogueService Service(WorkspaceArtifactPushQueue? pushQueue = null)
+        => ServiceWithRegistry(pushQueue).Service;
+
+    private (WorkbenchCatalogueService Service, ProjectRegistry Registry) ServiceWithRegistry(
+        WorkspaceArtifactPushQueue? pushQueue = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -577,7 +621,17 @@ public sealed class WorkbenchCatalogueTests : IDisposable
             git,
             pushQueue: pushQueue,
             logger: NullLogger<ManagedRepositoryMutationService>.Instance);
-        return new WorkbenchCatalogueService(scanner, registry, git, repositoryMutations: mutations);
+        return (
+            new WorkbenchCatalogueService(scanner, registry, git, repositoryMutations: mutations),
+            registry);
+    }
+
+    private void SetWorkbenchKey(string id, string key)
+    {
+        var path = Path.Combine(_root, "docs", "workbenches", id, "workbench.json");
+        var descriptor = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        descriptor["key"] = key;
+        File.WriteAllText(path, descriptor.ToJsonString());
     }
 
     private string RunGit(params string[] args)
