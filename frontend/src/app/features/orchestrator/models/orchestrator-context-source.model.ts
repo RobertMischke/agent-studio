@@ -20,5 +20,15 @@ export interface OrchestratorContextSourceOption {
 }
 
 export function contextSourceId(reference: OrchestratorContextReference): string {
-  return `${reference.kind}:${reference.projectId ?? ''}:${reference.reference}`;
+  const ranges = reference.lineRanges
+    ?.map(range => `${range.startLine}-${range.endLine}`)
+    .join(',') ?? '';
+  return [
+    reference.kind,
+    reference.projectId ?? '',
+    reference.repositoryId ?? '',
+    reference.reference,
+    reference.path ?? '',
+    ranges,
+  ].join(':');
 }

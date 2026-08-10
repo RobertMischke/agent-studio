@@ -84,6 +84,16 @@ describe('orchestrator-side-sheet.util', () => {
         taskKey: 'AGT-2235',
         includedBlocks: ['task metadata', 'status.md'],
         capturedAt: '2026-07-23T11:59:58Z',
+        receiptId: 'receipt-1',
+        sources: [{
+          sourceId: 'repository-file:Agent Studio:README.md',
+          kind: 'repository-file',
+          revision: '0123456789012345678901234567890123456789',
+          freshness: 'immutable',
+          includedCharacters: 120,
+          estimatedTokens: 30,
+          status: 'included',
+        }],
       },
       attachments: [{
         alt: 'evidence',
@@ -110,6 +120,13 @@ describe('orchestrator-side-sheet.util', () => {
       expect(sameOrchestratorChatTurns([turn], [{
         ...turn,
         contextReceipt: { ...turn.contextReceipt!, includedBlocks: ['task metadata'] },
+      }])).toBe(false);
+      expect(sameOrchestratorChatTurns([turn], [{
+        ...turn,
+        contextReceipt: {
+          ...turn.contextReceipt!,
+          sources: [{ ...turn.contextReceipt!.sources![0], status: 'blocked' }],
+        },
       }])).toBe(false);
       expect(sameOrchestratorChatTurns([turn], [turn, { ...turn, id: 'turn-2' }])).toBe(false);
     });

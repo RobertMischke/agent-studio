@@ -41,6 +41,7 @@
     <button type="button"
             class="context-draft__add"
             [disabled]="disabled()"
+            [attr.aria-expanded]="open()"
             (click)="show()"
             data-testid="orch-add-context">+ Add context</button>
   </div>
@@ -105,14 +106,28 @@
           <section class="source-group" [attr.data-testid]="'orch-context-group-' + group.id">
             <h4>{{ group.label }}</h4>
             @for (source of group.items; track source.id) {
-              <button type="button"
-                      class="source-row"
-                      [disabled]="selectedIds().has(source.id)"
-                      (click)="add(source)"
-                      [attr.data-testid]="'orch-context-source-' + source.id">
-                <span><strong>{{ source.label }}</strong><small>{{ source.detail }}</small></span>
-                <span>{{ selectedIds().has(source.id) ? 'Added' : 'Add' }}</span>
-              </button>
+              @if (group.id === 'commits') {
+                <div class="source-row">
+                  <span><strong>{{ source.label }}</strong><small>{{ source.detail }}</small></span>
+                  <span class="source-row__actions">
+                    <button type="button"
+                            [disabled]="selectedIds().has(source.id)"
+                            (click)="add(source)">Add commit</button>
+                    <button type="button"
+                            [disabled]="selectedIds().has(diffSource(source).id)"
+                            (click)="addDiff(source)">Add diff</button>
+                  </span>
+                </div>
+              } @else {
+                <button type="button"
+                        class="source-row"
+                        [disabled]="selectedIds().has(source.id)"
+                        (click)="add(source)"
+                        [attr.data-testid]="'orch-context-source-' + source.id">
+                  <span><strong>{{ source.label }}</strong><small>{{ source.detail }}</small></span>
+                  <span>{{ selectedIds().has(source.id) ? 'Added' : 'Add' }}</span>
+                </button>
+              }
             }
           </section>
         }

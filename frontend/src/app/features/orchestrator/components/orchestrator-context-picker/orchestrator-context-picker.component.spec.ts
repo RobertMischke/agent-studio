@@ -17,7 +17,7 @@ const CURRENT: OrchestratorContextSourceOption = {
 };
 
 describe('OrchestratorContextPickerComponent', () => {
-  async function fixture() {
+  async function fixture(currentSource: OrchestratorContextSourceOption = CURRENT) {
     await TestBed.configureTestingModule({
       imports: [OrchestratorContextPickerComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -28,7 +28,7 @@ describe('OrchestratorContextPickerComponent', () => {
     result.componentRef.setInput('automaticKey', 'AGT-W34');
     result.componentRef.setInput('automaticTypeLabel', 'Dossier');
     result.componentRef.setInput('automaticIcon', 'eye');
-    result.componentRef.setInput('currentSource', CURRENT);
+    result.componentRef.setInput('currentSource', currentSource);
     result.detectChanges();
     return result;
   }
@@ -61,6 +61,39 @@ describe('OrchestratorContextPickerComponent', () => {
     result.detectChanges();
     expect(root.querySelector('[data-testid="orch-current-tab-label"]')?.textContent?.trim())
       .toBe('Context workspace with a deliberately long title');
+  });
+
+  it('preserves the selected file and line range in a current diff reference', async () => {
+    const sha = '0123456789012345678901234567890123456789';
+    const currentDiff: OrchestratorContextSourceOption = {
+      id: `diff:Demo:Demo:${sha}:frontend/src/app/app.ts:8-16`,
+      category: 'current',
+      label: 'frontend/src/app/app.ts',
+      detail: `Diff · ${sha.slice(0, 8)} · L8-L16`,
+      estimateTokens: 900,
+      reference: {
+        kind: 'diff',
+        reference: sha,
+        revision: sha,
+        projectId: 'Demo',
+        repositoryId: 'Demo',
+        path: 'frontend/src/app/app.ts',
+        lineRanges: [{ startLine: 8, endLine: 16 }],
+      },
+    };
+    const result = await fixture(currentDiff);
+    const added = vi.fn();
+    result.componentInstance.attachmentAdded.subscribe(added);
+
+    result.componentInstance.add(currentDiff);
+
+    expect(added).toHaveBeenCalledWith(expect.objectContaining({
+      reference: expect.objectContaining({
+        kind: 'diff',
+        path: 'frontend/src/app/app.ts',
+        lineRanges: [{ startLine: 8, endLine: 16 }],
+      }),
+    }));
   });
 
   it('renders removable chips and an honest send-time estimate', async () => {

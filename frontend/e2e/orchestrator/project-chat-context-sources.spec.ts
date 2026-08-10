@@ -5,6 +5,7 @@ import { installOrchestratorChatBootstrap } from '../helpers/orchestrator-chat-b
 import { setTheme } from '../helpers/theme';
 
 const PROJECT = 'context-fixture';
+const SHA = '9a11cbed0123456789abcdef0123456789abcdef';
 const RESULTS = resolve(process.env.JOB_RESULTS_DIR ?? resolve(process.cwd(), '..', 'results', 'AGT-2573'));
 mkdirSync(RESULTS, { recursive: true });
 
@@ -12,6 +13,8 @@ interface ContextReference {
   kind: string;
   reference: string;
   projectId: string;
+  repositoryId?: string;
+  revision?: string;
 }
 
 interface CapturedSend {
@@ -39,8 +42,8 @@ async function installContextFixtures(page: Page) {
   }));
   await page.route('**/api/search**', route => json(route, {
     tasks: [{ domain: 'tasks', projectName: PROJECT, title: 'Prepare context contracts', subtitle: '2-ready', taskKey: 'CTX-22', lane: '2-ready' }],
-    files: [{ domain: 'files', projectName: PROJECT, title: 'context-envelope.ts', subtitle: 'src/context-envelope.ts', path: 'src/context-envelope.ts', isWiki: false }],
-    commits: [{ domain: 'commits', projectName: PROJECT, title: 'feat: persist context receipts', subtitle: '9a11cbed', sha: '9a11cbed0123456789abcdef' }],
+    files: [{ domain: 'files', projectName: PROJECT, title: 'context-envelope.ts', subtitle: 'src/context-envelope.ts', path: 'src/context-envelope.ts', isWiki: false, repositoryId: PROJECT, revision: SHA }],
+    commits: [{ domain: 'commits', projectName: PROJECT, title: 'feat: persist context receipts', subtitle: '9a11cbed', sha: SHA, repositoryId: PROJECT, revision: SHA }],
     errors: {}, durationMs: 3,
   }));
   await page.route('**/api/projects/*/wiki/search**', route => json(route, {
@@ -79,7 +82,7 @@ async function installContextFixtures(page: Page) {
             ...references.map((reference, index) => ({
               sourceId: reference.reference,
               kind: reference.kind,
-              revision: reference.kind === 'commit' ? '9a11cbed0123456789abcdef' : null,
+              revision: reference.kind === 'commit' ? SHA : null,
               sha256: index === 1 ? null : 'b'.repeat(64),
               freshness: index === 1 ? 'unknown' : 'current',
               includedCharacters: index === 1 ? 0 : 4200,
@@ -118,7 +121,7 @@ test('project chat attaches known sources, inspects the persisted receipt, and k
 
   await page.getByTestId('orch-context-group-wiki').getByRole('button', { name: /Context workbench/ }).click();
   await page.getByTestId('orch-context-group-files').getByRole('button', { name: /context-envelope.ts/ }).click();
-  await page.getByTestId('orch-context-group-commits').getByRole('button', { name: /persist context receipts/ }).click();
+  await page.getByTestId('orch-context-group-commits').getByRole('button', { name: 'Add commit' }).click();
   await expect(page.getByTestId('orch-context-estimate')).toContainText('4 sources');
 
   await setTheme(page, 'light');
@@ -130,8 +133,8 @@ test('project chat attaches known sources, inspects the persisted receipt, and k
   await expect.poll(() => captured.length).toBe(1);
   expect(captured[0].contextEnvelope?.explicitReferences).toEqual([
     { kind: 'page', reference: `page:${PROJECT}/operations/context-workbench/index.html`, projectId: PROJECT },
-    { kind: 'repository-file', reference: 'src/context-envelope.ts', projectId: PROJECT },
-    { kind: 'commit', reference: `commit:${PROJECT}/9a11cbed0123456789abcdef`, projectId: PROJECT },
+    { kind: 'repository-file', reference: 'src/context-envelope.ts', projectId: PROJECT, repositoryId: PROJECT, revision: SHA },
+    { kind: 'commit', reference: SHA, projectId: PROJECT, repositoryId: PROJECT, revision: SHA },
   ]);
 
   await expect(page.getByTestId('orch-context-inspect-toggle')).toContainText('4 sources');
