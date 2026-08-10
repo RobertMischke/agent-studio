@@ -1201,6 +1201,7 @@ public class ProjectDocsService
         "decision-pending" => "review-requested",
         "decided" => "decided",
         "archived" => "done",
+        "documented" => "documented",
         "invalid" => "review-requested",
         _ when phase == "decision-ready" => "review-requested",
         _ => "in-progress",
@@ -1219,14 +1220,15 @@ public class ProjectDocsService
         "review-requested" => 0,
         "in-progress" => 1,
         "decided" => 2,
-        "done" => 3,
-        _ => 4,
+        "documented" => 3,
+        "done" => 4,
+        _ => 5,
     };
 
     private static readonly HashSet<string> WikiLifecycleKinds = new(StringComparer.Ordinal)
         { "design", "concept", "exploration", "workbench" };
     private static readonly HashSet<string> WikiLifecycleStates = new(StringComparer.Ordinal)
-        { "in-progress", "review-requested", "decided", "done" };
+        { "in-progress", "review-requested", "decided", "documented", "done" };
 
     /// <summary>
     /// The top-level docs folder a page lives under (the first path segment), or

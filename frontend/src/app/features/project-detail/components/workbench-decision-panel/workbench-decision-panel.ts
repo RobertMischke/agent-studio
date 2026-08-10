@@ -84,7 +84,7 @@ export class WorkbenchDecisionPanelComponent {
     const decision = this.persistedDecision();
     if (decision) return decision.state === 'succeeded';
     const status = this.document().workbench.status;
-    return status === 'decided' || status === 'archived';
+    return status === 'decided' || status === 'documented' || status === 'archived';
   });
   readonly gateReady = computed(() =>
     this.document().workbench.phase === 'decision-ready'
@@ -206,6 +206,7 @@ export class WorkbenchDecisionPanelComponent {
   }
 
   stageLabel(): string {
+    if (this.document().workbench.status === 'documented') return 'Documented';
     switch (this.stage()) {
       case 'prepared': return 'Ready to confirm';
       case 'pending': return 'Decision in progress';

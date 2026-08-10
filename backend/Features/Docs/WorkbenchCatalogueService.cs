@@ -31,9 +31,9 @@ public sealed class WorkbenchCatalogueService
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private static readonly HashSet<string> CurrentStatuses = new(StringComparer.Ordinal)
-        { "active", "decision-pending" };
+        { "active", "decision-pending", "decided" };
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.Ordinal)
-        { "active", "decision-pending", "decided", "archived" };
+        { "active", "decision-pending", "decided", "documented", "archived" };
     private static readonly HashSet<string> AllowedPhases = new(StringComparer.Ordinal)
         { "shaping", "testing", "decision-ready" };
 
@@ -126,6 +126,8 @@ public sealed class WorkbenchCatalogueService
                 legacy.SourceTaskKeys));
         }
 
+        ApplyDocumentationProjection(items);
+
         var visible = WorkbenchOverviewPolicy.Sort(items
                 .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
                 .Select(item => new WorkbenchOverviewItem(projectName, item)))
@@ -200,7 +202,7 @@ public sealed class WorkbenchCatalogueService
             ProjectName: projectName,
             Count: sorted.Count,
             CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
-            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "decided"),
+            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "documented"),
             Items: sorted);
     }
 
@@ -851,11 +853,15 @@ public sealed class WorkbenchCatalogueService
             // (AGT-2375). The receipt records the decision, not the card.
             if (outcome == "archive" && spawned.Length != 0)
                 throw new InvalidDataException("Archive decisions cannot carry spawned task receipts.");
-            var expectedLifecycle = outcome == "archive" ? "done" : "decided";
-            if (lifecycleState != null && lifecycleState != expectedLifecycle)
-                throw new InvalidDataException($"Succeeded {outcome} decision requires lifecycleState '{expectedLifecycle}'.");
+            var lifecycleMatches = outcome == "archive"
+                ? lifecycleState == "done"
+                : lifecycleState is "decided" or "documented";
+            if (lifecycleState != null && !lifecycleMatches)
+                throw new InvalidDataException(outcome == "archive"
+                    ? "Succeeded archive decision requires lifecycleState 'done'."
+                    : "Succeeded feature decision requires lifecycleState 'decided' or 'documented'.");
         }
-        else if (lifecycleState is "decided" or "done")
+        else if (lifecycleState is "decided" or "documented" or "done")
         {
             throw new InvalidDataException("Pending or failed decisions must remain in a current lifecycle state.");
         }
@@ -878,6 +884,7 @@ public sealed class WorkbenchCatalogueService
     private static string StatusFromDecision(
         string lifecycleState, WorkbenchDecisionProjection? decision)
     {
+        if (lifecycleState == "documented") return "documented";
         if (decision == null) return StatusFromLifecycle(lifecycleState);
         if (decision.State is "pending" or "failed") return "decision-pending";
         return decision.Outcome == "archive" ? "archived" : "decided";
@@ -915,11 +922,12 @@ public sealed class WorkbenchCatalogueService
     }
 
     private static readonly HashSet<string> AllowedLifecycleStates = new(StringComparer.Ordinal)
-        { "in-progress", "review-requested", "decided", "done" };
+        { "in-progress", "review-requested", "decided", "documented", "done" };
     private static string StatusFromLifecycle(string state) => state switch
     {
         "in-progress" or "review-requested" => "active",
         "decided" => "decided",
+        "documented" => "documented",
         "done" => "archived",
         _ => "invalid",
     };
@@ -927,6 +935,7 @@ public sealed class WorkbenchCatalogueService
     {
         "decision-pending" => "review-requested",
         "decided" => "decided",
+        "documented" => "documented",
         "archived" => "done",
         _ when phase == "decision-ready" => "review-requested",
         _ => "in-progress",
@@ -958,6 +967,49 @@ public sealed class WorkbenchCatalogueService
         return result;
     }
 
+    private void ApplyDocumentationProjection(List<WorkbenchListItem> items)
+    {
+        var referenceIndex = _scanner.GetReferenceIndex();
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            if (!item.Valid) continue;
+
+            var references = new Dictionary<string, WorkbenchDocumentationReference>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var key in item.RelatedTaskKeys.Concat(item.Decision?.SpawnedTaskKeys ?? []))
+            {
+                if (string.IsNullOrWhiteSpace(key)) continue;
+                var normalized = key.Trim();
+                var task = referenceIndex.Resolve(normalized);
+                references[normalized] = new WorkbenchDocumentationReference(
+                    normalized,
+                    Exists: task != null,
+                    Terminal: task != null && WaitsOnEvaluator.IsFulfilledState(task.State),
+                    Lane: task?.State);
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Key))
+            {
+                foreach (var link in referenceIndex.Dependents(item.Key, TaskReferenceKinds.Workbenches))
+                {
+                    var key = (link.SourceKey ?? link.SourceJobId).Trim();
+                    if (key.Length == 0) continue;
+                    references[key] = new WorkbenchDocumentationReference(
+                        key,
+                        Exists: true,
+                        Terminal: WaitsOnEvaluator.IsFulfilledState(link.SourceState),
+                        Lane: link.SourceState);
+                }
+            }
+
+            items[index] = item with
+            {
+                Documentation = WorkbenchDocumentationPolicy.Evaluate(item.Status, references.Values),
+            };
+        }
+    }
+
     private static bool IsUtcLifecycleTimestamp(string value, out DateTimeOffset parsed)
     {
         parsed = default;
@@ -984,6 +1036,7 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     /// level gate so the queue never hides required operator action.
     /// </summary>
     public int OpenDecisionCount { get; init; }
+    public WorkbenchDocumentationProjection? Documentation { get; init; }
 }
 public record WorkbenchTaskReferences(
     string ProjectName,

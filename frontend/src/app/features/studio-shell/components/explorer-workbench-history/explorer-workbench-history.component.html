@@ -1,0 +1,26 @@
+@for (group of groups(); track group.status) {
+  <div
+    class="studio-workbench-history__items"
+    [attr.data-testid]="'studio-explorer-workbench-' + group.status + '-history'"
+  >
+    <span class="studio-workbench-history__label">{{ group.label }}</span>
+    @for (workbench of group.items; track workbench.id) {
+      <button
+        #workbenchTopic
+        type="button"
+        class="studio-workbench-topic"
+        [class.studio-workbench-topic--active]="isActive(workbench)"
+        [attr.aria-current]="isActive(workbench) ? 'page' : null"
+        [attr.aria-label]="workbench.title + ', ' + secondaryMeta(workbench)"
+        [appTooltip]="tooltip(workbench)"
+        [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
+        (click)="openWorkbench.emit(workbench)"
+      >
+        <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+        <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
+      </button>
+    } @empty {
+      <span class="studio-workbench-topics__state">{{ group.empty }}</span>
+    }
+  </div>
+}

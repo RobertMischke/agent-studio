@@ -46,9 +46,10 @@ export class WorkbenchOverviewComponent {
 
   readonly decisionPending = computed(() => this.itemsWithStatus('decision-pending'));
   readonly active = computed(() => this.itemsWithStatus('active'));
+  readonly tracking = computed(() => this.itemsWithStatus('decided'));
   readonly invalid = computed(() => this.itemsWithStatus('invalid'));
   readonly discarded = computed(() => this.itemsWithStatus('archived'));
-  readonly completed = computed(() => this.itemsWithStatus('decided'));
+  readonly documented = computed(() => this.itemsWithStatus('documented'));
 
   constructor() {
     effect(() => {
@@ -103,10 +104,12 @@ export class WorkbenchOverviewComponent {
   statusLabel(item: WorkbenchOverviewItem): string {
     const workbench = item.workbench;
     if (!workbench.valid) return 'Needs attention';
+    if (workbench.documentation?.eligible) return 'Ready to document';
     if (workbench.status === 'decision-pending') return 'Decision pending';
     if (workbench.status === 'active') return workbench.phase ?? 'Active';
+    if (workbench.status === 'decided') return 'Tracking';
     if (workbench.status === 'archived') return 'Discarded';
-    if (workbench.status === 'decided') return 'Completed';
+    if (workbench.status === 'documented') return 'Documented';
     return workbench.status;
   }
 

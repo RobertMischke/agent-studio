@@ -399,9 +399,9 @@ public sealed class WorkbenchDecisionService
                 })
                 : new(Failure(id, operationId, "already-settled",
                     "This Workbench already carries a settled decision."));
-        if (snapshot.Item.Status is "decided" or "archived")
+        if (snapshot.Item.Status is "decided" or "documented" or "archived")
             return new(Failure(id, operationId, "already-settled",
-                "This Workbench is already decided or archived."));
+                "This Workbench already carries a settled decision."));
         if (_catalogue.OperationIdOwnedByAnotherWorkbench(projectName, operationId, id))
             return new(Failure(id, operationId, "operation-id-conflict",
                 "This operationId belongs to a different Workbench."));

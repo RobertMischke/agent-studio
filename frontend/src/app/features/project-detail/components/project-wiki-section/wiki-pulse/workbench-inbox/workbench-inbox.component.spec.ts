@@ -30,7 +30,7 @@ describe('WorkbenchInboxComponent', () => {
     const valid = item('valid');
     const invalid = item('invalid', false);
     const catalogue: WorkbenchCatalogue = {
-      projectName: 'Demo', includesHistory: false, count: 2, items: [valid, invalid],
+      projectName: 'Demo', includesHistory: true, count: 2, items: [valid, invalid],
     };
     const page: WikiLifecycleItem = {
       relPath: 'concepts/indicator.md', title: 'Indicator alternatives', pageKind: 'exploration',
@@ -47,8 +47,14 @@ describe('WorkbenchInboxComponent', () => {
       editedBy: null, editedAtUtc: invalid.updatedAtUtc, history: [], workbenchId: invalid.id,
       valid: false, error: invalid.error,
     };
+    const documentedPage: WikiLifecycleItem = {
+      relPath: 'concepts/delivery.md', title: 'Delivery record', pageKind: 'concept', state: 'documented',
+      editedBy: 'Operator', editedAtUtc: new Date().toISOString(), history: [], workbenchId: null,
+      valid: true, error: null,
+    };
     const lifecycle: WikiPulseLifecycle = {
-      available: true, reason: null, count: 3, items: [page, invalidPage, workbenchPage],
+      available: true, reason: null, count: 4,
+      items: [page, invalidPage, workbenchPage, documentedPage],
     };
     fixture.componentRef.setInput('catalogue', catalogue);
     fixture.componentRef.setInput('lifecycle', lifecycle);
@@ -64,6 +70,8 @@ describe('WorkbenchInboxComponent', () => {
       '[data-testid="project-wiki-lifecycle-group-in-progress"]')?.textContent).toContain('valid');
     expect(fixture.nativeElement.querySelector(
       '[data-testid="project-wiki-lifecycle-group-invalid"]')?.textContent).toContain('invalid');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-group-documented"]')?.textContent).toContain('Delivery record');
     expect(fixture.nativeElement.querySelector(
       '[data-testid="project-wiki-lifecycle-group-review-requested"]')?.textContent).not.toContain('Descriptor needs repair.');
     const pageButton = fixture.nativeElement.querySelector(

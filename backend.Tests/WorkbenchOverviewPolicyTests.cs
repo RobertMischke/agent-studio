@@ -15,12 +15,13 @@ public sealed class WorkbenchOverviewPolicyTests
             Item("Project B", "active-old", "active", "2026-08-08T11:00:00Z"),
             Item("Project B", "pending-four", "decision-pending", "2026-08-08T12:00:00Z", 4),
             Item("Project A", "decided", "decided", "2026-08-09T14:00:00Z"),
+            Item("Project A", "documented", "documented", "2026-08-09T15:00:00Z"),
         };
 
         var sorted = WorkbenchOverviewPolicy.Sort(items);
 
         Assert.Equal(
-            ["pending-four", "pending-one", "active-new", "active-old", "archived", "decided"],
+            ["pending-four", "pending-one", "active-new", "active-old", "decided", "archived", "documented"],
             sorted.Select(item => item.Workbench.Id));
     }
 

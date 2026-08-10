@@ -33,14 +33,14 @@ function overview(items: WorkbenchOverviewItem[], projectName: string | null = n
   return {
     projectName,
     count: items.length,
-    currentCount: items.filter(entry => ['active', 'decision-pending'].includes(entry.workbench.status)).length,
-    historyCount: items.filter(entry => ['archived', 'decided'].includes(entry.workbench.status)).length,
+    currentCount: items.filter(entry => ['active', 'decision-pending', 'decided'].includes(entry.workbench.status)).length,
+    historyCount: items.filter(entry => ['archived', 'documented'].includes(entry.workbench.status)).length,
     items,
   };
 }
 
 describe('WorkbenchOverviewComponent', () => {
-  it('renders the priority queue and keeps discarded and completed history separate', async () => {
+  it('renders tracking items in the current queue and keeps discarded and documented history separate', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchOverviewComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -49,11 +49,21 @@ describe('WorkbenchOverviewComponent', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     const pending = item('pending', 'decision-pending', 3);
+    const tracking = item('tracking', 'decided');
+    tracking.workbench.documentation = {
+      eligible: true,
+      totalCount: 1,
+      terminalCount: 1,
+      openCount: 0,
+      missingCount: 0,
+      references: [{ key: 'AGT-1', exists: true, terminal: true, lane: '6-completed' }],
+    };
     http.expectOne('/api/workbenches').flush(overview([
       pending,
       item('active', 'active'),
+      tracking,
       item('discarded', 'archived'),
-      item('completed', 'decided'),
+      item('documented', 'documented'),
     ]));
     fixture.detectChanges();
 
@@ -61,6 +71,8 @@ describe('WorkbenchOverviewComponent', () => {
       .toContain('3 open');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('active');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
+      .toContain('Ready to document');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-discarded-list"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')).toBeNull();
 
@@ -70,7 +82,7 @@ describe('WorkbenchOverviewComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-discarded-list"]')?.textContent)
       .toContain('discarded');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')?.textContent)
-      .toContain('completed');
+      .toContain('documented');
 
     let opened: WorkbenchOverviewItem | null = null;
     fixture.componentInstance.openWorkbench.subscribe(value => opened = value);

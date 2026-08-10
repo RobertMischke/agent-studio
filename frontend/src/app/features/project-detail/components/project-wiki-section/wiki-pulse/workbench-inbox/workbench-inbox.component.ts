@@ -19,7 +19,8 @@ const GROUPS: readonly { state: WikiLifecycleState; label: string }[] = [
   { state: 'review-requested', label: 'New, wants review' },
   { state: 'in-progress', label: 'In progress' },
   { state: 'decided', label: 'Decided' },
-  { state: 'done', label: 'Done' },
+  { state: 'documented', label: 'Documented' },
+  { state: 'done', label: 'Archived' },
 ];
 
 @Component({

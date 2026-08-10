@@ -663,6 +663,7 @@ builder.Services.AddSingleton<PromptEnrichmentService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<WorkbenchChangeNotifier>();
 builder.Services.AddSingleton<WorkbenchDecisionService>();
+builder.Services.AddSingleton<WorkbenchLifecycleService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
