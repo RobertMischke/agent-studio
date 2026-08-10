@@ -279,7 +279,7 @@ internal sealed class DurableReviewProcess
         catch (ReviewInfrastructureException exception)
         {
             result = new DetachedReviewResult(
-                null,
+                exception.Evidence,
                 exception.Classification,
                 exception.Message,
                 DateTime.UtcNow);

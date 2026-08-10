@@ -8,11 +8,13 @@ public sealed record GatePreparationCommand(
     string WorkingSubdir,
     string Command,
     VerifyCommandShell Shell,
-    IReadOnlyList<GateDependencyScope> DependencyScopes);
+    IReadOnlyList<GateDependencyScope> DependencyScopes,
+    IReadOnlyList<string>? PreserveGlobs = null);
 
 /// <summary>
 /// One install root and its root-relative lockfiles. The gate feeds this shape
-/// into <see cref="AgentStudio.Runner.DepsState"/> after restoring the repo cache.
+/// into <see cref="AgentStudio.TaskServer.Contracts.DependencyPreparationState"/>
+/// after restoring the shared repository cache.
 /// </summary>
 public sealed record GateDependencyScope(
     string WorkingSubdir,
@@ -43,7 +45,8 @@ public static partial class GatePreparationPlanner
                     "",
                     profile.InstallCmd.Trim(),
                     VerifyCommandShell.Bash,
-                    ProfileDependencyScopes(repositoryPath, profile.Lockfiles)),
+                    ProfileDependencyScopes(repositoryPath, profile.Lockfiles),
+                    profile.PreserveGlobs),
             ];
         }
 
@@ -62,7 +65,8 @@ public static partial class GatePreparationPlanner
                 "",
                 DotNetRestore,
                 customCommands.Length > 0 ? VerifyCommandShell.Bash : VerifyCommandShell.Platform,
-                []));
+                [],
+                profile?.PreserveGlobs));
         }
 
         var nodeDirs = new HashSet<string>(
@@ -102,7 +106,8 @@ public static partial class GatePreparationPlanner
                 subdir,
                 NpmCi,
                 customCommands.Length > 0 ? VerifyCommandShell.Bash : VerifyCommandShell.Platform,
-                ConventionalNodeDependencyScopes(repositoryPath, subdir)));
+                ConventionalNodeDependencyScopes(repositoryPath, subdir),
+                profile?.PreserveGlobs));
         }
 
         return result;

@@ -41,6 +41,7 @@ public sealed class RemoteReviewWorkspace
         TempPath = Path.Combine(AttemptRoot, "tmp");
         HomePath = Path.Combine(AttemptRoot, "home");
         BaselineCacheRoot = Path.Combine(root, ".baseline-cache");
+        DependencyCacheRoot = Path.Combine(root, ".dependency-cache");
     }
 
     public string AttemptRoot { get; }
@@ -50,6 +51,7 @@ public sealed class RemoteReviewWorkspace
     public string TempPath { get; }
     public string HomePath { get; }
     public string BaselineCacheRoot { get; }
+    public string DependencyCacheRoot { get; }
 
     public IReadOnlyDictionary<string, string?> ProcessEnvironment()
     {
@@ -103,6 +105,7 @@ public sealed class RemoteReviewWorkspace
         Directory.CreateDirectory(TempPath);
         Directory.CreateDirectory(HomePath);
         Directory.CreateDirectory(BaselineCacheRoot);
+        Directory.CreateDirectory(DependencyCacheRoot);
 
         if (!string.IsNullOrWhiteSpace(_subject.RepositoryUrl))
             await MaterializeGitAsync(_subject.RepositoryUrl!, ct);
@@ -171,89 +174,164 @@ public sealed class RemoteReviewWorkspace
         var commands = new List<ReviewCommandEvidenceDto>();
         var verdicts = new List<ReviewVerdictDto>();
         var artifacts = new List<ReviewArtifactEvidenceDto>();
-        foreach (var command in _subject.Plan.Commands)
+        DependencyCacheSession? candidateCache = null;
+        try
         {
-            var headBefore = await GitValueAsync("rev-parse", "HEAD", ct);
-            var treeBefore = await GitValueAsync("rev-parse", "HEAD^{tree}", ct);
-            if (!string.Equals(headBefore, _subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase))
-                throw new ReviewInfrastructureException(
-                    "CommandSubjectMismatch",
-                    $"Step '{command.StepId}' would run at '{headBefore}', not '{_subject.ExpectedResultSha}'.");
-            var execution = await RunCommandAsync(command, RepositoryPath, ct);
-            BaselineComparison? comparison = null;
-            var retryPerformed = false;
-            if (command.CompareToBaseline && !execution.Process.Success)
+            candidateCache = await ExecutePreparationAsync(
+                RepositoryPath,
+                "candidate",
+                baselineSha: null,
+                ProcessEnvironment(),
+                commands,
+                artifacts,
+                ct);
+
+            foreach (var command in _subject.Plan.Commands)
             {
-                comparison = await CompareToBaselineAsync(command, execution.Process, ct);
-                if (comparison.NewFailures.Count > 0)
+                var headBefore = await GitValueAsync("rev-parse", "HEAD", ct);
+                var treeBefore = await GitValueAsync("rev-parse", "HEAD^{tree}", ct);
+                if (!string.Equals(headBefore, _subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase))
+                    throw new ReviewInfrastructureException(
+                        "CommandSubjectMismatch",
+                        $"Step '{command.StepId}' would run at '{headBefore}', not '{_subject.ExpectedResultSha}'.");
+                var execution = await RunCommandAsync(command, RepositoryPath, ct);
+                if (MissingToolchain(execution.Process))
                 {
-                    var reviewFlakyTests = ReviewFlakyTestIndex.Discover(RepositoryPath, _log);
-                    retryPerformed = true;
-                    await AddArtifactsAsync(
-                        $"{SafeSegment(command.StepId)}.initial",
+                    commands.Add(await AddCommandEvidenceAsync(
+                        command.StepId,
+                        command.Aspect,
+                        command.FileName,
+                        command.Arguments,
+                        headBefore,
+                        treeBefore,
                         execution.Process,
+                        execution.StartedAt,
+                        execution.FinishedAt,
+                        execution.Signal,
+                        command.TimeoutSeconds,
+                        "verification",
+                        "candidate",
+                        baselineSha: null,
+                        comparison: null,
+                        retryPerformed: false,
+                        dependencyCacheHit: false,
+                        dependencyCache: null,
+                        artifacts,
+                        ct));
+                    SaveCaches(candidateCache);
+                    throw await InfrastructureFailureAsync(
+                        "ToolUnavailable",
+                        $"Review command '{command.StepId}' could not use its declared toolchain: " +
+                        $"{CommandLine(command)}; exit={execution.Process.ExitCode}; " +
+                        $"budget={BudgetSummary(command.TimeoutSeconds, execution)}.",
+                        commands,
                         artifacts,
                         ct);
-                    execution = await RunCommandAsync(command, RepositoryPath, ct);
-                    comparison = comparison.Reclassify(
-                        SubjectFailures(command, execution.Process),
-                        reviewFlakyTests);
+                }
+
+                BaselineComparison? comparison = null;
+                var retryPerformed = false;
+                if (command.CompareToBaseline && !execution.Process.Success)
+                {
+                    comparison = await CompareToBaselineAsync(
+                        command,
+                        execution.Process,
+                        candidateCache,
+                        commands,
+                        artifacts,
+                        ct);
+                    if (comparison.NewFailures.Count > 0)
+                    {
+                        var reviewFlakyTests = ReviewFlakyTestIndex.Discover(RepositoryPath, _log);
+                        retryPerformed = true;
+                        await AddArtifactsAsync(
+                            $"candidate.{SafeSegment(command.StepId)}.initial",
+                            execution.Process,
+                            artifacts,
+                            ct);
+                        execution = await RunCommandAsync(command, RepositoryPath, ct);
+                        if (MissingToolchain(execution.Process))
+                        {
+                            commands.Add(await AddCommandEvidenceAsync(
+                                command.StepId,
+                                command.Aspect,
+                                command.FileName,
+                                command.Arguments,
+                                headBefore,
+                                treeBefore,
+                                execution.Process,
+                                execution.StartedAt,
+                                execution.FinishedAt,
+                                execution.Signal,
+                                command.TimeoutSeconds,
+                                "verification",
+                                "candidate",
+                                comparison.BaselineSha,
+                                comparison: null,
+                                retryPerformed: true,
+                                dependencyCacheHit: false,
+                                dependencyCache: null,
+                                artifacts,
+                                ct));
+                            SaveCaches(candidateCache);
+                            throw await InfrastructureFailureAsync(
+                                "ToolUnavailable",
+                                $"Review retry '{command.StepId}' lost its declared toolchain; " +
+                                $"exit={execution.Process.ExitCode}; budget={BudgetSummary(command.TimeoutSeconds, execution)}.",
+                                commands,
+                                artifacts,
+                                ct);
+                        }
+                        comparison = comparison.Reclassify(
+                            SubjectFailures(command, execution.Process),
+                            reviewFlakyTests);
+                    }
+                }
+
+                commands.Add(await AddCommandEvidenceAsync(
+                    command.StepId,
+                    command.Aspect,
+                    command.FileName,
+                    command.Arguments,
+                    headBefore,
+                    treeBefore,
+                    execution.Process,
+                    execution.StartedAt,
+                    execution.FinishedAt,
+                    execution.Signal,
+                    command.TimeoutSeconds,
+                    "verification",
+                    "candidate",
+                    comparison?.BaselineSha,
+                    comparison,
+                    retryPerformed,
+                    dependencyCacheHit: false,
+                    dependencyCache: null,
+                    artifacts,
+                    ct));
+                verdicts.Add(comparison is null
+                    ? ParseVerdict(command, execution.Process)
+                    : BaselineVerdict(command, comparison));
+                if (checkpoint is not null)
+                {
+                    await checkpoint(
+                        new ReviewExecutionCheckpoint(
+                            commands.Select(item => item.StepId).ToArray(),
+                            commands.Sum(item => Math.Max(
+                                0,
+                                (item.FinishedAt - item.StartedAt).TotalSeconds)),
+                            DateTime.UtcNow),
+                        ct);
                 }
             }
-
-            var stdoutPath = Path.Combine(ArtifactPath, $"{SafeSegment(command.StepId)}.stdout.log");
-            var stderrPath = Path.Combine(ArtifactPath, $"{SafeSegment(command.StepId)}.stderr.log");
-            await File.WriteAllTextAsync(stdoutPath, execution.Process.StdOut, ct);
-            await File.WriteAllTextAsync(stderrPath, execution.Process.StdErr, ct);
-            var stdout = HashText(execution.Process.StdOut);
-            var stderr = HashText(execution.Process.StdErr);
-            commands.Add(new ReviewCommandEvidenceDto(
-                command.StepId,
-                command.Aspect,
-                command.FileName,
-                command.Arguments,
-                _subject.ExpectedResultSha,
-                headBefore,
-                treeBefore,
-                execution.StartedAt,
-                execution.FinishedAt,
-                execution.Process.ExitCode,
-                execution.Signal,
-                stdout,
-                stderr,
-                comparison?.BaselineSha,
-                comparison?.NewFailures,
-                comparison?.PreExistingFailures,
-                comparison?.CacheHit ?? false,
-                retryPerformed,
-                comparison?.FlakyQuarantinedFailures));
-            artifacts.Add(new ReviewArtifactEvidenceDto(
-                Path.GetFileName(stdoutPath), "text/plain", stdout, new FileInfo(stdoutPath).Length));
-            artifacts.Add(new ReviewArtifactEvidenceDto(
-                Path.GetFileName(stderrPath), "text/plain", stderr, new FileInfo(stderrPath).Length));
-            verdicts.Add(comparison is null
-                ? ParseVerdict(command, execution.Process)
-                : BaselineVerdict(command, comparison));
-            if (checkpoint is not null)
-            {
-                await checkpoint(
-                    new ReviewExecutionCheckpoint(
-                        commands.Select(item => item.StepId).ToArray(),
-                        commands.Sum(item => Math.Max(
-                            0,
-                            (item.FinishedAt - item.StartedAt).TotalSeconds)),
-                        DateTime.UtcNow),
-                    ct);
-            }
+        }
+        finally
+        {
+            if (candidateCache is not null)
+                foreach (var message in candidateCache.Save()) _log(message);
         }
 
-        var finalHead = await GitValueAsync("rev-parse", "HEAD", ct);
-        var finalTree = await GitValueAsync("rev-parse", "HEAD^{tree}", ct);
-        var status = await GitValueAsync("status", "--porcelain", "--untracked-files=all", ct);
-        var dirtyAfter = status.Length > 0
-                         || !string.Equals(finalHead, _subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
-                         || !string.Equals(finalTree, _initialTree, StringComparison.OrdinalIgnoreCase);
-        var proof = Proof(_subject.RepositoryId, finalHead, finalTree, dirtyAfter);
+        var proof = await CurrentProofAsync(ct);
         var outcome = verdicts.Any(verdict =>
             verdict.Status is "block" or "concerns" or "fail")
             ? "ProductFailure"
@@ -266,6 +344,23 @@ public sealed class RemoteReviewWorkspace
         string workingDirectory,
         CancellationToken ct,
         IReadOnlyDictionary<string, string?>? environment = null)
+        => await RunCommandAsync(
+            command.StepId,
+            command.FileName,
+            command.Arguments,
+            command.TimeoutSeconds,
+            workingDirectory,
+            ct,
+            environment);
+
+    private async Task<CommandExecution> RunCommandAsync(
+        string stepId,
+        string fileName,
+        IReadOnlyList<string> arguments,
+        int timeoutSeconds,
+        string workingDirectory,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
         var started = DateTime.UtcNow;
         ProcessResult process;
@@ -273,14 +368,22 @@ public sealed class RemoteReviewWorkspace
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(command.TimeoutSeconds, 1, 7200)));
-            process = await ProcessRunner.RunAsync(
-                command.FileName,
-                command.Arguments,
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 7200)));
+            var completeStdout = new StringBuilder();
+            var completeStderr = new StringBuilder();
+            var boundedProcess = await ProcessRunner.RunAsync(
+                fileName,
+                arguments,
                 workingDirectory,
+                onStdOut: line => completeStdout.AppendLine(line),
+                onStdErr: line => completeStderr.AppendLine(line),
                 environment: environment ?? ProcessEnvironment(),
                 clearEnvironment: true,
                 ct: timeout.Token);
+            process = new ProcessResult(
+                boundedProcess.ExitCode,
+                completeStdout.ToString(),
+                completeStderr.ToString());
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -289,17 +392,313 @@ public sealed class RemoteReviewWorkspace
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            throw new ReviewInfrastructureException(
-                "ToolUnavailable",
-                $"Review step '{command.StepId}' could not start: {exception.Message}",
-                exception);
+            process = new ProcessResult(
+                127,
+                string.Empty,
+                $"Review step '{stepId}' could not start: {exception.Message}");
         }
         return new CommandExecution(process, started, DateTime.UtcNow, signal);
+    }
+
+    private async Task<DependencyCacheSession?> ExecutePreparationAsync(
+        string workspacePath,
+        string workspaceRole,
+        string? baselineSha,
+        IReadOnlyDictionary<string, string?> environment,
+        ICollection<ReviewCommandEvidenceDto> commands,
+        ICollection<ReviewArtifactEvidenceDto> artifacts,
+        CancellationToken ct)
+    {
+        var preparation = _subject.Plan.Preparation ?? [];
+        if (preparation.Count == 0) return null;
+
+        var scopes = preparation
+            .SelectMany(command => command.DependencyScopes ?? [])
+            .GroupBy(scope => scope.WorkingSubdir, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new ReviewDependencyScopeDto(
+                group.Key,
+                group.SelectMany(scope => scope.Lockfiles)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()))
+            .ToArray();
+        var cacheRole = workspaceRole.StartsWith("baseline", StringComparison.Ordinal)
+            ? "baseline"
+            : "candidate";
+        var cache = DependencyCacheSession.Create(
+            DependencyCacheRoot,
+            _subject.RepositoryId,
+            workspacePath,
+            scopes,
+            _subject.Plan.PreserveGlobs,
+            cacheRole,
+            _log);
+        var cacheMessages = cache.Restore();
+
+        foreach (var command in preparation)
+        {
+            var headBefore = await GitValueAtAsync(
+                workspacePath,
+                ["rev-parse", "HEAD"],
+                environment,
+                ct);
+            var treeBefore = await GitValueAtAsync(
+                workspacePath,
+                ["rev-parse", "HEAD^{tree}"],
+                environment,
+                ct);
+            var dependencyDecisions = (command.DependencyScopes ?? [])
+                .Select(scope =>
+                {
+                    var installRoot = ResolveWorkingDirectory(workspacePath, scope.WorkingSubdir);
+                    return (InstallRoot: installRoot,
+                        Decision: DependencyPreparationState.Evaluate(installRoot, scope));
+                })
+                .ToArray();
+            var installNeeded = dependencyDecisions.Length == 0
+                                || dependencyDecisions.Any(item => item.Decision.State != "hit");
+            CommandExecution execution;
+            if (installNeeded)
+            {
+                var workingDirectory = ResolveWorkingDirectory(
+                    workspacePath,
+                    command.WorkingSubdir);
+                execution = Directory.Exists(workingDirectory)
+                    ? await RunCommandAsync(
+                        command.StepId,
+                        command.FileName,
+                        command.Arguments,
+                        command.TimeoutSeconds,
+                        workingDirectory,
+                        ct,
+                        environment)
+                    : new CommandExecution(
+                        new ProcessResult(
+                            127,
+                            string.Empty,
+                            $"Dependency preparation directory is missing: {workingDirectory}"),
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        null);
+            }
+            else
+            {
+                var now = DateTime.UtcNow;
+                var output = string.Join(Environment.NewLine,
+                    cacheMessages.Concat(dependencyDecisions.Select(item =>
+                        $"dependency-cache hit scope={item.Decision.Scope} " +
+                        $"reason={item.Decision.Reason} lockHash={item.Decision.LockHash}")));
+                execution = new CommandExecution(new ProcessResult(0, output, string.Empty), now, now, null);
+            }
+
+            var evidence = dependencyDecisions
+                .Select(item => item.Decision with { InstallRan = installNeeded })
+                .ToArray();
+            if (installNeeded && execution.Process.Success)
+            {
+                foreach (var item in dependencyDecisions)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.Decision.LockHash))
+                        DependencyPreparationState.Stamp(item.InstallRoot, item.Decision.LockHash);
+                }
+            }
+
+            commands.Add(await AddCommandEvidenceAsync(
+                command.StepId,
+                "preparation",
+                command.FileName,
+                command.Arguments,
+                headBefore,
+                treeBefore,
+                execution.Process,
+                execution.StartedAt,
+                execution.FinishedAt,
+                execution.Signal,
+                command.TimeoutSeconds,
+                "preparation",
+                workspaceRole,
+                baselineSha,
+                comparison: null,
+                retryPerformed: false,
+                dependencyCacheHit: !installNeeded,
+                dependencyCache: evidence,
+                artifacts,
+                ct));
+
+            if (!execution.Process.Success || execution.Signal is not null)
+            {
+                foreach (var message in cache.Save()) _log(message);
+                var summary =
+                    $"Dependency preparation '{command.StepId}' failed: " +
+                    $"command={CommandLine(command)}; exit={execution.Process.ExitCode}; " +
+                    $"budget={BudgetSummary(command.TimeoutSeconds, execution)}; " +
+                    $"stdout={ArtifactName(workspaceRole, command.StepId, "stdout")}; " +
+                    $"stderr={ArtifactName(workspaceRole, command.StepId, "stderr")}.";
+                throw await InfrastructureFailureAsync(
+                    "PreparationFailed",
+                    summary,
+                    commands,
+                    artifacts,
+                    ct);
+            }
+        }
+
+        return cache;
+    }
+
+    private async Task<ReviewCommandEvidenceDto> AddCommandEvidenceAsync(
+        string stepId,
+        string aspect,
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string headBefore,
+        string treeBefore,
+        ProcessResult process,
+        DateTime startedAt,
+        DateTime finishedAt,
+        string? signal,
+        int timeoutSeconds,
+        string phase,
+        string workspaceRole,
+        string? baselineSha,
+        BaselineComparison? comparison,
+        bool retryPerformed,
+        bool dependencyCacheHit,
+        IReadOnlyList<ReviewDependencyCacheEvidenceDto>? dependencyCache,
+        ICollection<ReviewArtifactEvidenceDto> artifacts,
+        CancellationToken ct)
+    {
+        var stdoutName = ArtifactName(workspaceRole, stepId, "stdout");
+        var stderrName = ArtifactName(workspaceRole, stepId, "stderr");
+        var includeContent = !process.Success || signal is not null;
+        var stdout = await WriteArtifactAsync(stdoutName, process.StdOut, includeContent, ct);
+        var stderr = await WriteArtifactAsync(stderrName, process.StdErr, includeContent, ct);
+        artifacts.Add(stdout);
+        artifacts.Add(stderr);
+        var consumed = Math.Max(0, (long)(finishedAt - startedAt).TotalMilliseconds);
+        var limit = Math.Clamp(timeoutSeconds, 1, 7200) * 1000L;
+        return new ReviewCommandEvidenceDto(
+            stepId,
+            aspect,
+            fileName,
+            arguments,
+            _subject.ExpectedResultSha,
+            headBefore,
+            treeBefore,
+            startedAt,
+            finishedAt,
+            process.ExitCode,
+            signal,
+            stdout.Sha256,
+            stderr.Sha256,
+            baselineSha,
+            comparison?.NewFailures,
+            comparison?.PreExistingFailures,
+            comparison?.CacheHit ?? false,
+            retryPerformed,
+            comparison?.FlakyQuarantinedFailures,
+            phase,
+            workspaceRole,
+            new ReviewCommandBudgetEvidenceDto(
+                "review-command",
+                limit,
+                consumed,
+                signal == "timeout" || consumed > limit),
+            dependencyCacheHit,
+            dependencyCache);
+    }
+
+    private async Task<ReviewArtifactEvidenceDto> WriteArtifactAsync(
+        string name,
+        string content,
+        bool includeContent,
+        CancellationToken ct)
+    {
+        var path = Path.Combine(ArtifactPath, name);
+        await File.WriteAllTextAsync(path, content, new UTF8Encoding(false), ct);
+        var bytes = Encoding.UTF8.GetBytes(content);
+        return new ReviewArtifactEvidenceDto(
+            name,
+            "text/plain",
+            HashText(content),
+            bytes.LongLength,
+            includeContent ? Convert.ToBase64String(bytes) : null);
+    }
+
+    private async Task<ReviewInfrastructureException> InfrastructureFailureAsync(
+        string classification,
+        string summary,
+        ICollection<ReviewCommandEvidenceDto> commands,
+        ICollection<ReviewArtifactEvidenceDto> artifacts,
+        CancellationToken ct)
+        => new(
+            classification,
+            summary,
+            evidence: new ReviewExecutionEvidence(
+                "ReviewInfra",
+                await CurrentProofAsync(ct),
+                commands.ToArray(),
+                artifacts.ToArray(),
+                []));
+
+    private async Task<ReviewWorkspaceProofDto> CurrentProofAsync(CancellationToken ct)
+    {
+        var finalHead = await GitValueAsync("rev-parse", "HEAD", ct);
+        var finalTree = await GitValueAsync("rev-parse", "HEAD^{tree}", ct);
+        var status = await GitValueAsync("status", "--porcelain", "--untracked-files=all", ct);
+        var productChanges = status.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !line.Trim().EndsWith(
+                DependencyPreparationState.MarkerFileName,
+                StringComparison.Ordinal))
+            .ToArray();
+        var dirtyAfter = productChanges.Length > 0
+                         || !string.Equals(finalHead, _subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
+                         || !string.Equals(finalTree, _initialTree, StringComparison.OrdinalIgnoreCase);
+        return Proof(_subject.RepositoryId, finalHead, finalTree, dirtyAfter);
+    }
+
+    private static bool MissingToolchain(ProcessResult process)
+        => process.ExitCode == 127
+           || (process.ExitCode != 0
+               && (process.StdOut + "\n" + process.StdErr).Contains(
+                   "node_modules/@angular/cli/bin/ng.js",
+                   StringComparison.OrdinalIgnoreCase));
+
+    private static string BudgetSummary(int timeoutSeconds, CommandExecution execution)
+    {
+        var limit = Math.Clamp(timeoutSeconds, 1, 7200) * 1000L;
+        var consumed = Math.Max(0, (long)(execution.FinishedAt - execution.StartedAt).TotalMilliseconds);
+        return $"review-command limit={limit}ms consumed={consumed}ms " +
+               $"violated={(execution.Signal == "timeout" || consumed > limit).ToString().ToLowerInvariant()}";
+    }
+
+    private static string ArtifactName(string workspaceRole, string stepId, string stream)
+        => $"{SafeSegment(workspaceRole)}.{SafeSegment(stepId)}.{stream}.log";
+
+    private static string CommandLine(ReviewPreparationCommandDto command)
+        => string.Join(' ', new[] { command.FileName }.Concat(command.Arguments));
+
+    private static string ResolveWorkingDirectory(string workspacePath, string? workingSubdir)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspacePath));
+        var candidate = string.IsNullOrWhiteSpace(workingSubdir)
+            ? root
+            : Path.GetFullPath(Path.Combine(
+                root,
+                workingSubdir.Replace('/', Path.DirectorySeparatorChar)));
+        if (!candidate.Equals(root, StringComparison.OrdinalIgnoreCase)
+            && !candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new ReviewInfrastructureException(
+                "PreparationPathInvalid",
+                $"Dependency preparation directory escaped the immutable workspace: {workingSubdir}");
+        return candidate;
     }
 
     private async Task<BaselineComparison> CompareToBaselineAsync(
         ReviewCommandDto command,
         ProcessResult subjectResult,
+        DependencyCacheSession? candidateCache,
+        ICollection<ReviewCommandEvidenceDto> commands,
+        ICollection<ReviewArtifactEvidenceDto> artifacts,
         CancellationToken ct)
     {
         var baselineSha = await ResolveBaselineShaAsync(ct);
@@ -348,16 +747,84 @@ public sealed class RemoteReviewWorkspace
                 baselineSha,
                 command);
 
-        var execution = await RunCommandAsync(
-            command,
-            baselinePath,
-            ct,
-            BaselineProcessEnvironment(commandHash));
-        if (execution.Signal is not null || execution.Process.ExitCode < 0)
-            throw BaselineUnavailable(
-                $"Baseline command '{command.StepId}' did not complete normally.",
+        var environment = BaselineProcessEnvironment(commandHash);
+        var workspaceRole = $"baseline-{commandHash[..12]}";
+        DependencyCacheSession? baselineCache = null;
+        CommandExecution execution;
+        try
+        {
+            baselineCache = await ExecutePreparationAsync(
+                baselinePath,
+                workspaceRole,
                 baselineSha,
-                command);
+                environment,
+                commands,
+                artifacts,
+                ct);
+            var headBefore = await GitValueAtAsync(
+                baselinePath,
+                ["rev-parse", "HEAD"],
+                environment,
+                ct);
+            var treeBefore = await GitValueAtAsync(
+                baselinePath,
+                ["rev-parse", "HEAD^{tree}"],
+                environment,
+                ct);
+            execution = await RunCommandAsync(command, baselinePath, ct, environment);
+            commands.Add(await AddCommandEvidenceAsync(
+                command.StepId,
+                command.Aspect,
+                command.FileName,
+                command.Arguments,
+                headBefore,
+                treeBefore,
+                execution.Process,
+                execution.StartedAt,
+                execution.FinishedAt,
+                execution.Signal,
+                command.TimeoutSeconds,
+                "verification",
+                workspaceRole,
+                baselineSha,
+                comparison: null,
+                retryPerformed: false,
+                dependencyCacheHit: false,
+                dependencyCache: null,
+                artifacts,
+                ct));
+            if (MissingToolchain(execution.Process))
+            {
+                SaveCaches(baselineCache, candidateCache);
+                throw await InfrastructureFailureAsync(
+                    "ToolUnavailable",
+                    $"Baseline review command '{command.StepId}' could not use its declared toolchain: " +
+                    $"{CommandLine(command)}; exit={execution.Process.ExitCode}; " +
+                    $"budget={BudgetSummary(command.TimeoutSeconds, execution)}.",
+                    commands,
+                    artifacts,
+                    ct);
+            }
+            if (execution.Signal is not null || execution.Process.ExitCode < 0)
+            {
+                var unavailable = BaselineUnavailable(
+                    $"Baseline command '{command.StepId}' did not complete normally.",
+                    baselineSha,
+                    command);
+                SaveCaches(baselineCache, candidateCache);
+                throw await InfrastructureFailureAsync(
+                    unavailable.Classification,
+                    unavailable.Message,
+                    commands,
+                    artifacts,
+                    ct);
+            }
+        }
+        finally
+        {
+            if (baselineCache is not null)
+                foreach (var message in baselineCache.Save()) _log(message);
+        }
         var failures = ParsedTestFailures(execution.Process);
         var entry = new BaselineCacheEntry(
             TestFailureParserVersion,
@@ -373,6 +840,12 @@ public sealed class RemoteReviewWorkspace
             failures,
             SubjectFailures(command, subjectResult),
             cacheHit: false);
+    }
+
+    private void SaveCaches(params DependencyCacheSession?[] sessions)
+    {
+        foreach (var session in sessions.Where(item => item is not null).Cast<DependencyCacheSession>())
+            foreach (var message in session.Save()) _log(message);
     }
 
     private IReadOnlyDictionary<string, string?> BaselineProcessEnvironment(string commandHash)
@@ -539,13 +1012,11 @@ public sealed class RemoteReviewWorkspace
                      ("stderr.log", process.StdErr),
                  })
         {
-            var path = Path.Combine(ArtifactPath, $"{name}.{suffix}");
-            await File.WriteAllTextAsync(path, content, ct);
-            artifacts.Add(new ReviewArtifactEvidenceDto(
-                Path.GetFileName(path),
-                "text/plain",
-                HashText(content),
-                new FileInfo(path).Length));
+            artifacts.Add(await WriteArtifactAsync(
+                $"{name}.{suffix}",
+                content,
+                includeContent: true,
+                ct));
         }
     }
 
@@ -557,6 +1028,8 @@ public sealed class RemoteReviewWorkspace
             ["git"] = ExecutableIdentity("git"),
         };
         foreach (var command in _subject.Plan.Commands)
+            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
+        foreach (var command in _subject.Plan.Preparation ?? [])
             toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
         return new ReviewEnvironmentDto(
             _lease.HostId,
@@ -572,6 +1045,7 @@ public sealed class RemoteReviewWorkspace
                 ["workspace"] = AttemptRoot,
                 ["cache"] = CachePath,
                 ["baselineResultCache"] = BaselineCacheRoot,
+                ["dependencyCache"] = DependencyCacheRoot,
                 ["temp"] = TempPath,
                 ["ports"] = $"{_lease.PortBase}-{_lease.PortBase + 7}",
                 ["containers"] = _lease.ResourceNamespace,
@@ -664,10 +1138,21 @@ public sealed class RemoteReviewWorkspace
         => await GitValueAsync([first, second, third], ct);
 
     private async Task<string> GitValueAsync(IReadOnlyList<string> arguments, CancellationToken ct)
+        => await GitValueAtAsync(
+            RepositoryPath,
+            arguments,
+            ProcessEnvironment(),
+            ct);
+
+    private static async Task<string> GitValueAtAsync(
+        string repositoryPath,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string?> environment,
+        CancellationToken ct)
     {
         var result = await ProcessRunner.RunAsync(
-            "git", arguments, RepositoryPath,
-            environment: ProcessEnvironment(), clearEnvironment: true, ct: ct);
+            "git", arguments, repositoryPath,
+            environment: environment, clearEnvironment: true, ct: ct);
         if (!result.Success)
             throw new ReviewInfrastructureException(
                 "WorkspaceProofFailed",
@@ -1035,11 +1520,17 @@ internal sealed record BaselineComparison(
 
 public sealed class ReviewInfrastructureException : Exception
 {
-    public ReviewInfrastructureException(string classification, string message, Exception? inner = null)
+    public ReviewInfrastructureException(
+        string classification,
+        string message,
+        Exception? inner = null,
+        ReviewExecutionEvidence? evidence = null)
         : base(message, inner)
     {
         Classification = classification;
+        Evidence = evidence;
     }
 
     public string Classification { get; }
+    public ReviewExecutionEvidence? Evidence { get; }
 }

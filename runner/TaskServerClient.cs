@@ -182,6 +182,7 @@ public sealed class TaskServerClient : IDisposable
                     Contract.ReviewCapabilities.SemanticReview,
                     Contract.ReviewCapabilities.VisionReview,
                     Contract.ReviewCapabilities.BaselineComparison,
+                    Contract.ReviewCapabilities.DependencyPreparation,
                 ]
                 : [
                     Contract.ReviewCapabilities.CodingExecutor,

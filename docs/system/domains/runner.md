@@ -379,6 +379,14 @@ state.
   `SnapshotUnavailable`; wrong repository, wrong SHA, dirty-before, and
   mutated-after are typed infrastructure outcomes. They stay in Auto Review and
   consume no coding attempt.
+- A Review Executor advertises dependency-preparation capability before it can
+  claim a plan with preparation work. The immutable plan carries the build
+  profile install command, lockfile scopes, and preserve globs. Candidate and
+  baseline workspaces execute that preparation before verification using
+  role-isolated instances of the shared gate dependency cache. Lockfile digest
+  changes invalidate the cached dependency state. Preparation failure and a
+  verification exit 127 are typed `ReviewInfra`; the report retains the exact
+  failed command, exit code, budget, and complete stdout and stderr artifacts.
 - Draining closes review admission but not active renew, report, or cleanup.
   Safe shutdown and restore include unresolved ReviewAttempt authority, and
   a positively proven planned-restart adoption retains the ReviewAttempt,

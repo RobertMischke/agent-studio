@@ -448,6 +448,8 @@ public sealed partial class TaskServerStore
             requirements.Add(CapabilityProtocol.Vision);
         if (subject.Plan.Commands.Any(command => command.CompareToBaseline))
             requirements.Add(ReviewCapabilities.BaselineComparison);
+        if (subject.Plan.Preparation is { Count: > 0 })
+            requirements.Add(ReviewCapabilities.DependencyPreparation);
         if (subject.Plan.RequiredAspects.Any(aspect =>
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence"))
             requirements.Add(ReviewCapabilities.SemanticReview);
@@ -693,7 +695,12 @@ public sealed partial class TaskServerStore
         if (request.Plan.Commands.Count == 0 || request.Plan.RequiredAspects.Count == 0)
             throw new ArgumentException("Review plan commands and required aspects are required.");
         var commandIds = request.Plan.Commands.Select(command => command.StepId).ToHashSet(StringComparer.Ordinal);
-        if (commandIds.Count != request.Plan.Commands.Count)
+        var preparationIds = (request.Plan.Preparation ?? [])
+            .Select(command => command.StepId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (commandIds.Count != request.Plan.Commands.Count
+            || preparationIds.Count != (request.Plan.Preparation?.Count ?? 0)
+            || commandIds.Overlaps(preparationIds))
             throw new ArgumentException("Review command step ids must be unique.");
         if (request.Plan.Commands.Any(command => command.CompareToBaseline)
             && string.IsNullOrWhiteSpace(request.Plan.IntegrationRef))
@@ -735,8 +742,10 @@ public sealed partial class TaskServerStore
             return ("ReviewInfra", "ContainmentMismatch");
         if (!request.Environment.Toolchain.ContainsKey("runtime")
             || !request.Environment.Toolchain.ContainsKey("git")
-            || subject.Plan.Commands.Any(command =>
-                !request.Environment.Toolchain.ContainsKey($"command:{command.StepId}")))
+            || subject.Plan.Commands.Select(command => command.StepId)
+                .Concat((subject.Plan.Preparation ?? []).Select(command => command.StepId))
+                .Any(stepId =>
+                    !request.Environment.Toolchain.ContainsKey($"command:{stepId}")))
             return ("ReviewInfra", "ToolchainIdentityMissing");
         if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal)
             && request.FailureClassification is "SnapshotUnavailable" or "SourceBundleDigestMismatch")
@@ -755,27 +764,50 @@ public sealed partial class TaskServerStore
             return ("ReviewInfra", request.FailureClassification);
         if (request.Commands.Any(command =>
                 !string.Equals(command.ExpectedResultSha, subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(command.HeadBefore, subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(command.TreeBefore, request.Workspace.TreeHash, StringComparison.OrdinalIgnoreCase)))
+                || (command.WorkspaceRole.StartsWith("baseline", StringComparison.Ordinal)
+                    ? string.IsNullOrWhiteSpace(command.BaselineSha)
+                      || !string.Equals(command.HeadBefore, command.BaselineSha, StringComparison.OrdinalIgnoreCase)
+                      || string.IsNullOrWhiteSpace(command.TreeBefore)
+                    : !string.Equals(command.HeadBefore, subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
+                      || !string.Equals(
+                          command.TreeBefore,
+                          request.Workspace.TreeHash,
+                          StringComparison.OrdinalIgnoreCase))))
             return ("ReviewInfra", "CommandSubjectMismatch");
+        if (ReviewToolchainFailurePolicy.IsUnavailable(request.Commands, request.Artifacts))
+            return ("ReviewInfra", "ToolUnavailable");
+        if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal)
+            && request.FailureClassification is "PreparationFailed")
+            return ClassifyPreparationFailure(subject, request);
         var verdictAspects = request.Verdicts.Select(verdict => verdict.Aspect).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (subject.Plan.RequiredAspects.Any(aspect => !verdictAspects.Contains(aspect)))
             return ("ReviewInfra", "IncompleteReviewReport");
-        var commandSteps = request.Commands.Select(command => command.StepId).ToHashSet(StringComparer.Ordinal);
-        if (commandSteps.Count != request.Commands.Count)
+        var commandKeys = request.Commands
+            .Select(command => $"{command.Phase}\0{command.WorkspaceRole}\0{command.StepId}")
+            .ToHashSet(StringComparer.Ordinal);
+        if (commandKeys.Count != request.Commands.Count)
             return ("ReviewInfra", "DuplicateCommandEvidence");
-        if (subject.Plan.Commands.Where(command => command.Required).Any(command => !commandSteps.Contains(command.StepId)))
+        var candidateSteps = request.Commands
+            .Where(command => command.Phase == "verification" && command.WorkspaceRole == "candidate")
+            .Select(command => command.StepId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (subject.Plan.Commands.Where(command => command.Required).Any(command => !candidateSteps.Contains(command.StepId)))
             return ("ReviewInfra", "IncompleteCommandEvidence");
+        var candidatePreparation = request.Commands
+            .Where(command => command.Phase == "preparation" && command.WorkspaceRole == "candidate")
+            .Select(command => command.StepId)
+            .ToHashSet(StringComparer.Ordinal);
+        if ((subject.Plan.Preparation ?? []).Any(command => !candidatePreparation.Contains(command.StepId)))
+            return ("ReviewInfra", "IncompletePreparationEvidence");
         foreach (var command in request.Commands)
         {
             var planned = subject.Plan.Commands.SingleOrDefault(item =>
                 string.Equals(item.StepId, command.StepId, StringComparison.Ordinal));
-            if (planned is null
-                || !string.Equals(planned.Aspect, command.Aspect, StringComparison.Ordinal)
-                || !string.Equals(planned.FileName, command.FileName, StringComparison.Ordinal)
-                || !planned.Arguments.SequenceEqual(command.Arguments, StringComparer.Ordinal))
+            var plannedPreparation = (subject.Plan.Preparation ?? []).SingleOrDefault(item =>
+                string.Equals(item.StepId, command.StepId, StringComparison.Ordinal));
+            if (!CommandMatchesPlan(command, planned, plannedPreparation))
                 return ("ReviewInfra", "CommandPlanMismatch");
-            if (planned.CompareToBaseline
+            if (planned?.CompareToBaseline == true
                 && command.BaselineSha is not null
                 && (!ValidDigest(command.BaselineSha, 40, 64)
                     || command.NewFailures is null
@@ -786,7 +818,7 @@ public sealed partial class TaskServerStore
                             || command.FlakyQuarantinedFailures.Any(command.NewFailures.Contains)))))
                 return ("ReviewInfra", "BaselineEvidenceInvalid");
         }
-        if (request.Artifacts.Any(artifact => !ValidDigest(artifact.Sha256, 64) || artifact.SizeBytes < 0))
+        if (request.Artifacts.Any(artifact => !ValidArtifact(artifact)))
             return ("ReviewInfra", "ArtifactEvidenceInvalid");
         if (request.Commands.Any(command =>
                 command.FinishedAt < command.StartedAt
@@ -807,6 +839,8 @@ public sealed partial class TaskServerStore
             return ("ReviewInfra", "InvalidAspectVerdict");
         var commandFailures = request.Commands.Any(command =>
         {
+            if (command.Phase != "verification" || command.WorkspaceRole != "candidate")
+                return false;
             var planned = subject.Plan.Commands.Single(item =>
                 string.Equals(item.StepId, command.StepId, StringComparison.Ordinal));
             if (planned.CompareToBaseline && command.NewFailures is { Count: > 0 })
@@ -829,6 +863,84 @@ public sealed partial class TaskServerStore
             return (request.Outcome, request.FailureClassification);
         return ("ReviewInfra", "InvalidReviewOutcome");
     }
+
+    private static (string Outcome, string? Classification) ClassifyPreparationFailure(
+        ReviewSubjectDto subject,
+        ReviewReportRequest request)
+    {
+        var preparation = request.Commands
+            .Where(command => command.Phase == "preparation")
+            .ToArray();
+        var failed = preparation.LastOrDefault(command =>
+            command.ExitCode != 0 || command.Signal is not null);
+        if (failed is null)
+            return ("ReviewInfra", "IncompletePreparationEvidence");
+        var planned = (subject.Plan.Preparation ?? []).SingleOrDefault(command =>
+            string.Equals(command.StepId, failed.StepId, StringComparison.Ordinal));
+        if (!CommandMatchesPlan(
+                failed,
+                plannedCommand: null,
+                plannedPreparation: planned))
+            return ("ReviewInfra", "CommandPlanMismatch");
+        if (failed.Budget is null
+            || failed.Budget.LimitMs <= 0
+            || failed.Budget.ConsumedMs < 0)
+            return ("ReviewInfra", "CommandBudgetEvidenceInvalid");
+        if (!HasUnabridgedArtifact(request.Artifacts, failed.StdoutSha256)
+            || !HasUnabridgedArtifact(request.Artifacts, failed.StderrSha256))
+            return ("ReviewInfra", "ArtifactEvidenceIncomplete");
+        return ("ReviewInfra", "PreparationFailed");
+    }
+
+    private static bool CommandMatchesPlan(
+        ReviewCommandEvidenceDto command,
+        ReviewCommandDto? plannedCommand,
+        ReviewPreparationCommandDto? plannedPreparation)
+    {
+        if (command.Phase == "preparation")
+        {
+            return plannedPreparation is not null
+                   && string.Equals(command.Aspect, "preparation", StringComparison.Ordinal)
+                   && string.Equals(plannedPreparation.FileName, command.FileName, StringComparison.Ordinal)
+                   && plannedPreparation.Arguments.SequenceEqual(command.Arguments, StringComparer.Ordinal)
+                   && (command.WorkspaceRole == "candidate"
+                       || command.WorkspaceRole.StartsWith("baseline-", StringComparison.Ordinal));
+        }
+        return command.Phase == "verification"
+               && plannedCommand is not null
+               && string.Equals(plannedCommand.Aspect, command.Aspect, StringComparison.Ordinal)
+               && string.Equals(plannedCommand.FileName, command.FileName, StringComparison.Ordinal)
+               && plannedCommand.Arguments.SequenceEqual(command.Arguments, StringComparer.Ordinal)
+               && (command.WorkspaceRole == "candidate"
+                   || command.WorkspaceRole.StartsWith("baseline-", StringComparison.Ordinal));
+    }
+
+    private static bool ValidArtifact(ReviewArtifactEvidenceDto artifact)
+    {
+        if (!ValidDigest(artifact.Sha256, 64) || artifact.SizeBytes < 0) return false;
+        if (artifact.ContentBase64 is null) return true;
+        try
+        {
+            var bytes = Convert.FromBase64String(artifact.ContentBase64);
+            return bytes.LongLength == artifact.SizeBytes
+                   && string.Equals(
+                       Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+                       artifact.Sha256,
+                       StringComparison.OrdinalIgnoreCase);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasUnabridgedArtifact(
+        IReadOnlyList<ReviewArtifactEvidenceDto> artifacts,
+        string digest)
+        => artifacts.Any(artifact =>
+            string.Equals(artifact.Sha256, digest, StringComparison.OrdinalIgnoreCase)
+            && artifact.ContentBase64 is not null
+            && ValidArtifact(artifact));
 
     private async Task InsertReviewRetryAsync(
         SqliteConnection connection,
@@ -1295,6 +1407,9 @@ public sealed partial class TaskServerStore
             return false;
         if (subject.Plan.Commands.Any(command => command.CompareToBaseline)
             && !executor.Capabilities.Contains(ReviewCapabilities.BaselineComparison))
+            return false;
+        if (subject.Plan.Preparation is { Count: > 0 }
+            && !executor.Capabilities.Contains(ReviewCapabilities.DependencyPreparation))
             return false;
         if (subject.Plan.RequiredAspects.Any(aspect =>
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence")

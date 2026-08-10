@@ -9,6 +9,7 @@ internal static class ReviewWorkspaceRetention
 {
     internal static readonly TimeSpan MaximumOrphanAge = TimeSpan.FromHours(72);
     private const string BaselineCacheDirectoryName = ".baseline-cache";
+    private const string DependencyCacheDirectoryName = ".dependency-cache";
     private const string AttemptDirectoryPrefix = "review-";
 
     internal static ReviewWorkspaceRetentionResult Sweep(
@@ -33,7 +34,7 @@ internal static class ReviewWorkspaceRetention
         foreach (var directory in Directory.EnumerateDirectories(root))
         {
             var info = new DirectoryInfo(directory);
-            if (string.Equals(info.Name, BaselineCacheDirectoryName, StringComparison.Ordinal))
+            if (info.Name is BaselineCacheDirectoryName or DependencyCacheDirectoryName)
                 continue;
             if (!info.Name.StartsWith(AttemptDirectoryPrefix, StringComparison.Ordinal))
             {
@@ -80,7 +81,7 @@ internal static class ReviewWorkspaceRetention
             activeSkipped,
             youngSkipped,
             unsafeSkipped);
-        log($"review workspace retention inspected={result.Inspected} removed={result.Removed} activeSkipped={result.ActiveSkipped} youngSkipped={result.YoungSkipped} unsafeSkipped={result.UnsafeSkipped} baselineCache=preserved cutoffHours={MaximumOrphanAge.TotalHours:F0}");
+        log($"review workspace retention inspected={result.Inspected} removed={result.Removed} activeSkipped={result.ActiveSkipped} youngSkipped={result.YoungSkipped} unsafeSkipped={result.UnsafeSkipped} reusableCaches=preserved cutoffHours={MaximumOrphanAge.TotalHours:F0}");
         return result;
     }
 }

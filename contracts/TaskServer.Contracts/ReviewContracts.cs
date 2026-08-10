@@ -9,7 +9,20 @@ public static class ReviewCapabilities
     public const string SemanticReview = "review:semantic";
     public const string VisionReview = "review:vision";
     public const string BaselineComparison = "review:baseline-comparison";
+    public const string DependencyPreparation = "review:dependency-preparation";
 }
+
+public sealed record ReviewDependencyScopeDto(
+    string WorkingSubdir,
+    IReadOnlyList<string> Lockfiles);
+
+public sealed record ReviewPreparationCommandDto(
+    string StepId,
+    string FileName,
+    IReadOnlyList<string> Arguments,
+    string WorkingSubdir = "",
+    int TimeoutSeconds = 1800,
+    IReadOnlyList<ReviewDependencyScopeDto>? DependencyScopes = null);
 
 public sealed record ReviewCommandDto(
     string StepId,
@@ -25,7 +38,9 @@ public sealed record ReviewPlanDto(
     IReadOnlyList<string> RequiredAspects,
     bool RequiresVisualReview = false,
     bool RequireDifferentHostFailureDomain = false,
-    string? IntegrationRef = null);
+    string? IntegrationRef = null,
+    IReadOnlyList<ReviewPreparationCommandDto>? Preparation = null,
+    IReadOnlyList<string>? PreserveGlobs = null);
 
 public sealed record CreateReviewSubjectRequest(
     string TaskId,
@@ -130,7 +145,26 @@ public sealed record ReviewCommandEvidenceDto(
     IReadOnlyList<string>? PreExistingFailures = null,
     bool BaselineCacheHit = false,
     bool RetryPerformed = false,
-    IReadOnlyList<string>? FlakyQuarantinedFailures = null);
+    IReadOnlyList<string>? FlakyQuarantinedFailures = null,
+    string Phase = "verification",
+    string WorkspaceRole = "candidate",
+    ReviewCommandBudgetEvidenceDto? Budget = null,
+    bool DependencyCacheHit = false,
+    IReadOnlyList<ReviewDependencyCacheEvidenceDto>? DependencyCache = null);
+
+public sealed record ReviewCommandBudgetEvidenceDto(
+    string Name,
+    long LimitMs,
+    long ConsumedMs,
+    bool Violated);
+
+public sealed record ReviewDependencyCacheEvidenceDto(
+    string Scope,
+    string State,
+    string Reason,
+    string LockHash,
+    IReadOnlyList<string> Lockfiles,
+    bool InstallRan);
 
 public sealed record ReviewWorkspaceProofDto(
     string RepositoryId,
@@ -162,7 +196,42 @@ public sealed record ReviewArtifactEvidenceDto(
     string Name,
     string MediaType,
     string Sha256,
-    long SizeBytes);
+    long SizeBytes,
+    string? ContentBase64 = null);
+
+public static class ReviewToolchainFailurePolicy
+{
+    public static bool IsUnavailable(
+        IReadOnlyList<ReviewCommandEvidenceDto> commands,
+        IReadOnlyList<ReviewArtifactEvidenceDto> artifacts)
+        => commands.Any(command =>
+            command.Phase == "verification"
+            && (command.ExitCode == 127
+                || ArtifactsContainMissingAngularToolchain(artifacts, command)));
+
+    private static bool ArtifactsContainMissingAngularToolchain(
+        IReadOnlyList<ReviewArtifactEvidenceDto> artifacts,
+        ReviewCommandEvidenceDto command)
+        => artifacts.Any(artifact =>
+        {
+            if (artifact.ContentBase64 is null
+                || (!string.Equals(artifact.Sha256, command.StdoutSha256, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(artifact.Sha256, command.StderrSha256, StringComparison.OrdinalIgnoreCase)))
+                return false;
+            try
+            {
+                var text = System.Text.Encoding.UTF8.GetString(
+                    Convert.FromBase64String(artifact.ContentBase64));
+                return text.Replace('\\', '/').Contains(
+                    "node_modules/@angular/cli/bin/ng.js",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        });
+}
 
 public sealed record ReviewReportRequest(
     string ExecutorId,

@@ -359,6 +359,7 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
                 [
                     Contract.ReviewCapabilities.ReviewExecutor,
                     Contract.ReviewCapabilities.BaselineComparison,
+                    Contract.ReviewCapabilities.DependencyPreparation,
                     Contract.ReviewCapabilities.GitMaterialization,
                     Contract.ReviewCapabilities.SemanticReview,
                 ]));
