@@ -44,7 +44,7 @@ public static class DevToolsEndpoints
             if (scriptPath is null)
             {
                 http.Response.StatusCode = StatusCodes.Status500InternalServerError;
-                await http.Response.WriteAsync("update-stable.sh not found. Set DevTools:UpdateStableScriptPath or place update-stable.sh in the devspace root.", ct);
+                await http.Response.WriteAsync("update-stable.sh not found. Set DevTools:UpdateStableScriptPath or use scripts/update-stable.sh from the dev checkout.", ct);
                 return;
             }
 
@@ -149,15 +149,16 @@ public static class DevToolsEndpoints
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
             return configured;
 
-        // Walk up from the backend cwd looking for update-stable.sh; the
-        // devspace layout puts it one or two directories above (e.g. the
-        // backend runs from agent-taskboard-dev/ and the script lives in
-        // agent-taskboard-devspace/).
+        // Prefer the versioned updater in a checkout. Keep the outer devspace
+        // copy as a compatibility fallback for existing local installations.
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
         for (var i = 0; i < 5 && dir != null; i++, dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "update-stable.sh");
-            if (File.Exists(candidate)) return candidate;
+            var versionedCandidate = Path.Combine(dir.FullName, "scripts", "update-stable.sh");
+            if (File.Exists(versionedCandidate)) return versionedCandidate;
+
+            var legacyCandidate = Path.Combine(dir.FullName, "update-stable.sh");
+            if (File.Exists(legacyCandidate)) return legacyCandidate;
         }
         return null;
     }

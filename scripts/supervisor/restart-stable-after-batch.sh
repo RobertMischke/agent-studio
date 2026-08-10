@@ -36,7 +36,8 @@
 #   ATP_RESTART_TRIGGER      review-batch (default) or main-advance
 #   ATP_DEPLOY_REMOTE        stable checkout remote watched by main-advance
 #                            (default: origin)
-#   ATP_UPDATE_SCRIPT        update script path (default: <devspace>/update-stable.sh)
+#   ATP_UPDATE_SCRIPT        update script path
+#                            (default: <dev-checkout>/scripts/update-stable.sh)
 #   ATP_GATE_DRAIN_TIMEOUT_SECONDS
 #                            max wait for an active merge gate (default: 120)
 #   ATP_GATE_DRAIN_POLL_SECONDS
@@ -67,7 +68,7 @@ STABLE_API="${ATP_STABLE_API:-http://127.0.0.1:5031}"
 THRESHOLD="${ATP_RESTART_THRESHOLD:-3}"
 TRIGGER="${ATP_RESTART_TRIGGER:-review-batch}"
 DEPLOY_REMOTE="${ATP_DEPLOY_REMOTE:-origin}"
-UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$DEVSPACE_DIR/update-stable.sh}"
+UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$THIS_CHECKOUT/scripts/update-stable.sh}"
 GATE_DRAIN_TIMEOUT="${ATP_GATE_DRAIN_TIMEOUT_SECONDS:-120}"
 GATE_DRAIN_POLL="${ATP_GATE_DRAIN_POLL_SECONDS:-2}"
 

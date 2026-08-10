@@ -173,7 +173,15 @@ For anything not on this short list, the full FAQ is [troubleshooting.md](./trou
 
 ## Reference: dev + stable side-by-side (optional, advanced)
 
-Everything above gives you **one** working instance. The maintainers additionally run two checkouts side by side on the same machine - `-dev` for active development (backend `:5030` / frontend `:4010`) and `-stable` for the always-on orchestrator seat that actually manages projects (backend `:5031` / frontend `:4011`) - with small outer wrapper scripts (`start-dev.sh`, `start-stable.sh`, `stop-dev.sh`, `stop-stable.sh`, `update-stable.sh`) that live **one level above both checkouts**, not inside this repository. That pattern is only worth replicating if you are also developing agent-orchestrator itself against a live reference instance; it is not required to use the product. If you do want it, the shape is: two checkouts named so one ends in `-stable`, a shared workspace-root scripts folder that sets `PORT`/`--port` per checkout before delegating to each checkout's own `api.sh`, and the ADR-0044 gate described in step 2.4 left in place (the `-stable` checkout is exempt from it; the `-dev` one is not).
+Everything above gives you **one** working instance. The maintainers additionally run two checkouts side by side on the same machine - `-dev` for active development (backend `:5030` / frontend `:4010`) and `-stable` for the always-on orchestrator seat that actually manages projects (backend `:5031` / frontend `:4011`) - with small outer wrapper scripts (`start-dev.sh`, `start-stable.sh`, `stop-dev.sh`, `stop-stable.sh`) that live **one level above both checkouts**, not inside this repository. The Stable updater is versioned at [`scripts/update-stable.sh`](../../../scripts/update-stable.sh); invoke it there or copy it unchanged to the outer devspace root for compatibility with an existing caller. That pattern is only worth replicating if you are also developing agent-orchestrator itself against a live reference instance; it is not required to use the product. If you do want it, the shape is: two checkouts named so one ends in `-stable`, a shared workspace-root scripts folder that sets `PORT`/`--port` per checkout before delegating to each checkout's own `api.sh`, and the ADR-0044 gate described in step 2.4 left in place (the `-stable` checkout is exempt from it; the `-dev` one is not).
+
+The repository's development start path (`npm start`, which delegates to
+`ng serve`) does not install dependencies and does not run the postinstall
+patches. It therefore does not invalidate `frontend/.angular/cache`. Keep an
+outer `start.sh` or `start-dev.sh` start-only as well. If a local wrapper is
+changed to run `npm install`, it must remove `frontend/.angular/cache` after the
+install and before starting the frontend, for the same in-place dependency
+patch reason as the Stable updater.
 
 ## Reference: configuration knobs
 

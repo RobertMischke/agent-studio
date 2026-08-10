@@ -69,6 +69,15 @@ identity comparison after restart. Health alone is not success. Append the full
 intended and observed identities, direction, and rollback outcome to deployment
 history.
 
+Frontend installation has one additional cache boundary. Agent Studio's
+postinstall bridges patch `node_modules/coding-agent-chat` in place, while the
+Angular/Vite optimizer cache key does not reflect those changed bytes. Every
+Stable update that runs `npm install` must therefore remove
+`frontend/.angular/cache` after the install and before frontend startup. After
+startup, load the frontend once through `playwright-core` with a `pageerror`
+listener registered before navigation. A page error is a failed deployment,
+even when the frontend port and backend health endpoint are reachable.
+
 Offline mode is an explicit updater input (`ReleaseMetadataOffline`), not an
 inference from cache presence or age. It is accepted only when both cached
 manifests and the cached latest-approved tag still pass the same comparison.

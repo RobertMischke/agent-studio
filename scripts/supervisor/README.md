@@ -49,7 +49,28 @@ Trigger conditions (both must hold on a tick):
 - At least N (default 3) **new** job folders have appeared in the watched project's `4-review` lane since the last restart (or since the watcher first booted and took its baseline snapshot).
 - Stable's `/api/runner/status` reports every project as idle (`activeJobId == null`). If stable is unreachable, the tick is skipped — never restart blind.
 
-On trigger the watcher delegates to `update-stable.sh` in the parent devspace folder, which already runs the preflight (clean working tree, fast-forward only), stops stable, pulls `origin/main`, runs `npm install` if `package-lock.json` changed, and re-launches stable detached. The watcher does not call `git pull` or `git fetch` directly.
+On trigger the watcher delegates to the versioned
+[`scripts/update-stable.sh`](../update-stable.sh). The updater runs the preflight
+(clean working tree, fast-forward only), stops Stable, updates from
+`origin/main`, and runs `npm install` when the frontend package inputs or a
+`coding-agent-chat` postinstall patch changed. After an install it removes
+`frontend/.angular/cache`, because the postinstall bridge changes dependency
+bytes without changing Vite's optimizer cache key. It then launches Stable
+detached and uses `playwright-core` to load the frontend. Any browser
+`pageerror` makes the update fail; an open port alone is not health evidence.
+The watcher does not call `git pull` or `git fetch` directly.
+
+Older devspaces may still have an unversioned root-level `update-stable.sh`.
+Replace that copy after updating the dev checkout, or point every caller at the
+versioned script:
+
+```sh
+install -m 0755 agent-taskboard-dev/scripts/update-stable.sh ./update-stable.sh
+```
+
+The versioned updater can also run in place and remains the source of truth.
+`scripts/test-update-stable.sh` covers both the stale prebundle regression and
+the hard failure on an injected application boot error.
 
 Immediately before that hard restart, the watcher polls `/healthz/drain`.
 `gate-busy` means an accepted delivery is inside the serialized merge, build
