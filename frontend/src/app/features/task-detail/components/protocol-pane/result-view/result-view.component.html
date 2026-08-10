@@ -58,6 +58,20 @@
       </div>
     </header>
 
+    @if (d.overview.synthesized && !d.overview.problem) {
+      <aside class="result__overview" data-testid="result-scaffold-notice">
+        <p class="result__overview-text">
+          The run did not write <code>status.md</code>. This report was generated automatically from
+          <code>task.json</code> and the artifacts.<br>
+          <small class="result__overview-blurb">
+            Generated {{ detail().info.lastActivity }} · {{ detail().info.key }} ·
+            <a href="#artifacts"
+               (click)="$event.preventDefault(); navigateMetric.emit('artifacts')">Open artifacts</a>
+          </small>
+        </p>
+      </aside>
+    }
+
     @if (detail().info.testEvidence) {
       <app-test-evidence-status
         [task]="detail().info"
@@ -69,7 +83,7 @@
          data-layout drives visibly distinct arrangements (concept doc §8.3):
          sequence (arrow flow), before-after (two columns), blocker (warn
          callout), or the standard stacked pair. -->
-    @if (hasOverview()) {
+    @if (d.overview.problem || d.overview.solution) {
       <section class="result__overview"
                [attr.data-tone]="caseMeta().tone"
                [attr.data-layout]="caseMeta().layout"
@@ -91,7 +105,7 @@
             </div>
           }
         </div>
-        @if (!d.hasDetail) {
+        @if (!d.detailMarkdown) {
           <p class="result__overview-blurb" data-testid="result-overview-blurb">{{ caseMeta().blurb }}</p>
         }
         @if (d.overview.synthesized) {
@@ -103,14 +117,14 @@
     }
 
     <!-- 3. Detail: the existing rich markdown body, one layer down. -->
-    @if (d.hasDetail) {
+    @if (d.detailMarkdown) {
       <section class="result__detail" data-testid="result-detail">
         <h4 class="result__detail-title">Details</h4>
         <app-beautiful-results
           [markdown]="d.detailMarkdown"
           [jobId]="detail().info.id"
           [watchPath]="detail().info.watchPath"
-          (openSource)="onOpenSource($event)"
+          (openSource)="openSource.emit($event)"
           (openWiki)="openWiki.emit($event)"
           (openTask)="openTask.emit($event)" />
       </section>
