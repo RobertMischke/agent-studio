@@ -11,11 +11,14 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
+import { BoardFiltersService } from '../../../../features/board';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
+import { kvValueOf } from '../../../../services/url-hash.util';
+import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
+import { OrchestratorFeedEntryComponent } from '../orchestrator-feed-entry/orchestrator-feed-entry';
 import { OrchestratorFeedStore } from '../../state/orchestrator-feed.store';
 import { OrchestratorFeedWindow } from './orchestrator-feed-windowing';
 
@@ -24,7 +27,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, GlobalOrchestratorCardComponent, LoadDistributionComponent, TooltipDirective],
+  imports: [FormsModule, GlobalOrchestratorCardComponent, LoadDistributionComponent, OrchestratorFeedEntryComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-feed.html',
   styleUrl: './orchestrator-feed.scss'
@@ -35,12 +38,15 @@ export class OrchestratorFeedComponent {
   readonly openTask = output<{ jobId: string; watchPath: string }>();
 
   private readonly jobService = inject(TaskService);
+  private readonly boardFilters = inject(BoardFiltersService);
   readonly feedStore = inject(OrchestratorFeedStore);
   readonly entries = this.feedStore.entries;
   readonly loading = this.feedStore.loading;
   readonly error = this.feedStore.error;
-  readonly kindFilter = signal<string>('signal');
-  readonly projectFilter = signal<string>('all');
+  readonly kindFilter = signal<string>('all');
+  readonly projectFilter = signal<ReadonlySet<string>>(
+    new Set(readProjectFiltersFromHash(typeof window === 'undefined' ? '' : window.location.hash)),
+  );
   readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
   readonly activeView = signal<'activity' | 'load'>('activity');
   readonly overridingTs = signal<string | null>(null);
@@ -51,61 +57,57 @@ export class OrchestratorFeedComponent {
   private anchorFrame: number | null = null;
 
   readonly kindFilters = [
-    { id: 'signal', label: 'Signal' },
+    { id: 'all', label: 'All activity' },
     { id: 'alert', label: 'Alerts' },
     { id: 'decision', label: 'Decisions' },
     { id: 'action', label: 'Actions' },
     { id: 'observation', label: 'Observations' },
     { id: 'intervention', label: 'Interventions' },
-    { id: 'all', label: 'All activity' }
+    { id: 'signal', label: 'Signal' },
   ];
 
-  readonly projects = computed(() => [...new Set(this.entries().map(entry => entry.project).filter(Boolean) as string[])].sort());
+  readonly projects = computed(() => [...new Set(this.entries().map(entry => entry.project || this.projectName()).filter(Boolean))].sort());
   readonly reversed = computed(() => [...this.entries()].sort((a, b) => b.ts.localeCompare(a.ts)));
+  readonly projectEntries = computed(() => {
+    const projects = this.projectFilter();
+    return this.reversed().filter(entry => projects.size === 0 || projects.has(entry.project || this.projectName()));
+  });
   readonly visibleEntries = computed(() => {
     const filter = this.kindFilter();
-    const project = this.projectFilter();
-    return this.reversed().filter(entry =>
-      (project === 'all' || entry.project === project)
-      && (filter === 'all' || (filter === 'signal' ? entry.kind !== 'observation' : entry.kind === filter))
+    return this.projectEntries().filter(entry =>
+      filter === 'all' || (filter === 'signal' ? entry.kind !== 'observation' : entry.kind === filter)
     );
   });
+  readonly visibleProjectCount = computed(() =>
+    new Set(this.visibleEntries().map(entry => entry.project || this.projectName()).filter(Boolean)).size
+  );
   readonly windowedEntries = computed(() => this.historyWindow.slice(this.visibleEntries()));
-  readonly groupedEntries = computed(() => {
-    const groups: { key: string; day: string; project: string; entries: OrchestratorLogEntry[] }[] = [];
-    const byKey = new Map<string, typeof groups[number]>();
+  readonly dayGroups = computed(() => {
+    const groups: { key: string; day: string; entries: OrchestratorLogEntry[] }[] = [];
     for (const entry of this.windowedEntries()) {
-      const day = this.formatDay(entry.ts);
-      const project = entry.project || this.projectName();
-      const key = `${day}\u0000${project}`;
-      let group = byKey.get(key);
-      if (!group) {
-        group = { key, day, project, entries: [] };
+      const key = this.dayKey(entry.ts);
+      let group = groups[groups.length - 1];
+      if (!group || group.key !== key) {
+        group = { key, day: this.formatDay(entry.ts), entries: [] };
         groups.push(group);
-        byKey.set(key, group);
       }
       group.entries.push(entry);
     }
     return groups;
-  });
-  readonly countsByKind = computed(() => {
-    const counts = new Map<string, number>();
-    for (const entry of this.entries()) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
-    return counts;
   });
   readonly olderEntryCount = computed(() =>
     this.historyWindow.remaining(this.visibleEntries().length, this.windowedEntries().length)
   );
 
   private readonly selectionEffect = effect(() => {
-    const entries = this.reversed();
+    const entries = this.visibleEntries();
     const selected = this.selectedEntry();
     if (selected && entries.includes(selected)) return;
     this.selectedEntry.set(entries[0] ?? null);
   });
 
   private readonly feedGrowthEffect = effect(() => {
-    const scope = `${this.projectFilter()}\u0000${this.kindFilter()}`;
+    const scope = this.filterScope(this.projectFilter(), this.kindFilter());
     const total = this.visibleEntries().length;
     const stream = this.streamRef()?.nativeElement;
     const followingNewest = !stream || stream.scrollTop <= 8;
@@ -136,13 +138,14 @@ export class OrchestratorFeedComponent {
   }
 
   filterCount(kind: string): number {
-    if (kind === 'all') return this.entries().length;
-    if (kind === 'signal') return this.entries().filter(entry => entry.kind !== 'observation').length;
-    return this.countsByKind().get(kind) ?? 0;
+    const entries = this.projectEntries();
+    if (kind === 'all') return entries.length;
+    if (kind === 'signal') return entries.filter(entry => entry.kind !== 'observation').length;
+    return entries.filter(entry => entry.kind === kind).length;
   }
 
   selectFilter(kind: string): void {
-    this.historyWindow.reset(`${this.projectFilter()}\u0000${kind}`);
+    this.historyWindow.reset(this.filterScope(this.projectFilter(), kind));
     this.kindFilter.set(kind);
     const first = this.visibleEntries()[0] ?? null;
     this.selectedEntry.set(first);
@@ -153,9 +156,16 @@ export class OrchestratorFeedComponent {
   }
 
   selectProject(project: string): void {
-    this.historyWindow.reset(`${project}\u0000${this.kindFilter()}`);
-    this.projectFilter.set(project);
+    const next = project === 'all' ? new Set<string>() : new Set([project]);
+    this.historyWindow.reset(this.filterScope(next, this.kindFilter()));
+    this.projectFilter.set(next);
+    if (project === 'all') this.boardFilters.clearProjectScope();
+    else this.boardFilters.setSoleProject(project);
     this.selectedEntry.set(this.visibleEntries()[0] ?? null);
+  }
+
+  isProjectSelected(project: string): boolean {
+    return this.projectFilter().has(project);
   }
 
   navigateToTask(entry: OrchestratorLogEntry): void {
@@ -191,8 +201,12 @@ export class OrchestratorFeedComponent {
     return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
-  projectHue(project: string): number {
-    return projectIdentity(project).hue;
+  projectColor(project: string): string {
+    return projectIdentity(project).color;
+  }
+
+  entryKey(entry: OrchestratorLogEntry): string {
+    return [entry.project, entry.ts, entry.kind, entry.topic, entry.summary].join('\u0000');
   }
 
   startOverride(entry: OrchestratorLogEntry): void {
@@ -229,13 +243,34 @@ export class OrchestratorFeedComponent {
     });
   }
 
-  tokenTooltip(tu: NonNullable<OrchestratorLogEntry['tokenUsage']>): string {
-    return [
-      `Model: ${tu.model || '?'}`,
-      `Input: ${tu.inputTokens.toLocaleString()} tokens`,
-      `Output: ${tu.outputTokens.toLocaleString()} tokens`,
-      `Cache read: ${tu.cacheReadTokens.toLocaleString()} tokens`,
-      `Cache creation: ${tu.cacheCreationTokens.toLocaleString()} tokens`
-    ].join('\n');
+  private dayKey(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
+
+  private filterScope(projects: ReadonlySet<string>, kind: string): string {
+    return `${[...projects].sort().join(',')}\u0000${kind}`;
+  }
+}
+
+function readProjectFiltersFromHash(hash: string): string[] {
+  const raw = kvValueOf(hash, 'filters');
+  if (raw == null) return [];
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return [];
+  }
+  const projectSegment = decoded
+    .split(';')
+    .map(segment => segment.trim())
+    .find(segment => segment.startsWith('projects:'));
+  if (!projectSegment) return [];
+  return projectSegment
+    .slice('projects:'.length)
+    .split(',')
+    .map(project => project.trim())
+    .filter(Boolean);
 }
