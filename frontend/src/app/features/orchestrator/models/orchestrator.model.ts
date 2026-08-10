@@ -185,7 +185,7 @@ export interface OrchestratorActiveSurface {
 }
 
 export interface OrchestratorContextReference {
-  kind: 'task' | 'page' | 'repository-file';
+  kind: 'task' | 'page' | 'repository-file' | 'commit';
   reference: string;
   projectId?: string | null;
   revision?: string | null;

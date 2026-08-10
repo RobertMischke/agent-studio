@@ -9,9 +9,10 @@ public static class OrchestratorContextReferenceKinds
     public const string Task = "task";
     public const string Page = "page";
     public const string RepositoryFile = "repository-file";
+    public const string Commit = "commit";
 
     public static bool IsSupported(string kind)
-        => kind is Task or Page or RepositoryFile;
+        => kind is Task or Page or RepositoryFile or Commit;
 }
 
 public sealed record OrchestratorConversationScope(

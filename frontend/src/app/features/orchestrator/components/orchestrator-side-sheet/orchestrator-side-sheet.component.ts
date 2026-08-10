@@ -10,6 +10,7 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
@@ -19,6 +20,7 @@ import type {
   ComposerLocationContext,
   OrchestratorChatTurn,
   OrchestratorContextSession,
+  OrchestratorContextSourceOption,
 } from '../../../../features/orchestrator';
 import {
   buildChatNavigationContext,
@@ -27,6 +29,7 @@ import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
 import {
   ChatEvent,
+  ChatComposerContext,
   ChatModelSelection,
   ChatSubmitEvent,
   ChatToolbarItem,
@@ -37,6 +40,7 @@ import { OrchestratorContextHeaderComponent } from '../orchestrator-context-head
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
 import { OrchestratorContextReceiptComponent } from '../orchestrator-context-receipt/orchestrator-context-receipt.component';
+import { OrchestratorContextPickerComponent } from '../orchestrator-context-picker/orchestrator-context-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
@@ -50,7 +54,7 @@ import {
   parseOrchestratorContextKey,
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
-import type { PageContext } from '../../../../models/page-context.model';
+import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -66,6 +70,7 @@ import type { PageContext } from '../../../../models/page-context.model';
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
     OrchestratorContextReceiptComponent,
+    OrchestratorContextPickerComponent,
     ChatSwitcherRailComponent,
     OrchestratorProjectPickerComponent
   ],
@@ -89,9 +94,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly preferredProject = input<string | null>(null);
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /**
-   * Canonical active-tab context, derived by Studio and rendered unchanged in
-   * the composer's standard footer (via CAC's `[chat-foot-start]` slot until
-   * the library exposes a first-class `composerContext` input).
+   * Canonical active-tab context, derived by Studio and rendered through
+   * CAC's `composerContext` input.
    */
   readonly composerContext = input<ComposerLocationContext | null>(null);
   /** Active repository page carried inside the existing project chat. */
@@ -338,6 +342,41 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   /** Project scope may explicitly omit context once. Task scope is mandatory. */
   readonly contextDismissed = signal(false);
+  readonly contextAttachments = signal<OrchestratorContextSourceOption[]>([]);
+  private readonly contextPicker = viewChild<OrchestratorContextPickerComponent>('contextPicker');
+
+  readonly automaticContextLabel = computed(() => {
+    const project = this.effectiveProject();
+    const page = this.pageContext();
+    if (page && page.projectName === project) return `${page.pageType === 'workbench' ? 'Workbench' : 'Page'} · ${page.title}`;
+    if (this.contextKind() === 'task') return `Task · ${this.effectiveJobKey() ?? this.effectiveJobTitle() ?? 'current'}`;
+    const location = this.composerContext();
+    if (location && (!location.project || location.project === project)) {
+      return location.detail ? `${location.surface} · ${location.detail}` : location.surface;
+    }
+    return 'Project overview';
+  });
+
+  readonly currentTabSource = computed<OrchestratorContextSourceOption | null>(() => {
+    if (this.contextKind() !== 'project') return null;
+    const project = this.effectiveProject();
+    const page = this.pageContext();
+    if (!project || !page || page.projectName !== project) return null;
+    const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
+    return {
+      id: `${reference.kind}:${project}:${reference.reference}`,
+      category: 'current',
+      label: page.title,
+      detail: `${page.pageType === 'workbench' ? 'Workbench' : 'Page'} · ${page.relPath}`,
+      estimateTokens: 1_200,
+      reference,
+    };
+  });
+  readonly cacComposerContext = computed<ChatComposerContext | null>(() => {
+    const context = this.composerContext();
+    if (!context?.project) return null;
+    return { project: context.project, surface: context.surface, detail: context.detail ?? '' };
+  });
 
   /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
   private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
@@ -433,6 +472,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       this.pageContext();
       untracked(() => {
         if (this.contextDismissed()) this.contextDismissed.set(false);
+        if (this.contextAttachments().length > 0) this.contextAttachments.set([]);
+        this.contextPicker()?.close();
       });
     });
 
@@ -636,6 +677,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.contextDismissed.update(dismissed => !dismissed);
   }
 
+  setNextMessageContextIncluded(included: boolean): void {
+    if (this.contextKind() === 'task') return;
+    this.contextDismissed.set(!included);
+  }
+
+  addContextAttachment(source: OrchestratorContextSourceOption): void {
+    if (source.reference.projectId !== this.effectiveProject()) return;
+    this.contextAttachments.update(current => current.some(item => item.id === source.id)
+      ? current
+      : [...current, source]);
+  }
+
+  removeContextAttachment(id: string): void {
+    this.contextAttachments.update(current => current.filter(item => item.id !== id));
+  }
+
+  onComposerToolbarAction(action: { id: string }): void {
+    if (action.id === 'reference') this.contextPicker()?.show();
+  }
+
   onOpenVerboseDebug(): void {
     const jobId = this.effectiveJobId();
     const watchPath = this.effectiveWatchPath();
@@ -701,6 +762,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       return;
     }
     const capturedAt = new Date();
+    const explicitReferenceSnapshot = this.contextAttachments().map(source => ({ ...source.reference }));
     const navigationSnapshot = {
       kind: this.contextKind(),
       jobId: this.effectiveJobId(),
@@ -810,7 +872,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       contextEnvelope: lazy.buildOrchestratorContextEnvelope(
         contextKey,
         contextPayload,
-        [],
+        explicitReferenceSnapshot,
         () => capturedAt,
       ),
       model: this.composerModel.effectiveSelection().model || null,
@@ -822,6 +884,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       next: (response) => {
         if (response.executionContext) this.executionContext.set(response.executionContext);
         if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
+        this.contextAttachments.set([]);
         this.sending.set(false);
         // Pre-decode the persisted attachment URL(s) so the upcoming swap
         // from the local blob bubble to the server turn uses byte-identical

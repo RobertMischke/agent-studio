@@ -38,6 +38,11 @@ export type {
   ChatExecutionContext,
   ChatNavigationContext,
 } from './models/orchestrator.model';
+export type {
+  OrchestratorContextSourceCategory,
+  OrchestratorContextSourceOption,
+} from './models/orchestrator-context-source.model';
+export { contextSourceId } from './models/orchestrator-context-source.model';
 export { buildChatNavigationContext } from './chat-navigation-context';
 export { buildOrchestratorContextEnvelope } from './orchestrator-context-envelope';
 export {

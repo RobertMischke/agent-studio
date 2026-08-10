@@ -1,10 +1,66 @@
-<div class="receipt"
-     role="status"
-     aria-label="Context used for the latest answer"
-     data-testid="orch-answer-context-receipt">
-  <span class="receipt__dot" aria-hidden="true"></span>
-  <strong>Context used</strong>
-  <span data-testid="orch-answer-context-scope">{{ receipt().taskKey || receipt().contextKey }}</span>
+<section class="receipt"
+         aria-label="Context used for the latest answer"
+         data-testid="orch-answer-context-receipt">
+  <button type="button"
+          class="receipt__summary"
+          [attr.aria-expanded]="expanded()"
+          aria-controls="orch-context-inspector"
+          (click)="toggle()"
+          data-testid="orch-context-inspect-toggle">
+    <span class="receipt__dot" aria-hidden="true"></span>
+    <strong>Used context</strong>
+    <span data-testid="orch-answer-context-scope">{{ receipt().taskKey || receipt().contextKey }}</span>
+    <span class="receipt__count">{{ sourceCount() }} {{ sourceCount() === 1 ? 'source' : 'sources' }}</span>
+    @if (estimatedTokens(); as tokens) {
+      <span class="receipt__tokens">about {{ tokens }} tokens</span>
+    }
+    <span class="receipt__inspect">{{ expanded() ? 'Close' : 'Inspect' }}</span>
+  </button>
+
   <span class="receipt__blocks"
         data-testid="orch-answer-context-blocks">{{ receipt().includedBlocks.join(' · ') }}</span>
-</div>
+
+  @if (expanded()) {
+    <div id="orch-context-inspector"
+         class="receipt__inspector"
+         data-testid="orch-context-inspector">
+      <header>
+        <div>
+          <h3>Context receipt</h3>
+          <p>Resolved on the execution checkout at {{ receipt().capturedAt }}.</p>
+        </div>
+        @if (receipt().receiptId; as receiptId) {
+          <code [title]="receiptId">{{ receiptId.slice(0, 16) }}</code>
+        }
+      </header>
+
+      @if (sources().length > 0) {
+        <ul class="receipt__sources">
+          @for (source of sources(); track source.sourceId) {
+            <li [attr.data-status]="source.status"
+                [attr.data-testid]="'orch-context-receipt-source-' + source.sourceId">
+              <div class="receipt__source-head">
+                <strong>{{ kindLabel(source.kind) }}</strong>
+                <span class="receipt__status">{{ statusLabel(source) }}</span>
+              </div>
+              <code [title]="source.sourceId">{{ source.sourceId }}</code>
+              <div class="receipt__source-meta">
+                <span>{{ source.estimatedTokens }} tokens</span>
+                <span>{{ source.includedCharacters }} characters</span>
+                <span>{{ source.freshness }}</span>
+                @if (shortRevision(source.revision); as revision) {
+                  <span [title]="source.revision">revision {{ revision }}</span>
+                }
+              </div>
+              @if (source.reason) {
+                <p>{{ source.reason }}</p>
+              }
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="receipt__legacy">This older receipt records included blocks but no per-source metadata.</p>
+      }
+    </div>
+  }
+</section>

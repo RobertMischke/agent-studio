@@ -51,4 +51,18 @@ describe('ChatSwitcherRailComponent', () => {
     expect(selected).toHaveBeenCalledWith('task:Alpha/A-1');
     expect(navigated).toHaveBeenCalledWith('task:Alpha/A-1');
   });
+
+  it('renders exactly one permanent row for each project identity', () => {
+    const projectSession = {
+      contextKey: 'project:Alpha', kind: 'project' as const, projectId: 'Alpha', taskKey: null,
+      updatedAt: '2026-08-10T10:00:00Z', model: null, cumulativeInputTokens: 0,
+      cumulativeOutputTokens: 0, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
+      runtimeStatus: 'idle' as const, queuePosition: 0, summary: 'Permanent project conversation',
+    };
+    fixture.componentRef.setInput('sessions', [projectSession, { ...projectSession }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="chat-switcher-row-project:Alpha"]'))
+      .toHaveLength(1);
+  });
 });
