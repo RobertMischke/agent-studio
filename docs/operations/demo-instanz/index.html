@@ -150,7 +150,7 @@
   </ul>
 </nav>
 
-<section id="decision" class="box accent">
+<section id="decision" class="box accent" data-concept-section="recommendation">
   <h4>Recommendation</h4>
   <p><b>Approve the defense-in-depth variant as one launch package.</b> Run the real Task Server in a startup-locked public-demo profile that rejects every execution admission path. Pair it with a replay-only Runner that has no claim scope, CLI, repository, deploy key, secret mount, or general outbound network access. Publish only a server-enforced read-only visitor surface from a dedicated demo VM. Build the instance from the existing pinned seed, extend that one seed with the Wiki and Dossier gallery, prove the generated datastore is scrubbed, and replace the whole runtime from a versioned release bundle on reset.</p>
 </section>
@@ -160,7 +160,7 @@
   <p>A browser control, a manual Runner mode, or a replay flag is not an execution boundary. The Task Server must deny claims and starts even if a caller bypasses Angular, forges a Runner request, moves a card, or compromises the replay process. If the server cannot prove that lock at startup and through its route matrix, the public demo does not start.</p>
 </div>
 
-<h2 id="basis"><span class="no">§2</span>Existing basis and boundaries</h2>
+<h2 id="basis" data-concept-section="evidence"><span class="no">§2</span>Existing basis and boundaries</h2>
 <p>This proposal extends current product work instead of creating a second demo system.</p>
 
 <table>
@@ -182,9 +182,9 @@
       <td>Reuse this as local verification. It is not the public hosting topology or security boundary.</td>
     </tr>
     <tr>
-      <td><b>AGT-2530, round 3</b></td>
-      <td>The in-flight branch has a committed <code>pinned-seed.json</code>, two-project lane coverage, a decision task, and repeatable pinned captures.</td>
-      <td>Extend its schema or add versioned sidecars after integration. Do not fork its task list, naming, or capture provenance.</td>
+      <td><b>AGT-2530</b></td>
+      <td>The integrated baseline has a committed <code>pinned-seed.json</code>, two-project lane coverage, a decision task, and repeatable pinned captures.</td>
+      <td>Extend its schema or add versioned sidecars. Do not fork its task list, naming, or capture provenance.</td>
     </tr>
     <tr>
       <td><b>AGT-2558</b></td>
@@ -297,7 +297,7 @@
   </ul>
 </div>
 
-<h2 id="architecture"><span class="no">§5</span>Architecture variants</h2>
+<h2 id="architecture" data-concept-section="alternatives"><span class="no">§5</span>Architecture variants</h2>
 
 <table>
   <thead><tr><th>Variant</th><th>Strengths</th><th>Failure mode</th><th>Verdict</th></tr></thead>
@@ -476,7 +476,7 @@
 </table>
 
 <h3>Scrub proof, not a scrub claim</h3>
-<p>The source note in the in-flight <code>pinned-seed.json</code> is useful provenance, but a public deployment needs machine-readable evidence over the rendered output. The gate should produce <code>demo-seed-scrub-report.json</code> beside the release bundle with:</p>
+<p>The source note in the committed <code>pinned-seed.json</code> is useful provenance, but a public deployment needs machine-readable evidence over the rendered output. The gate should produce <code>demo-seed-scrub-report.json</code> beside the release bundle with:</p>
 
 <ul>
   <li>seed schema, generator version, fixed time base, content digest, product compatibility range, and replay trace digest;</li>
@@ -540,7 +540,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <li>Every product release runs a compatibility job that generates the seed twice, starts the real Task Server in public-demo mode, opens both projects, checks every lane, Wiki, all six Dossiers, search, artifacts, and SignalR, then probes all execution paths for typed denial.</li>
   <li>A schema migration updates the generator and seed manifest in one review. It does not import a live workspace or regenerate from an operator machine.</li>
   <li>Content changes are explicit pull requests against the pinned source. They include a new digest, scrub report, both-theme captures for affected scenes, and a short semantic-change note.</li>
-  <li>AGT-2530 remains the owner of capture reproducibility and pinned provenance. The public instance consumes that contract after integration. It does not maintain a parallel screenshot-only fixture.</li>
+  <li>AGT-2530 remains the owner of capture reproducibility and pinned provenance. The public instance consumes that integrated contract. It does not maintain a parallel screenshot-only fixture.</li>
   <li>If current product code cannot read the approved seed, the previous demo release remains online until a fully compatible bundle passes. “Latest” is not more important than “safe and internally consistent.”</li>
 </ul>
 
@@ -552,7 +552,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <tr>
       <td><b>S1 · Seed content and gallery</b></td>
       <td>Extend the integrated pinned seed with the two Wiki trees, six Dossiers, canonical Dossier references, fixture-only decisions, and optional accepted AGT-2558 artifact scene. Prove byte-identical generation and all-lane/all-lifecycle discovery.</td>
-      <td>After AGT-2530 integration. Consume AGT-2558 only after acceptance.</td>
+      <td>The integrated AGT-2530 baseline. Consume AGT-2558 only after acceptance.</td>
     </tr>
     <tr>
       <td><b>S2 · Hard public-demo execution profile</b></td>
@@ -589,10 +589,10 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 
 <div class="box ok">
   <h4>Recommended delivery order</h4>
-  <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel after AGT-2530 settles. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
+  <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel from the integrated AGT-2530 baseline. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
 </div>
 
-<h2 id="approval"><span class="no">§9</span>Decision request</h2>
+<h2 id="approval" data-concept-section="open-decisions"><span class="no">§9</span>Decision request</h2>
 <p>This dossier is decision-ready. Approval is requested for the following package:</p>
 
 <ol>
@@ -604,7 +604,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <li><b>Launch gate:</b> scrub attestation, execution-denial matrix, public endpoint inventory, external probes, and reset rehearsal must all pass before DNS is enabled.</li>
 </ol>
 
-<p class="dim">Evidence basis: ADR-0056; the pinned screenshot-system decision; current AGT-2530 pinned seed and repeatability artifacts as in-flight evidence; AGT-2558 human-review state; WEB-17 ready state; networked security profile; and the dedicated Task Server VM separation rationale. This dossier changes no runtime, seed, card, hosting, or security configuration.</p>
+<p class="dim">Evidence basis: ADR-0056; the pinned screenshot-system decision; the integrated AGT-2530 seed and repeatability artifacts; AGT-2558 human-review state; WEB-17 ready state; networked security profile; and the dedicated Task Server VM separation rationale. This dossier changes no runtime, seed, card, hosting, or security configuration.</p>
 
 </main>
 </body>
