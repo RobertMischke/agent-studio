@@ -674,6 +674,11 @@ state.
   lifecycle visibility, usage, and short summaries. Project contexts are
   permanent; archived task contexts are retained with `hiddenAt` and omitted
   from the current list. Local orchestrator chat JSONL is migration input only.
+- Project chat reference chips carry stable task, page, repository-file, or
+  project-qualified commit ids only. The backend resolves them on the selected
+  execution checkout after route and project validation. The UI exposes the
+  resulting Task Server receipt through the Used context inspector instead of
+  trusting browser-supplied source bodies.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this

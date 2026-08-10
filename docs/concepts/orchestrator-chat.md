@@ -148,6 +148,22 @@ stable source id, kind, revision or hash, freshness, included characters and
 estimated tokens, status, omission reason, and applied budget. It stores no
 resolved source body.
 
+The project composer shows the active tab as automatic context and keeps
+explicit additions as removable reference chips. **Add context** opens a
+project-bound picker with the current tab first, followed by Tasks, Wiki and
+Workbenches, Files, and Commits. Search results never carry repository content
+in the browser. They add only stable task keys, page refs, repository-relative
+paths, or project-qualified commit SHAs to the next envelope. Send snapshots
+those refs once, so later navigation cannot change the in-flight turn.
+
+The latest reply renders a compact **Used context** disclosure. Its inspector
+reads the persisted Task Server receipt and names included, excerpted,
+unresolved, unavailable, blocked, and budget-excluded sources with revision,
+freshness, character, token, and reason metadata. The header opens **Chat
+history**, which consumes the central current-context list and its short
+summaries. A watched project contributes exactly one permanent project row;
+archived task rows remain retained by the Task Server but are omitted here.
+
 The side sheet consumes these routes directly: it derives the context key from
 navigation (`contextKey` on `OrchestratorSideSheetComponent`, frozen while
 pinned) and reads/sends through `getOrchestratorChatByContext` /

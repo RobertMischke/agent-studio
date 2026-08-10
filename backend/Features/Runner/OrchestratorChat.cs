@@ -1003,8 +1003,56 @@ public class OrchestratorChatService
                     blocks.Add(ResolveRepositoryText(
                         projectName, watchPath, reference.Reference, "repository-file", isExplicit: true));
                     break;
+                case OrchestratorContextReferenceKinds.Commit:
+                    blocks.Add(ResolveCommit(projectName, reference.Reference));
+                    break;
             }
         }
+    }
+
+    private ResolvedContextBlock ResolveCommit(string projectName, string reference)
+    {
+        var sha = NormalizeCommitReference(projectName, reference);
+        if (_git is null)
+            return ResolvedContextBlock.Unavailable(
+                $"commit:{projectName}/{sha}",
+                "commit",
+                "unavailable",
+                "Git context is unavailable on this execution host.",
+                isExplicit: true);
+
+        var diff = _git.GetProjectCommitDiffResult(projectName, sha, path: null);
+        if (!diff.Success)
+            return ResolvedContextBlock.Unavailable(
+                $"commit:{projectName}/{sha}",
+                "commit",
+                "unresolved",
+                diff.Error ?? "The referenced commit could not be resolved.",
+                isExplicit: true);
+
+        var files = _git.GetProjectCommitFiles(projectName, sha);
+        var content = new StringBuilder()
+            .Append("Commit ").AppendLine(sha)
+            .Append("Changed files: ").AppendLine(files.Count.ToString());
+        foreach (var file in files.Take(80))
+            content.Append("- ").Append(file.Status).Append(' ')
+                .Append(file.Path).Append(" (+").Append(file.Added)
+                .Append(" / -").Append(file.Removed).AppendLine(")");
+        if (files.Count > 80)
+            content.Append("- ").Append(files.Count - 80).AppendLine(" more files omitted from the source summary");
+        if (!string.IsNullOrWhiteSpace(diff.Diff))
+        {
+            content.AppendLine().AppendLine("Bounded unified diff:");
+            var remaining = Math.Max(0, 64_000 - content.Length);
+            content.Append(diff.Diff.AsSpan(0, Math.Min(diff.Diff.Length, remaining)));
+        }
+        return ResolvedContextBlock.Included(
+            $"commit:{projectName}/{sha}",
+            "commit",
+            content.ToString(),
+            sha,
+            "current",
+            isExplicit: true);
     }
 
     private ResolvedContextBlock ResolveRepositoryText(
@@ -1282,6 +1330,20 @@ public class OrchestratorChatService
                 normalized = "docs/" + normalized;
         }
         return normalized;
+    }
+
+    private static string NormalizeCommitReference(string projectName, string reference)
+    {
+        var normalized = reference.Trim();
+        var prefix = $"commit:{projectName}/";
+        if (normalized.StartsWith("commit:", StringComparison.OrdinalIgnoreCase)
+            && !normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new OrchestratorContextEnvelopeException(
+                "context-reference-cross-project",
+                "A commit reference cannot cross the active conversation project.");
+        return normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? normalized[prefix.Length..].Trim()
+            : normalized;
     }
 
     private static bool IsWithinRoot(string root, string candidate)

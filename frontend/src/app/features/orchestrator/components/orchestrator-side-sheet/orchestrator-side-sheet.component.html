@@ -43,7 +43,7 @@
             [class.sheet__context-badge--open]="contextMenuOpen()"
             (click)="toggleContextMenu()"
             data-testid="orch-context-badge">
-      <span>Contexts</span>
+      <span>Chats</span>
       <strong data-testid="orch-context-count">{{ contextCount() }}</strong>
       <span class="sheet__context-caret" aria-hidden="true">{{ contextMenuOpen() ? '▴' : '▾' }}</span>
     </button>
@@ -57,7 +57,7 @@
                data-testid="orch-context-menu">
         <header class="sheet__context-menu-head">
           <div class="sheet__context-menu-title">
-            <h3>Chat contexts</h3>
+            <h3>Chat history</h3>
             @if (contextChipText(); as contextLabel) {
               <p data-testid="orch-context-current">{{ contextLabel }}</p>
             }
@@ -160,6 +160,20 @@
               }
             }
 
+            @if (contextKind() === 'project') {
+              <app-orchestrator-context-picker
+                #contextPicker
+                [project]="effectiveProject()!"
+                [automaticLabel]="automaticContextLabel()"
+                [automaticIncluded]="!contextDismissed()"
+                [currentSource]="currentTabSource()"
+                [attachments]="contextAttachments()"
+                [disabled]="sending()"
+                (automaticIncludedChange)="setNextMessageContextIncluded($event)"
+                (attachmentAdded)="addContextAttachment($event)"
+                (attachmentRemoved)="removeContextAttachment($event)" />
+            }
+
             <!-- `cac-chat` is deliberately composer-only here. With no
                  messages/events and an empty state, the library suppresses
                  its legacy transcript body while retaining its composer. -->
@@ -173,34 +187,12 @@
               [toolbarStart]="composerToolbarStart"
               [routingLabel]="composerRoutingLabel()"
               [modelControl]="composerModel.control()"
+              [composerContext]="cacComposerContext()"
+              (toolbarAction)="onComposerToolbarAction($event)"
               (submitMessage)="onSubmit($event)"
               (modelCommit)="onModelCommit($event)"
               (modelCatalogRequested)="composerModel.requestCatalog()"
               (modelRefreshRequested)="composerModel.requestCatalog(true)">
-              <!-- Canonical location context in CAC's standard footer. Studio
-                   derives it once from the active tab; the composer renders it
-                   verbatim and never re-derives navigation state. Projected
-                   into the [chat-foot-start] slot until the library exposes a
-                   first-class composerContext input (companion change lost in
-                   the 11.07 remote-runner outage). ngProjectAs keeps the slot
-                   match while the @if guards the conditional content. -->
-              <ng-container ngProjectAs="[chat-foot-start]">
-                @if (composerContext(); as ctx) {
-                  <span class="sheet__composer-context"
-                        data-testid="chat-composer-context">
-                    @if (ctx.project) {
-                      <span class="sheet__composer-context-project"
-                            data-testid="chat-composer-context-project">{{ ctx.project }}</span>
-                    }
-                    <span class="sheet__composer-context-surface"
-                          data-testid="chat-composer-context-surface">{{ ctx.surface }}</span>
-                    @if (ctx.detail) {
-                      <span class="sheet__composer-context-detail"
-                            data-testid="chat-composer-context-detail">{{ ctx.detail }}</span>
-                    }
-                  </span>
-                }
-              </ng-container>
             </cac-chat>
           </section>
         } @else {

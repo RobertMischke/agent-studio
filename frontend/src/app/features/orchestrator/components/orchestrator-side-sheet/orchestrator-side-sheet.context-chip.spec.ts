@@ -77,6 +77,28 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect(root.querySelector('[data-testid="orch-side-sheet-pin"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-settings"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-refresh"]')).not.toBeNull();
+    expect(root.textContent).toContain('Chat history');
+  });
+
+  it('offers a repository page as the first stable current-tab source', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('pageContext', {
+      projectName: 'demo-project', relPath: 'concepts/context.md', title: 'Context model',
+      pageType: 'concept', excerpt: 'Conversation scope and source receipts.',
+    });
+    fixture.componentRef.setInput('composerContext', {
+      project: 'demo-project', surface: 'Wiki', detail: 'Context model',
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.currentTabSource()?.reference).toEqual({
+      kind: 'page', reference: 'page:demo-project/concepts/context.md', projectId: 'demo-project',
+    });
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('[data-testid="orch-add-context"]')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="orch-context-current-source"]')?.textContent)
+      .toContain('Context model');
   });
 
   it('renders the standard composer footer once and removes both host task workflows', async () => {

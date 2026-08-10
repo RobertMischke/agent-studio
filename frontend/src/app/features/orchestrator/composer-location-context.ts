@@ -7,11 +7,9 @@ import type { StudioTab } from '../studio-shell';
  * standard footer: the large scope (project), the active surface, and an
  * optional identity detail (task key, URL id, commit…).
  *
- * App-local for now: the companion `coding-agent-chat` change that adds a
- * first-class `composerContext` input on `<cac-chat>` was lost in the 11.07
- * remote-runner outage, so the side sheet projects this value into the
- * library's `[chat-foot-start]` footer slot instead. Once the library grows
- * the input, this type collapses into CAC's `ChatComposerContext`.
+ * The side sheet maps this host-owned location shape to the chat library's
+ * `composerContext` input. Keeping the shell contract separate preserves
+ * nullable navigation state at the application boundary.
  */
 export interface ComposerLocationContext {
   project: string | null;

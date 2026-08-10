@@ -98,6 +98,27 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
     }
 
     [Fact]
+    public void Snapshot_AcceptsProjectBoundCommitReferences()
+    {
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var route));
+        var envelope = Envelope(
+            route.Value,
+            "project-a",
+            null,
+            DateTime.UtcNow,
+            [new OrchestratorContextReference("commit", "commit:project-a/0123456789abcdef", "project-a")]);
+
+        var result = OrchestratorContextEnvelopePolicy.Snapshot(
+            "project-a", route,
+            new SendOrchestratorChatRequest("Question", null, ContextEnvelope: envelope),
+            DateTime.UtcNow);
+
+        var reference = Assert.Single(result.ExplicitReferences);
+        Assert.Equal("commit", reference.Kind);
+        Assert.Equal("commit:project-a/0123456789abcdef", reference.Reference);
+    }
+
+    [Fact]
     public async Task SendAsync_AssemblesEveryStatelessTurnInDossierOrderAndPersistsLinkedReceipt()
     {
         var persistence = new MemoryPersistence([
