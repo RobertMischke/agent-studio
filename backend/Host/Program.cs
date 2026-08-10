@@ -1141,6 +1141,7 @@ watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
 // multi-hundred-file docs/ tree synchronously would delay the HTTP listener.
 var wikiContentCache = app.Services.GetRequiredService<WikiContentCache>();
 var projectDocs = app.Services.GetRequiredService<ProjectDocsService>();
+projectDocs.SetWorkbenchCatalogue(app.Services.GetRequiredService<WorkbenchCatalogueService>());
 projectDocs.SetWikiContentCache(wikiContentCache);
 watcher.OnWikiChanged += (projectName, _) =>
     wikiContentCache.Invalidate(projectName, WikiContentCache.InvalidationSource.Watcher);

@@ -147,12 +147,9 @@ public sealed class WorkbenchCatalogueService
 
         ApplyDocumentationProjection(items);
 
-        var visible = WorkbenchOverviewPolicy.Sort(items
-                .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
-                .Select(item => new WorkbenchOverviewItem(projectName, item)))
-            .Select(item => item.Workbench)
-            .ToList();
-        return new WorkbenchCatalogue(projectName, includeHistory, visible.Count, visible);
+        return FilterCatalogue(
+            new WorkbenchCatalogue(projectName, true, items.Count, items),
+            includeHistory);
     }
 
     /// <summary>All valid document reference keys currently owned by one project.</summary>
@@ -215,14 +212,7 @@ public sealed class WorkbenchCatalogueService
             if (catalogue == null) continue;
             items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)));
         }
-
-        var sorted = WorkbenchOverviewPolicy.Sort(items);
-        return new WorkbenchOverview(
-            ProjectName: projectName,
-            Count: sorted.Count,
-            CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
-            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "documented"),
-            Items: sorted);
+        return BuildOverview(items, projectName);
     }
 
     public WorkbenchDocument? Read(string projectName, string id)
@@ -230,8 +220,23 @@ public sealed class WorkbenchCatalogueService
         if (!SafeId(id)) return null;
         var source = ResolveSource(projectName);
         if (source == null) return null;
+        return ReadFromSource(projectName, id, source);
+    }
+
+    /// <summary>
+    /// Reads a Workbench from the exact source already published by the Wiki
+    /// cache. Supplying the cached catalogue keeps list validation and document
+    /// resolution on one immutable view.
+    /// </summary>
+    internal WorkbenchDocument? ReadFromSource(
+        string projectName,
+        string id,
+        WikiSourceContext source,
+        WorkbenchCatalogue? catalogue = null)
+    {
+        if (!SafeId(id)) return null;
         var root = source.BaseDir;
-        var item = ListFromSource(projectName, source, includeHistory: true).Items
+        var item = (catalogue ?? ListFromSource(projectName, source, includeHistory: true)).Items
             .FirstOrDefault(x => x.Id == id);
         if (item is not { Valid: true }) return null;
         var full = ContainedPath(root, item.EntryPath);
@@ -270,6 +275,39 @@ public sealed class WorkbenchCatalogueService
             revision,
             workingTreeModified,
             fingerprint);
+    }
+
+    /// <summary>
+    /// Applies the public current/history projection to a complete cached
+    /// catalogue without scanning or resolving a repository source again.
+    /// </summary>
+    internal static WorkbenchCatalogue FilterCatalogue(
+        WorkbenchCatalogue catalogue,
+        bool includeHistory)
+    {
+        var visible = WorkbenchOverviewPolicy.Sort(catalogue.Items
+                .Where(item => !item.Valid || includeHistory || CurrentStatuses.Contains(item.Status))
+                .Select(item => new WorkbenchOverviewItem(catalogue.ProjectName, item)))
+            .Select(item => item.Workbench)
+            .ToList();
+        return new WorkbenchCatalogue(
+            catalogue.ProjectName,
+            includeHistory,
+            visible.Count,
+            visible);
+    }
+
+    internal static WorkbenchOverview BuildOverview(
+        IEnumerable<WorkbenchOverviewItem> items,
+        string? projectName)
+    {
+        var sorted = WorkbenchOverviewPolicy.Sort(items);
+        return new WorkbenchOverview(
+            ProjectName: projectName,
+            Count: sorted.Count,
+            CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
+            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "documented"),
+            Items: sorted);
     }
 
     /// <summary>
