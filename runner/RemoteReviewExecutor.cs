@@ -14,6 +14,8 @@ public sealed class RemoteReviewExecutor
     private readonly ReviewStateStore _state;
     private readonly Action<string> _log;
 
+    internal Func<int, TimeSpan>? ReportRetryDelayOverride { get; set; }
+
     public RemoteReviewExecutor(
         RunnerOptions options,
         TaskServerClient client,
@@ -78,10 +80,9 @@ public sealed class RemoteReviewExecutor
             workspace,
             "ExecutorRestarted",
             summary,
-            // Once a fenced restart-loss terminal is being reported, daemon
-            // shutdown must not interrupt the authority mutation and leave an
-            // ambiguous outcome for the replacement generation.
-            CancellationToken.None);
+            // The HTTP mutation itself is never cancelled once sent. The daemon
+            // token only interrupts a retry delay so replacement can adopt it.
+            shutdown);
     }
 
     private async Task<int> RunPersistedAsync(
@@ -111,7 +112,7 @@ public sealed class RemoteReviewExecutor
                         slot,
                         workspace,
                         completedResult,
-                        CancellationToken.None);
+                        shutdown);
                 }
             }
 
@@ -131,7 +132,7 @@ public sealed class RemoteReviewExecutor
                         workspace,
                         "ExecutorRestarted",
                         LostWorkSummary(slot, "daemon stopped during workspace preparation"),
-                        CancellationToken.None);
+                        shutdown);
                 }
                 catch (ReviewInfrastructureException exception)
                 {
@@ -140,7 +141,7 @@ public sealed class RemoteReviewExecutor
                         workspace,
                         exception.Classification,
                         exception.Message,
-                        CancellationToken.None);
+                        shutdown);
                 }
 
                 slot = _state.Save(slot with { Phase = "launching" });
@@ -156,7 +157,7 @@ public sealed class RemoteReviewExecutor
                         workspace,
                         "ReviewWorkerStartFailed",
                         $"Detached review worker could not start: {exception.Message}",
-                        CancellationToken.None);
+                        shutdown);
                 }
                 slot = _state.Save(slot with
                 {
@@ -177,7 +178,7 @@ public sealed class RemoteReviewExecutor
                 if (result is not null)
                 {
                     slot = _state.Save(slot with { Phase = "finalizing" });
-                    return await FinalizeResultAsync(slot, workspace, result, CancellationToken.None);
+                    return await FinalizeResultAsync(slot, workspace, result, shutdown);
                 }
                 if (!DurableReviewProcess.VerifyLive(slot, out var processProof))
                 {
@@ -202,7 +203,7 @@ public sealed class RemoteReviewExecutor
                         workspace,
                         "ExecutorRestarted",
                         LostWorkSummary(slot, processProof),
-                        CancellationToken.None);
+                        shutdown);
                 }
                 await Task.Delay(TimeSpan.FromMilliseconds(200), shutdown);
             }
@@ -244,6 +245,10 @@ public sealed class RemoteReviewExecutor
         }
 
         var evidence = result.Evidence;
+        slot = slot with
+        {
+            ReportPendingSinceUtc = slot.ReportPendingSinceUtc ?? result.CompletedAtUtc,
+        };
         return await SubmitReportAndCleanupAsync(
             slot,
             workspace,
@@ -263,6 +268,10 @@ public sealed class RemoteReviewExecutor
         var subject = slot.Claim.Subject!;
         var lease = slot.Claim.Lease!;
         var evidence = InfrastructureEvidence(workspace, subject, lease, classification);
+        slot = slot with
+        {
+            ReportPendingSinceUtc = slot.ReportPendingSinceUtc ?? DateTime.UtcNow,
+        };
         return SubmitReportAndCleanupAsync(
             slot,
             workspace,
@@ -321,20 +330,92 @@ public sealed class RemoteReviewExecutor
             AuthorityEpoch: lease.AuthorityEpoch);
 
         ReviewReportDto report;
-        try
+        while (true)
         {
-            report = await _client.ReportReviewAsync(attempt.AttemptId, request, ct);
-        }
-        catch
-        {
-            // No cleanup and no state deletion after an unacknowledged terminal
-            // write. A replacement daemon can replay the same fenced key.
-            _state.Save(slot with { Phase = "report-pending" });
-            throw;
+            var submittedAt = DateTime.UtcNow;
+            slot = _state.Save(slot with
+            {
+                Phase = "report-submitting",
+                ReportPendingSinceUtc = slot.ReportPendingSinceUtc ?? submittedAt,
+                ReportSubmissionAttempts = slot.ReportSubmissionAttempts + 1,
+                LastReportSubmissionAtUtc = submittedAt,
+                LastReportStatusCode = null,
+                LastReportErrorCode = null,
+                LastReportError = null,
+            });
+            try
+            {
+                // The idempotency key makes this atomic write replay-safe. Do not
+                // cancel a request once sent; shutdown only interrupts backoff.
+                report = await _client.ReportReviewAsync(
+                    attempt.AttemptId,
+                    request,
+                    CancellationToken.None);
+                break;
+            }
+            catch (Exception exception)
+            {
+                var taskServer = exception as TaskServerException;
+                var transportFailure = exception is HttpRequestException or TaskCanceledException;
+                var action = ReviewReportSubmissionPolicy.Decide(
+                    taskServer?.StatusCode,
+                    taskServer?.ErrorCode,
+                    transportFailure);
+                var error = exception.Message.Length <= 500
+                    ? exception.Message
+                    : exception.Message[..500];
+                slot = _state.Save(slot with
+                {
+                    Phase = action == ReviewReportSubmissionAction.Retry
+                        ? "report-pending"
+                        : "report-rejected-terminal",
+                    LastReportStatusCode = taskServer?.StatusCode,
+                    LastReportErrorCode = taskServer?.ErrorCode,
+                    LastReportError = error,
+                    TerminalClassification = action == ReviewReportSubmissionAction.Retry
+                        ? null
+                        : ReviewReportSubmissionPolicy.TerminalClassification(action),
+                });
+
+                if (action != ReviewReportSubmissionAction.Retry)
+                {
+                    return await FinalizeTerminalReportRejectionAsync(
+                        slot,
+                        workspace,
+                        action,
+                        taskServer);
+                }
+
+                var delay = ReportRetryDelayOverride?.Invoke(slot.ReportSubmissionAttempts)
+                            ?? TaskServerConnectivityMonitor.RetryDelay(
+                                _options.PollSeconds,
+                                slot.ReportSubmissionAttempts);
+                var age = DateTime.UtcNow - slot.ReportPendingSinceUtc!.Value;
+                _log(
+                    $"review-report-pending attempt={attempt.AttemptId} " +
+                    $"submissionAttempts={slot.ReportSubmissionAttempts} " +
+                    $"ageSeconds={Math.Max(0, age.TotalSeconds):0} " +
+                    $"status={taskServer?.StatusCode.ToString() ?? "transport"} " +
+                    $"code={taskServer?.ErrorCode ?? exception.GetType().Name} " +
+                    $"retryInMs={(long)delay.TotalMilliseconds}");
+                try
+                {
+                    await Task.Delay(delay, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    _log(
+                        $"review report retry handed off attempt={attempt.AttemptId} " +
+                        $"submissionAttempts={slot.ReportSubmissionAttempts} " +
+                        $"phase=report-pending");
+                    return 0;
+                }
+            }
         }
         _log(
             $"review report accepted attempt={attempt.AttemptId} outcome={report.Outcome} " +
-            $"classification={report.FailureClassification ?? "none"} taskState={report.TaskState}");
+            $"classification={report.FailureClassification ?? "none"} taskState={report.TaskState} " +
+            $"submissionAttempts={slot.ReportSubmissionAttempts}");
         slot = _state.Save(slot with { Phase = "report-accepted" });
 
         var removed = false;
@@ -374,6 +455,46 @@ public sealed class RemoteReviewExecutor
         if (removed) _state.Delete(slot);
 
         return report.Outcome == "Pass" ? 0 : report.Outcome == "ProductFailure" ? 2 : 3;
+    }
+
+    private async Task<int> FinalizeTerminalReportRejectionAsync(
+        PersistedReviewSlot slot,
+        RemoteReviewWorkspace workspace,
+        ReviewReportSubmissionAction action,
+        TaskServerException? exception)
+    {
+        var classification = ReviewReportSubmissionPolicy.TerminalClassification(action);
+        var age = DateTime.UtcNow - (slot.ReportPendingSinceUtc ?? slot.UpdatedAtUtc);
+        var removed = false;
+        try
+        {
+            removed = await CleanupWorkspaceAsync(slot, workspace);
+        }
+        catch (Exception cleanupException)
+        {
+            slot = _state.Save(slot with { Phase = "terminal-cleanup-pending" });
+            _log(
+                $"review-report-terminal attempt={slot.AttemptId} classification={classification} " +
+                $"status={exception?.StatusCode.ToString() ?? "none"} " +
+                $"code={exception?.ErrorCode ?? "none"} " +
+                $"submissionAttempts={slot.ReportSubmissionAttempts} " +
+                $"ageSeconds={Math.Max(0, age.TotalSeconds):0} cleanup=pending " +
+                $"error={cleanupException.GetType().Name}");
+            return 3;
+        }
+
+        _log(
+            $"review-report-terminal attempt={slot.AttemptId} classification={classification} " +
+            $"status={exception?.StatusCode.ToString() ?? "none"} " +
+            $"code={exception?.ErrorCode ?? "none"} " +
+            $"submissionAttempts={slot.ReportSubmissionAttempts} " +
+            $"ageSeconds={Math.Max(0, age.TotalSeconds):0} " +
+            $"cleanup={(removed ? "removed" : "pending")}");
+        if (removed)
+            _state.Delete(slot);
+        else
+            _state.Save(slot with { Phase = "terminal-cleanup-pending" });
+        return 3;
     }
 
     private async Task<bool> CleanupWorkspaceAsync(

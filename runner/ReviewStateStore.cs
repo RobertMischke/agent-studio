@@ -16,7 +16,15 @@ public sealed record PersistedReviewSlot(
     DateTime? ProcessStartedAtUtc,
     string Phase,
     DateTime UpdatedAtUtc,
-    string? AdoptionFailure = null)
+    string? AdoptionFailure = null,
+    DateTime? CreatedAtUtc = null,
+    DateTime? ReportPendingSinceUtc = null,
+    int ReportSubmissionAttempts = 0,
+    DateTime? LastReportSubmissionAtUtc = null,
+    int? LastReportStatusCode = null,
+    string? LastReportErrorCode = null,
+    string? LastReportError = null,
+    string? TerminalClassification = null)
 {
     public string AttemptId => Claim.Attempt?.AttemptId
                                ?? throw new InvalidDataException("Persisted review claim has no attempt.");
@@ -43,6 +51,7 @@ public sealed class ReviewStateStore
         var attemptId = claim.Attempt!.AttemptId;
         var workerDirectory = Path.Combine(Root, RemoteReviewWorkspace.SafeSegment(attemptId));
         Directory.CreateDirectory(workerDirectory);
+        var now = DateTime.UtcNow;
         var slot = new PersistedReviewSlot(
             claim,
             workerDirectory,
@@ -50,7 +59,8 @@ public sealed class ReviewStateStore
             null,
             null,
             "preparing",
-            DateTime.UtcNow);
+            now,
+            CreatedAtUtc: now);
         return Save(slot);
     }
 
@@ -106,6 +116,26 @@ public sealed class ReviewStateStore
         }
     }
 
+    public ReviewSlotHygieneSnapshot GetHygieneSnapshot(DateTime utcNow)
+    {
+        var slots = LoadAll();
+        var pending = slots.Where(slot =>
+                string.Equals(slot.Phase, "report-pending", StringComparison.Ordinal)
+                || string.Equals(slot.Phase, "report-submitting", StringComparison.Ordinal))
+            .ToList();
+        var oldest = pending.Count == 0
+            ? (TimeSpan?)null
+            : pending.Max(slot => utcNow - (slot.ReportPendingSinceUtc ?? slot.UpdatedAtUtc));
+        if (oldest < TimeSpan.Zero) oldest = TimeSpan.Zero;
+        var cleanupPending = slots.Count(slot =>
+            string.Equals(slot.Phase, "terminal-cleanup-pending", StringComparison.Ordinal));
+        return new ReviewSlotHygieneSnapshot(
+            slots.Count,
+            pending.Count,
+            oldest,
+            cleanupPending);
+    }
+
     public PersistedReviewSlot? Find(string attemptId)
         => LoadAll().FirstOrDefault(slot => string.Equals(
             slot.AttemptId,
@@ -148,3 +178,9 @@ public sealed class ReviewStateStore
             throw new InvalidDataException("Persisted review attempt, subject, and lease identities disagree.");
     }
 }
+
+public sealed record ReviewSlotHygieneSnapshot(
+    int Total,
+    int ReportPending,
+    TimeSpan? OldestReportPendingAge,
+    int TerminalCleanupPending);

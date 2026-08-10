@@ -203,7 +203,18 @@ state.
   `RUNNER_STATE_DIR/reviews`. The detached worker persists command checkpoints
   and terminal evidence. A replacement adopts only a positively matched PID
   start time and workspace cwd, renews the original lease instance, and submits
-  the deterministic `review-report:<attempt>:<fence>` terminal key.
+  the deterministic `review-report:<attempt>:<fence>` terminal key. Report
+  delivery retains the completed evidence and retries transport failures,
+  ambiguous responses, HTTP 408/429, and ordinary 5xx responses with bounded
+  backoff. A missing task (404 or legacy `task-not-found` 503), superseded
+  authority, or another fenced 4xx response is a classified terminal delivery
+  rejection: the disposable workspace is reaped locally and the slot record is
+  deleted, or retained as visible `terminal-cleanup-pending` state if cleanup
+  cannot complete. The daemon journals total persisted slots, pending report
+  count, oldest pending-report age, and terminal-cleanup count at startup and
+  once per minute. Compatibility report projection uses the archive-inclusive
+  task snapshot so a late idempotent report can record evidence without
+  reopening an archived card.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive
