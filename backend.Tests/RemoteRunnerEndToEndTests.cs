@@ -3259,8 +3259,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Fail(failure);
     }
 
-    [Fact]
-    public async Task Monolith_v1_review_report_after_operator_acceptance_keeps_completed_lane_and_records_evidence()
+    [Theory]
+    [InlineData(TaskStates.Completed)]
+    [InlineData(TaskStates.Archive)]
+    public async Task Monolith_v1_review_report_after_operator_acceptance_keeps_terminal_lane_and_records_evidence(
+        string terminalState)
     {
         const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
         const string repositoryUrl = "https://example.invalid/agent-studio.git";
@@ -3338,7 +3341,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         var moved = factory.Services.GetRequiredService<TaskStateMachine>().MoveJob(
             TaskKey,
-            TaskStates.Completed,
+            terminalState,
             _watchPath,
             TimelineActors.Human("operator"));
         Assert.Equal(MoveJobStatus.Success, moved.Status);
@@ -3353,11 +3356,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             reportRequest,
             CancellationToken.None);
 
-        var completedFolder = Path.Combine(_watchPath, TaskStates.Completed, TaskKey);
+        var completedFolder = Path.Combine(_watchPath, terminalState, TaskKey);
         var evidenceFile = Path.Combine(
             completedFolder,
             $"remote-review-grade-{claim.Attempt.AttemptId}.md");
-        Assert.Equal(TaskStates.Completed, report.TaskState);
+        Assert.Equal(terminalState, report.TaskState);
         Assert.Equal(report, replay);
         Assert.False(report.RetryScheduled);
         Assert.True(Directory.Exists(completedFolder));
