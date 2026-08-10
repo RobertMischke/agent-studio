@@ -4,7 +4,11 @@
       Loading Workbench…
     </div>
   } @else if (error(); as message) {
-    <div class="workbench-viewer__state workbench-viewer__state--error" role="alert">
+    <div
+      class="workbench-viewer__state workbench-viewer__state--error"
+      data-testid="workbench-viewer-error"
+      role="alert"
+    >
       {{ message }}
     </div>
   } @else if (document(); as doc) {
