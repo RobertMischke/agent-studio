@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "demo-instanz",
+  "title": "Public demo instance with no execution authority",
+  "summary": "Decision dossier for a publicly browsable Agent Studio demo built from the existing pinned ADR-0056 seed. It specifies two mock projects with Wiki and all board lanes, a six-state Dossier lifecycle gallery, a real Task Server, a replay-only Runner, a startup-locked server execution denial, a read-only visitor surface, scrub proof, dedicated-VM isolation, deterministic reset and seed versioning, and a six-slice launch plan plus an optional later per-session sandbox.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-10T12:00:00Z",
+  "sourceTaskKeys": ["AGT-2582"],
+  "relatedTaskKeys": ["AGT-2530", "AGT-2558", "WEB-17"]
+}
