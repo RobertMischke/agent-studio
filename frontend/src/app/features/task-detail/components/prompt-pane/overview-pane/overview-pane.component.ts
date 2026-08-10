@@ -33,6 +33,7 @@ import { ConceptDossierNoticeComponent } from '../../concept-dossier-notice/conc
 import { TooltipDirective, type StructuredTooltip, type TooltipSeverity } from 'coding-agent-chat/shared';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-run-history.component';
+import { PipelineTokenUsageComponent } from '../pipeline-token-usage/pipeline-token-usage.component';
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
 import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
@@ -62,6 +63,7 @@ import {
   buildPipelineStepTokenTooltip,
   buildPipelineTotalCostTooltip,
   buildPipelineTotalTokenTooltip,
+  formatPipelineAggregateCost,
   formatPipelineCost,
 } from './pipeline-cost-tooltip.util';
 import {
@@ -481,7 +483,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, ConceptDossierNoticeComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, OverviewRunsComponent, CopyableTaskKeyComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, ConceptDossierNoticeComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineTokenUsageComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent, PipelineHistoryNoticeComponent, OverviewRunsComponent, CopyableTaskKeyComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -1773,6 +1775,10 @@ export class OverviewPaneComponent {
   /** USD formatting: sub-cent costs need more than 2 dp to be non-zero. */
   formatCost(usd: number): string {
     return formatPipelineCost(usd);
+  }
+
+  formatAggregateCost(usd: number, anyModelUnknown: boolean): string {
+    return formatPipelineAggregateCost(usd, anyModelUnknown);
   }
 
   formatRelativeTime(iso: string): string {

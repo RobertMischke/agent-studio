@@ -142,6 +142,31 @@ function pipeline() {
       totalInputCostUsd: 0, totalOutputCostUsd: 0, totalCacheReadCostUsd: 0,
       totalCacheCreationCostUsd: 0, totalCostUsd: 2.75, anyModelUnknown: false,
     },
+    tokensByModel: {
+      runs: [
+        {
+          attempt: 1, current: false, startedAt: previous.startedAt, completedAt: previous.completedAt,
+          models: [
+            { model: 'claude-haiku-4-5', modelKnown: true, steps: 1, inputTokens: 1000000, outputTokens: 200000, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 1200000, costUsd: 2.0 },
+            { model: 'claude-opus-4-8', modelKnown: true, steps: 1, inputTokens: 100000, outputTokens: 10000, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 110000, costUsd: 0.75 },
+          ],
+          totalTokens: 1310000, totalCostUsd: 2.75, anyModelUnknown: false,
+        },
+        {
+          attempt: 2, current: true, startedAt: current.startedAt, completedAt: current.completedAt,
+          models: [
+            { model: 'claude-haiku-4-5', modelKnown: true, steps: 1, inputTokens: 1000000, outputTokens: 200000, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 1200000, costUsd: 2.0 },
+            { model: 'claude-opus-4-8', modelKnown: true, steps: 1, inputTokens: 100000, outputTokens: 10000, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 110000, costUsd: 0.75 },
+          ],
+          totalTokens: 1310000, totalCostUsd: 2.75, anyModelUnknown: false,
+        },
+      ],
+      totalByModel: [
+        { model: 'claude-haiku-4-5', modelKnown: true, steps: 2, inputTokens: 2000000, outputTokens: 400000, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 2400000, costUsd: 4.0 },
+        { model: 'claude-opus-4-8', modelKnown: true, steps: 2, inputTokens: 200000, outputTokens: 20000, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 220000, costUsd: 1.5 },
+      ],
+      totalTokens: 2620000, totalCostUsd: 5.5, anyModelUnknown: false,
+    },
     config: {
       'core-agent-run': {
         enabled: true, canDisable: false, enabledSource: 'catalogue',
@@ -219,6 +244,9 @@ async function installFixtureRoutes(page: Page) {
   await page.route('**/api/clients', route => route.fulfill(json([])));
   await page.route('**/api/cli/usage**', route => route.fulfill(json({ items: [] })));
   await page.route('**/api/cli/quota**', route => route.fulfill(json({ snapshots: [], ttlSeconds: 600 })));
+  await page.route('**/api/projects/*/workbenches**', route => route.fulfill(json({
+    projectName: 'agent-taskboard', includesHistory: true, count: 0, items: [],
+  })));
   await page.route('**/api/auth/status', route => route.fulfill(json({
     profile: 'local', bootstrapRequired: false, authenticated: false, user: null,
   })));
@@ -316,6 +344,72 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
   await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
+});
+
+test('task totals show Unknown, never $0.00, when all recorded usage is unpriced', async ({ page, devBackend }) => {
+  void devBackend;
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    } catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  const unpriced = pipeline();
+  unpriced.cost = {
+    ...unpriced.cost,
+    steps: unpriced.cost.steps.map(step => ({
+      ...step,
+      model: 'future-unpriced-model',
+      modelKnown: false,
+      inputCostUsd: 0,
+      outputCostUsd: 0,
+      cacheReadCostUsd: 0,
+      cacheCreationCostUsd: 0,
+      costUsd: 0,
+    })),
+    totalInputCostUsd: 0,
+    totalOutputCostUsd: 0,
+    totalCacheReadCostUsd: 0,
+    totalCacheCreationCostUsd: 0,
+    totalCostUsd: 0,
+    anyModelUnknown: true,
+  };
+  unpriced.tokensByModel = {
+    runs: unpriced.tokensByModel.runs.map(run => ({
+      ...run,
+      models: [{
+        model: 'future-unpriced-model', modelKnown: false, steps: 2,
+        inputTokens: 1100000, outputTokens: 210000, cacheReadTokens: 0,
+        cacheCreationTokens: 0, totalTokens: 1310000, costUsd: 0,
+      }],
+      totalCostUsd: 0,
+      anyModelUnknown: true,
+    })),
+    totalByModel: [{
+      model: 'future-unpriced-model', modelKnown: false, steps: 4,
+      inputTokens: 2200000, outputTokens: 420000, cacheReadTokens: 0,
+      cacheCreationTokens: 0, totalTokens: 2620000, costUsd: 0,
+    }],
+    totalTokens: 2620000,
+    totalCostUsd: 0,
+    anyModelUnknown: true,
+  };
+
+  const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(unpriced)));
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toHaveText('Unknown');
+  await expect(page.getByTestId('pipeline-token-usage-grand-total-cost')).toHaveText('Unknown');
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+    const path = RESULTS_DIR
+      ? join(RESULTS_DIR, `pipeline-total-unpriced-${theme}--mocked.png`)
+      : `test-results/pipeline-total-unpriced-${theme}--mocked.png`;
+    await page.screenshot({ path, fullPage: true });
+  }
 });
 
 test('post-step lifecycle shows backend activation, history, and the exact settings row in both themes', async ({ page }) => {

@@ -1,7 +1,8 @@
 # Token pricing
 
-> **Status (2026-07-21):** Live. Pricing is owned by the published
-> `TokenEconomy` package. Studio contains no model rates.
+> **Status (2026-08-10):** Live on exactly pinned `TokenEconomy` 0.3.1,
+> including historical prices for the GPT-5.6 family. Studio contains no model
+> rates.
 
 ## Contract
 
@@ -12,7 +13,7 @@ in `backend/Features/Runner/TokenEconomyPriceProvider.cs` adapts
 
 The adapter is exposed through `ITokenPriceProvider`; the active
 `TokenPricing.Provider` configuration selects `TokenEconomyPriceProvider`, the
-package-specific implementation from the exactly pinned `TokenEconomy` 0.2.0
+package-specific implementation from the exactly pinned `TokenEconomy` 0.3.1
 dependency. Aggregators and frontend contracts do not depend on the provider
 package directly.
 
@@ -25,6 +26,12 @@ TokenEconomy distinguishes `Resolved`, `UnknownModel`, and `NoPriceForDate`.
 Studio maps only `Resolved` to a dollar value. The other states keep the token
 count and set the existing unknown-price flags so UI surfaces render `Unknown`,
 never a silent `$0.00`.
+
+Active `UnknownModel` usage also increments `unknownModelCount` in the project
+Token Summary, renders an acute `N models without price data` badge, and emits
+one warning per project and model per backend process. `NoPriceForDate` remains
+explicitly unpriced but does not trigger the catalog-drift signal because the
+model id is present in the pinned catalog.
 
 ## Cost surfaces
 
@@ -81,3 +88,11 @@ no-price behavior, selection by run timestamp, and the configured provider
 identity. The adapter also preserves the four effective rates, source, and
 effective date returned to the shared calculation modal. Aggregator tests cover
 the shared consumers.
+
+## Updating the exact package pin
+
+1. Verify that the intended published TokenEconomy release contains prices and `ValidFrom` history for every newly active model family.
+2. Update the exact `TokenEconomy` `PackageReference` and the public-package check in `scripts/check-public-docs.mjs` to the same version.
+3. Restore and build the backend so any `ITokenPriceProvider` or `TokenEconomyPriceProvider` API change fails at the adapter boundary.
+4. Run `TokenPricingTests` plus the token-summary and pipeline-cost regressions, including a historical timestamp for each newly priced family.
+5. Run the focused task-detail Playwright proof and preserve light- and dark-theme screenshots when aggregate rendering changes.

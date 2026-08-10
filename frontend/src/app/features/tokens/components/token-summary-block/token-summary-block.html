@@ -7,6 +7,13 @@
       } @else {
         <span class="tok-sum__sub">No orchestrator activity yet.</span>
       }
+      @if ((s.unknownModelCount ?? 0) > 0) {
+        <span class="studio-pill studio-pill--warn"
+              data-testid="token-summary-pricing-drift"
+              [cacTooltip]="'These active model ids are absent from the pinned TokenEconomy catalog. Update and verify the exact package pin.'">
+          {{ s.unknownModelCount }} model{{ s.unknownModelCount === 1 ? '' : 's' }} without price data
+        </span>
+      }
     </header>
 
     @if (s.orchestratorLlmCalls > 0) {
@@ -38,7 +45,7 @@
         <button type="button" class="tok-sum__cost-amount tok-sum__cost-button"
               [class.tok-sum__cost-amount--partial]="!s.allModelsPriced"
               (click)="showTotalCalculation(s)">
-          {{ formatUsd(s.estimatedApiCostUsd) }}
+          {{ formatAggregateUsd(s.estimatedApiCostUsd, s.allModelsPriced) }}
           @if (!s.allModelsPriced) { <span class="tok-sum__partial">(partial; some models not priced)</span> }
         </button>
       </div>

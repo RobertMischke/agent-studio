@@ -7,6 +7,7 @@ import type {
   PipelineRunTokenUsage,
 } from '../../../../task-pipeline';
 import { buildTokenCostTooltip } from '../../../../tokens';
+import { formatPipelineAggregateCost } from '../overview-pane/pipeline-cost-tooltip.util';
 
 /** The task-wide total (every model summed over every run). */
 interface TaskTotal {
@@ -107,6 +108,10 @@ export class PipelineTokenUsageComponent {
     if (usd <= 0) return '$0.00';
     if (usd < 0.01) return `$${usd.toFixed(4)}`;
     return `$${usd.toFixed(2)}`;
+  }
+
+  aggregateCostLabel(usd: number, anyModelUnknown: boolean): string {
+    return formatPipelineAggregateCost(usd, anyModelUnknown);
   }
 
   totalTooltip(totalTokens: number, costUsd: number, anyModelUnknown: boolean, scope: string): string {

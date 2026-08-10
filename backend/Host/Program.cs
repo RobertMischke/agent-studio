@@ -302,6 +302,7 @@ builder.Services.AddSingleton<OrchestratorTurnService>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();
 builder.Services.AddSingleton<WorkspaceTokensCacheStore>();
+builder.Services.AddSingleton<AgentStudio.Tokens.TokenPricingDriftMonitor>();
 builder.Services.AddSingleton<TokenSummaryService>();
 builder.Services.AddSingleton<ProjectTokenUsageService>();
 builder.Services.AddSingleton<WorkspaceTokensTimelineService>();

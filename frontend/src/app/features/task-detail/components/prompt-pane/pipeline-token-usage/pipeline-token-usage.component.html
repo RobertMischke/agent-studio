@@ -23,7 +23,8 @@
         <span class="ptu__head-total ptu__num ptu__strong"
               data-testid="pipeline-token-usage-grand-total-tokens">{{ tokens(taskTotal().totalTokens) }}</span>
         <span class="ptu__head-cost ptu__num"
-              data-testid="pipeline-token-usage-grand-total-cost">{{ formatCost(taskTotal().costUsd) }}@if (taskTotal().anyModelUnknown) {<span class="ptu__na" [cacTooltip]="'One or more models have no price on file; the total excludes them.'">*</span>}</span>
+              [class.ptu__na]="taskTotal().anyModelUnknown"
+              data-testid="pipeline-token-usage-grand-total-cost">{{ aggregateCostLabel(taskTotal().costUsd, taskTotal().anyModelUnknown) }}</span>
       </button>
 
       @if (summaryOpen()) {
@@ -93,7 +94,8 @@
           <span class="ptu__head-total ptu__num ptu__strong"
                 data-testid="pipeline-token-usage-run-total">{{ tokens(run.totalTokens) }}</span>
           <span class="ptu__head-cost ptu__num"
-                data-testid="pipeline-token-usage-run-cost">{{ formatCost(run.totalCostUsd) }}@if (run.anyModelUnknown) {<span class="ptu__na" [cacTooltip]="'A model in this run has no price on file; the cost excludes it.'">*</span>}</span>
+                [class.ptu__na]="run.anyModelUnknown"
+                data-testid="pipeline-token-usage-run-cost">{{ aggregateCostLabel(run.totalCostUsd, run.anyModelUnknown) }}</span>
         </button>
 
         @if (isRunOpen(run.attempt)) {

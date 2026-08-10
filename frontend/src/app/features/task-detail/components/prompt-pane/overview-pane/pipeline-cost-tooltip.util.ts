@@ -8,6 +8,13 @@ export function formatPipelineCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
+/** Aggregate labels must preserve unknown and partial pricing semantics. */
+export function formatPipelineAggregateCost(usd: number, anyModelUnknown: boolean): string {
+  if (!anyModelUnknown) return formatPipelineCost(usd);
+  if (usd <= 0) return 'Unknown';
+  return `${formatPipelineCost(usd)} partial`;
+}
+
 export function formatPipelineTokens(tokens: number): string {
   if (tokens <= 0) return '—';
   if (tokens < 1000) return String(tokens);

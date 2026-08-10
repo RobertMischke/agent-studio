@@ -31,6 +31,7 @@ public sealed class TokenAggregationService : ITokenAggregator
     private readonly BusBackedAdHocUsageReader _busAdHoc;
     private readonly BusBackedWorkspaceTimelineReader _busTimeline;
     private readonly BusBackedProjectTokenUsageReader _busProjectUsage;
+    private readonly TokenPricingDriftMonitor? _pricingDrift;
 
     public TokenAggregationService(
         BusAggregationCache bus,
@@ -38,7 +39,8 @@ public sealed class TokenAggregationService : ITokenAggregator
         TokenSummaryCacheStore summaryCache,
         BusBackedAdHocUsageReader busAdHoc,
         BusBackedWorkspaceTimelineReader busTimeline,
-        BusBackedProjectTokenUsageReader busProjectUsage)
+        BusBackedProjectTokenUsageReader busProjectUsage,
+        TokenPricingDriftMonitor? pricingDrift = null)
     {
         _bus = bus;
         _config = config;
@@ -46,6 +48,7 @@ public sealed class TokenAggregationService : ITokenAggregator
         _busAdHoc = busAdHoc;
         _busTimeline = busTimeline;
         _busProjectUsage = busProjectUsage;
+        _pricingDrift = pricingDrift;
     }
 
     public TokenAggregateResponse ForProject(string project, DateTime? since = null, DateTime? until = null, CancellationToken ct = default)
@@ -79,13 +82,19 @@ public sealed class TokenAggregationService : ITokenAggregator
         => _busProjectUsage.BuildJobDetail(projectName, watchPath, jobId);
 
     public TokenSummary LifetimeSummary(string projectName, string watchPath)
-        => _busProjectUsage.BuildLifetimeSummary(projectName, watchPath);
+    {
+        var summary = _busProjectUsage.BuildLifetimeSummary(projectName, watchPath);
+        _pricingDrift?.Observe(summary);
+        return summary;
+    }
 
     public TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects)
     {
         var summaries = projects
             .Select(project => (project.Name, _busProjectUsage.BuildLifetimeSummary(project.Name, project.WatchPath)))
             .ToList();
+        foreach (var (_, summary) in summaries)
+            _pricingDrift?.Observe(summary);
         return TokenSummaryService.AggregateSummaries(summaries, _summaryCache);
     }
 

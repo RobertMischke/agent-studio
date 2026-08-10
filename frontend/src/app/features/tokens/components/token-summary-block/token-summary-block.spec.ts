@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TokenSummaryBlockComponent } from './token-summary-block';
@@ -19,6 +19,8 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
  * stable across template tweaks.
  */
 describe('TokenSummaryBlockComponent (smoke)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
   it('compiles + instantiates without throwing', async () => {
     await TestBed.configureTestingModule({
       imports: [TokenSummaryBlockComponent],
@@ -30,15 +32,66 @@ describe('TokenSummaryBlockComponent (smoke)', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(TokenSummaryBlockComponent);
-    fixture.componentRef.setInput('projectName', undefined);
-
-    // Required inputs seeded with undefined — replace with realistic defaults if needed:
-    // projectName
-    try { fixture.detectChanges(); } catch (e) {
-      // Render needs more setup than the generic generator provides.
-      // The instantiation above is still a real smoke check.
-      console.warn('[smoke] TokenSummaryBlockComponent initial render skipped:', (e as Error).message);
-    }
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/runner/Demo/token-summary')
+      .flush({
+        project: 'Demo', orchestratorEntries: 0, orchestratorLlmCalls: 0,
+        totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
+        totalCacheCreationTokens: 0, estimatedApiCostUsd: 0, allModelsPriced: false,
+        unknownModelCount: 0, byModel: [], disclaimer: 'Estimate only.',
+      });
+    fixture.detectChanges();
     expect(fixture.componentInstance).toBeTruthy();
+    fixture.destroy();
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('shows a visible drift badge for active models absent from the catalog', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TokenSummaryBlockComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TokenSummaryBlockComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/runner/Demo/token-summary')
+      .flush({
+        project: 'Demo',
+        orchestratorEntries: 1,
+        orchestratorLlmCalls: 1,
+        totalInputTokens: 1_000,
+        totalOutputTokens: 100,
+        totalCacheReadTokens: 0,
+        totalCacheCreationTokens: 0,
+        estimatedApiCostUsd: 0,
+        allModelsPriced: false,
+        unknownModelCount: 1,
+        byModel: [{
+          model: 'future-model', calls: 1, inputTokens: 1_000, outputTokens: 100,
+          cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0,
+          modelPriced: false, modelInCatalog: false,
+        }],
+        disclaimer: 'Estimate only.',
+      });
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector(
+      '[data-testid="token-summary-pricing-drift"]',
+    ) as HTMLElement | null;
+    expect(badge?.textContent).toContain('1 model without price data');
+    expect(fixture.nativeElement.querySelector('[data-testid="token-summary-cost"]')?.textContent)
+      .toContain('Unknown');
+
+    fixture.destroy();
+    TestBed.inject(HttpTestingController).verify();
   });
 });
