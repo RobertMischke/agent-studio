@@ -43,13 +43,20 @@ public sealed class AcceptedIntegrationInventorySweep
             if (string.Equals(step?.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var hasIntegrationRecord = step is not null || _timeline.ReadAll(task.FolderPath).Any(item =>
-                string.Equals(item.Kind, TimelineEventKinds.IntegrationStarted, StringComparison.Ordinal));
-            var outcome = ClassifyFinding(step, status, hasIntegrationRecord);
+            var timeline = _timeline.ReadAll(task.FolderPath);
+            var verification = TaskIntegrationRecordDetector.LatestVerification(task);
+            var hasIntegrationRecord = verification is not null
+                || TaskIntegrationRecordDetector.HasNativeRecord(step, timeline);
+            var outcome = ClassifyFinding(
+                step,
+                status,
+                hasIntegrationRecord,
+                verification?.Classification);
             if (outcome is null) continue;
-            var detail = string.Equals(outcome, PreInvariantNotEvaluated, StringComparison.Ordinal)
-                ? "Acceptance predates integration recording; the invariant was not evaluated."
-                : step?.Reason ?? step?.VerdictSummary;
+            var detail = verification?.Evidence
+                ?? (string.Equals(outcome, PreInvariantNotEvaluated, StringComparison.Ordinal)
+                    ? "Acceptance predates integration recording; the invariant has not been evaluated yet."
+                    : step?.Reason ?? step?.VerdictSummary);
 
             var item = new AcceptedIntegrationInventoryItem(
                 task.ProjectName,
@@ -84,23 +91,31 @@ public sealed class AcceptedIntegrationInventorySweep
             }
         }
 
-        var historicalCount = findings.Count(item => string.Equals(
+        var unevaluated = findings.Count(item => string.Equals(
             item.Outcome,
             PreInvariantNotEvaluated,
             StringComparison.Ordinal));
         _logger.LogInformation(
             "accepted-integration-inventory completed scanned={Scanned} findings={Findings} preInvariantNotEvaluated={PreInvariantNotEvaluated}",
             accepted.Count,
-            findings.Count - historicalCount,
-            historicalCount);
+            findings.Count - unevaluated,
+            unevaluated);
         return findings;
     }
 
     internal static string? ClassifyFinding(
         PipelineStepExecution? step,
         TaskIntegrationStatus? status,
-        bool hasIntegrationRecord)
+        bool hasIntegrationRecord,
+        string? verificationClass = null)
     {
+        if (!string.IsNullOrWhiteSpace(verificationClass))
+        {
+            return IntegrationRecordClasses.IsOperatorVisible(verificationClass)
+                ? verificationClass
+                : null;
+        }
+
         var finding = step?.Verdict?.ToLowerInvariant() switch
         {
             "error" => "Error",

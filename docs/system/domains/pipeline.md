@@ -212,20 +212,23 @@ pipeline view.
   Completed only after successful integration and returns decided failures to
   Human Review. Its 15-minute sweep reports `attempted`, `merged`,
   `alreadyMerged`, and `failed` separately; `MergedAfterRebase` contributes to
-  the existing `merged` and `integrated` counters. The same sweep evaluates the 30-minute accepted
-  delivery invariant. The alert evaluates only current, non-archived cards
-  whose acceptance has an `integration_started` timeline event or a durable
-  merge-step record; cards that predate that recording contract never become
-  acute alerts. Accepted cards without Git-proven integration publish a
-  project-filtered snapshot at
+  the existing `merged` and `integrated` counters. The same sweep evaluates the
+  30-minute accepted delivery invariant. The alert evaluates only current,
+  non-archived cards
+  whose acceptance has a native integration record or an operator-facing
+  historical verification record. Verified legacy integration and explicit
+  no-code delivery records never become acute alerts. Accepted cards without
+  Git-proven integration publish a project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
   banner capped at ten task keys with a link to the exact filtered board list,
   and emit a warning event containing the affected task keys.
-  Startup also performs one read-only inventory of Completed and archived
-  integration-required cards whose merge attempt is absent, `Error`, or
-  `NoTaskBranch`, logging one row per finding without rewriting the card.
-  Missing-record cases are inventory-only and carry the quiet
-  `PreInvariantNotEvaluated` classification.
+  Startup first classifies missing historical records in bounded background
+  batches, then inventories only `content-on-fence`, `genuinely-missing`, and
+  current recorded `Error` or `NoTaskBranch` outcomes. The historical report
+  retains counts for all five classes but includes task keys only for its two
+  operator-facing classes. Recovery starts only after this bookkeeping pass;
+  its records are never merge authority and their cards are never moved by the
+  recovery backstop.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability

@@ -111,6 +111,39 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
         Assert.Equal(expected, AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate));
     }
 
+    [Theory]
+    [InlineData(TaskStates.Completed, null, null, true)]
+    [InlineData(TaskStates.Archive, null, null, true)]
+    [InlineData(TaskStates.HumanReview, LifecyclePhases.Integrating, null, true)]
+    [InlineData(TaskStates.HumanReview, null, null, false)]
+    [InlineData(TaskStates.Completed, null, "genuinely-missing", false)]
+    [InlineData(TaskStates.Completed, null, "content-on-fence", false)]
+    [InlineData(TaskStates.Completed, null, "integrated-historical", false)]
+    public void RecoveryCandidate_NeverTreatsHistoricalBookkeepingAsMergeAuthority(
+        string state,
+        string? phase,
+        string? verificationClass,
+        bool expected)
+    {
+        var task = Candidate("AGT-2589", 45, lastOutcome: null).Task with
+        {
+            State = state,
+            Phase = phase,
+            IntegrationRecords = verificationClass is null
+                ? []
+                :
+                [
+                    new TaskIntegrationRecord
+                    {
+                        Id = HistoricalIntegrationVerificationSweep.RecordId,
+                        Classification = verificationClass,
+                    },
+                ],
+        };
+
+        Assert.Equal(expected, AcceptedIntegrationBackstopPolicy.IsRecoveryCandidate(task));
+    }
+
     private static AcceptedIntegrationAlertCandidate Candidate(
         string key,
         int acceptedMinutesAgo,

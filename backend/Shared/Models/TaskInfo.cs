@@ -136,6 +136,12 @@ public record TaskInfo
     /// </summary>
     public List<TaskCommitInfo> Commits { get; init; } = [];
     /// <summary>
+    /// Append-only application bookkeeping for historical integration truth.
+    /// Live acceptance records remain in pipeline/timeline history; this list
+    /// prevents verified legacy cards from repeatedly returning to inventory.
+    /// </summary>
+    public List<TaskIntegrationRecord> IntegrationRecords { get; init; } = [];
+    /// <summary>
     /// Actual repository base line used to prepare the latest runner checkout,
     /// persisted as <c>refs/heads/main</c> or <c>refs/heads/develop</c>.
     /// Null on legacy tasks that have not yet been backfilled.

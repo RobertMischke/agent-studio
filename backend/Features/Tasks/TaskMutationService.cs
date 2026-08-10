@@ -547,6 +547,62 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Appends one stable integration bookkeeping record without changing any
+    /// existing row. The record id is the idempotency key: a repeated sweep is
+    /// a successful no-op, even if its wall clock or evidence text differs.
+    /// </summary>
+    public IntegrationRecordWriteResult AppendIntegrationRecordOnFolder(
+        string folderPath,
+        TaskIntegrationRecord record)
+    {
+        if (!Directory.Exists(folderPath)
+            || string.IsNullOrWhiteSpace(record.Id)
+            || !IntegrationRecordClasses.All.Contains(record.Classification, StringComparer.Ordinal))
+        {
+            return new IntegrationRecordWriteResult(false, false);
+        }
+
+        var path = Path.Combine(folderPath, "task.json");
+        if (!File.Exists(path)) return new IntegrationRecordWriteResult(false, false);
+
+        try
+        {
+            var document = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                File.ReadAllText(path),
+                TaskJsonFile.ReadOpts) ?? new Dictionary<string, JsonElement>();
+            var records = new List<TaskIntegrationRecord>();
+            if (document.TryGetValue("integrationRecords", out var persisted)
+                && persisted.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in persisted.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = item.Deserialize<TaskIntegrationRecord>(TaskJsonFile.ReadOpts);
+                    if (parsed is not null && !string.IsNullOrWhiteSpace(parsed.Id)) records.Add(parsed);
+                }
+            }
+
+            if (records.Any(existing => string.Equals(
+                    existing.Id,
+                    record.Id,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                return new IntegrationRecordWriteResult(true, false);
+            }
+
+            records.Add(record);
+            TaskJsonFile.UpdateFieldOrThrow(folderPath, "integrationRecords", records);
+            Updated();
+            return new IntegrationRecordWriteResult(true, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to append integration record in {Folder}", folderPath);
+            return new IntegrationRecordWriteResult(false, false);
+        }
+    }
+
     private bool WriteCommitState(
         string folderPath,
         List<TaskCommitInfo> chain,
@@ -1927,6 +1983,8 @@ public class TaskMutationService
         return System.Text.RegularExpressions.Regex.Replace(s, @"[^a-z0-9\-]", "");
     }
 }
+
+public sealed record IntegrationRecordWriteResult(bool Succeeded, bool Appended);
 
 public sealed record CommitSupersessionWriteResult(bool Succeeded, int MarkedCommits);
 
