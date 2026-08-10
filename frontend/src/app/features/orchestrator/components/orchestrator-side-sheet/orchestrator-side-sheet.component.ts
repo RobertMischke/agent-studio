@@ -30,12 +30,14 @@ import { ConversationViewComponent } from 'coding-agent-chat/conversation';
 import {
   ChatEvent,
   ChatComposerContext,
+  ChatContextAttachment,
   ChatModelSelection,
   ChatSubmitEvent,
-  ChatToolbarItem,
 } from 'coding-agent-chat/core';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { MenuComponent } from '../../../../components/menu/menu.component';
+import type { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorPanelHeaderComponent } from '../orchestrator-panel-header/orchestrator-panel-header.component';
@@ -71,6 +73,7 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
     ChatComponent,
     ConversationViewComponent,
     AppTooltipDirective,
+    MenuComponent,
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
     OrchestratorContextReceiptComponent,
@@ -315,6 +318,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly contextDismissed = signal(false);
   readonly contextAttachments = signal<OrchestratorContextSourceOption[]>([]);
   private readonly contextPicker = viewChild<OrchestratorContextPickerComponent>('contextPicker');
+  readonly selectedContextAttachmentIds = computed(() =>
+    new Set(this.contextAttachments().map(item => item.id)));
+  readonly cacContextAttachments = computed<readonly ChatContextAttachment[]>(() =>
+    this.contextAttachments().map(item => ({
+      id: item.id,
+      label: item.label,
+      hint: item.detail,
+    })));
+  readonly composerActionMenuOpen = signal(false);
+  readonly composerActionMenuItems: readonly MenuItem[] = [
+    { kind: 'row', id: 'add-context', label: 'Add context' },
+  ];
 
   readonly automaticContextPresentation = computed(() => buildContextChipPresentation({
     project: this.effectiveProject(),
@@ -326,10 +341,22 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }));
 
   readonly currentTabSource = computed<OrchestratorContextSourceOption | null>(() => {
-    if (this.contextKind() !== 'project') return null;
     const project = this.effectiveProject();
+    if (!project) return null;
+    const taskKey = this.effectiveJobKey();
+    if (this.contextKind() === 'task' && taskKey) {
+      const reference = { kind: 'task' as const, reference: taskKey, projectId: project };
+      return {
+        id: `${reference.kind}:${project}:${reference.reference}`,
+        category: 'current',
+        label: taskKey,
+        detail: this.effectiveJobTitle() ?? 'Current task',
+        estimateTokens: 900,
+        reference,
+      };
+    }
     const page = this.pageContext();
-    if (!project || !page || page.projectName !== project) return null;
+    if (!page || page.projectName !== project) return null;
     const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
     return {
       id: `${reference.kind}:${project}:${reference.reference}`,
@@ -359,22 +386,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    */
   readonly events = signal<ChatEvent[]>([]);
 
-  /**
-   * Composer toolbar items. The chat component is intentionally generic
-   * (a reusable agent-interaction surface) — hosts plug surface-specific
-   * affordances in. The orchestrator side sheet retains the standard
-   * reference, mention, fork, and search actions.
-   */
-  readonly composerToolbarStart: readonly ChatToolbarItem[] = [
-    { id: 'reference', glyph: '#', label: 'Reference a task' },
-    { id: 'mention',   glyph: '@', label: 'Mention a participant' },
-    { id: 'fork',      glyph: '⑂', label: 'Fork into a new thread' },
-    { id: 'search',    glyph: '🔍', label: 'Search chat history' },
-  ];
-  /** Effective GPT-only route and explicit-vs-inherited provenance. */
-  readonly composerRoutingLabel = computed<string>(() =>
-    `GPT-only · ${this.composerModel.sourceLabel()}`);
-
   onModelCommit(selection: ChatModelSelection): void {
     this.composerModel.commit(selection);
   }
@@ -388,7 +399,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.turns(),
     this.localTurns(),
     this.events(),
-    this.effectiveProject(),
     this.contextKey() ?? this.effectiveProject() ?? 'orchestrator-chat',
   ));
 
@@ -711,8 +721,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.contextAttachments.update(current => current.filter(item => item.id !== id));
   }
 
-  onComposerToolbarAction(action: { id: string }): void {
-    if (action.id === 'reference') this.contextPicker()?.show();
+  requestContextAttachment(): void {
+    this.contextPicker()?.show();
+  }
+
+  toggleComposerActionMenu(): void {
+    this.composerActionMenuOpen.update(open => !open);
+  }
+
+  onComposerActionMenuItem(event: MenuItemClickEvent): void {
+    if (event.id !== 'add-context') return;
+    this.composerActionMenuOpen.set(false);
+    this.requestContextAttachment();
   }
 
   onOpenVerboseDebug(): void {
@@ -777,8 +797,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   async onSubmit(event: ChatSubmitEvent): Promise<void> {
     const proj = this.effectiveProject();
     if (!proj) return;
-    // Snapshot once so a navigation change during attachment upload cannot
-    // split the send and its reconciliation read across two histories.
+    // Snapshot once so a navigation change during the request cannot split
+    // the send and its reconciliation read across two histories.
     const contextKey = this.contextKey();
     if (!contextKey) {
       this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
@@ -795,7 +815,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       page: this.pageContext(),
     };
     const text = event.text.trim();
-    if (!text && event.attachments.length === 0) return;
+    if (!text) return;
 
     // Slice E: chat-level slash directive. The parser lives here in the
     // chat host (not a global registry) because the directive borrows
@@ -804,71 +824,22 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // existing `events` stream so the confirmation card appears in the
     // chat at the user's turn position.
     if (text === '/bug' || text.startsWith('/bug ') || text.startsWith('/bug\n')) {
-      this.handleBugDirective(text, event, proj);
+      this.handleBugDirective(text, proj);
       return;
     }
 
-    // Render the user's turn immediately so the chat doesn't sit silent
-    // while the orchestrator thinks (Opus replies often take 30-60s).
-    // The attached image is carried on the local turn as a `blob:` URL
-    // so the bubble paints with text + image in the same frame; without
-    // this the bubble would appear with text only and the image would
-    // pop in moments later once the server turn arrived.
-    const localBlobs = event.attachments.map((a) => ({
-      alt: a.alt,
-      previewUrl: a.previewUrl
-    }));
+    // Render the user's turn immediately while the reply is generated.
     const localId = `local:${Date.now()}`;
-    const localTurn: OrchestratorChatTurn & {
-      pending?: boolean;
-      localAttachments?: { alt: string; previewUrl: string }[];
-    } = {
+    const localTurn: OrchestratorChatTurn & { pending?: boolean } = {
       id: localId,
       ts: new Date().toISOString(),
       role: 'user',
-      text: text || (event.attachments.length > 0 ? '(attachments)' : ''),
+      text,
       pending: true,
-      localAttachments: localBlobs.length > 0 ? localBlobs : undefined
     };
     this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
     const lazy = await import('./orchestrator-side-sheet.lazy');
-
-    // Upload each pasted/dropped image first so the chat message can
-    // reference real files. We do this sequentially to keep error
-    // surfaces simple and the frontend code small; orchestrator chats
-    // rarely carry more than 1-2 images per turn. We also read each file
-    // as base64 in parallel so the same POST can carry the bytes inline:
-    // the backend uses the inline bytes to build an Anthropic image
-    // content block (model sees the picture without a Read tool call),
-    // while the uploaded copy stays as the archived reference.
-    const uploaded: {
-      alt: string;
-      relativePath: string;
-      inlineBase64?: string | null;
-      mimeType?: string | null;
-    }[] = [];
-    try {
-      for (const att of event.attachments) {
-        const [resp, inline] = await Promise.all([
-          lazy.uploadAttachment(this.jobService, proj, att.file),
-          lazy.readFileAsBase64(att.file).catch(() => null)
-        ]);
-        uploaded.push({
-          alt: att.alt,
-          relativePath: resp.relativePath,
-          inlineBase64: inline?.base64 ?? null,
-          mimeType: inline?.mimeType ?? att.file.type ?? null
-        });
-      }
-    } catch (err) {
-      this.sending.set(false);
-      const message = (err as { message?: string })?.message ?? 'Attachment upload failed';
-      this.localTurns.update((curr) =>
-        curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
-      );
-      return;
-    }
 
     // Task scope is attached to every turn. Project scope is also attached by
     // default, with one explicit one-message exclusion available in the menu.
@@ -889,8 +860,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // turns accumulate in — and read back from — their own history. A
     // project/board context falls through to the per-project route.
     const sendBody = {
-      text: text || (uploaded.length > 0 ? '(attachments)' : ''),
-      attachments: uploaded.length > 0 ? uploaded : undefined,
+      text,
       navigationContext: contextPayload,
       contextEnvelope: lazy.buildOrchestratorContextEnvelope(
         contextKey,
@@ -909,31 +879,16 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
         this.contextAttachments.set([]);
         this.sending.set(false);
-        // Pre-decode the persisted attachment URL(s) so the upcoming swap
-        // from the local blob bubble to the server turn uses byte-identical
-        // pixels from the browser image cache (no fetch on swap = no
-        // visible flicker). The fallback timeout caps the wait so a slow
-        // network can't strand the bubble in pending state forever.
-        const preloads = lazy.preloadPersistedAttachments(proj, uploaded);
-        // Fetch the server's view of the conversation. While the local
-        // turn is still in the list, `suppressLocalDuplicates` hides the
-        // matching server user turn so the bubble does not duplicate
-        // momentarily. Once preloads resolve we drop the local turn and
-        // revoke its blob URLs; the server turn takes over with the
-        // cached image and the user perceives no swap.
+        // Fetch the server's view of the conversation. While the local turn
+        // remains, `suppressLocalDuplicates` hides its persisted duplicate.
         this.readChat(contextKey).subscribe({
-          next: async (resp) => {
+          next: (resp) => {
             this.turns.set(resp.turns ?? []);
             this.errorMsg.set(null);
-            await preloads;
             this.localTurns.set([]);
-            for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           },
           error: () => {
-            // Fallback: clear local turn anyway so the user is not stuck
-            // looking at a pending bubble forever.
             this.localTurns.set([]);
-            for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           }
         });
       },
@@ -954,11 +909,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * skipping straight into `2-ready`. Hashtag patterns at the start of
    * any line in the description are parsed into workspace tag ids.
    */
-  private handleBugDirective(text: string, event: ChatSubmitEvent, project: string): void {
+  private handleBugDirective(text: string, project: string): void {
     void import('./orchestrator-side-sheet.lazy').then(({ handleBugDirective }) => {
       handleBugDirective({
         text,
-        event,
         project,
         watchPaths: this.watchPaths(),
         jobService: this.jobService,

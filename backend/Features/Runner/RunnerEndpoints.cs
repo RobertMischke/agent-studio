@@ -395,48 +395,6 @@ public static class RunnerEndpoints
             (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));
 
-        // Image upload + serving for the orchestrator chat composer.
-        // Files land under <watchPath>/.orchestrator/chat-attachments/.
-        // The frontend uploads each pasted/dropped image first, then sends
-        // the chat message with the relative paths so the orchestrator
-        // sees them as proper file references rather than placeholders.
-        runnerGroup.MapPost("/{projectName}/orchestrator-chat/attachments",
-            async (string projectName, HttpRequest request, TaskScannerService scanner, OrchestratorChat chat) =>
-            {
-                if (!request.HasFormContentType)
-                    return Results.BadRequest(new { error = "multipart/form-data expected" });
-
-                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
-                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-
-                var form = await request.ReadFormAsync();
-                var file = form.Files["file"] ?? form.Files.FirstOrDefault();
-                if (file is null || file.Length == 0)
-                    return Results.BadRequest(new { error = "No file uploaded" });
-
-                using var ms = new MemoryStream();
-                await file.CopyToAsync(ms);
-
-                var (fileName, relativePath, error) = chat.SaveAttachment(entry.Path, ms.ToArray(), file.FileName, file.ContentType);
-                if (fileName is null) return Results.BadRequest(new { error });
-
-                return Results.Ok(new
-                {
-                    fileName,
-                    relativePath,
-                    url = $"/api/runner/{Uri.EscapeDataString(projectName)}/orchestrator-chat/attachments/{fileName}"
-                });
-            }).DisableAntiforgery();
-
-        runnerGroup.MapGet("/{projectName}/orchestrator-chat/attachments/{fileName}",
-            (string projectName, string fileName, TaskScannerService scanner, OrchestratorChat chat) =>
-            {
-                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
-                if (entry == null) return Results.NotFound();
-                var (path, contentType) = chat.ResolveAttachment(entry.Path, fileName);
-                return path is null ? Results.NotFound() : Results.File(path, contentType);
-            });
-
         static string Truncate(string s, int max)
         {
             if (string.IsNullOrEmpty(s) || s.Length <= max) return s;

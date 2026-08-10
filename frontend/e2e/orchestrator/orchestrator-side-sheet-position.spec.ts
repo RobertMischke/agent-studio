@@ -49,8 +49,8 @@ test.describe('Orchestrator side sheet position', () => {
     await page.screenshot({ path: `${SHOTS}/01-open.png`, fullPage: false });
 
     // Title is no longer the misleading "Project window" — sidesheet
-    // wrapper paints "Orchestrator" as the title.
-    await expect(sheet.locator('.sidesheet__title')).toHaveText(/^(Chat|Orchestrator)/i);
+    // wrapper paints the neutral chat title.
+    await expect(sheet.locator('.sidesheet__title')).toHaveText('Chat');
     await expect(sheet).not.toContainText('Project window');
 
     // Sheet sits on the right edge of the viewport: its right edge is at

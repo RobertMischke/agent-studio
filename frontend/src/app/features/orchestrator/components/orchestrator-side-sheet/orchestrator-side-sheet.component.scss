@@ -274,6 +274,44 @@
   background: var(--orch-panel-bg);
 }
 
+// CAC owns the context chips and footer layout. The Studio host owns the one
+// secondary-action entry point, so the library's duplicate add buttons and
+// permanent location string stay out of the visible composer chrome.
+:host ::ng-deep .sheet__composer .chat__context-add-btn,
+:host ::ng-deep .sheet__composer .chat__context-attachment-add,
+:host ::ng-deep .sheet__composer .chat__composer-context {
+  display: none;
+}
+
+.sheet__composer-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--studio-fg-dim);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sheet__composer-add:hover,
+.sheet__composer-add:focus-visible {
+  border-color: var(--studio-border-strong);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+
+.sheet__composer-add:focus-visible {
+  outline: 2px solid var(--studio-focus-ring, var(--studio-accent));
+  outline-offset: 1px;
+}
+
 .sheet__event-action {
   align-self: flex-start;
 }

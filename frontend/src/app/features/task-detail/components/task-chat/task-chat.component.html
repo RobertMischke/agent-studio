@@ -2,7 +2,7 @@
   <header class="task-chat__boundary" data-testid="task-chat-boundary">
     <span class="task-chat__actor">
       <span class="task-chat__actor-dot" aria-hidden="true"></span>
-      Orchestrator
+      Task Q&amp;A
     </span>
     <span>Questions automatically refer to {{ taskKey() }}.</span>
     <span class="task-chat__effect">Answers do not start, pause, or continue the task agent.</span>
@@ -15,7 +15,7 @@
   <div class="task-chat__conversation" data-testid="task-chat-conversation">
     @if (!loading() && conversationEvents().length === 0) {
       <div class="task-chat__empty" data-testid="task-chat-empty">
-        Ask the Orchestrator about this task's intent, status, runs, or commits.
+        Ask about this task's intent, status, runs, or commits.
       </div>
     } @else {
       <cac-conversation-view
@@ -36,8 +36,8 @@
     emptyState=""
     [pending]="sending()"
     [disabled]="sending()"
+    [allowAttachments]="false"
     [placeholder]="placeholder()"
-    [toolbarStart]="composerToolbar"
     (submitMessage)="onSubmit($event)">
     <ng-container ngProjectAs="[chat-foot-start]">
       <span class="task-chat__composer-context" data-testid="task-chat-composer-context">

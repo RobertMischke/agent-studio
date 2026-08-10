@@ -292,6 +292,17 @@ async function stubLongWorkbench(page: Page): Promise<string[]> {
       items: [],
     }, unexpectedRequests);
   });
+  await page.route(/\/api\/search(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, { tasks: [], files: [], commits: [] }, unexpectedRequests);
+  });
+  await page.route(
+    new RegExp(`/api/projects/${encodedProject}/wiki/search(?:\\?.*)?$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        query: 'family', semanticUsed: false, expandedTerms: [], durationMs: 1, results: [],
+      }, unexpectedRequests);
+    },
+  );
   await page.route(
     new RegExp(`/api/orchestrator/context/project:${encodedProject}$`),
     async (route) => {
@@ -510,11 +521,10 @@ test.describe('Orchestrator context header · where am I', () => {
     const input = page.getByTestId('chat-input');
     await input.fill('Keyboard order draft');
     await input.focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
-    await input.focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByTestId('chat-attach')).toBeFocused();
+    await expect(page.getByTestId('orch-composer-add')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('chat-send')).toBeFocused();
 
@@ -547,7 +557,7 @@ test.describe('Orchestrator context header · where am I', () => {
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`keeps the Dossier context chip row compact in ${variant.name}`, async ({ page }) => {
+    test(`uses compact native Dossier context attachments in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
@@ -573,65 +583,55 @@ test.describe('Orchestrator context header · where am I', () => {
         await showSideSheet(page, false);
       }
 
-      const draft = page.getByTestId('orch-context-draft');
-      const chip = page.getByTestId('orch-current-tab-chip');
-      const chipLabel = page.getByTestId('orch-current-tab-label');
-      const estimate = page.getByTestId('orch-context-estimate');
-      await expect(draft).toBeVisible();
-      await expect(chip).toHaveAttribute('data-context-type', 'Dossier');
-      await expect(page.getByTestId('orch-current-tab-type-icon')).toBeVisible();
-      await expect(chipLabel).toHaveText('AOW-W1');
-      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
-      await expect(estimate).toHaveText('~1.6k');
-      await expect(estimate).not.toContainText('resolved when you send');
+      await expect(page.getByTestId('chat-composer-context-project')).toHaveText(LONG_CONTEXT_PROJECT);
+      await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Dossier');
+      await expect(page.getByTestId('chat-composer-context-detail')).toHaveText(LONG_CONTEXT_TITLE);
+      await expect(page.getByTestId('orch-context-draft')).toHaveCount(0);
+      await expect(page.getByTestId('chat-toolbar')).toHaveCount(0);
+      await expect(page.getByTestId('chat-attach')).toHaveCount(0);
 
-      const layout = await draft.evaluate((element) => {
-        const rowItems = [
-          element.querySelector<HTMLElement>('[data-testid="orch-current-tab-chip"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-add-context"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-context-estimate"]')!,
-        ];
-        const label = element.querySelector<HTMLElement>('[data-testid="orch-current-tab-label"]')!;
+      await page.getByTestId('orch-composer-add').click();
+      await page.getByTestId('orch-composer-actions-item-add-context').click();
+      await expect(page.getByTestId('orch-context-current-automatic')).toContainText(LONG_CONTEXT_TITLE);
+      await expect(page.getByTestId('orch-context-current-automatic')).toContainText('already included');
+      await page.getByTestId('orch-context-source-search').fill('Family');
+      const dossierSource = page.getByTestId('orch-context-group-wiki')
+        .getByRole('button', { name: new RegExp(LONG_CONTEXT_TITLE) });
+      await expect(dossierSource).toContainText('Dossier');
+      await dossierSource.click();
+
+      const attachments = page.getByTestId('chat-context-attachments');
+      await expect(attachments).toContainText(LONG_CONTEXT_TITLE);
+      const layout = await attachments.evaluate((element) => {
+        const chip = element.querySelector<HTMLElement>('.chat__context-attachment')!;
+        const label = element.querySelector<HTMLElement>('.chat__context-attachment-label')!;
         return {
           fits: element.scrollWidth <= element.clientWidth + 1,
-          rowCount: new Set(rowItems.map(item => {
-            const box = item.getBoundingClientRect();
-            return Math.round(box.top + box.height / 2);
-          })).size,
-          chipWhiteSpace: getComputedStyle(rowItems[0]).whiteSpace,
+          chipFits: chip.scrollWidth <= chip.clientWidth + 1,
           labelOverflow: getComputedStyle(label).textOverflow,
+          labelWhiteSpace: getComputedStyle(label).whiteSpace,
         };
       });
       expect(layout).toEqual({
         fits: true,
-        rowCount: 1,
-        chipWhiteSpace: 'nowrap',
+        chipFits: true,
         labelOverflow: 'ellipsis',
+        labelWhiteSpace: 'nowrap',
       });
 
-      await page.mouse.move(1, 1);
+      await page.getByRole('button', { name: 'Close context picker' }).click();
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-context-chip--after--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-context-attachment--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
 
-      await chip.hover();
-      await expect(page.locator('.app-tooltip-overlay')).toContainText(LONG_CONTEXT_TITLE);
-      await expect(page.locator('.app-tooltip-overlay')).toContainText('Current tab · Dossier');
-
-      await page.mouse.move(1, 1);
-      await expect(page.locator('.app-tooltip-overlay')).toHaveCount(0);
-      await estimate.hover();
-      await expect(page.locator('.app-tooltip-overlay'))
-        .toHaveText('1 source · about 1,600 tokens · resolved when you send');
-      await page.getByTestId('orch-side-sheet').screenshot({
-        path: resolve(
-          RESULTS,
-          `orchestrator-context-chip-meta-tooltip--after--${variant.name.replace(' ', '-')}--mocked.png`,
-        ),
-      });
+      await page.getByRole('button', {
+        name: `Remove ${LONG_CONTEXT_TITLE} from context`,
+      }).click();
+      await expect(page.getByTestId('chat-context-attachments')).toHaveCount(0);
+      await expect(page.getByTestId('orch-composer-add')).toBeVisible();
 
       expect(unexpectedRequests).toEqual([]);
     });

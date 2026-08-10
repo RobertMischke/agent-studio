@@ -8,7 +8,7 @@
        (mousedown)="startResize($event)"></div>
 }
 
-<app-sidesheet title="Orchestrator chat"
+<app-sidesheet title="Chat"
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <app-orchestrator-panel-header
@@ -107,7 +107,7 @@
 
         @if (selectedContextKey() === 'global') {
           <section class="sheet__no-project" data-testid="orchestrator-global-chat-empty">
-            Global orchestrator selected. This workspace has no global transcript yet.
+            Global chat selected. This workspace has no global transcript yet.
           </section>
         } @else if (effectiveProject()) {
           <section class="sheet__chat">
@@ -135,22 +135,14 @@
               }
             }
 
-            @if (contextKind() === 'project') {
-              <app-orchestrator-context-picker
-                #contextPicker
-                [project]="effectiveProject()!"
-                [automaticLabel]="automaticContextPresentation().label"
-                [automaticKey]="automaticContextPresentation().key"
-                [automaticTypeLabel]="automaticContextPresentation().typeLabel"
-                [automaticIcon]="automaticContextPresentation().icon"
-                [automaticIncluded]="!contextDismissed()"
-                [currentSource]="currentTabSource()"
-                [attachments]="contextAttachments()"
-                [disabled]="sending()"
-                (automaticIncludedChange)="setNextMessageContextIncluded($event)"
-                (attachmentAdded)="addContextAttachment($event)"
-                (attachmentRemoved)="removeContextAttachment($event)" />
-            }
+            <app-orchestrator-context-picker
+              #contextPicker
+              [project]="effectiveProject()!"
+              [automaticLabel]="automaticContextPresentation().label"
+              [currentSource]="currentTabSource()"
+              [selectedIds]="selectedContextAttachmentIds()"
+              [disabled]="sending()"
+              (attachmentAdded)="addContextAttachment($event)" />
 
             <app-orchestrator-jump-latest [conversationHost]="conversationHost" />
 
@@ -163,17 +155,39 @@
               emptyState=""
               [pending]="sending()"
               [disabled]="sending()"
-              [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
-              [toolbarStart]="composerToolbarStart"
-              [routingLabel]="composerRoutingLabel()"
+              [allowAttachments]="false"
+              [contextAttachments]="cacContextAttachments()"
+              [placeholder]="'Ask a question... try /bug &lt;description&gt; to file a bug'"
               [modelControl]="composerModel.control()"
               [composerContext]="cacComposerContext()"
-              (toolbarAction)="onComposerToolbarAction($event)"
+              (contextAttachmentRemoved)="removeContextAttachment($event)"
+              (contextAttachmentAddRequested)="requestContextAttachment()"
               (submitMessage)="onSubmit($event)"
               (modelCommit)="onModelCommit($event)"
               (modelCatalogRequested)="composerModel.requestCatalog()"
               (modelRefreshRequested)="composerModel.requestCatalog(true)">
+              <button #composerActionTrigger
+                      chat-foot-start
+                      type="button"
+                      class="sheet__composer-add"
+                      aria-label="Composer actions"
+                      aria-haspopup="menu"
+                      [attr.aria-expanded]="composerActionMenuOpen()"
+                      data-testid="orch-composer-add"
+                      (click)="toggleComposerActionMenu()">
+                <span aria-hidden="true">+</span>
+              </button>
             </cac-chat>
+            <app-menu
+              [items]="composerActionMenuItems"
+              [open]="composerActionMenuOpen()"
+              [anchorEl]="composerActionTrigger"
+              placement="above"
+              ariaLabel="Composer actions"
+              testIdPrefix="orch-composer-actions"
+              [minWidth]="160"
+              (itemClick)="onComposerActionMenuItem($event)"
+              (closeRequest)="composerActionMenuOpen.set(false)" />
           </section>
         } @else {
           <div class="sheet__no-project">No watched projects yet.</div>
