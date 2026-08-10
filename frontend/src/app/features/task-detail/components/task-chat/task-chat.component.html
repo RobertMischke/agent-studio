@@ -1,0 +1,48 @@
+<section class="task-chat" data-testid="task-chat">
+  <header class="task-chat__boundary" data-testid="task-chat-boundary">
+    <span class="task-chat__actor">
+      <span class="task-chat__actor-dot" aria-hidden="true"></span>
+      Orchestrator
+    </span>
+    <span>Questions automatically refer to {{ taskKey() }}.</span>
+    <span class="task-chat__effect">Answers do not start, pause, or continue the task agent.</span>
+  </header>
+
+  @if (error(); as message) {
+    <p class="task-chat__error" role="alert" data-testid="task-chat-error">{{ message }}</p>
+  }
+
+  <div class="task-chat__conversation" data-testid="task-chat-conversation">
+    @if (!loading() && conversationEvents().length === 0) {
+      <div class="task-chat__empty" data-testid="task-chat-empty">
+        Ask the Orchestrator about this task's intent, status, runs, or commits.
+      </div>
+    } @else {
+      <cac-conversation-view
+        variant="embedded"
+        [events]="conversationEvents()"
+        [isRunning]="sending() || loading()"
+        [showHeader]="false" />
+    }
+  </div>
+
+  @if (latestContextReceipt(); as receipt) {
+    <app-orchestrator-context-receipt [receipt]="receipt" />
+  }
+
+  <cac-chat
+    class="task-chat__composer"
+    variant="embedded"
+    emptyState=""
+    [pending]="sending()"
+    [disabled]="sending()"
+    [placeholder]="placeholder()"
+    [toolbarStart]="composerToolbar"
+    (submitMessage)="onSubmit($event)">
+    <ng-container ngProjectAs="[chat-foot-start]">
+      <span class="task-chat__composer-context" data-testid="task-chat-composer-context">
+        {{ taskKey() }} context included · no task-agent action
+      </span>
+    </ng-container>
+  </cac-chat>
+</section>

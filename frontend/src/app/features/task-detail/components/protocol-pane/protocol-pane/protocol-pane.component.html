@@ -19,7 +19,7 @@
     (hide)="hide.emit()">
     <ng-container tabs>
       <app-pane-tabs variant="header"
-                     ariaLabel="Task / Activity / Result"
+                     ariaLabel="Task / Activity / Chat / Result"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
                      (tabChange)="onInspectorTabChange($event)" />
@@ -87,6 +87,7 @@
   </app-pane-header>
   <div class="pane__body">
     @if (activeInspectorTab() !== 'task'
+         && activeInspectorTab() !== 'chat'
          && (activeInspectorTab() !== 'protocol' || !detail().statusMarkdown)
          && protocolVerdict(); as v) {
       <app-protocol-verdict-banner
@@ -98,7 +99,7 @@
         [interimElapsedSeconds]="interimElapsedSeconds()"
         (requestInterim)="requestInterimSummary()" />
     }
-    @if (activeInspectorTab() !== 'task' && interimSummary(); as s) {
+    @if (activeInspectorTab() !== 'task' && activeInspectorTab() !== 'chat' && interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {
         <div class="interim-summary"
              [attr.data-status]="s.status"
@@ -143,7 +144,7 @@
       }
     }
     <!-- Visual evidence and code review live in the prompt pane (F38). -->
-    @if (activeInspectorTab() !== 'task' && followupCreated(); as fc) {
+    @if (activeInspectorTab() !== 'task' && activeInspectorTab() !== 'chat' && followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">
         <span aria-hidden="true">✓</span>
@@ -168,6 +169,8 @@
             [refinements]="runTimeline()?.refinements ?? []"
             [jobId]="detail().info.id"
             [watchPath]="detail().info.watchPath" />
+        } @else if (activeInspectorTab() === 'chat') {
+          <app-task-chat [detail]="detail()" />
         } @else if (activeInspectorTab() === 'protocol') {
           <section class="notes-panel">
             <app-decision-surface

@@ -174,4 +174,14 @@ describe('Studio route contract', () => {
       inspector: 'task',
     });
   });
+
+  it('round-trips the Task Chat inspector tab', () => {
+    const parsed = parseStudioRoute('#/tasks/AGT-2574?view=overview%3Achat');
+    expect(parsed).toEqual({
+      kind: 'task',
+      reference: 'AGT-2574',
+      tab: 'overview',
+      inspector: 'chat',
+    });
+  });
 });
