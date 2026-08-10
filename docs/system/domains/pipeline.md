@@ -276,8 +276,10 @@ pipeline view.
   deliveries retain the build-only level. A merge result that touches
   `frontend/` runs a blocking Angular work package made from every spec in each
   touched source folder plus the fixed app, studio-shell, and task-detail
-  barrel collision probes. The generic frontend test command stays omitted, so
-  this boundary cannot silently become the promotion full suite.
+  barrel collision probes. Broad frontend suite commands stay outside the
+  candidate inventory and configured continuous set, so impact rules, history,
+  or the optional adviser cannot silently turn this boundary into the promotion
+  full suite.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order

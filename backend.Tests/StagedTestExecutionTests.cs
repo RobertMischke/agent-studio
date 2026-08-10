@@ -52,7 +52,7 @@ public sealed class TestSelectionPlannerTests : IDisposable
     }
 
     [Fact]
-    public void WorkPackage_GeneratedDotNetCommandExcludesMachineBoundByDefault()
+    public void WorkPackage_GeneratedDotNetCommandExcludesMachineBoundRunnerCancellationFamilyByDefault()
     {
         Write("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />");
         Write("tests/App.Tests/App.Tests.csproj", """
@@ -95,17 +95,31 @@ public sealed class TestSelectionPlannerTests : IDisposable
         Write("frontend/src/app/features/project-detail/components/unrelated/unrelated.component.spec.ts", "// omitted");
         var fullDotNet = "dotnet test --filter Category!=MachineBound";
         var fullFrontend = "npm run test:ci";
+        var profileFullFrontend = "npm --prefix frontend run test:ci";
         var verify = new VerifyPlan([
             new(VerifyEcosystem.DotNet, VerifyCommandKind.Build, "", "dotnet build"),
             new(VerifyEcosystem.DotNet, VerifyCommandKind.Test, "", fullDotNet),
             new(VerifyEcosystem.Node, VerifyCommandKind.Test, "frontend", fullFrontend),
+            new(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", profileFullFrontend),
         ], VerifyPlan.SourceBuildProfile);
 
         var result = TestSelectionPlanner.Plan(
             _root,
             verify,
             ["frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts"],
-            policy: null,
+            new TestExecutionPolicy
+            {
+                ContinuousCommands = [profileFullFrontend, "test-smoke"],
+                ImpactRules =
+                [
+                    new TestImpactRule
+                    {
+                        PathPrefixes = ["frontend/"],
+                        TestCommands = [profileFullFrontend],
+                        Reason = "frontend impact",
+                    },
+                ],
+            },
             TaskStates.Completed,
             TestExecutionLevels.WorkPackage);
 
@@ -120,8 +134,14 @@ public sealed class TestSelectionPlannerTests : IDisposable
         Assert.Contains("features/task-detail/task-detail.spec.ts", frontend.Command);
         Assert.DoesNotContain("unrelated.component.spec.ts", frontend.Command);
         Assert.DoesNotContain(result.Commands, command => command.Command == fullFrontend);
+        Assert.DoesNotContain(result.Commands, command => command.Command == profileFullFrontend);
         Assert.DoesNotContain(result.Commands, command => command.Command == fullDotNet);
+        Assert.Contains(result.Commands, command => command.Command == "test-smoke");
+        Assert.DoesNotContain(result.Audit.Candidates,
+            candidate => candidate.Command.Command == fullFrontend
+                || candidate.Command.Command == profileFullFrontend);
         Assert.Contains(result.Audit.OmittedTestCommands, command => command.Contains(fullFrontend));
+        Assert.Contains(result.Audit.OmittedTestCommands, command => command.Contains(profileFullFrontend));
         Assert.Contains(fullDotNet, result.Audit.OmittedTestCommands);
         Assert.False(result.Audit.FullSuiteRan);
     }
@@ -180,6 +200,42 @@ public sealed class TestSelectionPlannerTests : IDisposable
         Assert.Contains("src/app/app.spec.ts", command.Command);
         Assert.Contains("studio-shell.component.spec.ts", command.Command);
         Assert.Contains("features/task-detail/task-detail.spec.ts", command.Command);
+    }
+
+    [Fact]
+    public void PromotionIncidentRetro_StudioShellCycleSelectsTheCompleteHistoricalWorkPackage()
+    {
+        Write("frontend/package.json", """
+            { "scripts": { "test:ci": "ng test frontend --watch=false --progress=false" } }
+            """);
+        Write("frontend/src/app/app.spec.ts", "// app barrel collision probe");
+        Write("frontend/src/app/features/studio-shell/studio-shell.component.spec.ts", "// shell collision probe");
+        Write("frontend/src/app/features/task-detail/task-detail.spec.ts", "// task-detail barrel probe");
+        Write("frontend/src/app/features/studio-shell/services/studio-route.spec.ts", "// touched service spec");
+        Write("frontend/src/app/features/task-detail/components/concept-dossier-notice/concept-dossier-notice.component.spec.ts", "// touched component spec");
+        Write("frontend/src/app/services/project-identity.util.spec.ts", "// touched shared-service folder spec");
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.Node, VerifyCommandKind.Test, "frontend", "npm run test:ci"),
+        ], VerifyPlan.SourceBuildProfile);
+
+        var result = TestSelectionPlanner.Plan(
+            _root,
+            verify,
+            [
+                "frontend/src/app/features/studio-shell/services/studio-route.ts",
+                "frontend/src/app/features/task-detail/components/concept-dossier-notice/concept-dossier-notice.component.ts",
+                "frontend/src/app/services/studio-project-slug.util.ts",
+            ],
+            policy: null,
+            TaskStates.Completed,
+            TestExecutionLevels.WorkPackage);
+
+        var command = Assert.Single(result.Commands);
+        Assert.Contains("src/app/features/studio-shell/services/*.spec.ts", command.Command);
+        Assert.Contains("src/app/features/task-detail/components/concept-dossier-notice/*.spec.ts", command.Command);
+        Assert.Contains("src/app/services/*.spec.ts", command.Command);
+        Assert.Contains("src/app/features/studio-shell/studio-shell.component.spec.ts", command.Command);
+        Assert.Contains("src/app/features/task-detail/task-detail.spec.ts", command.Command);
     }
 
     [Fact]

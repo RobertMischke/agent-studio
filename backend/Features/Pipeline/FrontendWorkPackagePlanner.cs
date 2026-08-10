@@ -23,6 +23,22 @@ internal static class FrontendWorkPackagePlanner
         => changedFiles?.Any(path => Normalize(path).StartsWith(
             FrontendPrefix, StringComparison.OrdinalIgnoreCase)) == true;
 
+    public static bool IsBroadFrontendTest(VerifyCommand command)
+    {
+        if (command.Kind != VerifyCommandKind.Test
+            || command.Command.Contains("--include", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (command.Ecosystem == VerifyEcosystem.Node
+            && string.Equals(command.WorkingSubdir, "frontend", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var invokesAngular = command.Command.Contains("ng test", StringComparison.OrdinalIgnoreCase);
+        var invokesFrontendNpm = command.Command.Contains("npm", StringComparison.OrdinalIgnoreCase)
+            && command.Command.Contains("test", StringComparison.OrdinalIgnoreCase)
+            && command.Command.Contains("frontend", StringComparison.OrdinalIgnoreCase);
+        return invokesAngular || invokesFrontendNpm;
+    }
+
     public static VerifyCommand? Plan(
         string repositoryPath,
         IReadOnlyList<string> changedFiles)
