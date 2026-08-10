@@ -5983,6 +5983,17 @@ public class ProjectRunner
             if (movedToReview)
             {
                 var completionLane = epicPlanningLane ?? TaskStates.AutoReview;
+                if (activeInfo != null)
+                {
+                    // Result finalization is an awaited post-core gate. A
+                    // summary-side failure retries only this application step;
+                    // bounded exhaustion records Degraded and still permits the
+                    // completed core run to enter review.
+                    await _summaryService.FinalizeAsync(
+                        activeInfo,
+                        terminalOutcome,
+                        CancellationToken.None);
+                }
                 // Drop a completion marker BEFORE the move so a crash between
                 // here and the folder-rename leaves enough state on disk for
                 // CrashRecoveryService to finish the transition on next boot.
@@ -6014,19 +6025,6 @@ public class ProjectRunner
                     TeardownWorktreeForJob(jobId);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
-                    // Fire-and-forget Haiku summary on successful completion.
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var info = _scanner.FindJob(jobId, Entry.Path);
-                            if (info != null) await _summaryService.GenerateAsync(info, terminalOutcome);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Summary generation crashed for {JobId}", jobId);
-                        }
-                    });
                 }
                 else
                 {

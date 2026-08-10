@@ -104,6 +104,13 @@ describe('deriveProtocolVerdict', () => {
     expect(v.label).toBe('Result summary failed');
   });
 
+  it('keeps an exhausted summary gate reviewable as a typed degraded Result', () => {
+    const v = deriveProtocolVerdict(baseInputs({ summaryStatus: 'degraded', statusMarkdown: null }));
+    expect(v.kind).toBe('unclear');
+    expect(v.label).toBe('Result degraded');
+    expect(v.detail).toContain('core run remains reviewable');
+  });
+
   it('flags problem on a high-severity outcome issue', () => {
     const v = deriveProtocolVerdict(baseInputs({
       outcomeIssue: { kind: 'watchdog-timeout', label: 'Watchdog', severity: 'High', summary: '120s silence', lastSeenAt: null }

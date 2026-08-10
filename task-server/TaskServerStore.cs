@@ -11,12 +11,15 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 10 adds the central Orchestrator context, transcript, and receipt store.
-    // The migration block is idempotent; the number only guards downgrades.
+    // 10 adds the central Orchestrator context, transcript, and receipt store,
+    // plus the durable application-owned Result-finalization state used by the
+    // awaited remote post-core gate. The migration block is idempotent; the
+    // number only guards downgrades.
     public const int CurrentSchemaVersion = 10;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
+    private readonly IResultFinalizationSummaryGenerator _resultSummaries;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly DateTime _startedAt;
     private static readonly JsonSerializerOptions OutcomeJson = CreateOutcomeJson();
@@ -28,9 +31,18 @@ public sealed partial class TaskServerStore
         new Dictionary<string, int>(StringComparer.Ordinal);
 
     public TaskServerStore(IOptions<TaskServerOptions> options, TimeProvider clock)
+        : this(options, clock, new ApplicationResultFinalizationSummaryGenerator())
+    {
+    }
+
+    public TaskServerStore(
+        IOptions<TaskServerOptions> options,
+        TimeProvider clock,
+        IResultFinalizationSummaryGenerator resultSummaries)
     {
         _options = options.Value;
         _clock = clock;
+        _resultSummaries = resultSummaries;
         _startedAt = UtcNow;
     }
 
@@ -378,13 +390,29 @@ public sealed partial class TaskServerStore
             }
         }
 
+        ResultFinalizationDto? resultFinalization = null;
+        await using (var resultCommand = Command(connection, """
+            SELECT run_id, status, attempt_count, max_attempts, artifact_id,
+                   artifact_sha256, error, updated_at
+              FROM result_finalizations
+             WHERE run_id IN (SELECT id FROM runs WHERE task_id = $task)
+             ORDER BY updated_at DESC
+             LIMIT 1;
+            """, ("$task", task.TaskId)))
+        await using (var resultReader = await resultCommand.ExecuteReaderAsync(ct))
+        {
+            if (await resultReader.ReadAsync(ct))
+                resultFinalization = ReadResultFinalization(resultReader);
+        }
+
         return new TaskHistoryDto(
             task,
             runs,
             events,
             artifacts,
             audit,
-            events.Count == 0 ? after : events[^1].Cursor);
+            events.Count == 0 ? after : events[^1].Cursor,
+            resultFinalization);
     }
 
     public async Task<IReadOnlyList<TaskDto>> ListTasksAsync(string projectId, CancellationToken ct)
@@ -2148,6 +2176,17 @@ public sealed partial class TaskServerStore
                 created_at TEXT NOT NULL,
                 sequence INTEGER
             );
+            CREATE TABLE IF NOT EXISTS result_finalizations(
+                run_id TEXT PRIMARY KEY REFERENCES runs(id),
+                status TEXT NOT NULL,
+                attempt_count INTEGER NOT NULL,
+                max_attempts INTEGER NOT NULL,
+                artifact_id TEXT REFERENCES artifacts(id),
+                artifact_sha256 TEXT,
+                error TEXT,
+                last_idempotency_key TEXT NOT NULL UNIQUE,
+                updated_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS result_handoffs(
                 run_id TEXT PRIMARY KEY REFERENCES runs(id),
                 task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -2338,6 +2377,8 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_leases_task_status ON leases(task_id, status);
             CREATE INDEX IF NOT EXISTS ix_events_run_cursor ON events(run_id, cursor);
             CREATE INDEX IF NOT EXISTS ix_artifacts_run ON artifacts(run_id);
+            CREATE INDEX IF NOT EXISTS ix_result_finalizations_status
+                ON result_finalizations(status);
             CREATE INDEX IF NOT EXISTS ix_result_handoffs_retain_until ON result_handoffs(retain_until);
             CREATE INDEX IF NOT EXISTS ix_result_ref_gc_deleted_at ON result_ref_gc(deleted_at);
             CREATE INDEX IF NOT EXISTS ix_runner_outbox_backlog ON runner_outbox_status(backlog_count);

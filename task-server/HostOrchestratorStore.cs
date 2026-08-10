@@ -247,7 +247,8 @@ public sealed partial class TaskServerStore
             var leaseId = $"lse_{Guid.NewGuid():N}";
             var now = UtcNow;
             var authorityDeadline = now.AddSeconds(NormalizeTtl(request.RequestedTtlSeconds));
-            var stepExecutionId = $"pst_{Guid.NewGuid():N}";
+            var containmentStepExecutionId = $"pst_01_{Guid.NewGuid():N}";
+            var resultStepExecutionId = $"pst_02_{Guid.NewGuid():N}";
             await ExecuteAsync(connection, """
                 INSERT INTO fence_counters(task_id, last_fence) VALUES ($task, $fence)
                 ON CONFLICT(task_id) DO UPDATE SET last_fence = excluded.last_fence;
@@ -266,7 +267,9 @@ public sealed partial class TaskServerStore
                        run_id = $run
                  WHERE id = $permit AND status = 'available';
                 INSERT INTO post_step_executions(id, run_id, step_id, eligible_runner_id, status)
-                VALUES ($step, $run, 'post-worktree-containment', $runner, 'available');
+                VALUES ($containment_step, $run, $containment_step_id, $runner, 'available');
+                INSERT INTO post_step_executions(id, run_id, step_id, eligible_runner_id, status)
+                VALUES ($result_step, $run, $result_step_id, $runner, 'available');
                 """, ct, transaction,
                 ("$task", taskId),
                 ("$fence", fence),
@@ -278,7 +281,10 @@ public sealed partial class TaskServerStore
                 ("$deadline", Iso(authorityDeadline)),
                 ("$key", request.IdempotencyKey),
                 ("$permit", permitId),
-                ("$step", stepExecutionId));
+                ("$containment_step", containmentStepExecutionId),
+                ("$containment_step_id", HostPostStepIds.WorktreeContainment),
+                ("$result_step", resultStepExecutionId),
+                ("$result_step_id", HostPostStepIds.ResultFinalization));
             await AuditAsync(connection, transaction, actorId, "work.permit.accepted", "run", createdRunId,
                 JsonSerializer.Serialize(new
                 {
