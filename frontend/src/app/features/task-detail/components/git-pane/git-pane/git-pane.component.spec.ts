@@ -11,7 +11,7 @@ import { LayoutPanesService } from '../../../services/layout-panes.service';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskCommitInfo, TaskProvenanceView } from '../../../../git';
 import type { CodeReviewListEntry } from '../../../../../services/task.service';
 import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
-import { formatCompactDateTime, formatDateTime, formatTime } from '../../../../../services/format.util';
+import { formatCompactDateTime, formatTime } from '../../../../../services/format.util';
 
 const commits: TaskCommitInfo[] = [
   {
@@ -246,7 +246,6 @@ describe('GitPaneComponent', () => {
     expect(meta[0].textContent?.trim()).not.toBe(`1f · ${firstTimeOnly}`);
     expect(meta[1].textContent?.trim()).not.toBe(`1f · ${secondTimeOnly}`);
     expect(meta[0].textContent).not.toBe(meta[1].textContent);
-    expect(fixture.componentInstance.commitChainTooltip(commits[0], 0)).toContain(formatDateTime(commits[0].at));
   });
 
   it('shows a landed-status skeleton while provenance is still loading, then the ladder (AGT-2006)', async () => {

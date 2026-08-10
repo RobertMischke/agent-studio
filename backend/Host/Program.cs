@@ -315,6 +315,7 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<SupersededCommitSweep>();
 builder.Services.AddSingleton<TaskListGitProjectionCache>();
 builder.Services.AddSingleton<OperatorReviewRequeueService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
@@ -893,6 +894,18 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("CommitMetadataBackfill", ex);
+}
+
+// One-time, conservative repair of historical rebase/steer generations. The
+// persisted report is also the completion marker. Ambiguous file-breadth cases
+// remain untouched and visible in that report.
+try
+{
+    app.Services.GetRequiredService<SupersededCommitSweep>().RunOnce();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("SupersededCommitSweep", ex);
 }
 
 // Cap legacy durable CLI logs after the one-time full-history wiki read

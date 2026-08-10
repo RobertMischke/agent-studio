@@ -884,6 +884,15 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Contains(
             TimelineEventKinds.IntegrationRecoveryQueued,
             File.ReadAllText(TaskPaths.TimelineLog(readyFolder)));
+        using var readyJson = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(readyFolder, "task.json")));
+        var supersededCommit = readyJson.RootElement
+            .GetProperty("commits")
+            .EnumerateArray()
+            .Single();
+        Assert.Equal(
+            TaskCommitSupersession.PendingAttempt,
+            supersededCommit.GetProperty("supersededByAttempt").GetString());
     }
 
     [Fact]

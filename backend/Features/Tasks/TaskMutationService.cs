@@ -257,7 +257,14 @@ public class TaskMutationService
             }
 
             var existingIdx = chain.FindIndex(c => string.Equals(c.Sha, commit.Sha, StringComparison.OrdinalIgnoreCase));
-            if (existingIdx >= 0) chain[existingIdx] = commit;
+            if (existingIdx >= 0)
+            {
+                chain[existingIdx] = commit with
+                {
+                    SupersededByAttempt = commit.SupersededByAttempt
+                        ?? chain[existingIdx].SupersededByAttempt,
+                };
+            }
             else chain.Add(commit);
 
             return WriteCommitState(folderPath, chain);
@@ -299,6 +306,7 @@ public class TaskMutationService
                     RunAttemptId = commit.RunAttemptId ?? producer.RunAttemptId,
                     RunnerId = commit.RunnerId ?? producer.RunnerId,
                     ResultSha = commit.ResultSha ?? producer.ResultSha,
+                    SupersededByAttempt = commit.SupersededByAttempt ?? producer.SupersededByAttempt,
                 };
             })
             .OrderBy(c => c.At)
@@ -344,6 +352,12 @@ public class TaskMutationService
 
         var persisted = ReadPersistedCommitChain(folderPath);
         if (persisted is null) return false;
+        persisted = persisted.Select(commit => string.Equals(
+                commit.SupersededByAttempt,
+                TaskCommitSupersession.PendingAttempt,
+                StringComparison.Ordinal)
+            ? commit with { SupersededByAttempt = runAttemptId }
+            : commit).ToList();
 
         var union = new List<TaskCommitInfo>();
         foreach (var commit in persisted)
@@ -385,6 +399,85 @@ public class TaskMutationService
         }
 
         return WriteCommitState(folderPath, union, allowEmptyReplacement: true);
+    }
+
+    /// <summary>
+    /// Retains the current delivery generation as history while removing it
+    /// from future integration expectations. When a current review subject is
+    /// available, only commits attributed to that fenced attempt or result are
+    /// marked. Legacy unscoped chains fall back to every still-active entry.
+    /// </summary>
+    public CommitSupersessionWriteResult SupersedeCurrentDeliveryOnFolder(
+        string folderPath,
+        string supersededByAttempt)
+    {
+        if (!Directory.Exists(folderPath)
+            || string.IsNullOrWhiteSpace(supersededByAttempt))
+        {
+            return new CommitSupersessionWriteResult(false, 0);
+        }
+
+        var persisted = ReadPersistedCommitChain(folderPath);
+        if (persisted is null) return new CommitSupersessionWriteResult(false, 0);
+        if (persisted.Count == 0) return new CommitSupersessionWriteResult(true, 0);
+
+        var subject = ReviewSubjectStore.Read(folderPath);
+        var hasAttempt = !string.IsNullOrWhiteSpace(subject?.RunAttemptId);
+        var hasResult = !string.IsNullOrWhiteSpace(subject?.ResultSha);
+        var scoped = persisted.Where(commit =>
+                !TaskCommitSupersession.IsSuperseded(commit)
+                && (hasAttempt && string.Equals(
+                        commit.RunAttemptId,
+                        subject?.RunAttemptId,
+                        StringComparison.OrdinalIgnoreCase)
+                    || hasResult && string.Equals(
+                        commit.ResultSha,
+                        subject?.ResultSha,
+                        StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        var candidates = scoped.Count > 0
+            ? scoped.Select(commit => commit.Sha).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : persisted.Where(commit => !TaskCommitSupersession.IsSuperseded(commit))
+                .Select(commit => commit.Sha)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (candidates.Count == 0) return new CommitSupersessionWriteResult(true, 0);
+        var updated = persisted.Select(commit => candidates.Contains(commit.Sha)
+            ? commit with { SupersededByAttempt = supersededByAttempt.Trim() }
+            : commit).ToList();
+        var written = WriteCommitState(folderPath, updated);
+        return new CommitSupersessionWriteResult(written, written ? candidates.Count : 0);
+    }
+
+    /// <summary>
+    /// Marks an explicit, policy-approved subset during the legacy healing
+    /// sweep. The policy supplies the replacement attempt per SHA; this method
+    /// owns the bounded task.json write and preserves every history entry.
+    /// </summary>
+    public CommitSupersessionWriteResult MarkCommitsSupersededOnFolder(
+        string folderPath,
+        IReadOnlyDictionary<string, string> replacements)
+    {
+        if (!Directory.Exists(folderPath)) return new CommitSupersessionWriteResult(false, 0);
+        if (replacements.Count == 0) return new CommitSupersessionWriteResult(true, 0);
+        var persisted = ReadPersistedCommitChain(folderPath);
+        if (persisted is null) return new CommitSupersessionWriteResult(false, 0);
+
+        var changed = 0;
+        var updated = persisted.Select(commit =>
+        {
+            if (TaskCommitSupersession.IsSuperseded(commit)
+                || !replacements.TryGetValue(commit.Sha, out var replacement)
+                || string.IsNullOrWhiteSpace(replacement))
+            {
+                return commit;
+            }
+            changed++;
+            return commit with { SupersededByAttempt = replacement.Trim() };
+        }).ToList();
+        if (changed == 0) return new CommitSupersessionWriteResult(true, 0);
+        var written = WriteCommitState(folderPath, updated);
+        return new CommitSupersessionWriteResult(written, written ? changed : 0);
     }
 
     public bool SetRunIntegrationBranchOnFolder(string folderPath, string integrationBranch)
@@ -1774,6 +1867,8 @@ public class TaskMutationService
         return System.Text.RegularExpressions.Regex.Replace(s, @"[^a-z0-9\-]", "");
     }
 }
+
+public sealed record CommitSupersessionWriteResult(bool Succeeded, int MarkedCommits);
 
 public sealed record CommitMetadataBackfillResult(
     int RepairedTasks,

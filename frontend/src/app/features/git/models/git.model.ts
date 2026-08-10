@@ -350,6 +350,19 @@ export interface TaskCommitInfo {
   attribution?: string;
   /** Confidence of an automatic attribution (0..1); absent otherwise. */
   confidence?: number;
+  /** Immutable delivery-generation identity stamped by remote attribution. */
+  runAttemptId?: string | null;
+  /** Runner that produced this delivery generation. */
+  runnerId?: string | null;
+  /** Result SHA fencing this delivery generation. */
+  resultSha?: string | null;
+  /** Result or task branch used to derive this commit. */
+  branch?: string | null;
+  /**
+   * Attempt that replaced this historical commit. Superseded commits remain
+   * selectable as history but are excluded from the current aggregate diff.
+   */
+  supersededByAttempt?: string | null;
 }
 
 export interface TaskCommitDetail {

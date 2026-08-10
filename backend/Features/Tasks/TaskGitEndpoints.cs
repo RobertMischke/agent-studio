@@ -444,7 +444,12 @@ public static class TaskGitEndpoints
         TaskInfo info, TaskSessionLog sessions, string jobId, string? watchPath, GitService git)
     {
         var aggregate = BuildJobCommitsAggregate(info, sessions, jobId, watchPath, git);
+        var superseded = info.Commits
+            .Where(TaskCommitSupersession.IsSuperseded)
+            .Select(commit => commit.Sha)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return aggregate.Commits
+            .Where(commit => !superseded.Contains(commit.Sha))
             .Select(c => c.Sha)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct(StringComparer.OrdinalIgnoreCase)

@@ -5,7 +5,7 @@ import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
-import type { TaskCommitInfo, TaskLandedLadder } from '../../../../git';
+import type { TaskLandedLadder } from '../../../../git';
 import type { CodeReviewListEntry } from '../../../../../services/task.service';
 import {
   codeReviewVerdictGlyph,
@@ -15,11 +15,11 @@ import {
 } from '../../code-review-verdict.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { AppTooltipDirective } from '../../../../../components/tooltip/app-tooltip.directive';
-import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 import { coalesceDiffByFile } from '../../../../../utils/coalesce-diff';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';
 import { clampTreeWidth, MIN_TREE_PX } from './git-pane-splitter.util';
+import { TaskCommitRoundsComponent } from '../task-commit-rounds/task-commit-rounds.component';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
 // import was static, which dragged the whole library into the initial
@@ -46,7 +46,7 @@ import { clampTreeWidth, MIN_TREE_PX } from './git-pane-splitter.util';
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, NgTemplateOutlet, GitFileTreeComponent, TooltipDirective, AppTooltipDirective, MarkdownViewComponent],
+  imports: [DatePipe, NgTemplateOutlet, GitFileTreeComponent, TaskCommitRoundsComponent, TooltipDirective, AppTooltipDirective, MarkdownViewComponent],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })
@@ -85,18 +85,11 @@ export class GitPaneComponent {
    * fullscreened layouts so the mental model stays simple.
    */
   readonly commitHeaderCollapsed = signal<boolean>(readCommitHeaderCollapsed());
-  readonly commitGroupCollapsed = signal<boolean>(readCommitGroupCollapsed());
 
   toggleCommitHeaderCollapsed(): void {
     const next = !this.commitHeaderCollapsed();
     this.commitHeaderCollapsed.set(next);
     writeCommitHeaderCollapsed(next);
-  }
-
-  toggleCommitGroupCollapsed(): void {
-    const next = !this.commitGroupCollapsed();
-    this.commitGroupCollapsed.set(next);
-    writeCommitGroupCollapsed(next);
   }
 
   /**
@@ -117,7 +110,7 @@ export class GitPaneComponent {
 
   /** Compact label for the collapsed head strip. */
   readonly headTitle = computed<string>(() => {
-    const n = this.git.commitChain().length;
+    const n = currentCommitCount(this.git.commitChain());
     return n > 1 ? `${n} task commits` : 'Commit details';
   });
 
@@ -194,7 +187,7 @@ export class GitPaneComponent {
    */
   readonly paneTitle = computed<string>(() => {
     if (this.git.viewMode() === 'commit') {
-      const n = this.git.commitChain().length;
+      const n = currentCommitCount(this.git.commitChain());
       if (n > 1) return `⏺ ${n} task commits`;
       return '⏺ Task commit';
     }
@@ -346,23 +339,20 @@ export class GitPaneComponent {
     return this.sanitizer.bypassSecurityTrustHtml(content);
   });
 
-  commitChainTooltip(entry: TaskCommitInfo, index: number): string {
-    return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${formatDateTime(entry.at)} · ${entry.message}`;
-  }
-
-  commitChainTimestamp(entry: TaskCommitInfo): string {
-    return formatCompactDateTime(entry.at);
+  selectCommitFromHistory(sha: string | null): void {
+    if (sha === null) this.git.selectAllCommits();
+    else this.git.selectChainCommit(sha);
   }
 
   selectedCommitSummary(): string {
     if (this.git.isAggregate()) {
       const files = this.git.commitFiles().length;
-      const commits = this.git.commitChain().length;
+      const commits = currentCommitCount(this.git.commitChain());
       return `All ${commits} commits · ${files} ${files === 1 ? 'file' : 'files'}`;
     }
     const sha = this.git.selectedCommitSha();
     const entry = this.git.commitChain().find(c => c.sha === sha);
-    if (!entry) return `${this.git.commitChain().length} task commits`;
+    if (!entry) return `${currentCommitCount(this.git.commitChain())} current task commits`;
     return `${entry.shortSha} · ${entry.message.split('\n')[0]}`;
   }
 
@@ -456,8 +446,11 @@ export function previewKindOf(path: string | null | undefined): 'markdown' | 'ht
   return null;
 }
 
+function currentCommitCount(commits: readonly { supersededByAttempt?: string | null }[]): number {
+  return commits.filter((commit) => !commit.supersededByAttempt?.trim()).length;
+}
+
 const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';
-const COMMIT_GROUP_COLLAPSED_KEY = 'taskboard.gitPane.commitGroupCollapsed';
 const HEAD_COLLAPSED_KEY = 'taskboard.gitPane.headCollapsed';
 const DIFF_VIEW_MODE_KEY = 'taskboard.gitPane.diffViewMode';
 const TREE_WIDTH_KEY = 'taskboard.gitPane.treeWidth';
@@ -474,19 +467,6 @@ function readCommitHeaderCollapsed(): boolean {
 
 function writeCommitHeaderCollapsed(value: boolean): void {
   try { localStorage.setItem(COMMIT_HEADER_COLLAPSED_KEY, value ? '1' : '0'); }
-  catch { /* ignore quota / privacy-mode errors */ }
-}
-
-function readCommitGroupCollapsed(): boolean {
-  try {
-    const stored = localStorage.getItem(COMMIT_GROUP_COLLAPSED_KEY);
-    return stored === null ? true : stored === '1';
-  }
-  catch { return true; }
-}
-
-function writeCommitGroupCollapsed(value: boolean): void {
-  try { localStorage.setItem(COMMIT_GROUP_COLLAPSED_KEY, value ? '1' : '0'); }
   catch { /* ignore quota / privacy-mode errors */ }
 }
 

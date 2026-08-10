@@ -38,6 +38,8 @@ interface CommitFixture {
   filesChanged: number;
   files: string[];
   at: string;
+  runAttemptId?: string;
+  supersededByAttempt?: string;
 }
 
 const COMMITS: CommitFixture[] = [
@@ -157,6 +159,12 @@ async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }));
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.route('**/api/tasks/grouped**', (route) =>
@@ -258,10 +266,28 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }));
 }
 
+async function installSupersededRoundDetail(page: Page) {
+  const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const detail = makeDetail();
+  detail.info.commits = [
+    { ...COMMITS[0], runAttemptId: 'round-1', supersededByAttempt: 'round-2' },
+    { ...COMMITS[1], runAttemptId: 'round-2' },
+    { ...COMMITS[2], runAttemptId: 'round-2' },
+  ];
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }));
+}
+
 async function installWorktreeRoutes(page: Page) {
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
@@ -509,7 +535,7 @@ test.describe('Task-detail multi-commit chain', () => {
     await expect(items).toHaveCount(3);
 
     // Confirm the default selection is the aggregate before clicking.
-    await expect(page.getByTestId('git-commit-chain-all')).toHaveClass(/git-view__commit-chain-item--selected/);
+    await expect(page.getByTestId('git-commit-chain-all').getByRole('button')).toHaveAttribute('aria-pressed', 'true');
 
     // Pick the first (oldest) commit. The detail header swaps to its short
     // SHA + message, the chip moves to the selected state, and the
@@ -522,8 +548,8 @@ test.describe('Task-detail multi-commit chain', () => {
       target?.click();
     }, COMMITS[0].sha);
 
-    await expect(items.nth(0)).toHaveClass(/git-view__commit-chain-item--selected/, { timeout: 5_000 });
-    await expect(page.getByTestId('git-commit-chain-all')).not.toHaveClass(/git-view__commit-chain-item--selected/);
+    await expect(items.nth(0).getByRole('button')).toHaveAttribute('aria-pressed', 'true', { timeout: 5_000 });
+    await expect(page.getByTestId('git-commit-chain-all').getByRole('button')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('git-commit-sha')).toContainText(COMMITS[0].shortSha);
     await expect(page.getByTestId('git-commit-message')).toContainText('feat: initial slice');
 
@@ -532,7 +558,7 @@ test.describe('Task-detail multi-commit chain', () => {
       const btn = document.querySelector<HTMLButtonElement>('[data-testid="git-commit-chain-all"] button');
       btn?.click();
     });
-    await expect(page.getByTestId('git-commit-chain-all')).toHaveClass(/git-view__commit-chain-item--selected/, { timeout: 5_000 });
+    await expect(page.getByTestId('git-commit-chain-all').getByRole('button')).toHaveAttribute('aria-pressed', 'true', { timeout: 5_000 });
     await expect(page.getByTestId('git-commit-aggregate-header')).toHaveCount(0);
     await expect(page.getByTestId('git-commit-group-toggle')).toContainText('All 3 commits');
   });
@@ -547,6 +573,33 @@ test.describe('Task-detail multi-commit chain', () => {
     // chain length without scanning the strip.
     await expect(page.locator('[data-testid="pane-git"] .pane__title')).toContainText('3 task commits');
   });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`shows superseded delivery rounds separately in ${theme} theme`, async ({ page }) => {
+      await page.addInitScript((selectedTheme) => {
+        localStorage.setItem('atp.studio.theme', selectedTheme);
+      }, theme);
+      await installRoutes(page);
+      await installSupersededRoundDetail(page);
+      await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+      await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+
+      await page.getByTestId('git-commit-group-toggle').click();
+      await expect(page.getByTestId('git-commit-chain-item')).toHaveCount(2);
+      await expect(page.getByTestId('git-superseded-rounds')).toBeVisible();
+      await page.getByTestId('git-superseded-rounds').evaluate((details: HTMLDetailsElement) => {
+        details.open = true;
+      });
+      await expect(page.getByTestId('git-superseded-round')).toContainText('Round 1, replaced by round 2');
+      await expect(page.getByTestId('git-superseded-commit')).toHaveAttribute('data-sha', COMMITS[0].sha);
+
+      if (RESULTS_DIR) {
+        await page.getByTestId('pane-git').screenshot({
+          path: path.join(RESULTS_DIR, `superseded-delivery-round-${theme}--mocked.png`),
+        });
+      }
+    });
+  }
 
   test('diff layout toggle switches side-by-side <-> unified and persists the choice', async ({ page }) => {
     await installRoutes(page);
