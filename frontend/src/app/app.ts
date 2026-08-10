@@ -993,7 +993,10 @@ export class App implements OnInit, OnDestroy {
           project = tab.projectName === '__all__' ? null : tab.projectName;
           break;
         case 'feed':
-          project = null;
+          // The workspace feed owns its project scope. Its default is all
+          // projects, while an explicit `filters=projects:...` deep link must
+          // survive route hydration and remain shareable.
+          project = undefined;
           break;
         case 'workbenches':
         case 'workbench':
