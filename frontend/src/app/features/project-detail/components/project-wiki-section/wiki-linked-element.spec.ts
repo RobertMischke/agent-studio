@@ -27,14 +27,18 @@ describe('wiki linked elements', () => {
     const shadow = shadowHost.attachShadow({ mode: 'open' });
     const target = document.createElement('h2');
     target.id = 'section one';
-    target.scrollIntoView = vi.fn();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(target, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
     shadow.append(target);
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
 
     expect(wikiAnchorId('#section%20one')).toBe('section one');
     expect(findWikiAnchor(root, '#section%20one')).toBe(target);
     expect(scrollToWikiAnchor(root, '#section%20one')).toBe(true);
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   });
 
   it('reports malformed and unresolved anchors instead of silently succeeding', () => {
