@@ -263,10 +263,10 @@ public static class ProjectDocsEndpoints
 
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
         {
-            var file = docs.ReadWikiFile(projectName, relPath);
-            return file == null
-                ? Results.NotFound(new { error = "File not found or path rejected" })
-                : Results.Ok(file);
+            var result = docs.ReadWikiFileResult(projectName, relPath);
+            return result.File == null
+                ? Results.NotFound(new { error = result.Error })
+                : Results.Ok(result.File);
         });
 
         app.MapPut("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, WikiSaveRequest body, ProjectDocsService docs, GitService git) =>

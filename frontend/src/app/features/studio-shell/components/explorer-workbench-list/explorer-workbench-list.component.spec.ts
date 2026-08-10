@@ -105,6 +105,26 @@ describe('ExplorerWorkbenchListComponent', () => {
     http.verify();
   });
 
+  it('keeps an invalid descriptor non-openable and shows its repair reason', async () => {
+    const { fixture, component, http } = await mount();
+    const broken = item('broken', 'invalid', {
+      valid: false,
+      error: 'entrypoint is missing or escapes its Dossier folder.',
+    });
+
+    component.toggle();
+    http.expectOne(request => request.url === '/api/projects/Demo/workbenches'
+      && request.params.get('history') === 'true')
+      .flush(catalogue([broken]));
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-Demo-broken"]') as HTMLButtonElement;
+    expect(row.disabled).toBe(true);
+    expect(row.getAttribute('aria-label')).toContain('entrypoint is missing or escapes its Dossier folder.');
+    http.verify();
+  });
+
   it('reveals only the active Dossier path and leaves foreign status groups untouched', async () => {
     const { fixture, component, http, state } = await mount('active');
     state.setGroupExpanded('Demo', 'needs-decision', false);
