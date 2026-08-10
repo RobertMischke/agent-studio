@@ -35,10 +35,11 @@
       </header>
 
       @if (sources().length > 0) {
-        <ul class="receipt__sources">
+        <ul class="receipt__sources" data-testid="orch-answer-context-sources">
           @for (source of sources(); track source.sourceId) {
             <li [attr.data-status]="source.status"
-                [attr.data-testid]="'orch-context-receipt-source-' + source.sourceId">
+                data-testid="orch-answer-context-source"
+                [attr.data-source-id]="source.sourceId">
               <div class="receipt__source-head">
                 <strong>{{ kindLabel(source.kind) }}</strong>
                 <span class="receipt__status">{{ statusLabel(source) }}</span>

@@ -19,6 +19,8 @@ interface KnownSourceItem {
   sha?: string;
   path?: string;
   isWiki?: boolean;
+  repositoryId?: string;
+  revision?: string;
 }
 
 interface KnownSourceResponse {
@@ -65,11 +67,23 @@ export class OrchestratorContextSourceService {
         item.isWiki ? 'wiki' : 'files', item.title, item.path ?? item.subtitle,
         item.isWiki
           ? { kind: 'page', reference: `page:${project}/${(item.path ?? '').replace(/^docs\//i, '')}`, projectId: project }
-          : { kind: 'repository-file', reference: item.path ?? item.subtitle, projectId: project },
+          : {
+              kind: 'repository-file',
+              reference: item.path ?? item.subtitle,
+              projectId: project,
+              repositoryId: item.repositoryId ?? project,
+              revision: item.revision,
+            },
         item.isWiki ? 1_200 : 700));
       const commits = known.commits.filter(sameProject).map(item => this.option(
         'commits', item.title, item.sha?.slice(0, 8) ?? item.subtitle,
-        { kind: 'commit', reference: `commit:${project}/${item.sha ?? item.subtitle}`, projectId: project }, 1_400));
+        {
+          kind: 'commit',
+          reference: item.sha ?? item.subtitle,
+          projectId: project,
+          repositoryId: item.repositoryId ?? project,
+          revision: item.revision ?? item.sha,
+        }, 1_400));
       const wikiPages = (wiki?.results ?? []).map(item => this.option(
         'wiki', item.title, item.relPath,
         { kind: 'page', reference: `page:${project}/${item.relPath}`, projectId: project }, 1_200));

@@ -95,7 +95,7 @@ export class GlobalSearchComponent {
       }
     } else if (item.domain === 'commits' && item.sha) {
       this.boardFilters.setSoleProject(item.projectName);
-      this.tabs.open({ kind: 'diff', commitSha: item.sha });
+      this.tabs.open({ kind: 'diff', projectName: item.projectName, commitSha: item.sha });
     } else if (item.domain === 'files') {
       const wikiPath = item.isWiki ? item.path?.replace(/^docs\//i, '') : null;
       this.tabs.open({

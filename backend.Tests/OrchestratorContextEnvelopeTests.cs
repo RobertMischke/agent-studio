@@ -1,5 +1,7 @@
 using System.Net;
+using System.Diagnostics;
 using System.Text.Json;
+using AgentStudio.Git;
 using AgentStudio.TaskServer.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -11,6 +13,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "orchestrator-context-envelope-" + Guid.NewGuid().ToString("N"));
     private readonly string _watchPath;
+    private readonly string _commitSha;
 
     public OrchestratorContextEnvelopeTests()
     {
@@ -22,6 +25,16 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         File.WriteAllText(
             Path.Combine(_watchPath, "docs", "second-proof.md"),
             "SECOND_EXPLICIT_PROOF_BODY");
+        Directory.CreateDirectory(Path.Combine(_watchPath, "dist"));
+        File.WriteAllText(Path.Combine(_watchPath, "dist", "generated.min.js"), "generated");
+        File.WriteAllBytes(Path.Combine(_watchPath, "binary.dat"), [0x00, 0x01, 0x02, 0xFF]);
+        RunGit(_watchPath, "init", "-q", "-b", "main");
+        RunGit(_watchPath, "config", "user.email", "context@example.test");
+        RunGit(_watchPath, "config", "user.name", "Context Test");
+        RunGit(_watchPath, "config", "commit.gpgsign", "false");
+        RunGit(_watchPath, "add", ".");
+        RunGit(_watchPath, "commit", "-q", "-m", "Add context fixtures");
+        _commitSha = RunGit(_watchPath, "rev-parse", "HEAD").Trim();
     }
 
     [Fact]
@@ -106,7 +119,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             "project-a",
             null,
             DateTime.UtcNow,
-            [new OrchestratorContextReference("commit", "commit:project-a/0123456789abcdef", "project-a")]);
+            [new OrchestratorContextReference("commit", _commitSha, "project-a")]);
 
         var result = OrchestratorContextEnvelopePolicy.Snapshot(
             "project-a", route,
@@ -115,7 +128,29 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
 
         var reference = Assert.Single(result.ExplicitReferences);
         Assert.Equal("commit", reference.Kind);
-        Assert.Equal("commit:project-a/0123456789abcdef", reference.Reference);
+        Assert.Equal(_commitSha, reference.Reference);
+        Assert.Equal("project-a", reference.RepositoryId);
+    }
+
+    [Fact]
+    public void Snapshot_RequiresFullCommitIdentityForCommitAndDiffReferences()
+    {
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var route));
+        var envelope = Envelope(
+            route.Value,
+            "project-a",
+            null,
+            DateTime.UtcNow,
+            [new OrchestratorContextReference("diff", _commitSha[..8], "project-a")]);
+
+        var error = Assert.Throws<OrchestratorContextEnvelopeException>(() =>
+            OrchestratorContextEnvelopePolicy.Snapshot(
+                "project-a",
+                route,
+                new SendOrchestratorChatRequest("Question", null, ContextEnvelope: envelope),
+                DateTime.UtcNow));
+
+        Assert.Equal("context-commit-full-sha-required", error.Code);
     }
 
     [Fact]
@@ -325,6 +360,243 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
     }
 
     [Fact]
+    public async Task SendAsync_ResolvesFileCommitAndSelectedDiffIntoPromptAndReceipt()
+    {
+        var persistence = new MemoryPersistence([]);
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, persistence);
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+        var references = new OrchestratorContextReference[]
+        {
+            new(
+                "repository-file",
+                "docs/proof.md",
+                "project-a",
+                _commitSha,
+                "project-a",
+                LineRanges: [new OrchestratorContextLineRange(1, 1)]),
+            new("commit", _commitSha, "project-a", RepositoryId: "project-a"),
+            new(
+                "diff",
+                _commitSha,
+                "project-a",
+                RepositoryId: "project-a",
+                Path: "docs/proof.md",
+                LineRanges: [new OrchestratorContextLineRange(1, 8)]),
+        };
+
+        var reply = await service.SendAsync(
+            "project-a",
+            _watchPath,
+            new SendOrchestratorChatRequest(
+                "Explain these sources",
+                null,
+                Model: "gpt-5.4-mini",
+                ContextEnvelope: Envelope(
+                    context.Value, "project-a", null, DateTime.UtcNow, references)),
+            clientId: null,
+            context,
+            CancellationToken.None);
+
+        Assert.Contains("CENTRAL_CONTEXT_PROOF_BODY", runner.Prompt);
+        Assert.Contains($"Commit: {_commitSha}", runner.Prompt);
+        Assert.Contains("Selected diff:", runner.Prompt);
+        var sources = Assert.IsType<OrchestratorContextReceipt>(reply.ContextReceipt).Sources!;
+        var file = Assert.Single(sources, source => source.Kind == "repository-file");
+        var commit = Assert.Single(sources, source => source.Kind == "commit");
+        var diff = Assert.Single(sources, source => source.Kind == "diff");
+        Assert.Equal(_commitSha, file.Revision);
+        Assert.Equal(_commitSha, commit.Revision);
+        Assert.Equal(_commitSha, diff.Revision);
+        Assert.Contains("docs/proof.md#L1-L1", file.SourceId);
+        Assert.Contains("docs/proof.md#L1-L8", diff.SourceId);
+        Assert.All([file, commit, diff], source => Assert.Equal(64, source.Sha256?.Length));
+    }
+
+    [Fact]
+    public async Task SendAsync_ReceiptsMissingCommitsAndGeneratedFilesWithoutInvokingGitInTheCli()
+    {
+        var persistence = new MemoryPersistence([]);
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, persistence);
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+        var missingSha = new string('f', 40);
+        var references = new OrchestratorContextReference[]
+        {
+            new("commit", missingSha, "project-a", RepositoryId: "project-a"),
+            new("diff", missingSha, "project-a", RepositoryId: "project-a"),
+            new("repository-file", "dist/generated.min.js", "project-a", RepositoryId: "project-a"),
+        };
+
+        var reply = await service.SendAsync(
+            "project-a",
+            _watchPath,
+            new SendOrchestratorChatRequest(
+                "Explain these sources",
+                null,
+                Model: "gpt-5.4-mini",
+                ContextEnvelope: Envelope(
+                    context.Value, "project-a", null, DateTime.UtcNow, references)),
+            clientId: null,
+            context,
+            CancellationToken.None);
+
+        var sources = Assert.IsType<OrchestratorContextReceipt>(reply.ContextReceipt).Sources!;
+        Assert.Equal(2, sources.Count(source => source.Status == "unresolved"));
+        var generated = Assert.Single(sources, source => source.SourceId.Contains("generated.min.js"));
+        Assert.Equal("blocked", generated.Status);
+        Assert.Contains("Generated", generated.Reason);
+        Assert.Contains("status=unresolved", runner.Prompt);
+        Assert.Contains("status=blocked", runner.Prompt);
+    }
+
+    [Fact]
+    public async Task SendAsync_PinsFileContentToItsImmutableRevisionAcrossExecutionCheckouts()
+    {
+        File.WriteAllText(Path.Combine(_watchPath, "docs", "proof.md"), "MUTATED_EXECUTION_CHECKOUT_BODY");
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, new MemoryPersistence([]));
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+        var reference = new OrchestratorContextReference(
+            "repository-file",
+            "docs/proof.md",
+            "project-a",
+            _commitSha,
+            "project-a");
+
+        var reply = await service.SendAsync(
+            "project-a",
+            _watchPath,
+            new SendOrchestratorChatRequest(
+                "Read the pinned file",
+                null,
+                Model: "gpt-5.4-mini",
+                ContextEnvelope: Envelope(
+                    context.Value, "project-a", null, DateTime.UtcNow, [reference])),
+            clientId: null,
+            context,
+            CancellationToken.None);
+
+        Assert.Contains("CENTRAL_CONTEXT_PROOF_BODY", runner.Prompt);
+        Assert.DoesNotContain("MUTATED_EXECUTION_CHECKOUT_BODY", runner.Prompt);
+        var source = Assert.Single(
+            Assert.IsType<OrchestratorContextReceipt>(reply.ContextReceipt).Sources!,
+            item => item.Kind == "repository-file");
+        Assert.Equal(_commitSha, source.Revision);
+        Assert.Equal("immutable-revision", source.Freshness);
+    }
+
+    [Fact]
+    public async Task SendAsync_ReceiptsBinaryFilesAtImmutableRevisionsAsBlocked()
+    {
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, new MemoryPersistence([]));
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+        var reference = new OrchestratorContextReference(
+            "repository-file", "binary.dat", "project-a", _commitSha, "project-a");
+
+        var reply = await service.SendAsync(
+            "project-a",
+            _watchPath,
+            new SendOrchestratorChatRequest(
+                "Read the binary",
+                null,
+                Model: "gpt-5.4-mini",
+                ContextEnvelope: Envelope(
+                    context.Value, "project-a", null, DateTime.UtcNow, [reference])),
+            clientId: null,
+            context,
+            CancellationToken.None);
+
+        var source = Assert.Single(
+            Assert.IsType<OrchestratorContextReceipt>(reply.ContextReceipt).Sources!,
+            item => item.Kind == "repository-file");
+        Assert.Equal("blocked", source.Status);
+        Assert.Contains("Binary", source.Reason);
+        Assert.Contains("status=blocked", runner.Prompt);
+    }
+
+    [Fact]
+    public async Task SendAsync_ExcerptsLargeDiffsAndRetainsTheResolvedCommitRevision()
+    {
+        var largePath = Path.Combine(_watchPath, "src", "large.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(largePath)!);
+        File.WriteAllText(largePath, string.Join('\n', Enumerable.Range(1, 4000).Select(index => $"line {index}")));
+        RunGit(_watchPath, "add", "src/large.txt");
+        RunGit(_watchPath, "commit", "-q", "-m", "Add large diff fixture");
+        var largeSha = RunGit(_watchPath, "rev-parse", "HEAD").Trim();
+        var persistence = new MemoryPersistence([]);
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, persistence);
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+        var envelope = Envelope(
+            context.Value,
+            "project-a",
+            null,
+            DateTime.UtcNow,
+            [new OrchestratorContextReference(
+                "diff", largeSha, "project-a", RepositoryId: "project-a", Path: "src/large.txt")]) with
+        {
+            Budget = new OrchestratorContextBudget(100, 100, 100, 4),
+        };
+
+        var reply = await service.SendAsync(
+            "project-a",
+            _watchPath,
+            new SendOrchestratorChatRequest(
+                "Summarize", null, Model: "gpt-5.4-mini", ContextEnvelope: envelope),
+            clientId: null,
+            context,
+            CancellationToken.None);
+
+        var source = Assert.Single(
+            Assert.IsType<OrchestratorContextReceipt>(reply.ContextReceipt).Sources!,
+            item => item.Kind == "diff");
+        Assert.Equal("excerpted", source.Status);
+        Assert.Equal(largeSha, source.Revision);
+        Assert.Equal(400, source.IncludedCharacters);
+    }
+
+    [Fact]
+    public async Task SendAsync_BlocksOutOfRootSymlinkBeforePersistenceOrModelInvocation()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var outside = Path.Combine(_root, "outside.txt");
+        File.WriteAllText(outside, "outside");
+        File.CreateSymbolicLink(Path.Combine(_watchPath, "docs", "outside-link.txt"), outside);
+        var persistence = new MemoryPersistence([]);
+        var runner = new CapturingRunner();
+        var service = BuildService(runner, persistence);
+        Assert.True(OrchestratorContextKey.TryParse("project:project-a", out var context));
+
+        var error = await Assert.ThrowsAsync<OrchestratorContextEnvelopeException>(() =>
+            service.SendAsync(
+                "project-a",
+                _watchPath,
+                new SendOrchestratorChatRequest(
+                    "Question",
+                    null,
+                    Model: "gpt-5.4-mini",
+                    ContextEnvelope: Envelope(
+                        context.Value,
+                        "project-a",
+                        null,
+                        DateTime.UtcNow,
+                        [new OrchestratorContextReference(
+                            "repository-file",
+                            "docs/outside-link.txt",
+                            "project-a",
+                            RepositoryId: "project-a")])),
+                clientId: null,
+                context,
+                CancellationToken.None));
+
+        Assert.Equal("context-path-outside-project", error.Code);
+        Assert.Empty(persistence.Turns);
+        Assert.Null(runner.Prompt);
+    }
+
+    [Fact]
     public async Task LegacyMigration_ReadsProjectJsonl_ImportsItCentrally_AndRetainsTheSourceFile()
     {
         var legacy = new OrchestratorChat(NullLogger<OrchestratorChat>.Instance);
@@ -397,6 +669,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(
             config, NullLogger<TaskScannerService>.Instance, summary);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var bootstrap = new GlobalOrchestratorBootstrap(
             NullLogger<GlobalOrchestratorBootstrap>.Instance,
             sessionStore,
@@ -411,6 +684,7 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             scanner,
             config,
             NullLogger<OrchestratorChatService>.Instance,
+            git: git,
             persistence: persistence);
     }
 
@@ -442,6 +716,28 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         for (var index = 0; (index = source.IndexOf(value, index, StringComparison.Ordinal)) >= 0; index += value.Length)
             count++;
         return count;
+    }
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            },
+        };
+        foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} failed: {error}");
+        return output;
     }
 
     private sealed class CapturingRunner : OrchestratorRunner
