@@ -158,6 +158,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   and integration status use only entries without that marker. The temporary
   value `next-attempt` is replaced by the next fenced `runAttemptId` when its
   remote attribution lands.
+- A platform-owned mechanical rebase retains each original `commits[]` entry,
+  marks it with `supersededBySha`, and appends its replacement object with the
+  same producer attribution. Both SHA and attempt supersession remove a
+  historical entry from integration completeness while preserving its audit
+  chain. If this attribution write fails, the integration merge is rolled back
+  before any push is released.
 - Startup runs the one-time `superseded-commits-v1` healing sweep over delivered
   and archived cards. It marks only a missing runner salvage fence with a later
   integrated commit from a proven different generation, at least 90 percent
@@ -170,8 +176,9 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   and curated merge subjects do not force `integrated`; an out-of-band merge is
   detected on the next read.
 - Human acceptance is transactional. A coding card remains in
-  `5-human-review` with phase `integrating` until the delivery reaches `Merged`
-  or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure, and error return it
+  `5-human-review` with phase `integrating` until the delivery reaches `Merged`,
+  `MergedAfterRebase`, or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure,
+  and error return it
   to ordinary Human Review with an Integration failed badge and timeline
   evidence. Before the already-integrated decision, acceptance fetches the
   configured origin integration ref and evaluates refreshed local plus remote

@@ -1210,9 +1210,7 @@ public sealed class TaskTransitionService
             integrationBranch,
             ct,
             settings.IntegrationStrategy).ConfigureAwait(false);
-        if (result.Outcome is not (
-                MergeIntoIntegrationOutcome.Merged
-                or MergeIntoIntegrationOutcome.AlreadyMerged))
+        if (!result.Outcome.IsSuccessfulIntegration())
         {
             return FailTransactionalAccept(
                 integrating,
@@ -1223,7 +1221,7 @@ public sealed class TaskTransitionService
         }
 
         if (_provenance != null
-            && result.Outcome == MergeIntoIntegrationOutcome.Merged
+            && result.Outcome.IsFreshMerge()
             && !string.IsNullOrWhiteSpace(result.MergedSha))
         {
             _provenance.RecordMerge(integrating, result.MergedSha);
@@ -1844,7 +1842,7 @@ public sealed class TaskTransitionService
             // `moved` was freshly scanned, so the replace-all provenance write
             // cannot drop earlier transitions.
             if (_provenance != null
-                && result.Outcome == AgentStudio.Git.MergeIntoIntegrationOutcome.Merged
+                && result.Outcome.IsFreshMerge()
                 && !string.IsNullOrWhiteSpace(result.MergedSha))
             {
                 _provenance.RecordMerge(moved, result.MergedSha);

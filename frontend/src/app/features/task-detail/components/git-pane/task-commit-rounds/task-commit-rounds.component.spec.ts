@@ -51,4 +51,28 @@ describe('TaskCommitRoundsComponent', () => {
     expect(root.querySelector('[data-testid="git-superseded-commit"]')?.getAttribute('data-sha'))
       .toBe(superseded.sha);
   });
+
+  it('keeps a mechanically rewritten SHA out of the current aggregate', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCommitRoundsComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCommitRoundsComponent);
+    fixture.componentRef.setInput('commits', [
+      { ...superseded, supersededByAttempt: null, supersededBySha: current.sha },
+      { ...current, runAttemptId: superseded.runAttemptId },
+    ]);
+    fixture.componentRef.setInput('selectedSha', current.sha);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('[data-testid="git-commit-group-toggle"]')?.click();
+    fixture.detectChanges();
+    root.querySelector<HTMLDetailsElement>('[data-testid="git-superseded-rounds"]')!.open = true;
+    fixture.detectChanges();
+
+    expect(root.querySelectorAll('[data-testid="git-commit-chain-item"]')).toHaveLength(1);
+    expect(root.querySelector('[data-testid="git-superseded-round"]')?.textContent)
+      .toContain(`mechanically replaced by SHA ${current.sha.slice(0, 9)}`);
+  });
 });

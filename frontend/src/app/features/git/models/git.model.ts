@@ -363,6 +363,8 @@ export interface TaskCommitInfo {
    * selectable as history but are excluded from the current aggregate diff.
    */
   supersededByAttempt?: string | null;
+  /** Exact replacement SHA produced by a conflict-free platform rebase. */
+  supersededBySha?: string | null;
 }
 
 export interface TaskCommitDetail {

@@ -25,7 +25,7 @@ export class TaskCommitRoundsComponent {
 
   readonly collapsed = signal(readCollapsed());
   readonly activeCommits = computed(() =>
-    this.commits().filter((commit) => !commit.supersededByAttempt?.trim()),
+    this.commits().filter((commit) => !isSuperseded(commit)),
   );
   readonly supersededRounds = computed<SupersededRound[]>(() => buildSupersededRounds(this.commits()));
   readonly summary = computed(() => {
@@ -61,35 +61,59 @@ function buildSupersededRounds(commits: TaskCommitInfo[]): SupersededRound[] {
     if (attempt && !attemptIds.includes(attempt)) attemptIds.push(attempt);
   }
 
-  const groups = new Map<string, { sourceAttempt: string | null; replacement: string; commits: TaskCommitInfo[] }>();
+  const groups = new Map<string, {
+    sourceAttempt: string | null;
+    replacement: string;
+    replacementKind: 'sha' | 'attempt';
+    commits: TaskCommitInfo[];
+  }>();
   commits.forEach((commit, index) => {
-    const replacement = commit.supersededByAttempt?.trim();
+    const replacementSha = commit.supersededBySha?.trim();
+    const replacementAttempt = commit.supersededByAttempt?.trim();
+    const replacement = replacementSha || replacementAttempt;
     if (!replacement) return;
     const sourceAttempt = commit.runAttemptId?.trim() || null;
-    const key = `${sourceAttempt ?? `legacy-${index + 1}`}|${replacement}`;
+    const replacementKind = replacementSha ? 'sha' : 'attempt';
+    const key = `${sourceAttempt ?? `legacy-${index + 1}`}|${replacementKind}|${replacement}`;
     const existing = groups.get(key);
     if (existing) existing.commits.push(commit);
-    else groups.set(key, { sourceAttempt, replacement, commits: [commit] });
+    else groups.set(key, { sourceAttempt, replacement, replacementKind, commits: [commit] });
   });
 
   return [...groups.entries()].map(([key, group], groupIndex) => {
     const sourceIndex = group.sourceAttempt ? attemptIds.indexOf(group.sourceAttempt) : -1;
     const sourceRound = sourceIndex >= 0 ? sourceIndex + 1 : groupIndex + 1;
-    const replacementCommit = commits.find((commit) =>
-      commit.runAttemptId === group.replacement
-      || commit.resultSha === group.replacement
-      || commit.sha === group.replacement);
-    const replacementAttempt = replacementCommit?.runAttemptId ?? group.replacement;
-    const replacementIndex = attemptIds.indexOf(replacementAttempt);
-    const replacementLabel = group.replacement === 'next-attempt'
-      ? 'next attempt'
-      : `round ${replacementIndex >= 0 ? replacementIndex + 1 : sourceRound + 1}`;
+    const replacementLabel = group.replacementKind === 'sha'
+      ? `SHA ${group.replacement.slice(0, 9)}`
+      : replacementRoundLabel(commits, attemptIds, group.replacement, sourceRound);
     return {
       key,
-      label: `Round ${sourceRound}, replaced by ${replacementLabel}`,
+      label: group.replacementKind === 'sha'
+        ? `Round ${sourceRound}, mechanically replaced by ${replacementLabel}`
+        : `Round ${sourceRound}, replaced by ${replacementLabel}`,
       commits: group.commits,
     };
   });
+}
+
+function replacementRoundLabel(
+  commits: TaskCommitInfo[],
+  attemptIds: string[],
+  replacement: string,
+  sourceRound: number,
+): string {
+  if (replacement === 'next-attempt') return 'next attempt';
+  const replacementCommit = commits.find((commit) =>
+    commit.runAttemptId === replacement
+    || commit.resultSha === replacement
+    || commit.sha === replacement);
+  const replacementAttempt = replacementCommit?.runAttemptId ?? replacement;
+  const replacementIndex = attemptIds.indexOf(replacementAttempt);
+  return `round ${replacementIndex >= 0 ? replacementIndex + 1 : sourceRound + 1}`;
+}
+
+function isSuperseded(commit: TaskCommitInfo): boolean {
+  return !!commit.supersededBySha?.trim() || !!commit.supersededByAttempt?.trim();
 }
 
 const COLLAPSED_KEY = 'taskboard.gitPane.commitGroupCollapsed';

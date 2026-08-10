@@ -75,6 +75,7 @@ internal static class AcceptedIntegrationBackstopPolicy
             switch (outcome)
             {
                 case MergeIntoIntegrationOutcome.Merged:
+                case MergeIntoIntegrationOutcome.MergedAfterRebase:
                     merged++;
                     break;
                 case MergeIntoIntegrationOutcome.AlreadyMerged:

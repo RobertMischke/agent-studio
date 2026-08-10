@@ -189,7 +189,7 @@ describe('GitPaneService superseded delivery rounds', () => {
       files: ['src/a.ts'],
       at: '2026-08-09T10:00:00Z',
       runAttemptId: 'round-1',
-      supersededByAttempt: 'round-2',
+      supersededBySha: 'b'.repeat(40),
     };
     const replacement = {
       sha: 'b'.repeat(40),

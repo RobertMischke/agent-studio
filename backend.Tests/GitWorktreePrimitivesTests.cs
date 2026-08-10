@@ -300,6 +300,32 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
+    public void MergeBranchIntoIntegration_BehindCurrentTarget_RebasesMechanicallyBeforeMerge()
+    {
+        var repo = SeedRepo("merge-behind-target");
+        var git = BuildGitService(("Fixture", repo));
+
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/behind");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        var originalTaskTip = RunGit(repo, "rev-parse task/behind").Out.Trim();
+
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "develop.txt"), "integration advanced");
+        Commit(repo, "chore: advance integration target");
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/behind", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.MergedAfterRebase, result.Outcome);
+        var replacement = Assert.Single(result.RebasedCommits);
+        Assert.Equal(originalTaskTip, replacement.OriginalSha);
+        Assert.Equal(RunGit(repo, "rev-parse develop^2").Out.Trim(), replacement.RebasedSha);
+        Assert.NotEqual(originalTaskTip, replacement.RebasedSha);
+        Assert.False(git.RepoHasUncommittedChanges(repo));
+    }
+
+    [Fact]
     public void MergeBranchIntoIntegration_AlreadyContained_IsIdempotentNoOp()
     {
         var repo = SeedRepo("merge-already");
@@ -330,11 +356,13 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         RunGit(repo, "checkout -q -b task/12");
         File.WriteAllText(Path.Combine(repo, "shared.txt"), "task version");
         Commit(repo, "feat: task edits shared");
+        var taskTipBefore = RunGit(repo, "rev-parse task/12").Out.Trim();
         // ... develop edits the same file differently -> merge must conflict.
         RunGit(repo, "checkout -q develop");
         File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version");
         Commit(repo, "chore: develop edits shared");
         var developTipBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+        var worktreesBefore = git.ListWorktrees(repo).Select(item => item.Path).ToArray();
 
         var result = git.MergeBranchIntoIntegration(repo, "task/12", "develop");
 
@@ -344,8 +372,10 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         // The merge was aborted: develop is unchanged, the tree is clean, and no
         // merge is in progress (MERGE_HEAD gone).
         Assert.Equal(developTipBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.Equal(taskTipBefore, RunGit(repo, "rev-parse task/12").Out.Trim());
         Assert.False(git.RepoHasUncommittedChanges(repo));
         Assert.NotEqual(0, RunGit(repo, "rev-parse --verify MERGE_HEAD").Code);
+        Assert.Equal(worktreesBefore, git.ListWorktrees(repo).Select(item => item.Path));
     }
 
     [Fact]

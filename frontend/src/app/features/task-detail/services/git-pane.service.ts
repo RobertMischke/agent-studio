@@ -160,7 +160,7 @@ export class GitPaneService implements OnDestroy {
   readonly commitChain = signal<TaskCommitInfo[]>([]);
   /** Commits still expected to land, excluding replaced delivery rounds. */
   readonly activeCommitChain = computed<TaskCommitInfo[]>(() =>
-    this.commitChain().filter((commit) => !commit.supersededByAttempt?.trim()),
+    this.commitChain().filter((commit) => !isSuperseded(commit)),
   );
   /**
    * SHA of the commit the detail view is filtered to. `null` is the
@@ -334,7 +334,7 @@ export class GitPaneService implements OnDestroy {
       this.aggregateFiles.set([]);
       return;
     }
-    const active = chain.filter((commit) => !commit.supersededByAttempt?.trim());
+    const active = chain.filter((commit) => !isSuperseded(commit));
     if (active.length > 1) {
       this.selectedCommitSha.set(null);
       this.loadAggregate();
@@ -678,8 +678,12 @@ export class GitPaneService implements OnDestroy {
 
 function commitChainSignature(chain: TaskCommitInfo[]): string {
   return chain
-    .map((commit) => `${commit.sha}:${commit.supersededByAttempt?.trim() ?? ''}`)
+    .map((commit) => `${commit.sha}:${commit.supersededBySha?.trim() ?? ''}:${commit.supersededByAttempt?.trim() ?? ''}`)
     .join('|');
+}
+
+function isSuperseded(commit: TaskCommitInfo): boolean {
+  return !!commit.supersededBySha?.trim() || !!commit.supersededByAttempt?.trim();
 }
 
 /**

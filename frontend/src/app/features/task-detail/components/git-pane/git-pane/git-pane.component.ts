@@ -446,8 +446,11 @@ export function previewKindOf(path: string | null | undefined): 'markdown' | 'ht
   return null;
 }
 
-function currentCommitCount(commits: readonly { supersededByAttempt?: string | null }[]): number {
-  return commits.filter((commit) => !commit.supersededByAttempt?.trim()).length;
+function currentCommitCount(
+  commits: readonly { supersededBySha?: string | null; supersededByAttempt?: string | null }[],
+): number {
+  return commits.filter((commit) =>
+    !commit.supersededBySha?.trim() && !commit.supersededByAttempt?.trim()).length;
 }
 
 const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';

@@ -125,8 +125,8 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.
-  The Git pane treats commits without `supersededByAttempt` as the current
-  delivery. Its aggregate diff and count exclude replaced rounds, while a
+  The Git pane treats commits without `supersededByAttempt` or `supersededBySha`
+  as the current delivery. Its aggregate diff and count exclude replaced rounds, while a
   separate history disclosure keeps those commits selectable and labels their
   relationship, for example `Round 1, replaced by round 2`.
   Timeline and steering text is ANSI-sanitised before rendering. Timeline rows

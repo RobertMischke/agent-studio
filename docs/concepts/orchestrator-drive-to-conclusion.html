@@ -1949,6 +1949,29 @@
             repository-embedded flat storage, the failure matrix, the card projection, and source-needs-rebase recovery.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-10</td>
+          <td><code>AGT-2563</code><br><span class="small">behind-base deliveries required overnight rebase steer rounds</span></td>
+          <td>
+            A delivery could be fenced against one integration head while the target advanced before its serialized
+            merge. The overnight operator sample called out ten cards but listed eleven. All were surfaced as
+            <code>conflict-skipped</code> and required a steer round before the platform had attempted a conflict-free
+            mechanical replay.
+          </td>
+          <td>
+            The common delivery runner synchronized the current target and attempted only the final merge. It had no
+            isolated recovery boundary for replaying a behind-base delivery and no old-to-new SHA attribution contract.
+            A retrospective replay of each named delivery onto the target head immediately before its recorded conflict,
+            with <code>rerere</code> disabled, found that 0 of 11 were textually clean. Those incidents were real content
+            conflicts, even though the missing mechanism remained a correctness and operator-effort gap.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> a behind-base delivery now receives one conflict-free replay in a
+            disposable detached worktree. Clean application records <code>MergedAfterRebase</code>, runs the ordinary gate,
+            and persists a superseded SHA chain. A textual conflict aborts with its file list, and cleanup or attribution
+            failure prevents push and leaves no temporary worktree mutation on the target repository.
+          </td>
+        </tr>
       </tbody>
     </table>
 
