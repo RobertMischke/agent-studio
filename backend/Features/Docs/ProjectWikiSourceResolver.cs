@@ -16,8 +16,8 @@ internal static class ProjectWikiSourceResolver
     {
         var entry = scanner.GetWatchPaths().FirstOrDefault(candidate =>
             string.Equals(candidate.Name, projectName, StringComparison.OrdinalIgnoreCase));
-        if (entry != null)
-            return registry.FindByStorageLocation(entry.Path);
+        if (entry != null && registry.FindByStorageLocation(entry.Path) is { } registered)
+            return registered;
         return registry.FindByIdOrDisplayName(projectName)
             ?? registry.FindByShortCode(projectName);
     }
@@ -28,10 +28,20 @@ internal static class ProjectWikiSourceResolver
         ProjectRegistry registry,
         GitService? git)
     {
+        var project = ResolveProject(projectName, scanner, registry);
         var checkout = ProjectRepoResolver.ResolveForProject(projectName, scanner, registry);
+        if (checkout == null && project != null)
+        {
+            var entry = scanner.GetWatchPaths().FirstOrDefault(candidate =>
+                string.Equals(
+                    registry.FindByStorageLocation(candidate.Path)?.Id,
+                    project.Id,
+                    StringComparison.OrdinalIgnoreCase));
+            checkout = ProjectRepoResolver.Resolve(project, entry);
+        }
         if (checkout == null) return null;
 
-        var configured = ResolveProject(projectName, scanner, registry)?.WikiSourceBranch;
+        var configured = project?.WikiSourceBranch;
         var repoRoot = git?.ResolveRepoRootForProject(projectName) ?? checkout;
         if (string.IsNullOrWhiteSpace(configured))
         {

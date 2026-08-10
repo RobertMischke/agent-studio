@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 using Xunit;
 
@@ -352,6 +353,15 @@ public sealed class WaitsOnEndpointsTests : IDisposable
         using var factory = BuildFactory();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        var directCatalogue = factory.Services
+            .GetRequiredService<WorkbenchCatalogueService>()
+            .List(App, includeHistory: true);
+        var cachedCatalogue = factory.Services
+            .GetRequiredService<ProjectDocsService>()
+            .GetWikiWorkbenchCatalogue(App, includeHistory: true);
+        Assert.NotNull(directCatalogue);
+        Assert.NotNull(cachedCatalogue);
 
         using var catalogue = JsonDocument.Parse(await client.GetStringAsync(
             $"/api/projects/{App}/workbenches?history=true"));
