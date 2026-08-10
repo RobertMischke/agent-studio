@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public Demo Instance | Decision Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --control: #2a78d6;
+    --replay: #008300;
+    --risk: #c93736;
+    --warn: #9a6b00;
+    --control-soft: #eaf1fb;
+    --replay-soft: #eaf4ea;
+    --risk-soft: #fbecec;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --control: #3987e5;
+      --replay: #4eae4e;
+      --risk: #e66767;
+      --warn: #d9a63f;
+      --control-soft: #1e2a3a;
+      --replay-soft: #1f2f1f;
+      --risk-soft: #382222;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { margin: 0 0 10px; color: var(--ink-3); font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+  h1 { margin: 0 0 12px; font-size: 34px; line-height: 1.2; }
+  .lede { max-width: 65ch; margin: 0; color: var(--ink-2); font-size: 18px; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; color: var(--ink-3); font-size: 13px; }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { margin: 56px 0 6px; font-size: 24px; scroll-margin-top: 20px; }
+  h2 .no { margin-right: 10px; color: var(--ink-3); font-weight: 600; }
+  h3 { margin: 34px 0 4px; font-size: 18px; }
+  p { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  a { color: var(--control); text-underline-offset: 3px; }
+  .box { margin: 20px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; }
+  .box.accent { border-color: color-mix(in srgb, var(--control) 30%, var(--line)); background: var(--control-soft); }
+  .box.ok { border-color: color-mix(in srgb, var(--replay) 30%, var(--line)); background: var(--replay-soft); }
+  .box.bad { border-color: color-mix(in srgb, var(--risk) 30%, var(--line)); background: var(--risk-soft); }
+  .box.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); background: var(--warn-soft); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  code, .mono { border-radius: 4px; background: var(--surface-3); padding: 1px 5px; font: 13px/1.5 ui-monospace, Consolas, monospace; }
+  table { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { color: var(--ink-3); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  td b { font-weight: 600; }
+  ul, ol { padding-left: 22px; }
+  li { max-width: 82ch; margin: 5px 0; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .pill { display: inline-block; border-radius: 99px; padding: 2px 10px; font-size: 12px; font-weight: 600; vertical-align: 1px; white-space: nowrap; }
+  .pill.control { background: var(--control-soft); color: var(--control); }
+  .pill.ok { background: var(--replay-soft); color: var(--replay); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.risk { background: var(--risk-soft); color: var(--risk); }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 16px; }
+  .card h4 { margin: 0 0 5px; font-size: 16px; }
+  .card p { margin: 4px 0 0; color: var(--ink-2); }
+  figure { margin: 26px 0; }
+  figure svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { max-width: 86ch; margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
+  figcaption b { color: var(--ink-1); }
+  .s-zone { fill: var(--surface-1); stroke: var(--line); stroke-dasharray: 5 5; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-control { fill: var(--control-soft); stroke: var(--control); }
+  .s-replay { fill: var(--replay-soft); stroke: var(--replay); }
+  .s-risk { fill: var(--risk-soft); stroke: var(--risk); }
+  .s-label { fill: var(--ink-1); font: 600 14px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
+  .s-control-flow { fill: none; stroke: var(--control); stroke-width: 2; }
+  .s-replay-flow { fill: none; stroke: var(--replay); stroke-width: 2; }
+  .s-deny { fill: none; stroke: var(--risk); stroke-width: 2.5; stroke-dasharray: 6 5; }
+  .t-risk { fill: var(--risk); font: 600 12px system-ui, sans-serif; }
+  .t-ok { fill: var(--replay); font: 600 12px system-ui, sans-serif; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; color: var(--ink-2); font-size: 13px; }
+  .legend span::before { display: inline-block; width: 22px; height: 4px; margin-right: 7px; border-radius: 2px; background: var(--c); content: ""; vertical-align: middle; }
+  @media (max-width: 760px) {
+    main { padding: 0 18px; }
+    h1 { font-size: 27px; }
+    .toc { columns: 1; }
+    .cards { grid-template-columns: 1fr; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Decision dossier · Public demo instance</p>
+  <h1>A browsable demo with no execution authority</h1>
+  <p class="lede">A public Agent Studio scene with two credible mock projects, a real Task Server, live navigation and SignalR, a replay-only Runner, and Dossiers across their full lifecycle. The instance can show execution evidence, but it cannot claim, start, continue, or complete real work.</p>
+  <div class="meta">
+    <span><b>Date</b> 10 August 2026</span>
+    <span><b>Source</b> AGT-2582</span>
+    <span><b>Status</b> Decision pending</span>
+    <span><b>Phase</b> Decision ready</span>
+    <span><b>Scope</b> Analysis only, no implementation</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#decision">§1 Recommendation</a></li>
+    <li><a href="#basis">§2 Existing basis</a></li>
+    <li><a href="#content">§3 Demo content</a></li>
+    <li><a href="#dossiers">§4 Dossier lifecycle gallery</a></li>
+    <li><a href="#architecture">§5 Architecture variants</a></li>
+    <li><a href="#security">§6 Security and residual risk</a></li>
+    <li><a href="#operations">§7 Reset and versioning</a></li>
+    <li><a href="#slices">§8 Decision-ready slice plan</a></li>
+    <li><a href="#approval">§9 Decision request</a></li>
+  </ul>
+</nav>
+
+<section id="decision" class="box accent">
+  <h4>Recommendation</h4>
+  <p><b>Approve the defense-in-depth variant as one launch package.</b> Run the real Task Server in a startup-locked public-demo profile that rejects every execution admission path. Pair it with a replay-only Runner that has no claim scope, CLI, repository, deploy key, secret mount, or general outbound network access. Publish only a server-enforced read-only visitor surface from a dedicated demo VM. Build the instance from the existing pinned seed, extend that one seed with the Wiki and Dossier gallery, prove the generated datastore is scrubbed, and replace the whole runtime from a versioned release bundle on reset.</p>
+</section>
+
+<div class="box bad">
+  <h4>Launch invariant</h4>
+  <p>A browser control, a manual Runner mode, or a replay flag is not an execution boundary. The Task Server must deny claims and starts even if a caller bypasses Angular, forges a Runner request, moves a card, or compromises the replay process. If the server cannot prove that lock at startup and through its route matrix, the public demo does not start.</p>
+</div>
+
+<h2 id="basis"><span class="no">§2</span>Existing basis and boundaries</h2>
+<p>This proposal extends current product work instead of creating a second demo system.</p>
+
+<table>
+  <thead><tr><th>Basis</th><th>Already decided or present</th><th>Implication here</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>ADR-0056</b></td>
+      <td>Separate two-project demo datastore, deterministic fixed timestamps, reset by re-seeding, and a guard against the production workspace.</td>
+      <td>Keep <code>Demo App</code>, <code>Demo Platform</code>, and the <code>DEMO-*</code>/<code>PLAT-*</code> namespace. Do not introduce another workspace shape.</td>
+    </tr>
+    <tr>
+      <td><b>Pinned screenshot decision</b></td>
+      <td>Pinned is the rule. Real data may inform a deliberately sanitized snapshot, but capture never reads a live source workspace.</td>
+      <td>The public instance consumes the same committed seed family. It never imports or proxies production data at runtime.</td>
+    </tr>
+    <tr>
+      <td><b><code>worktree-test-stack.sh up --demo</code></b></td>
+      <td>A real backend can already boot on isolated ports against only the seeded projects.</td>
+      <td>Reuse this as local verification. It is not the public hosting topology or security boundary.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2530, round 3</b></td>
+      <td>The in-flight branch has a committed <code>pinned-seed.json</code>, two-project lane coverage, a decision task, and repeatable pinned captures.</td>
+      <td>Extend its schema or add versioned sidecars after integration. Do not fork its task list, naming, or capture provenance.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2558</b></td>
+      <td>The artifact-gallery scene is in human review with light and dark evidence.</td>
+      <td>Use that scene as an optional seeded evidence story after acceptance. This dossier does not assume it is already shipped.</td>
+    </tr>
+    <tr>
+      <td><b>WEB-17</b></td>
+      <td>The website sync and pinned-shot adoption remain a separate ready card.</td>
+      <td>The public demo URL and hosting are not smuggled into the screenshot sync slice.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>Important distinction</h4>
+  <p>The ADR-0056 dev guard is suitable for local development, not sufficient for a hostile network. <code>RunnerMode: manual</code>, <code>AutoCommit: false</code>, and <code>Runner:Role = test-subject</code> reduce accidental pickup. The public demo additionally needs a server execution lock, restricted visitor authorization, a scrub attestation, and infrastructure separation.</p>
+</div>
+
+<h2 id="content"><span class="no">§3</span>Demo content specification</h2>
+<p>The content should feel like one coherent product story, not a fixture catalogue. The existing reports-export thread provides that spine: planning, active delivery, review evidence, an operator decision, completed follow-up work, Wiki context, and visible history.</p>
+
+<h3>Two projects with bounded Wiki content</h3>
+<table>
+  <thead><tr><th>Project</th><th>Purpose</th><th>Seeded Wiki pages</th><th>Data boundary</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Demo App</b><br><code>demo-app</code></td>
+      <td>A customer-facing reporting application. It carries the dense board, decision task, evidence, Dossier gallery, and artifact story.</td>
+      <td>Product overview; reporting domain; system map; accessibility baseline; release checklist; export retention policy; Dossier index.</td>
+      <td>Invented organizations, actors, paths, metrics, screenshots, commits, and dates. No source repository identity survives.</td>
+    </tr>
+    <tr>
+      <td><b>Demo Platform</b><br><code>demo-platform</code></td>
+      <td>A small supporting service that makes cross-project navigation, platform work, operations, and archived history credible.</td>
+      <td>Service overview; request lifecycle; observability guide; cache policy; incident checklist; demo security boundary.</td>
+      <td>No real infrastructure names, hostnames, IP addresses, alerts, owners, or provider identifiers.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Every Wiki page is substantive but short. Each page needs a purpose, one concrete diagram or table where useful, links only to other seeded pages or cards, and a footer that labels the content as pinned demo data. No page fetches remote images, embeds third-party content, or contains executable snippets that the public instance could run.</p>
+
+<h3>Cards across every board lane</h3>
+<p>The AGT-2530 pinned task list already supplies the right base. The public seed preserves these keys and stories, with the Dossier references added deterministically.</p>
+
+<table>
+  <thead><tr><th>Lane</th><th>Required seeded examples</th><th>What the visitor can inspect</th></tr></thead>
+  <tbody>
+    <tr><td><code>0-backlog</code></td><td>DEMO-1 saved views; DEMO-10 dashboard filters; PLAT-1 health check</td><td>Bounded prompts, tags, ownership, and prioritization without execution affordances.</td></tr>
+    <tr><td><code>1-preparation</code></td><td>DEMO-2 onboarding checklist; DEMO-17 export retention policy</td><td>Refinement context and links into active and decision-pending Dossiers.</td></tr>
+    <tr><td><code>2-ready</code></td><td>DEMO-3 accessibility baseline; DEMO-11 stable columns; DEMO-16 export presets; PLAT-2 request logging</td><td>A populated ready queue whose controls remain disabled and whose API mutations are denied.</td></tr>
+    <tr><td><code>3-progress</code></td><td>DEMO-4 large uploads; DEMO-12 export progress stream</td><td>Recorded run timeline, token use, changes, and replay progress clearly labeled as simulated.</td></tr>
+    <tr><td><code>4-auto-review</code></td><td>DEMO-13 dependency license notices</td><td>Automated review status, evidence inventory, and a deterministic verdict.</td></tr>
+    <tr><td><code>5-human-review</code></td><td>DEMO-5 CSV export; DEMO-6 timezone handling; DEMO-14 empty-state copy; DEMO-18 responsive layout</td><td>Grade, findings, screenshots, diff preview, artifact gallery, and the human handoff.</td></tr>
+    <tr><td><code>5e-escalated</code></td><td>DEMO-9 reports export release decision</td><td>Three bounded options, review evidence, accepted risk, and an explicit operator decision surface.</td></tr>
+    <tr><td><code>6-completed</code></td><td>DEMO-7 keyboard shortcuts; DEMO-15 report sorting; PLAT-3 catalog cache</td><td>Terminal evidence, completion receipts, and links back to documented Dossiers.</td></tr>
+    <tr><td><code>7-archive</code></td><td>DEMO-8 legacy banner; PLAT-4 retried-task metrics</td><td>Historical context and archive reasons without presenting discarded work as completed delivery.</td></tr>
+  </tbody>
+</table>
+
+<p>Recorded executions use a fixed trace with synthetic session identifiers, fixture-only commits, stable token counts, and explicit <code>simulated</code>/<code>pinned</code> provenance. The UI may animate the trace, but it must never imply that an agent is currently editing a repository.</p>
+
+<h2 id="dossiers"><span class="no">§4</span>Dossier lifecycle gallery</h2>
+<p>The gallery is a dedicated showcase under <code>Demo App</code>. It contains six credible documents. “In implementation” is deliberately not a sixth persisted status: the current product represents it as <code>status: decided</code> plus non-terminal referenced cards. The host-rendered card points make that projection visible.</p>
+
+<table>
+  <thead><tr><th>Key and stored state</th><th>Title and content</th><th>References and visible proof</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>DEMO-W1</b><br><code>active</code> / <code>shaping</code></td>
+      <td><b>Reusable dashboard filters</b><br>Observed navigation friction, three user goals, known constraints, two open research questions, and the next evidence-gathering step. No option is presented as chosen.</td>
+      <td><code>sourceTaskKeys: [DEMO-10]</code><br>No implementation cards. The viewer labels it Active and shows current shaping work.</td>
+    </tr>
+    <tr>
+      <td><b>DEMO-W2</b><br><code>decision-pending</code> / <code>decision-ready</code></td>
+      <td><b>Export retention and privacy</b><br>Compares 7, 30, and 90-day retention; records storage, recovery, and privacy consequences; recommends 30 days; leaves the policy and deletion-proof decisions open.</td>
+      <td><code>sourceTaskKeys: [DEMO-17]</code><br>Two open decision points, a recommended option, and a concise residual-risk table.</td>
+    </tr>
+    <tr>
+      <td><b>DEMO-W3</b><br><code>decided</code> / <code>decision-ready</code></td>
+      <td><b>Onboarding checklist scope</b><br>Records the selected three-step checklist, rejected wizard alternative, decision owner, fixed decision time, and acceptance boundary. It has intentionally not spawned implementation cards yet.</td>
+      <td><code>sourceTaskKeys: [DEMO-2]</code><br><code>relatedTaskKeys: []</code><br>The viewer shows Decided without live delivery points.</td>
+    </tr>
+    <tr>
+      <td><b>DEMO-W4</b><br><code>decided</code> / <code>decision-ready</code><br><span class="pill control">Tracking</span></td>
+      <td><b>Reports export release</b><br>Contains the chosen implementation direction, slice boundaries, evidence links, review criteria, and a current-state note that is separate from the live host projection.</td>
+      <td><code>relatedTaskKeys: [DEMO-12, DEMO-13, DEMO-14, DEMO-15]</code><br>Live points resolve to Progress, Auto review, Human review, and Completed. Cards also reference <code>DEMO-W4</code>.</td>
+    </tr>
+    <tr>
+      <td><b>DEMO-W5</b><br><code>documented</code> / <code>decision-ready</code></td>
+      <td><b>Board keyboard shortcuts</b><br>Preserves the original decision, implementation summary, final shortcut map, accessibility proof, measured outcome, and the reason the Dossier became durable documentation.</td>
+      <td><code>relatedTaskKeys: [DEMO-7]</code><br>Every reference is terminal. The history list labels it Documented, not Archived.</td>
+    </tr>
+    <tr>
+      <td><b>DEMO-W6</b><br><code>archived</code> / <code>decision-ready</code></td>
+      <td><b>Legacy notification banner experiment</b><br>Explains why the proposal was discarded: it duplicated the activity feed, performed poorly in the accessibility review, and was superseded by an inline status pattern.</td>
+      <td><code>sourceTaskKeys: [DEMO-8]</code><br>An archive receipt records actor, fixed time, and reason. The history list labels it Archived or Discarded according to the surface.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box ok">
+  <h4>Seed contract for the gallery</h4>
+  <ul>
+    <li>Each folder contains a self-contained English <code>index.html</code> and a valid descriptor written by the same generator as the task seed.</li>
+    <li>Keys, timestamps, decisions, lifecycle history, related card keys, and document text are explicit pinned inputs. First boot must not invent gallery-visible values.</li>
+    <li>Cards use <code>references.workbenches</code> for the canonical edge when supported. <code>relatedTaskKeys</code> remains populated as the current compatibility bridge.</li>
+    <li>Every document says “Pinned demo data” and links only to seeded cards or Wiki pages. No lorem ipsum, live production references, or hidden source notes are allowed.</li>
+  </ul>
+</div>
+
+<h2 id="architecture"><span class="no">§5</span>Architecture variants</h2>
+
+<table>
+  <thead><tr><th>Variant</th><th>Strengths</th><th>Failure mode</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>A. Replay-only Runner</b><br>Normal server, Runner starts only a mock/replay mode.</td>
+      <td>Richest visible scene; recorded runs can drive cards, logs, artifacts, and SignalR.</td>
+      <td>A configuration error, compromised Runner, alternate claim client, or local server run path can still reach execution because the authority remains enabled.</td>
+      <td><span class="pill risk">Reject alone</span></td>
+    </tr>
+    <tr>
+      <td><b>B. Server execution lock</b><br>Task Server rejects claims and starts; no active replay service.</td>
+      <td>Correct authority placement and smallest runtime. Direct API callers fail closed.</td>
+      <td>The Runner story is static. Visitors see historical evidence but not a living execution plane or useful event movement.</td>
+      <td><span class="pill warn">Safe but thin</span></td>
+    </tr>
+    <tr>
+      <td><b>C. Both</b><br>Hard server lock plus replay-only Runner with a replay-specific scope.</td>
+      <td>Defense in depth, credible Runner presence, real Task Server behavior, deterministic live events, and independent failure barriers.</td>
+      <td>More contracts to build and test. Replay ingestion becomes a small mutation surface that must be fixture-bound and rate-limited.</td>
+      <td><span class="pill ok">Recommended</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Recommended topology</h3>
+<figure>
+  <svg viewBox="0 0 1040 650" role="img" aria-label="Public demo architecture and execution security boundaries">
+    <defs>
+      <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="context-stroke"/></marker>
+      <marker id="stop" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8"><path d="M1 1 L9 9 M9 1 L1 9" stroke="var(--risk)" stroke-width="2"/></marker>
+    </defs>
+
+    <rect x="20" y="26" width="1000" height="590" rx="14" class="s-zone"/>
+    <text x="42" y="55" class="s-tiny">DEDICATED PUBLIC DEMO VM · NO PRIVATE NETWORK ROUTE</text>
+
+    <rect x="55" y="88" width="220" height="112" rx="10" class="s-node"/>
+    <text x="78" y="119" class="s-label">Untrusted browser</text>
+    <text x="78" y="143" class="s-sub">Public visitor or scripted client</text>
+    <text x="78" y="165" class="s-sub">No trusted browser secret</text>
+    <text x="78" y="187" class="s-sub">Can bypass Angular controls</text>
+
+    <rect x="365" y="70" width="300" height="148" rx="10" class="s-control"/>
+    <text x="389" y="101" class="s-label">TLS edge + visitor boundary</text>
+    <text x="389" y="125" class="s-sub">Same origin · rate limits · body caps · CSP</text>
+    <rect x="389" y="143" width="252" height="28" rx="6" class="s-node"/>
+    <text x="403" y="162" class="s-tiny">Allowlisted reads + ephemeral viewer session</text>
+    <rect x="389" y="178" width="252" height="28" rx="6" class="s-risk"/>
+    <text x="403" y="197" class="t-risk">POST · PUT · PATCH · DELETE denied</text>
+
+    <rect x="745" y="70" width="240" height="148" rx="10" class="s-control"/>
+    <text x="769" y="101" class="s-label">Real Task Server</text>
+    <text x="769" y="125" class="s-sub">Browse · Wiki · search · SignalR</text>
+    <rect x="769" y="143" width="192" height="28" rx="6" class="s-risk"/>
+    <text x="783" y="162" class="t-risk">execution = disabled</text>
+    <text x="769" y="194" class="s-sub">Startup-locked, no UI override</text>
+
+    <rect x="745" y="292" width="240" height="126" rx="10" class="s-node"/>
+    <text x="769" y="323" class="s-label">Pinned demo datastore</text>
+    <text x="769" y="347" class="s-sub">DEMO-* · PLAT-* · Wiki · Dossiers</text>
+    <text x="769" y="369" class="s-sub">Scrub manifest + content digest</text>
+    <text x="769" y="391" class="s-sub">No production mount or import</text>
+
+    <rect x="365" y="292" width="300" height="156" rx="10" class="s-replay"/>
+    <text x="389" y="323" class="s-label">Replay-only Runner</text>
+    <text x="389" y="347" class="s-sub">Identity: demo-runner-replay</text>
+    <rect x="389" y="365" width="252" height="28" rx="6" class="s-node"/>
+    <text x="403" y="384" class="s-tiny">Scope: demo.replay only · signed fixed trace</text>
+    <text x="389" y="417" class="s-sub">No CLI · Git · repo · Docker socket · secrets</text>
+    <text x="389" y="438" class="s-sub">Default-deny egress · unprivileged service</text>
+
+    <rect x="55" y="300" width="220" height="136" rx="10" class="s-risk"/>
+    <text x="78" y="331" class="s-label">Execution surfaces</text>
+    <text x="78" y="355" class="s-sub">Claims · starts · continue · reissue</text>
+    <text x="78" y="377" class="s-sub">Local runner · review · post-steps</text>
+    <text x="78" y="399" class="s-sub">Chat agents · previews · ad hoc tools</text>
+    <text x="78" y="423" class="t-risk">All denied by one server policy</text>
+
+    <rect x="55" y="500" width="930" height="78" rx="10" class="s-risk"/>
+    <text x="78" y="530" class="s-label">Outside the demo trust domain</text>
+    <text x="78" y="554" class="s-sub">Production Task Server · production workspace · real repositories · runner hosts · website VM · secret stores · private DNS</text>
+
+    <path d="M275 144 H361" class="s-control-flow" marker-end="url(#arrow)"/>
+    <path d="M665 144 H741" class="s-control-flow" marker-end="url(#arrow)"/>
+    <path d="M865 218 V288" class="s-control-flow" marker-end="url(#arrow)"/>
+    <path d="M665 350 H741" class="s-replay-flow" marker-end="url(#arrow)"/>
+    <path d="M515 292 V222 C515 210 525 210 525 222" class="s-replay-flow"/>
+    <text x="535" y="265" class="t-ok">simulated events</text>
+    <path d="M365 374 H281" class="s-deny" marker-end="url(#stop)"/>
+    <path d="M745 188 C690 188 690 350 669 350" class="s-deny" marker-end="url(#stop)"/>
+    <path d="M520 448 V496" class="s-deny" marker-end="url(#stop)"/>
+    <path d="M865 418 V496" class="s-deny" marker-end="url(#stop)"/>
+  </svg>
+  <figcaption><b>Target boundary.</b> Blue is the public control plane, green is deterministic replay, and red is denied authority. The replay process can make real SignalR and task read models move, but it never obtains a claim credential. The Task Server also rejects execution independently. The entire VM is disposable and has no path to productive state.</figcaption>
+  <div class="legend" aria-label="Diagram legend">
+    <span style="--c:var(--control)">Control plane</span>
+    <span style="--c:var(--replay)">Replay data flow</span>
+    <span style="--c:var(--risk)">Denied boundary</span>
+  </div>
+</figure>
+
+<h3>Hard server lock coverage</h3>
+<p>The implementation should expose a startup-only deployment profile, backed by one pure execution-admission policy. That policy is evaluated at every boundary below and returns the same typed <code>execution-disabled</code> denial. It is not a mutable project setting and has no management or browser toggle.</p>
+
+<ul>
+  <li>Local pickup and any local direct-start path.</li>
+  <li>Current and legacy remote coding claims, lease acquisition, and replay of an existing claim.</li>
+  <li>Review claims, gate execution, post-processing, and host-orchestrator work.</li>
+  <li>Continue, steer, extend, reissue, retry, resume, and scheduled automation that could spawn a process.</li>
+  <li>Project Chat, task Chat, ad hoc agents, preview commands, repository operations, and any diagnostic endpoint that invokes a tool.</li>
+  <li>Future execution endpoints by a route or feature registration guard that fails the public-demo build when a new execution capability lacks a policy test.</li>
+</ul>
+
+<p>The server may accept the narrow replay event scope only for known fixture task keys, the current replay epoch, monotonic sequence numbers, and a pinned trace digest. Replay events are always labeled simulated and cannot write task prompts, decisions, files, Git state, or lifecycle transitions outside the declared scene.</p>
+
+<h2 id="security"><span class="no">§6</span>Security as the core chapter</h2>
+
+<h3>Threat model</h3>
+<table>
+  <thead><tr><th>Threat actor or failure</th><th>Assumed capability</th><th>Primary assets at risk</th></tr></thead>
+  <tbody>
+    <tr><td><b>Anonymous visitor</b></td><td>Sends arbitrary HTTP and WebSocket traffic, bypasses Angular, scrapes content, opens many sessions, and probes undocumented routes.</td><td>Demo availability, visitor trust, and any accidentally reachable mutation or diagnostic surface.</td></tr>
+    <tr><td><b>Compromised replay process</b></td><td>Uses its service identity, reads its filesystem, and attempts lateral movement or event forgery.</td><td>Demo integrity, Task Server availability, and the claim boundary.</td></tr>
+    <tr><td><b>Application exploit</b></td><td>Achieves Task Server or reverse-proxy code execution inside the dedicated VM.</td><td>Sanitized demo data, public availability, and any network or credential accidentally attached to the VM.</td></tr>
+    <tr><td><b>Operator misconfiguration</b></td><td>Points the demo at a productive workspace, mounts a home directory, injects a real Runner token, opens private routes, or deploys the wrong profile.</td><td>Production tasks, repositories, credentials, hostnames, and filesystem paths.</td></tr>
+    <tr><td><b>Scrub failure</b></td><td>A real name, prompt fragment, repository URL, path, commit, screenshot pixel, log field, or high-entropy secret survives derivation.</td><td>Confidentiality and the credibility of the public demo.</td></tr>
+    <tr><td><b>Supply-chain or cloud compromise</b></td><td>Compromises a dependency, image, CI artifact, cloud account, VM kernel, or DNS/TLS control.</td><td>Demo integrity and availability. Production remains at risk only if separation is violated.</td></tr>
+  </tbody>
+</table>
+
+<h3>Controls with residual risk</h3>
+<table>
+  <thead><tr><th>Control</th><th>Required measure</th><th>Residual risk</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Server-side execution denial</b></td>
+      <td>Startup-locked public-demo profile; one deny-by-default admission policy; direct matrix tests for every claim, start, continuation, review, chat, preview, and post-step path; startup fails when policy coverage or profile identity is absent.</td>
+      <td>A missed future path or server code-execution vulnerability can bypass application policy. The route-registration guard, external probes, immutable image, and dedicated VM limit but do not eliminate this.</td>
+    </tr>
+    <tr>
+      <td><b>Incapable replay Runner</b></td>
+      <td>No claim scope, CLI installation, repository, Git credential, agent credential, Docker socket, host mount, shell toolchain beyond runtime needs, or unrestricted egress. Run as a separate unprivileged identity with a read-only root filesystem.</td>
+      <td>A kernel or Task Server flaw can cross the service boundary. A compromised replay identity may still spam or falsify allowed demo events until revoked or reset.</td>
+    </tr>
+    <tr>
+      <td><b>Minimum mutation surface</b></td>
+      <td>Launch read-only. Server and edge deny unsafe methods and all management, upload, registration, decision, move, create, merge, restore, URL-preview, and diagnostic routes. Angular hides controls only as explanatory UX.</td>
+      <td>GET or hub handlers may have side effects or expensive queries. Endpoint inventory, budgets, rate limits, and load probes remain necessary.</td>
+    </tr>
+    <tr>
+      <td><b>Visitor authorization</b></td>
+      <td>Use an ephemeral, HttpOnly, same-site viewer session or an explicit allowlist of public demo-read endpoints. Treat it as public, not secret. Apply the same project filter to REST, search, and SignalR.</td>
+      <td>Anyone can obtain public read authority, so it does not prevent scraping. It only constrains reachable data and methods. Rate limits and content minimization carry the abuse defense.</td>
+    </tr>
+    <tr>
+      <td><b>Instance and data separation</b></td>
+      <td>Dedicated demo VM, demo-only data volume, separate service identities, no shared TaskRepository, no mount from the website or production Task Server, no private WireGuard peer, and no route to productive Runner hosts.</td>
+      <td>Cloud-account, hypervisor, DNS, or operator credential compromise can affect several systems. Separate projects/accounts and least-privilege deployment credentials can reduce that remaining common mode.</td>
+    </tr>
+    <tr>
+      <td><b>Pinned scrub gate</b></td>
+      <td>Allowlist reconstruction from any real source, never redaction in place. Scan the fully generated datastore and images for secrets, high entropy, emails, URLs, absolute paths, hostnames, IPs, usernames, repository names, remotes, and unapproved commit identifiers. Review semantic content separately.</td>
+      <td>Scanners miss context-sensitive or visual disclosures. Human review, OCR, image metadata stripping, and a second independent review are still required before public release.</td>
+    </tr>
+    <tr>
+      <td><b>Transport and browser boundary</b></td>
+      <td>Same-origin TLS edge, HSTS, restrictive CSP, WebSocket Origin checks, body caps, connection limits, no detailed errors, sandboxed Dossier/Wiki HTML, no remote embeds, and sanitized logs.</td>
+      <td>Browser, proxy, dependency, and denial-of-service vulnerabilities remain possible. Patch cadence, resource ceilings, and a fast disable switch are required.</td>
+    </tr>
+    <tr>
+      <td><b>Disposable operations</b></td>
+      <td>Immutable release bundle, short log retention, no backup of runtime drift, atomic restore from the approved seed, and alerting on any write outside replay namespaces or any execution-denied request spike.</td>
+      <td>Reset limits persistence, not the impact before detection. A compromised release artifact will return after reset until the artifact is revoked.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Scrub proof, not a scrub claim</h3>
+<p>The source note in the in-flight <code>pinned-seed.json</code> is useful provenance, but a public deployment needs machine-readable evidence over the rendered output. The gate should produce <code>demo-seed-scrub-report.json</code> beside the release bundle with:</p>
+
+<ul>
+  <li>seed schema, generator version, fixed time base, content digest, product compatibility range, and replay trace digest;</li>
+  <li>generated file counts by class and the exact temporary root scanned;</li>
+  <li>zero unreviewed matches for secret patterns, entropy, private keys, tokens, emails, URLs, IPs, absolute Windows or Unix paths, user-home fragments, hostnames, repository remotes, and source project names;</li>
+  <li>an allowlist for deliberately synthetic model names, task keys, and fixture commit hashes, with a deterministic derivation note for every hash;</li>
+  <li>OCR and metadata results for every image, plus confirmation that no source screenshot is shipped;</li>
+  <li>two independent generations with a clean recursive diff and identical manifest digest;</li>
+  <li>human review identity, time, reviewed digest, exceptions, and approval. A changed byte invalidates the approval.</li>
+</ul>
+
+<p>Raw exports, intermediate redaction files, source screenshots, and scanner exception samples must never enter the repository, CI artifact, demo VM, or task result bundle. Real data may inspire the final prose, but the committed fixture is an allowlisted reconstruction.</p>
+
+<h3>Hosting choice</h3>
+<table>
+  <thead><tr><th>Host option</th><th>Assessment</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td><b>Production Task Server or Runner host</b></td><td>Shares the exact assets the demo must never reach. A public exploit becomes a direct production incident.</td><td><span class="pill risk">Forbidden</span></td></tr>
+    <tr><td><b>Website VM</b></td><td>Cheaper, but couples an interactive API, WebSockets, and reset jobs to the public website's availability and host security.</td><td><span class="pill risk">Reject</span></td></tr>
+    <tr><td><b>Dedicated demo VM</b></td><td>Clear firewall, data, identity, patch, reset, and incident boundary. The replay Runner may share this disposable VM under a separate service identity because it has no productive credential or data.</td><td><span class="pill ok">Recommended</span></td></tr>
+  </tbody>
+</table>
+
+<p>The VM exposes only the TLS edge. Task Server and replay service bind to loopback or a private local container network. Administrative SSH is key-only and source-restricted. Default-deny egress permits only explicit update, time, DNS, and certificate flows. The VM has no cloud credential that can discover or attach production volumes.</p>
+
+<h3>Read-only launch versus sandbox resets</h3>
+<table>
+  <thead><tr><th>Mode</th><th>Visitor value</th><th>Security and operations cost</th><th>Recommendation</th></tr></thead>
+  <tbody>
+    <tr><td><b>Shared read-only</b></td><td>Supports every requested browse, Wiki, Dossier, task, evidence, navigation, and live replay scene.</td><td>Smallest route surface; canonical data cannot be vandalized; resets handle runtime overlays and contamination only.</td><td><span class="pill ok">Launch mode</span></td></tr>
+    <tr><td><b>Shared mutable sandbox</b></td><td>Visitors can move or edit the same cards.</td><td>Cross-visitor interference, stored content abuse, vandalism, moderation, and more paths toward execution. Frequent reset does not prevent harm between resets.</td><td><span class="pill risk">Do not launch</span></td></tr>
+    <tr><td><b>Per-session sandbox</b></td><td>Isolated interaction without shared vandalism.</td><td>Per-visitor stores, quotas, expiration, abuse controls, and stronger tenancy boundaries. Execution must remain disabled.</td><td><span class="pill warn">Optional later slice</span></td></tr>
+  </tbody>
+</table>
+
+<h2 id="operations"><span class="no">§7</span>Reset, seed versioning, and product updates</h2>
+
+<h3>One versioned release unit</h3>
+<p>A demo release pins four compatible artifacts together: frontend and Task Server image, pinned seed, replay trace, and deployment policy. The manifest records each digest and the supported seed/product schema range. Rollback changes the whole unit, not one component.</p>
+
+<pre><code>demoRelease: 2026.08.1
+productImage: &lt;immutable digest&gt;
+seedSchemaVersion: 1
+seedDigest: &lt;sha256&gt;
+replayTraceVersion: 1
+replayTraceDigest: &lt;sha256&gt;
+deploymentProfile: public-demo-readonly
+scrubReportDigest: &lt;sha256&gt;</code></pre>
+
+<h3>Reset cycle</h3>
+<ol>
+  <li><b>Replay cycle:</b> derive the visible replay offset from a fixed 12-minute trace. On reconnect, the server projects the current cycle position. The canonical seed is not rewritten for animation.</li>
+  <li><b>Runtime replacement:</b> recreate the ephemeral runtime volume from the approved seed on every deploy and restart, on operator request, and on a six-hour schedule. Six hours is a backstop for bugs and unexpected writes, not a substitute for read-only authorization.</li>
+  <li><b>Atomic cut:</b> generate into a new isolated volume, verify seed and scrub digests, start the candidate, probe browse and deny paths, then switch the proxy. Never delete and rewrite the datastore underneath a running Task Server.</li>
+  <li><b>Failure behavior:</b> keep the previous healthy bundle active if generation, migration, scrub verification, claim-denial probes, or smoke tests fail. Do not partially update content.</li>
+  <li><b>Retention:</b> rotate access and denial logs aggressively. Preserve aggregate security metrics, not visitor payloads or an indefinitely growing copy of public requests.</li>
+</ol>
+
+<h3>When the product moves</h3>
+<ul>
+  <li>Every product release runs a compatibility job that generates the seed twice, starts the real Task Server in public-demo mode, opens both projects, checks every lane, Wiki, all six Dossiers, search, artifacts, and SignalR, then probes all execution paths for typed denial.</li>
+  <li>A schema migration updates the generator and seed manifest in one review. It does not import a live workspace or regenerate from an operator machine.</li>
+  <li>Content changes are explicit pull requests against the pinned source. They include a new digest, scrub report, both-theme captures for affected scenes, and a short semantic-change note.</li>
+  <li>AGT-2530 remains the owner of capture reproducibility and pinned provenance. The public instance consumes that contract after integration. It does not maintain a parallel screenshot-only fixture.</li>
+  <li>If current product code cannot read the approved seed, the previous demo release remains online until a fully compatible bundle passes. “Latest” is not more important than “safe and internally consistent.”</li>
+</ul>
+
+<h2 id="slices"><span class="no">§8</span>Decision-ready slice plan</h2>
+
+<table>
+  <thead><tr><th>Slice</th><th>Scope and acceptance</th><th>Dependencies</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>S1 · Seed content and gallery</b></td>
+      <td>Extend the integrated pinned seed with the two Wiki trees, six Dossiers, canonical Dossier references, fixture-only decisions, and optional accepted AGT-2558 artifact scene. Prove byte-identical generation and all-lane/all-lifecycle discovery.</td>
+      <td>After AGT-2530 integration. Consume AGT-2558 only after acceptance.</td>
+    </tr>
+    <tr>
+      <td><b>S2 · Hard public-demo execution profile</b></td>
+      <td>Add the startup-only server profile and pure deny policy. Direct tests cover every current claim/start/continue/review/chat/preview/post-step path. An inventory guard fails when a new executable route has no public-demo expectation.</td>
+      <td>Security-critical launch gate. Can begin in parallel with S1.</td>
+    </tr>
+    <tr>
+      <td><b>S3 · Replay-only Runner</b></td>
+      <td>Replay a signed fixed trace through a narrow server scope. The service image contains no CLI, Git, repo, secret, or broad egress. UI and events say Simulated. Compromise tests prove its credential cannot claim or mutate tasks.</td>
+      <td>S2 policy and trace schema.</td>
+    </tr>
+    <tr>
+      <td><b>S4 · Public read-only edge</b></td>
+      <td>Same-origin TLS, ephemeral viewer boundary, explicit endpoint allowlist, project-filtered SignalR, CSP, sandboxing, rate and body limits, safe errors, and disabled UI controls. Raw unsafe requests return a typed denial.</td>
+      <td>S2 route inventory.</td>
+    </tr>
+    <tr>
+      <td><b>S5 · Scrub, bundle, and reset contract</b></td>
+      <td>Generate the machine-readable scrub report, immutable release manifest, compatibility gate, two-pass diff proof, image OCR/metadata proof, six-hour replacement job, and rollback rehearsal.</td>
+      <td>S1 content, S2 profile, S3 trace.</td>
+    </tr>
+    <tr>
+      <td><b>S6 · Dedicated-VM launch rehearsal</b></td>
+      <td>Provision the isolated VM, prove listeners/firewall/egress/mounts/identities, run external read and mutation probes, exercise denial alerts, reset and rollback, then capture a signed launch checklist. No production or website co-hosting.</td>
+      <td>S2 through S5 complete. Explicit operator launch approval.</td>
+    </tr>
+    <tr>
+      <td><b>S7 · Optional per-session sandbox</b></td>
+      <td>Only after read-only operation is stable and there is evidence that visitor mutations add value. Use isolated expiring stores, quotas, moderation, and the unchanged hard execution lock.</td>
+      <td>Separate later decision. Not part of launch.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box ok">
+  <h4>Recommended delivery order</h4>
+  <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel after AGT-2530 settles. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
+</div>
+
+<h2 id="approval"><span class="no">§9</span>Decision request</h2>
+<p>This dossier is decision-ready. Approval is requested for the following package:</p>
+
+<ol>
+  <li><b>Execution architecture:</b> hard server denial plus replay-only Runner.</li>
+  <li><b>Visitor surface:</b> shared read-only launch, no public task mutations.</li>
+  <li><b>Hosting:</b> one dedicated disposable demo VM, separate from the website, productive Task Server, and productive Runners.</li>
+  <li><b>Content:</b> extend the one AGT-2530 pinned seed with the specified Wiki and six-state Dossier gallery.</li>
+  <li><b>Operations:</b> one immutable compatibility bundle, deterministic 12-minute replay, replacement on deploy/restart/on demand and every six hours, with atomic rollback.</li>
+  <li><b>Launch gate:</b> scrub attestation, execution-denial matrix, public endpoint inventory, external probes, and reset rehearsal must all pass before DNS is enabled.</li>
+</ol>
+
+<p class="dim">Evidence basis: ADR-0056; the pinned screenshot-system decision; current AGT-2530 pinned seed and repeatability artifacts as in-flight evidence; AGT-2558 human-review state; WEB-17 ready state; networked security profile; and the dedicated Task Server VM separation rationale. This dossier changes no runtime, seed, card, hosting, or security configuration.</p>
+
+</main>
+</body>
+</html>
