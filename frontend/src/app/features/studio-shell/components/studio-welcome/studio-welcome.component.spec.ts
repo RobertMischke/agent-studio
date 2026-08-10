@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { StudioWelcomeComponent } from './studio-welcome.component';
 
 describe('StudioWelcomeComponent', () => {
-  it('promotes project chat without advertising direct task creation', async () => {
+  it('keeps the empty state factual and promotes project chat without direct task creation', async () => {
     await TestBed.configureTestingModule({
       imports: [StudioWelcomeComponent],
       providers: [provideZonelessChangeDetection()],
@@ -23,7 +23,10 @@ describe('StudioWelcomeComponent', () => {
     fixture.componentInstance.chatOpened.subscribe(chatOpened);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Describe your first task in the project chat.');
+    expect(fixture.nativeElement.textContent).toContain('No tabs open.');
+    expect(fixture.nativeElement.textContent).toContain('Project boards');
+    expect(fixture.nativeElement.querySelector('[data-testid="studio-welcome-chat-hint"]')?.textContent)
+      .toContain('Open project chat');
     expect(fixture.nativeElement.textContent).not.toContain('New task');
     fixture.nativeElement.querySelector('[data-testid="studio-welcome-open-chat"]')?.click();
     expect(chatOpened).toHaveBeenCalledOnce();

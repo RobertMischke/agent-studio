@@ -1,48 +1,39 @@
 :host {
   display: block;
-  height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
 }
 
 .studio-welcome {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: var(--studio-spacing-5);
   height: 100%;
+  min-height: 100%;
   padding: var(--studio-spacing-5);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 
   &__idle {
     flex: 0 0 auto;
+    min-height: 0;
   }
 
-  &__card {
+  &__content {
     flex: 0 0 auto;
-    max-width: 720px;
     width: 100%;
-    padding: var(--studio-spacing-6);
-    background:
-      linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--studio-accent) 7%, var(--studio-bg-surface)),
-        var(--studio-bg-elevated) 52%,
-        color-mix(in srgb, var(--studio-accent-4) 5%, var(--studio-bg-elevated))
-      );
-    border: 1px solid var(--studio-border-strong);
-    border-radius: 14px;
-    box-shadow: var(--elevation-card);
     text-align: left;
   }
 
   &__eyebrow {
     margin: 0 0 var(--studio-spacing-1);
-    color: var(--studio-accent-strong);
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    color: var(--studio-fg-muted);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   &__title {
@@ -53,47 +44,15 @@
     letter-spacing: -0.02em;
   }
 
-  &__sub {
-    margin: 0 0 var(--studio-spacing-5);
-    color: var(--studio-fg-dim);
-    font-size: 13px;
-    line-height: 1.55;
-  }
-
-  &__chat-guide {
+  &__primary {
     display: flex;
-    align-items: flex-start;
-    gap: var(--studio-spacing-3);
-    padding: var(--studio-spacing-4);
-    background: color-mix(in srgb, var(--studio-accent) 10%, var(--studio-bg-surface));
-    border: 1px solid color-mix(in srgb, var(--studio-accent) 30%, var(--studio-border));
-    border-radius: 10px;
-    color: var(--studio-fg);
-    font-size: 13px;
-    line-height: 1.5;
-
-    strong {
-      display: block;
-      margin-bottom: var(--studio-spacing-1);
-      color: var(--studio-fg-strong);
-      font-size: 14px;
-      font-weight: 650;
-    }
-  }
-
-  &__chat-dot {
-    width: 9px;
-    height: 9px;
-    margin-top: var(--studio-spacing-1);
-    border-radius: 50%;
-    background: var(--studio-accent);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--studio-accent) 16%, transparent);
-    flex: 0 0 auto;
+    align-items: center;
+    margin-top: var(--studio-spacing-5);
   }
 
   &__chat-cta {
-    min-height: 38px;
-    margin-top: var(--studio-spacing-4);
+    min-height: 32px;
+    margin: 0;
     padding: var(--studio-spacing-2) var(--studio-spacing-5);
     border-radius: 7px;
     background: var(--studio-accent);
@@ -101,7 +60,6 @@
     color: var(--studio-on-accent);
     font-size: 14px;
     font-weight: 650;
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--studio-accent) 24%, transparent);
 
     &:hover {
       background: var(--studio-accent);
@@ -109,29 +67,16 @@
     }
   }
 
-  &__divider {
-    display: flex;
-    align-items: center;
-    gap: var(--studio-spacing-3);
+  &__section-title {
     margin: var(--studio-spacing-5) 0 var(--studio-spacing-3);
     color: var(--studio-fg-muted);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-
-    &::before,
-    &::after {
-      height: 1px;
-      background: var(--studio-border);
-      content: '';
-      flex: 1;
-    }
   }
 
   &__projects {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 280px));
     gap: var(--studio-spacing-2);
   }
 
@@ -183,8 +128,32 @@
     border-radius: 3px;
     font-size: 10px;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
     display: grid;
     place-items: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .studio-welcome {
+    gap: var(--studio-spacing-4);
+    padding: var(--studio-spacing-4);
+
+    &__title {
+      font-size: 20px;
+    }
+
+    &__projects {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+@media (max-height: 700px) {
+  .studio-welcome {
+    justify-content: flex-start;
+    gap: var(--studio-spacing-4);
+    padding-block: var(--studio-spacing-4);
   }
 }
 

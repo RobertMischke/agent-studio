@@ -23,6 +23,34 @@ async function openEmptyState(page: Page): Promise<void> {
     if (url.includes('/api/auth/status')) {
       return json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
     }
+    if (url.includes('/api/runner/queue-starvation')) {
+      return json({
+        active: false,
+        waitingTaskCount: 0,
+        availableSlots: 1,
+        thresholdMinutes: 15,
+        oldestEnteredLaneAt: null,
+        observedAt: '2026-08-10T09:00:00Z',
+        items: [],
+      });
+    }
+    if (url.includes('/api/pipeline/accepted-integration-alert')) {
+      return json({
+        active: true,
+        stalledTaskCount: 1,
+        thresholdMinutes: 30,
+        oldestAcceptedAt: '2026-08-10T08:00:00Z',
+        observedAt: '2026-08-10T09:00:00Z',
+        items: [{
+          taskKey: 'AGT-2592',
+          taskId: 'welcome-layout',
+          projectName: 'Agent Software Studio',
+          title: 'Welcome layout',
+          acceptedAt: '2026-08-10T08:00:00Z',
+          integrationStatus: 'pending',
+        }],
+      });
+    }
     if (url.includes('/api/tasks/grouped')) return json(EMPTY_GROUPED);
     if (url.includes('/api/runner/status')) return json({ projects: {} });
     if (/\/api\/tasks(\?|$)/.test(url)) return json([]);
@@ -46,6 +74,7 @@ async function openEmptyState(page: Page): Promise<void> {
     await expect(page.locator('.studio-tab__close')).toHaveCount(--tabCount);
   }
   await expect(page.getByTestId('studio-welcome')).toBeVisible();
+  await expect(page.getByTestId('accepted-integration-alert-banner')).toBeVisible();
 }
 
 async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
@@ -53,6 +82,54 @@ async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
     document.documentElement.setAttribute('data-studio-theme', selectedTheme);
   }, theme);
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+}
+
+async function expectBoundedFlatLayout(page: Page): Promise<void> {
+  const banner = page.getByTestId('accepted-integration-alert-banner');
+  const welcome = page.getByTestId('studio-welcome');
+  const stage = page.getByTestId('studio-empty-stage');
+  const canvas = page.getByTestId('studio-empty-canvas');
+  const content = page.getByTestId('studio-welcome-content');
+
+  const [bannerBox, stageBox, canvasBox] = await Promise.all([
+    banner.boundingBox(),
+    stage.boundingBox(),
+    canvas.boundingBox(),
+  ]);
+  expect(bannerBox).not.toBeNull();
+  expect(stageBox).not.toBeNull();
+  expect(canvasBox).not.toBeNull();
+  expect(stageBox!.y).toBeGreaterThanOrEqual(bannerBox!.y + bannerBox!.height + 8);
+  expect(stageBox!.height).toBeLessThanOrEqual(241);
+  expect(canvasBox!.x).toBeGreaterThanOrEqual(stageBox!.x - 1);
+  expect(canvasBox!.y).toBeGreaterThanOrEqual(stageBox!.y - 1);
+  expect(canvasBox!.x + canvasBox!.width).toBeLessThanOrEqual(stageBox!.x + stageBox!.width + 1);
+  expect(canvasBox!.y + canvasBox!.height).toBeLessThanOrEqual(stageBox!.y + stageBox!.height + 1);
+
+  const stageStyle = await stage.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      borderTopWidth: style.borderTopWidth,
+      boxShadow: style.boxShadow,
+      overflow: style.overflow,
+    };
+  });
+  expect(stageStyle).toEqual({ borderTopWidth: '0px', boxShadow: 'none', overflow: 'hidden' });
+
+  const contentStyle = await content.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      borderTopWidth: style.borderTopWidth,
+      boxShadow: style.boxShadow,
+    };
+  });
+  expect(contentStyle).toEqual({ borderTopWidth: '0px', boxShadow: 'none' });
+
+  const overflow = await welcome.evaluate(element => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
 }
 
 test.describe('studio-shell · refreshed empty state', () => {
@@ -63,15 +140,14 @@ test.describe('studio-shell · refreshed empty state', () => {
     await openEmptyState(page);
     fs.mkdirSync(resultsDir, { recursive: true });
 
-    const welcome = page.getByTestId('studio-welcome');
     const automata = page.getByTestId('studio-empty-state');
     const capture = process.env.EMPTY_STATE_CAPTURE ?? 'after';
 
     if (capture !== 'before') {
       await expect(page.getByTestId('studio-empty-subtitle'))
-        .toHaveText('404 tabs found. Have some cellular automata instead.');
+        .toHaveText('No tabs open.');
       await expect(page.getByTestId('studio-welcome-chat-hint'))
-        .toContainText('Describe your first task in the project chat.');
+        .toContainText('Open project chat');
       await expect(page.getByTestId('studio-welcome-open-chat')).toBeVisible();
       await expect(page.getByTestId('studio-welcome-add-task')).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'New task', exact: true })).toHaveCount(0);
@@ -93,19 +169,24 @@ test.describe('studio-shell · refreshed empty state', () => {
             .toBeGreaterThan(minimumProgress);
         }
         await automata.screenshot({
-          path: path.join(resultsDir, `cycle-${index + 1}-${phase}.png`),
+          path: path.join(resultsDir, `cycle-${index + 1}-${phase}--mocked.png`),
         });
       }
     }
 
-    if (capture !== 'before') {
-      await expect(automata).toHaveAttribute('data-phase', 'smiley', { timeout: 15_000 });
-    }
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await welcome.screenshot({
-        path: path.join(resultsDir, `${capture}-${theme}.png`),
-      });
+    const viewports = [
+      { name: 'wide', width: 1440, height: 900 },
+      { name: 'narrow', width: 520, height: 700 },
+    ] as const;
+    for (const viewport of viewports) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        if (capture !== 'before') await expectBoundedFlatLayout(page);
+        await page.screenshot({
+          path: path.join(resultsDir, `${capture}-${theme}-${viewport.name}--mocked.png`),
+        });
+      }
     }
   });
 });

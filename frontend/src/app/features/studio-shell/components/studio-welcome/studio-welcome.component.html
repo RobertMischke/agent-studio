@@ -1,24 +1,18 @@
 <div class="studio-welcome" data-testid="studio-welcome">
   <app-studio-empty-state class="studio-welcome__idle" />
-  <div class="studio-welcome__card">
-    <p class="studio-welcome__eyebrow">Welcome to</p>
-    <h2 class="studio-welcome__title">Agent Software Studio</h2>
-    <p class="studio-welcome__sub">No tab open. Start with a conversation, or choose a project board to explore existing work.</p>
+  <section class="studio-welcome__content"
+           data-testid="studio-welcome-content"
+           aria-labelledby="studio-welcome-title">
+    <p class="studio-welcome__eyebrow">Welcome</p>
+    <h2 class="studio-welcome__title" id="studio-welcome-title">Agent Software Studio</h2>
     @if (projects().length > 0) {
-      <div class="studio-welcome__chat-guide" data-testid="studio-welcome-chat-hint">
-        <span class="studio-welcome__chat-dot" aria-hidden="true"></span>
-        <span>
-          <strong>Describe your first task in the project chat.</strong>
-          The studio will shape the conversation into the right work.
-        </span>
+      <div class="studio-welcome__primary" data-testid="studio-welcome-chat-hint">
+        <button type="button"
+                class="studio-button studio-button--primary studio-welcome__chat-cta"
+                data-testid="studio-welcome-open-chat"
+                (click)="chatOpened.emit()">Open project chat</button>
       </div>
-      <button type="button"
-              class="studio-button studio-button--primary studio-welcome__chat-cta"
-              data-testid="studio-welcome-open-chat"
-              (click)="chatOpened.emit()">Open project chat</button>
-      <div class="studio-welcome__divider" aria-hidden="true">
-        <span>Or open a board</span>
-      </div>
+      <h3 class="studio-welcome__section-title">Project boards</h3>
     }
     <div class="studio-welcome__projects">
       @for (project of projects(); track project.name) {
@@ -42,7 +36,7 @@
       }
     </div>
     @if (projects().length === 0) {
-      <app-empty-state>No projects loaded yet. Check the backend connection or wait for the next poll tick.</app-empty-state>
+      <app-empty-state>No projects loaded. Check the backend connection.</app-empty-state>
     }
-  </div>
+  </section>
 </div>

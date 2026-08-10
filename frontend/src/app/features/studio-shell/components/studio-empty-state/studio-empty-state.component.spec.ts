@@ -21,7 +21,7 @@ describe('StudioEmptyStateComponent', () => {
     expect(() => fixture.detectChanges()).not.toThrow();
     expect(fixture.componentInstance).toBeTruthy();
     const punchline = fixture.nativeElement.querySelector('[data-testid="studio-empty-subtitle"]');
-    expect(punchline?.textContent).toContain('404 tabs found');
+    expect(punchline?.textContent.trim()).toBe('No tabs open.');
     expect(fixture.componentInstance.phase()).toBeTruthy();
     expect(() => fixture.destroy()).not.toThrow();
   });
