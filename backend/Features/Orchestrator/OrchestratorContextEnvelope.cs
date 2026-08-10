@@ -10,10 +10,15 @@ public static class OrchestratorContextReferenceKinds
     public const string Page = "page";
     public const string RepositoryFile = "repository-file";
     public const string Commit = "commit";
+    public const string Diff = "diff";
 
     public static bool IsSupported(string kind)
-        => kind is Task or Page or RepositoryFile or Commit;
+        => kind is Task or Page or RepositoryFile or Commit or Diff;
 }
+
+public sealed record OrchestratorContextLineRange(
+    int StartLine,
+    int EndLine);
 
 public sealed record OrchestratorConversationScope(
     string Kind,
@@ -27,13 +32,19 @@ public sealed record OrchestratorActiveSurface(
     string? Title = null,
     string? Revision = null,
     string? TaskKey = null,
-    IReadOnlyList<string>? Selection = null);
+    IReadOnlyList<string>? Selection = null,
+    string? ProjectId = null,
+    string? RepositoryId = null,
+    string? Path = null);
 
 public sealed record OrchestratorContextReference(
     string Kind,
     string Reference,
     string? ProjectId = null,
-    string? Revision = null);
+    string? Revision = null,
+    string? RepositoryId = null,
+    string? Path = null,
+    IReadOnlyList<OrchestratorContextLineRange>? LineRanges = null);
 
 public sealed record OrchestratorContextBudget(
     int AutomaticSoftCapTokens = 4000,
@@ -95,6 +106,16 @@ public static class OrchestratorContextEnvelopePolicy
                 ProjectId = string.IsNullOrWhiteSpace(reference.ProjectId)
                     ? routeScope.ProjectId
                     : reference.ProjectId.Trim(),
+                RepositoryId = string.IsNullOrWhiteSpace(reference.RepositoryId)
+                    ? routeScope.ProjectId
+                    : reference.RepositoryId.Trim(),
+                Revision = string.IsNullOrWhiteSpace(reference.Revision)
+                    ? null
+                    : reference.Revision.Trim(),
+                Path = string.IsNullOrWhiteSpace(reference.Path)
+                    ? null
+                    : reference.Path.Trim().Replace('\\', '/'),
+                LineRanges = reference.LineRanges?.ToArray(),
             })
             .ToArray();
         if (references.Length > 20)
@@ -115,9 +136,49 @@ public static class OrchestratorContextEnvelopePolicy
                 throw new OrchestratorContextEnvelopeException(
                     "context-reference-cross-project",
                     "A context reference cannot cross the active conversation project.");
+            if (reference.Kind is OrchestratorContextReferenceKinds.RepositoryFile
+                    or OrchestratorContextReferenceKinds.Commit
+                    or OrchestratorContextReferenceKinds.Diff
+                && string.IsNullOrWhiteSpace(reference.RepositoryId))
+                throw new OrchestratorContextEnvelopeException(
+                    "context-repository-identity-required",
+                    "Repository context references require an owning repository identity.");
+            if (reference.Kind is OrchestratorContextReferenceKinds.Commit
+                    or OrchestratorContextReferenceKinds.Diff
+                && !IsFullCommitSha(reference.Reference))
+                throw new OrchestratorContextEnvelopeException(
+                    "context-commit-full-sha-required",
+                    "Commit and diff context references require a full 40-character commit SHA.");
+            if (reference.Kind == OrchestratorContextReferenceKinds.RepositoryFile
+                && reference.Revision is not null
+                && !IsFullCommitSha(reference.Revision))
+                throw new OrchestratorContextEnvelopeException(
+                    "context-file-revision-invalid",
+                    "A repository file revision must be a full 40-character commit SHA.");
+            if (reference.LineRanges is { Count: > 10 })
+                throw new OrchestratorContextEnvelopeException(
+                    "context-line-range-limit-exceeded",
+                    "At most 10 selected line ranges may be sent for one context reference.");
+            if (reference.LineRanges?.Any(range => range.StartLine < 1
+                                                    || range.EndLine < range.StartLine
+                                                    || range.EndLine - range.StartLine > 2000) == true)
+                throw new OrchestratorContextEnvelopeException(
+                    "context-line-range-invalid",
+                    "Selected line ranges must be positive, ordered, and no longer than 2,001 lines.");
+            if (reference.LineRanges is { Count: > 0 }
+                && reference.Kind is not OrchestratorContextReferenceKinds.RepositoryFile
+                    and not OrchestratorContextReferenceKinds.Diff)
+                throw new OrchestratorContextEnvelopeException(
+                    "context-line-range-kind-invalid",
+                    "Selected line ranges are supported only for repository files and diffs.");
         }
 
         var surface = supplied?.ActiveSurface ?? SurfaceFromNavigation(request.NavigationContext);
+        if (surface?.ProjectId is not null
+            && !string.Equals(surface.ProjectId, routeScope.ProjectId, StringComparison.OrdinalIgnoreCase))
+            throw new OrchestratorContextEnvelopeException(
+                "context-active-surface-cross-project",
+                "The active surface cannot cross the active conversation project.");
         if (surface?.Kind.Equals("task", StringComparison.OrdinalIgnoreCase) == true
             && routeScope.Kind == "task"
             && !string.Equals(
@@ -201,4 +262,7 @@ public static class OrchestratorContextEnvelopePolicy
 
     public static string Sha256(string content)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+
+    private static bool IsFullCommitSha(string value)
+        => value.Length == 40 && value.All(Uri.IsHexDigit);
 }

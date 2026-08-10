@@ -68,4 +68,32 @@ describe('buildComposerLocationContext', () => {
         ...(tab.kind === 'workbench' ? { detail: 'Routing', referenceKey: 'AGT-W34' } : {}),
       });
   });
+
+  it('maps a diff tab with owning project, full commit, and selected file', () => {
+    const sha = '1234567890abcdef1234567890abcdef12345678';
+
+    expect(buildComposerLocationContext(
+      { kind: 'diff', projectName: 'Agent Studio', commitSha: sha },
+      [task],
+      {
+        projectName: 'Agent Studio',
+        commitSha: sha,
+        path: 'src/app.ts',
+        lineRanges: [{ startLine: 7, endLine: 18 }],
+      },
+    )).toEqual({
+      project: 'Agent Studio',
+      surface: 'Diff',
+      detail: '12345678',
+      contextReference: {
+        kind: 'diff',
+        reference: sha,
+        projectId: 'Agent Studio',
+        repositoryId: 'Agent Studio',
+        revision: sha,
+        path: 'src/app.ts',
+        lineRanges: [{ startLine: 7, endLine: 18 }],
+      },
+    });
+  });
 });

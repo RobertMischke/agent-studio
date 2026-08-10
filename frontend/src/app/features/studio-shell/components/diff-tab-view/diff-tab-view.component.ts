@@ -6,6 +6,7 @@ import { DiffContentComponent } from '../../../../components/diff-content/diff-c
 import type { TaskInfo } from '../../../../models/task.model';
 import type { GitFileChange } from '../../../git';
 import { describeDiffSize, isLargeDiff } from '../../../../utils/large-diff-gate';
+import { OrchestratorSurfaceContextService } from '../../../../services/orchestrator-surface-context.service';
 
 interface CommitDiffPayload {
   readonly diff?: string | null;
@@ -35,7 +36,9 @@ interface CommitDiffPayload {
 })
 export class StudioDiffViewComponent {
   private readonly jobService = inject(TaskService);
+  private readonly surfaceContext = inject(OrchestratorSurfaceContextService);
 
+  readonly projectName = input.required<string>();
   readonly commitSha = input.required<string>();
 
   /** Commit-message expander state. Collapsed = first line + ellipsis. */
@@ -70,6 +73,7 @@ export class StudioDiffViewComponent {
     const short = sha.slice(0, 7);
     const jobs = this.jobService.jobs();
     for (const job of jobs) {
+      if (job.projectName !== this.projectName()) continue;
       const commits = job.commits ?? [];
       for (const c of commits) {
         if (c.sha === sha || c.sha?.startsWith(short)) {
@@ -130,6 +134,7 @@ export class StudioDiffViewComponent {
   selectFile(path: string): void {
     if (this.selectedPath() === path) return;
     this.selectedPath.set(path);
+    this.emitContextSelection({ path });
     const owner = this.owner();
     if (owner) this.loadDiff(owner, path);
   }
@@ -172,12 +177,14 @@ export class StudioDiffViewComponent {
         this.filesState.set('loaded');
         const first = files[0]?.path ?? null;
         this.selectedPath.set(first);
+        this.emitContextSelection({ path: first });
         if (first) this.loadDiff(owner, first);
       },
       error: (err) => {
         if (requestKey !== this.ownerLoadKey) return;
         this.files.set([]);
         this.selectedPath.set(null);
+        this.emitContextSelection({ path: null });
         this.filesError.set(err?.error?.error || err?.message || 'Could not load commit files.');
         this.filesState.set('error');
       },
@@ -207,6 +214,10 @@ export class StudioDiffViewComponent {
               : payload.emptyReason ?? 'No diff for this path in the selected commit.',
           );
           this.diffState.set('loaded');
+          this.emitContextSelection({
+            path,
+            lineRanges: firstDiffHunkLineRange(payload.diff),
+          });
         },
         error: (err) => {
           if (requestKey !== this.diffLoadKey) return;
@@ -249,6 +260,7 @@ export class StudioDiffViewComponent {
     this.filesState.set('idle');
     this.filesError.set(null);
     this.selectedPath.set(null);
+    this.emitContextSelection({ path: null });
     this.resetDiff();
   }
 
@@ -259,4 +271,20 @@ export class StudioDiffViewComponent {
     this.diffError.set(null);
     this.diffEmptyMessage.set(null);
   }
+
+  private emitContextSelection(selection: {
+    path: string | null;
+    lineRanges?: { startLine: number; endLine: number }[];
+  }): void {
+    this.surfaceContext.selectDiff(this.projectName(), this.commitSha(), selection);
+  }
+}
+
+/** Return the first complete unified-diff hunk as resolver line coordinates. */
+export function firstDiffHunkLineRange(diff: string): { startLine: number; endLine: number }[] | undefined {
+  const lines = diff.split(/\r?\n/);
+  const start = lines.findIndex(line => line.startsWith('@@ '));
+  if (start < 0) return undefined;
+  const next = lines.findIndex((line, index) => index > start && line.startsWith('@@ '));
+  return [{ startLine: start + 1, endLine: next < 0 ? lines.length : next }];
 }

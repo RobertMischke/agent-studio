@@ -14,6 +14,8 @@ export interface GlobalSearchItem {
   sha?: string;
   path?: string;
   isWiki?: boolean;
+  repositoryId?: string;
+  revision?: string;
 }
 
 export interface GlobalSearchResponse {
