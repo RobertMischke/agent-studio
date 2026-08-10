@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const manifestPath = path.join(repoRoot, 'docs', 'visual', 'manifest.json');
+const manifestPath = path.join(repoRoot, 'docs', 'quality', 'visual-features', 'manifest.json');
 const manifestDir = path.dirname(manifestPath);
 
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -18,6 +18,15 @@ if (!Array.isArray(manifest.images) || manifest.images.length === 0) {
   failures.push('manifest.images must contain at least one image');
 }
 
+if (Object.hasOwn(manifest, 'existingDataOnly')) {
+  failures.push('manifest.existingDataOnly was retired; use capturePolicy.sourceClass=pinned');
+}
+if (manifest.capturePolicy?.sourceClass !== 'pinned') {
+  failures.push('manifest.capturePolicy.sourceClass must be pinned');
+}
+requireField(manifest.capturePolicy ?? {}, 'snapshot', 'manifest.capturePolicy');
+requireField(manifest.capturePolicy ?? {}, 'fixedTimeBase', 'manifest.capturePolicy');
+
 for (const image of manifest.images ?? []) {
   const label = `image ${image.id ?? '<missing id>'}`;
   requireField(image, 'id', label);
@@ -25,6 +34,9 @@ for (const image of manifest.images ?? []) {
   requireField(image, 'purpose', label);
   requireField(image, 'state', label);
   requireField(image, 'capture', label);
+  if (image.image?.sourceClass !== 'pinned') {
+    failures.push(`${label}.image.sourceClass must be pinned`);
+  }
 
   const featureDoc = image.featureDoc
     ? path.join(manifestDir, image.featureDoc)
@@ -40,6 +52,9 @@ for (const image of manifest.images ?? []) {
     failures.push(`${label} image.path is missing`);
   } else if (!existsSync(imagePath)) {
     failures.push(`${label} image does not exist: ${image.image.path}`);
+  }
+  if (image.image?.path && !/--pinned\.[a-z0-9]+$/i.test(image.image.path)) {
+    failures.push(`${label} image.path must use the --pinned filename suffix`);
   }
 
   requireField(image.image ?? {}, 'alt', `${label}.image`);

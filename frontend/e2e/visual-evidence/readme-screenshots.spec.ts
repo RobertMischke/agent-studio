@@ -1,14 +1,14 @@
-import { type Page } from '@playwright/test';
-import { test, expect } from '../fixtures/dev-backend';
-import { api } from '../helpers/api';
+import { test, expect, type Page } from '@playwright/test';
 
-// On-demand visual documentation screenshot generator. It uses existing task
-// data from the configured product workspace and writes output paths relative
-// to the frontend/ working dir.
+// On-demand visual documentation screenshot generator. It uses the versioned
+// pinned workspace seeded by scripts/seed-demo-workspace.mjs and writes output
+// paths relative to the frontend/ working dir.
 
 const OUT = '../docs/assets/images/';
 const TASK_CARD = '[data-testid="task-card"], [data-testid="job-card"]';
-const PRIMARY_TASK_LABELS = ['ASS-1740', 'ASS-847', 'ASS-850', 'ASS-856', 'ASS-1529'];
+const PRIMARY_TASK_LABEL = 'DEMO-9';
+const DEMO_APP = 'Demo App';
+const FIXED_BROWSER_TIME = '2026-08-09T13:00:00.000Z';
 
 async function applyVisualCaptureMode(page: Page): Promise<void> {
   if ((process.env.PW_VISUAL_CAPTURE ?? 'marketing') !== 'marketing') return;
@@ -20,30 +20,30 @@ async function applyVisualCaptureMode(page: Page): Promise<void> {
       [data-testid="dev-banner"] {
         display: none !important;
       }
+      [data-testid="status-bar"] .statusbar__quota {
+        visibility: hidden !important;
+      }
     `,
   });
 }
 
 async function capture(page: Page, fileName: string) {
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}${fileName}`, fullPage: false });
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  await page.screenshot({
+    path: `${OUT}${fileName}`,
+    fullPage: false,
+    animations: 'disabled',
+    caret: 'hide',
+  });
 }
 
-async function openExistingTask(page: Page, preferredLabels: readonly string[]): Promise<string> {
-  for (const label of preferredLabels) {
-    const card = page.locator(TASK_CARD).filter({ hasText: label }).first();
-    if (await card.count()) {
-      await card.scrollIntoViewIfNeeded();
-      await card.click();
-      return label;
-    }
-  }
-
-  const fallback = page.locator(TASK_CARD).first();
-  await expect(fallback).toBeVisible({ timeout: 15_000 });
-  const label = (await fallback.innerText()).split('\n').find(Boolean)?.trim() ?? 'first visible task';
-  await fallback.click();
-  return label;
+async function openPinnedTask(page: Page, label: string): Promise<void> {
+  const card = page.locator(TASK_CARD).filter({ hasText: label }).first();
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await card.scrollIntoViewIfNeeded();
+  await card.click();
 }
 
 async function clickVisibleTestId(page: Page, testIds: readonly string[]): Promise<void> {
@@ -68,7 +68,7 @@ async function dismissBlockingOverlays(page: Page): Promise<void> {
   for (let i = 0; i < 40; i++) {
     const dismiss = page.getByTestId('crash-recovery-dismiss').first();
     if (await dismiss.isVisible().catch(() => false)) {
-      await dismiss.click({ force: true }).catch(() => {});
+      await dismiss.click({ force: true }).catch(() => undefined);
       await page.waitForTimeout(350);
       continue;
     }
@@ -78,7 +78,7 @@ async function dismissBlockingOverlays(page: Page): Promise<void> {
   // Belt and braces: close any leftover modal overlay so clicks land on the board.
   const overlay = page.getByTestId('studio-overlay-root').first();
   if (await overlay.isVisible().catch(() => false)) {
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => undefined);
     await page.waitForTimeout(300);
   }
 }
@@ -87,54 +87,65 @@ test.describe.configure({ mode: 'serial' });
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
-test('readme screenshots — board and task detail states', async ({ page, devBackend }) => {
-  void devBackend;
-  await api('/api/watch-paths');
+async function freezeBrowserClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FIXED_BROWSER_TIME);
+}
+
+async function selectDemoApp(page: Page): Promise<void> {
+  const trigger = page.getByTestId('studio-project-picker-trigger');
+  await expect(trigger).toBeVisible({ timeout: 15_000 });
+  await trigger.click();
+  await page.getByTestId('studio-project-picker-panel').getByText(DEMO_APP, { exact: true }).click();
+}
+
+test('readme screenshots - board and task detail states', async ({ page }) => {
+  await freezeBrowserClock(page);
 
   await page.goto('/');
   await applyVisualCaptureMode(page);
   await dismissBlockingOverlays(page);
   await expect(page.getByTestId('dev-banner')).toBeHidden({ timeout: 5_000 });
+  await selectDemoApp(page);
   await expect(page.locator(TASK_CARD).first()).toBeVisible({ timeout: 15_000 });
-  await capture(page, 'board-overview.png');
+  await capture(page, 'board-overview--pinned.png');
 
-  await openExistingTask(page, PRIMARY_TASK_LABELS);
+  await openPinnedTask(page, PRIMARY_TASK_LABEL);
   await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('overview-tab')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-overview.png');
+  await capture(page, 'detail-overview--pinned.png');
 
   await page.getByTestId('prompt-tab-description').click();
   await expect(page.getByTestId('files-pane')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-files.png');
+  await capture(page, 'detail-files--pinned.png');
 
   await page.getByTestId('prompt-tab-timeline').click();
   await expect(page.getByTestId('timeline-tab')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-timeline.png');
+  await capture(page, 'detail-timeline--pinned.png');
 
   await page.getByTestId('prompt-tab-evidence').click();
   await expect(page.getByTestId('evidence-view')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-evidence.png');
+  await capture(page, 'detail-evidence--pinned.png');
 
   await page.getByTestId('prompt-tab-code-review').click();
   await expect(page.getByTestId('code-review-panel')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-code-review.png');
+  await capture(page, 'detail-code-review--pinned.png');
 
   await page.getByTestId('prompt-tab-overview').click();
   await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-protocol.png');
+  await capture(page, 'detail-protocol--pinned.png');
 
   await page.getByTestId('inspector-tab-activity').click();
   await expect(page.getByTestId('activity-panel')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-activity.png');
+  await capture(page, 'detail-activity--pinned.png');
 
   await clickVisibleTestId(page, ['studio-pane-toggle-git', 'pane-toggle-git']);
   await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 5_000 });
-  await capture(page, 'detail-three-panes.png');
+  await capture(page, 'detail-three-panes--pinned.png');
 
   await clickVisibleTestId(page, ['studio-pane-toggle-prompt', 'pane-toggle-prompt']);
   await clickVisibleTestId(page, ['studio-pane-toggle-protocol', 'pane-toggle-protocol']);
   await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 5_000 });
-  await capture(page, 'detail-git-focus.png');
+  await capture(page, 'detail-git-focus--pinned.png');
 
   await clickVisibleTestId(page, ['studio-pane-toggle-prompt', 'pane-toggle-prompt']);
   await clickVisibleTestId(page, ['studio-pane-toggle-protocol', 'pane-toggle-protocol']);
@@ -143,26 +154,11 @@ test('readme screenshots — board and task detail states', async ({ page, devBa
   if (await protocolTab.isVisible() && await protocolTab.isEnabled()) {
     await protocolTab.click();
   }
-  await capture(page, 'detail-quality-gate.png');
+  await capture(page, 'detail-quality-gate--pinned.png');
 });
-
-interface WatchPath { name: string; path: string }
 
 function slugForProject(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-// Pick the richest watched project for marketing shots: prefer the dev project
-// (its own checkout has the fullest wiki / pipeline / token / orchestrator data),
-// fall back to the first watched project.
-async function pickRichProjectName(): Promise<string> {
-  const paths = await api<WatchPath[]>('/api/watch-paths');
-  const prioritized = [
-    ...paths.filter(p => /agent.?software|agent.?studio|agent.?task/i.test(p.name)),
-    ...paths,
-  ];
-  const unique = Array.from(new Map(prioritized.map(p => [p.name, p])).values());
-  return unique[0]?.name ?? '';
 }
 
 async function softVisible(page: Page, testId: string, timeout = 15_000): Promise<boolean> {
@@ -176,7 +172,7 @@ async function dismissCrashRecoveryCards(page: Page): Promise<void> {
   for (let i = 0; i < 20; i++) {
     const card = page.getByTestId('crash-recovery-dismiss').first();
     if (await card.isVisible().catch(() => false)) {
-      await card.click({ force: true }).catch(() => {});
+      await card.click({ force: true }).catch(() => undefined);
       await page.waitForTimeout(300);
       continue;
     }
@@ -185,11 +181,10 @@ async function dismissCrashRecoveryCards(page: Page): Promise<void> {
   }
 }
 
-test('readme screenshots — project rails (wiki / tokens / pipeline / orchestrator)', async ({ page, devBackend }) => {
-  void devBackend;
+test('readme screenshots - project rails (wiki / tokens / pipeline / orchestrator)', async ({ page }) => {
   test.setTimeout(180_000);
-  const projectName = await pickRichProjectName();
-  expect(projectName, 'a watched project').not.toBe('');
+  await freezeBrowserClock(page);
+  const projectName = DEMO_APP;
   const slug = slugForProject(projectName);
 
   // Clear the startup crash-recovery overlay ONCE up front. Dismissing acknowledges
@@ -226,22 +221,22 @@ test('readme screenshots — project rails (wiki / tokens / pipeline / orchestra
   if (await tree.isVisible().catch(() => false)) {
     const firstFile = tree.locator('[data-testid^="project-wiki-file-"]').first();
     if (await firstFile.count()) {
-      await firstFile.click().catch(() => {});
+      await firstFile.click().catch(() => undefined);
       await softVisible(page, 'project-wiki-viewer', 8_000);
       await page.waitForTimeout(400);
     }
   }
-  await capture(page, 'wiki-context.png');
+  await capture(page, 'wiki-context--pinned.png');
 
   // (B) Token economy — per-project usage cards + heatmap + cost (pricing).
   await showRail('token-usage', 'project-token-usage-panel');
-  await capture(page, 'token-economy.png');
+  await capture(page, 'token-economy--pinned.png');
 
   // (C) Pre/core/post step management — the project pipeline catalogue.
   await showRail('pipeline', 'project-detail-pipeline');
-  await capture(page, 'pipeline-page.png');
+  await capture(page, 'pipeline-page--pinned.png');
 
   // (D) Agent orchestration — the orchestrator rail (full panel).
   await showRail('orchestrator', 'project-shell-panel-orchestrator');
-  await capture(page, 'orchestrator-rail.png');
+  await capture(page, 'orchestrator-rail--pinned.png');
 });

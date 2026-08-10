@@ -6,14 +6,14 @@ The Timeline tab makes task progression inspectable. Events, verdicts, re-open
 loops, and operator-visible progress are shown chronologically instead of being
 left in scattered terminal output.
 
-![Task detail timeline tab](../../../assets/images/detail-timeline.png)
+![Task detail timeline tab](../../../assets/images/detail-timeline--pinned.png)
 
 ## Relevant State
 
 - Manifest id: `task-detail-timeline`
-- Route: `/tasks/<existing-agent-studio-task>`
+- Route: `/tasks/DEMO-9`
 - Viewport: `1440x900`
-- Data state: existing Agent Software Studio task selected from the live board
+- Data state: pinned DEMO-9 task selected from the live board
 - Visible state: Timeline tab with task events or the timeline empty state
 
 ## How To Recreate The Screenshot
@@ -22,8 +22,8 @@ left in scattered terminal output.
 ./scripts/visual-docs/generate.sh
 ```
 
-The Playwright spec opens an existing task, clicks `prompt-tab-timeline`, waits
-for `timeline-tab`, and captures `docs/assets/images/detail-timeline.png`.
+The Playwright spec opens a pinned DEMO-9 task, clicks `prompt-tab-timeline`, waits
+for `timeline-tab`, and captures `docs/assets/images/detail-timeline--pinned.png`.
 
 ## Marketing Usage
 

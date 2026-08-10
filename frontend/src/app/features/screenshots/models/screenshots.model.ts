@@ -22,7 +22,8 @@ export interface TaskScreenshot {
   /**
    * Provenance label derived from the filename suffix: `real` (captured
    * against a live backend), `mocked` (e2e run with mocked API routes),
-   * `composite` (a stitched image), or `unlabeled` (no recognised suffix).
+   * `composite` (a stitched image), `pinned` (the versioned deterministic
+   * documentation workspace), or `unlabeled` (no recognised suffix).
    * Rendered text-only next to the caption so a reviewer can tell a
    * live-backend shot from a mocked-route one.
    */

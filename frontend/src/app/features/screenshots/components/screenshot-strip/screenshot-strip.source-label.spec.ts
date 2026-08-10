@@ -14,7 +14,8 @@ import type { TaskScreenshot } from '../../../../features/screenshots';
  * one at a glance, and the UI must never invent a source it cannot prove.
  * These render-path tests lock that behaviour for the strip thumbnails -
  * `real` / `mocked` / `composite` show a label (composite spells out its
- * parts), `unlabeled` shows nothing.
+ * parts), `pinned` identifies the deterministic documentation workspace, and
+ * `unlabeled` shows nothing.
  */
 function shot(overrides: Partial<TaskScreenshot>): TaskScreenshot {
   return {
@@ -89,6 +90,15 @@ describe('ScreenshotStripComponent source label', () => {
     ]);
 
     expect(sourceLabels(host)).toEqual(['composite']);
+  });
+
+  it('renders the pinned documentation-workspace label', async () => {
+    const host = await render([
+      shot({ url: 'u-pinned', fileName: 'landing-board--pinned.png', source: 'pinned' }),
+    ]);
+
+    expect(sourceLabels(host)).toEqual(['pinned']);
+    expect(host.querySelector('[data-source="pinned"]')).not.toBeNull();
   });
 
   it('renders no source label for unlabeled screenshots', async () => {
