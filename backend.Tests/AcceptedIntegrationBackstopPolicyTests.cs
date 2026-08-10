@@ -74,11 +74,81 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
         Assert.Null(item.LastOutcome);
     }
 
+    [Fact]
+    public void Alert_PreInvariantCandidateWithoutIntegrationRecord_IsNotEvaluated()
+    {
+        var snapshot = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [Candidate("ASS-499", 10_000, lastOutcome: null, hasIntegrationRecord: false)]);
+
+        Assert.False(snapshot.Active);
+        Assert.Equal(0, snapshot.StalledTaskCount);
+        Assert.Empty(snapshot.Items);
+    }
+
+    [Theory]
+    [InlineData(TaskStates.Archive, true, false)]
+    [InlineData(TaskStates.Completed, false, false)]
+    [InlineData(TaskStates.Completed, true, true)]
+    [InlineData(TaskStates.HumanReview, true, true)]
+    public void AlertCandidate_RequiresCurrentLaneAndIntegrationRecord(
+        string state,
+        bool hasIntegrationRecord,
+        bool expected)
+    {
+        var candidate = Candidate("AGT-2588", 45, MergeIntoIntegrationOutcome.Error.ToString()) with
+        {
+            Task = Candidate("AGT-2588", 45, MergeIntoIntegrationOutcome.Error.ToString()).Task with
+            {
+                State = state,
+                Phase = state == TaskStates.HumanReview ? LifecyclePhases.Integrating : null,
+            },
+            HasIntegrationRecord = hasIntegrationRecord,
+        };
+
+        Assert.Equal(expected, AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate));
+    }
+
+    [Theory]
+    [InlineData(TaskStates.Completed, null, null, true)]
+    [InlineData(TaskStates.Archive, null, null, true)]
+    [InlineData(TaskStates.HumanReview, LifecyclePhases.Integrating, null, true)]
+    [InlineData(TaskStates.HumanReview, null, null, false)]
+    [InlineData(TaskStates.Completed, null, "genuinely-missing", false)]
+    [InlineData(TaskStates.Completed, null, "content-on-fence", false)]
+    [InlineData(TaskStates.Completed, null, "integrated-historical", false)]
+    public void RecoveryCandidate_NeverTreatsHistoricalBookkeepingAsMergeAuthority(
+        string state,
+        string? phase,
+        string? verificationClass,
+        bool expected)
+    {
+        var task = Candidate("AGT-2589", 45, lastOutcome: null).Task with
+        {
+            State = state,
+            Phase = phase,
+            IntegrationRecords = verificationClass is null
+                ? []
+                :
+                [
+                    new TaskIntegrationRecord
+                    {
+                        Id = HistoricalIntegrationVerificationSweep.RecordId,
+                        Classification = verificationClass,
+                    },
+                ],
+        };
+
+        Assert.Equal(expected, AcceptedIntegrationBackstopPolicy.IsRecoveryCandidate(task));
+    }
+
     private static AcceptedIntegrationAlertCandidate Candidate(
         string key,
         int acceptedMinutesAgo,
         string? lastOutcome,
-        string integrationStatus = IntegrationStatuses.Pending)
+        string integrationStatus = IntegrationStatuses.Pending,
+        bool hasIntegrationRecord = true)
         => new()
         {
             Task = new TaskInfo
@@ -89,10 +159,12 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
                 Title = $"Delivery {key}",
                 ProjectName = "Agent Studio",
                 State = TaskStates.HumanReview,
+                Phase = LifecyclePhases.Integrating,
                 Mode = TaskModes.Coding,
                 EnteredLaneAt = Now.AddMinutes(-acceptedMinutesAgo),
             },
             AcceptedAt = Now.AddMinutes(-acceptedMinutesAgo),
+            HasIntegrationRecord = hasIntegrationRecord,
             IntegrationStatus = integrationStatus,
             LastOutcome = lastOutcome,
         };

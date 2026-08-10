@@ -6,17 +6,22 @@ namespace AgentStudio.Tasks;
 /// </summary>
 public sealed class AcceptedIntegrationInventorySweep
 {
+    internal const string PreInvariantNotEvaluated = "PreInvariantNotEvaluated";
+
     private readonly TaskScannerService _scanner;
     private readonly TaskIntegrationStatusService _integrationStatus;
+    private readonly TimelineLog _timeline;
     private readonly ILogger<AcceptedIntegrationInventorySweep> _logger;
 
     public AcceptedIntegrationInventorySweep(
         TaskScannerService scanner,
         TaskIntegrationStatusService integrationStatus,
+        TimelineLog timeline,
         ILogger<AcceptedIntegrationInventorySweep> logger)
     {
         _scanner = scanner;
         _integrationStatus = integrationStatus;
+        _timeline = timeline;
         _logger = logger;
     }
 
@@ -38,8 +43,20 @@ public sealed class AcceptedIntegrationInventorySweep
             if (string.Equals(step?.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var outcome = ClassifyFinding(step, status);
+            var timeline = _timeline.ReadAll(task.FolderPath);
+            var verification = TaskIntegrationRecordDetector.LatestVerification(task);
+            var hasIntegrationRecord = verification is not null
+                || TaskIntegrationRecordDetector.HasNativeRecord(step, timeline);
+            var outcome = ClassifyFinding(
+                step,
+                status,
+                hasIntegrationRecord,
+                verification?.Classification);
             if (outcome is null) continue;
+            var detail = verification?.Evidence
+                ?? (string.Equals(outcome, PreInvariantNotEvaluated, StringComparison.Ordinal)
+                    ? "Acceptance predates integration recording; the invariant has not been evaluated yet."
+                    : step?.Reason ?? step?.VerdictSummary);
 
             var item = new AcceptedIntegrationInventoryItem(
                 task.ProjectName,
@@ -47,35 +64,68 @@ public sealed class AcceptedIntegrationInventorySweep
                 task.State,
                 outcome,
                 status?.Status,
-                step?.Reason ?? step?.VerdictSummary,
+                detail,
                 task.FolderPath);
             findings.Add(item);
-            _logger.LogWarning(
-                "accepted-integration-inventory project={Project} job={JobId} lane={Lane} outcome={Outcome} status={Status} detail={Detail}",
-                item.Project,
-                item.JobId,
-                item.Lane,
-                item.Outcome,
-                item.IntegrationStatus ?? "null",
-                item.Detail ?? "none");
+            if (string.Equals(outcome, PreInvariantNotEvaluated, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "accepted-integration-inventory project={Project} job={JobId} lane={Lane} outcome={Outcome} status={Status} detail={Detail}",
+                    item.Project,
+                    item.JobId,
+                    item.Lane,
+                    item.Outcome,
+                    item.IntegrationStatus ?? "null",
+                    item.Detail);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "accepted-integration-inventory project={Project} job={JobId} lane={Lane} outcome={Outcome} status={Status} detail={Detail}",
+                    item.Project,
+                    item.JobId,
+                    item.Lane,
+                    item.Outcome,
+                    item.IntegrationStatus ?? "null",
+                    item.Detail ?? "none");
+            }
         }
 
+        var unevaluated = findings.Count(item => string.Equals(
+            item.Outcome,
+            PreInvariantNotEvaluated,
+            StringComparison.Ordinal));
         _logger.LogInformation(
-            "accepted-integration-inventory completed scanned={Scanned} findings={Findings}",
+            "accepted-integration-inventory completed scanned={Scanned} findings={Findings} preInvariantNotEvaluated={PreInvariantNotEvaluated}",
             accepted.Count,
-            findings.Count);
+            findings.Count - unevaluated,
+            unevaluated);
         return findings;
     }
 
     internal static string? ClassifyFinding(
         PipelineStepExecution? step,
-        TaskIntegrationStatus? status) => step?.Verdict?.ToLowerInvariant() switch
+        TaskIntegrationStatus? status,
+        bool hasIntegrationRecord,
+        string? verificationClass = null)
     {
-        "error" => "Error",
-        "no-branch" => "NoTaskBranch",
-        _ when step is null && status?.Status != IntegrationStatuses.Integrated => "Null",
-        _ => null,
-    };
+        if (!string.IsNullOrWhiteSpace(verificationClass))
+        {
+            return IntegrationRecordClasses.IsOperatorVisible(verificationClass)
+                ? verificationClass
+                : null;
+        }
+
+        var finding = step?.Verdict?.ToLowerInvariant() switch
+        {
+            "error" => "Error",
+            "no-branch" => "NoTaskBranch",
+            _ when step is null && status?.Status != IntegrationStatuses.Integrated => "Null",
+            _ => null,
+        };
+        if (finding is null) return null;
+        return hasIntegrationRecord ? finding : PreInvariantNotEvaluated;
+    }
 }
 
 public sealed record AcceptedIntegrationInventoryItem(

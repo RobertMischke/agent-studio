@@ -196,9 +196,20 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   history and `status.md` retain the override and reason. Concept and other
   no-branch cards are exempt through their mode, kind, `taskType=concept|decision`,
   or the explicit `noBranchExpected: true` card field.
-- The read-only startup `AcceptedIntegrationInventorySweep` lists historical
-  Completed and archived coding cards whose integration fact is absent, Error,
-  or NoTaskBranch. It does not mutate historical cards.
+- `HistoricalIntegrationVerificationSweep` runs once off the startup request
+  path before the accepted integration inventory. It groups Git reads by
+  repository and processes card writes in bounded batches. Cards without a
+  native integration fact receive one append-only `integrationRecords[]` row:
+  `integrated-verified`, `integrated-historical`, `no-code-expected`,
+  `content-on-fence`, or `genuinely-missing`. Target-branch ancestry uses the
+  same abbreviated-SHA and superseded-generation rules as the card projection;
+  report-only classification requires both a no-code expectation and a task
+  result artifact. The durable migration report contains aggregate counts and
+  lists only the two operator-facing classes. These rows are bookkeeping only:
+  the accepted integration recovery loop starts after the sweep and excludes
+  every card carrying one. `AcceptedIntegrationInventorySweep` then lists only
+  `content-on-fence`, `genuinely-missing`, or current recorded Error and
+  NoTaskBranch outcomes.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

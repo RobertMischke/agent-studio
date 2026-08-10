@@ -13,6 +13,7 @@ canonical layout:
     workspaces.json
     migrations/
       superseded-commits-v1.json
+      historical-integration-verification-v1.json
     test-runs/
       PROJ-023.json
   projects/
@@ -77,6 +78,14 @@ durable report and completion marker for the one-time historical delivery-round
 repair. It lists both marked commits and ambiguous cards left untouched. The
 backend writes it atomically after scanning delivered and archived cards; an
 unreadable existing report fails that repair rather than silently rerunning it.
+
+`<TaskRepository>/.metadata/migrations/historical-integration-verification-v1.json`
+is the durable count report and completion marker for accepted and archived
+cards that predate acceptance integration recording. It contains counts for
+all five verification classes and task rows only for `content-on-fence` and
+`genuinely-missing`. The related `task.json.integrationRecords[]` rows are
+append-only and use a stable id, so an interrupted or repeated sweep cannot
+duplicate card bookkeeping.
 
 ## Operational Boundary
 
@@ -190,6 +199,12 @@ excludes that rotation path, including when a legacy rotation was once tracked.
 - `tags` - string array of workspace tag ids. The label and colour for each id come from `<workspace>/tags.json` served by `GET /api/tags`. The registry seeds seven default tags on first read (`ui-ux`, `performance`, `quality`, `architecture`, `security`, `docs`, `observability`), each carrying a `description` field that surfaces in tooltips and the filter dropdown. On boot, missing seed ids are merged into an existing registry by id; user-customised rows are never overwritten. Unknown ids on a job (registry entries that were soft-deleted) render as a faint ghost chip on the card.
 - `references` - structured cross-references by stable key (`{ "dependsOn": ["CAR-3"], "relatedTo": [], "blockedBy": [], "supersedes": [], "workbenches": ["CAR-W2"] }`), written through `PUT /api/tasks/{id}/references`. Task keys are project-unique via the project short code, so they resolve across projects. Document references use the owning project's `SHORT-W<number>` namespace; unknown document keys are rejected, while descriptor `relatedTaskKeys` remain a readable legacy bridge. **`dependsOn` is the "waits-on" relation (AGT-2029) and is scheduler-load-bearing**: a `2-ready` card whose `dependsOn` targets have not all reached `6-completed`/`7-archive` is held back from auto-pickup (it stays visibly "waiting" on the board, never a silent skip) and becomes pickable once they are fulfilled. A dependency can opt into an additional content-release boundary with the object form `{ "key": "CAR-3", "releaseGate": true }`; legacy string entries remain valid and unchanged. A release-gated dependency is fulfilled only when the target is terminal and carries `"released": true`. Fulfillment resolution is cross-project and archive-inclusive. A `dependsOn` cycle is a configuration error: it is reported (structured `waits-on-cycle` log + an error chip on the card) and the card is skipped so the runner never deadlocks. Writing an unknown task key is allowed (a warning, not a hard failure) because the referenced task may be created later. The board card renders a state-aware, clickable dependency chip and distinguishes waiting for completion from waiting for release. The task detail shows both directions (waits-on / blocked-by-me) plus linked document key chips. Only `references` is persisted; the task read endpoints (`GET /api/tasks`, `/api/tasks/grouped`, `/api/tasks/{id}`) additionally fold on a derived, non-persisted `waitsOn` object - `{ "items": [{ "key", "resolved", "fulfilled", "releaseGate", "targetReleased", "waitingForRelease", "targetJobId", "targetTitle", "targetState", "targetWatchPath" }], "blocked", "cycleDetected" }` - computed per request from `dependsOn` against an archive-inclusive, whole-workspace index (`WaitsOnEvaluator`). It is absent/null on cards without `dependsOn` edges and drives the chip; the frontend never recomputes fulfillment client-side. `GET /api/projects/{projectName}/workbenches/{key}/references` derives the reverse card list from the same reference index.
 - `released` - explicit content approval for release-gated dependents. It defaults to `false` when absent and is written through `PUT /api/tasks/{id}/release` with `{ "released": true|false }`. Terminal lane movement never sets it implicitly; an operator or a dedicated release step must do so.
+- `integrationRecords` - append-only application bookkeeping for historical
+  integration verification. Each row carries a stable id, one of
+  `integrated-verified`, `integrated-historical`, `no-code-expected`,
+  `content-on-fence`, or `genuinely-missing`, the integration branch, and the
+  Git or artifact evidence used. Agents and ordinary task mutations never
+  author or replace these rows.
 
 The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`, whose visible label is Post Processing; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (forward to `5e-escalated` with a `[supervisor]` chat-note and an escalation verdict). The user always confirms accepted work before it moves from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 

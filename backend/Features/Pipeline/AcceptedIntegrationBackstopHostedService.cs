@@ -20,6 +20,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     private readonly TaskTransitionService? _transitions;
     private readonly TimelineLog? _timeline;
     private readonly PipelineExecutionLog? _pipelineLog;
+    private readonly HistoricalIntegrationVerificationSweep? _historicalSweep;
+    private readonly AcceptedIntegrationInventorySweep? _historicalInventory;
     private readonly object _alertGate = new();
     private readonly AcceptedIntegrationAlertLogState _alertLog = new();
     private AcceptedIntegrationAlertSnapshot _currentAlert = new()
@@ -38,7 +40,9 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         ILogger<AcceptedIntegrationBackstopHostedService> logger,
         TaskTransitionService? transitions = null,
         TimelineLog? timeline = null,
-        PipelineExecutionLog? pipelineLog = null)
+        PipelineExecutionLog? pipelineLog = null,
+        HistoricalIntegrationVerificationSweep? historicalSweep = null,
+        AcceptedIntegrationInventorySweep? historicalInventory = null)
     {
         _scanner = scanner;
         _settings = settings;
@@ -50,6 +54,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         _transitions = transitions;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _historicalSweep = historicalSweep;
+        _historicalInventory = historicalInventory;
     }
 
     public AcceptedIntegrationAlertSnapshot CurrentAlert
@@ -62,14 +68,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         // AGT-2480: the automation scanner excludes fixture cards. Keep the
         // acceptedJobs name from AGT-2428 because it describes the recovery set.
         var acceptedJobs = _scanner.ScanAllAutomationJobsWithArchive()
-            .Where(job =>
-                job.State is TaskStates.Completed or TaskStates.Archive
-                || (job.State == TaskStates.HumanReview
-                    && string.Equals(
-                        job.Phase,
-                        LifecyclePhases.Integrating,
-                        StringComparison.Ordinal)))
-            .Where(AcceptanceIntegrationPolicy.IsIntegrationRequired)
+            .Where(AcceptedIntegrationBackstopPolicy.IsRecoveryCandidate)
             .OrderBy(job => job.ProjectName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(DeliveryOrder)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
@@ -162,8 +161,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             _configuration.GetValue<int?>("Integration:AcceptedAlertThresholdMinutes") ?? 30,
             1,
             24 * 60);
-        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
-            .Where(IsAcceptedAlertCandidate)
+        var candidates = _scanner.ScanAllAutomationJobs()
+            .Where(IsPotentialAlertLane)
             .OrderBy(job => job.EnteredLaneAt)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -176,16 +175,20 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             var recovery = _integrationStatus.ResolveAcceptedIntegrationRecovery(job, status);
             if (recovery.Action == AcceptedIntegrationRecoveryAction.Ignore)
                 continue;
-            policyCandidates.Add(new AcceptedIntegrationAlertCandidate
+            var acceptanceRecord = ResolveAcceptanceRecord(job, recovery.LastMergeAttempt);
+            var candidate = new AcceptedIntegrationAlertCandidate
             {
                 Task = job,
-                AcceptedAt = ResolveAcceptedAt(job),
+                AcceptedAt = acceptanceRecord.RecordedAt,
+                HasIntegrationRecord = acceptanceRecord.Exists,
                 IntegrationStatus = status?.Status,
                 LastOutcome = NormalizeOutcome(recovery.LastMergeAttempt?.Verdict),
                 Detail = recovery.LastMergeAttempt?.Reason
                          ?? recovery.LastMergeAttempt?.VerdictSummary
                          ?? status?.Detail,
-            });
+            };
+            if (AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate))
+                policyCandidates.Add(candidate);
         }
 
         var next = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
@@ -200,16 +203,17 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         }
     }
 
-    private static bool IsAcceptedAlertCandidate(TaskInfo job)
+    private static bool IsPotentialAlertLane(TaskInfo job)
     {
-        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(job)) return false;
-        if (job.State is TaskStates.Completed or TaskStates.Archive) return true;
+        if (job.State == TaskStates.Completed) return true;
         return job.State == TaskStates.HumanReview
                && (string.Equals(job.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal)
                    || (job.Tags ?? []).Any(IntegrationStatuses.IsPendingTag));
     }
 
-    private DateTime ResolveAcceptedAt(TaskInfo job)
+    private (bool Exists, DateTime RecordedAt) ResolveAcceptanceRecord(
+        TaskInfo job,
+        PipelineStepExecution? lastMergeAttempt)
     {
         var integrationStarted = _timeline?.ReadAll(job.FolderPath)
             .Where(item => string.Equals(
@@ -218,7 +222,17 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 StringComparison.Ordinal))
             .OrderByDescending(item => item.Ts)
             .FirstOrDefault();
-        return integrationStarted?.Ts ?? job.EnteredLaneAt;
+        if (integrationStarted is not null)
+            return (true, integrationStarted.Ts.ToUniversalTime());
+
+        var mergeRecordedAt = lastMergeAttempt?.StartedAt ?? lastMergeAttempt?.CompletedAt;
+        if (mergeRecordedAt is { } recordedAt)
+            return (true, recordedAt.ToUniversalTime());
+
+        var verification = TaskIntegrationRecordDetector.LatestOperatorVisibleVerification(job);
+        return verification is null
+            ? (false, default)
+            : (true, verification.AcceptedAtUtc?.ToUniversalTime() ?? job.EnteredLaneAt.ToUniversalTime());
     }
 
     private static string? NormalizeOutcome(string? verdict)
@@ -259,6 +273,38 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Run the one-time historical bookkeeping migration before the
+        // mutating recovery loop. The initial yield keeps disk and Git work
+        // off the host startup path, while the ordering prevents legacy cards
+        // from being mistaken for live acceptance transactions.
+        await Task.Yield();
+        if (_historicalSweep is not null)
+        {
+            try
+            {
+                var report = await _historicalSweep.RunOnceAsync(stoppingToken);
+                if (!report.Completed)
+                {
+                    _logger.LogError(
+                        "accepted-integration-backstop paused because historical verification had {Failures} write failure(s)",
+                        report.WriteFailures);
+                    return;
+                }
+                _historicalInventory?.Run();
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "accepted-integration-backstop paused because historical verification failed");
+                return;
+            }
+        }
+
         var interval = TimeSpan.FromMinutes(Math.Clamp(
             _configuration.GetValue<int?>("Integration:BackstopIntervalMinutes") ?? 15,
             1,

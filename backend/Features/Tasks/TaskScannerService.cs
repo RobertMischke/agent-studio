@@ -609,6 +609,7 @@ public class TaskScannerService : ITaskScanner
                     : null,
                 Commit = legacyCommit,
                 Commits = commitChain,
+                IntegrationRecords = ReadIntegrationRecords(raw),
                 IntegrationBranch = raw.TryGetProperty("integrationBranch", out var integrationBranch)
                     && integrationBranch.ValueKind == JsonValueKind.String
                     ? TaskIntegrationBranch.NormalizeRef(integrationBranch.GetString())
@@ -794,6 +795,36 @@ public class TaskScannerService : ITaskScanner
             ProjectName = info.ProjectName,
             Attachments = attachments,
         };
+    }
+
+    private static List<TaskIntegrationRecord> ReadIntegrationRecords(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("integrationRecords", out var records)
+            || records.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var result = new List<TaskIntegrationRecord>();
+        foreach (var item in records.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            try
+            {
+                var record = item.Deserialize<TaskIntegrationRecord>(TaskJsonFile.ReadOpts);
+                if (record is not null
+                    && !string.IsNullOrWhiteSpace(record.Id)
+                    && IntegrationRecordClasses.All.Contains(record.Classification, StringComparer.Ordinal))
+                {
+                    result.Add(record);
+                }
+            }
+            catch (JsonException ex)
+            {
+                SilentCatch.Note(ex, "TaskScannerService: malformed integration record");
+            }
+        }
+        return result;
     }
 
     private static RemoteDispatchRejection? ReadRemoteDispatchRejection(JsonElement raw)
