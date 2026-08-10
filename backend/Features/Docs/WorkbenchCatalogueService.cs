@@ -23,6 +23,7 @@ public sealed class WorkbenchCatalogueService
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
     private readonly GitService _git;
+    private readonly ManagedRepositoryMutationService _repositoryMutations;
     private readonly IAtomicJsonFileWriter _fileWriter;
     private readonly ConcurrentDictionary<string, DecisionCountSnapshot> _decisionCounts =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -58,12 +59,15 @@ public sealed class WorkbenchCatalogueService
         TaskScannerService scanner,
         ProjectRegistry registry,
         GitService git,
-        IAtomicJsonFileWriter? fileWriter = null)
+        IAtomicJsonFileWriter? fileWriter = null,
+        ManagedRepositoryMutationService? repositoryMutations = null)
     {
         _scanner = scanner;
         _registry = registry;
         _git = git;
         _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
+        _repositoryMutations = repositoryMutations
+            ?? new ManagedRepositoryMutationService(git);
     }
 
     public WorkbenchCatalogue? List(string projectName, bool includeHistory = false)
@@ -490,6 +494,7 @@ public sealed class WorkbenchCatalogueService
                 .OrderBy(path => path, PathComparer)
                 .ToList();
             var highest = 0;
+            var assignments = new List<(string Path, string RelativePath, JsonObject Descriptor)>();
             foreach (var descriptorPath in descriptors)
             {
                 try
@@ -521,13 +526,37 @@ public sealed class WorkbenchCatalogueService
 
                     var seq = _registry.IssueNextWorkbenchKey(project.Id);
                     descriptor["key"] = $"{project.ShortCode}-W{seq}";
-                    _fileWriter.Write(descriptorPath, descriptor.ToJsonString(
-                        new JsonSerializerOptions { WriteIndented = true }));
+                    assignments.Add((
+                        descriptorPath,
+                        Path.GetRelativePath(root, descriptorPath).Replace('\\', '/'),
+                        descriptor));
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
                 {
                     SilentCatch.Note(ex, "Document reference key assignment failed.");
                 }
+            }
+
+            if (assignments.Count == 0) return;
+            var persisted = _repositoryMutations.Execute(
+                project.DisplayName,
+                root,
+                "workbench-key-discovery",
+                "chore(workbench): assign document keys",
+                assignments.Select(assignment => assignment.RelativePath).ToArray(),
+                () =>
+                {
+                    foreach (var assignment in assignments)
+                    {
+                        _fileWriter.Write(assignment.Path, assignment.Descriptor.ToJsonString(
+                            new JsonSerializerOptions { WriteIndented = true }));
+                    }
+                });
+            if (!persisted.Success)
+            {
+                SilentCatch.Note(
+                    new InvalidOperationException(persisted.Error ?? "Document key persistence failed."),
+                    "Document reference keys were not persisted because the managed commit boundary failed.");
             }
         }
     }

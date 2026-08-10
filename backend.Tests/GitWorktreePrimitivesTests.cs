@@ -373,11 +373,14 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         RunGit(repo, "checkout -q develop");
         // Leave an uncommitted edit in the integration working tree.
         File.WriteAllText(Path.Combine(repo, "README.md"), "operator edit in flight");
+        File.WriteAllText(Path.Combine(repo, "untracked-notes.txt"), "service evidence");
 
         var result = git.MergeBranchIntoIntegration(repo, "task/13", "develop");
 
         Assert.Equal(MergeIntoIntegrationOutcome.Error, result.Outcome);
         Assert.NotNull(result.Error);
+        Assert.Contains("README.md", result.Error);
+        Assert.Contains("untracked-notes.txt", result.Error);
     }
 
     private string SeedRepo(string name)

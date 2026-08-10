@@ -3237,11 +3237,13 @@ public class GitService
                 MergeIntoIntegrationOutcome.Error,
                 error: $"Release source '{sourceBranch}' is not a fast-forward of '{targetBranch}'.");
         }
-        if (RepoHasUncommittedChanges(repoRoot))
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to merge.") is { } dirtyRefusal)
         {
             return MergeIntoIntegrationResult.Of(
                 MergeIntoIntegrationOutcome.Error,
-                error: "Integration working tree has uncommitted changes; refusing to merge.");
+                error: dirtyRefusal);
         }
 
         var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
@@ -3977,10 +3979,12 @@ public class GitService
 
         var localTip = GetBranchTip(repoRoot, integrationBranch)!;
         var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef)!;
-        if (RepoHasUncommittedChanges(repoRoot))
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to fast-forward it from origin.") is { } dirtyRefusal)
             return new(
                 IntegrationBranchSyncOutcome.Error,
-                "Integration working tree has uncommitted changes; refusing to fast-forward it from origin.");
+                dirtyRefusal);
 
         var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
         var current = headCode == 0 ? currentRaw.Trim() : null;
@@ -4119,6 +4123,13 @@ public class GitService
     private static string AbbreviateSha(string sha)
         => sha[..Math.Min(8, sha.Length)];
 
+    private string? DirtyTreeRefusal(string repoRoot, string refusal)
+    {
+        var status = GetStatusForRepoRoot(repoRoot);
+        if (!status.IsRepo || status.Files.Count == 0) return null;
+        return $"{refusal} Dirty files: {string.Join(", ", status.Files.Select(file => file.Path))}.";
+    }
+
     private MergeIntoIntegrationResult MergeRefIntoIntegration(
         string repoRoot,
         string sourceRef,
@@ -4129,8 +4140,10 @@ public class GitService
 
         // Never merge into a dirty tree - that would entangle the operator's
         // in-flight edits with the delivery merge.
-        if (RepoHasUncommittedChanges(repoRoot))
-            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Integration working tree has uncommitted changes; refusing to merge.");
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to merge.") is { } dirtyRefusal)
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: dirtyRefusal);
 
         var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
         var current = headCode == 0 ? currentRaw.Trim() : null;

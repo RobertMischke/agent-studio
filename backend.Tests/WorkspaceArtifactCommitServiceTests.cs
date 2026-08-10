@@ -218,6 +218,42 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
         Assert.Equal("ASS-OFFLINE", pushFailure.JobId);
     }
 
+    [Fact]
+    public async Task WorkspacePushWorker_PushesTheRequestedShaToTheRequestedBranch()
+    {
+        var firstSha = RunGitCapture(_root, "rev-parse", "HEAD").Trim();
+        File.WriteAllText(Path.Combine(_root, "later.txt"), "later\n");
+        RunGit(_root, "add", "later.txt");
+        RunGit(_root, "commit", "-q", "-m", "later");
+        var remote = Path.Combine(_root, "remote.git");
+        RunGit(_root, "init", "-q", "--bare", remote);
+        RunGit(_root, "remote", "add", "origin", remote);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WorkspaceArtifacts:PushRetrySeconds"] = "0",
+            })
+            .Build();
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            NullLogger<WorkspaceArtifactPushWorker>.Instance,
+            config);
+
+        var pushed = await worker.ProcessAsync(
+            new WorkspaceArtifactPushRequest(
+                _root,
+                "service-mutation",
+                TargetBranch: "develop",
+                Sha: firstSha,
+                Project: "Project"),
+            default);
+
+        Assert.True(pushed);
+        Assert.Equal(
+            firstSha,
+            RunGitCapture(_root, $"--git-dir={remote}", "rev-parse", "refs/heads/develop").Trim());
+    }
+
     private string JobFolder(string id) =>
         Path.Combine(_root, "projects", "agent-taskboard", "tasks", "001", id);
 

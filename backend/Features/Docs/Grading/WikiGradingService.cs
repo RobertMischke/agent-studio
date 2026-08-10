@@ -29,6 +29,8 @@ public sealed class WikiGradingService
     private readonly IWikiPageGrader _grader;
     private readonly WikiCompanionStore _companions;
     private readonly ILogger<WikiGradingService> _logger;
+    private readonly GitService? _git;
+    private readonly ManagedRepositoryMutationService? _repositoryMutations;
 
     private readonly ConcurrentDictionary<string, RunHandle> _runs =
         new(StringComparer.OrdinalIgnoreCase);
@@ -37,12 +39,16 @@ public sealed class WikiGradingService
         ProjectDocsService docs,
         IWikiPageGrader grader,
         WikiCompanionStore companions,
-        ILogger<WikiGradingService> logger)
+        ILogger<WikiGradingService> logger,
+        GitService? git = null,
+        ManagedRepositoryMutationService? repositoryMutations = null)
     {
         _docs = docs;
         _grader = grader;
         _companions = companions;
         _logger = logger;
+        _git = git;
+        _repositoryMutations = repositoryMutations;
     }
 
     /// <summary>
@@ -186,7 +192,34 @@ public sealed class WikiGradingService
 
         try
         {
-            _companions.WriteGrading(wikiDir, page.RelPath, page.Title, content, verdict, handle.Request, handle.RunId, DateTime.UtcNow);
+            var repoRoot = _git?.ResolveRepoRootForProject(project);
+            if (_repositoryMutations != null && !string.IsNullOrWhiteSpace(repoRoot))
+            {
+                var companionRel = Path.GetRelativePath(repoRoot, companionAbs).Replace('\\', '/');
+                var mutation = _repositoryMutations.Execute(
+                    project,
+                    repoRoot,
+                    $"wiki-grading-{handle.RunId}-{page.RelPath}",
+                    $"chore(wiki): grade {page.RelPath}",
+                    [companionRel],
+                    () => _companions.WriteGrading(
+                        wikiDir, page.RelPath, page.Title, content, verdict,
+                        handle.Request, handle.RunId, DateTime.UtcNow));
+                if (!mutation.Success)
+                {
+                    return new WikiPageGradeResult(
+                        page.RelPath,
+                        verdict.Grade,
+                        WikiGradeOutcome.Failed,
+                        $"companion persistence failed: {mutation.Error}");
+                }
+            }
+            else
+            {
+                _companions.WriteGrading(
+                    wikiDir, page.RelPath, page.Title, content, verdict,
+                    handle.Request, handle.RunId, DateTime.UtcNow);
+            }
         }
         catch (Exception ex)
         {

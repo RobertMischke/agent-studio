@@ -445,6 +445,61 @@ public sealed class WorkbenchCatalogueTests : IDisposable
             item => item.Id == "gamma").Key);
     }
 
+    [Fact]
+    public void List_AssignsMissingKeys_CommitsThemAndLeavesTheRepositoryClean()
+    {
+        WriteWorkbench("discovered", "Discovered", "active", "2026-08-10T08:00:00Z");
+        RunGit("init", "-b", "develop");
+        RunGit("config", "user.email", "tests@example.invalid");
+        RunGit("config", "user.name", "Workbench Tests");
+        RunGit("add", ".");
+        RunGit("commit", "-m", "test: seed workbench without a key");
+        var before = RunGit("rev-parse", "HEAD").Trim();
+        var pushQueue = new WorkspaceArtifactPushQueue();
+
+        var item = Assert.Single(Service(pushQueue).List("Project", includeHistory: true)!.Items);
+
+        var after = RunGit("rev-parse", "HEAD").Trim();
+        Assert.Equal("PRO-W1", item.Key);
+        Assert.NotEqual(before, after);
+        Assert.Equal("chore(workbench): assign document keys", RunGit("log", "-1", "--format=%s").Trim());
+        Assert.Equal(string.Empty, RunGit("status", "--porcelain"));
+        Assert.True(pushQueue.Reader.TryRead(out var push));
+        Assert.Equal(after, push!.Sha);
+        Assert.Equal("develop", push.TargetBranch);
+        Assert.Equal("Project", push.Project);
+    }
+
+    [Fact]
+    public void List_WhenTheManagedCommitFails_RestoresTheDescriptorAndLeavesTheRepositoryClean()
+    {
+        WriteWorkbench("discovered", "Discovered", "active", "2026-08-10T08:00:00Z");
+        RunGit("init", "-b", "develop");
+        RunGit("config", "user.email", "tests@example.invalid");
+        RunGit("config", "user.name", "Workbench Tests");
+        RunGit("add", ".");
+        RunGit("commit", "-m", "test: seed workbench without a key");
+        var before = RunGit("rev-parse", "HEAD").Trim();
+        var hook = Path.Combine(_root, ".git", "hooks", "pre-commit");
+        File.WriteAllText(hook, "#!/bin/sh\nexit 1\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                hook,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+
+        Assert.False(item.Valid);
+        Assert.Contains("key is required", item.Error);
+        Assert.Equal(before, RunGit("rev-parse", "HEAD").Trim());
+        Assert.Equal(string.Empty, RunGit("status", "--porcelain"));
+        using var descriptor = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(_root, "docs", "workbenches", "discovered", "workbench.json")));
+        Assert.False(descriptor.RootElement.TryGetProperty("key", out _));
+    }
+
     private void WriteWorkbench(string id, string title, string status, string updatedAt)
     {
         var dir = Path.Combine(_root, "docs", "workbenches", id);
@@ -479,7 +534,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
           """);
     }
 
-    private WorkbenchCatalogueService Service()
+    private WorkbenchCatalogueService Service(WorkspaceArtifactPushQueue? pushQueue = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -495,7 +550,11 @@ public sealed class WorkbenchCatalogueTests : IDisposable
             "Project",
             DefaultWorkspace.Id);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
-        return new WorkbenchCatalogueService(scanner, registry, git);
+        var mutations = new ManagedRepositoryMutationService(
+            git,
+            pushQueue: pushQueue,
+            logger: NullLogger<ManagedRepositoryMutationService>.Instance);
+        return new WorkbenchCatalogueService(scanner, registry, git, repositoryMutations: mutations);
     }
 
     private string RunGit(params string[] args)
