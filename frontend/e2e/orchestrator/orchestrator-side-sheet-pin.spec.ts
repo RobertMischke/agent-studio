@@ -29,7 +29,7 @@ async function stubWorkspace(page: Page) {
   // or that are list-shaped need a minimally-valid empty body so nothing throws.
   const emptyBodyFor = (path: string): string => {
     if (path === '/api/v1/management/remote-hosts' || path.startsWith('/api/bus/')) return '[]';
-    if (/\/api\/(tags|workspaces|clients)\/?$/.test(path)) return '[]';
+    if (/\/api\/(tags|workspaces|clients|projects)\/?$/.test(path)) return '[]';
     if (/\/api\/runner\/status$/.test(path)) return '{"projects":{}}';
     if (/\/api\/cli\/quota$/.test(path)) return '{"snapshots":[]}';
     if (/\/api\/tasks\/archive/.test(path)) return '{"items":[],"total":0,"offset":0,"limit":0}';
@@ -92,13 +92,13 @@ async function stubWorkspace(page: Page) {
           contextKey: `project:${PROJECT}`, kind: 'project', projectId: PROJECT, taskKey: null,
           updatedAt: '2026-07-11T10:00:00Z', model: 'codex', cumulativeInputTokens: 800,
           cumulativeOutputTokens: 200, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
-          runtimeStatus: 'active', queuePosition: 0,
+          runtimeStatus: 'active', queuePosition: 0, summary: 'Review the project rollout',
         },
         {
           contextKey: `task:${PROJECT}/AGT-1933`, kind: 'task', projectId: PROJECT, taskKey: 'AGT-1933',
           updatedAt: '2026-07-11T10:01:00Z', model: 'codex', cumulativeInputTokens: 12_000,
           cumulativeOutputTokens: 3_000, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
-          runtimeStatus: 'parked', queuePosition: 0,
+          runtimeStatus: 'parked', queuePosition: 0, summary: 'Verify the task context lifecycle',
         },
       ] }),
     });
@@ -175,6 +175,7 @@ async function openSideSheet(page: Page) {
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   await toggle.click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+  await dismissErrorDialogs(page);
 }
 
 test.describe('Orchestrator side sheet · navigation context + pin', () => {
@@ -236,8 +237,10 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(page.getByTestId('orch-context-scope')).toHaveText('Project context');
     await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
     await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
+    await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('Review the project rollout');
     await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
     await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('Verify the task context lifecycle');
 
     if (resultsDir) {
       await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-expanded--mocked.png'), fullPage: false });

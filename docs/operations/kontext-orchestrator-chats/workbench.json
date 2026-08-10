@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "kontext-orchestrator-chats",
   "title": "Context-Aware Orchestrator Chats",
-  "summary": "Decision dossier for project Chat as the primary context workspace: current implementation evidence, a typed context model, the Task Chat boundary, token-budget policy, two UX sketches, and five follow-up slices.",
+  "summary": "Decided dossier for context-aware Orchestrator Chat. Operator GO was given on 10 August 2026 for Slices 1 through 5. Binding additions keep Task Activity unchanged, create managed task contexts on open, retain permanent project contexts and hidden archived-task contexts, and place transcript, receipt, lifecycle, and summary authority on the central Task Server.",
   "entrypoint": "index.html",
-  "status": "decision-pending",
-  "phase": "decision-ready",
-  "updatedAt": "2026-08-09T16:53:46Z",
+  "status": "decided",
+  "phase": "implementation",
+  "updatedAt": "2026-08-10T01:53:57Z",
   "sourceTaskKeys": ["AGT-2514"],
-  "relatedTaskKeys": ["AGT-2506", "AGT-2512"]
+  "relatedTaskKeys": ["AGT-2506", "AGT-2512", "AGT-2572", "AGT-2573", "AGT-2574", "AGT-2575", "AGT-2576", "AGT-2577"]
 }

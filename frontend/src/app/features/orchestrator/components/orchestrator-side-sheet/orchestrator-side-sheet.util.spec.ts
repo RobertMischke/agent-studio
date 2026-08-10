@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildDemoEvents,
   buildOrchestratorConversationEvents,
-  parseBugHashtags,
   resolveAttachmentUrl,
   sameOrchestratorChatTurns,
   suppressLocalDuplicates,
 } from './orchestrator-side-sheet.util';
+import { buildDemoEvents } from './orchestrator-side-sheet.demo-events';
+import { parseBugHashtags } from './orchestrator-side-sheet.bug-directive';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import type { ChatEvent } from 'coding-agent-chat/core';
 

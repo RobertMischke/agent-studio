@@ -79,6 +79,8 @@ export interface OrchestratorContextSession {
   cumulativeCacheCreationTokens: number;
   runtimeStatus: 'idle' | 'active' | 'queued' | 'parked';
   queuePosition: number;
+  /** Short Task Server-owned preview of the latest user intent. */
+  summary?: string | null;
 }
 
 export interface OrchestratorContextSessionsResponse {
@@ -140,6 +142,68 @@ export interface OrchestratorContextReceipt {
   contextKey: string;
   taskKey?: string | null;
   includedBlocks: string[];
+  capturedAt: string;
+  receiptId?: string | null;
+  userTurnId?: string | null;
+  budget?: OrchestratorContextBudgetReceipt | null;
+  sources?: OrchestratorContextSourceReceipt[] | null;
+}
+
+export interface OrchestratorContextBudgetReceipt {
+  automaticSoftCapTokens: number;
+  automaticHardCapTokens: number;
+  totalHardCapTokens: number;
+  estimatedIncludedTokens: number;
+}
+
+export interface OrchestratorContextSourceReceipt {
+  sourceId: string;
+  kind: string;
+  revision?: string | null;
+  sha256?: string | null;
+  freshness: string;
+  includedCharacters: number;
+  estimatedTokens: number;
+  status: 'included' | 'excerpted' | 'unresolved' | 'unavailable' | 'blocked' | 'oversize' | string;
+  reason?: string | null;
+}
+
+export interface OrchestratorConversationScope {
+  kind: 'project' | 'task';
+  contextKey: string;
+  projectId: string;
+  taskKey?: string | null;
+}
+
+export interface OrchestratorActiveSurface {
+  kind: string;
+  reference?: string | null;
+  title?: string | null;
+  revision?: string | null;
+  taskKey?: string | null;
+  selection?: string[] | null;
+}
+
+export interface OrchestratorContextReference {
+  kind: 'task' | 'page' | 'repository-file';
+  reference: string;
+  projectId?: string | null;
+  revision?: string | null;
+}
+
+export interface OrchestratorContextBudget {
+  automaticSoftCapTokens: number;
+  automaticHardCapTokens: number;
+  totalHardCapTokens: number;
+  charactersPerEstimatedToken: number;
+}
+
+/** Immutable context snapshot captured before a chat POST starts. */
+export interface OrchestratorContextEnvelope {
+  scope: OrchestratorConversationScope;
+  activeSurface?: OrchestratorActiveSurface | null;
+  explicitReferences: OrchestratorContextReference[];
+  budget: OrchestratorContextBudget;
   capturedAt: string;
 }
 

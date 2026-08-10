@@ -14,14 +14,15 @@ import {
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
-import { TaskState } from '../../../../models/task.model';
 import type {
   ChatExecutionContext,
   ComposerLocationContext,
   OrchestratorChatTurn,
   OrchestratorContextSession,
 } from '../../../../features/orchestrator';
-import { buildChatNavigationContext } from '../../../../features/orchestrator';
+import {
+  buildChatNavigationContext,
+} from '../../../../features/orchestrator';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
 import {
@@ -40,10 +41,6 @@ import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-st
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
 import {
-  parseBugHashtags,
-  resolveAttachmentUrl,
-  readFileAsBase64,
-  buildDemoEvents,
   buildOrchestratorConversationEvents,
   sameOrchestratorChatTurns,
 } from './orchestrator-side-sheet.util';
@@ -520,7 +517,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('demoEvents') !== '1') return;
-    this.events.set(buildDemoEvents(Date.now()));
+    void import('./orchestrator-side-sheet.lazy').then(({ buildDemoEvents }) => {
+      this.events.set(buildDemoEvents(Date.now()));
+    });
   }
 
   ngOnDestroy(): void {
@@ -744,6 +743,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     };
     this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
+    const lazy = await import('./orchestrator-side-sheet.lazy');
 
     // Upload each pasted/dropped image first so the chat message can
     // reference real files. We do this sequentially to keep error
@@ -762,8 +762,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     try {
       for (const att of event.attachments) {
         const [resp, inline] = await Promise.all([
-          this.uploadOne(proj, att.file),
-          readFileAsBase64(att.file).catch(() => null)
+          lazy.uploadAttachment(this.jobService, proj, att.file),
+          lazy.readFileAsBase64(att.file).catch(() => null)
         ]);
         uploaded.push({
           alt: att.alt,
@@ -802,6 +802,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
       navigationContext: contextPayload,
+      contextEnvelope: lazy.buildOrchestratorContextEnvelope(contextKey, contextPayload),
       model: this.composerModel.effectiveSelection().model || null,
       thinkingLevel: this.composerModel.effectiveSelection().thinkingLevel,
       selectionSource: this.composerModel.selectionSource(),
@@ -817,14 +818,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // pixels from the browser image cache (no fetch on swap = no
         // visible flicker). The fallback timeout caps the wait so a slow
         // network can't strand the bubble in pending state forever.
-        const preloads = uploaded.map((u) =>
-          new Promise<void>((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-            img.src = resolveAttachmentUrl(proj, u.relativePath);
-          })
-        );
+        const preloads = lazy.preloadPersistedAttachments(proj, uploaded);
         // Fetch the server's view of the conversation. While the local
         // turn is still in the list, `suppressLocalDuplicates` hides the
         // matching server user turn so the bubble does not duplicate
@@ -835,12 +829,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
           next: async (resp) => {
             this.turns.set(resp.turns ?? []);
             this.errorMsg.set(null);
-            if (preloads.length > 0) {
-              await Promise.race([
-                Promise.all(preloads),
-                new Promise<void>((r) => setTimeout(r, 3000))
-              ]);
-            }
+            await preloads;
             this.localTurns.set([]);
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           },
@@ -870,94 +859,21 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * any line in the description are parsed into workspace tag ids.
    */
   private handleBugDirective(text: string, event: ChatSubmitEvent, project: string): void {
-    const description = text.replace(/^\/bug\s*/, '').trim();
-    const ts = new Date().toISOString();
-
-    // Always render the user's directive locally so the card appears at
-    // the user's turn position even though we never round-trip through
-    // the orchestrator chat write-path.
-    const localId = `bug-local:${Date.now()}`;
-    this.localTurns.update((curr) => [
-      ...curr,
-      { id: localId, ts, role: 'user', text }
-    ]);
-    for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
-
-    if (!description) {
-      this.appendBugEvent({
-        id: `bug-err:empty:${Date.now()}`,
-        kind: 'task',
-        timestamp: new Date().toISOString(),
-        severity: 'error',
-        summary: 'Bug not filed: description is empty',
-        detail: 'Add a description after `/bug`, e.g. `/bug Frontend chips overlap on narrow viewport`.'
+    void import('./orchestrator-side-sheet.lazy').then(({ handleBugDirective }) => {
+      handleBugDirective({
+        text,
+        event,
+        project,
+        watchPaths: this.watchPaths(),
+        jobService: this.jobService,
+        appendUser: (id, ts, body) => this.localTurns.update(current => [
+          ...current, { id, ts, role: 'user', text: body }
+        ]),
+        appendEvent: item => this.appendBugEvent(item),
+        addTarget: (eventId, jobId, watchPath) =>
+          this.bugEventTargets.set(eventId, { jobId, watchPath }),
       });
-      return;
-    }
-
-    const watchPath = this.watchPaths().find((wp) => wp.name === project)?.path;
-    if (!watchPath) {
-      this.appendBugEvent({
-        id: `bug-err:no-watchpath:${Date.now()}`,
-        kind: 'task',
-        timestamp: new Date().toISOString(),
-        severity: 'error',
-        summary: 'Bug not filed: no watch path for this project',
-        detail: `Could not resolve a watch path for project \`${project}\`. Check the workspace configuration.`
-      });
-      return;
-    }
-
-    const tags = parseBugHashtags(description);
-    const firstLine = description.split('\n')[0].trim();
-    const title = firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
-    const promptMarkdown = `${description}\n\n---\n\nReported via /bug from project chat`;
-
-    this.jobService
-      .createJob({
-        title,
-        agent: 'claude',
-        watchPath,
-        promptMarkdown,
-        targetState: TaskState.Backlog,
-        taskType: 'bug',
-        tags: tags.length > 0 ? tags : undefined
-      })
-      .subscribe({
-        next: (resp) => {
-          const jobId = resp.id;
-          const eventId = `bug-ok:${jobId}`;
-          this.bugEventTargets.set(eventId, { jobId, watchPath });
-          const tagSuffix = tags.length > 0 ? `\n\nTags: ${tags.map((t) => '`' + t + '`').join(' ')}` : '';
-          this.appendBugEvent({
-            id: eventId,
-            kind: 'task',
-            timestamp: new Date().toISOString(),
-            summary: `Bug filed in 0-backlog: ${title}`,
-            detail:
-              `**Lane:** \`0-backlog\`  \n` +
-              `**Task type:** \`bug\`  \n` +
-              `**Job ID:** \`${jobId}\`${tagSuffix}\n\n` +
-              `The new task is in triage. Open the detail panel to refine the prompt before promoting it to \`2-ready\`.`,
-            actionLabel: 'Open task'
-          });
-          // Refresh the kanban so the new card surfaces in the backlog
-          // lane without waiting for the next poll tick.
-          this.jobService.refresh(true);
-        },
-        error: (err) => {
-          const message =
-            err?.error?.error || (typeof err?.error === 'string' ? err.error : null) || err?.message || 'Failed to file bug';
-          this.appendBugEvent({
-            id: `bug-err:${Date.now()}`,
-            kind: 'task',
-            timestamp: new Date().toISOString(),
-            severity: 'error',
-            summary: `Bug not filed: ${title || '(empty title)'}`,
-            detail: `**Error:** ${message}`
-          });
-        }
-      });
+    });
   }
 
   private appendBugEvent(ev: ChatEvent): void {
@@ -978,15 +894,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   hasChatEventAction(eventId: string): boolean {
     return this.bugEventTargets.has(eventId);
-  }
-
-  private uploadOne(projectName: string, file: File): Promise<{ relativePath: string; url: string }> {
-    return new Promise((resolve, reject) => {
-      this.jobService.uploadOrchestratorChatAttachment(projectName, file).subscribe({
-        next: (resp) => resolve({ relativePath: resp.relativePath, url: resp.url }),
-        error: (err) => reject(new Error(err?.error?.error || err?.message || 'Upload failed'))
-      });
-    });
   }
 
 }

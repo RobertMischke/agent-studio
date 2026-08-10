@@ -15,6 +15,7 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
 {
     private readonly string _root;
     private readonly IConfiguration _config;
+    private readonly CentralOrchestratorChatPersistenceStub _central = new();
 
     public OrchestratorSessionRegistryTests()
     {
@@ -102,12 +103,17 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
             Assert.Equal("task~3APROJ-001~2FAGT-1930", doc.RootElement.GetProperty("encodedKey").GetString());
         }
 
+        _central.SeedContext("project:PROJ-001", "Project context");
+        _central.SeedContext("task:PROJ-001/AGT-1930", "Task context");
+
         using var list = await client.GetAsync("/api/orchestrator/sessions");
         list.EnsureSuccessStatusCode();
         using (var doc = JsonDocument.Parse(await list.Content.ReadAsStringAsync()))
         {
             var sessions = doc.RootElement.GetProperty("sessions").EnumerateArray().ToList();
-            Assert.Contains(sessions, s => s.GetProperty("contextKey").GetString() == "global");
+            Assert.Contains(sessions, s =>
+                s.GetProperty("contextKey").GetString() == "project:PROJ-001"
+                && s.GetProperty("summary").GetString() == "Project context");
             Assert.Contains(sessions, s => s.GetProperty("contextKey").GetString() == "task:PROJ-001/AGT-1930");
         }
 
@@ -216,6 +222,11 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
                             values[pair.Key] = pair.Value;
                     }
                     cfg.AddInMemoryCollection(values);
+                });
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IOrchestratorChatPersistence>();
+                    services.AddSingleton<IOrchestratorChatPersistence>(_central);
                 });
                 if (runner != null)
                 {

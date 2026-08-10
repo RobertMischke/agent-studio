@@ -26,12 +26,20 @@ export type {
   OrchestratorContextDigestSourceName,
   OrchestratorChatTurn,
   OrchestratorContextReceipt,
+  OrchestratorContextBudgetReceipt,
+  OrchestratorContextSourceReceipt,
+  OrchestratorConversationScope,
+  OrchestratorActiveSurface,
+  OrchestratorContextReference,
+  OrchestratorContextBudget,
+  OrchestratorContextEnvelope,
   OrchestratorChatAttachment,
   OrchestratorChatResponse,
   ChatExecutionContext,
   ChatNavigationContext,
 } from './models/orchestrator.model';
 export { buildChatNavigationContext } from './chat-navigation-context';
+export { buildOrchestratorContextEnvelope } from './orchestrator-context-envelope';
 export {
   buildComposerLocationContext,
   composerLocationLabel,
