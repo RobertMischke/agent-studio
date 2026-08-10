@@ -215,6 +215,10 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-baseline-comparison-required",
                     "Update this Review Executor to one that advertises baseline-comparison support."));
+            if (!executor.Capabilities.Contains(Contract.ReviewCapabilities.DependencyPreparation))
+                return Results.Conflict(new Contract.ApiError(
+                    "review-dependency-preparation-required",
+                    "Update this Review Executor to one that advertises dependency-preparation support."));
             // A drained capability pauses this executor rather than feeding it
             // attempts it just reported itself unable to materialize. The pause
             // lifts on cooldown expiry or on the next full registration (a
@@ -367,6 +371,19 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-subject-mismatch",
                     "Review workspace does not identify the immutable ReviewSubject."));
+            }
+
+            if (Contract.ReviewToolchainFailurePolicy.IsUnavailable(
+                    request.Commands,
+                    request.Artifacts))
+            {
+                request = request with
+                {
+                    Outcome = "ReviewInfra",
+                    FailureClassification = "ToolUnavailable",
+                    Summary = request.Summary
+                              ?? "A verification command could not use its declared toolchain.",
+                };
             }
 
             if (!TryOutcome(request.Outcome, out var outcome))
@@ -800,7 +817,7 @@ public static class V1ReviewPlaneEndpoints
             settings.Get(task.ProjectName).IntegrationBranch,
             RemoteProjectRepositoryResolver.ReadRepositoryDefaultBranch(project));
 
-    private static Contract.ReviewPlanDto FallbackPlan(
+    internal static Contract.ReviewPlanDto FallbackPlan(
         string? repositoryPath,
         string? projectName,
         AgentStudio.Projects.ProjectSettingsService settings,
@@ -809,7 +826,31 @@ public static class V1ReviewPlaneEndpoints
         var profile = string.IsNullOrWhiteSpace(projectName)
             ? null
             : settings.Get(projectName).BuildProfile;
+        return FallbackPlan(repositoryPath, profile, integrationRef);
+    }
+
+    internal static Contract.ReviewPlanDto FallbackPlan(
+        string? repositoryPath,
+        BuildProfile? profile,
+        string? integrationRef)
+    {
         var verify = VerifyCommandPlanner.Plan(repositoryPath ?? string.Empty, profile);
+        var preparation = GatePreparationPlanner.Plan(
+                repositoryPath ?? string.Empty,
+                profile,
+                verify.Commands)
+            .Select((command, index) => new Contract.ReviewPreparationCommandDto(
+                $"prepare-{index + 1}",
+                "bash",
+                ["-lc", command.Command],
+                command.WorkingSubdir,
+                TimeoutSeconds: 7200,
+                command.DependencyScopes
+                    .Select(scope => new Contract.ReviewDependencyScopeDto(
+                        scope.WorkingSubdir,
+                        scope.Lockfiles))
+                    .ToArray()))
+            .ToArray();
         var commands = verify.Commands
             .Select((command, index) =>
             {
@@ -842,7 +883,9 @@ public static class V1ReviewPlaneEndpoints
             commands.Select(command => command.Aspect)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
-            IntegrationRef: integrationRef);
+            IntegrationRef: integrationRef,
+            Preparation: preparation,
+            PreserveGlobs: profile?.PreserveGlobs);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using AgentStudio.Git;
 using AgentStudio.Runner;
+using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Pipeline;
 
@@ -922,12 +923,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     return new DependencyPreparationDecision(
                         scope,
                         installRoot,
-                        DepsState.Evaluate(installRoot, scope.Lockfiles));
+                        DependencyPreparationState.Evaluate(
+                            installRoot,
+                            new ReviewDependencyScopeDto(
+                                scope.WorkingSubdir,
+                                scope.Lockfiles)));
                 })
                 .ToArray();
             var installNeeded = decisions.Length == 0
-                || decisions.Any(item => item.Decision.InstallNeeded
-                    || string.Equals(item.Decision.Reason, "no-lockfile", StringComparison.Ordinal));
+                || decisions.Any(item => item.Decision.State != "hit");
             if (!installNeeded)
             {
                 foreach (var item in decisions)
@@ -977,7 +981,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             foreach (var item in decisions)
             {
                 if (!string.IsNullOrWhiteSpace(item.Decision.LockHash))
-                    DepsState.Stamp(item.InstallRoot, item.Decision.LockHash);
+                    DependencyPreparationState.Stamp(item.InstallRoot, item.Decision.LockHash);
                 dependencyCache.Add(ToCacheEvidence(item, installRan: true));
                 output.AppendLine(
                     $"# dependency-cache miss scope={DisplayScope(item.Scope.WorkingSubdir)} " +
@@ -1067,14 +1071,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private sealed record DependencyPreparationDecision(
         GateDependencyScope Scope,
         string InstallRoot,
-        DepsEnsureDecision Decision);
+        ReviewDependencyCacheEvidenceDto Decision);
 
     private static BuildTestGateDependencyCacheEvidence ToCacheEvidence(
         DependencyPreparationDecision item,
         bool installRan)
         => new(
             DisplayScope(item.Scope.WorkingSubdir),
-            item.Decision.InstallNeeded || item.Decision.Reason == "no-lockfile" ? "miss" : "hit",
+            item.Decision.State,
             item.Decision.Reason,
             item.Decision.LockHash,
             item.Decision.Lockfiles,

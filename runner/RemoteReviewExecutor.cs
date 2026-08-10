@@ -248,8 +248,8 @@ public sealed class RemoteReviewExecutor
             slot,
             workspace,
             evidence,
-            failureClassification: null,
-            ExecutionSummary(evidence),
+            result.FailureClassification,
+            result.Summary ?? ExecutionSummary(evidence),
             ct);
     }
 
@@ -499,6 +499,7 @@ public sealed class RemoteReviewExecutor
         {
             "SnapshotUnavailable" or "RepositoryMismatch" or "ShaMismatch"
                 => CapabilityProtocol.RepositoryAccess,
+            "PreparationFailed" => ReviewCapabilities.DependencyPreparation,
             "ToolUnavailable" => ReviewCapabilities.SemanticReview,
             "VisionUnavailable" => CapabilityProtocol.Vision,
             "DiskFull" => CapabilityProtocol.Disk,

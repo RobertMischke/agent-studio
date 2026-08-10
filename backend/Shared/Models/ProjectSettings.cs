@@ -888,7 +888,7 @@ public record BuildProfile
     /// Lockfile paths (worktree-relative, e.g. <c>["package-lock.json",
     /// "frontend/package-lock.json"]</c>) whose content hash decides whether a
     /// recycled worktree must re-install. Feeds the deps-ensure pre-step
-    /// (<see cref="AgentStudio.Runner.DepsState"/>).
+    /// (<see cref="AgentStudio.TaskServer.Contracts.DependencyPreparationState"/>).
     /// </summary>
     public IReadOnlyList<string>? Lockfiles { get; init; }
 

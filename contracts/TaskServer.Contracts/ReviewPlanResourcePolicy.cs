@@ -25,7 +25,33 @@ public static partial class ReviewPlanResourcePolicy
             changed |= !ReferenceEquals(limited, command);
             return limited;
         }).ToArray();
-        return changed ? plan with { Commands = commands } : plan;
+        var preparation = (plan.Preparation ?? []).Select(command =>
+        {
+            var limited = Apply(command, dotNetMaxCpuCount);
+            changed |= !ReferenceEquals(limited, command);
+            return limited;
+        }).ToArray();
+        return changed
+            ? plan with { Commands = commands, Preparation = preparation }
+            : plan;
+    }
+
+    private static ReviewPreparationCommandDto Apply(
+        ReviewPreparationCommandDto command,
+        int maxCpuCount)
+    {
+        if (!IsShell(command.FileName)) return command;
+        var arguments = command.Arguments.ToArray();
+        var changed = false;
+        for (var index = 0; index + 1 < arguments.Length; index++)
+        {
+            if (arguments[index] is not ("-c" or "-lc")) continue;
+            var limited = LimitShellCommand(arguments[index + 1], maxCpuCount);
+            if (string.Equals(limited, arguments[index + 1], StringComparison.Ordinal)) continue;
+            arguments[index + 1] = limited;
+            changed = true;
+        }
+        return changed ? command with { Arguments = arguments } : command;
     }
 
     private static ReviewCommandDto Apply(ReviewCommandDto command, int maxCpuCount)
