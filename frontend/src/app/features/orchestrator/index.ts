@@ -4,6 +4,7 @@ export { GlobalOrchestratorCardComponent } from './components/global-orchestrato
 export { LoadDistributionComponent } from './components/load-distribution/load-distribution.component';
 export { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 export { OrchestratorContextHeaderComponent } from './components/orchestrator-context-header/orchestrator-context-header.component';
+export { OrchestratorContextReceiptComponent } from './components/orchestrator-context-receipt/orchestrator-context-receipt.component';
 export { ChatSwitcherRailComponent } from './components/chat-switcher-rail/chat-switcher-rail.component';
 export { OrchestratorProjectPickerComponent } from './components/orchestrator-project-picker/orchestrator-project-picker.component';
 export { OrchestratorFeedStore } from './state/orchestrator-feed.store';
@@ -40,6 +41,7 @@ export type {
 } from './models/orchestrator.model';
 export { buildChatNavigationContext } from './chat-navigation-context';
 export { buildOrchestratorContextEnvelope } from './orchestrator-context-envelope';
+export { buildOrchestratorConversationEvents } from './components/orchestrator-side-sheet/orchestrator-side-sheet.util';
 export {
   buildComposerLocationContext,
   composerLocationLabel,
