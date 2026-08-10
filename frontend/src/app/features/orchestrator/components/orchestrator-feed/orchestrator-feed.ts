@@ -67,7 +67,7 @@ export class OrchestratorFeedComponent {
   ];
 
   readonly projects = computed(() => [...new Set(this.entries().map(entry => entry.project || this.projectName()).filter(Boolean))].sort());
-  readonly reversed = computed(() => [...this.entries()].sort((a, b) => b.ts.localeCompare(a.ts)));
+  readonly reversed = computed(() => [...this.entries()].sort((a, b) => newestFirst(a.ts, b.ts)));
   readonly projectEntries = computed(() => {
     const projects = this.projectFilter();
     return this.reversed().filter(entry => projects.size === 0 || projects.has(entry.project || this.projectName()));
@@ -160,7 +160,7 @@ export class OrchestratorFeedComponent {
     this.historyWindow.reset(this.filterScope(next, this.kindFilter()));
     this.projectFilter.set(next);
     if (project === 'all') this.boardFilters.clearProjectScope();
-    else this.boardFilters.setSoleProject(project);
+    else this.boardFilters.setExplicitSoleProject(project);
     this.selectedEntry.set(this.visibleEntries()[0] ?? null);
   }
 
@@ -273,4 +273,13 @@ function readProjectFiltersFromHash(hash: string): string[] {
     .split(',')
     .map(project => project.trim())
     .filter(Boolean);
+}
+
+function newestFirst(left: string, right: string): number {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs !== rightMs) {
+    return rightMs - leftMs;
+  }
+  return right.localeCompare(left);
 }

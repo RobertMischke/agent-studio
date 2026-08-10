@@ -139,6 +139,18 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     expect(root.querySelector('[data-testid="orchestrator-feed-day"]')?.textContent).not.toContain('Agent Studio');
   });
 
+  it('orders timestamps by instant when entries carry different UTC offsets', async () => {
+    const { fixture } = await setup([
+      { ...decisionEntry, ts: '2026-05-14T11:00:00+02:00', summary: 'Older offset event', project: 'Agent Studio' },
+      { ...decisionEntry, ts: '2026-05-14T10:00:00Z', summary: 'Newer UTC event', project: 'Runbook' },
+    ]);
+
+    expect(fixture.componentInstance.visibleEntries().map(entry => entry.summary)).toEqual([
+      'Newer UTC event',
+      'Older offset event',
+    ]);
+  });
+
   it('honours a shared multi-project URL filter and writes chip filtering through the same contract', async () => {
     const { fixture } = await setup([
       { ...decisionEntry, project: 'Agent Studio' },
