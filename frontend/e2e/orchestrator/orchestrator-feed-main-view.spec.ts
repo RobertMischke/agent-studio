@@ -11,7 +11,7 @@ const EMPTY_GROUPED = {
   humanReview: [], escalated: [], completed: [], archive: [],
 };
 
-type FeedEntry = {
+interface FeedEntry {
   ts: string;
   kind: 'alert' | 'decision' | 'action' | 'observation' | 'intervention';
   topic: string;
@@ -28,31 +28,54 @@ type FeedEntry = {
     cacheReadTokens: number;
     cacheCreationTokens: number;
   };
-};
+}
 
 function buildEntries(): FeedEntry[] {
   const now = Date.now();
-  return Array.from({ length: 500 }, (_, index) => ({
-    ts: new Date(now - index * 60_000).toISOString(),
-    kind: index < 3 ? 'alert' : index % 5 === 0 ? 'decision' : 'action',
-    topic: index < 3 ? 'pipeline-health' : index % 5 === 0 ? 'route/decision' : 'runner/signal',
-    summary: index < 3
-      ? `Fresh alert ${index + 1} needs operator attention`
-      : `Workspace event ${String(index + 1).padStart(3, '0')} completed without intervention`,
-    reasoning: index % 5 === 0 ? 'Recorded evidence cleared the configured correctness floor.' : null,
-    project: PROJECTS[index % PROJECTS.length],
-    watchPath: WATCH_PATH,
-    jobId: `AGT-${2440 + index}`,
-    tokenUsage: {
-      model: 'gpt-5.6-terra',
-      thinkingLevel: 'medium',
-      inputTokens: 1200 + index,
-      outputTokens: 240,
-      cacheReadTokens: 4000,
-      cacheCreationTokens: 0,
-    },
-  }));
+  const recurringKinds: FeedEntry['kind'][] = ['decision', 'action', 'observation', 'intervention'];
+  return Array.from({ length: 500 }, (_, index) => {
+    const kind = index < 3 ? 'alert' : recurringKinds[index % recurringKinds.length];
+    return {
+      ts: new Date(now - index * 60_000).toISOString(),
+      kind,
+      topic: index < 3 ? 'pipeline-health' : kind === 'decision' ? 'route/decision' : `watcher/${kind}`,
+      summary: index < 3
+        ? `Fresh alert ${index + 1} needs operator attention`
+        : `Workspace event ${String(index + 1).padStart(3, '0')} completed without intervention`,
+      reasoning: kind === 'decision' ? 'Recorded evidence cleared the configured correctness floor.' : null,
+      project: PROJECTS[index % PROJECTS.length],
+      watchPath: WATCH_PATH,
+      jobId: `AGT-${2440 + index}`,
+      tokenUsage: {
+        model: 'gpt-5.6-terra',
+        thinkingLevel: 'medium',
+        inputTokens: 1200 + index,
+        outputTokens: 240,
+        cacheReadTokens: 4000,
+        cacheCreationTokens: 0,
+      },
+    };
+  });
 }
+
+const REGISTRY_PROJECTS = PROJECTS.map((displayName, index) => ({
+  sourceType: 'local-folder',
+  id: `project-${index + 1}`,
+  displayName,
+  shortCode: ['AGT', 'RUN', 'TSK'][index],
+  workspaceId: 'workspace-1',
+  color: null,
+  cliDefault: null,
+  modelDefault: null,
+  sortOrder: index,
+  storageLocation: `${WATCH_PATH}/${index}`,
+  repositoryPath: null,
+  rootPath: `${WATCH_PATH}/${index}`,
+  repositoryUrl: null,
+  urls: [],
+  archived: false,
+  createdAt: '2026-07-30T07:00:00Z',
+}));
 
 function evidenceDir(testInfo: TestInfo): string {
   const root = process.env['JOB_RESULTS_DIR']?.trim()
@@ -119,7 +142,14 @@ async function mockStudio(page: Page, currentEntries: () => readonly FeedEntry[]
     if (url.pathname === '/api/tasks') return json([]);
     if (url.pathname === '/api/runner/status') return json({ projects: {} });
     if (url.pathname === '/api/runner/pickup-gates') return json({ projects: {} });
-    if (url.pathname === '/api/workspaces' || url.pathname === '/api/projects') return json([]);
+    if (url.pathname === '/api/workspaces') {
+      return json([{
+        id: 'workspace-1', displayName: 'Workspace', sortOrder: 0, isDefault: true,
+        color: null, createdAt: '2026-07-30T07:00:00Z', projects: REGISTRY_PROJECTS,
+      }]);
+    }
+    if (url.pathname === '/api/projects') return json(REGISTRY_PROJECTS);
+    if (/^\/api\/bus\/[^/]+\/messages$/.test(url.pathname)) return json([]);
     if (
       url.pathname === '/api/tags'
       || url.pathname === '/api/clients'
@@ -186,7 +216,7 @@ async function mockStudio(page: Page, currentEntries: () => readonly FeedEntry[]
 }
 
 test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live stability, and responsive themes', async ({ page }, testInfo) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   let entries = buildEntries();
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -199,10 +229,11 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   await page.addInitScript(() => {
     localStorage.setItem('atp.orchestrator-feed.alerts-seen-at', '2026-01-01T00:00:00Z');
     localStorage.removeItem('atp.studio.tabs.v1');
+    localStorage.setItem('activeProjects', '[]');
   });
   await mockStudio(page, () => entries);
   await page.setViewportSize({ width: 1440, height: 960 });
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await dismissDevErrorDialog(page);
 
   const activityIcon = page.getByTestId('studio-ab-activity');
@@ -217,8 +248,56 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
 
   const renderedEntries = page.getByTestId('orchestrator-feed-entry');
   await expect(renderedEntries).toHaveCount(100);
+  await expect(page.getByTestId('feed-kind-all')).toHaveClass(/orch-feed__filter--active/);
+  await expect(page.getByTestId('orchestrator-feed')).toContainText('500 events · newest first');
   await expect(page.getByTestId('orchestrator-feed-load-older')).toContainText('100 older events');
   await expect(page.getByTestId('orchestrator-entry-task').first()).toHaveAttribute('aria-label', /Open task AGT-/);
+
+  const firstProjects = await renderedEntries.evaluateAll(rows =>
+    rows.slice(0, 6).map(row => row.getAttribute('data-project')),
+  );
+  expect(firstProjects).toEqual(['Agent Studio', 'Runbook', 'Taskboard', 'Agent Studio', 'Runbook', 'Taskboard']);
+  const firstTimes = await renderedEntries.locator('time').evaluateAll(times =>
+    times.slice(0, 6).map(time => Date.parse(time.getAttribute('datetime') || '')),
+  );
+  expect(firstTimes).toEqual([...firstTimes].sort((a, b) => b - a));
+  await expect(page.getByTestId('orchestrator-entry-project').nth(0)).toHaveText('AGT');
+  await expect(page.getByTestId('orchestrator-entry-project').nth(1)).toHaveText('RUN');
+  await expect(page.getByTestId('orchestrator-entry-project').nth(2)).toHaveText('TSK');
+  await expect(page.getByTestId('orchestrator-feed-day').first()).not.toContainText(/Agent Studio|Runbook|Taskboard/);
+
+  const eventKinds: FeedEntry['kind'][] = ['alert', 'decision', 'action', 'observation', 'intervention'];
+  const eventBoxes = await Promise.all(eventKinds.map(kind =>
+    page.locator(`[data-testid="orchestrator-feed-entry"][data-entry-kind="${kind}"]`).first().boundingBox(),
+  ));
+  expect(eventBoxes.every(Boolean)).toBe(true);
+  const entryLeft = eventBoxes[0]!.x;
+  const entryRight = eventBoxes[0]!.x + eventBoxes[0]!.width;
+  for (const box of eventBoxes.slice(1)) {
+    expect(Math.abs(box!.x - entryLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs((box!.x + box!.width) - entryRight)).toBeLessThanOrEqual(1);
+  }
+
+  const globalStatus = page.getByTestId('global-orchestrator-status');
+  await expect(globalStatus).toContainText('Scope All projects');
+  await expect(globalStatus).toContainText('Model gpt-5.6-terra');
+  await expect(globalStatus).toContainText('claude -r feed-main-session');
+  await expect(page.getByTestId('global-orchestrator-card')).not.toContainText('Monitoring all projects');
+  expect((await globalStatus.boundingBox())?.height).toBeLessThanOrEqual(40);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
+  await page.getByTestId('global-orchestrator-command').click();
+  await expect(page.getByTestId('global-orchestrator-command')).toContainText('✓ Copied');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('claude -r feed-main-session');
+  await page.getByTestId('global-orchestrator-toggle').click();
+  await expect(page.getByTestId('global-orchestrator-details')).toContainText('120,000 / 18,000');
+  await page.getByTestId('global-orchestrator-toggle').click();
+
+  await page.getByTestId('orchestrator-entry-project').first().click();
+  await expect(renderedEntries).toHaveCount(100);
+  expect(await renderedEntries.evaluateAll(rows => new Set(rows.map(row => row.getAttribute('data-project'))).size)).toBe(1);
+  expect(decodeURIComponent(new URL(page.url()).hash)).toContain('projects:Agent Studio');
+  await page.getByTestId('feed-project-all').click();
+  await expect(page).toHaveURL(/#\/feed$/);
 
   const [filters, stream, detail] = await Promise.all([
     page.getByTestId('orchestrator-feed-filters').boundingBox(),
@@ -240,11 +319,13 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   await expect(page.getByTestId('orchestrator-feed-detail').getByRole('heading', { level: 3 }))
     .toHaveText(selectedSummary ?? '');
 
+  await page.getByTestId('orchestrator-feed-stream').evaluate(element => { element.scrollTop = 0; });
+
   const output = evidenceDir(testInfo);
   for (const theme of ['light', 'dark'] as Theme[]) {
     await setTheme(page, theme);
     await page.screenshot({
-      path: join(output, `feed-main-wide-${theme}.png`),
+      path: join(output, `activity-chronology-after-wide-${theme}--mocked.png`),
       fullPage: false,
     });
   }
@@ -256,15 +337,23 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
     await setTheme(page, theme);
     await expect(page.getByTestId('orchestrator-feed')).toBeVisible();
     await page.screenshot({
-      path: join(output, `feed-main-narrow-${theme}.png`),
+      path: join(output, `activity-chronology-after-narrow-${theme}--mocked.png`),
       fullPage: false,
     });
   }
 
-  await page.reload();
+  await page.goto('/#/feed&filters=projects%3ARunbook', { waitUntil: 'domcontentloaded' });
+  // A shared hash URL is an entry contract. Reload to model opening it in a
+  // fresh tab instead of a same-document hash change in the existing SPA.
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await dismissDevErrorDialog(page);
-  await expect(page).toHaveURL(/#\/feed$/);
+  await expect(page.getByTestId('orchestrator-feed-entry').first()).toHaveAttribute('data-project', 'Runbook');
+  await expect(page.getByTestId('feed-kind-all')).toHaveClass(/orch-feed__filter--active/);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await dismissDevErrorDialog(page);
+  await expect(page).toHaveURL(/#\/feed&filters=projects%3ARunbook$/);
   await expect(page.getByTestId('orchestrator-feed')).toHaveAttribute('data-mode', 'embedded');
+  await expect(page.getByTestId('orchestrator-feed-entry').first()).toHaveAttribute('data-project', 'Runbook');
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });

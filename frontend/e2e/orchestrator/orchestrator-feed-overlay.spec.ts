@@ -92,6 +92,22 @@ const EMPTY_GROUPED = {
 };
 
 async function mockBackend(page: Page): Promise<void> {
+  await page.route('**/update/status', route => route.fulfill({
+    json: { phase: 'idle', isRunning: false, behindBy: 0 },
+  }));
+  await page.route('**/hubs/jobs/negotiate**', route => route.fulfill({
+    json: {
+      connectionId: 'orchestrator-feed-overlay-e2e',
+      connectionToken: 'orchestrator-feed-overlay-e2e',
+      negotiateVersion: 1,
+      availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+    },
+  }));
+  await page.routeWebSocket('**/hubs/jobs**', socket => {
+    socket.onMessage(message => {
+      if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+    });
+  });
   // Broad fallback FIRST so it has the lowest precedence; specific routes
   // registered afterwards win. Keeps a backend-less `ng serve` from spraying
   // proxy ECONNREFUSED errors that would pollute the screenshot. Anything
@@ -110,6 +126,13 @@ async function mockBackend(page: Page): Promise<void> {
   );
   await page.route('**/api/tasks/archive**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0 }) }),
+  );
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
   );
   await page.route('**/api/cli/usage**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }),
@@ -149,6 +172,18 @@ async function mockBackend(page: Page): Promise<void> {
         { name: 'Agent Task Processor', path: 'C:/Projects/agent-taskboard', rootPath: 'C:/Projects/agent-taskboard' },
       ]),
     }),
+  );
+  await page.route('**/api/workspaces', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route('**/api/projects', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route('**/api/bus/*/messages**', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route('**/api/v1/management/remote-hosts', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
 
   // StatusBar.runningCount does `Object.values(status.projects)`, so the
@@ -194,41 +229,39 @@ const RESULTS_DIR = process.env.JOB_RESULTS_DIR
   ? join(process.env.JOB_RESULTS_DIR, 'orch-feed-overlay')
   : join(process.cwd(), 'test-results', 'orch-feed-overlay');
 
-test('global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes', async ({ page }) => {
+test('workspace orchestrator feed: Activity opens it, filters, layout + contrast hold on both themes', async ({ page }) => {
   mkdirSync(RESULTS_DIR, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 960 });
   await mockBackend(page);
 
-  // Requirement #4 — deep-link anchor. A cold navigation straight to the
-  // feed hash must reproduce the open overlay (bookmark / reload parity).
+  // Open the workspace Activity surface from its primary navigation entry.
   await page.goto('/');
   await dismissDevErrorDialog(page);
-  await page.getByTestId('status-bar-feed').click({ force: true });
+  await page.getByTestId('studio-ab-activity').click();
 
   const feed = page.getByTestId('orchestrator-feed');
   await expect(feed).toBeVisible({ timeout: 15_000 });
   await dismissDevErrorDialog(page);
   await expect(feed).toBeVisible();
 
-  // Requirement #3 — scope separation is explicit and labelled.
+  // Requirement #3: workspace and global-session scopes are explicit.
   const projectScope = page.getByTestId('orchestrator-feed-scope');
   const globalScope = page.getByTestId('global-orchestrator-scope');
   await expect(projectScope).toBeVisible();
   await expect(projectScope).toHaveText(/workspace scope/i);
   await expect(globalScope).toBeVisible();
-  await expect(globalScope).toHaveText(/global scope/i);
+  await expect(globalScope).toHaveText(/scope all projects/i);
 
   // Feed actually rendered the mocked entries.
-  const entries = page.locator('.orch-feed__entry');
+  const entries = page.getByTestId('orchestrator-feed-entry');
   await expect(entries.first()).toBeVisible();
-  // The project deep-link starts scoped to Runbook, and the quiet default
-  // hides observations until the operator explicitly asks for all activity.
-  expect(await entries.count()).toBe(3);
-  await feed.getByRole('button', { name: 'Runbook' }).click();
-  expect(await entries.count()).toBe(2);
+  // All activity is the entry default, in one workspace-wide stream.
+  expect(await entries.count()).toBe(4);
+  await page.getByTestId('orchestrator-feed-filters').getByRole('button', { name: 'Runbook', exact: true }).click();
+  await expect(entries).toHaveCount(3);
   await page.getByTestId('feed-project-all').click();
   await page.getByTestId('feed-kind-all').click();
-  expect(await entries.count()).toBe(LOG_ENTRIES.length);
+  await expect(entries).toHaveCount(LOG_ENTRIES.length);
 
   // Requirement #1 — three-pane layout lays out side by side (non-zero,
   // left-to-right) at a wide viewport, not collapsed/overlapping.
@@ -256,10 +289,10 @@ test('global orchestrator feed: status bar opens it, filters, layout + contrast 
       ['.orch-feed__title', 0, 4.5],
       ['.orch-feed__sub', 0, 4.5],
       ['.orch-feed__refresh', 0, 4.5],
-      ['.orch-feed__summary', 0, 4.5],
+      ['[data-testid="orchestrator-entry-summary"]', 0, 4.5],
       ['[data-testid="orchestrator-feed-scope"]', 0, 3.0],
       ['[data-testid="global-orchestrator-scope"]', 0, 3.0],
-      ['.global-orch__voice', 0, 4.5],
+      ['[data-testid="global-orchestrator-status"]', 0, 4.5],
     ];
     for (const [selector, nth, min] of probes) {
       const { color, bg } = await sampleColours(page, selector, nth);
@@ -267,7 +300,7 @@ test('global orchestrator feed: status bar opens it, filters, layout + contrast 
       expect(ratio, `${theme} · ${selector} (${color} on ${bg})`).toBeGreaterThanOrEqual(min);
     }
 
-    await page.locator('.overlay__panel--orch-feed').screenshot({
+    await feed.screenshot({
       path: join(RESULTS_DIR, `orch-feed-${theme}--mocked.png`),
     });
   }
@@ -286,7 +319,7 @@ test('global orchestrator feed: status bar opens it, filters, layout + contrast 
   for (const theme of themes) {
     await setTheme(page, theme);
     await page.waitForTimeout(100);
-    await page.locator('.overlay__panel--orch-feed').screenshot({
+    await feed.screenshot({
       path: join(RESULTS_DIR, `load-distribution-${theme}--mocked.png`),
     });
   }

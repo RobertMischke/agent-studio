@@ -76,10 +76,19 @@ The workspace Activity Feed is the embedded `#/feed` main view and is opened
 by the Activity icon. Its 500-event backend snapshot is rendered through a
 bounded, variable-height history window based on the Activity scroll fix, so
 live prepends preserve the operator's reading position without FixedSize
-virtual-scroll assumptions. Only fresh `alert` events contribute to the icon
-badge. The older project-scoped modal remains a quick-access compatibility
-surface and shares the same live feed store. Its bounded panes use Deck-Panel
-v1, and alert treatment follows the AGT-2410 acute-only status contract.
+virtual-scroll assumptions. The entry default is all projects and all event
+types, newest first. Day separators may segment the chronology, but projects
+never form sections: every event carries the shared project-identity dot and
+registry short code, and its project chip writes the existing
+`filters=projects:...` URL contract. Explicit shared URL filters remain active.
+Only fresh `alert` events contribute to the icon badge. The global orchestrator
+occupies a flat, one-line status header with scope, model, boot time, and a
+copyable resume command; cumulative session details disclose below it. The
+older project-scoped modal remains a quick-access compatibility surface and
+shares the same live feed store. Alert treatment follows the AGT-2410
+acute-only status contract, and every event kind uses the same row-width grid
+so Watcher Problem and Decision projections can join the stream without a
+parallel surface.
 
 ## Key Code
 
