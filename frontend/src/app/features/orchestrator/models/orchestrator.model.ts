@@ -186,13 +186,24 @@ export interface OrchestratorActiveSurface {
   revision?: string | null;
   taskKey?: string | null;
   selection?: string[] | null;
+  projectId?: string | null;
+  repositoryId?: string | null;
+  path?: string | null;
 }
 
 export interface OrchestratorContextReference {
-  kind: 'task' | 'page' | 'repository-file' | 'commit';
+  kind: 'task' | 'page' | 'repository-file' | 'commit' | 'diff';
   reference: string;
   projectId?: string | null;
   revision?: string | null;
+  repositoryId?: string | null;
+  path?: string | null;
+  lineRanges?: OrchestratorContextLineRange[] | null;
+}
+
+export interface OrchestratorContextLineRange {
+  startLine: number;
+  endLine: number;
 }
 
 export interface OrchestratorContextBudget {

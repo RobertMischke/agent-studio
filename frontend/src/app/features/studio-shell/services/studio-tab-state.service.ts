@@ -315,6 +315,8 @@ export class StudioTabStateService {
       // studioTabKey. This is also the migration for persisted Backlog Triage
       // tabs from builds that still exposed that feature.
       const safeTabs = parsed.tabs.filter(t => {
+        if (t.kind === 'diff'
+          && (typeof t.projectName !== 'string' || t.projectName.trim().length === 0)) return false;
         try { return typeof studioTabKey(t) === 'string'; }
         catch { return false; }
       });
@@ -387,7 +389,7 @@ export class StudioTabStateService {
           key: tab.key,
         };
       case 'diff':
-        return { kind: 'diff', commitSha: tab.commitSha };
+        return { kind: 'diff', projectName: tab.projectName, commitSha: tab.commitSha };
       case 'activity':
         return { kind: 'activity', taskKey: tab.taskKey };
       case 'url-preview':

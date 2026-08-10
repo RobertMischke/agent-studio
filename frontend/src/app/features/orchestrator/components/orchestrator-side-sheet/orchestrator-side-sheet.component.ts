@@ -24,6 +24,7 @@ import type {
 } from '../../../../features/orchestrator';
 import {
   buildChatNavigationContext,
+  contextSourceId,
 } from '../../../../features/orchestrator';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
@@ -61,6 +62,7 @@ import { buildContextChipPresentation } from '../../composer-location-context';
 import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
 import { PlanStripComponent } from '../../../plan-strip';
 import { OrchestratorTaskPlanStore } from '../../state/orchestrator-task-plan.store';
+import { OrchestratorSurfaceContextService } from '../../../../services/orchestrator-surface-context.service';
 
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
@@ -99,6 +101,7 @@ import { OrchestratorTaskPlanStore } from '../../state/orchestrator-task-plan.st
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
   readonly composerModel = inject(OrchestratorComposerModelService);
+  private readonly surfaceContext = inject(OrchestratorSurfaceContextService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
   /** One-shot shell event for an explicit project entry from an empty editor. */
@@ -109,6 +112,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * CAC's `composerContext` input.
    */
   readonly composerContext = input<ComposerLocationContext | null>(null);
+  readonly currentContextReference = computed(() => {
+    const reference = this.composerContext()?.contextReference ?? null;
+    if (reference?.kind !== 'diff') return reference;
+    const selection = this.surfaceContext.diffSelection();
+    if (!selection
+      || selection.projectName !== reference.projectId
+      || selection.commitSha !== reference.reference) return reference;
+    return { ...reference, path: selection.path, lineRanges: selection.lineRanges };
+  });
   /** Active repository page carried inside the existing project chat. */
   readonly pageContext = input<PageContext | null>(null);
 
@@ -338,6 +350,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly currentTabSource = computed<OrchestratorContextSourceOption | null>(() => {
     if (this.contextKind() !== 'project') return null;
     const project = this.effectiveProject();
+    const activeReference = this.currentContextReference();
+    if (project && activeReference?.projectId === project) {
+      const ranges = activeReference.lineRanges
+        ?.map(range => `L${range.startLine}-L${range.endLine}`)
+        .join(', ');
+      return {
+        id: contextSourceId(activeReference),
+        category: 'current',
+        label: activeReference.path ?? `${activeReference.kind} ${activeReference.reference.slice(0, 8)}`,
+        detail: [
+          activeReference.kind === 'diff' ? 'Diff' : 'File',
+          activeReference.reference.slice(0, 8),
+          ranges,
+        ].filter(Boolean).join(' · '),
+        estimateTokens: 900,
+        reference: activeReference,
+      };
+    }
     const page = this.pageContext();
     if (!project || !page || page.projectName !== project) return null;
     const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
@@ -824,6 +854,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobTitle: this.effectiveJobTitle(),
       jobState: this.effectiveJobState(),
       page: this.pageContext(),
+      source: this.currentContextReference(),
     };
     const contextIncludedSnapshot = navigationSnapshot.kind === 'task' || !this.contextDismissed();
     const text = event.text.trim();
@@ -929,6 +960,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         contextKey,
         contextPayload,
         explicitReferenceSnapshot,
+        navigationSnapshot.source,
         () => capturedAt,
       ),
       model: this.composerModel.effectiveSelection().model || null,
@@ -945,7 +977,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (contextStillVisible && !taskScope && !contextIncludedSnapshot) {
           this.contextDismissed.set(false);
         }
-        if (contextStillVisible) this.contextAttachments.set([]);
+        if (contextStillVisible) {
+          this.contextAttachments.set([]);
+          this.contextPicker()?.close();
+        }
         this.chatActivity.finish(contextKey);
         this.refreshContextSessions();
         // Pre-decode the persisted attachment URL(s) so the upcoming swap

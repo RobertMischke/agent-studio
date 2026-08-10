@@ -719,11 +719,15 @@ state.
   lifecycle visibility, usage, and short summaries. Project contexts are
   permanent; archived task contexts are retained with `hiddenAt` and omitted
   from the current list. Local orchestrator chat JSONL is migration input only.
-- Project chat reference chips carry stable task, page, repository-file, or
-  project-qualified commit ids only. The backend resolves them on the selected
-  execution checkout after route and project validation. The UI exposes the
-  resulting Task Server receipt through the Used context inspector instead of
-  trusting browser-supplied source bodies.
+- Git-rich chat context remains backend-owned. `repository-file`, `commit`, and
+  `diff` references carry project/repository identity and full immutable SHAs
+  where applicable. `GitService` resolves file text, commit metadata and stats,
+  changed paths, and bounded selected diff hunks. Traversal, out-of-root links,
+  missing commits, generated or binary sources, and oversize text are rejected
+  or disclosed in the source receipt before the Codex one-shot or remote chat
+  work item is invoked. Project chat reference chips also carry stable task and
+  page ids. The UI exposes the resulting Task Server receipt through the Used
+  context inspector instead of trusting browser-supplied source bodies.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this
