@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE,
+  ISOLATED_HTML_ANCHORS_READY_MESSAGE,
   ISOLATED_HTML_LINK_MESSAGE,
+  ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE,
+  ISOLATED_HTML_TRACK_ANCHORS_MESSAGE,
   WORKBENCH_DECISION_CHANGE_MESSAGE,
   WORKBENCH_DECISION_HYDRATE_MESSAGE,
   buildIsolatedHtmlSrcdoc,
@@ -16,6 +20,11 @@ describe('sandboxed HTML navigation', () => {
     expect(srcdoc).toContain(`type: '${ISOLATED_HTML_LINK_MESSAGE}'`);
     expect(srcdoc).toContain("href.charAt(0) === '#'");
     expect(srcdoc).toContain('parent.postMessage');
+    expect(srcdoc).toContain(ISOLATED_HTML_ANCHORS_READY_MESSAGE);
+    expect(srcdoc).toContain(ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE);
+    expect(srcdoc).toContain(ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE);
+    expect(srcdoc).toContain(ISOLATED_HTML_TRACK_ANCHORS_MESSAGE);
+    expect(srcdoc).toContain("reduceMotion ? 'auto' : 'smooth'");
   });
 
   it('adds the inert Workbench decision bridge only when the host requests it', () => {

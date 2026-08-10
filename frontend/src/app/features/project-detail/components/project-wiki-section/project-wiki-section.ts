@@ -57,7 +57,7 @@ import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.com
 import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
 import { WikiSourceBadgeComponent } from './wiki-source-badge/wiki-source-badge.component';
-import { WikiRelatedTasksComponent } from './wiki-related-tasks/wiki-related-tasks.component';
+import { WikiLinkedElementsComponent } from './wiki-linked-elements/wiki-linked-elements.component';
 import {
   WikiTreeRow,
   collectDocumentPaths,
@@ -86,9 +86,7 @@ import {
   WikiLinkedElement,
   extractWikiLinkedElements,
   resolveWikiPageTarget,
-  scrollToWikiAnchor,
   wikiLinkedElementKindLabel,
-  wikiLinkedElementTitle,
 } from './wiki-linked-element';
 import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
 import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
@@ -164,7 +162,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
     WikiMetaSectionComponent,
-    WikiRelatedTasksComponent,
+    WikiLinkedElementsComponent,
     WikiPageActionsComponent,
     WikiSearchResultsComponent,
     WikiSourceBadgeComponent,
@@ -312,6 +310,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly htmlFrames = viewChildren<ElementRef<HTMLIFrameElement>>('wikiHtmlFrame');
+  protected readonly wikiDocumentFrame = computed(() => this.htmlFrames()[0]?.nativeElement ?? null);
   private pendingOpenRestore: { rel: string; tab: WikiViewerTab } | null = null;
   private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
@@ -542,7 +541,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   });
   readonly linkedElementCount = computed(() => this.docLinks().length + this.linkedTaskReferences().length);
   protected readonly linkKindLabel = wikiLinkedElementKindLabel;
-  protected readonly linkedElementTitle = wikiLinkedElementTitle;
 
   /**
    * Compact drift grade for the open page, surfaced in the meta rail's toggle
@@ -1137,27 +1135,21 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.metaPanelState.setPanelCollapsed(collapsed);
   }
 
-  linkedElementHref(link: WikiLinkedElement): string {
+  readonly linkedElementHref = (link: WikiLinkedElement): string => {
     if (link.kind === 'external' || link.kind === 'anchor') return link.target;
     if (link.kind === 'task') return `#task:${link.taskReference ?? link.label}`;
     const rel = this.resolveLinkedWikiPage(link);
     return rel
       ? buildWikiRouteHash(this.routeProjectRef(), { kind: 'page', relPath: rel })
       : link.target;
-  }
+  };
 
-  openLinkedElement(event: MouseEvent, link: WikiLinkedElement): void {
-    if (link.kind === 'external') return;
-    event.preventDefault();
+  openLinkedElement(link: WikiLinkedElement): void {
     if (link.kind === 'task') {
       const reference = link.taskReference ?? link.label;
       const match = this.taskNavigation.markdownReferences()
         .find(item => item.label.toUpperCase() === reference.toUpperCase());
       this.taskNavigation.openTaskKey(match?.taskKey ?? reference);
-      return;
-    }
-    if (link.kind === 'anchor') {
-      scrollToWikiAnchor(this.host.nativeElement as HTMLElement, link.target);
       return;
     }
     const rel = this.resolveLinkedWikiPage(link);
