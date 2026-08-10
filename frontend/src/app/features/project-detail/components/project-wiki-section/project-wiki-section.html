@@ -620,29 +620,14 @@
                   toggleTestId="project-wiki-section-toggle-linked-elements"
                   bodyId="project-wiki-section-linked-elements">
                   <span meta-section-count>{{ linkedElementCount() }}</span>
-                  @if (linkedTaskReferences().length > 0) {
-                    <app-wiki-related-tasks [related]="linkedTaskReferences()" />
-                  }
-                  @if (docLinks().length > 0) {
-                    <ul class="pwiki__links">
-                      @for (link of docLinks(); track link.target + link.label) {
-                        <li>
-                          <a class="pwiki__linked-element"
-                             data-testid="project-wiki-linked-element"
-                             [href]="linkedElementHref(link)"
-                             [attr.title]="linkedElementTitle(link)"
-                             [attr.target]="link.kind === 'external' ? '_blank' : null"
-                             [attr.rel]="link.kind === 'external' ? 'noopener noreferrer' : null"
-                             (click)="openLinkedElement($event, link)">
-                            <span class="pwiki__link-kind">{{ linkKindLabel(link.kind) }}</span>
-                            <span class="pwiki__link-label">{{ link.label }}</span>
-                            <code>{{ link.target }}</code>
-                          </a>
-                        </li>
-                      }
-                    </ul>
-                  } @else if (linkedTaskReferences().length === 0) {
-                    <p class="pwiki__panel-empty">No page or task links detected.</p>
+                  @defer (when openedRel() !== null) {
+                    <app-wiki-linked-elements
+                      [documentKey]="openedRel() ?? ''"
+                      [frame]="wikiDocumentFrame()"
+                      [links]="docLinks()"
+                      [relatedTasks]="linkedTaskReferences()"
+                      [hrefFor]="linkedElementHref"
+                      (navigate)="openLinkedElement($event)" />
                   }
               </app-wiki-meta-section>
 

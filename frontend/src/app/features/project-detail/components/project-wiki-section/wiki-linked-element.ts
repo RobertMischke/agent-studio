@@ -77,19 +77,29 @@ export function wikiLinkedElementTitle(link: WikiLinkedElement): string {
   }
 }
 
-export function scrollToWikiAnchor(root: HTMLElement, target: string): void {
-  const rawId = target.replace(/^#/, '');
-  if (!rawId) return;
-  let id: string;
+export function wikiAnchorId(target: string): string | null {
+  const rawId = target.trim().replace(/^#/, '');
+  if (!rawId) return null;
   try {
-    id = decodeURIComponent(rawId);
+    return decodeURIComponent(rawId);
   } catch {
-    return;
+    return null;
   }
-  const escaped = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-    ? CSS.escape(id)
-    : id.replace(/["\\]/g, '\\$&');
-  root.querySelector<HTMLElement>(`#${escaped}`)?.scrollIntoView();
+}
+
+/** Find an id in the rendered page, including nested open ShadowRoots. */
+export function findWikiAnchor(root: ParentNode, target: string): HTMLElement | null {
+  const id = wikiAnchorId(target);
+  return id ? findElementById(root, id) : null;
+}
+
+export function scrollToWikiAnchor(root: ParentNode, target: string): boolean {
+  const anchor = findWikiAnchor(root, target);
+  if (!anchor) return false;
+  const reduceMotion = typeof globalThis.matchMedia === 'function'
+    && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  anchor.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  return true;
 }
 
 function linkKind(target: string): WikiLinkedElement['kind'] {
@@ -107,4 +117,16 @@ function taskReferenceFrom(label: string, target: string): string | null {
 function parentDir(rel: string): string {
   const index = rel.lastIndexOf('/');
   return index >= 0 ? rel.slice(0, index) : '';
+}
+
+function findElementById(root: ParentNode, id: string): HTMLElement | null {
+  const direct = Array.from(root.querySelectorAll<HTMLElement>('[id]'))
+    .find(element => element.id === id);
+  if (direct) return direct;
+  for (const element of Array.from(root.querySelectorAll<HTMLElement>('*'))) {
+    if (!element.shadowRoot) continue;
+    const nested = findElementById(element.shadowRoot, id);
+    if (nested) return nested;
+  }
+  return null;
 }

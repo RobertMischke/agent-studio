@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { vi } from 'vitest';
 import { of } from 'rxjs';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
@@ -11,7 +12,13 @@ import { WikiStarsService } from './wiki-stars.service';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { WIKI_LIVE_REFRESH_MS } from '../../services/wiki-live-refresh.service';
-import { ISOLATED_HTML_LINK_MESSAGE } from '../../../../services/sandboxed-html.util';
+import { WikiLinkedElementsComponent } from './wiki-linked-elements/wiki-linked-elements.component';
+import {
+  ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE,
+  ISOLATED_HTML_ANCHORS_READY_MESSAGE,
+  ISOLATED_HTML_LINK_MESSAGE,
+  ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE,
+} from '../../../../services/sandboxed-html.util';
 import type {
   ProjectStyleGuideCatalogue,
   WikiFileHistory,
@@ -1414,7 +1421,10 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
 
     http.expectOne('/api/projects/Demo/wiki/files/concepts/page.html')
-      .flush({ relPath: 'concepts/page.html', content: '<h1>Sandboxed</h1><a href="./overview.md">Overview</a><script>window.x=1</script>' });
+      .flush({
+        relPath: 'concepts/page.html',
+        content: '<nav><a href="#live">Live</a><a href="#missing">Missing</a></nav><h1 id="live">Sandboxed</h1><a href="./overview.md">Overview</a><script>window.x=1</script>',
+      });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/page.html').flush({
       relPath: 'concepts/page.html', model: null,
       metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
@@ -1429,6 +1439,40 @@ describe('ProjectWikiSectionComponent', () => {
     const srcdoc = frame!.getAttribute('srcdoc') ?? frame!.srcdoc;
     expect(srcdoc).toContain('Sandboxed');
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const linkedElements = fixture.debugElement.query(By.directive(WikiLinkedElementsComponent))
+      .componentInstance as WikiLinkedElementsComponent;
+    linkedElements.onWindowMessage({
+      source: frame!.contentWindow,
+      data: { type: ISOLATED_HTML_ANCHORS_READY_MESSAGE, anchors: ['live'] },
+    } as MessageEvent);
+    fixture.detectChanges();
+
+    const anchorLinks = [...el(fixture).querySelectorAll<HTMLAnchorElement>(
+      '[data-testid="project-wiki-linked-element"]',
+    )];
+    const live = anchorLinks.find(link => link.getAttribute('href') === '#live')!;
+    const missing = anchorLinks.find(link => link.getAttribute('href') === '#missing')!;
+    expect(live.getAttribute('data-anchor-state')).toBe('available');
+    expect(missing.getAttribute('data-anchor-state')).toBe('missing');
+    expect(missing.getAttribute('aria-disabled')).toBe('true');
+    expect(missing.textContent).toContain('Missing');
+
+    const postMessage = vi.spyOn(frame!.contentWindow!, 'postMessage');
+    live.click();
+    expect(postMessage).toHaveBeenCalledWith({
+      type: ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE,
+      id: 'live',
+    }, '*');
+    linkedElements.onWindowMessage({
+      source: frame!.contentWindow,
+      data: { type: ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE, id: 'live' },
+    } as MessageEvent);
+    fixture.detectChanges();
+    expect(live.getAttribute('data-anchor-state')).toBe('active');
+    expect(live.getAttribute('aria-current')).toBe('location');
 
     fixture.componentInstance.onHtmlFrameMessage({
       source: frame!.contentWindow,

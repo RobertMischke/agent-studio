@@ -1,0 +1,30 @@
+@if (relatedTasks().length > 0) {
+  <app-wiki-related-tasks [related]="relatedTasks()" />
+}
+@if (links().length > 0) {
+  <ul class="linked-elements">
+    @for (link of links(); track link.target + '\u0000' + link.label) {
+      <li>
+        <a class="linked-element"
+           data-testid="project-wiki-linked-element"
+           [href]="hrefFor()(link)"
+           [attr.title]="linkedElementTitle(link)"
+           [attr.target]="link.kind === 'external' ? '_blank' : null"
+           [attr.rel]="link.kind === 'external' ? 'noopener noreferrer' : null"
+           [attr.data-anchor-state]="linkedElementState(link)"
+           [attr.aria-current]="linkedElementState(link) === 'active' ? 'location' : null"
+           [attr.aria-disabled]="linkedElementState(link) === 'missing' ? 'true' : null"
+           (click)="openLinkedElement($event, link)">
+          <span class="linked-element__kind">{{ linkKindLabel(link.kind) }}</span>
+          <span class="linked-element__label">{{ link.label }}</span>
+          @if (linkedElementState(link) === 'missing') {
+            <span class="linked-element__status">Missing</span>
+          }
+          <code>{{ link.target }}</code>
+        </a>
+      </li>
+    }
+  </ul>
+} @else if (relatedTasks().length === 0) {
+  <p class="linked-elements__empty">No page or task links detected.</p>
+}

@@ -5,6 +5,10 @@ export const ISOLATED_HTML_CSP =
   "form-action 'none'; base-uri 'none'";
 
 export const ISOLATED_HTML_LINK_MESSAGE = 'agent-studio:isolated-html-link';
+export const ISOLATED_HTML_ANCHORS_READY_MESSAGE = 'agent-studio:isolated-html-anchors-ready';
+export const ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE = 'agent-studio:isolated-html-active-anchor';
+export const ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE = 'agent-studio:isolated-html-scroll-anchor';
+export const ISOLATED_HTML_TRACK_ANCHORS_MESSAGE = 'agent-studio:isolated-html-track-anchors';
 export const WORKBENCH_DECISION_READY_MESSAGE = 'agent-studio:workbench-decision-ready';
 export const WORKBENCH_DECISION_CHANGE_MESSAGE = 'agent-studio:workbench-decision-change';
 export const WORKBENCH_DECISION_HYDRATE_MESSAGE = 'agent-studio:workbench-decision-hydrate';
@@ -61,14 +65,26 @@ export function buildIsolatedHtmlSrcdoc(
     var href = a.getAttribute('href') || '';
     e.preventDefault();
     if (href.charAt(0) === '#') {
-      var el = document.getElementById(href.slice(1))
-        || document.querySelector('a[name="' + href.slice(1).replace(/"/g, '') + '"]');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      var id = href.slice(1);
+      try { id = decodeURIComponent(id); } catch (_) { return; }
+      var el = document.getElementById(id);
+      if (!el) {
+        var named = document.querySelectorAll('a[name]');
+        for (var i = 0; i < named.length; i += 1) {
+          if (named[i].getAttribute('name') === id) { el = named[i]; break; }
+        }
+      }
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (el) el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
       return;
     }
     parent.postMessage({ type: '${ISOLATED_HTML_LINK_MESSAGE}', href: href }, '*');
   }, true);`;
   wrapper.body.append(nav);
+
+  const anchorBridge = wrapper.createElement('script');
+  anchorBridge.textContent = isolatedHtmlAnchorBridgeScript();
+  wrapper.body.append(anchorBridge);
 
   if (options.workbenchDecisions) {
     const style = wrapper.createElement('style');
@@ -114,6 +130,71 @@ export function buildIsolatedHtmlSrcdoc(
   }
 
   return `<!doctype html>${wrapper.documentElement.outerHTML}`;
+}
+
+function isolatedHtmlAnchorBridgeScript(): string {
+  return `(function(){
+var tracked=[],pending=false;
+function anchorFor(id){return document.getElementById(id);}
+function inventory(){
+var ids=[],seen=Object.create(null);
+Array.prototype.forEach.call(document.querySelectorAll('[id]'),function(element){
+var id=element.id;
+if(!id||seen[id])return;
+seen[id]=true;
+ids.push(id);
+});
+return ids;
+}
+function publishInventory(){
+parent.postMessage({type:'${ISOLATED_HTML_ANCHORS_READY_MESSAGE}',anchors:inventory()},'*');
+}
+function activeId(){
+var active=null,edge=Math.max(32,Math.min(96,window.innerHeight*.16));
+for(var i=0;i<tracked.length;i+=1){
+var element=anchorFor(tracked[i]);
+if(!element)continue;
+if(element.getBoundingClientRect().top<=edge)active=tracked[i];
+else if(!active)return tracked[i];
+else break;
+}
+return active;
+}
+function publishActive(){
+pending=false;
+parent.postMessage({type:'${ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE}',id:activeId()},'*');
+}
+function scheduleActive(){
+if(pending)return;
+pending=true;
+requestAnimationFrame(publishActive);
+}
+window.addEventListener('scroll',scheduleActive,{passive:true});
+window.addEventListener('message',function(event){
+if(event.source!==parent)return;
+var message=event.data;
+if(!message||typeof message.type!=='string')return;
+if(message.type==='${ISOLATED_HTML_TRACK_ANCHORS_MESSAGE}'&&Array.isArray(message.ids)){
+tracked=message.ids.filter(function(id,index,ids){
+return typeof id==='string'&&id.length<=512&&ids.indexOf(id)===index;
+});
+scheduleActive();
+return;
+}
+if(message.type!=='${ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE}'||typeof message.id!=='string')return;
+var target=anchorFor(message.id);
+if(!target){publishInventory();return;}
+var reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var behavior=reduceMotion?'auto':'smooth';
+target.scrollIntoView({behavior:behavior,block:'start'});
+scheduleActive();
+if(behavior==='smooth')setTimeout(function(){
+if(Math.abs(target.getBoundingClientRect().top)>96)target.scrollIntoView({behavior:'auto',block:'start'});
+scheduleActive();
+},500);
+});
+publishInventory();
+})();`;
 }
 
 function workbenchDecisionBridgeScript(): string {

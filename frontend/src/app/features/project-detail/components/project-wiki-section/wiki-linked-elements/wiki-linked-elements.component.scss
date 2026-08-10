@@ -1,0 +1,106 @@
+:host {
+  display: block;
+}
+
+.linked-elements {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  padding: var(--studio-spacing-2);
+  list-style: none;
+}
+
+.linked-elements li {
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 70%, transparent);
+}
+
+.linked-elements li:last-child {
+  border-bottom: 0;
+}
+
+.linked-element {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--studio-spacing-1) var(--studio-spacing-2);
+  align-items: baseline;
+  padding: var(--studio-spacing-2);
+  border-radius: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.linked-element:hover .linked-element__label {
+  color: var(--studio-accent);
+  text-decoration: underline;
+}
+
+.linked-element:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: -2px;
+}
+
+.linked-element[data-anchor-state='active'] {
+  background: color-mix(in srgb, var(--studio-accent) 11%, transparent);
+}
+
+.linked-element[data-anchor-state='active'] .linked-element__label {
+  color: var(--studio-accent);
+  font-weight: 650;
+}
+
+.linked-element[data-anchor-state='missing'] {
+  background: color-mix(in srgb, var(--severity-high) 7%, transparent);
+  cursor: not-allowed;
+}
+
+.linked-element[data-anchor-state='missing'] .linked-element__label,
+.linked-element[data-anchor-state='missing'] code {
+  color: var(--studio-fg-muted);
+  text-decoration: line-through;
+}
+
+.linked-element__kind {
+  color: var(--studio-fg-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.linked-element__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--studio-fg);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked-element__status {
+  padding: 0 var(--studio-spacing-1);
+  border: 1px solid color-mix(in srgb, var(--severity-high) 45%, var(--studio-border));
+  border-radius: 999px;
+  color: var(--severity-high);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.linked-element code {
+  grid-column: 2 / -1;
+  min-width: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked-elements__empty {
+  margin: 0;
+  padding: var(--studio-spacing-3);
+  color: var(--studio-fg-muted);
+  font-size: 0.78rem;
+}
