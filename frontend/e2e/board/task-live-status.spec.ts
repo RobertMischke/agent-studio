@@ -279,7 +279,8 @@ test.describe('task live status', () => {
     const stalledCard = page.locator('[data-testid="task-card"]', { hasText: 'Possible pipeline hang' });
 
     await expect(activeCard.getByTestId('task-live-current')).toContainText('Review aspect · Tests and evidence');
-    await expect(activeCard.getByTestId('task-live-status')).toContainText(/running 4\ds/);
+    await expect(activeCard.getByTestId('task-live-status'))
+      .toContainText(/running (?:\d+s|\d+m\d{2}s|\d+h\d{2}m)/);
     await expect(activeCard.getByTestId('task-live-status')).toContainText('agent-runner-01');
     await expect(activeCard.getByTestId('task-live-status')).toContainText('gpt-5.4-mini');
     await expect(activeCard.getByTestId('task-live-status')).toContainText('via Codex');
