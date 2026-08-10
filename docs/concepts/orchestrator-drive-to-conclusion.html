@@ -1972,6 +1972,32 @@
             failure prevents push and leaves no temporary worktree mutation on the target repository.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-10</td>
+          <td><code>AGT-2591</code><br><span class="small">completed remote reviews accumulated as undelivered persisted slots</span></td>
+          <td>
+            A planned Review Executor restart recovered 27 persisted slots. Four completed reports replayed successfully,
+            19 returned legacy <code>503 task-not-found</code>, two returned <code>409 Superseded</code>, and two still had
+            live workers. The 21 rejected attempts had already produced durable results before the restart. The preceding
+            journal contained 25 one-shot report failures, mainly 60-second HTTP timeouts, with no same-process retry.
+          </td>
+          <td>
+            Report submission persisted <code>report-pending</code> after one failure, then let the active task finish as
+            faulted; persisted slots were only reattached at process startup. The report endpoint settled canonical
+            authority before its compatibility projection, but that projection searched only the live task snapshot.
+            Nineteen cards had since entered <span class="lane">7-archive</span>, so idempotent replay found the authority
+            record but falsely reported that the card was missing. Authority reads retained the same attempt and task IDs,
+            ruling out store rotation or an ID-schema migration.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> ambiguous and transient report failures now retry the same idempotent
+            terminal write with bounded backoff. Missing-task and superseded replies reach an explicit terminal
+            classification and local cleanup instead of permanent slot retention. Persisted-slot journal counters expose
+            pending count and oldest age. The compatibility lookup now includes archive while preserving the card's
+            terminal lane. The expected <code>awaiting-canonical-review-executor</code> deferral remains a separate
+            control-plane waiter; both paths meet only at canonical ReviewAttempt settlement.
+          </td>
+        </tr>
       </tbody>
     </table>
 

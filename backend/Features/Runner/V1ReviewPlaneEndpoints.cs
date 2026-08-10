@@ -391,7 +391,7 @@ public static class V1ReviewPlaneEndpoints
             if (task is null)
                 return Results.Json(
                     new Contract.ApiError("task-not-found", "Review task was not found in the monolith store."),
-                    statusCode: StatusCodes.Status503ServiceUnavailable);
+                    statusCode: StatusCodes.Status404NotFound);
 
             var receivedAt = settled.ReviewAttempt.Reports
                 .LastOrDefault(report => string.Equals(
@@ -1056,7 +1056,7 @@ public static class V1ReviewPlaneEndpoints
     }
 
     private static TaskInfo? FindTask(TaskScannerService scanner, string taskKey)
-        => scanner.ScanAllJobs().FirstOrDefault(task =>
+        => scanner.ScanAllJobsWithArchive().FirstOrDefault(task =>
             string.Equals(task.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(task.Key, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(task.Id, taskKey, StringComparison.OrdinalIgnoreCase));

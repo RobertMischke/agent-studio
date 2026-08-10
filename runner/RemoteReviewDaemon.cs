@@ -34,6 +34,20 @@ public sealed class RemoteReviewDaemon
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var telemetry = new HostTelemetrySampler();
         HostTelemetrySample? latestTelemetry = null;
+        var nextSlotHygieneLog = DateTime.MinValue;
+
+        void LogSlotHygiene(bool force = false)
+        {
+            var now = DateTime.UtcNow;
+            if (!force && now < nextSlotHygieneLog) return;
+            var hygiene = state.GetHygieneSnapshot(now);
+            _log(
+                $"review-slot-hygiene total={hygiene.Total} " +
+                $"reportPending={hygiene.ReportPending} " +
+                $"oldestReportPendingSeconds={(hygiene.OldestReportPendingAge?.TotalSeconds ?? 0):0} " +
+                $"terminalCleanupPending={hygiene.TerminalCleanupPending}");
+            nextSlotHygieneLog = now.AddMinutes(1);
+        }
 
         HostTelemetrySample? TakeTelemetry(bool force = false)
         {
@@ -94,6 +108,7 @@ public sealed class RemoteReviewDaemon
                 "load admission applies only to fresh slots");
         }
         idleWatchdog.RecordActiveSlots(active.Count);
+        LogSlotHygiene(force: true);
 
         var capabilityGeneration = DateTime.UtcNow.Ticks;
         await CapabilityAdvertisementRecovery.ExecuteAsync(
@@ -127,6 +142,7 @@ public sealed class RemoteReviewDaemon
         while (!shutdown.IsCancellationRequested)
         {
             idleWatchdog.RecordActiveSlots(active.Count);
+            LogSlotHygiene();
             for (var index = active.Count - 1; index >= 0; index--)
             {
                 if (!active[index].Run.IsCompleted) continue;
