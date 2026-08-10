@@ -1,10 +1,19 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { setTheme } from '../helpers/theme';
 
 const PROJECT_NAME = 'Wiki Meta Panel Fixture';
+const PROJECT_ID = 'PROJ-002';
 const REPOSITORY_PATH = '/tmp/wiki-meta-panel-fixture';
 const FIRST_PAGE = 'guide/one.md';
 const SECOND_PAGE = 'guide/two.md';
+const LAGEBILD_PAGE = 'operations/lagebild-2026-08/index.html';
+
+interface WikiMockOptions {
+  failedPage?: string;
+  extraHtml?: { relPath: string; title: string; content: string };
+}
 
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
@@ -14,11 +23,7 @@ function json(route: Route, body: unknown): Promise<void> {
   });
 }
 
-function slugFor(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-async function mockWiki(page: Page, projectName: string): Promise<{
+async function mockWiki(page: Page, projectName: string, options: WikiMockOptions = {}): Promise<{
   updateFirstPage: () => void;
 }> {
   const project = encodeURIComponent(projectName);
@@ -26,11 +31,61 @@ async function mockWiki(page: Page, projectName: string): Promise<{
     content: '# One\n\n[Second page](two.md)\n\n[AGT-2050](task:AGT-2050)',
     etag: '"wiki-page-v1"',
   };
+  let pendingPageUpdate = false;
+  // Broad fallback first. Later feature routes have priority in Playwright.
+  await page.route('**/api/**', route => json(route, []));
+  await page.route('**/api/tasks/grouped**', route => json(route, {
+    backlog: [],
+    preparation: [],
+    orchestratorPrep: [],
+    ready: [],
+    progress: [],
+    failedPickup: [],
+    codeNotComplete: [],
+    autoReview: [],
+    humanReview: [],
+    escalated: [],
+    review: [],
+    completed: [],
+    archive: [],
+  }));
+  await page.route('**/api/tasks/archive**', route => json(route, {
+    items: [], total: 0, offset: 0, limit: 50,
+  }));
+  await page.route('**/api/runner/status**', route => json(route, { projects: {} }));
+  await page.route('**/api/cli/quota**', route => json(route, {
+    at: '2026-08-10T00:00:00Z', ttlSeconds: 600, snapshots: [],
+  }));
+  await page.route('**/api/cli/usage**', route => json(route, {
+    at: '2026-08-10T00:00:00Z', sessions: [],
+  }));
   await page.route('**/api/watch-paths**', route => json(route, [{
     name: projectName,
     path: REPOSITORY_PATH,
     rootPath: REPOSITORY_PATH,
     repositoryPath: REPOSITORY_PATH,
+  }]));
+  await page.route('**/api/workspaces**', route => json(route, [{
+    id: 'WS-WIKI',
+    displayName: 'Wiki fixtures',
+    sortOrder: 0,
+    isDefault: true,
+    color: null,
+    createdAt: '2026-08-10T00:00:00Z',
+    projects: [{
+      id: PROJECT_ID,
+      displayName: projectName,
+      shortCode: 'WIK',
+      workspaceId: 'WS-WIKI',
+      color: null,
+      sortOrder: 0,
+      storageLocation: REPOSITORY_PATH,
+      rootPath: REPOSITORY_PATH,
+      repositoryPath: REPOSITORY_PATH,
+      urls: [],
+      archived: false,
+      createdAt: '2026-08-10T00:00:00Z',
+    }],
   }]));
   await page.route('**/api/auth/status', route => json(route, {
     profile: 'local',
@@ -51,7 +106,25 @@ async function mockWiki(page: Page, projectName: string): Promise<{
         { name: 'one.md', title: 'One', relPath: FIRST_PAGE, type: 'md', children: [] },
         { name: 'two.md', title: 'Two', relPath: SECOND_PAGE, type: 'md', children: [] },
       ],
-    }],
+    }, ...(options.extraHtml ? [{
+      name: 'operations',
+      title: 'Operations',
+      relPath: 'operations',
+      type: 'folder',
+      children: [{
+        name: 'lagebild-2026-08',
+        title: 'lagebild-2026-08',
+        relPath: 'operations/lagebild-2026-08',
+        type: 'folder',
+        children: [{
+          name: 'index.html',
+          title: options.extraHtml.title,
+          relPath: options.extraHtml.relPath,
+          type: 'html',
+          children: [],
+        }],
+      }],
+    }] : [])],
   }));
   await page.route(`**/api/projects/${project}/wiki/pulse**`, route => json(route, {
     projectName,
@@ -79,14 +152,31 @@ async function mockWiki(page: Page, projectName: string): Promise<{
   await page.route('**/api/tasks/reference-status', route => json(route, { items: [] }));
   await page.route(`**/api/projects/${project}/wiki/files/**`, route => {
     const relPath = decodeURIComponent(route.request().url().split('/wiki/files/')[1] ?? '');
+    if (relPath === options.failedPage) {
+      return route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: `Page '${relPath}' is not available in Wiki source 'origin/develop'.`,
+        }),
+      });
+    }
     const content = relPath === FIRST_PAGE
       ? livePage.content
+      : relPath === options.extraHtml?.relPath
+        ? options.extraHtml.content
       : '# Two\n\nSecond page body.';
     return json(route, { relPath, content });
   });
   await page.route(`**/api/projects/${project}/wiki/history/**`, route => {
     const relPath = decodeURIComponent(route.request().url().split('/wiki/history/')[1] ?? '');
-    if (route.request().headers()['if-none-match'] === livePage.etag) {
+    const requestedEtag = route.request().headers()['if-none-match'];
+    if (requestedEtag && pendingPageUpdate) {
+      livePage.content = '# One updated on disk';
+      livePage.etag = '"wiki-page-v2"';
+      pendingPageUpdate = false;
+    }
+    if (requestedEtag === livePage.etag) {
       return route.fulfill({
         status: 304,
         headers: { ETag: livePage.etag },
@@ -115,16 +205,22 @@ async function mockWiki(page: Page, projectName: string): Promise<{
   });
   return {
     updateFirstPage: () => {
-      livePage.content = '# One updated on disk';
-      livePage.etag = '"wiki-page-v2"';
+      pendingPageUpdate = true;
     },
   };
+}
+
+function evidencePath(testInfo: { outputPath(fileName: string): string }, fileName: string): string {
+  const results = process.env['JOB_RESULTS_DIR']?.trim();
+  if (!results) return testInfo.outputPath(fileName);
+  fs.mkdirSync(results, { recursive: true });
+  return path.join(results, fileName);
 }
 
 test('meta-panel and section choices survive wiki navigation and reload', async ({ page }, testInfo) => {
   await mockWiki(page, PROJECT_NAME);
 
-  await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
+  await page.goto(`/#/projects/${PROJECT_ID}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
   await expect(page.getByTestId('project-wiki-viewer-path')).toContainText(FIRST_PAGE);
 
   const metaToggle = page.getByTestId('project-wiki-meta-toggle');
@@ -177,7 +273,7 @@ test('meta-panel and section choices survive wiki navigation and reload', async 
 test('an external page change waits for explicit reload', async ({ page }) => {
   const wiki = await mockWiki(page, PROJECT_NAME);
 
-  await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
+  await page.goto(`/#/projects/${PROJECT_ID}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
   await expect(page.getByTestId('project-wiki-viewer')).toContainText('One');
 
   wiki.updateFirstPage();
@@ -188,4 +284,42 @@ test('an external page change waits for explicit reload', async ({ page }) => {
   await page.getByTestId('project-wiki-update-reload').click();
   await expect(page.getByTestId('project-wiki-viewer')).toContainText('updated on disk');
   await expect(banner).toHaveCount(0);
+});
+
+test('Lagebild opens from navigation and a missing source page shows its reason', async ({ page }, testInfo) => {
+  const lagebild = fs.readFileSync(
+    path.resolve(process.cwd(), '..', 'docs', LAGEBILD_PAGE),
+    'utf8',
+  );
+  await mockWiki(page, PROJECT_NAME, {
+    failedPage: SECOND_PAGE,
+    extraHtml: {
+      relPath: LAGEBILD_PAGE,
+      title: 'Lagebild 03.08.2026',
+      content: lagebild,
+    },
+  });
+
+  await page.goto(`/#/projects/${PROJECT_ID}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
+  await page.getByTestId('project-wiki-chevron-operations').click();
+  await page.getByTestId('project-wiki-chevron-operations/lagebild-2026-08').click();
+  await page.getByTestId(`project-wiki-file-${LAGEBILD_PAGE}`).click();
+  await expect(page.getByTestId('project-wiki-viewer-path')).toContainText(LAGEBILD_PAGE);
+  await expect(page.getByTestId('project-wiki-html-frame').contentFrame().locator('h1'))
+    .toContainText('Wo wir stehen');
+
+  await page.getByTestId(`project-wiki-file-${SECOND_PAGE}`).click();
+  const error = page.getByTestId('project-wiki-load-error');
+  await expect(error).toHaveAttribute('role', 'alert');
+  await expect(error).toContainText(
+    `Page '${SECOND_PAGE}' is not available in Wiki source 'origin/develop'.`,
+  );
+
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await page.screenshot({
+      path: evidencePath(testInfo, `wiki-source-error--mocked-${theme}.png`),
+      fullPage: true,
+    });
+  }
 });

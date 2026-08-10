@@ -12,12 +12,22 @@ navigation reuses that snapshot. The Wiki header reports the source branch and
 short commit, so Stable and Dev never imply a source from their deployment
 checkout.
 
+The same source selection applies to Workbench discovery and document reads.
+`GET /api/projects/{projectName}/workbenches`, the Workbench catalogue embedded
+in Pulse, `GET /api/projects/{projectName}/workbenches/{id}`, the Wiki tree, and
+`GET /api/projects/{projectName}/wiki/files/{relPath}` must resolve the same
+checkout or branch snapshot. A Workbench found only in the deployment checkout
+is therefore not advertised while the project reads its Wiki from another ref.
+This closes the former split in which `WorkbenchCatalogueService` always scanned
+the working tree while `ProjectDocsService` served a configured Git snapshot.
+
 There is no app-owned organization manifest, no virtual grouping layer, and no
 compatibility shim for historical root-level pages. If the Wiki should show a
 folder, that folder must exist under `docs/`.
 
 - Backend surface: [`backend/Features/Docs/ProjectDocsEndpoints.cs`](../../../backend/Features/Docs/ProjectDocsEndpoints.cs),
   [`backend/Features/Docs/ProjectDocsService.cs`](../../../backend/Features/Docs/ProjectDocsService.cs),
+  [`backend/Features/Docs/ProjectWikiSourceResolver.cs`](../../../backend/Features/Docs/ProjectWikiSourceResolver.cs),
   [`backend/Features/Docs/WikiContentCache.cs`](../../../backend/Features/Docs/WikiContentCache.cs),
   watcher integration in
   [`backend/Features/Tasks/TaskWatcherService.cs`](../../../backend/Features/Tasks/TaskWatcherService.cs),
@@ -46,6 +56,13 @@ classification, ordering, Home curation, grading completion, move, and delete.
 The mutation does not return across its cache consistency boundary until the
 replacement snapshot has been published. This guarantees read-after-write and
 keeps the next HTTP reader warm.
+
+Page content reads use the source context stored in that published snapshot.
+They do not resolve `wikiSourceBranch` independently after the tree or Pulse was
+built. If a requested page is absent or the selected source cannot be
+materialized, the file endpoint returns a source-aware reason. The reader shows
+that reason as an alert instead of replacing it with a generic failed-load
+placeholder.
 
 Cache keys normalize display names and short codes to the immutable project id
 when a registry record exists. A watcher event that carries a display name
@@ -94,6 +111,16 @@ Every page also receives one canonical interaction type: `doc`, `concept`,
 source. A registered `workbench.json` entry page is always a Dossier. Agreed
 path families fill remaining gaps, with `doc` as the default. The tree and page
 head use the same type-to-icon mapping.
+
+A malformed `workbench.json` never produces an openable Workbench row. Catalogue
+projections retain a disabled repair row with the concrete validation error so
+an operator can distinguish invalid metadata from a missing page. Valid
+descriptors are listed only when their entrypoint exists inside the selected
+Wiki source and passes the Workbench containment and size checks.
+Automatic Workbench reference-key assignment runs only for a writable checkout.
+A read-only branch snapshot is never mutated for discovery; a descriptor without
+a previously assigned key remains readable with a null key until checkout-backed
+discovery persists one.
 
 ## Durable agent-read evidence
 

@@ -156,7 +156,7 @@ export class ExplorerWorkbenchListComponent {
   }
 
   secondaryMeta(item: WorkbenchListItem): string {
-    if (!item.valid) return 'Needs attention';
+    if (!item.valid) return item.error || 'Descriptor needs repair';
     if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
     if (item.status === 'active') return item.phase ?? 'Active';

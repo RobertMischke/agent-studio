@@ -397,7 +397,14 @@
                           data-testid="project-wiki-rev-back">Back to current</button>
                 </div>
               }
-              @if (viewerTab() === 'report') {
+              @if (loadError(); as error) {
+                <div class="pwiki__report-empty"
+                     role="alert"
+                     data-testid="project-wiki-load-error">
+                  <app-studio-icon name="warn" [size]="20"></app-studio-icon>
+                  <p>{{ error }}</p>
+                </div>
+              } @else if (viewerTab() === 'report') {
                 <div class="pwiki__report-view" data-testid="project-wiki-report">
                   @if (loadingReport()) {
                     <p class="studio-empty pwiki__reader-empty">Loading report...</p>
