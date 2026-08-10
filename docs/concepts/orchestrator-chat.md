@@ -1,6 +1,6 @@
 # Persistent Orchestrator Chat
 
-This document describes the product and architecture target for an optional, always-available chat window with the orchestrator.
+This document describes the product and architecture contract for the always-available chat window with the orchestrator. The Task Server context foundation was accepted on 10 August 2026.
 
 The feature is not "another task chat". It is the user's standing relationship with the system that controls the board: what happened, why decisions were made, what the application knows about each project, and what should happen next.
 
@@ -26,6 +26,7 @@ The chat has two scopes:
 
 - **Global orchestrator.** Answers cross-project questions: what is happening across the board, which projects need attention, whether the queue is healthy, and what should be reviewed first.
 - **Project orchestrator.** Answers project-local questions: what this application does, what jobs ran recently, what decisions were made, what the roadmap says, which tasks are blocked, and what follow-up should be created.
+- **Task context.** Answers read-only questions about one task in a separate task transcript. It does not replace or alter the task detail Activity tab.
 
 The user should be able to tell which scope is active. A target selector is better than pretending one model sees everything at once.
 
@@ -44,7 +45,19 @@ This means the app does not need two competing project orchestrators. It needs t
 
 That model matches the existing ADR-0007 and ADR-0009 direction. The chat is not a second brain next to the orchestrator. It is the visible conversation surface for the orchestrator that already owns the project or board scope.
 
-## Session Registry Contract
+## Managed Context and Session Contracts
+
+Managed conversation context and CLI session mechanics are separate contracts.
+The Task Server is the central authority for project and task context identity,
+transcripts, receipts, lifecycle visibility, and short summaries. Machine-local
+session records may support execution continuity, but they are not Chat History
+and cannot become a competing transcript store.
+
+Every project is materialized as a permanently visible managed context. Opening
+Orchestrator Chat for a task materializes a new managed task context. It remains
+visible until the task reaches `7-archive`; archive sets `hiddenAt` and excludes
+it from the current list without deleting the context or any turns. If the task
+leaves archive, the retained context becomes visible again.
 
 The backend exposes a context-keyed session registry for the canonical
 orchestrator scopes. The accepted context keys are:
@@ -53,17 +66,19 @@ orchestrator scopes. The accepted context keys are:
 - `project:<PROJ-ID>` for one watched project's canonical orchestrator.
 - `task:<PROJ-ID>/<KEY>` for a task-scoped orchestrator context.
 
-The registry is lazy: reading a valid context key creates the backing record
-when it does not already exist. Records are stored below
+The execution-session registry is lazy: reading a valid context key creates the
+machine-local runtime record when it does not already exist. Records are stored below
 `<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`, where
 `session.json` holds the current session metadata and `history.jsonl` is the
 append-only sidecar for future session events. The encoded path segment is the
 URL-safe form produced by `OrchestratorContextKey`.
 
-The HTTP surface includes registry reads plus asynchronous turn dispatch:
+The HTTP surface combines the central context projection with asynchronous
+runtime dispatch:
 
-- `GET /api/orchestrator/sessions` lists known sessions and ensures the global
-  session exists.
+- `GET /api/orchestrator/sessions` lists current Task Server-owned project and
+  task contexts with their short summaries, merged with ephemeral runtime
+  status and queue position. Archived task contexts are omitted.
 - `GET /api/orchestrator/sessions/{contextKey}` returns or creates one valid
   context-key record. Invalid context keys return `400`.
 - `POST /api/orchestrator/sessions/{contextKey}/turns` appends a user prompt
@@ -98,20 +113,40 @@ transcript so a pinned task and the board no longer share one history.
   persists both turns to that context's transcript, returning
   `{ contextKey, project, reply }`.
 
-Storage is context-keyed on top of the existing per-project chat store: a
-`task` context is written to `<watchPath>/.orchestrator/context-chats/<encoded>.jsonl`
-(the reversible `OrchestratorContextKey` encoding), while `project` / `global`
-contexts resolve to the canonical `<watchPath>/.orchestrator/orchestrator-chat.jsonl`.
-A `project:<PROJ>` request therefore serves the exact same thread as the legacy
-`GET /api/runner/{projectName}/orchestrator-chat` route, so the board's chat is
-unchanged. The literal-prefixed routes are strictly more specific than the
-`{projectName}` route, so routing prefers them without ambiguity — the same
-pattern the session-turn endpoints use.
+Storage is context-keyed in the Task Server SQLite store. It keeps stable
+project and task ownership, append-only turns, compact source receipts, token
+usage, lifecycle visibility, and a short latest-intent summary. Resolved source
+bodies are never copied into receipts. The literal-prefixed Studio routes are
+strictly more specific than the `{projectName}` compatibility route, so routing
+still prefers them without ambiguity.
 
-The shared Claude session and usage accounting stay project-level. The context
-key selects both the on-disk thread and the ORCH-1 read digest for the turn, so
-a task thread gets its focused task facts and a project thread cannot receive
-facts from another project.
+At startup, a configured Studio host reads existing
+`<watchPath>/.orchestrator/orchestrator-chat.jsonl` project history as an
+idempotent migration source and imports it into the Task Server. The file is
+not deleted and is never selected as the active store. New turns do not write
+machine-local transcript files.
+
+Side-sheet execution is GPT-only and stateless. The context key selects both
+the central thread and the ORCH-1 read digest for the turn, so a task thread
+gets its focused task facts and a project thread cannot receive facts from
+another project.
+
+Every send carries an immutable typed envelope with conversation scope, active
+surface, explicit stable references, the context budget, and capture time. The
+backend validates the envelope against the route before persisting the user
+turn. Scope mismatch, cross-project references, path traversal, and out-of-root
+symlink resolution stop before model invocation.
+
+Prompt assembly is deterministic: scoped preamble, context ledger, automatic
+evidence, explicit attachments, bounded conversation continuity, then the new
+user message last. Automatic evidence has a 4,000-token soft cap and 6,000-token
+hard cap; explicit references can expand the total to 8,000 tokens. The latest
+four to eight semantic turns provide continuity on every stateless call.
+
+Each reply persists a receipt linked to its user turn id. The receipt records
+stable source id, kind, revision or hash, freshness, included characters and
+estimated tokens, status, omission reason, and applied budget. It stores no
+resolved source body.
 
 The side sheet consumes these routes directly: it derives the context key from
 navigation (`contextKey` on `OrchestratorSideSheetComponent`, frozen while
@@ -221,14 +256,14 @@ instructs the orchestrator to ask before proposing or creating a task.
 
 The side sheet includes an optional, collapsed-by-default chat switcher. Its
 chip reports the number of active or queued contexts; expanding it groups the
-registry into Global, Projects, and Tasks. Rows expose runtime state, local
-unread state, and cumulative token usage. Clicking a row name changes the chat
+registry into Global, Projects, and Tasks. Rows expose the central short
+summary, runtime state, local unread state, and cumulative token usage. Clicking a row name changes the chat
 context without moving the workspace. The separate arrow navigates to that
 context's all-project board, project board, or task tab.
 
-The rail reads `GET /api/orchestrator/sessions`. Its runtime badge is a snapshot
-of the in-memory turn dispatcher (`active`, `queued`, or `parked`); durable
-usage comes from the session record. Unread state is intentionally local to the
+The rail reads `GET /api/orchestrator/sessions`. The context row, summary, and
+durable usage come from the Task Server; its runtime badge is a snapshot of the
+in-memory turn dispatcher (`active`, `queued`, or `parked`). Unread state is intentionally local to the
 browser because the registry does not own per-user read receipts. Global is
 listed as a first-class registry context, but until a global transcript endpoint
 exists its selected state renders an explicit empty transcript instead of
@@ -251,8 +286,9 @@ The orchestrator's memory should be layered, inspectable, and rebuildable:
 
 | Layer | Purpose | Storage |
 |-------|---------|---------|
-| Live session id | Lets the CLI resume the same conversation. | Existing orchestrator-session JSON files. |
-| Event log | Durable record of decisions, chat turns, follow-ups, overrides, and app actions. | Existing `orchestrator.jsonl` plus chat entries. |
+| Live session id | Optional CLI execution continuity. It is not transcript authority. | Existing machine-local orchestrator-session JSON files. |
+| Managed context | Central project/task identity, transcript, source receipts, lifecycle visibility, short summary, and token usage. | Task Server SQLite store and versioned API. |
+| Event log | Durable record of decisions, follow-ups, overrides, and app actions outside managed chat turns. | Existing `orchestrator.jsonl`. |
 | Working memory | Compact "what I currently know" briefing: project purpose, current roadmap, active risks, recent task results, open decisions, next tasks. | New per-project memory snapshot, for example `.orchestrator/orchestrator-memory.md` or JSON. |
 | Source context | Human-owned truth: README, ROADMAP, AGENTS, architecture decisions, skills, project docs. | Existing repository files. |
 | Task evidence | Job results, status summaries, logs, screenshots, commits, and review decisions. | Existing job folders and run artifacts. |
@@ -269,7 +305,9 @@ Memory should be maintained by a deterministic pipeline first, then optionally r
 4. Ask the LLM to compress or reconcile only where judgment is useful, for example grouping related follow-ups or identifying drift.
 5. Write the resulting memory snapshot as an artifact the user can inspect.
 
-This keeps memory from becoming a hidden, self-referential chat summary. The source of truth stays in local evidence.
+This keeps memory from becoming a hidden, self-referential chat summary. The
+source of truth stays in repository and task evidence; the Task Server is the
+durable authority for chat turns and their source ledger.
 
 ## Keeping It Alive
 

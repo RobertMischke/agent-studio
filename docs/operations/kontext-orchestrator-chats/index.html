@@ -381,28 +381,39 @@
 <body>
 <main>
   <header class="hero">
-    <div class="eyebrow">AGT-2514 · Planning report · 8 August 2026</div>
+    <div class="eyebrow">AGT-2514 · Decided dossier · Operator GO 10 August 2026</div>
     <h1>Orchestrator Chat as the Context Workspace</h1>
     <p class="lede">A context model and delivery plan for making project chat the primary working surface, giving task questions an implicit task scope, and showing the operator exactly what evidence reached the model.</p>
     <div class="meta-line" aria-label="Report scope">
-      <span class="pill blue">Decision brief</span>
-      <span class="pill">Read-only investigation</span>
+      <span class="pill blue">Decided</span>
+      <span class="pill">Slices 1 to 5 approved</span>
       <span class="pill">Repository and live task evidence</span>
-      <span class="pill">No implementation</span>
+      <span class="pill">Slice 1 in implementation</span>
     </div>
   </header>
 
   <div class="decision">
     <article class="decision-card primary">
-      <span class="label">Recommended product cut</span>
+      <span class="label">Operator decision, 10 August 2026</span>
       <h2>Single Chat System with Three Context Concepts</h2>
       <p>Keep the existing project and task transcript scopes. Add a typed, per-turn context envelope made from the current surface plus explicit references. Reuse the task transcript inside a new task-detail Chat tab. Every model turn returns and persists a context receipt.</p>
     </article>
     <article class="decision-card">
-      <span class="label">Recommended rollout</span>
+      <span class="label">Approved rollout</span>
       <h3>Foundation, Project UX, Task Chat, and Default Entry</h3>
-      <p>Ship slices 1, 2, and 3 before making Chat the standard project entry. The Git-rich adapter can proceed after the foundation without blocking the core switch.</p>
+      <p>Slices 1 through 5 have GO. Slice 1 establishes the Task Server context authority. Slices 2 through 5 retain their dependency order. AGT-2577 tracks the additional central Chat History management surface.</p>
     </article>
+  </div>
+
+  <div class="callout teal">
+    <strong>Binding operator additions from 10 August 2026</strong>
+    <ul>
+      <li>The task's existing Activity tab and its execution semantics remain unchanged.</li>
+      <li>Opening Orchestrator Chat in task scope creates a new managed task context and exposes it in Chat History.</li>
+      <li>Every project owns a permanently visible project context. Task contexts remain visible until archive; archive hides them without deletion.</li>
+      <li>The Task Server centrally owns contexts, transcripts, receipts, lifecycle visibility, and short summaries. Machine-local JSONL is migration input only.</li>
+      <li>Chat History lists every current context with a compact summary. The follow-up management surface is tracked as AGT-2577.</li>
+    </ul>
   </div>
 
   <nav class="toc" aria-label="Report sections">
@@ -420,9 +431,9 @@
     <div class="section-head">
       <div>
         <span class="section-kicker">01 · Current reality</span>
-        <h2>Existing Foundation and Missing Context Contract</h2>
+        <h2>Existing Foundation and Decided Context Contract</h2>
       </div>
-      <p>The app already selects project and task chat threads from navigation. It does not yet resolve the full task or surface evidence into each model turn, and its visible transcript is not currently conversation memory for the Codex side-sheet path.</p>
+      <p>The app selects project and task chat threads from navigation. Slice 1 adds the typed per-turn envelope, bounded continuity, central Task Server persistence, and the source receipt required by the decision.</p>
     </div>
 
     <div class="grid-3">
@@ -435,8 +446,8 @@
         <div class="metric-label">rough tokens in the measured current project digest before boot framing</div>
       </article>
       <article class="panel">
-        <div class="metric">0</div>
-        <div class="metric-label">previous transcript turns injected into the visible Codex chat request</div>
+        <div class="metric">8</div>
+        <div class="metric-label">maximum recent semantic turns injected for bounded continuity</div>
       </article>
     </div>
 
@@ -461,13 +472,13 @@
           <tr>
             <th>Per-context transcripts</th>
             <td><span class="status exists">Exists</span></td>
-            <td><code>project:&lt;project&gt;</code> uses <code>.orchestrator/orchestrator-chat.jsonl</code>. <code>task:&lt;project&gt;/&lt;key&gt;</code> uses <code>.orchestrator/context-chats/&lt;encoded&gt;.jsonl</code>. Navigation swaps the visible transcript.</td>
-            <td>Task Chat needs no new history store. Wiki, Workbench, board, file, and diff should remain context inputs, not new transcript owners.</td>
+            <td>The Task Server owns project and task contexts, turns, receipts, lifecycle visibility, and short summaries. Legacy project JSONL is imported idempotently and never becomes the active store.</td>
+            <td>Task Chat needs no machine-local history store. Wiki, Workbench, board, file, and diff remain context inputs, not new transcript owners.</td>
           </tr>
           <tr>
             <th>Chat switcher</th>
             <td><span class="status exists">Exists</span></td>
-            <td>The Contexts menu groups global, project, and task sessions, supports pin/follow navigation, unread state, refresh, and context switching. Global currently has no transcript.</td>
+            <td>The context list groups global, project, and task rows and shows the Task Server-owned short summary for managed project and task contexts. Archived task contexts are omitted from the current list without deletion.</td>
             <td>Keep its thread-switching role, but rename it to <strong>Chats</strong> or <strong>Scopes</strong> once composer context attachments ship. This removes a three-way use of “context”.</td>
           </tr>
           <tr>
@@ -477,10 +488,10 @@
             <td>It is a useful label, not a model contract. It lacks stable typed references, board selection, revision, and a project identity for Diff.</td>
           </tr>
           <tr>
-            <th>Navigation context</th>
-            <td><span class="status partial">Partial</span></td>
-            <td>A separate <code>ChatNavigationContext</code> can carry task fields or a repository page reference, title, type, and a 480-character excerpt. The frontend sends it only on the first turn for an unchanged context signature.</td>
-            <td>The current footer label and model payload can diverge. A stateless turn must receive the bounded active context every time, not only once.</td>
+            <th>Typed context envelope</th>
+            <td><span class="status exists">Slice 1</span></td>
+            <td>Every send snapshots conversation scope, active surface, explicit typed references, budget, and capture time. The backend validates route scope and project isolation before persisting the user turn.</td>
+            <td>Navigation changes during resolution cannot alter an in-flight turn. Scope, traversal, and cross-project violations are typed host-visible failures.</td>
           </tr>
           <tr>
             <th>ORCH-1 application digest</th>
@@ -490,9 +501,9 @@
           </tr>
           <tr>
             <th>Conversation continuity</th>
-            <td><span class="status gap">Gap</span></td>
-            <td>The visible side-sheet path calls a GPT-only <code>CodexOneShot</code>. It returns no session id, does not resume a session, and <code>BuildPromptAsync</code> does not read prior transcript turns.</td>
-            <td>A primary chat must inject a bounded recent-turn window or rebuildable summary from the existing JSONL. UI persistence alone is not model memory.</td>
+            <td><span class="status exists">Slice 1</span></td>
+            <td>The visible side-sheet path remains GPT-only and stateless. Prompt assembly reads up to eight recent semantic turns from the central transcript on every request.</td>
+            <td>Continuity no longer depends on a provider session id. The new user message remains the final unambiguous prompt block.</td>
           </tr>
           <tr>
             <th>AGT-2506 context references</th>
@@ -511,13 +522,13 @@
     </div>
 
     <div class="callout amber">
-      <strong>Documentation drift worth correcting in the implementation slice</strong>
-      <p>The current Orchestrator Chat concept still describes shared Claude session memory for the side sheet. The source path is now GPT-only and stateless. The report treats source as current reality and recommends updating the concept when behavior changes.</p>
+      <strong>Documentation contract updated with Slice 1</strong>
+      <p>The Orchestrator Chat and ORCH-1 concepts now distinguish the central transcript from machine-local CLI session mechanics and define the per-turn envelope, continuity, and receipt order.</p>
     </div>
 
     <div class="callout rose">
-      <strong>Scope leak and cost risk in the current prompt preamble</strong>
-      <p>Each project turn prepends <code>GlobalOrchestratorBootstrap.BuildBootPrompt()</code>, which lists all watched projects and task-count snapshots, before adding the project-scoped ORCH-1 digest. A project context should receive a project-scoped preamble. The global inventory is unnecessary repeated input and weakens the stated project-isolation contract.</p>
+      <strong>Project isolation is enforced before model invocation</strong>
+      <p>Project and task turns now use a scoped chat preamble. The all-project global boot prompt is not prepended. Explicit references cannot cross projects or escape the resolved checkout.</p>
     </div>
   </section>
 
@@ -771,8 +782,8 @@
             <th>Recent chat</th>
             <td>800 to 1,500</td>
             <td>Makes follow-up questions coherent in the current stateless runtime.</td>
-            <td>Replaying the entire JSONL grows without bound.</td>
-            <td>Use the latest 4 to 8 semantic turns plus a rebuildable rolling summary. Keep raw JSONL as source of truth.</td>
+            <td>Replaying the entire central transcript grows without bound.</td>
+            <td>Use the latest 4 to 8 semantic turns plus a rebuildable rolling summary. The Task Server transcript is source of truth; legacy JSONL is migration input only.</td>
           </tr>
         </tbody>
       </table>
@@ -849,12 +860,12 @@
 
     <div class="grid-2" style="margin-top:18px">
       <article class="panel">
-        <h3>Persistence recommendation</h3>
-        <p>Keep task chat under the project-level <code>.orchestrator/context-chats/</code> store. It survives lane moves and archive transitions without following the task folder. Store only transcript turns and compact context receipts there, not resolved source bodies.</p>
+        <h3>Decided persistence contract</h3>
+        <p>Store project and task contexts centrally on the Task Server. The server owns transcript turns, compact receipts, summary, and lifecycle visibility. Project contexts are permanent. Task contexts are hidden, not deleted, after archive. Existing <code>.orchestrator/orchestrator-chat.jsonl</code> files are read once as an idempotent migration source.</p>
       </article>
       <article class="panel">
-        <h3>Continuity recommendation</h3>
-        <p>Read a bounded recent window from that JSONL on every stateless turn. A derived summary may be cached beside it, but it must be rebuildable and carry the last included turn id.</p>
+        <h3>Decided continuity contract</h3>
+        <p>Read a bounded recent window from the Task Server on every stateless turn. The central short summary is derived from durable turns. Receipts remain append-only, are linked to the user turn id, and contain source metadata and hashes rather than resolved bodies.</p>
       </article>
     </div>
 
@@ -1020,7 +1031,7 @@
         <span class="section-kicker">06 · Slice plan</span>
         <h2>Five Workflow-Sized Follow-up Slices</h2>
       </div>
-      <p>Each slice has one operator-visible outcome and a bounded backend contract. Slices 1 through 3 form the recommended minimum cut. Slice 5 makes the product switch prominent.</p>
+      <p>Each slice has one operator-visible outcome and a bounded backend contract. The operator approved Slices 1 through 5 on 10 August 2026. Slice 5 makes the product switch prominent.</p>
     </div>
 
     <div class="dependency" aria-label="Slice dependency graph">
@@ -1126,7 +1137,7 @@
               <ul>
                 <li>Add a Chat tab to task detail using <code>task:&lt;project&gt;/&lt;key&gt;</code> and the reusable orchestrator chat component.</li>
                 <li>Automatically load card metadata, authored prompt intent, latest status, last two run summaries with acute excerpts, commits, and recent task-chat turns.</li>
-                <li>Keep Activity as the task-agent execution surface. Clarify actor and side-effect copy in both composers.</li>
+                <li>Keep the Activity tab and all of its task-agent execution semantics unchanged. Clarify actor and side-effect copy in Chat without repurposing Activity.</li>
                 <li>Project-chat task references open this Chat tab; histories remain separate and linkable.</li>
               </ul>
             </div>
@@ -1209,8 +1220,8 @@
     </div>
 
     <div class="callout teal">
-      <strong>Recommended operator cut</strong>
-      <p>Approve Slices 1 to 3 as one coherent product increment. Schedule Slice 5 immediately after acceptance evidence from those slices. Run Slice 4 after Slice 1 when Git and diff questions are important enough; it does not need to delay the main project/task chat switch if unsupported Diff context is shown transparently.</p>
+      <strong>Approved operator cut</strong>
+      <p>Slices 1 through 5 have GO. Preserve their dependency order: Slice 1 is the persistence and prompt foundation; Slice 4 may proceed after it; Slices 2 and 3 establish the project and task UX before Slice 5 changes the default entry. AGT-2577 separately tracks the central all-context management view requested with the GO.</p>
     </div>
   </section>
 
@@ -1220,7 +1231,7 @@
         <span class="section-kicker">07 · Operator decisions</span>
         <h2>Operator Choices for Cut and Rollout</h2>
       </div>
-      <p>The recommendations below keep context inspectable and preserve the existing separation between orchestrator conversation and task execution.</p>
+      <p>The decisions below are accepted. They keep context inspectable and preserve the existing separation between orchestrator conversation and task execution.</p>
     </div>
 
     <div class="table-wrap">
@@ -1270,9 +1281,9 @@
     </div>
 
     <details open>
-      <summary>Proposed decision record</summary>
+      <summary>Accepted decision record, 10 August 2026</summary>
       <div>
-        <p><strong>Decision:</strong> Orchestrator Chat becomes the primary project conversation. Conversation scope remains project or task; the active surface is a per-turn context input; explicit references are additive. Task-detail Chat is read-only orchestrator Q&amp;A and remains separate from Activity. Every model turn persists a source receipt. The project opens with the existing side sheet visible after the execution and context foundations are accepted.</p>
+        <p><strong>Decision:</strong> Orchestrator Chat becomes the primary project conversation. Conversation scope remains project or task; the active surface is a per-turn context input; explicit references are additive. The Task Server centrally owns managed contexts, transcripts, receipts, lifecycle visibility, and short summaries. Project contexts are permanent. Opening task Chat creates a managed task context; archive hides it without deletion. Task-detail Chat is read-only orchestrator Q&amp;A and remains separate from the unchanged Activity tab. Every model turn persists a source receipt. Slices 1 through 5 are approved.</p>
       </div>
     </details>
   </section>
@@ -1291,11 +1302,12 @@
       <li><strong>Side-sheet context and composer UI:</strong> <code>frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html:39-197</code>. Confirms Contexts menu, context freshness, switcher, transcript, footer label, and composer host.</li>
       <li><strong>Scope following, pinning, and first-send context cache:</strong> <code>orchestrator-side-sheet.component.ts:187-274</code>, <code>:318-353</code>, and <code>:688-797</code>.</li>
       <li><strong>Repository page context:</strong> <code>frontend/src/app/features/orchestrator/chat-navigation-context.ts:38-66</code> and <code>frontend/src/app/models/page-context.model.ts:8-88</code>. Confirms page ref/title/type/excerpt and 480-character default excerpt cap.</li>
-      <li><strong>Project and task transcript storage:</strong> <code>backend/Features/Runner/OrchestratorChat.cs:59-212</code>. Confirms project JSONL, encoded task context files, and project-only FTS mirror.</li>
-      <li><strong>Current request and prompt assembly:</strong> <code>backend/Features/Runner/OrchestratorChat.cs:364-399</code>, <code>:501-624</code>, and <code>:631-752</code>. Confirms no <code>ContextReferences</code> field and no transcript read during prompt construction.</li>
+      <li><strong>Central context storage and lifecycle:</strong> <code>task-server/TaskServerOrchestratorContextStore.cs</code> and <code>contracts/TaskServer.Contracts/OrchestratorContextContracts.cs</code>. Confirms permanent project contexts, retained hidden archived-task contexts, central summaries, turns, and receipts.</li>
+      <li><strong>Legacy migration boundary:</strong> <code>backend/Features/Orchestrator/OrchestratorChatPersistence.cs</code>. Confirms the Task Server client is the active persistence boundary and local <code>.orchestrator/orchestrator-chat.jsonl</code> is read only as migration input.</li>
+      <li><strong>Typed request and prompt assembly:</strong> <code>backend/Features/Orchestrator/OrchestratorContextEnvelope.cs</code> and <code>backend/Features/Runner/OrchestratorChat.cs</code>. Confirms route-bound scope, project/path validation, bounded evidence and continuity, ordered prompt sections, and receipt metadata without resolved source bodies.</li>
       <li><strong>Stateless Codex execution:</strong> <code>backend/Features/Runner/OrchestratorRunner.cs:104-141</code>. Confirms <code>CodexOneShot</code>, no resume id, and null captured session id.</li>
       <li><strong>ORCH-1 digest scope and caps:</strong> <code>backend/Features/Orchestrator/OrchestratorContextDigestService.cs:14-18</code>, <code>:57-114</code>, and <code>:406-524</code>.</li>
-      <li><strong>All-project boot preamble:</strong> <code>backend/Features/Runner/GlobalOrchestratorBootstrap.cs:101-160</code>, prepended by <code>OrchestratorChat.cs:548</code>.</li>
+      <li><strong>Scoped prompt preamble:</strong> <code>backend/Features/Runner/OrchestratorChat.cs</code>. Confirms project and task side-sheet turns no longer prepend the all-project global boot prompt.</li>
       <li><strong>Existing task-agent composer semantics:</strong> <code>frontend/src/app/features/task-detail/task-detail.ts:822-910</code> and <code>frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html:464-493</code>.</li>
       <li><strong>Product placement doctrine:</strong> <code>docs/quality/design-principles.md</code>, “Chat is a multi-actor conversation”. It places task-scoped conversation in task detail and project-scoped conversation in the resizable side sheet.</li>
       <li><strong>Live Task API snapshot, 8 August 2026:</strong> AGT-2506 was <code>2-ready</code>, blocked by CAC-20 in <code>5-human-review</code> and not released. AGT-2512 was <code>2-ready</code> with no attributed App commit. CAC-20 had result commit <code>928ebeb</code> but remained unintegrated/unpublished.</li>

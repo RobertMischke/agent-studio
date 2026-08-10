@@ -667,6 +667,13 @@ state.
   marked as degraded without silently erasing task substance. Each reply
   persists a context receipt naming the scope and included blocks; the chat UI
   shows the latest receipt below the answer transcript.
+- Side-sheet chat sends one route-bound typed context envelope on every turn.
+  Prompt order is scoped preamble, source ledger, automatic evidence, explicit
+  attachments, bounded central transcript continuity, and the new user message
+  last. The Task Server owns project/task chat contexts, turns, receipts,
+  lifecycle visibility, usage, and short summaries. Project contexts are
+  permanent; archived task contexts are retained with `hiddenAt` and omitted
+  from the current list. Local orchestrator chat JSONL is migration input only.
 - Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
   level travel on every Board or Task context request. The backend may resolve
   an omitted model to the detected Codex default, but it must never route this

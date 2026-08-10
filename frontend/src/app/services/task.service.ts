@@ -2412,6 +2412,7 @@ export class TaskService {
         mimeType?: string | null;
       }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+      contextEnvelope?: import('../features/orchestrator').OrchestratorContextEnvelope | null;
       model?: string | null;
       thinkingLevel?: string | null;
       selectionSource?: 'explicit' | 'inherited';
@@ -2446,6 +2447,7 @@ export class TaskService {
         mimeType?: string | null;
       }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+      contextEnvelope?: import('../features/orchestrator').OrchestratorContextEnvelope | null;
       model?: string | null;
       thinkingLevel?: string | null;
       selectionSource?: 'explicit' | 'inherited';

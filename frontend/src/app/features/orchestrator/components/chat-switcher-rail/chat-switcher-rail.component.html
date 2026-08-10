@@ -12,7 +12,7 @@
                 <span class="context-list__presence"
                       [class.context-list__presence--live]="row.runtimeStatus === 'active'"
                       aria-hidden="true"></span>
-                <span class="context-list__label">{{ row.label }}</span>
+                <span class="context-list__label">{{ row.label }}{{ row.summary ? ' · ' + row.summary : '' }}</span>
                 <span class="context-list__badges">
                   @if (row.runtimeStatus === 'active') { <span class="context-list__badge context-list__badge--live">running</span> }
                   @if (row.runtimeStatus === 'queued') { <span class="context-list__badge">queued {{ row.queuePosition }}</span> }

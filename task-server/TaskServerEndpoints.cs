@@ -42,6 +42,71 @@ public static class TaskServerEndpoints
         api.MapPost("/projects", async (HttpContext context, CreateProjectRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CreateProjectAsync(request, Actor(context), ct), StatusCodes.Status201Created));
 
+        var orchestratorContexts = api.MapGroup("/orchestrator-contexts");
+        orchestratorContexts.MapGet("", async (
+            bool? includeHidden,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(async () => new OrchestratorContextListResponse(
+                await store.ListOrchestratorContextsAsync(includeHidden == true, ct))));
+        orchestratorContexts.MapPut("/projects/{projectIdentity}", async (
+            HttpContext context,
+            string projectIdentity,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.EnsureOrchestratorContextAsync(
+                projectIdentity, null, Actor(context), ct)));
+        orchestratorContexts.MapPut("/projects/{projectIdentity}/tasks/{taskIdentity}", async (
+            HttpContext context,
+            string projectIdentity,
+            string taskIdentity,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.EnsureOrchestratorContextAsync(
+                projectIdentity, taskIdentity, Actor(context), ct)));
+        orchestratorContexts.MapGet("/projects/{projectIdentity}/turns", async (
+            HttpContext context,
+            string projectIdentity,
+            int? limit,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ReadOrchestratorContextAsync(
+                projectIdentity, null, limit ?? 500, Actor(context), ct)));
+        orchestratorContexts.MapGet("/projects/{projectIdentity}/tasks/{taskIdentity}/turns", async (
+            HttpContext context,
+            string projectIdentity,
+            string taskIdentity,
+            int? limit,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ReadOrchestratorContextAsync(
+                projectIdentity, taskIdentity, limit ?? 500, Actor(context), ct)));
+        orchestratorContexts.MapPost("/projects/{projectIdentity}/turns", async (
+            HttpContext context,
+            string projectIdentity,
+            AppendOrchestratorContextTurnRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.AppendOrchestratorContextTurnAsync(
+                projectIdentity, null, request, Actor(context), ct), StatusCodes.Status201Created));
+        orchestratorContexts.MapPost("/projects/{projectIdentity}/tasks/{taskIdentity}/turns", async (
+            HttpContext context,
+            string projectIdentity,
+            string taskIdentity,
+            AppendOrchestratorContextTurnRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.AppendOrchestratorContextTurnAsync(
+                projectIdentity, taskIdentity, request, Actor(context), ct), StatusCodes.Status201Created));
+        orchestratorContexts.MapPost("/projects/{projectIdentity}/legacy-import", async (
+            HttpContext context,
+            string projectIdentity,
+            ImportLegacyOrchestratorChatRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ImportLegacyOrchestratorChatAsync(
+                projectIdentity, request, Actor(context), ct)));
+
         var hosts = api.MapGroup("/hosts");
         hosts.MapGet("/{hostId}/runtime-capacity", async (
             string hostId,

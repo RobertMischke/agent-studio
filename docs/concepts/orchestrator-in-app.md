@@ -1,7 +1,9 @@
 # Orchestrator in-app: the operator moves inside
 
 Status: concept v1, 2026-07-10. ORCH-1 sight is implemented by the
-context digest described below. ORCH-2 and ORCH-3 remain future work.
+context digest described below. The per-turn context envelope, bounded
+continuity, central Task Server transcript, and source receipt were accepted on
+2026-08-10. ORCH-2 and ORCH-3 remain future work.
 
 The target is an in-app orchestrator chat that can keep the application
 running while it lives inside that application. The app is no longer only the
@@ -38,6 +40,31 @@ same digest.
 The digest is one backend service shared by the visible side-sheet chat and the
 context-session turn API. This prevents two orchestrator entry points from
 developing different views of application state.
+
+### Turn-level context contract
+
+ORCH-1 is one automatic evidence layer inside a typed context envelope. Every
+stateless side-sheet send snapshots the conversation scope, active surface,
+explicit stable references, token budget, and capture time. The backend binds
+scope to the route, rejects cross-project and unsafe repository references
+before model invocation, and resolves source content at the execution checkout.
+
+Prompt assembly is fixed: scoped preamble, source ledger, automatic evidence,
+explicit attachments, four to eight recent semantic turns, and the new user
+message last. Automatic context uses a 4,000-token soft cap and 6,000-token hard
+cap. Explicit sources may expand the total context envelope to 8,000 tokens.
+
+Every reply persists an append-only source receipt linked to the corresponding
+user turn. It records stable ids, revisions or hashes, freshness, inclusion and
+omission state, character and token estimates, and budget. Resolved source
+bodies do not enter the receipt.
+
+Project and task transcript authority is the central Task Server. Every project
+context is permanent. Opening task Chat materializes a managed task context;
+archive hides it without deleting its turns. Chat History reads the central
+current-context list and compact summaries. Machine-local
+`.orchestrator/orchestrator-chat.jsonl` is an idempotent migration source only.
+The task detail Activity tab remains the unchanged task-agent execution surface.
 
 ### Hands
 

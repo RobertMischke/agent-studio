@@ -282,6 +282,9 @@ builder.Services.AddSingleton<AgentStudio.Tasks.TaskReader>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
+builder.Services.AddSingleton<TaskServerOrchestratorChatPersistence>();
+builder.Services.AddSingleton<IOrchestratorChatPersistence>(sp =>
+    sp.GetRequiredService<TaskServerOrchestratorChatPersistence>());
 builder.Services.AddSingleton<OrchestratorContextDigestService>();
 builder.Services.AddSingleton<OrchestratorTaskPromptContextComposer>();
 builder.Services.AddSingleton<RemoteChatWorkBroker>();
@@ -298,6 +301,7 @@ builder.Services.AddSingleton<OrchestratorRunner>(sp => new OrchestratorRunner(
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<OrchestratorSessionRegistry>();
+builder.Services.AddHostedService<OrchestratorChatLegacyMigrationHostedService>();
 builder.Services.AddSingleton<OrchestratorTurnService>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();

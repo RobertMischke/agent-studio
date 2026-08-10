@@ -5,8 +5,10 @@ using AgentStudio.Orchestrator;
 using AgentStudio.Runner;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -22,11 +24,8 @@ namespace AgentStudio.Tests;
 ///
 /// Two layers are pinned here:
 ///
-///   1. The <see cref="OrchestratorChat"/> store keys transcripts by context.
-///      A task context writes and reads its own file so a pinned task and the
-///      board no longer share one history; a project / null context resolves
-///      to the legacy <c>orchestrator-chat.jsonl</c>, so existing project
-///      chats are byte-for-byte unchanged.
+///   1. Legacy JSONL context paths remain readable migration inputs while the
+///      active endpoint persistence boundary is a central-store test double.
 ///   2. The literal-prefixed runner routes resolve without colliding with the
 ///      pre-existing <c>{projectName}/orchestrator-chat</c> route and return
 ///      the correct per-context turns.
@@ -38,6 +37,7 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
     private readonly string _root;
     private readonly string _projectRoot;
     private readonly string _codeRoot;
+    private readonly CentralOrchestratorChatPersistenceStub _central = new();
 
     public OrchestratorContextChatEndpointsTests()
     {
@@ -227,9 +227,12 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
     private void SeedTranscript(string rawContextKey, params (string Role, string Text)[] turns)
     {
         Assert.True(OrchestratorContextKey.TryParse(rawContextKey, out var key));
-        var chat = new OrchestratorChat(NullLogger<OrchestratorChat>.Instance);
-        foreach (var (role, text) in turns)
-            Assert.True(chat.Append(_projectRoot, Turn(role, text), key));
+        _central.SeedContext(
+            key.Value,
+            turns.FirstOrDefault(item => item.Role == OrchestratorChatRoles.User).Text
+                ?? key.TaskKey
+                ?? key.ProjectId!,
+            [.. turns.Select(item => Turn(item.Role, item.Text))]);
     }
 
     private WebApplicationFactory<Program> CreateFactory() =>
@@ -246,6 +249,11 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
                     ["WatchPaths:0:RootPath"] = _codeRoot,
                     ["WatchPaths:0:RepositoryPath"] = _codeRoot,
                 });
+            });
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IOrchestratorChatPersistence>();
+                services.AddSingleton<IOrchestratorChatPersistence>(_central);
             });
         });
 }
