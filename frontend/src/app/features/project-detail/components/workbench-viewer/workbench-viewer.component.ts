@@ -70,9 +70,13 @@ export class WorkbenchViewerComponent {
   readonly documenting = signal(false);
   readonly documentationError = signal<string | null>(null);
 
-  readonly srcdoc = computed(() =>
-    buildIsolatedHtmlSrcdoc(this.document()?.html ?? '', { workbenchDecisions: true }),
-  );
+  readonly srcdoc = computed(() => {
+    const document = this.document();
+    return buildIsolatedHtmlSrcdoc(document?.html ?? '', {
+      workbenchDecisions: true,
+      documentPattern: document?.workbench.pattern === 'ui' ? 'ui' : 'concept',
+    });
+  });
   readonly decisionMarkup = computed(() =>
     discoverWorkbenchDecisionMarkup(this.document()?.html ?? ''),
   );

@@ -38,8 +38,19 @@
   font-weight: 600;
 }
 .studio-workbench-topic--active:hover { background: var(--studio-nav-active-bg-hover); }
-.studio-workbench-topic__title {
+.studio-workbench-topic__primary {
   width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+}
+.studio-workbench-topic__pattern { display: inline-flex; flex: none; color: var(--studio-fg-muted); }
+.studio-workbench-topic__pattern[data-pattern='ui'] { color: var(--studio-accent-3); }
+.studio-workbench-topic--active .studio-workbench-topic__pattern { color: var(--studio-nav-active-fg); }
+.studio-workbench-topic__title {
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

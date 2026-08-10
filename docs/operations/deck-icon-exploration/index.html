@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-document-pattern="ui">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Deck Icon Exploration | Concept Workbench</title>
-<style>
+<title>Deck Icon Exploration | Article document</title>
+<style data-article-template="v2">
   :root {
     color-scheme: light;
     --surface-1: #fcfcfb;
@@ -38,12 +38,11 @@
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 0 0 72px;
     background: var(--surface-1);
     color: var(--ink-1);
-    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+    font: 17px/1.75 Georgia, "Times New Roman", serif;
   }
-  main { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+  main { width: min(70ch, calc(100% - 48px)); margin: 0 auto; padding: 0 0 72px; }
   header.page {
     padding: 42px 0 25px;
     border-bottom: 1px solid var(--line);
@@ -55,10 +54,9 @@
     letter-spacing: .12em;
     text-transform: uppercase;
   }
-  h1 { margin: 0 0 10px; font-size: 33px; line-height: 1.2; }
-  h2 { margin: 48px 0 8px; font-size: 23px; }
-  h3 { margin: 0; font-size: 16px; }
-  p { max-width: 76ch; }
+  h1 { margin: 0 0 10px; font: 700 38px/1.15 system-ui, "Segoe UI", sans-serif; letter-spacing: -0.01em; }
+  h2 { margin: 48px 0 8px; font: 700 23px/1.25 system-ui, "Segoe UI", sans-serif; }
+  h3 { margin: 0; font: 700 16px/1.35 system-ui, "Segoe UI", sans-serif; }
   .lede { margin: 0; color: var(--ink-2); font-size: 18px; }
   .meta {
     display: flex;
@@ -94,7 +92,9 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--surface-2);
+    font-family: system-ui, "Segoe UI", sans-serif;
   }
+  [data-document-pattern="ui"] .mockup { width: min(1120px, calc(100vw - 48px)); margin-left: 50%; transform: translateX(-50%); }
   .theme-row {
     display: grid;
     grid-template-columns: 104px repeat(3, minmax(190px, 1fr));
@@ -171,7 +171,9 @@
     grid-template-columns: repeat(3, 1fr);
     gap: 14px;
     margin-top: 16px;
+    font-family: system-ui, "Segoe UI", sans-serif;
   }
+  [data-document-pattern="ui"] .alternatives { width: min(1120px, calc(100vw - 48px)); margin-left: 50%; transform: translateX(-50%); }
   .card {
     padding: 16px;
     border: 1px solid var(--line);
@@ -195,7 +197,7 @@
     letter-spacing: .08em;
     text-transform: uppercase;
   }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
   th, td {
     padding: 10px 12px;
     border-bottom: 1px solid var(--line);
@@ -221,13 +223,15 @@
   @media (max-width: 760px) {
     h1 { font-size: 28px; }
     .alternatives { grid-template-columns: 1fr; }
+    [data-document-pattern="ui"] .mockup,
+    [data-document-pattern="ui"] .alternatives { width: calc(100vw - 20px); }
   }
 </style>
 </head>
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Concept Workbench · AGT-2355</p>
+  <p class="kicker">Article document · AGT-2355</p>
   <h1>Deck Icon Exploration</h1>
   <p class="lede">Round 2 defines the Deck as the multi-faceted project console: overview panels, settings, Wiki, token usage, and other project views. These 24 by 24 line icons express that container rather than a board or card stack.</p>
   <div class="meta">
@@ -237,13 +241,13 @@
   </div>
 </header>
 
-<section class="decision" aria-labelledby="recommendation" data-concept-section="recommendation">
+<section class="decision" aria-labelledby="recommendation" data-document-section="recommendation">
   <span class="badge">Recommended</span>
-  <h2 id="recommendation" style="margin: 8px 0 0">A · Project facets</h2>
+  <h2 id="recommendation">A · Project facets</h2>
   <p>The asymmetric panel frame reads as one project surface with several distinct views. The small focus ring suggests a project overview without turning the icon into a Kanban grid, card stack, or terminal-only symbol.</p>
 </section>
 
-<section data-concept-section="alternatives">
+<section data-document-section="alternatives">
 <p class="round-label">Round 2 · Project console</p>
 <h2>Mockup row</h2>
 <figure>
@@ -327,7 +331,7 @@
 </div>
 </section>
 
-<section data-concept-section="round-1">
+<section data-document-section="round-1">
 <h2>Round 1: rejected direction</h2>
 <div class="rejected">
   <h3>Card stack, layered planes, and board stack</h3>
@@ -336,7 +340,7 @@
 </div>
 </section>
 
-<section data-concept-section="evidence">
+<section data-document-section="evidence">
 <h2>Located implementation seam</h2>
 <table>
   <thead><tr><th>Surface</th><th>Current</th><th>Later one-place change</th></tr></thead>
@@ -365,7 +369,7 @@
 </ul>
 </section>
 
-<section data-concept-section="open-decisions">
+<section data-document-section="open-decisions">
 <h2>Open decision for Robert</h2>
 <p>Pick A, B, or C from Round 2. The recommended default is <b>A · Project facets</b>. No other dependency or product decision is required before the later implementation card can apply the selected path.</p>
 </section>

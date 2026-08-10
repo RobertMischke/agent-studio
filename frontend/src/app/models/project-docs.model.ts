@@ -213,6 +213,7 @@ export interface WikiRevisionContent {
 
 export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
 export type WorkbenchDecisionStage = 'prepared' | 'pending' | 'failed' | 'succeeded' | 'archived';
+export type ArticlePattern = 'ui' | 'concept';
 
 export interface WorkbenchTaskDraft {
   title: string;
@@ -334,6 +335,8 @@ export interface WorkbenchListItem {
   valid: boolean;
   error: string | null;
   sourceTaskKeys: string[];
+  /** Presentation variant. Missing or unknown server values render as concept. */
+  pattern?: ArticlePattern | null;
   /** Legacy descriptor bridge. Derived card references use the keyed endpoint. */
   relatedTaskKeys?: string[];
   /** Shared lifecycle projection. Present on schema-v2 descriptors. */

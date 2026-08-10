@@ -16,7 +16,14 @@
         [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
         (click)="openWorkbench.emit(workbench)"
       >
-        <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+        <span class="studio-workbench-topic__primary">
+          <span class="studio-workbench-topic__pattern"
+                aria-hidden="true"
+                [attr.data-pattern]="documentPattern(workbench)">
+            <app-studio-icon [name]="patternIcon(workbench)" [size]="12" />
+          </span>
+          <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+        </span>
         <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
       </button>
     } @empty {

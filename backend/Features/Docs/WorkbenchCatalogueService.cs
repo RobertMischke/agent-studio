@@ -459,6 +459,7 @@ public sealed class WorkbenchCatalogueService
                     updated.UtcDateTime, repoRel, true, null, DescriptorTaskKeys(obj))
                 {
                     Key = key,
+                    Pattern = ArticlePatterns.Normalize(OptionalString(obj, "pattern")),
                     RelatedTaskKeys = StringArray(obj, "relatedTaskKeys"),
                     LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
                     EditedBy = editedBy,
@@ -1053,6 +1054,7 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
 {
     public string? Key { get; init; }
+    public string Pattern { get; init; } = ArticlePatterns.Concept;
     public string[] RelatedTaskKeys { get; init; } = [];
     public string? LifecycleState { get; init; }
     public string? EditedBy { get; init; }

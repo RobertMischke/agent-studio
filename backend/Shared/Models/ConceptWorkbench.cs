@@ -1,5 +1,21 @@
 namespace AgentStudio.Shared;
 
+/// <summary>
+/// Presentation patterns supported by article-style documents. Descriptor
+/// readers deliberately fail open to <see cref="Concept"/> so older files and
+/// future values remain readable while the two current variants stay explicit.
+/// </summary>
+public static class ArticlePatterns
+{
+    public const string Ui = "ui";
+    public const string Concept = "concept";
+
+    public static string Normalize(string? value) =>
+        string.Equals(value?.Trim(), Ui, StringComparison.OrdinalIgnoreCase)
+            ? Ui
+            : Concept;
+}
+
 /// <summary>One implementation card proposed by a concept Workbench.</summary>
 public sealed record ConceptImplementationTask
 {
@@ -20,7 +36,8 @@ public sealed record ConceptWorkbenchDescriptor
     public string Summary { get; init; } = "";
     public string Entrypoint { get; init; } = "index.html";
     public string Status { get; init; } = "decision-pending";
-    public string Phase { get; init; } = "sight-review";
+    public string Phase { get; init; } = "shaping";
+    public string Pattern { get; init; } = ArticlePatterns.Concept;
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
     public List<string> SourceTaskKeys { get; init; } = [];
     public List<ConceptImplementationTask> ImplementationTasks { get; init; } = [];

@@ -12,9 +12,10 @@ import {
 } from '@angular/core';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
-import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
+import type { ArticlePattern, WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
 import { ExplorerWorkbenchHistoryComponent } from '../explorer-workbench-history/explorer-workbench-history.component';
 
 const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expanded.v1';
@@ -22,7 +23,7 @@ const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expande
 @Component({
   selector: 'app-explorer-workbench-list',
   standalone: true,
-  imports: [TreeRowComponent, AppTooltipDirective, ExplorerWorkbenchHistoryComponent],
+  imports: [TreeRowComponent, AppTooltipDirective, ExplorerWorkbenchHistoryComponent, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-list.component.html',
   styleUrl: './explorer-workbench-list.component.scss',
@@ -163,6 +164,14 @@ export class ExplorerWorkbenchListComponent {
     return !item.valid || item.status === 'decision-pending';
   }
 
+  documentPattern(item: WorkbenchListItem): ArticlePattern {
+    return item.pattern === 'ui' ? 'ui' : 'concept';
+  }
+
+  patternIcon(item: WorkbenchListItem): StudioIconName {
+    return this.documentPattern(item) === 'ui' ? 'grid' : 'book';
+  }
+
   secondaryMeta(item: WorkbenchListItem): string {
     if (!item.valid) return 'Needs attention';
     if (item.documentation?.eligible) return 'Ready to document';
@@ -181,7 +190,7 @@ export class ExplorerWorkbenchListComponent {
   accessibleMeta(item: WorkbenchListItem): string {
     const days = Math.max(0, Math.floor((Date.now() - new Date(item.updatedAtUtc).getTime()) / 86_400_000));
     const updated = days === 0 ? 'updated today' : `updated ${days} days ago`;
-    return `${this.secondaryMeta(item)}, ${updated}`;
+    return `${this.documentPattern(item)} pattern, ${this.secondaryMeta(item)}, ${updated}`;
   }
 
   navTooltip(item: WorkbenchListItem): string {

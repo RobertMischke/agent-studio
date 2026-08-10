@@ -10,7 +10,12 @@ import type {
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { WorkbenchOverviewComponent } from './workbench-overview.component';
 
-function item(id: string, status: WorkbenchStatus, openDecisionCount = 0): WorkbenchOverviewItem {
+function item(
+  id: string,
+  status: WorkbenchStatus,
+  openDecisionCount = 0,
+  pattern?: WorkbenchOverviewItem['workbench']['pattern'],
+): WorkbenchOverviewItem {
   return {
     projectName: id.startsWith('other') ? 'Other' : 'Demo',
     workbench: {
@@ -25,6 +30,7 @@ function item(id: string, status: WorkbenchStatus, openDecisionCount = 0): Workb
       error: null,
       sourceTaskKeys: [],
       openDecisionCount,
+      pattern,
     },
   };
 }
@@ -48,7 +54,7 @@ describe('WorkbenchOverviewComponent', () => {
     const fixture = TestBed.createComponent(WorkbenchOverviewComponent);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    const pending = item('pending', 'decision-pending', 3);
+    const pending = item('pending', 'decision-pending', 3, 'ui');
     const tracking = item('tracking', 'decided');
     tracking.workbench.documentation = {
       eligible: true,
@@ -69,6 +75,12 @@ describe('WorkbenchOverviewComponent', () => {
 
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-decision-pending"]')?.textContent)
       .toContain('3 open');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-pattern-Demo-pending"]')?.getAttribute('data-pattern'))
+      .toBe('ui');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-pattern-Demo-active"]')?.getAttribute('data-pattern'))
+      .toBe('concept');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('active');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
