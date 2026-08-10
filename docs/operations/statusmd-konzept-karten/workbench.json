@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "statusmd-konzept-karten",
+  "title": "status.md Finalization for Concept and Planning Cards",
+  "summary": "Decision dossier based on 1,782 unique task records and 485 Result scaffolds. It separates 341 operator backfills from 144 transition-path scaffolds, identifies the remote V1 finalization contract gap as the primary cause, distinguishes the MKT-21 terminal-signal reissue defect, and recommends an awaited application-owned Result-finalization gate with a typed degraded fallback.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-09T17:13:00Z",
+  "sourceTaskKeys": ["AGT-2555"],
+  "implementationTasks": [],
+  "relatedTaskKeys": ["AGT-2514", "MKT-21", "AGT-2355", "AGT-2548", "AGT-2552"]
+}

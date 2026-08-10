@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>status.md finalization for concept cards | Decision dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch identity: develop */
+    --taskbr: #4a3aa7;       /* Branch identity: task/<slug> */
+    --salvage: #eb6834;      /* Branch identity: runner/<id>/<key> (salvage) */
+    --rescue: #b58500;       /* Branch identity: rescue/WIP */
+    --ok: #008300;           /* Good status, always paired with icon and text */
+    --bad: #c93736;          /* Problem status, always paired with icon and text */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG roles */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Decision dossier · Agent Studio</p>
+  <h1><code>status.md</code> finalization for concept and planning cards</h1>
+  <p class="lede">The agents are following the current ownership contract. The failure is a split application contract: remote V1 completion can succeed without invoking the application-owned Result finalizer.</p>
+  <div class="meta">
+    <span><b>Snapshot</b> 2026-08-09 16:58 UTC</span>
+    <span><b>Source card</b> AGT-2555</span>
+    <span><b>Status</b> decision pending</span>
+    <span><b>Scope</b> analysis only</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#decision">Decision brief</a></li>
+    <li><a href="#method">Evidence method</a></li>
+    <li><a href="#inventory">Inventory baseline</a></li>
+    <li><a href="#cases">Case evidence</a></li>
+    <li><a href="#contract">Ownership contract</a></li>
+    <li><a href="#chain">Root-cause chain</a></li>
+    <li><a href="#candidates">Candidate assessment</a></li>
+    <li><a href="#options">Decision options</a></li>
+    <li><a href="#recommendation">Recommendation</a></li>
+    <li><a href="#slices">Implementation slices</a></li>
+  </ul>
+</nav>
+
+<section id="decision" class="box accent" data-concept-section="open-decisions">
+  <h4>Decision brief</h4>
+  <p><b>Recommended:</b> retain application ownership of <code>status.md</code>, restore V1 finalization parity, and make Result finalization an awaited post-core gate. A missing generated Result must retry the summary step, not the completed core agent run. After a bounded retry budget, the card should expose a typed degraded Result state and remain reviewable without presenting the scaffold as normal success.</p>
+  <p class="stx stx-open"><b>Root cause:</b> the fresh-run prompt says not to rely on a hand-written <code>status.md</code>. The legacy artifact endpoint honors <code>FinalizeResult=true</code>; the V1 client branch uploads artifacts individually and drops that intent. The V1 Task Server persists artifacts and completion but has no summary-generation action.</p>
+  <p class="stx stx-part"><b>Adjacent defect:</b> MKT-21 proves a separate terminal-signal false negative. A post-run <code>[worker-head-advanced]</code> line invalidated an already logged <code>[[TASK_DONE]]</code>, causing a needless core reissue.</p>
+</section>
+
+<h2 id="method"><span class="no">1</span>Evidence method</h2>
+<p>The inventory used the stable Task API at <code>127.0.0.1:5031</code>. It combined the current grouped inventory with the archive, deduplicated by task identity, fetched every task detail, and searched <code>statusMarkdown</code> for <code>&lt;!-- agent-studio:result-scaffold --&gt;</code>. All 1,782 unique task details were read; the scan had zero read errors.</p>
+<ul>
+  <li><b>Raw inputs:</b> 142 current cards and 1,655 archive entries.</li>
+  <li><b>Unique population:</b> 1,782 cards after removal of 15 current/archive overlaps.</li>
+  <li><b>Provenance split:</b> marker text distinguishes transition preflight or landed scaffolds from startup operator backfills.</li>
+  <li><b>Runtime evidence:</b> durable task details, <code>cli-output.log</code>, timeline events, and <code>statusGeneration</code> state for AGT-2514, AGT-2355, and MKT-21.</li>
+  <li><b>Contract evidence:</b> runtime prompts, runner client branches, Task Server endpoints, transition backstop, summary generator, and sentinel parser.</li>
+</ul>
+<p class="dim">The stock is a historical inventory, not a controlled experiment. Rates show what is present now. They do not establish a causal mode effect, especially where the non-coding denominators are small.</p>
+
+<h2 id="inventory" data-concept-section="evidence"><span class="no">2</span>Inventory baseline</h2>
+<h3>Execution-mode distribution</h3>
+<table>
+  <thead><tr><th>Mode</th><th>All cards</th><th>Marker stock</th><th>Marker rate</th><th>Transition path</th><th>Operator backfill</th></tr></thead>
+  <tbody>
+    <tr><td><b>Coding</b></td><td>1,758</td><td>476</td><td>27.1%</td><td>142</td><td>334</td></tr>
+    <tr><td><b>Planning</b></td><td>13</td><td>4</td><td>30.8%</td><td>1</td><td>3</td></tr>
+    <tr><td><b>Research</b></td><td>10</td><td>4</td><td>40.0%</td><td>1</td><td>3</td></tr>
+    <tr><td><b>Concept</b></td><td>1</td><td>1</td><td>100.0%</td><td>0</td><td>1</td></tr>
+    <tr><td><b>Total</b></td><td><b>1,782</b></td><td><b>485</b></td><td><b>27.2%</b></td><td><b>144</b></td><td><b>341</b></td></tr>
+  </tbody>
+</table>
+<p><b>Interpretation:</b> 341 of 485 markers, or 70.3%, were created by the historical operator backfill. The raw stock does not support the claim that Coding cards rarely show the issue: Coding owns 476 markers and 142 of the 144 transition-path scaffolds. Planning, Research, and Concept together contribute nine markers, but their combined population is only 24 cards.</p>
+
+<h3>Task-type distribution</h3>
+<table>
+  <thead><tr><th>Task type</th><th>All cards</th><th>Marker stock</th><th>Marker rate</th><th>Transition path</th><th>Operator backfill</th></tr></thead>
+  <tbody>
+    <tr><td><b>Feature</b></td><td>590</td><td>170</td><td>28.8%</td><td>57</td><td>113</td></tr>
+    <tr><td><b>Chore</b></td><td>857</td><td>191</td><td>22.3%</td><td>24</td><td>167</td></tr>
+    <tr><td><b>Bug</b></td><td>335</td><td>124</td><td>37.0%</td><td>63</td><td>61</td></tr>
+    <tr><td><b>Total</b></td><td><b>1,782</b></td><td><b>485</b></td><td><b>27.2%</b></td><td><b>144</b></td><td><b>341</b></td></tr>
+  </tbody>
+</table>
+<p>Task type is not a semantic concept classifier. AGT-2355 is a decision and icon-exploration card, yet its stored metadata is <code>taskType=feature</code> and <code>mode=coding</code>. The inventory therefore undercounts concept-shaped work when grouped only by metadata.</p>
+
+<h3>Non-coding marker inventory</h3>
+<table>
+  <thead><tr><th>Card</th><th>Mode</th><th>Type</th><th>Scaffold provenance</th></tr></thead>
+  <tbody>
+    <tr><td><b>AGT-2514</b></td><td>Planning</td><td>Feature</td><td>Transition landed</td></tr>
+    <tr><td><b>AGT-2444</b></td><td>Research</td><td>Chore</td><td>Transition landed</td></tr>
+    <tr><td>AGT-2443</td><td>Research</td><td>Chore</td><td>Operator backfill</td></tr>
+    <tr><td>AGT-2442</td><td>Research</td><td>Chore</td><td>Operator backfill</td></tr>
+    <tr><td>AGT-2390</td><td>Planning</td><td>Feature</td><td>Operator backfill</td></tr>
+    <tr><td>AGT-2369</td><td>Concept</td><td>Chore</td><td>Operator backfill</td></tr>
+    <tr><td>AGT-2322</td><td>Research</td><td>Chore</td><td>Operator backfill</td></tr>
+    <tr><td>AGT-2276</td><td>Planning</td><td>Feature</td><td>Operator backfill</td></tr>
+    <tr><td>AGT-2195</td><td>Planning</td><td>Feature</td><td>Operator backfill</td></tr>
+  </tbody>
+</table>
+
+<h2 id="cases"><span class="no">3</span>Case evidence</h2>
+<table>
+  <thead><tr><th>Case</th><th>Observed completion</th><th>Result state</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>AGT-2514</b><br>Planning, Feature</td>
+      <td>Remote V1 run on <code>agent-runner-01</code>; primary <code>results/report.html</code>; <code>[[TASK_DONE]]</code>; exit 0; typed successful completion; orchestrator acceptance.</td>
+      <td><code>statusGeneration=null</code>; scaffold after entry to Human Review.</td>
+      <td>The core run and terminal contract succeeded. Result finalization did not run.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2355</b><br>Coding, Feature; semantic decision card</td>
+      <td>Deck-icon exploration delivered its decision Workbench.</td>
+      <td><code>statusGeneration=null</code>; transition-preflight scaffold for Completed.</td>
+      <td>Confirms the semantic concept symptom and the metadata-classification gap.</td>
+    </tr>
+    <tr>
+      <td><b>MKT-21</b><br>Planning, Feature</td>
+      <td>Core work completed in run 1. Three core runs were recorded: 632.6 s, 18.2 s, and 11.1 s.</td>
+      <td>Real generated Result after run 3; no marker in the snapshot.</td>
+      <td>Evidence for the reissue loop, not part of the 485-marker count.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>MKT-21 terminal sequence</h4>
+  <p>Run 1 logged <code>[[TASK_DONE]]</code> and a clean exit. The next durable line was <code>[orchestrator] [worker-head-advanced]</code>. The parser treats every orchestrator, supervisor, or user line after a sentinel as resolution, except one narrow technical marker. It therefore hid the valid Done signal. Fifteen minutes later the orchestrator reissued the card to obtain a clean terminal closure.</p>
+  <p>Run 2 also logged Done and exited cleanly, but another reissue followed. The durable log establishes a second false negative; it does not preserve enough concurrent ordering to assign that second miss to one exact race. Run 3 was accepted, then summary generation ran for 14.5 seconds.</p>
+</div>
+
+<h2 id="contract"><span class="no">4</span>Ownership contract</h2>
+<table>
+  <thead><tr><th>Boundary</th><th>Current contract</th><th>Finding</th></tr></thead>
+  <tbody>
+    <tr><td><b>Fresh-run prompt</b></td><td><code>prompts/runtime/runner-fresh-start.md</code> says not to rely on a hand-written <code>status.md</code>; the application regenerates it from logs.</td><td><span class="pill done">Intentional</span> Agent omission is expected.</td></tr>
+    <tr><td><b>Concept framing</b></td><td>Requires exactly one docs-only Workbench; no separate status-writing duty.</td><td><span class="pill done">Consistent</span> The dossier is the primary deliverable, not the Result summary.</td></tr>
+    <tr><td><b>Local completion</b></td><td>Moves the card to review, then starts <code>SummaryGenerationService.GenerateAsync</code> in a fire-and-forget task.</td><td><span class="pill part">Race-tolerant</span> Transition can scaffold first; summary failure does not block review.</td></tr>
+    <tr><td><b>Legacy remote artifacts</b></td><td><code>/api/runner/artifacts</code> honors <code>FinalizeResult</code>, awaits the summary, and returns <code>ResultDocumentGenerated</code>.</td><td><span class="pill done">Complete</span> Application ownership is implemented.</td></tr>
+    <tr><td><b>V1 remote artifacts</b></td><td>The client uploads each artifact to <code>/api/v1/runs/{runId}/artifacts</code> and returns a synthetic acknowledgement. The source request's <code>FinalizeResult</code> is not represented.</td><td><span class="pill open">Contract gap</span> Finalization intent is dropped.</td></tr>
+    <tr><td><b>V1 Task Server</b></td><td>Artifact ingestion stores bytes and completion stores the outcome. Neither endpoint invokes the Studio summary generator.</td><td><span class="pill open">Contract gap</span> No alternate finalizer exists.</td></tr>
+    <tr><td><b>Lane transition</b></td><td><code>TaskTransitionService</code> creates a marked scaffold when Result is empty, then treats the Result invariant as satisfied.</td><td><span class="pill part">Masking backstop</span> Honest, but not a clean generated Result.</td></tr>
+  </tbody>
+</table>
+<p>The published protocol documentation states that remote final upload asks Studio to generate the Result. That statement describes the legacy path, but not the negotiated V1 path. The code and the contract document have diverged.</p>
+
+<h2 id="chain"><span class="no">5</span>Root-cause chain</h2>
+<figure>
+  <svg viewBox="0 0 1020 410" role="img" aria-label="Root-cause chain from prompt ownership through the V1 finalization gap to a generated scaffold">
+    <defs>
+      <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.3"/>
+      </marker>
+    </defs>
+    <text x="34" y="34" class="s-label">Expected ownership</text>
+    <rect x="34" y="50" width="182" height="66" class="s-node"/>
+    <text x="50" y="76" class="s-label">Agent core run</text>
+    <text x="50" y="96" class="s-sub">Report or Workbench + Done</text>
+    <rect x="256" y="50" width="206" height="66" class="s-node"/>
+    <text x="272" y="76" class="s-label">Application finalizer</text>
+    <text x="272" y="96" class="s-sub">Generate status.md from logs</text>
+    <rect x="502" y="50" width="206" height="66" class="badge-ok" rx="8"/>
+    <text x="518" y="76" class="s-label">Review transition</text>
+    <text x="518" y="96" class="s-sub">Generated Result available</text>
+    <path d="M216 83 L256 83 M462 83 L502 83" class="s-flow" marker-end="url(#arrow)"/>
+
+    <line x1="20" y1="148" x2="1000" y2="148" class="s-lane"/>
+    <text x="34" y="180" class="s-label">Observed remote V1 path</text>
+    <rect x="34" y="196" width="182" height="72" class="s-node"/>
+    <text x="50" y="222" class="s-label">Agent core run</text>
+    <text x="50" y="242" class="s-sub">Complete artifact + Done</text>
+    <rect x="256" y="196" width="206" height="72" class="badge-bad" rx="8"/>
+    <text x="272" y="222" class="s-label">V1 artifact upload</text>
+    <text x="272" y="242" class="s-sub">FinalizeResult intent dropped</text>
+    <rect x="502" y="196" width="206" height="72" class="s-node"/>
+    <text x="518" y="222" class="s-label">Run completion</text>
+    <text x="518" y="242" class="s-sub">Outcome accepted, no summary</text>
+    <rect x="748" y="196" width="238" height="72" class="badge-warn" rx="8"/>
+    <text x="764" y="222" class="s-label">Transition backstop</text>
+    <text x="764" y="242" class="s-sub">Scaffold satisfies file invariant</text>
+    <path d="M216 232 L256 232 M462 232 L502 232 M708 232 L748 232" class="s-flow" marker-end="url(#arrow)"/>
+
+    <rect x="256" y="310" width="206" height="58" class="badge-ok" rx="8"/>
+    <text x="272" y="334" class="s-label">Legacy endpoint</text>
+    <text x="272" y="353" class="s-sub">Awaits summary generation</text>
+    <path d="M359 268 L359 310" class="s-flow" style="stroke-dasharray:4 5" marker-end="url(#arrow)"/>
+    <text x="480" y="340" class="s-tiny">Parity exists in legacy code, not in V1.</text>
+  </svg>
+  <figcaption><b>Failure boundary.</b> Concept and Planning prompts make the missing Result more visible, but the causal gap sits after the core run. The transition scaffold preserves honesty and lane progress while hiding the absent finalizer from completion semantics.</figcaption>
+</figure>
+
+<h2 id="candidates"><span class="no">6</span>Candidate assessment</h2>
+<table>
+  <thead><tr><th>Candidate</th><th>Verdict</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr><td><b>Missing concept-prompt duty</b></td><td><span class="pill queued">Not root cause</span></td><td>The global prompt deliberately assigns status generation to the application. Adding only a concept instruction would create two writers and would still not repair V1 application finalization.</td></tr>
+    <tr><td><b>Different concept termination</b></td><td><span class="pill part">Visibility factor</span></td><td>Concept and report-only modes use a Workbench or report as the primary result and skip Coding gates. Their Result summary remains application-owned.</td></tr>
+    <tr><td><b>No-code-change watchdog</b></td><td><span class="pill queued">Not root cause</span></td><td>The report-only acceptance path checks the primary artifact and terminal sentinel, not <code>status.md</code>. The transition backstop permits closure by creating the scaffold.</td></tr>
+    <tr><td><b>Remote V1 finalization</b></td><td><span class="pill open">Primary cause</span></td><td>The V1 client ignores <code>FinalizeResult</code>; V1 ingestion and completion provide no summary replacement. AGT-2514 matches this path exactly.</td></tr>
+    <tr><td><b>Local summary timing</b></td><td><span class="pill part">Secondary weakness</span></td><td>Local completion starts summary generation after the lane move and does not await it. A crash or persistent summary failure leaves the scaffold as the final Result.</td></tr>
+    <tr><td><b>Reissue loop</b></td><td><span class="pill part">Adjacent amplifier</span></td><td>MKT-21 proves terminal-signal false negatives and repeated core work. It eventually received a real Result, so it does not explain the current marker stock.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="options" data-concept-section="alternatives"><span class="no">7</span>Decision options</h2>
+<div class="building-blocks">
+  <article class="building-block">
+    <h4>A. Application-owned finalization gate</h4>
+    <p><span class="pill done">Recommended</span></p>
+    <p>Restore V1 parity and define a post-core Result-finalization step that is awaited before clean review closure. Retry only summary generation. Preserve the scaffold as an explicit degraded fallback after bounded exhaustion.</p>
+    <p><b>Effort:</b> Medium. Runner client, V1 coordination boundary, lifecycle policy, and local/remote matrix tests.</p>
+    <p><b>Risk:</b> Low to medium. The main risk is added review latency and backward compatibility during protocol rollout.</p>
+  </article>
+  <article class="building-block">
+    <h4>B. Agent-authored status duty</h4>
+    <p><span class="pill part">Alternative</span></p>
+    <p>Require Concept and Planning agents to write <code>status.md</code> alongside the dossier or report. Define precedence between agent text and generated text and remove the conflicting fresh-run instruction.</p>
+    <p><b>Effort:</b> Small to medium. Prompt, validation, and ownership migration.</p>
+    <p><b>Risk:</b> High. Prompt compliance is probabilistic, two writers can overwrite each other, and Coding versus Concept semantics diverge.</p>
+  </article>
+  <article class="building-block">
+    <h4>C. Scaffold as the normal concept Result</h4>
+    <p><span class="pill part">Alternative</span></p>
+    <p>Declare the dossier the sole narrative result and make the system scaffold the expected card summary. AGT-2552 would present its origin compactly and the dossier link would carry the decision content.</p>
+    <p><b>Effort:</b> Small. Contract documentation and presentation.</p>
+    <p><b>Risk:</b> Medium to high. Summary outages become normal, Result quality differs by mode, and operational regressions lose a useful signal.</p>
+  </article>
+  <article class="building-block">
+    <h4>D. Strict missing-file completion failure</h4>
+    <p><span class="pill open">Rejected shape</span></p>
+    <p>Reject clean completion whenever <code>status.md</code> is absent, without separating core completion from summary finalization.</p>
+    <p><b>Effort:</b> Medium.</p>
+    <p><b>Risk:</b> High. It converts a summary-side failure into expensive agent reissues and repeats the MKT-21 failure pattern.</p>
+  </article>
+</div>
+
+<h2 id="recommendation" data-concept-section="recommendation"><span class="no">8</span>Recommendation</h2>
+<div class="box ok">
+  <h4>Application ownership with an explicit degraded state</h4>
+  <ul>
+    <li>Keep the dossier or report as the primary domain deliverable and <code>status.md</code> as the application-generated card summary.</li>
+    <li>Carry Result-finalization intent through V1, or move summary generation into a server-side post-step with equivalent durable evidence.</li>
+    <li>Await that step before a clean Result is claimed. A failed summary retries independently and never reopens the completed core run.</li>
+    <li>After bounded exhaustion, retain the honesty scaffold but label the Result as degraded. AGT-2552 presentation remains valuable for that fallback.</li>
+    <li>For AGT-2548, require the agent to publish the dossier and write its path to <code>results/deliverables.md</code>. The application finalizer should extract or receive that path and place it in generated <code>status.md</code>. Do not make a hand-written status file the canonical dossier contract.</li>
+    <li>Replace raw-log sentinel invalidation with latest-run typed terminal evidence. At minimum, technical post-run events such as <code>worker-head-advanced</code> must not resolve <code>[[TASK_DONE]]</code>.</li>
+  </ul>
+</div>
+<p><b>Decision requested:</b> approve Option A, keep Option C only as the degraded fallback presentation, and reject agent-authored <code>status.md</code> as the primary repair.</p>
+
+<h2 id="slices"><span class="no">9</span>Implementation slices</h2>
+<p>This dossier proposes work only; it does not create or implement these slices.</p>
+<ol>
+  <li><b>V1 Result-finalization parity:</b> preserve the finalization request across negotiated transports and prove a real generated Result for a remote Planning or Concept run.</li>
+  <li><b>Result-finalization lifecycle:</b> model summary generation as an awaited post-core step with bounded retry and a typed degraded terminal state, without rerunning core work.</li>
+  <li><b>Terminal-evidence parsing:</b> make typed latest-run completion authoritative and add the MKT-21 <code>worker-head-advanced</code> sequence as a regression case.</li>
+  <li><b>Dossier linkage and fallback presentation:</b> align AGT-2548 link publication with generated Result ownership and AGT-2552 scaffold presentation.</li>
+</ol>
+
+<footer class="box">
+  <h4>Evidence boundaries</h4>
+  <p>The inventory proves the current marker stock and the V1 contract gap. It does not prove a statistically reliable Concept-versus-Coding prevalence difference because only one card is stored as Concept and semantic concept cards such as AGT-2355 are classified as Coding. The exact ordering behind MKT-21's second false negative is also unresolved; only the first false negative has a deterministic parser explanation.</p>
+</footer>
+
+</main>
+</body>
+</html>
