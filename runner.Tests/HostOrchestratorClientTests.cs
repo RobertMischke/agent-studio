@@ -61,6 +61,142 @@ public sealed class HostOrchestratorClientTests
     }
 
     [Fact]
+    public async Task Result_post_step_retries_summary_only_then_reports_generated_artifact()
+    {
+        var now = DateTime.UtcNow;
+        var task = new TaskDto(
+            "task-result", "project-1", "TS-R", "Concept Result", "3-progress", 2, now, now, "prompt");
+        var run = new RunDto("run-result", task.TaskId, "running", "runner-1", 11, now, now, null);
+        var lease = new LeaseDto(
+            "lease-result", run.RunId, task.TaskId, "runner-1", CurrentInstance, 11,
+            now, now.AddMinutes(2), "active");
+        var step = new PostStepPlanDto(
+            "step-result", run.RunId, HostPostStepIds.ResultFinalization, "runner-1", "available");
+        var acceptance = new WorkPermitAcceptanceDto(
+            "accepted", "permit-result", run, task, lease, lease.ExpiresAt, [step]);
+        var finalizationCalls = 0;
+        JsonElement completionBody = default;
+        var handler = new ContractHandler(async (request, ct) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/v1/runs/run-result/result-finalization")
+            {
+                finalizationCalls++;
+                return Json(finalizationCalls == 1
+                    ? new ResultFinalizationDto(
+                        run.RunId,
+                        ResultFinalizationStatus.Retryable,
+                        1,
+                        3,
+                        null,
+                        null,
+                        "transient summary failure",
+                        now)
+                    : new ResultFinalizationDto(
+                        run.RunId,
+                        ResultFinalizationStatus.Ready,
+                        2,
+                        3,
+                        "artifact-status",
+                        "status-sha",
+                        null,
+                        now));
+            }
+            if (path == "/api/v1/runs/run-result/post-steps/step-result/complete")
+            {
+                completionBody = await request.Content!.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+                return Json(new PostStepCompleteResponse(
+                    "completed", step with { Status = "completed" }, "passed", ["status-sha"]));
+            }
+            return path switch
+            {
+                "/api/v1/runners/runner-1/reports" => Json(new HostReportResponse(
+                    "accepted", 1,
+                    new HostContractRangeDto(HostOrchestratorContract.Current, HostOrchestratorContract.Current),
+                    1, "active", [], [])),
+                "/api/v1/runs/run-result/post-steps/step-result/claim" => Json(new PostStepClaimResponse(
+                    "claimed", step with { Status = "running" }, 11)),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        using var client = Client(http);
+        client.AdoptWorkPermit(acceptance);
+        await client.ReportHostAsync(Report(now), default);
+
+        await client.CompleteHostPostProcessingAsync(task.TaskKey, null, default);
+
+        Assert.Equal(2, finalizationCalls);
+        Assert.Equal("passed", completionBody.GetProperty("outcome").GetString());
+        Assert.Equal("status-sha", Assert.Single(completionBody.GetProperty("artifactHashes").EnumerateArray()).GetString());
+        Assert.DoesNotContain(handler.Paths, path => path.EndsWith("/completion", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Exhausted_result_post_step_reports_degraded_without_repeating_core_completion()
+    {
+        var now = DateTime.UtcNow;
+        var task = new TaskDto(
+            "task-degraded", "project-1", "TS-D", "Concept Result", "3-progress", 2, now, now, "prompt");
+        var run = new RunDto("run-degraded", task.TaskId, "running", "runner-1", 12, now, now, null);
+        var lease = new LeaseDto(
+            "lease-degraded", run.RunId, task.TaskId, "runner-1", CurrentInstance, 12,
+            now, now.AddMinutes(2), "active");
+        var step = new PostStepPlanDto(
+            "step-degraded", run.RunId, HostPostStepIds.ResultFinalization, "runner-1", "available");
+        var acceptance = new WorkPermitAcceptanceDto(
+            "accepted", "permit-degraded", run, task, lease, lease.ExpiresAt, [step]);
+        var finalizationCalls = 0;
+        JsonElement completionBody = default;
+        var handler = new ContractHandler(async (request, ct) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/v1/runs/run-degraded/result-finalization")
+            {
+                finalizationCalls++;
+                return Json(new ResultFinalizationDto(
+                    run.RunId,
+                    finalizationCalls == 1
+                        ? ResultFinalizationStatus.Retryable
+                        : ResultFinalizationStatus.Degraded,
+                    finalizationCalls,
+                    2,
+                    null,
+                    null,
+                    "summary unavailable",
+                    now));
+            }
+            if (path == "/api/v1/runs/run-degraded/post-steps/step-degraded/complete")
+            {
+                completionBody = await request.Content!.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+                return Json(new PostStepCompleteResponse(
+                    "completed", step with { Status = "completed" }, "degraded", []));
+            }
+            return path switch
+            {
+                "/api/v1/runners/runner-1/reports" => Json(new HostReportResponse(
+                    "accepted", 1,
+                    new HostContractRangeDto(HostOrchestratorContract.Current, HostOrchestratorContract.Current),
+                    1, "active", [], [])),
+                "/api/v1/runs/run-degraded/post-steps/step-degraded/claim" => Json(new PostStepClaimResponse(
+                    "claimed", step with { Status = "running" }, 12)),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        using var client = Client(http);
+        client.AdoptWorkPermit(acceptance);
+        await client.ReportHostAsync(Report(now), default);
+
+        await client.CompleteHostPostProcessingAsync(task.TaskKey, null, default);
+
+        Assert.Equal(2, finalizationCalls);
+        Assert.Equal("degraded", completionBody.GetProperty("outcome").GetString());
+        Assert.Empty(completionBody.GetProperty("artifactHashes").EnumerateArray());
+        Assert.DoesNotContain(handler.Paths, path => path.EndsWith("/completion", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Registration_declares_host_contract_and_capabilities()
     {
         JsonElement requestBody = default;

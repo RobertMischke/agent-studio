@@ -1372,11 +1372,14 @@ public static class LeaseEndpoints
                 && settled.Status == AttemptWriteStatus.Duplicate
                 && string.Equals(task.State, targetState, StringComparison.OrdinalIgnoreCase))
             {
+                var existingReview = authority
+                    .GetTaskProjection(req.TaskKey)
+                    .CurrentReviewAttempt;
                 return Results.Ok(new RemoteRunCompletionResponse(
                     req.TaskKey, responseOutcome, targetState, "duplicate delivery",
                     RunAttemptId: attemptId,
-                    ReviewAttemptId: reviewAttempt?.AttemptId,
-                    ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+                    ReviewAttemptId: existingReview?.AttemptId,
+                    ReviewSubjectId: existingReview?.Subject.SubjectId));
             }
 
             var source = CredentialRedactor.Redact(

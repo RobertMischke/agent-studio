@@ -109,6 +109,26 @@ const QUEUED = task(
   '2026-07-24T19:59:40Z',
 );
 
+const DEGRADED = task(
+  'agt-result-degraded',
+  'Reviewable concept with degraded Result',
+  '4-auto-review',
+  {},
+  '2026-07-24T19:58:40Z',
+);
+
+Object.assign(DEGRADED, {
+  summaryState: {
+    status: 'degraded',
+    startedAt: '2026-07-24T19:58:00Z',
+    finishedAt: '2026-07-24T19:58:40Z',
+    errorMessage: 'Summary service unavailable.',
+    bytesWritten: null,
+    attempt: 3,
+    maxAttempts: 3,
+  },
+});
+
 const PRE_STEP = task(
   'agt-pre-step',
   'Live preparation step',
@@ -160,7 +180,7 @@ const STALLED = task(
   '2026-07-24T19:48:40Z',
 );
 
-const TASKS = [ACTIVE, QUEUED, PRE_STEP, STALLED];
+const TASKS = [ACTIVE, QUEUED, DEGRADED, PRE_STEP, STALLED];
 
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
@@ -205,7 +225,7 @@ async function installRoutes(page: Page): Promise<void> {
         failedPickup: [],
         codeNotComplete: [],
         review: [],
-        autoReview: [ACTIVE, QUEUED],
+        autoReview: [ACTIVE, QUEUED, DEGRADED],
         humanReview: [],
         escalated: [],
         completed: [],
@@ -254,6 +274,7 @@ test.describe('task live status', () => {
 
     const activeCard = page.locator('[data-testid="task-card"]', { hasText: 'Live review chain' });
     const queuedCard = page.locator('[data-testid="task-card"]', { hasText: 'Waiting review slot' });
+    const degradedCard = page.locator('[data-testid="task-card"]', { hasText: 'Reviewable concept with degraded Result' });
     const preStepCard = page.locator('[data-testid="task-card"]', { hasText: 'Live preparation step' });
     const stalledCard = page.locator('[data-testid="task-card"]', { hasText: 'Possible pipeline hang' });
 
@@ -264,6 +285,12 @@ test.describe('task live status', () => {
     await expect(activeCard.getByTestId('task-live-status')).toContainText('via Codex');
     await expect(activeCard.getByTestId('task-live-next')).toContainText('Grade → Gate → Merge');
     await expect(queuedCard.getByTestId('task-live-current')).toContainText('Waiting for review slot · position 3');
+    await expect(degradedCard.getByTestId('task-card-review')).toHaveText(/result degraded/);
+    await degradedCard.getByTestId('task-card-review').hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('3/3 summary attempts');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('core run remains reviewable');
+    await page.mouse.move(1590, 950);
+    await expect(page.getByTestId('cac-tooltip')).toBeHidden();
     await expect(preStepCard).toHaveAttribute('data-running', 'true');
     await expect(preStepCard.getByTestId('task-live-current')).toContainText('Create worktree');
     await expect(preStepCard).not.toContainText('No active run');
