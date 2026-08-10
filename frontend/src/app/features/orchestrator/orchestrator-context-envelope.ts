@@ -10,6 +10,7 @@ export function buildOrchestratorContextEnvelope(
   contextKey: string,
   navigation: ChatNavigationContext | null,
   explicitReferences: OrchestratorContextReference[] = [],
+  activeReference: OrchestratorContextReference | null = null,
   now: () => Date = () => new Date(),
 ): OrchestratorContextEnvelope {
   const parsed = parseOrchestratorContextKey(contextKey);
@@ -18,7 +19,17 @@ export function buildOrchestratorContextEnvelope(
   }
 
   const taskKey = navigation?.currentTaskKey ?? navigation?.currentTaskId ?? null;
-  const activeSurface = taskKey
+  const activeSurface = activeReference
+    ? {
+        kind: activeReference.kind,
+        reference: activeReference.reference,
+        revision: activeReference.revision,
+        projectId: activeReference.projectId ?? parsed.projectId,
+        repositoryId: activeReference.repositoryId,
+        path: activeReference.path,
+        selection: activeReference.lineRanges?.map(range => `L${range.startLine}-L${range.endLine}`),
+      }
+    : taskKey
     ? { kind: 'task', reference: taskKey, title: navigation?.currentTaskTitle, taskKey }
     : navigation?.pageRef
       ? {

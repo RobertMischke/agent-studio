@@ -23,10 +23,21 @@ normalized `query`, an array for each requested domain, per-domain `errors`,
 and `durationMs`. Git commit and file lookup reuse the HEAD-keyed cache rather
 than maintaining a search index.
 
-Results are grouped by domain and carry project identity. Commit results open
-the diff surface, documentation files open the Wiki, and other files open the
-project Git view. Queries shorter than two characters return empty result
-groups, and a failed domain reports an error without hiding successful domains.
+Results are grouped by domain and carry project and repository identity. Commit
+results also carry their full SHA. Tracked file results carry the searched
+checkout's HEAD revision; untracked files remain working-tree references.
+Commit results open a project-owned diff tab, documentation files
+open the Wiki, and other files open the project Git view. Queries shorter than
+two characters return empty result groups, and a failed domain reports an error
+without hiding successful domains.
+
+The Orchestrator composer's Known Sources picker reuses the file and commit
+domains for its active project. It emits typed `repository-file`, `commit`, or
+`diff` references into the per-turn context envelope. An active Diff tab is the
+first suggested source and includes the owning project, full commit, selected
+file, and first complete hunk. After a reply, the expandable context receipt
+shows the backend-resolved source ids, revisions, inclusion states, character
+and token estimates, and omission reasons.
 
 ## Entry Points
 

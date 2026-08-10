@@ -16,7 +16,9 @@ public sealed record GlobalSearchItem(
     string? Lane = null,
     string? Sha = null,
     string? Path = null,
-    bool IsWiki = false);
+    bool IsWiki = false,
+    string? RepositoryId = null,
+    string? Revision = null);
 
 public sealed record GlobalSearchResponse(
     string Query,
@@ -80,8 +82,14 @@ public sealed class GlobalSearchService(
             {
                 try
                 {
+                    var revision = git.ReadHeadShaAt(root);
                     var cached = git.MemoizeByHead(root, $"global-search-files|{root}|{query.ToLowerInvariant()}",
-                        () => ReadFiles(root, project.Name, query, colors.GetValueOrDefault(project.Name, "#6e6e6e")));
+                        () => ReadFiles(
+                            root,
+                            project.Name,
+                            query,
+                            colors.GetValueOrDefault(project.Name, "#6e6e6e"),
+                            revision));
                     files.AddRange(cached);
                 }
                 catch (Exception ex) { Degrade("files", ex, errors, project.Name); }
@@ -130,20 +138,41 @@ public sealed class GlobalSearchService(
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.TrimEnd('\r').Split('\x1f'))
             .Where(p => p.Length >= 3 && (Contains(p[0], query) || Contains(p[1], query) || Contains(p[2], query)))
-            .Select(p => new GlobalSearchItem("commits", project, color, p[2], p[1], Sha: p[0]))
+            .Select(p => new GlobalSearchItem(
+                "commits", project, color, p[2], p[1], Sha: p[0],
+                RepositoryId: project, Revision: p[0]))
             .ToList();
     }
 
-    internal static List<GlobalSearchItem> ReadFiles(string root, string project, string query, string color)
+    internal static List<GlobalSearchItem> ReadFiles(
+        string root,
+        string project,
+        string query,
+        string color,
+        string? revision = null)
     {
-        var output = RunGit(root, ["ls-files", "--cached", "--others", "--exclude-standard"]);
-        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => path.TrimEnd('\r').Replace('\\', '/'))
-            .Where(path => Contains(path, query))
-            .Select(path => new GlobalSearchItem("files", project, color, Path.GetFileName(path), path,
-                Path: path, IsWiki: path.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)
+        var tracked = RunGit(root, ["ls-files", "--cached"])
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => (Path: path.TrimEnd('\r').Replace('\\', '/'), Revision: revision));
+        var untracked = RunGit(root, ["ls-files", "--others", "--exclude-standard"])
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => (Path: path.TrimEnd('\r').Replace('\\', '/'), Revision: (string?)null));
+        return tracked.Concat(untracked)
+            .GroupBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Where(item => Contains(item.Path, query))
+            .Select(item => new GlobalSearchItem(
+                "files",
+                project,
+                color,
+                Path.GetFileName(item.Path),
+                item.Path,
+                Path: item.Path,
+                IsWiki: item.Path.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)
                     // docs/app/ is a code contract, not a wiki page: never route it into the wiki viewer.
-                    && !path.StartsWith("docs/app/", StringComparison.OrdinalIgnoreCase)))
+                    && !item.Path.StartsWith("docs/app/", StringComparison.OrdinalIgnoreCase),
+                RepositoryId: project,
+                Revision: item.Revision))
             .ToList();
     }
 
