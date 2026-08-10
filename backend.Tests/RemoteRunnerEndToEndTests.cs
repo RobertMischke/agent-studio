@@ -235,7 +235,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
         File.Delete(Path.Combine(_watchPath, TaskStates.Progress, TaskKey, "status.md"));
 
-        using var factory = BuildFactory(summaryOneShot: new StubSummaryOneShot());
+        var summaryOneShot = new StubSummaryOneShot(false, true);
+        using var factory = BuildFactory(summaryOneShot: summaryOneShot);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         var ct = CancellationToken.None;
@@ -280,6 +281,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(2, artifactUpload!.Uploaded);
         Assert.True(artifactUpload.ResultDocumentGenerated, artifactUpload.ResultDocumentStatus);
         Assert.Equal("generated", artifactUpload.ResultDocumentStatus);
+        Assert.Equal(2, summaryOneShot.Calls);
         Assert.Equal(
             ["results/deliverables.md", "results/nested/proof.txt"],
             artifactUpload.Files);
