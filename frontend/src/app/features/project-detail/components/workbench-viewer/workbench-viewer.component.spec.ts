@@ -36,6 +36,37 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerComponent', () => {
+  it('ends loading and shows the API reason when a listed Workbench cannot be read', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'missing');
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/projects/Demo/workbenches/missing')
+      .flush(
+        { error: 'Workbench entrypoint is missing.' },
+        { status: 404, statusText: 'Not Found' },
+      );
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-loading"]'))
+      .toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-error"]')?.textContent)
+      .toContain('Workbench entrypoint is missing.');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('normalises artifact HTML behind a policy-first fixed wrapper', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {

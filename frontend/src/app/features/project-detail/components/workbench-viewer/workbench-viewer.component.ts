@@ -60,6 +60,7 @@ export class WorkbenchViewerComponent {
   private readonly http = inject(HttpClient);
   private readonly hub = inject(JobsHubClient);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
+  private requestGeneration = 0;
 
   readonly document = signal<WorkbenchDocument | null>(null);
   readonly loading = signal(false);
@@ -196,21 +197,39 @@ export class WorkbenchViewerComponent {
   }
 
   private loadDocument(project: string, id: string, clear = true): void {
+    const generation = ++this.requestGeneration;
     this.loading.set(true);
     this.error.set(null);
     this.documentationError.set(null);
     if (clear) this.document.set(null);
     this.docs.getWorkbench(project, id).subscribe({
       next: (document) => {
+        if (generation !== this.requestGeneration) return;
         this.document.set(document);
         const discovered = discoverWorkbenchDecisionMarkup(document.html);
         this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);
         this.loading.set(false);
       },
-      error: () => {
-        this.error.set('Workbench could not be loaded.');
+      error: response => {
+        if (generation !== this.requestGeneration) return;
+        this.error.set(workbenchLoadError(response));
         this.loading.set(false);
       },
     });
   }
+}
+
+function workbenchLoadError(response: unknown): string {
+  const candidate = response as {
+    error?: unknown;
+  } | null;
+  const payload = candidate?.error;
+  const reason = typeof payload === 'string'
+    ? payload.trim()
+    : typeof payload === 'object' && payload !== null && 'error' in payload
+      ? String((payload as { error?: unknown }).error ?? '').trim()
+      : '';
+  return reason
+    ? `Workbench could not be loaded: ${reason}`
+    : 'Workbench could not be loaded. The server did not provide a reason.';
 }

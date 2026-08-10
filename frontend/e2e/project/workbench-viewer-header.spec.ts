@@ -61,6 +61,13 @@ interface RefreshCapture {
   referenceRequest: Record<string, unknown> | null;
 }
 
+interface WorkbenchMockOptions {
+  workbenchError?: {
+    status: number;
+    message: string;
+  };
+}
+
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
     status: 200,
@@ -69,7 +76,10 @@ function json(route: Route, body: unknown): Promise<void> {
   });
 }
 
-async function installMocks(page: Page): Promise<RefreshCapture> {
+async function installMocks(
+  page: Page,
+  options: WorkbenchMockOptions = {},
+): Promise<RefreshCapture> {
   const capture: RefreshCapture = {
     linked: false,
     taskRequest: null,
@@ -233,6 +243,34 @@ async function installMocks(page: Page): Promise<RefreshCapture> {
       sections: [],
     }),
   );
+  await page.route(/\/api\/workbenches(?:\?.*)?$/, (route) =>
+    json(route, {
+      projectName: PROJECT,
+      count: 1,
+      currentCount: 1,
+      historyCount: 0,
+      items: [
+        {
+          projectName: PROJECT,
+          workbench: {
+            id: WORKBENCH_ID,
+            key: WORKBENCH_KEY,
+            title: 'Compact viewer header',
+            summary: 'Source metadata and controls stay in a detail popover.',
+            status: 'decision-pending',
+            phase: 'decision-ready',
+            updatedAtUtc: '2026-08-09T10:00:00Z',
+            entryPath: 'docs/operations/compact-viewer-header/index.html',
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            relatedTaskKeys: ['VHE-12', 'VHE-13'],
+            openDecisionCount: 3,
+          },
+        },
+      ],
+    }),
+  );
   await page.route(`**/api/projects/${encodeURIComponent(PROJECT)}/workbenches`, (route) =>
     json(route, {
       projectName: PROJECT,
@@ -258,8 +296,15 @@ async function installMocks(page: Page): Promise<RefreshCapture> {
   );
   await page.route(
     `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}`,
-    (route) =>
-      json(route, {
+    (route) => {
+      if (options.workbenchError) {
+        return route.fulfill({
+          status: options.workbenchError.status,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: options.workbenchError.message }),
+        });
+      }
+      return json(route, {
         workbench: {
           id: WORKBENCH_ID,
           key: WORKBENCH_KEY,
@@ -285,7 +330,8 @@ async function installMocks(page: Page): Promise<RefreshCapture> {
         revision: '1234567890abcdef',
         workingTreeModified: false,
         fingerprint: 'a'.repeat(64),
-      }),
+      });
+    },
   );
   await page.route(
     `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_KEY}/references`,
@@ -343,6 +389,27 @@ async function seedWorkbench(page: Page): Promise<void> {
   );
 }
 
+async function seedWorkbenchOverview(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ project }) => {
+      const tab = {
+        kind: 'workbenches',
+        projectName: project,
+      };
+      localStorage.setItem(
+        'atp.studio.tabs.v1',
+        JSON.stringify({
+          v: 1,
+          tabs: [tab],
+          activeKey: `workbenches:${project}`,
+        }),
+      );
+      localStorage.setItem('atp.studio.theme', 'light');
+    },
+    { project: PROJECT },
+  );
+}
+
 function evidencePath(testInfo: TestInfo, fileName: string): string {
   const root = resolve(process.env['JOB_RESULTS_DIR'] ?? testInfo.outputDir);
   mkdirSync(root, { recursive: true });
@@ -358,6 +425,87 @@ async function captureViewerTop(page: Page, testInfo: TestInfo, fileName: string
     clip: box!,
   });
 }
+
+async function expectViewerSettled(page: Page): Promise<void> {
+  await expect(page.getByTestId('workbench-viewer-frame')).toBeVisible({ timeout: 30_000 });
+  await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
+    .getByRole('heading', { name: 'Compact viewer header' })).toBeVisible();
+  await expect(page.getByTestId('workbench-viewer-loading')).toHaveCount(0);
+  await expect(page.getByTestId('loading-surface-list')).toHaveCount(0);
+}
+
+test('overview entry settles without a persistent loading surface', async ({
+  page,
+}, testInfo) => {
+  await installMocks(page);
+  await seedWorkbenchOverview(page);
+  await page.goto('/');
+  await page.addStyleTag({
+    content: '[data-testid="offline-banner"] { display: none !important; }',
+  });
+
+  await expect(page.getByTestId(`workbench-overview-item-${PROJECT}-${WORKBENCH_ID}`))
+    .toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`workbench-overview-full-${PROJECT}-${WORKBENCH_ID}`).click();
+  await expectViewerSettled(page);
+  await setTheme(page, 'light');
+  await page.screenshot({
+    path: evidencePath(testInfo, 'dossier-overview-entry-settled-light--mocked.png'),
+    fullPage: true,
+  });
+});
+
+test('direct dossier route settles without a persistent loading surface', async ({
+  page,
+}, testInfo) => {
+  await installMocks(page);
+  await page.goto(
+    `/#/projects/viewer-header-evidence/workbenches/${encodeURIComponent(WORKBENCH_ID)}`,
+  );
+  await page.addStyleTag({
+    content: '[data-testid="offline-banner"] { display: none !important; }',
+  });
+  await expect(page).toHaveURL(
+    /#\/projects\/viewer-header-evidence\/workbenches\/compact-viewer-header(?:&|$)/,
+  );
+  await expectViewerSettled(page);
+  await setTheme(page, 'dark');
+  await page.screenshot({
+    path: evidencePath(testInfo, 'dossier-direct-entry-settled-dark--mocked.png'),
+    fullPage: true,
+  });
+});
+
+test('unreadable dossier replaces loading feedback with the backend reason', async ({
+  page,
+}, testInfo) => {
+  await installMocks(page, {
+    workbenchError: {
+      status: 404,
+      message: 'Workbench not found, invalid, or path rejected',
+    },
+  });
+  await page.goto(
+    `/#/projects/viewer-header-evidence/workbenches/${encodeURIComponent(WORKBENCH_ID)}`,
+  );
+  await page.addStyleTag({
+    content: '[data-testid="offline-banner"] { display: none !important; }',
+  });
+
+  const error = page.getByTestId('workbench-viewer-error');
+  await expect(error).toBeVisible({ timeout: 30_000 });
+  await expect(error).toContainText('Workbench not found, invalid, or path rejected');
+  await expect(page.getByTestId('workbench-viewer-loading')).toHaveCount(0);
+  await expect(page.getByTestId('loading-surface-list')).toHaveCount(0);
+
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await page.screenshot({
+      path: evidencePath(testInfo, `dossier-load-error-${theme}--mocked.png`),
+      fullPage: true,
+    });
+  }
+});
 
 test('compact viewer head keeps live card state and details usable in both themes and widths', async ({
   page,
