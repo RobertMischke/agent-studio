@@ -291,14 +291,14 @@ public static class RunnerEndpoints
         // Different from the orchestrator log: the log records what the
         // runner / orchestrator did on its own; the chat is a real
         // bidirectional dialogue between the user and the global orchestrator
-        // session, scoped to one project tab. Persisted under
-        // <watchPath>/.orchestrator/orchestrator-chat.jsonl.
+        // session, scoped to one project tab. The Task Server centrally owns
+        // the managed context, transcript, receipts, summary, and lifecycle.
         runnerGroup.MapGet("/{projectName}/orchestrator-chat",
-            (string projectName, TaskScannerService scanner, OrchestratorChatService chatService) =>
+            async (string projectName, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-                var turns = chatService.Read(entry.Path);
+                var turns = await chatService.ReadAsync(projectName, entry.Path, context: null, 1000, ct);
                 var executionContext = chatService.ResolveExecutionContext(projectName, entry.Path);
                 return Results.Ok(new { project = projectName, turns, executionContext });
             });
@@ -316,9 +316,16 @@ public static class RunnerEndpoints
                 // per-turn USER PREFERENCES block resolves to the live
                 // defaults of the user who is actually chatting.
                 var clientId = ctx.Items["ClientId"] as string;
-                var reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
-                var executionContext = chatService.ResolveExecutionContext(projectName, entry.Path);
-                return Results.Ok(new { project = projectName, reply, executionContext });
+                try
+                {
+                    var reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
+                    var executionContext = chatService.ResolveExecutionContext(projectName, entry.Path);
+                    return Results.Ok(new { project = projectName, reply, executionContext });
+                }
+                catch (OrchestratorContextEnvelopeException exception)
+                {
+                    return Results.BadRequest(new { code = exception.Code, error = exception.Message });
+                }
             });
 
         // Per-context transcript history (MC-2, Concept §4). The side sheet's
@@ -332,13 +339,17 @@ public static class RunnerEndpoints
         // routes are strictly more specific than `{projectName}`, so routing
         // prefers them without ambiguity (same pattern as the orchestrator
         // session-turn endpoints).
-        static IResult ReadContextChat(string rawContextKey, TaskScannerService scanner, OrchestratorChatService chatService)
+        static async Task<IResult> ReadContextChat(
+            string rawContextKey,
+            TaskScannerService scanner,
+            OrchestratorChatService chatService,
+            CancellationToken ct)
         {
             if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
                 return Results.BadRequest(new { error = "Invalid orchestrator context key." });
             var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == key.ProjectId);
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{key.ProjectId}'" });
-            var turns = chatService.Read(entry.Path, key);
+            var turns = await chatService.ReadAsync(key.ProjectId!, entry.Path, key, 1000, ct);
             var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
             return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, turns, executionContext });
         }
@@ -358,17 +369,24 @@ public static class RunnerEndpoints
             // USER PREFERENCES block resolves to the live defaults of the user
             // who is actually chatting (matches the per-project route above).
             var clientId = ctx.Items["ClientId"] as string;
-            var reply = await chatService.SendAsync(key.ProjectId!, entry.Path, req, clientId, key, ct);
-            var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
-            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, reply, executionContext });
+            try
+            {
+                var reply = await chatService.SendAsync(key.ProjectId!, entry.Path, req, clientId, key, ct);
+                var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
+                return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, reply, executionContext });
+            }
+            catch (OrchestratorContextEnvelopeException exception)
+            {
+                return Results.BadRequest(new { code = exception.Code, error = exception.Message });
+            }
         }
 
         runnerGroup.MapGet("/project:{projectId}/orchestrator-chat",
-            (string projectId, TaskScannerService scanner, OrchestratorChatService chatService) =>
-                ReadContextChat($"project:{projectId}", scanner, chatService));
+            (string projectId, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                ReadContextChat($"project:{projectId}", scanner, chatService, ct));
         runnerGroup.MapGet("/task:{projectId}/{taskKey}/orchestrator-chat",
-            (string projectId, string taskKey, TaskScannerService scanner, OrchestratorChatService chatService) =>
-                ReadContextChat($"task:{projectId}/{taskKey}", scanner, chatService));
+            (string projectId, string taskKey, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                ReadContextChat($"task:{projectId}/{taskKey}", scanner, chatService, ct));
 
         runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
             (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>

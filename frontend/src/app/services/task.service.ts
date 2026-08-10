@@ -2371,9 +2371,8 @@ export class TaskService {
   }
 
   /**
-   * Read the per-project orchestrator chat log: turns between the user
-   * and the global orchestrator session, scoped to one project tab.
-   * Backed by `<watchPath>/.orchestrator/orchestrator-chat.jsonl`.
+   * Read the Task Server-owned per-project Orchestrator Chat transcript.
+   * The legacy project JSONL is a migration source, not active authority.
    */
   getOrchestratorChat(projectName: string) {
     return this.http.get<OrchestratorChatResponse>(
@@ -2386,9 +2385,9 @@ export class TaskService {
    * The side sheet derives a `project:<PROJ>` or `task:<PROJ>/<KEY>` context
    * key from where the operator is (board vs. task page); this hits
    * `GET /api/runner/{contextKey}/orchestrator-chat` so a pinned task and the
-   * board no longer share one history. A `project:` context resolves to the
-   * same canonical per-project thread {@link getOrchestratorChat} returns, so
-   * the board's chat is unchanged.
+   * board no longer share one history. Reading a task context materializes it
+   * in the central managed-context list without changing Task Activity. A
+   * `project:` context resolves to the canonical project transcript.
    */
   getOrchestratorChatByContext(contextKey: string) {
     return this.http.get<OrchestratorChatResponse>(
@@ -2398,8 +2397,8 @@ export class TaskService {
 
   /**
    * Send a user message to the project's orchestrator chat. The backend
-   * resumes the global orchestrator session, persists both user and
-   * orchestrator turns, and returns the orchestrator's reply turn.
+   * persists both turns and the context receipt on the Task Server, then
+   * returns the orchestrator's reply turn.
    */
   sendOrchestratorChat(
     projectName: string,
@@ -2412,6 +2411,7 @@ export class TaskService {
         mimeType?: string | null;
       }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+      contextEnvelope?: import('../features/orchestrator').OrchestratorContextEnvelope | null;
       model?: string | null;
       thinkingLevel?: string | null;
       selectionSource?: 'explicit' | 'inherited';
@@ -2430,10 +2430,10 @@ export class TaskService {
   /**
    * MC-2 (Concept §4): send a user message scoped to a navigation context.
    * Hits `POST /api/runner/{contextKey}/orchestrator-chat` so a task context's
-   * turns land in — and are read back from — its own thread, while a `project:`
+   * turns land in and are read back from its own thread, while a `project:`
    * context resolves to the same canonical per-project thread
-   * {@link sendOrchestratorChat} writes to. The resumed orchestrator session,
-   * prompt, and usage accounting stay project-level regardless of context.
+   * {@link sendOrchestratorChat} writes to. Prompt execution and usage
+   * accounting remain project-scoped while persistence stays context-scoped.
    */
   sendOrchestratorChatByContext(
     contextKey: string,
@@ -2446,6 +2446,7 @@ export class TaskService {
         mimeType?: string | null;
       }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+      contextEnvelope?: import('../features/orchestrator').OrchestratorContextEnvelope | null;
       model?: string | null;
       thinkingLevel?: string | null;
       selectionSource?: 'explicit' | 'inherited';

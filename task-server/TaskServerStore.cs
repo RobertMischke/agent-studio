@@ -11,10 +11,9 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 9 adds the task-version fence and code-owned default flow required for
-    // server-side Remote Review post-processing decisions. The migration block
-    // is idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 9;
+    // 10 adds the central Orchestrator context, transcript, and receipt store.
+    // The migration block is idempotent; the number only guards downgrades.
+    public const int CurrentSchemaVersion = 10;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -220,11 +219,16 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 INSERT INTO projects(id, workspace_id, name, task_key_prefix, next_task_number, version, created_at, updated_at)
                 VALUES ($id, $workspace, $name, $prefix, 1, 1, $now, $now);
+                INSERT INTO orchestrator_contexts(
+                    context_key, kind, project_id, task_id, summary, created_at, updated_at, hidden_at)
+                VALUES ($context_key, 'project', $id, NULL, $summary, $now, $now, NULL);
                 INSERT INTO flow_definitions(project_id, version, stages_json, max_reissue_attempts, updated_at)
                 VALUES ($id, 0, $stages, $max_reissues, $now);
                 """, ct, transaction,
                 ("$id", id), ("$workspace", request.WorkspaceId), ("$name", request.Name.Trim()),
                 ("$prefix", prefix), ("$now", now),
+                ("$context_key", $"project:{request.Name.Trim()}"),
+                ("$summary", $"Project chat for {request.Name.Trim()}"),
                 ("$stages", JsonSerializer.Serialize(OrchestrationDefaults.CreateStages())),
                 ("$max_reissues", OrchestrationDefaults.MaxReissueAttempts));
             await AuditAsync(connection, transaction, actorId, "project.created", "project", id,
@@ -461,6 +465,9 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 UPDATE tasks SET title = $title, body = $body, state = $state, version = $version, updated_at = $updated
                  WHERE id = $id AND version = $expected;
+                UPDATE orchestrator_contexts
+                   SET hidden_at = CASE WHEN $state = '7-archive' THEN COALESCE(hidden_at, $updated) ELSE NULL END
+                 WHERE task_id = $id;
                 """, ct, transaction,
                 ("$title", updated.Title), ("$body", updated.Body), ("$state", updated.State),
                 ("$version", updated.Version), ("$updated", Iso(now)), ("$id", updated.TaskId), ("$expected", request.ExpectedVersion));
@@ -1888,9 +1895,15 @@ public sealed partial class TaskServerStore
                     INSERT INTO projects(id, workspace_id, name, task_key_prefix, next_task_number, version, created_at, updated_at)
                     VALUES ($id, $workspace, $name, $prefix, $next, 1, $now, $now)
                     ON CONFLICT(id) DO NOTHING;
+                    INSERT INTO orchestrator_contexts(
+                        context_key, kind, project_id, task_id, summary, created_at, updated_at, hidden_at)
+                    VALUES ($context_key, 'project', $id, NULL, $summary, $now, $now, NULL)
+                    ON CONFLICT(context_key) DO NOTHING;
                     """, ct, transaction,
                     ("$id", project.ProjectId), ("$workspace", workspaceId), ("$name", project.Name),
-                    ("$prefix", project.Prefix), ("$next", project.NextTaskNumber), ("$now", now));
+                    ("$prefix", project.Prefix), ("$next", project.NextTaskNumber), ("$now", now),
+                    ("$context_key", $"project:{project.Name}"),
+                    ("$summary", $"Project chat for {project.Name}"));
 
                 foreach (var task in project.Tasks)
                 {
@@ -1975,6 +1988,35 @@ public sealed partial class TaskServerStore
                 version INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS orchestrator_contexts(
+                context_key TEXT PRIMARY KEY,
+                kind TEXT NOT NULL CHECK(kind IN ('project', 'task')),
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                task_id TEXT REFERENCES tasks(id),
+                summary TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                hidden_at TEXT,
+                CHECK((kind = 'project' AND task_id IS NULL) OR (kind = 'task' AND task_id IS NOT NULL))
+            );
+            CREATE TABLE IF NOT EXISTS orchestrator_context_turns(
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                context_key TEXT NOT NULL REFERENCES orchestrator_contexts(context_key),
+                turn_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'orchestrator')),
+                body TEXT NOT NULL,
+                model TEXT,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                error_detail TEXT,
+                attachments_json TEXT,
+                receipt_json TEXT,
+                payload_sha256 TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS runners(
                 id TEXT PRIMARY KEY,
@@ -2289,6 +2331,10 @@ public sealed partial class TaskServerStore
                 complete_idempotency_key TEXT UNIQUE
             );
             CREATE INDEX IF NOT EXISTS ix_tasks_project_state ON tasks(project_id, state);
+            CREATE INDEX IF NOT EXISTS ix_orchestrator_contexts_project_visible
+                ON orchestrator_contexts(project_id, hidden_at, updated_at);
+            CREATE INDEX IF NOT EXISTS ix_orchestrator_context_turns_context_sequence
+                ON orchestrator_context_turns(context_key, sequence);
             CREATE INDEX IF NOT EXISTS ix_leases_task_status ON leases(task_id, status);
             CREATE INDEX IF NOT EXISTS ix_events_run_cursor ON events(run_id, cursor);
             CREATE INDEX IF NOT EXISTS ix_artifacts_run ON artifacts(run_id);
@@ -2330,6 +2376,15 @@ public sealed partial class TaskServerStore
              GROUP BY host_id
             ON CONFLICT(host_id) DO NOTHING;
             """, ct, ("$now", Iso(UtcNow)));
+        await ExecuteAsync(connection, """
+            INSERT INTO orchestrator_contexts(
+                context_key, kind, project_id, task_id, summary, created_at, updated_at, hidden_at)
+            SELECT 'project:' || name, 'project', id, NULL, 'Project chat for ' || name,
+                   created_at, updated_at, NULL
+              FROM projects
+             WHERE 1 = 1
+            ON CONFLICT(context_key) DO NOTHING;
+            """, ct);
         await ExecuteAsync(connection, """
             INSERT INTO flow_definitions(
                 project_id, version, stages_json, max_reissue_attempts, updated_at)

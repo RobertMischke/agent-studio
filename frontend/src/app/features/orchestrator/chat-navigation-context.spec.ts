@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildChatNavigationContext } from './chat-navigation-context';
+import { buildOrchestratorContextEnvelope } from './orchestrator-context-envelope';
 
 /**
  * Pure-function unit test for the navigation-context builder that ships
@@ -105,5 +106,60 @@ describe('buildChatNavigationContext', () => {
     expect(ctx.pageType).toBe('concept');
     expect(ctx.pageExcerpt).toBe('Pages are bidirectional interfaces.');
     expect(ctx.currentTaskId).toBeUndefined();
+  });
+});
+
+describe('buildOrchestratorContextEnvelope', () => {
+  const fixedNow = () => new Date('2026-08-10T10:15:00.000Z');
+
+  it('freezes task scope, active surface, and dossier budget defaults', () => {
+    const navigation = buildChatNavigationContext({
+      activeJobId: 'task-folder',
+      activeTaskKey: 'AGT-2572',
+      activeJobTitle: 'Context foundation',
+      now: fixedNow,
+    });
+
+    expect(buildOrchestratorContextEnvelope(
+      'task:Agent Studio/AGT-2572', navigation, [], fixedNow,
+    )).toEqual({
+      scope: {
+        kind: 'task',
+        contextKey: 'task:Agent Studio/AGT-2572',
+        projectId: 'Agent Studio',
+        taskKey: 'AGT-2572',
+      },
+      activeSurface: {
+        kind: 'task',
+        reference: 'AGT-2572',
+        title: 'Context foundation',
+        taskKey: 'AGT-2572',
+      },
+      explicitReferences: [],
+      budget: {
+        automaticSoftCapTokens: 4_000,
+        automaticHardCapTokens: 6_000,
+        totalHardCapTokens: 8_000,
+        charactersPerEstimatedToken: 4,
+      },
+      capturedAt: '2026-08-10T10:15:00.000Z',
+    });
+  });
+
+  it('pins explicit references to the active project', () => {
+    const envelope = buildOrchestratorContextEnvelope(
+      'project:Agent Studio',
+      null,
+      [{ kind: 'repository-file', reference: 'docs/start/README.md' }],
+      fixedNow,
+    );
+
+    expect(envelope.scope.kind).toBe('project');
+    expect(envelope.explicitReferences[0].projectId).toBe('Agent Studio');
+  });
+
+  it('rejects invalid context keys before the network call starts', () => {
+    expect(() => buildOrchestratorContextEnvelope('global', null, [], fixedNow))
+      .toThrow('selected orchestrator context is invalid');
   });
 });

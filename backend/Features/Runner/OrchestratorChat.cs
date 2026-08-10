@@ -9,20 +9,14 @@ using AgentStudio.Tasks;
 namespace AgentStudio.Runner;
 
 /// <summary>
-/// Per-project conversation log between the user and the (global) orchestrator
-/// session. Lives next to the per-project orchestrator log as
-/// <c>&lt;watchPath&gt;/.orchestrator/orchestrator-chat.jsonl</c>: one JSONL
-/// turn per line, oldest first, tolerant to torn writes.
+/// Reader for the legacy machine-local Orchestrator Chat history. The active
+/// transcript authority is the Task Server; this JSONL implementation remains
+/// only for idempotent migration and direct compatibility tests.
 ///
 /// <para>
-/// This is the storage layer for Phase 3 of the side-sheet chat. Phase 2
-/// re-used the existing override endpoint to steer the *agent* on an
-/// already-running task; Phase 3 introduces a real bidirectional chat with
-/// the *orchestrator itself*: the user asks "where do you stand?", the
-/// orchestrator replies, the dialogue accumulates. Conversation memory
-/// lives in the global Claude session (resumed via <c>-r &lt;sessionId&gt;</c>
-/// on each turn), so the only on-disk state we need is the audit log of
-/// what was said when.
+/// New production turns must flow through
+/// <see cref="IOrchestratorChatPersistence"/> and cannot select this class as
+/// an active fallback store.
 /// </para>
 /// </summary>
 public class OrchestratorChat
@@ -329,7 +323,11 @@ public sealed record OrchestratorContextReceipt(
     string ContextKey,
     string? TaskKey,
     IReadOnlyList<string> IncludedBlocks,
-    DateTime CapturedAt);
+    DateTime CapturedAt,
+    string? ReceiptId = null,
+    string? UserTurnId = null,
+    OrchestratorContextBudgetReceipt? Budget = null,
+    IReadOnlyList<OrchestratorContextSourceReceipt>? Sources = null);
 
 internal sealed record OrchestratorChatPromptComposition(
     string Prompt,
@@ -383,7 +381,8 @@ public sealed record SendOrchestratorChatRequest(
     ChatNavigationContext? NavigationContext = null,
     string? Model = null,
     string? ThinkingLevel = null,
-    string? SelectionSource = null);
+    string? SelectionSource = null,
+    OrchestratorContextEnvelope? ContextEnvelope = null);
 
 /// <summary>
 /// Structured navigation context the frontend ships with every project-chat
@@ -418,7 +417,7 @@ public sealed record ChatNavigationContext(
 /// <summary>
 /// Service that turns a user message into an orchestrator reply with the
 /// operator-selected Codex model and reasoning level, then persists both
-/// turns to the context-specific chat log.
+/// turns to the Task Server-owned context transcript.
 ///
 /// <para>
 /// This operating mode is GPT-only. Each request carries the effective model
@@ -441,6 +440,7 @@ public class OrchestratorChatService
     private readonly RemoteChatWorkBroker? _remoteWork;
     private readonly GitService? _git;
     private readonly OrchestratorTaskPromptContextComposer? _taskPromptContext;
+    private readonly IOrchestratorChatPersistence? _persistence;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls so multiple Codex
@@ -471,7 +471,8 @@ public class OrchestratorChatService
         ProjectRegistry? projects = null,
         RemoteChatWorkBroker? remoteWork = null,
         GitService? git = null,
-        OrchestratorTaskPromptContextComposer? taskPromptContext = null)
+        OrchestratorTaskPromptContextComposer? taskPromptContext = null,
+        IOrchestratorChatPersistence? persistence = null)
     {
         _chat = chat;
         _runner = runner;
@@ -486,6 +487,7 @@ public class OrchestratorChatService
         _remoteWork = remoteWork;
         _git = git;
         _taskPromptContext = taskPromptContext;
+        _persistence = persistence;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -493,6 +495,16 @@ public class OrchestratorChatService
     /// <summary>Read the transcript for a specific navigation context (MC-2).</summary>
     public List<OrchestratorChatTurn> Read(string watchPath, OrchestratorContextKey? context)
         => _chat.Read(watchPath, context);
+
+    public Task<IReadOnlyList<OrchestratorChatTurn>> ReadAsync(
+        string projectName,
+        string watchPath,
+        OrchestratorContextKey? context,
+        int limit,
+        CancellationToken ct)
+        => _persistence?.ReadAsync(projectName, watchPath, context, limit, ct)
+           ?? Task.FromResult<IReadOnlyList<OrchestratorChatTurn>>(
+               _chat.Read(watchPath, context).TakeLast(Math.Clamp(limit, 1, 1000)).ToArray());
 
     public Task<OrchestratorChatTurn> SendAsync(
         string projectName,
@@ -510,13 +522,11 @@ public class OrchestratorChatService
         => SendAsync(projectName, watchPath, req, clientId, context: null, ct);
 
     /// <summary>
-    /// Send a user message and persist both turns to the transcript for the
-    /// given navigation context (MC-2, Concept §4). <paramref name="context"/>
-    /// selects both the on-disk thread and the ORCH-1 read digest injected into
-    /// this turn. The resumed Claude session and usage accounting remain shared,
-    /// while project/task scoping is enforced by the digest builder. Passing
-    /// <c>null</c> keeps the legacy project transcript and resolves an equivalent
-    /// <c>project:&lt;projectName&gt;</c> digest.
+    /// Send a user message and persist both turns through the configured
+    /// central context store. <paramref name="context"/> selects the Task Server
+    /// transcript and the ORCH-1 read digest injected into this stateless GPT
+    /// turn. Passing <c>null</c> resolves the canonical
+    /// <c>project:&lt;projectName&gt;</c> context.
     /// </summary>
     public async Task<OrchestratorChatTurn> SendAsync(
         string projectName,
@@ -526,15 +536,17 @@ public class OrchestratorChatService
         OrchestratorContextKey? context,
         CancellationToken ct)
     {
-        // Append the user turn outside the gate so the audit log records
-        // the inbound message even if the user cancels while queued.
         var userTurn = new OrchestratorChatTurn
         {
             Role = OrchestratorChatRoles.User,
             Text = req.Text,
             Attachments = req.Attachments
         };
-        _chat.Append(watchPath, userTurn, context);
+        // Boundary validation runs before any transcript mutation. The full
+        // resolver repeats this snapshot under the execution gate and also
+        // validates repository paths before the user turn is persisted.
+        _ = OrchestratorContextEnvelopePolicy.Snapshot(
+            projectName, context, req, userTurn.Ts);
 
         // Serialize on the singleton-session gate. Two concurrent resumes
         // race on the session id, the on-disk usage record, and Claude's
@@ -552,9 +564,11 @@ public class OrchestratorChatService
         }
         try
         {
-            var promptComposition = await BuildPromptAsync(projectName, watchPath, req, clientId, context, ct).ConfigureAwait(false);
+            var promptComposition = await BuildPromptAsync(
+                projectName, watchPath, req, clientId, context, userTurn.Id, ct).ConfigureAwait(false);
             var prompt = promptComposition.Prompt;
             var contextReceipt = promptComposition.ContextReceipt;
+            await AppendTurnAsync(projectName, watchPath, context, userTurn, ct).ConfigureAwait(false);
             var requestedModel = string.IsNullOrWhiteSpace(req.Model)
                 ? ModelMetadataRegistry.DefaultForCli(CliTypes.Codex) ?? ModelIds.Gpt55
                 : req.Model.Trim();
@@ -567,7 +581,7 @@ public class OrchestratorChatService
             OrchestratorDecisionResult result;
             try
             {
-                var fullPrompt = _bootstrap.BuildBootPrompt() + "\n\n" + prompt;
+                var fullPrompt = prompt;
                 var remoteRoute = ResolveRemoteRoute(projectName, watchPath);
                 if (remoteRoute != null && _remoteWork != null)
                 {
@@ -612,7 +626,7 @@ public class OrchestratorChatService
                     ErrorDetail = translation.RawDetail,
                     ContextReceipt = contextReceipt
                 };
-                _chat.Append(watchPath, failure, context);
+                await AppendTurnAsync(projectName, watchPath, context, failure, ct).ConfigureAwait(false);
                 return failure;
             }
 
@@ -632,7 +646,7 @@ public class OrchestratorChatService
                     ErrorDetail = translation.RawDetail,
                     ContextReceipt = contextReceipt
                 };
-                _chat.Append(watchPath, failure, context);
+                await AppendTurnAsync(projectName, watchPath, context, failure, ct).ConfigureAwait(false);
                 return failure;
             }
 
@@ -644,7 +658,7 @@ public class OrchestratorChatService
                 TokenUsage = result.TokenUsage,
                 ContextReceipt = contextReceipt
             };
-            _chat.Append(watchPath, reply, context);
+            await AppendTurnAsync(projectName, watchPath, context, reply, ct).ConfigureAwait(false);
             return reply;
         }
         finally
@@ -653,209 +667,691 @@ public class OrchestratorChatService
         }
     }
 
+    private Task AppendTurnAsync(
+        string projectName,
+        string watchPath,
+        OrchestratorContextKey? context,
+        OrchestratorChatTurn turn,
+        CancellationToken ct)
+    {
+        if (_persistence is not null)
+            return _persistence.AppendAsync(projectName, watchPath, context, turn, ct);
+        if (!_chat.Append(watchPath, turn, context))
+            throw new IOException("The orchestrator chat turn could not be persisted.");
+        return Task.CompletedTask;
+    }
+
     private async Task<OrchestratorChatPromptComposition> BuildPromptAsync(
         string projectName,
         string watchPath,
         SendOrchestratorChatRequest req,
         string? clientId,
         OrchestratorContextKey? context,
+        string userTurnId,
         CancellationToken ct)
     {
-        var sb = new StringBuilder();
-        var includedBlocks = new List<string> { "active project" };
-        sb.AppendLine("=== ACTIVE PROJECT CONTEXT ===");
-        sb.AppendLine($"The user is currently looking at project: \"{projectName}\"");
-        sb.AppendLine("This may be a different project than the one discussed earlier in this session.");
-        sb.AppendLine("Answer ONLY about \"" + projectName + "\". Do not refer to other projects unless the user asks.");
-        sb.AppendLine();
+        var capturedAt = DateTime.UtcNow;
+        var envelope = OrchestratorContextEnvelopePolicy.Snapshot(
+            projectName, context, req, capturedAt);
+        var automatic = new List<ResolvedContextBlock>();
+        var explicitBlocks = new List<ResolvedContextBlock>();
 
+        await ResolveAutomaticContextAsync(
+            automatic, projectName, watchPath, req, clientId, context, envelope, ct)
+            .ConfigureAwait(false);
+        ResolveExplicitContext(explicitBlocks, projectName, watchPath, envelope);
+        if (req.Attachments is { Count: > 0 })
+        {
+            var attachmentText = string.Join('\n', req.Attachments.Select(item =>
+                $"- {item.Alt} ({item.RelativePath})"));
+            explicitBlocks.Add(ResolvedContextBlock.Included(
+                $"attachments:{userTurnId}",
+                "image-attachments",
+                attachmentText,
+                revision: null,
+                freshness: "submitted",
+                isExplicit: true));
+        }
+
+        DeduplicateContext(automatic, explicitBlocks);
+
+        var priorTurns = await ReadAsync(projectName, watchPath, context, 12, ct).ConfigureAwait(false);
+        var continuity = RenderContinuity(priorTurns.Where(turn => turn.Id != userTurnId).TakeLast(8));
+        if (!string.IsNullOrWhiteSpace(continuity))
+        {
+            automatic.Add(ResolvedContextBlock.Included(
+                $"history:{envelope.Scope.ContextKey}",
+                "recent-conversation",
+                continuity,
+                priorTurns.LastOrDefault(turn => turn.Id != userTurnId)?.Id,
+                "current",
+                isExplicit: false));
+        }
+
+        var allocated = AllocateContext(envelope.Budget, automatic, explicitBlocks);
+        var receipts = allocated.Select(item => item.Receipt).ToArray();
+        var includedBlocks = receipts
+            .Where(item => item.Status is "included" or "excerpted")
+            .Select(item => item.SourceId)
+            .ToArray();
+        var estimatedTokens = receipts.Sum(item => item.EstimatedTokens);
+        var receipt = new OrchestratorContextReceipt(
+            envelope.Scope.Kind,
+            envelope.Scope.ContextKey,
+            envelope.Scope.TaskKey,
+            includedBlocks,
+            envelope.CapturedAt,
+            ReceiptId: "rcp_" + Guid.NewGuid().ToString("N"),
+            UserTurnId: userTurnId,
+            Budget: new OrchestratorContextBudgetReceipt(
+                envelope.Budget.AutomaticSoftCapTokens,
+                envelope.Budget.AutomaticHardCapTokens,
+                envelope.Budget.TotalHardCapTokens,
+                estimatedTokens),
+            Sources: receipts);
+
+        var sb = new StringBuilder();
+        AppendScopedPreamble(sb, projectName, envelope);
+        AppendContextLedger(sb, receipt);
+        AppendResolvedBlocks(
+            sb,
+            "AUTOMATIC EVIDENCE",
+            allocated.Where(item => !item.IsExplicit && item.Kind != "recent-conversation"));
+        AppendResolvedBlocks(sb, "EXPLICIT ATTACHMENTS", allocated.Where(item => item.IsExplicit));
+
+        var history = allocated.FirstOrDefault(item => item.Kind == "recent-conversation");
+        if (history is not null && history.IncludedContent.Length > 0)
+        {
+            sb.AppendLine("=== CONVERSATION CONTINUITY ===");
+            sb.AppendLine(history.IncludedContent);
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("=== USER MESSAGE ===");
+        sb.Append(req.Text.TrimEnd());
+
+        _logger.LogInformation(
+            "orchestrator_chat_prompt_composed contextKey={ContextKey} scope={Scope} taskKey={TaskKey} sources={Sources} estimatedTokens={EstimatedTokens}",
+            receipt.ContextKey,
+            receipt.Scope,
+            receipt.TaskKey,
+            string.Join(',', receipt.IncludedBlocks),
+            estimatedTokens);
+        return new OrchestratorChatPromptComposition(sb.ToString(), receipt);
+    }
+
+    private async Task ResolveAutomaticContextAsync(
+        ICollection<ResolvedContextBlock> blocks,
+        string projectName,
+        string watchPath,
+        SendOrchestratorChatRequest request,
+        string? clientId,
+        OrchestratorContextKey? context,
+        OrchestratorContextEnvelope envelope,
+        CancellationToken ct)
+    {
         var digestAdded = false;
-        if (_contextDigests != null)
+        if (_contextDigests is not null)
         {
             try
             {
                 var effectiveContext = context;
-                if (effectiveContext == null)
-                    OrchestratorContextKey.TryParse($"project:{projectName}", out effectiveContext);
-                if (effectiveContext != null)
+                if (effectiveContext is null)
+                    OrchestratorContextKey.TryParse(envelope.Scope.ContextKey, out effectiveContext);
+                if (effectiveContext is not null)
                 {
                     var digest = await _contextDigests.BuildAsync(effectiveContext, ct: ct).ConfigureAwait(false);
-                    sb.AppendLine(digest.Digest);
-                    sb.AppendLine();
+                    blocks.Add(ResolvedContextBlock.Included(
+                        $"digest:{effectiveContext.Value}",
+                        "project-base",
+                        digest.Digest,
+                        digest.CapturedAt.ToString("O"),
+                        "current",
+                        isExplicit: false));
                     digestAdded = true;
-                    includedBlocks.Add("context digest");
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                includedBlocks.Add("context digest: unavailable");
+                blocks.Add(ResolvedContextBlock.Unavailable(
+                    $"digest:{envelope.Scope.ContextKey}",
+                    "project-base",
+                    "unavailable",
+                    "The project context digest could not be resolved."));
                 _logger.LogWarning(
-                    ex,
+                    exception,
                     "orchestrator_context_digest_injection_failed contextKey={ContextKey} project={Project} fallback=project-state-snapshot",
-                    context?.Value ?? $"project:{projectName}",
+                    envelope.Scope.ContextKey,
                     projectName);
             }
         }
-
         if (!digestAdded)
         {
             try
             {
+                var snapshot = new StringBuilder();
                 var tasks = _scanner.ScanAllAutomationJobs()
-                    .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
+                    .Where(item => string.Equals(
+                        item.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                AppendProjectStateSnapshot(sb, projectName, tasks);
-                includedBlocks.Add("project state snapshot");
+                AppendProjectStateSnapshot(snapshot, projectName, tasks);
+                blocks.Add(ResolvedContextBlock.Included(
+                    $"project:{projectName}/state",
+                    "project-base",
+                    snapshot.ToString(),
+                    revision: null,
+                    freshness: "current",
+                    isExplicit: false));
             }
-            catch (Exception __ex)
+            catch (Exception exception)
             {
-                SilentCatch.Note(__ex, "OrchestratorChat: Best-effort: missing snapshot is fine; the orchestrator can");
-                // Best-effort: missing snapshot is fine; the orchestrator can
-                // still answer general questions from session memory.
+                SilentCatch.Note(exception, "OrchestratorChat: project state snapshot unavailable.");
+                blocks.Add(ResolvedContextBlock.Unavailable(
+                    $"project:{projectName}/state",
+                    "project-base",
+                    "unavailable",
+                    "The project state snapshot could not be resolved."));
             }
         }
 
-        // Per-turn refresh of the user's CLI / model defaults. The boot
-        // prompt embeds a stale snapshot, but the user can flip the default
-        // from the UI at any time; without this block the orchestrator
-        // would keep proposing the boot-time default forever. The block
-        // also names the X-Client-Id the orchestrator should forward when
-        // hitting /api/tasks on the user's behalf.
-        AppendCurrentUserPreferences(sb, clientId, _identityStore);
-        includedBlocks.Add("current user preferences");
+        var preferences = new StringBuilder();
+        AppendCurrentUserPreferences(preferences, clientId, _identityStore);
+        blocks.Add(ResolvedContextBlock.Included(
+            $"client:{clientId ?? "anonymous"}/preferences",
+            "operator-preferences",
+            preferences.ToString(),
+            revision: null,
+            freshness: "current",
+            isExplicit: false));
 
-        AppendNavigationContext(sb, req.NavigationContext);
-        includedBlocks.Add(req.NavigationContext == null ? "navigation context: none" : "navigation context");
+        var navigation = new StringBuilder();
+        AppendNavigationContext(
+            navigation,
+            request.NavigationContext is null
+                ? null
+                : request.NavigationContext with { PageExcerpt = null });
+        blocks.Add(ResolvedContextBlock.Included(
+            $"surface:{envelope.Scope.ContextKey}",
+            "active-surface",
+            navigation.ToString(),
+            envelope.ActiveSurface?.Revision,
+            "captured-at-submit",
+            isExplicit: false));
 
-        OrchestratorTaskPromptContext? taskPromptContext = null;
+        if (envelope.ActiveSurface is { Kind: "page" or "workbench", Reference: not null } surface)
+            blocks.Add(ResolveRepositoryText(
+                projectName, watchPath, surface.Reference, surface.Kind, isExplicit: false));
+
         try
         {
-            if (_taskPromptContext != null)
+            var taskPromptContext = _taskPromptContext?.Compose(
+                projectName, watchPath, request.NavigationContext, context);
+            if (taskPromptContext is not null)
             {
-                taskPromptContext = _taskPromptContext.Compose(
-                    projectName,
-                    watchPath,
-                    req.NavigationContext,
-                    context);
-                if (taskPromptContext != null)
-                {
-                    sb.AppendLine(taskPromptContext.PromptBlock);
-                    sb.AppendLine();
-                    includedBlocks.AddRange(taskPromptContext.IncludedBlocks);
-                }
+                blocks.Add(ResolvedContextBlock.Included(
+                    $"task:{projectName}/{taskPromptContext.TaskKey}/bundle",
+                    "task-bundle",
+                    taskPromptContext.PromptBlock,
+                    revision: null,
+                    freshness: "current",
+                    isExplicit: false));
             }
-            else if (context?.Kind == OrchestratorContextKey.TaskKind
-                     || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskKey)
-                     || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskId))
+            else if (envelope.Scope.Kind == "task")
             {
-                includedBlocks.Add("task context: unavailable");
-                _logger.LogError(
-                    "orchestrator_task_prompt_context_service_missing contextKey={ContextKey} project={Project}",
-                    context?.Value ?? "(navigation-only)",
-                    projectName);
+                blocks.Add(ResolvedContextBlock.Unavailable(
+                    $"task:{projectName}/{envelope.Scope.TaskKey}/bundle",
+                    "task-bundle",
+                    "unresolved",
+                    "The task bundle could not be resolved."));
             }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            includedBlocks.Add("task context: unavailable");
+            blocks.Add(ResolvedContextBlock.Unavailable(
+                $"task:{projectName}/{envelope.Scope.TaskKey}/bundle",
+                "task-bundle",
+                "unavailable",
+                "The task bundle could not be resolved."));
             _logger.LogWarning(
-                ex,
-                "orchestrator_task_prompt_context_lookup_failed contextKey={ContextKey} taskKey={TaskKey} project={Project}; continuing with the explicitly marked degraded context",
-                context?.Value ?? "(navigation-only)",
-                req.NavigationContext?.CurrentTaskKey ?? context?.TaskKey ?? req.NavigationContext?.CurrentTaskId,
+                exception,
+                "orchestrator_task_prompt_context_lookup_failed contextKey={ContextKey} taskKey={TaskKey} project={Project}",
+                envelope.Scope.ContextKey,
+                envelope.Scope.TaskKey,
                 projectName);
         }
 
-        if (_componentRouting != null)
+        if (_componentRouting is not null)
         {
-            var affectedComponent = req.NavigationContext?.AffectedComponent;
-            // The host cannot know the affected implementation before the
-            // operator describes the problem. Use an explicit component hint
-            // when one exists, otherwise resolve from the current message so
-            // the routing block is useful on the first proposal turn instead
-            // of always reporting an artificial "unresolved" component.
+            var affectedComponent = request.NavigationContext?.AffectedComponent;
             var routingComponent = string.IsNullOrWhiteSpace(affectedComponent)
-                ? req.Text
+                ? request.Text
                 : affectedComponent;
             var route = _componentRouting.Resolve(new ComponentRoutingRequest(
-                req.NavigationContext?.ObservedSurface ?? req.NavigationContext?.CurrentPage,
+                request.NavigationContext?.ObservedSurface ?? request.NavigationContext?.CurrentPage,
                 routingComponent,
                 projectName));
-            sb.AppendLine(ComponentRoutingService.RenderCompact(route));
-            sb.AppendLine();
-            includedBlocks.Add("component routing");
+            blocks.Add(ResolvedContextBlock.Included(
+                $"routing:{projectName}/{route.MappingVersion}",
+                "component-routing",
+                ComponentRoutingService.RenderCompact(route),
+                route.MappingVersion?.ToString(),
+                "current",
+                isExplicit: false));
         }
-
-        var receiptScope = taskPromptContext != null
-            || context?.Kind == OrchestratorContextKey.TaskKind
-            || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskKey)
-            || !string.IsNullOrWhiteSpace(req.NavigationContext?.CurrentTaskId)
-            ? "task"
-            : "project";
-        var receiptTaskKey = taskPromptContext?.TaskKey
-            ?? req.NavigationContext?.CurrentTaskKey
-            ?? context?.TaskKey
-            ?? req.NavigationContext?.CurrentTaskId;
-        var receiptContextKey = context?.Value
-            ?? (receiptScope == "task" && !string.IsNullOrWhiteSpace(receiptTaskKey)
-                ? $"task:{projectName}/{receiptTaskKey}"
-                : $"project:{projectName}");
-        var receipt = new OrchestratorContextReceipt(
-            receiptScope,
-            receiptContextKey,
-            receiptTaskKey,
-            includedBlocks,
-            DateTime.UtcNow);
-
-        sb.AppendLine("=== CONTEXT INCLUDED WITH THIS REQUEST ===");
-        sb.AppendLine($"Scope: {receipt.Scope}");
-        sb.AppendLine($"Context key: {receipt.ContextKey}");
-        sb.AppendLine($"Blocks: {string.Join(", ", receipt.IncludedBlocks)}");
-        sb.AppendLine();
-
-        _logger.LogInformation(
-            "orchestrator_chat_prompt_composed contextKey={ContextKey} scope={Scope} taskKey={TaskKey} includedBlocks={IncludedBlocks}",
-            receipt.ContextKey,
-            receipt.Scope,
-            receipt.TaskKey,
-            string.Join(",", receipt.IncludedBlocks));
-
-        sb.AppendLine("=== USER MESSAGE ===");
-        sb.AppendLine(req.Text);
-        sb.AppendLine();
-
-        if (req.Attachments != null && req.Attachments.Count > 0)
-        {
-            var inlineCount = req.Attachments.Count(a => !string.IsNullOrEmpty(a.InlineBase64));
-            if (inlineCount > 0)
-            {
-                // Inline images travel as Anthropic content blocks alongside
-                // the text in the same user message - the model has the
-                // pixels in context already. Telling it that explicitly
-                // avoids a wasted Read tool call against the archived copy.
-                sb.AppendLine($"User attached {req.Attachments.Count} image(s); {inlineCount} delivered as inline content block(s) above this text. The archived copies (for reference) are:");
-            }
-            else
-            {
-                sb.AppendLine($"User attached {req.Attachments.Count} image(s):");
-            }
-            foreach (var a in req.Attachments)
-            {
-                sb.AppendLine($"- {a.Alt} ({a.RelativePath})");
-            }
-            sb.AppendLine();
-        }
-
-        sb.AppendLine("Reply directly to the user about \"" + projectName + "\". Be concrete and specific.");
-        sb.AppendLine("Use the word \"tasks\", not \"jobs\".");
-        sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
-        sb.AppendLine("Keep it short unless the user asked for depth.");
-        return new OrchestratorChatPromptComposition(sb.ToString(), receipt);
     }
+
+    private void ResolveExplicitContext(
+        ICollection<ResolvedContextBlock> blocks,
+        string projectName,
+        string watchPath,
+        OrchestratorContextEnvelope envelope)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var reference in envelope.ExplicitReferences)
+        {
+            var canonicalId = $"{reference.Kind}:{reference.Reference}";
+            if (!seen.Add(canonicalId)) continue;
+            switch (reference.Kind)
+            {
+                case OrchestratorContextReferenceKinds.Task:
+                {
+                    var taskKey = NormalizeTaskReference(projectName, reference.Reference);
+                    try
+                    {
+                        OrchestratorContextKey.TryParse(
+                            $"task:{projectName}/{taskKey}", out var taskContextKey);
+                        var taskContext = _taskPromptContext?.Compose(
+                            projectName,
+                            watchPath,
+                            new ChatNavigationContext(CurrentTaskKey: taskKey),
+                            taskContextKey);
+                        blocks.Add(taskContext is null
+                            ? ResolvedContextBlock.Unavailable(
+                                $"task:{projectName}/{taskKey}/bundle",
+                                "task-bundle",
+                                "unresolved",
+                                "The referenced task could not be resolved.",
+                                isExplicit: true)
+                            : ResolvedContextBlock.Included(
+                                $"task:{projectName}/{taskContext.TaskKey}/bundle",
+                                "task-bundle",
+                                taskContext.PromptBlock,
+                                reference.Revision,
+                                "current",
+                                isExplicit: true));
+                    }
+                    catch (Exception)
+                    {
+                        blocks.Add(ResolvedContextBlock.Unavailable(
+                            $"task:{projectName}/{taskKey}/bundle",
+                            "task-bundle",
+                            "unresolved",
+                            "The referenced task could not be resolved.",
+                            isExplicit: true));
+                    }
+                    break;
+                }
+                case OrchestratorContextReferenceKinds.Page:
+                    blocks.Add(ResolveRepositoryText(
+                        projectName, watchPath, reference.Reference, "page", isExplicit: true));
+                    break;
+                case OrchestratorContextReferenceKinds.RepositoryFile:
+                    blocks.Add(ResolveRepositoryText(
+                        projectName, watchPath, reference.Reference, "repository-file", isExplicit: true));
+                    break;
+            }
+        }
+    }
+
+    private ResolvedContextBlock ResolveRepositoryText(
+        string projectName,
+        string watchPath,
+        string reference,
+        string kind,
+        bool isExplicit)
+    {
+        var relative = NormalizeRepositoryReference(projectName, reference, kind);
+        var root = Path.GetFullPath(ResolveWorkingDirectory(projectName, watchPath));
+        if (Path.IsPathRooted(relative)
+            || relative.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Contains("..", StringComparer.Ordinal))
+            throw new OrchestratorContextEnvelopeException(
+                "context-path-traversal",
+                $"Context reference '{reference}' escapes the active project checkout.");
+        var fullPath = Path.GetFullPath(Path.Combine(root, relative));
+        if (!IsWithinRoot(root, fullPath))
+            throw new OrchestratorContextEnvelopeException(
+                "context-path-traversal",
+                $"Context reference '{reference}' escapes the active project checkout.");
+        if (!File.Exists(fullPath))
+            return ResolvedContextBlock.Unavailable(
+                $"file:{projectName}/{relative.Replace('\\', '/')}",
+                kind,
+                "unresolved",
+                "The referenced repository text does not exist.",
+                isExplicit);
+        EnsureResolvedPathWithinRoot(root, fullPath, reference);
+        var info = new FileInfo(fullPath);
+        if (info.Length > 1_000_000)
+            return ResolvedContextBlock.Unavailable(
+                $"file:{projectName}/{relative.Replace('\\', '/')}",
+                kind,
+                "oversize",
+                "The referenced repository text exceeds the 1 MB resolver limit.",
+                isExplicit);
+        string content;
+        try
+        {
+            content = File.ReadAllText(fullPath, new UTF8Encoding(false, true));
+        }
+        catch (DecoderFallbackException)
+        {
+            return ResolvedContextBlock.Unavailable(
+                $"file:{projectName}/{relative.Replace('\\', '/')}",
+                kind,
+                "blocked",
+                "Binary repository files are not eligible for text context.",
+                isExplicit);
+        }
+        return ResolvedContextBlock.Included(
+            $"file:{projectName}/{relative.Replace('\\', '/')}",
+            kind,
+            content,
+            info.LastWriteTimeUtc.ToString("O"),
+            "current",
+            isExplicit);
+    }
+
+    private static IReadOnlyList<AllocatedContextBlock> AllocateContext(
+        OrchestratorContextBudget budget,
+        IReadOnlyList<ResolvedContextBlock> automatic,
+        IReadOnlyList<ResolvedContextBlock> explicitBlocks)
+    {
+        var totalRemaining = budget.TotalHardCapTokens * budget.CharactersPerEstimatedToken;
+        var explicitAllocated = new List<AllocatedContextBlock>();
+        var unresolvedExplicitContent = explicitBlocks.Count(block => block.Status == "included");
+        foreach (var block in explicitBlocks)
+        {
+            var perSourceRemaining = block.Status == "included" && unresolvedExplicitContent > 0
+                ? totalRemaining / unresolvedExplicitContent
+                : totalRemaining;
+            var allocated = AllocateBlock(block, perSourceRemaining, budget.CharactersPerEstimatedToken);
+            if (block.Status == "included")
+            {
+                unresolvedExplicitContent--;
+                if (allocated.IncludedContent.Length == 0)
+                    throw new OrchestratorContextEnvelopeException(
+                        "context-explicit-budget-insufficient",
+                        "Explicit context sources do not fit the submitted budget. Remove or narrow a source, then try again.");
+            }
+            explicitAllocated.Add(allocated);
+            totalRemaining -= allocated.IncludedContent.Length;
+        }
+
+        var automaticRemaining = Math.Min(
+            totalRemaining,
+            budget.AutomaticHardCapTokens * budget.CharactersPerEstimatedToken);
+        var automaticAllocated = new List<AllocatedContextBlock>();
+        foreach (var block in automatic.Where(item => item.Kind != "recent-conversation"))
+        {
+            var allocated = AllocateBlock(block, automaticRemaining, budget.CharactersPerEstimatedToken);
+            automaticAllocated.Add(allocated);
+            automaticRemaining -= allocated.IncludedContent.Length;
+            totalRemaining -= allocated.IncludedContent.Length;
+        }
+
+        var historyRemaining = Math.Min(
+            automaticRemaining,
+            Math.Max(0, budget.AutomaticSoftCapTokens * budget.CharactersPerEstimatedToken
+                        - automaticAllocated.Sum(item => item.IncludedContent.Length)));
+        foreach (var block in automatic.Where(item => item.Kind == "recent-conversation"))
+        {
+            var allocated = AllocateBlock(block, historyRemaining, budget.CharactersPerEstimatedToken);
+            automaticAllocated.Add(allocated);
+            historyRemaining -= allocated.IncludedContent.Length;
+        }
+        return automaticAllocated.Concat(explicitAllocated).ToArray();
+    }
+
+    private static void DeduplicateContext(
+        IList<ResolvedContextBlock> automatic,
+        IList<ResolvedContextBlock> explicitBlocks)
+    {
+        DeduplicateWithin(explicitBlocks);
+        DeduplicateWithin(automatic);
+        var explicitIds = explicitBlocks
+            .Select(item => item.SourceId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        for (var index = automatic.Count - 1; index >= 0; index--)
+        {
+            if (explicitIds.Contains(automatic[index].SourceId))
+                automatic.RemoveAt(index);
+        }
+    }
+
+    private static void DeduplicateWithin(IList<ResolvedContextBlock> blocks)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = blocks.Count - 1; index >= 0; index--)
+        {
+            if (!seen.Add(blocks[index].SourceId))
+                blocks.RemoveAt(index);
+        }
+    }
+
+    private static AllocatedContextBlock AllocateBlock(
+        ResolvedContextBlock block,
+        int availableCharacters,
+        int charactersPerToken)
+    {
+        if (block.Status != "included")
+            return new AllocatedContextBlock(
+                block.SourceId,
+                block.Kind,
+                string.Empty,
+                block.IsExplicit,
+                new OrchestratorContextSourceReceipt(
+                    block.SourceId, block.Kind, block.Revision, block.Sha256,
+                    block.Freshness, 0, 0, block.Status, block.Reason));
+        if (availableCharacters <= 0)
+            return new AllocatedContextBlock(
+                block.SourceId,
+                block.Kind,
+                string.Empty,
+                block.IsExplicit,
+                new OrchestratorContextSourceReceipt(
+                    block.SourceId, block.Kind, block.Revision, block.Sha256,
+                    block.Freshness, 0, 0, "omitted-budget",
+                    "The source did not fit within the context budget."));
+        var included = block.Content.Length <= availableCharacters
+            ? block.Content
+            : block.Content[..availableCharacters];
+        var status = included.Length == block.Content.Length ? "included" : "excerpted";
+        return new AllocatedContextBlock(
+            block.SourceId,
+            block.Kind,
+            included,
+            block.IsExplicit,
+            new OrchestratorContextSourceReceipt(
+                block.SourceId, block.Kind, block.Revision, block.Sha256,
+                block.Freshness, included.Length,
+                (int)Math.Ceiling(included.Length / (double)charactersPerToken),
+                status,
+                status == "excerpted" ? "The source was deterministically excerpted to fit the context budget." : null));
+    }
+
+    private static void AppendScopedPreamble(
+        StringBuilder builder,
+        string projectName,
+        OrchestratorContextEnvelope envelope)
+    {
+        builder.AppendLine("=== SCOPED ORCHESTRATOR CHAT PREAMBLE ===");
+        builder.AppendLine("You are the read-only Orchestrator answering an operator question.");
+        builder.AppendLine($"Conversation scope: {envelope.Scope.ContextKey}");
+        builder.AppendLine($"Project isolation boundary: {projectName}");
+        builder.AppendLine("Use only evidence listed in this request. Never infer facts from another project.");
+        builder.AppendLine("Do not start, stop, continue, move, or otherwise mutate a task from this chat turn.");
+        builder.AppendLine("Reply directly and concretely. Use the word 'tasks', not 'jobs'. Use Markdown when useful.");
+        builder.AppendLine();
+    }
+
+    private static void AppendContextLedger(StringBuilder builder, OrchestratorContextReceipt receipt)
+    {
+        builder.AppendLine("=== CONTEXT LEDGER ===");
+        builder.AppendLine($"Receipt: {receipt.ReceiptId}");
+        builder.AppendLine($"User turn: {receipt.UserTurnId}");
+        builder.AppendLine($"Captured at: {receipt.CapturedAt:O}");
+        builder.AppendLine($"Scope: {receipt.ContextKey}");
+        builder.AppendLine($"Budget: automatic-soft={receipt.Budget?.AutomaticSoftCapTokens}; automatic-hard={receipt.Budget?.AutomaticHardCapTokens}; total-hard={receipt.Budget?.TotalHardCapTokens}; estimated-included={receipt.Budget?.EstimatedIncludedTokens}");
+        foreach (var source in receipt.Sources ?? [])
+        {
+            builder.Append("- ").Append(source.SourceId)
+                .Append(" | kind=").Append(source.Kind)
+                .Append(" | revision=").Append(source.Revision ?? "none")
+                .Append(" | sha256=").Append(source.Sha256 ?? "none")
+                .Append(" | freshness=").Append(source.Freshness)
+                .Append(" | status=").Append(source.Status)
+                .Append(" | chars=").Append(source.IncludedCharacters)
+                .Append(" | tokens~=").Append(source.EstimatedTokens);
+            if (!string.IsNullOrWhiteSpace(source.Reason))
+                builder.Append(" | reason=").Append(source.Reason);
+            builder.AppendLine();
+        }
+        builder.AppendLine();
+    }
+
+    private static void AppendResolvedBlocks(
+        StringBuilder builder,
+        string heading,
+        IEnumerable<AllocatedContextBlock> blocks)
+    {
+        var included = blocks
+            .Where(item => item.Kind != "recent-conversation" && item.IncludedContent.Length > 0)
+            .ToArray();
+        if (included.Length == 0) return;
+        builder.Append("=== ").Append(heading).AppendLine(" ===");
+        foreach (var block in included)
+        {
+            builder.Append("--- ").Append(block.SourceId).AppendLine(" ---");
+            builder.AppendLine(block.IncludedContent.TrimEnd());
+        }
+        builder.AppendLine();
+    }
+
+    private static string RenderContinuity(IEnumerable<OrchestratorChatTurn> turns)
+    {
+        var builder = new StringBuilder();
+        foreach (var turn in turns)
+        {
+            if (string.IsNullOrWhiteSpace(turn.Text)) continue;
+            builder.Append(turn.Role == OrchestratorChatRoles.User ? "Operator" : "Orchestrator")
+                .Append(" [").Append(turn.Id).Append("]: ")
+                .AppendLine(turn.Text.Trim());
+        }
+        return builder.ToString().TrimEnd();
+    }
+
+    private static string NormalizeTaskReference(string projectName, string reference)
+    {
+        var prefix = $"task:{projectName}/";
+        return reference.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? reference[prefix.Length..].Trim()
+            : reference.Trim();
+    }
+
+    private static string NormalizeRepositoryReference(
+        string projectName,
+        string reference,
+        string kind)
+    {
+        var normalized = reference.Trim().Replace('\\', '/');
+        if (kind is "page" or "workbench")
+        {
+            var pagePrefix = $"page:{projectName}/";
+            if (normalized.StartsWith("page:", StringComparison.OrdinalIgnoreCase)
+                && !normalized.StartsWith(pagePrefix, StringComparison.OrdinalIgnoreCase))
+                throw new OrchestratorContextEnvelopeException(
+                    "context-reference-cross-project",
+                    "A page reference cannot cross the active conversation project.");
+            if (normalized.StartsWith(pagePrefix, StringComparison.OrdinalIgnoreCase))
+                normalized = normalized[pagePrefix.Length..];
+            if (!normalized.StartsWith("docs/", StringComparison.OrdinalIgnoreCase))
+                normalized = "docs/" + normalized;
+        }
+        return normalized;
+    }
+
+    private static bool IsWithinRoot(string root, string candidate)
+    {
+        var relative = Path.GetRelativePath(root, candidate);
+        return relative != ".."
+               && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+               && !Path.IsPathRooted(relative);
+    }
+
+    private static void EnsureResolvedPathWithinRoot(
+        string root,
+        string fullPath,
+        string reference)
+    {
+        var relative = Path.GetRelativePath(root, fullPath);
+        var current = root;
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            FileSystemInfo info = Directory.Exists(current)
+                ? new DirectoryInfo(current)
+                : new FileInfo(current);
+            if (info.LinkTarget is null) continue;
+            var resolved = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+            if (resolved is null || !IsWithinRoot(root, Path.GetFullPath(resolved)))
+                throw new OrchestratorContextEnvelopeException(
+                    "context-path-outside-project",
+                    $"Context reference '{reference}' resolves outside the active project checkout.");
+        }
+    }
+
+    private sealed record ResolvedContextBlock(
+        string SourceId,
+        string Kind,
+        string Content,
+        string? Revision,
+        string? Sha256,
+        string Freshness,
+        bool IsExplicit,
+        string Status,
+        string? Reason)
+    {
+        public static ResolvedContextBlock Included(
+            string sourceId,
+            string kind,
+            string content,
+            string? revision,
+            string freshness,
+            bool isExplicit)
+            => new(
+                sourceId, kind, content, revision,
+                OrchestratorContextEnvelopePolicy.Sha256(content),
+                freshness, isExplicit, "included", null);
+
+        public static ResolvedContextBlock Unavailable(
+            string sourceId,
+            string kind,
+            string status,
+            string reason,
+            bool isExplicit = false)
+            => new(sourceId, kind, string.Empty, null, null, "unknown", isExplicit, status, reason);
+    }
+
+    private sealed record AllocatedContextBlock(
+        string SourceId,
+        string Kind,
+        string IncludedContent,
+        bool IsExplicit,
+        OrchestratorContextSourceReceipt Receipt);
 
     /// <summary>
     /// Render the AUTHORITATIVE project-state snapshot block. The global

@@ -15,6 +15,7 @@ describe('ChatSwitcherRailComponent', () => {
       updatedAt: '2026-07-11T10:00:00Z', model: 'codex', cumulativeInputTokens: 1200,
       cumulativeOutputTokens: 50, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
       runtimeStatus: 'parked', queuePosition: 0,
+      summary: 'Investigate the task context lifecycle',
     }]);
     fixture.detectChanges();
   });
@@ -31,6 +32,7 @@ describe('ChatSwitcherRailComponent', () => {
     expect(text).toContain('parked');
     expect(text).toContain('new');
     expect(text).toContain('1k');
+    expect(text).toContain('Investigate the task context lifecycle');
 
     const current = fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]');
     expect(current.classList).toContain('context-list__row--active');
