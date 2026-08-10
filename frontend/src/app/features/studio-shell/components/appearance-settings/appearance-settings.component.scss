@@ -6,7 +6,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
-  max-width: 640px;
 }
 
 .appearance__head {
@@ -40,4 +39,23 @@
 .appearance__label {
   font-size: 0.9rem;
   color: var(--studio-fg);
+}
+
+.appearance__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.appearance__hint {
+  color: var(--studio-fg-muted);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 520px) {
+  .appearance__row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

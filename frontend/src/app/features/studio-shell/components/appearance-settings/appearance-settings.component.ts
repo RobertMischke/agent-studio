@@ -49,6 +49,10 @@ export class AppearanceSettingsComponent {
     { value: 'numbers', label: 'Numbers', testid: 'settings-tree-metrics-numbers' },
     { value: 'dots', label: 'Dots', testid: 'settings-tree-metrics-dots' },
   ];
+  readonly projectChatEntryOptions: readonly SegmentedOption<'open' | 'closed'>[] = [
+    { value: 'open', label: 'Open', testid: 'settings-project-chat-entry-open' },
+    { value: 'closed', label: 'Keep closed', testid: 'settings-project-chat-entry-closed' },
+  ];
 
   setTheme(value: 'dark' | 'light'): void {
     this.themeService.set(value);
@@ -60,5 +64,9 @@ export class AppearanceSettingsComponent {
 
   setTreeMetricView(value: 'numbers' | 'dots'): void {
     this.uiPrefs.setTreeMetricView(value);
+  }
+
+  setProjectChatEntry(value: 'open' | 'closed'): void {
+    this.uiPrefs.setOpenProjectChatOnEntry(value === 'open');
   }
 }

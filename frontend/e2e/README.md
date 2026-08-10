@@ -368,7 +368,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `remote-run-testsuite-report.spec.ts` | @mockup remote-run testsuite report |
 | `result-view-mockup.spec.ts` | @mockup result-view (real component) |
 
-### `orchestrator/` - 17 specs
+### `orchestrator/` - 19 specs
 
 | Spec | Summary |
 |------|---------|
@@ -381,6 +381,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `orchestrator-feed-overlay.spec.ts` | global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes |
 | `orchestrator-model-picker.spec.ts` | full live GPT picker persists across Board and Task contexts |
 | `orchestrator-project-chat.spec.ts` | orchestrator project chat |
+| `orchestrator-project-entry.spec.ts` | default project Chat entry, saved opt-out, atomic project switch, and task-route exclusion |
 | `orchestrator-review-subsection.spec.ts` | (no description) |
 | `orchestrator-side-sheet-pin.spec.ts` | Orchestrator side sheet · navigation context + pin |
 | `orchestrator-side-sheet-position.spec.ts` | Orchestrator side sheet position |
@@ -388,6 +389,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `orchestrator-steering.spec.ts` | Orchestrator steering |
 | `project-chat-bug-directive.spec.ts` | Project chat - Slice E /bug directive |
 | `project-chat-context-awareness.spec.ts` | Project chat context awareness |
+| `project-chat-context-sources.spec.ts` | explicit context sources and persisted receipt disclosure |
 | `project-chat-fix.spec.ts` | Project chat fix - silent drop, sluggishness, parallel use |
 
 ### `perf/` - 4 specs

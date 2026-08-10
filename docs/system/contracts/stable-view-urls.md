@@ -28,6 +28,12 @@ use the shorter form. Current Project Hub rail keys are the `key` values in
 Common examples are `project-urls`, `deployment`, `git`, `wiki`, `pipeline`,
 `workflow`, `prompts`, and `settings`.
 
+Opening a project also opens the existing Orchestrator Chat push-side-sheet by
+default, after the project route resolves. This does not create a `/chat` route:
+the URL continues to name the visible Board or Project Hub surface. A saved
+per-user opt-out, sheet visibility, pin, width, transcript scroll, and composer
+draft are transient browser state and do not belong in a shared URL.
+
 ## How an agent forms a link
 
 1. Start with the deployment origin, for example `https://studio.example.net`.

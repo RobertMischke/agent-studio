@@ -20,7 +20,20 @@ The pattern is clear: the user's feeling that a session is "still open" does not
 
 ## Product Shape
 
-The app should expose an optional **Orchestrator Chat** window that can be pinned, hidden, or opened from a project or global board context.
+The app exposes **Orchestrator Chat** as the standard project-level entry. A
+project opens its existing selected surface and the resizable Chat side sheet
+together, with the permanent project context already selected. Chat remains a
+push-layout surface that can be pinned or hidden; it is not a new full-screen
+route and does not replace the Board, Project Hub, status-bar toggle, or other
+existing entries.
+
+The per-user **Open project Chat on project entry** preference defaults to
+Open. Its saved opt-out keeps Chat closed on later project entries while all
+explicit entry points remain available. Route hydration completes before the
+sheet opens, so a persisted tab cannot briefly load another project's
+transcript. Passive restore never moves keyboard focus into the composer.
+Task routes keep their task surface and Activity tab unchanged and do not
+trigger the project-entry behavior.
 
 The chat has two scopes:
 
@@ -414,7 +427,6 @@ That slice gives the user a durable conversation and visible context before the 
 
 ## Open Product Questions
 
-- Should the Orchestrator Chat be a right sidebar, a bottom drawer, or a project-detail tab? The feature wants to be persistent, so a pinned side panel is the likely first shape.
 - Should memory refresh be automatic after every completed job, or only after review acceptance? Review acceptance is safer because it means the user agrees the result is real.
 - Which actions need confirmation? A good first rule: read-only and draft-creation actions can run immediately; task state changes, CLI starts, stops, and continues need visible confirmation unless auto-mode already owns the decision.
 - How much of the raw transcript should be loaded into chat? The default should be summaries plus source links; full logs stay one click away.

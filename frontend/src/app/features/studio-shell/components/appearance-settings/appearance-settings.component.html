@@ -33,4 +33,17 @@
       [value]="uiPrefs.treeMetricView()"
       (valueChange)="setTreeMetricView($event)" />
   </div>
+
+  <app-section-header title="Project entry" [divider]="true" />
+  <div class="appearance__row" data-testid="settings-project-chat-entry">
+    <span class="appearance__copy">
+      <span class="appearance__label" id="appearance-project-chat-entry-label">Open project Chat on project entry</span>
+      <span class="appearance__hint">Default: Open. The selected project surface stays visible beside Chat.</span>
+    </span>
+    <app-segmented-control
+      ariaLabel="Open project Chat on project entry"
+      [options]="projectChatEntryOptions"
+      [value]="uiPrefs.openProjectChatOnEntry() ? 'open' : 'closed'"
+      (valueChange)="setProjectChatEntry($event)" />
+  </div>
 </section>

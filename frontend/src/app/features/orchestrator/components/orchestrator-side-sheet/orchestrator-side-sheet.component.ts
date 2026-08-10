@@ -55,6 +55,7 @@ import {
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
+import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -92,6 +93,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly composerModel = inject(OrchestratorComposerModelService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
+  /** Prevent a persisted tab from opening Chat before a copied route resolves. */
+  readonly projectEntryReady = input(true);
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /**
    * Canonical active-tab context, derived by Studio and rendered through
@@ -149,6 +152,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   /** Persisted resize state for the panel — see OrchestratorPanelStateService. */
   private readonly panelState = inject(OrchestratorPanelStateService);
+  private readonly uiPreferences = inject(UiPreferencesService);
   readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
   readonly selectedContextKey = signal<string | null>(null);
@@ -412,6 +416,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   private pollTimer: VisibleIntervalHandle | null = null;
+  private lastProjectEntry: string | null = null;
 
   /** Canonical next-gen transcript consumed by `<cac-conversation-view>`. */
   readonly conversationEvents = computed(() => buildOrchestratorConversationEvents(
@@ -500,6 +505,28 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (projects.includes(preferred) && preferred !== this.activeProject()) {
           this.activeProject.set(preferred);
         }
+      });
+    });
+
+    // Project-level navigation is the standard Chat entry. Wait until route
+    // hydration has won over persisted tabs, then align the context before the
+    // panel becomes visible. Task tabs keep their separate Chat surface.
+    effect(() => {
+      const ready = this.projectEntryReady();
+      const context = this.composerContext();
+      const openOnEntry = this.uiPreferences.openProjectChatOnEntry();
+      untracked(() => {
+        if (!ready) return;
+        const project = context?.project && !context.taskKey ? context.project : null;
+        if (!project) {
+          this.lastProjectEntry = null;
+          return;
+        }
+        if (project === this.lastProjectEntry) return;
+        this.lastProjectEntry = project;
+        if (!openOnEntry || this.pinned()) return;
+        this.setActiveProject(project);
+        this.show();
       });
     });
 

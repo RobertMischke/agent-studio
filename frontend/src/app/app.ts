@@ -236,7 +236,7 @@ export class App implements OnInit, OnDestroy {
   readonly pageContext = inject(PageContextService);
   readonly routeDetailTab = signal<TaskDetailRouteTab | null>(null);
   readonly routeInspectorTab = signal<TaskInspectorRouteTab | null>(null);
-  private readonly studioRouteReady = signal(false);
+  readonly studioRouteReady = signal(false);
   private pendingStudioTaskReference: string | null = null;
   readonly orchestratorComposerContext = computed(() => buildComposerLocationContext(
     this.studioTabState.activeTab(),
