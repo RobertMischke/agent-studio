@@ -1,42 +1,48 @@
 <article class="global-orch" data-testid="global-orchestrator-card">
-  <header class="global-orch__head">
-    <span class="global-orch__badge" data-testid="global-orchestrator-scope">Global scope</span>
-    <span class="global-orch__role">Global orchestrator</span>
-    <app-concept-help concept="orchestrator" />
-    <span class="global-orch__scope">Across all watched projects</span>
-  </header>
-
   @if (session(); as s) {
-    <p class="global-orch__voice" [cacTooltip]="s.bootPromptPreview">
-      “{{ s.bootReplyPreview || 'Booted, no reply captured.' }}”
-    </p>
-    <dl class="global-orch__meta">
-      <div>
-        <dt>Model</dt>
-        <dd>{{ s.model }}</dd>
-      </div>
-      <div>
-        <dt>Booted</dt>
-        <dd>{{ formatTime(s.bootedAt) }} · {{ s.calls }} call{{ s.calls === 1 ? '' : 's' }} so far</dd>
-      </div>
-      <div>
-        <dt>Talk to it</dt>
-        <dd><code>claude -r {{ s.sessionId }}</code></dd>
-      </div>
-      @if (s.lastError) {
-        <div>
-          <dt>Last error</dt>
-          <dd class="global-orch__error">{{ s.lastError }}</dd>
-        </div>
-      }
-    </dl>
+    <div class="global-orch__status" data-testid="global-orchestrator-status">
+      <button type="button"
+              class="global-orch__toggle"
+              data-testid="global-orchestrator-toggle"
+              [attr.aria-expanded]="expanded()"
+              aria-controls="global-orchestrator-details"
+              (click)="toggleDetails()">
+        <span class="global-orch__chevron" [class.global-orch__chevron--open]="expanded()" aria-hidden="true">›</span>
+        <strong class="global-orch__role">Global orchestrator</strong>
+        <span class="global-orch__field" data-testid="global-orchestrator-scope"><b>Scope</b> All projects</span>
+        <span class="global-orch__field"><b>Model</b> {{ s.model }}</span>
+        <span class="global-orch__field"><b>Booted</b> {{ formatTime(s.bootedAt) }}</span>
+      </button>
+      <button type="button"
+              class="global-orch__command"
+              data-testid="global-orchestrator-command"
+              [cacTooltip]="copyState() === 'copied' ? 'Copied' : copyState() === 'failed' ? 'Copy failed' : 'Click to copy'"
+              [attr.aria-label]="'Copy talk-to-it command ' + command(s)"
+              (click)="copyCommand($event, s)">
+        <span>Talk to it</span><code>{{ command(s) }}</code>
+        @if (copyState() === 'copied') {
+          <span class="global-orch__copy-state" role="status">✓ Copied</span>
+        } @else if (copyState() === 'failed') {
+          <span class="global-orch__copy-state" role="status">Copy failed</span>
+        }
+      </button>
+    </div>
+
+    @if (expanded()) {
+      <dl class="global-orch__details" id="global-orchestrator-details" data-testid="global-orchestrator-details">
+        <div><dt>Calls</dt><dd>{{ s.calls }}</dd></div>
+        <div><dt>Last used</dt><dd>{{ formatTime(s.lastUsedAt) }}</dd></div>
+        <div><dt>Input / output</dt><dd>{{ formatTokens(s.cumulativeInputTokens) }} / {{ formatTokens(s.cumulativeOutputTokens) }}</dd></div>
+        <div><dt>Cache read / created</dt><dd>{{ formatTokens(s.cumulativeCacheReadTokens) }} / {{ formatTokens(s.cumulativeCacheCreationTokens) }}</dd></div>
+        @if (s.lastError) {
+          <div><dt>Last error</dt><dd class="global-orch__error">{{ s.lastError }}</dd></div>
+        }
+      </dl>
+    }
   } @else if (loading()) {
-    <p class="global-orch__loading">Reading the global orchestrator's state…</p>
+    <p class="global-orch__loading">Global orchestrator · Reading session status…</p>
   } @else {
-    <p class="global-orch__empty">
-      No global session booted yet. The app boots one Claude session that knows about every watched
-      project at startup. If this stays empty for more than a few seconds, the boot probably failed.
-    </p>
+    <p class="global-orch__empty">Global orchestrator · No session booted</p>
   }
 </article>
   
