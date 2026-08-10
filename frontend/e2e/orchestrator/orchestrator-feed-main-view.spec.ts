@@ -333,6 +333,10 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   await page.getByTestId('studio-ab-explorer').click();
   await expect(page.getByTestId('studio-sidebar')).toHaveCount(0);
   await page.setViewportSize({ width: 760, height: 1000 });
+  await expect(page.getByTestId('global-orchestrator-scope')).toBeVisible();
+  await expect(page.getByTestId('global-orchestrator-model')).toBeVisible();
+  await expect(page.getByTestId('global-orchestrator-booted')).toBeVisible();
+  await expect(page.getByTestId('global-orchestrator-command')).toBeVisible();
   for (const theme of ['light', 'dark'] as Theme[]) {
     await setTheme(page, theme);
     await expect(page.getByTestId('orchestrator-feed')).toBeVisible();
