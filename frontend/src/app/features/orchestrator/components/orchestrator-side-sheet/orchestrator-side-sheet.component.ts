@@ -412,6 +412,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   private pollTimer: VisibleIntervalHandle | null = null;
+  private contextSessionsLoading = false;
 
   /** Canonical next-gen transcript consumed by `<cac-conversation-view>`. */
   readonly conversationEvents = computed(() => buildOrchestratorConversationEvents(
@@ -604,6 +605,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.contextMenuOpen.set(false);
   }
 
+  /** Open one Task Server-managed context from the workspace Chat History. */
+  openManagedContext(contextKey: string): void {
+    this.show();
+    if (this.contextSessions().some(context => context.contextKey === contextKey)) {
+      this.selectChatContext(contextKey);
+      return;
+    }
+    this.jobService.getOrchestratorContextSessions().subscribe({
+      next: response => {
+        const sessions = response.sessions ?? [];
+        this.contextSessions.set(sessions);
+        if (sessions.some(context => context.contextKey === contextKey)) {
+          this.selectChatContext(contextKey);
+        }
+      },
+    });
+  }
+
   onNavigateToContext(contextKey: string): void {
     this.selectedContextKey.set(null);
     this.selectedContextNavigationKey.set(null);
@@ -611,9 +630,17 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.navigateToContext.emit(contextKey);
   }
   private refreshContextSessions(): void {
+    if (this.contextSessionsLoading) return;
+    this.contextSessionsLoading = true;
     this.jobService.getOrchestratorContextSessions().subscribe({
-      next: response => this.contextSessions.set(response.sessions ?? []),
-      error: () => this.contextSessions.set([]),
+      next: response => {
+        this.contextSessions.set(response.sessions ?? []);
+        this.contextSessionsLoading = false;
+      },
+      error: () => {
+        this.contextSessions.set([]);
+        this.contextSessionsLoading = false;
+      },
     });
   }
 

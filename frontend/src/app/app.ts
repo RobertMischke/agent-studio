@@ -51,6 +51,7 @@ import {
 } from './features/task-detail';
 import {
   buildComposerLocationContext,
+  OrchestratorChatHistoryComponent,
   OrchestratorFeedComponent,
   OrchestratorFeedStore,
   OrchestratorSideSheetComponent,
@@ -163,6 +164,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TaskDetailComponent,
     DetailLoadErrorComponent,
     OrchestratorSideSheetComponent,
+    OrchestratorChatHistoryComponent,
     OrchestratorFeedComponent,
     ProjectOverlaysComponent,
     AutoReviewIndicatorComponent,
@@ -993,6 +995,7 @@ export class App implements OnInit, OnDestroy {
           project = tab.projectName === '__all__' ? null : tab.projectName;
           break;
         case 'feed':
+        case 'chat-history':
           project = null;
           break;
         case 'workbenches':
@@ -1773,6 +1776,10 @@ export class App implements OnInit, OnDestroy {
     this.orchSideSheetRef?.toggle();
   }
 
+  openChatHistoryContext(contextKey: string): void {
+    this.orchSideSheetRef?.openManagedContext(contextKey);
+  }
+
   onNavigateToChatContext(contextKey: string): void {
     if (contextKey === 'global') {
       this.studioTabState.activateAllProjectsBoard();
@@ -2207,6 +2214,9 @@ export class App implements OnInit, OnDestroy {
         break;
       case 'feed':
         this.studioTabState.open({ kind: 'feed' });
+        break;
+      case 'chat-history':
+        this.studioTabState.open({ kind: 'chat-history' });
         break;
       case 'workbench':
         this.studioTabState.open({ kind: 'workbench', projectName: projectName!, workbenchId: route.workbenchId });

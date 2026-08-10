@@ -284,6 +284,7 @@ builder.Services.AddSingleton<AgentStudio.Tasks.TaskReader>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
+builder.Services.AddSingleton<AgentStudio.Host.OrchestratorContextHubBroadcaster>();
 builder.Services.AddSingleton<TaskServerOrchestratorChatPersistence>();
 builder.Services.AddSingleton<IOrchestratorChatPersistence>(sp =>
     sp.GetRequiredService<TaskServerOrchestratorChatPersistence>());

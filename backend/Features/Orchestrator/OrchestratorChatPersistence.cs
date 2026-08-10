@@ -36,7 +36,8 @@ public interface IOrchestratorChatPersistence
 /// coding CLI.
 /// </summary>
 public sealed class TaskServerOrchestratorChatPersistence(
-    IHttpClientFactory clients)
+    IHttpClientFactory clients,
+    OrchestratorContextHubBroadcaster? contextBroadcaster = null)
     : IOrchestratorChatPersistence
 {
     public bool IsCentralTaskServerStore => true;
@@ -55,6 +56,14 @@ public sealed class TaskServerOrchestratorChatPersistence(
         var transcript = await response.Content.ReadFromJsonAsync<OrchestratorContextTranscriptResponse>(
             cancellationToken: ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Task Server returned an empty context transcript response.");
+        if (contextBroadcaster is not null)
+        {
+            await contextBroadcaster.ContextChangedAsync(
+                transcript.Context.ProjectName,
+                transcript.Context.ContextKey,
+                transcript.Context.UpdatedAt,
+                ct).ConfigureAwait(false);
+        }
         return transcript.Turns.Select(FromDto).ToArray();
     }
 
@@ -70,6 +79,17 @@ public sealed class TaskServerOrchestratorChatPersistence(
             new AppendOrchestratorContextTurnRequest(ToDto(turn)),
             ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        if (contextBroadcaster is not null)
+        {
+            var contextKey = context?.Kind == OrchestratorContextKey.TaskKind
+                ? context.Value
+                : $"project:{projectName}";
+            await contextBroadcaster.ContextChangedAsync(
+                projectName,
+                contextKey,
+                turn.Ts,
+                ct).ConfigureAwait(false);
+        }
     }
 
     public async Task<IReadOnlyList<OrchestratorContextDto>> ListContextsAsync(
