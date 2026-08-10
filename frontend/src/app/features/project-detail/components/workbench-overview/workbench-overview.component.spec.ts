@@ -96,31 +96,37 @@ describe('WorkbenchOverviewComponent', () => {
   });
 
   it('refreshes a project-scoped queue after a matching live event', async () => {
-    await TestBed.configureTestingModule({
-      imports: [WorkbenchOverviewComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(WorkbenchOverviewComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne(request => request.url === '/api/workbenches' && request.params.get('project') === 'Demo')
-      .flush(overview([item('active', 'active')], 'Demo'));
+    vi.useFakeTimers();
+    try {
+      await TestBed.configureTestingModule({
+        imports: [WorkbenchOverviewComponent],
+        providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(WorkbenchOverviewComponent);
+      fixture.componentRef.setInput('projectName', 'Demo');
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne(request => request.url === '/api/workbenches' && request.params.get('project') === 'Demo')
+        .flush(overview([item('active', 'active')], 'Demo'));
 
-    TestBed.inject(JobsHubClient).workbenchEvent.set({
-      type: 'created',
-      projectName: 'Demo',
-      workbenchId: 'new-item',
-      workbench: null,
-      previousStatus: null,
-      occurredAtUtc: new Date().toISOString(),
-    });
-    await new Promise(resolve => setTimeout(resolve, 100));
-    http.expectOne(request => request.url === '/api/workbenches' && request.params.get('project') === 'Demo')
-      .flush(overview([item('new-item', 'active'), item('active', 'active')], 'Demo'));
-    fixture.detectChanges();
+      TestBed.inject(JobsHubClient).workbenchEvent.set({
+        type: 'created',
+        projectName: 'Demo',
+        workbenchId: 'new-item',
+        workbench: null,
+        previousStatus: null,
+        occurredAtUtc: new Date().toISOString(),
+      });
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(80);
+      http.expectOne(request => request.url === '/api/workbenches' && request.params.get('project') === 'Demo')
+        .flush(overview([item('new-item', 'active'), item('active', 'active')], 'Demo'));
+      fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('new-item');
-    http.verify();
+      expect(fixture.nativeElement.textContent).toContain('new-item');
+      http.verify();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
