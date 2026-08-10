@@ -10,8 +10,8 @@
         <span class="global-orch__chevron" [class.global-orch__chevron--open]="expanded()" aria-hidden="true">›</span>
         <strong class="global-orch__role">Global orchestrator</strong>
         <span class="global-orch__field" data-testid="global-orchestrator-scope"><b>Scope</b> All projects</span>
-        <span class="global-orch__field"><b>Model</b> {{ s.model }}</span>
-        <span class="global-orch__field"><b>Booted</b> {{ formatTime(s.bootedAt) }}</span>
+        <span class="global-orch__field" data-testid="global-orchestrator-model"><b>Model</b> {{ s.model }}</span>
+        <span class="global-orch__field" data-testid="global-orchestrator-booted"><b>Booted</b> {{ formatTime(s.bootedAt) }}</span>
       </button>
       <button type="button"
               class="global-orch__command"
