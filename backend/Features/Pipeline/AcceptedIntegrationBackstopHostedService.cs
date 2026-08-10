@@ -20,6 +20,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     private readonly TaskTransitionService? _transitions;
     private readonly TimelineLog? _timeline;
     private readonly PipelineExecutionLog? _pipelineLog;
+    private readonly HistoricalIntegrationVerificationSweep? _historicalSweep;
+    private readonly AcceptedIntegrationInventorySweep? _historicalInventory;
     private readonly object _alertGate = new();
     private readonly AcceptedIntegrationAlertLogState _alertLog = new();
     private AcceptedIntegrationAlertSnapshot _currentAlert = new()
@@ -38,7 +40,9 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         ILogger<AcceptedIntegrationBackstopHostedService> logger,
         TaskTransitionService? transitions = null,
         TimelineLog? timeline = null,
-        PipelineExecutionLog? pipelineLog = null)
+        PipelineExecutionLog? pipelineLog = null,
+        HistoricalIntegrationVerificationSweep? historicalSweep = null,
+        AcceptedIntegrationInventorySweep? historicalInventory = null)
     {
         _scanner = scanner;
         _settings = settings;
@@ -50,6 +54,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         _transitions = transitions;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _historicalSweep = historicalSweep;
+        _historicalInventory = historicalInventory;
     }
 
     public AcceptedIntegrationAlertSnapshot CurrentAlert
@@ -62,14 +68,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         // AGT-2480: the automation scanner excludes fixture cards. Keep the
         // acceptedJobs name from AGT-2428 because it describes the recovery set.
         var acceptedJobs = _scanner.ScanAllAutomationJobsWithArchive()
-            .Where(job =>
-                job.State is TaskStates.Completed or TaskStates.Archive
-                || (job.State == TaskStates.HumanReview
-                    && string.Equals(
-                        job.Phase,
-                        LifecyclePhases.Integrating,
-                        StringComparison.Ordinal)))
-            .Where(AcceptanceIntegrationPolicy.IsIntegrationRequired)
+            .Where(AcceptedIntegrationBackstopPolicy.IsRecoveryCandidate)
             .OrderBy(job => job.ProjectName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(DeliveryOrder)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
@@ -227,9 +226,13 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             return (true, integrationStarted.Ts.ToUniversalTime());
 
         var mergeRecordedAt = lastMergeAttempt?.StartedAt ?? lastMergeAttempt?.CompletedAt;
-        return mergeRecordedAt is { } recordedAt
-            ? (true, recordedAt.ToUniversalTime())
-            : (lastMergeAttempt is not null, default);
+        if (mergeRecordedAt is { } recordedAt)
+            return (true, recordedAt.ToUniversalTime());
+
+        var verification = TaskIntegrationRecordDetector.LatestOperatorVisibleVerification(job);
+        return verification is null
+            ? (false, default)
+            : (true, verification.AcceptedAtUtc?.ToUniversalTime() ?? job.EnteredLaneAt.ToUniversalTime());
     }
 
     private static string? NormalizeOutcome(string? verdict)
@@ -271,6 +274,38 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Run the one-time historical bookkeeping migration before the
+        // mutating recovery loop. The initial yield keeps disk and Git work
+        // off the host startup path, while the ordering prevents legacy cards
+        // from being mistaken for live acceptance transactions.
+        await Task.Yield();
+        if (_historicalSweep is not null)
+        {
+            try
+            {
+                var report = await _historicalSweep.RunOnceAsync(stoppingToken);
+                if (!report.Completed)
+                {
+                    _logger.LogError(
+                        "accepted-integration-backstop paused because historical verification had {Failures} write failure(s)",
+                        report.WriteFailures);
+                    return;
+                }
+                _historicalInventory?.Run();
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "accepted-integration-backstop paused because historical verification failed");
+                return;
+            }
+        }
+
         var interval = TimeSpan.FromMinutes(Math.Clamp(
             _configuration.GetValue<int?>("Integration:BackstopIntervalMinutes") ?? 15,
             1,

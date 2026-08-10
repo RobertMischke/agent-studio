@@ -47,6 +47,17 @@ internal sealed record AcceptedIntegrationSweepSummary(
 /// </summary>
 internal static class AcceptedIntegrationBackstopPolicy
 {
+    public static bool IsRecoveryCandidate(TaskInfo task)
+    {
+        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(task)) return false;
+        // Historical verification rows are bookkeeping facts, never a request
+        // to re-run integration or move a terminal card.
+        if (TaskIntegrationRecordDetector.LatestVerification(task) is not null) return false;
+        if (task.State is TaskStates.Completed or TaskStates.Archive) return true;
+        return task.State == TaskStates.HumanReview
+               && string.Equals(task.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal);
+    }
+
     public static bool IsAlertCandidate(AcceptedIntegrationAlertCandidate candidate)
     {
         if (!candidate.HasIntegrationRecord) return false;
