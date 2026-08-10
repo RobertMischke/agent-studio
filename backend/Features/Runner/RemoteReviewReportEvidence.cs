@@ -21,12 +21,18 @@ internal static class RemoteReviewReportEvidence
     {
         var fileName = $"remote-review-grade-{SafeFilePart(attemptId)}.md";
         var path = Path.Combine(jobFolder, fileName);
+        var artifactFiles = await PersistArtifactsAsync(
+            jobFolder,
+            attemptId,
+            request.Artifacts,
+            ct);
         var report = Render(
             attemptId,
             subjectId,
             request,
             reportSha256,
-            receivedAt);
+            receivedAt,
+            artifactFiles);
         await File.WriteAllTextAsync(path, report, new UTF8Encoding(false), ct);
         return fileName;
     }
@@ -36,7 +42,8 @@ internal static class RemoteReviewReportEvidence
         string subjectId,
         Contract.ReviewReportRequest request,
         string reportSha256,
-        DateTime receivedAt)
+        DateTime receivedAt,
+        IReadOnlyDictionary<string, string> artifactFiles)
     {
         var text = new StringBuilder();
         text.AppendLine("---");
@@ -80,6 +87,31 @@ internal static class RemoteReviewReportEvidence
         }
 
         text.AppendLine();
+        text.AppendLine("## Command evidence");
+        text.AppendLine();
+        if (request.Commands.Count == 0)
+        {
+            text.AppendLine("_No command evidence was supplied._");
+        }
+        else
+        {
+            text.AppendLine("| Phase | Workspace | Step | Command | Exit | Budget | Output | Errors |");
+            text.AppendLine("| --- | --- | --- | --- | ---: | --- | --- | --- |");
+            foreach (var command in request.Commands)
+            {
+                var budget = command.Budget is null
+                    ? "not reported"
+                    : $"{command.Budget.Name}: {command.Budget.ConsumedMs}/{command.Budget.LimitMs} ms" +
+                      (command.Budget.Violated ? " (violated)" : "");
+                text.AppendLine(
+                    $"| {Cell(command.Phase)} | {Cell(command.WorkspaceRole)} | {Cell(command.StepId)} | " +
+                    $"`{Cell(CommandLine(command))}` | {Cell(command.ExitCode?.ToString() ?? command.Signal ?? "n/a")} | " +
+                    $"{Cell(budget)} | {ArtifactLink("stdout", command.StdoutSha256, artifactFiles)} | " +
+                    $"{ArtifactLink("stderr", command.StderrSha256, artifactFiles)} |");
+            }
+        }
+
+        text.AppendLine();
         text.AppendLine("## Immutable subject proof");
         text.AppendLine();
         text.AppendLine($"- Repository: `{request.Workspace.RepositoryId}`");
@@ -93,6 +125,42 @@ internal static class RemoteReviewReportEvidence
         text.AppendLine($"- Authority epoch: `{request.AuthorityEpoch}`");
         return text.ToString();
     }
+
+    private static async Task<IReadOnlyDictionary<string, string>> PersistArtifactsAsync(
+        string jobFolder,
+        string attemptId,
+        IReadOnlyList<Contract.ReviewArtifactEvidenceDto> artifacts,
+        CancellationToken ct)
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var artifact in artifacts)
+        {
+            if (artifact.ContentBase64 is null) continue;
+            var bytes = Convert.FromBase64String(artifact.ContentBase64);
+            var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))
+                .ToLowerInvariant();
+            if (!string.Equals(digest, artifact.Sha256, StringComparison.OrdinalIgnoreCase)
+                || bytes.LongLength != artifact.SizeBytes)
+                throw new InvalidDataException(
+                    $"Remote Review artifact '{artifact.Name}' does not match its declared digest or size.");
+            var fileName =
+                $"remote-review-{SafeFilePart(attemptId)}-{SafeFilePart(artifact.Name)}";
+            await File.WriteAllBytesAsync(Path.Combine(jobFolder, fileName), bytes, ct);
+            files[artifact.Sha256] = fileName;
+        }
+        return files;
+    }
+
+    private static string ArtifactLink(
+        string label,
+        string digest,
+        IReadOnlyDictionary<string, string> artifactFiles)
+        => artifactFiles.TryGetValue(digest, out var file)
+            ? $"[{label}]({file})"
+            : $"{label} `{digest[..Math.Min(12, digest.Length)]}`";
+
+    private static string CommandLine(Contract.ReviewCommandEvidenceDto command)
+        => string.Join(' ', new[] { command.FileName }.Concat(command.Arguments));
 
     private static string SafeFilePart(string value)
         => new(value.Select(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_').ToArray());

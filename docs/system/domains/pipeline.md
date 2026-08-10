@@ -404,12 +404,21 @@ pipeline view.
   local gates also keep one dependency cache per source repository under
   `agentstudio-review-gates/.dependency-cache`: `node_modules`, `.angular`, and
   `.nm-state` move into the new disposable worktree before verification and move
-  back before Git cleanup. `DepsState` compares the build profile lockfiles, or
-  conventionally discovered npm lockfile, with `.nm-state`; an unchanged hash
-  skips the install, while a missing or changed dependency state runs the install
-  and stamps the new hash. Explicit profile commands, including `installCmd`, use
-  the same `bash -lc` contract as build-profile validation on every host.
-  Convention-derived commands retain the host shell.
+  back before Git cleanup. The shared `DependencyPreparationState` compares the
+  build profile lockfiles, or conventionally discovered npm lockfile, with
+  `.nm-state`; an unchanged hash skips the install, while a missing or changed
+  dependency state runs the install and stamps the new hash. Explicit profile
+  commands, including `installCmd`, use the same `bash -lc` contract as
+  build-profile validation on every host. Convention-derived commands retain
+  the host shell.
+- Immutable Remote Review plans carry that same preparation command, lockfile
+  scopes, and preserve globs to the Review Executor. Preparation runs before
+  verification in both the candidate and any materialized baseline workspace.
+  Candidate and baseline caches use distinct role namespaces while sharing the
+  same transfer and lock-digest protocol as local exact-subject gates. A failed
+  preparation, including a missing toolchain, is `ReviewInfra / PreparationFailed`;
+  it is never a product verdict. Its exact command, exit code, named budget, and
+  complete stdout and stderr artifacts are retained in the Remote Review grade.
 - Dependency preparation and verification consume one shared `gate-run` budget.
   Machine-gate queue wait, exact workspace materialization, and exact workspace
   cleanup have separate named budgets. Local Git operations receive the remaining

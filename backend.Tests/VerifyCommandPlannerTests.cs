@@ -304,6 +304,49 @@ public sealed class VerifyCommandPlannerTests : IDisposable
     }
 
     [Fact]
+    public void RemoteReviewFallbackPlan_CarriesMixedBuildProfilePreparationLockfilesAndPreserveGlobs()
+    {
+        Write("QualityStudio.slnx", "<Solution />");
+        Write("frontend/package.json", """{ "scripts": { "build": "ng build", "test": "ng test" } }""");
+        Write("frontend/package-lock.json", """{ "lockfileVersion": 3 }""");
+        const string install =
+            "dotnet restore QualityStudio.slnx && npm --prefix frontend ci";
+        var profile = new BuildProfile
+        {
+            Stack = "dotnet+node",
+            InstallCmd = install,
+            BuildCmds =
+            [
+                "dotnet build QualityStudio.slnx --configuration Release",
+                "npm --prefix frontend run build",
+            ],
+            TestCmds =
+            [
+                "dotnet test --filter Category!=MachineBound",
+                "npm --prefix frontend test",
+            ],
+            Lockfiles = ["frontend/package-lock.json"],
+            PreserveGlobs = ["frontend/node_modules", "frontend/.angular", "**/bin", "**/obj"],
+            Status = BuildProfileStatuses.PipelineReady,
+        };
+
+        var plan = V1ReviewPlaneEndpoints.FallbackPlan(
+            _root,
+            profile,
+            "refs/heads/main");
+
+        Assert.Equal(4, plan.Commands.Count);
+        var preparation = Assert.Single(plan.Preparation!);
+        Assert.Equal("prepare-1", preparation.StepId);
+        Assert.Equal("bash", preparation.FileName);
+        Assert.Equal(["-lc", install], preparation.Arguments);
+        var scope = Assert.Single(preparation.DependencyScopes!);
+        Assert.Equal("frontend", scope.WorkingSubdir);
+        Assert.Equal(["package-lock.json"], scope.Lockfiles);
+        Assert.Equal(profile.PreserveGlobs, plan.PreserveGlobs);
+    }
+
+    [Fact]
     public void GatePreparation_ProfileWithoutInstall_DerivesRestoreAndNpmPrefix()
     {
         Write("QualityStudio.slnx", "<Solution />");

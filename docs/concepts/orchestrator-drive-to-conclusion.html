@@ -1996,6 +1996,28 @@
             back the new merge and reaches <code>GateFailed</code> in Human Review without releasing a push.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-10</td>
+          <td><code>AGT-2597</code><br><span class="small">QS-55 Remote Review omitted BuildProfile preparation</span></td>
+          <td>
+            Review attempt <code>review_fedc9763d1394aaab517e71a1fda72f5</code> materialized QS-55 at the
+            exact result SHA and tree, then ran only the four verification commands. The .NET commands restored
+            implicitly, while the Angular build exited 127 and the frontend test could not load the local Angular CLI.
+            Remote Review reported those missing dependencies as a product regression.
+          </td>
+          <td>
+            The monolith fallback plan discarded the build profile <code>installCmd</code>, lockfiles, and preserve globs.
+            The Review Executor therefore had no preparation phase, and its independent baseline materialization used the
+            same unprepared execution path. Toolchain loss during verification also fell through to product-failure parsing.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> immutable ReviewPlans now carry the shared gate preparation contract.
+            Candidate and baseline prepare symmetrically with role-isolated caches and lock-digest invalidation. A failed
+            preparation is <code>ReviewInfra / PreparationFailed</code>, exit 127 is <code>ToolUnavailable</code>, and the
+            durable grade names the exact command, exit, budget, and complete output artifacts. The unchanged QS-55 SHA
+            passes its declared preparation and all four verification commands in a clean workspace.
+          </td>
+        </tr>
       </tbody>
     </table>
 

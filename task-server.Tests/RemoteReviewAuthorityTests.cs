@@ -437,6 +437,144 @@ public sealed class RemoteReviewAuthorityTests
         Assert.Equal("4-auto-review", (await TaskAsync(store, subject.TaskId)).State);
     }
 
+    [Theory]
+    [InlineData(127, false)]
+    [InlineData(1, true)]
+    public async Task Missing_verification_toolchain_cannot_be_accepted_as_a_product_failure(
+        int exitCode,
+        bool angularModuleEvidence)
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var request = PassingReport(claim);
+        var toolchainFailure = Encoding.UTF8.GetBytes(
+            "Cannot find module '/review/frontend/node_modules/@angular/cli/bin/ng.js'\n");
+        var toolchainFailureDigest = Convert.ToHexString(SHA256.HashData(toolchainFailure))
+            .ToLowerInvariant();
+        request = request with
+        {
+            Outcome = "ProductFailure",
+            FailureClassification = "ReviewFinding",
+            Commands = request.Commands
+                .Select((command, index) => index == 0
+                    ? command with
+                    {
+                        ExitCode = exitCode,
+                        StderrSha256 = angularModuleEvidence
+                            ? toolchainFailureDigest
+                            : command.StderrSha256,
+                    }
+                    : command)
+                .ToArray(),
+            Artifacts = angularModuleEvidence
+                ? request.Artifacts.Append(new ReviewArtifactEvidenceDto(
+                    "candidate.verify.stderr.log",
+                    "text/plain; charset=utf-8",
+                    toolchainFailureDigest,
+                    toolchainFailure.LongLength,
+                    Convert.ToBase64String(toolchainFailure))).ToArray()
+                : request.Artifacts,
+            Verdicts = request.Verdicts
+                .Select((verdict, index) => index == 0
+                    ? verdict with { Status = "block", Classification = "CommandFailed" }
+                    : verdict)
+                .ToArray(),
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, request, "review-a", default);
+
+        Assert.Equal("ReviewInfra", report.Outcome);
+        Assert.Equal("ToolUnavailable", report.FailureClassification);
+        Assert.True(report.RetryScheduled);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, subject.TaskId)).State);
+    }
+
+    [Fact]
+    public async Task Preparation_failure_preserves_full_command_evidence_and_retries_as_infrastructure()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-dependencies",
+            "/bin/bash",
+            ["-lc", "npm --prefix frontend ci"],
+            TimeoutSeconds: 120,
+            DependencyScopes:
+            [
+                new ReviewDependencyScopeDto("frontend", ["package-lock.json"]),
+            ]);
+        var subject = await SeedReviewSubjectAsync(
+            store,
+            plan: Plan() with
+            {
+                Preparation = [preparation],
+                PreserveGlobs = ["frontend/node_modules", "frontend/.angular"],
+            });
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var template = PassingReport(claim);
+        var stdout = Encoding.UTF8.GetBytes("complete preparation stdout\n");
+        var stderr = Encoding.UTF8.GetBytes("npm: dependency unavailable\n");
+        var stdoutDigest = Convert.ToHexString(SHA256.HashData(stdout)).ToLowerInvariant();
+        var stderrDigest = Convert.ToHexString(SHA256.HashData(stderr)).ToLowerInvariant();
+        var failed = new ReviewCommandEvidenceDto(
+            preparation.StepId,
+            "preparation",
+            preparation.FileName,
+            preparation.Arguments,
+            ResultSha,
+            ResultSha,
+            TreeSha,
+            DateTime.UtcNow.AddSeconds(-2),
+            DateTime.UtcNow,
+            9,
+            null,
+            stdoutDigest,
+            stderrDigest,
+            Phase: "preparation",
+            WorkspaceRole: "candidate",
+            Budget: new ReviewCommandBudgetEvidenceDto("review-command", 120_000, 2_000, false));
+        var unavailable = template with
+        {
+            Outcome = "ReviewInfra",
+            FailureClassification = "PreparationFailed",
+            Summary = "Preparation command 'prepare-dependencies' exited 9; budget=120000ms.",
+            Commands = [failed],
+            Artifacts =
+            [
+                new ReviewArtifactEvidenceDto(
+                    "candidate.prepare-dependencies.stdout.log",
+                    "text/plain; charset=utf-8",
+                    stdoutDigest,
+                    stdout.LongLength,
+                    Convert.ToBase64String(stdout)),
+                new ReviewArtifactEvidenceDto(
+                    "candidate.prepare-dependencies.stderr.log",
+                    "text/plain; charset=utf-8",
+                    stderrDigest,
+                    stderr.LongLength,
+                    Convert.ToBase64String(stderr)),
+            ],
+            Verdicts = [],
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, unavailable, "review-a", default);
+
+        Assert.Equal("ReviewInfra", report.Outcome);
+        Assert.Equal("PreparationFailed", report.FailureClassification);
+        Assert.True(report.RetryScheduled);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, subject.TaskId)).State);
+    }
+
     [Fact]
     public async Task Report_with_shared_cache_or_unbound_command_tree_is_rejected_as_review_infrastructure()
     {
@@ -1057,6 +1195,7 @@ public sealed class RemoteReviewAuthorityTests
                     ReviewCapabilities.SemanticReview,
                     ReviewCapabilities.VisionReview,
                     ReviewCapabilities.BaselineComparison,
+                    ReviewCapabilities.DependencyPreparation,
                 ]),
             id,
             default);
@@ -1070,7 +1209,17 @@ public sealed class RemoteReviewAuthorityTests
             command.StepId, command.Aspect, command.FileName, command.Arguments,
             ResultSha, ResultSha, TreeSha,
             DateTime.UtcNow.AddSeconds(-1), DateTime.UtcNow, 0, null,
-            new string('a', 64), new string('b', 64))).ToArray();
+            new string('a', 64), new string('b', 64)))
+            .Concat((subject.Plan.Preparation ?? []).Select(command => new ReviewCommandEvidenceDto(
+                command.StepId, "preparation", command.FileName, command.Arguments,
+                ResultSha, ResultSha, TreeSha,
+                DateTime.UtcNow.AddSeconds(-1), DateTime.UtcNow, 0, null,
+                new string('a', 64), new string('b', 64),
+                Phase: "preparation",
+                WorkspaceRole: "candidate",
+                Budget: new ReviewCommandBudgetEvidenceDto(
+                    "review-command", command.TimeoutSeconds * 1000L, 1_000, false))))
+            .ToArray();
         var verdicts = subject.Plan.RequiredAspects.Select(aspect =>
             new ReviewVerdictDto(aspect, "pass", "Verified", $"{aspect} passed")).ToArray();
         var toolchain = new Dictionary<string, string>
@@ -1079,6 +1228,8 @@ public sealed class RemoteReviewAuthorityTests
             ["git"] = "git;sha256=" + new string('d', 64),
         };
         foreach (var command in subject.Plan.Commands)
+            toolchain[$"command:{command.StepId}"] = command.FileName + ";sha256=" + new string('e', 64);
+        foreach (var command in subject.Plan.Preparation ?? [])
             toolchain[$"command:{command.StepId}"] = command.FileName + ";sha256=" + new string('e', 64);
         var artifacts = commands.SelectMany(command => new[]
         {

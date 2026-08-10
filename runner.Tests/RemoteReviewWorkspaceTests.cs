@@ -186,6 +186,244 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Node_fixture_without_node_modules_prepares_before_angular_style_build()
+    {
+        var sha = await SeedOriginWithFilesAsync(new Dictionary<string, string>
+        {
+            ["frontend/package.json"] = """
+                {
+                  "name": "remote-review-node",
+                  "version": "1.0.0",
+                  "scripts": { "build": "ng build" },
+                  "devDependencies": { "fixture-cli": "file:fixture-cli" }
+                }
+                """,
+            ["frontend/package-lock.json"] = """
+                {
+                  "name": "remote-review-node",
+                  "version": "1.0.0",
+                  "lockfileVersion": 3,
+                  "requires": true,
+                  "packages": {
+                    "": { "name": "remote-review-node", "version": "1.0.0", "devDependencies": { "fixture-cli": "file:fixture-cli" } },
+                    "fixture-cli": { "name": "fixture-cli", "version": "1.0.0", "bin": { "ng": "index.js" } },
+                    "node_modules/fixture-cli": { "resolved": "fixture-cli", "link": true }
+                  }
+                }
+                """,
+            ["frontend/fixture-cli/package.json"] = """
+                { "name": "fixture-cli", "version": "1.0.0", "bin": { "ng": "index.js" } }
+                """,
+            ["frontend/fixture-cli/index.js"] = "#!/usr/bin/env node\nconsole.log('angular-build=ready');\n",
+        });
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-1",
+            PosixShell.RequirePath(),
+            ["-c", "npm ci"],
+            "frontend",
+            DependencyScopes:
+            [
+                new ReviewDependencyScopeDto("frontend", ["package-lock.json"]),
+            ]);
+        var (workspace, _) = Workspace(
+            "attempt-node-prepare",
+            sha,
+            [new ReviewCommandDto(
+                "verify-node",
+                "build-tests",
+                PosixShell.RequirePath(),
+                ["-c", "npm --prefix frontend run build"],
+                TimeoutSeconds: 120)],
+            24004,
+            preparation: [preparation],
+            preserveGlobs: ["frontend/node_modules", "frontend/.angular"]);
+
+        await workspace.PrepareAsync(null!, default);
+        Assert.False(Directory.Exists(Path.Combine(workspace.RepositoryPath, "frontend", "node_modules")));
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("Pass", evidence.Outcome);
+        Assert.Collection(evidence.Commands,
+            install =>
+            {
+                Assert.Equal("preparation", install.Phase);
+                Assert.Equal("candidate", install.WorkspaceRole);
+                Assert.Equal(0, install.ExitCode);
+                Assert.False(install.DependencyCacheHit);
+            },
+            verify =>
+            {
+                Assert.Equal("verification", verify.Phase);
+                Assert.Equal(0, verify.ExitCode);
+            });
+        Assert.False(evidence.Workspace.DirtyAfter);
+    }
+
+    [Fact]
+    public async Task Candidate_and_baseline_run_the_same_preparation_contract()
+    {
+        var (baselineSha, subjectSha) = await SeedSubjectBranchAsync();
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-1",
+            PosixShell.RequirePath(),
+            ["-c", "mkdir -p node_modules && printf ready > node_modules/prepared"],
+            DependencyScopes:
+            [
+                new ReviewDependencyScopeDto("", []),
+            ]);
+        var command = new ReviewCommandDto(
+            "verify-2",
+            "build-tests",
+            PosixShell.RequirePath(),
+            ["-c", "test -f node_modules/prepared || exit 127; if grep -q subject product.txt; then exit 1; fi"],
+            CompareToBaseline: true);
+        var (workspace, _) = Workspace(
+            "attempt-symmetry",
+            subjectSha,
+            [command],
+            24006,
+            resultRef: "refs/heads/task/new-failure",
+            integrationRef: "refs/heads/main",
+            preparation: [preparation],
+            preserveGlobs: ["node_modules"]);
+
+        await workspace.PrepareAsync(null!, default);
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("ProductFailure", evidence.Outcome);
+        var preparationEvidence = evidence.Commands
+            .Where(item => item.Phase == "preparation")
+            .ToArray();
+        Assert.Contains(preparationEvidence, item => item.WorkspaceRole == "candidate");
+        Assert.Contains(preparationEvidence, item =>
+            item.WorkspaceRole.StartsWith("baseline-", StringComparison.Ordinal));
+        Assert.All(preparationEvidence, item => Assert.Equal(0, item.ExitCode));
+    }
+
+    [Fact]
+    public async Task Dependency_cache_reuses_unchanged_lock_and_reinstalls_after_digest_change()
+    {
+        var counter = Path.Combine(_root, "install-counter.txt");
+        var sha = await SeedOriginWithFilesAsync(new Dictionary<string, string>
+        {
+            ["package-lock.json"] = "lock-v1",
+            [".gitignore"] = "node_modules/\n.nm-state\n",
+        });
+        var shell = $"mkdir -p node_modules && printf x >> '{counter}'";
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-1",
+            PosixShell.RequirePath(),
+            ["-c", shell],
+            DependencyScopes:
+            [
+                new ReviewDependencyScopeDto("", ["package-lock.json"]),
+            ]);
+        var verify = new ReviewCommandDto(
+            "verify",
+            "build-tests",
+            PosixShell.RequirePath(),
+            ["-c", "test -d node_modules"]);
+
+        async Task<ReviewExecutionEvidence> RunAsync(string attempt, string revision)
+        {
+            var (workspace, _) = Workspace(
+                attempt,
+                revision,
+                [verify],
+                24010,
+                resultRef: revision,
+                preparation: [preparation],
+                preserveGlobs: ["node_modules"]);
+            await workspace.PrepareAsync(null!, default);
+            return await workspace.ExecutePlanAsync(default);
+        }
+
+        var cold = await RunAsync("cache-cold", sha);
+        var warm = await RunAsync("cache-warm", sha);
+        var seed = Path.Combine(_root, "seed");
+        await File.WriteAllTextAsync(Path.Combine(seed, "package-lock.json"), "lock-v2");
+        await GitAsync(seed, "add", "package-lock.json");
+        await GitAsync(seed, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "commit", "-m", "change lock");
+        await GitAsync(seed, "push", "origin", "main");
+        var changedSha = (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+        var changed = await RunAsync("cache-changed", changedSha);
+
+        Assert.False(cold.Commands[0].DependencyCacheHit);
+        Assert.True(warm.Commands[0].DependencyCacheHit);
+        Assert.Contains(changed.Commands[0].DependencyCache!, item => item.Reason == "lock-changed");
+        Assert.Equal(2, (await File.ReadAllTextAsync(counter)).Length);
+    }
+
+    [Fact]
+    public async Task Preparation_failure_is_review_infrastructure_with_unabridged_command_evidence()
+    {
+        var sha = await SeedOriginAsync();
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-fails",
+            PosixShell.RequirePath(),
+            ["-c", "printf 'complete stdout'; printf 'complete stderr' >&2; exit 9"],
+            TimeoutSeconds: 17);
+        var (workspace, _) = Workspace(
+            "attempt-prepare-fails",
+            sha,
+            [new ReviewCommandDto("must-not-run", "build-tests", "git", ["status"])],
+            24012,
+            preparation: [preparation]);
+        await workspace.PrepareAsync(null!, default);
+
+        var exception = await Assert.ThrowsAsync<ReviewInfrastructureException>(
+            () => workspace.ExecutePlanAsync(default));
+
+        Assert.Equal("PreparationFailed", exception.Classification);
+        var evidence = Assert.IsType<ReviewExecutionEvidence>(exception.Evidence);
+        Assert.Equal("ReviewInfra", evidence.Outcome);
+        var command = Assert.Single(evidence.Commands);
+        Assert.Equal("prepare-fails", command.StepId);
+        Assert.Equal(9, command.ExitCode);
+        Assert.Equal(17_000, command.Budget!.LimitMs);
+        Assert.Contains("exit=9", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("complete stdout\n", ArtifactText(evidence.Artifacts, command.StdoutSha256));
+        Assert.Equal("complete stderr\n", ArtifactText(evidence.Artifacts, command.StderrSha256));
+    }
+
+    [Fact]
+    public async Task Missing_toolchain_exit_127_is_never_a_product_failure()
+    {
+        var sha = await SeedOriginAsync();
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-1",
+            PosixShell.RequirePath(),
+            ["-c", "mkdir -p node_modules && printf ready > node_modules/prepared"],
+            DependencyScopes:
+            [
+                new ReviewDependencyScopeDto("", []),
+            ]);
+        var (workspace, _) = Workspace(
+            "attempt-tool-missing",
+            sha,
+            [new ReviewCommandDto(
+                "verify-node",
+                "build-tests",
+                PosixShell.RequirePath(),
+                ["-c", "exit 127"])],
+            24014,
+            preparation: [preparation],
+            preserveGlobs: ["node_modules"]);
+        await workspace.PrepareAsync(null!, default);
+
+        var exception = await Assert.ThrowsAsync<ReviewInfrastructureException>(
+            () => workspace.ExecutePlanAsync(default));
+
+        Assert.Equal("ToolUnavailable", exception.Classification);
+        Assert.Equal("ReviewInfra", exception.Evidence!.Outcome);
+        Assert.Equal(
+            127,
+            Assert.Single(exception.Evidence.Commands, item => item.Phase == "verification").ExitCode);
+        Assert.False(exception.Evidence.Workspace.DirtyAfter);
+    }
+
+    [Fact]
     public void Retention_removes_only_expired_inactive_attempt_workspaces()
     {
         var now = new DateTime(2026, 8, 2, 18, 0, 0, DateTimeKind.Utc);
@@ -345,7 +583,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var evidence = await workspace.ExecutePlanAsync(default);
 
         Assert.Equal("ProductFailure", evidence.Outcome);
-        var commandEvidence = Assert.Single(evidence.Commands);
+        var commandEvidence = CandidateVerification(evidence);
         Assert.Equal(["Product.NewFailure"], commandEvidence.NewFailures);
         Assert.Equal(["Product.ExistingFailure"], commandEvidence.PreExistingFailures);
         Assert.True(commandEvidence.RetryPerformed);
@@ -376,7 +614,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var evidence = await workspace.ExecutePlanAsync(default);
 
         Assert.Equal("ProductFailure", evidence.Outcome);
-        var commandEvidence = Assert.Single(evidence.Commands);
+        var commandEvidence = CandidateVerification(evidence);
         Assert.Equal(
             ["src/math.spec.ts > arithmetic > new failure"],
             commandEvidence.NewFailures);
@@ -403,7 +641,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var evidence = await workspace.ExecutePlanAsync(default);
 
         Assert.Equal("Pass", evidence.Outcome);
-        var commandEvidence = Assert.Single(evidence.Commands);
+        var commandEvidence = CandidateVerification(evidence);
         Assert.Empty(commandEvidence.NewFailures!);
         Assert.Equal(["Product.ExistingFailure"], commandEvidence.PreExistingFailures);
         Assert.False(commandEvidence.RetryPerformed);
@@ -439,8 +677,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         await second.PrepareAsync(null!, default);
         var secondEvidence = await second.ExecutePlanAsync(default);
 
-        Assert.False(Assert.Single(firstEvidence.Commands).BaselineCacheHit);
-        Assert.True(Assert.Single(secondEvidence.Commands).BaselineCacheHit);
+        Assert.False(CandidateVerification(firstEvidence).BaselineCacheHit);
+        Assert.True(CandidateVerification(secondEvidence).BaselineCacheHit);
         Assert.Single(Directory.EnumerateFiles(second.BaselineCacheRoot, "*.json", SearchOption.AllDirectories));
     }
 
@@ -471,7 +709,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         var evidence = await workspace.ExecutePlanAsync(default);
 
         Assert.Equal("Pass", evidence.Outcome);
-        var commandEvidence = Assert.Single(evidence.Commands);
+        var commandEvidence = CandidateVerification(evidence);
         Assert.True(commandEvidence.RetryPerformed);
         Assert.Empty(commandEvidence.NewFailures!);
         Assert.Equal([failure], commandEvidence.FlakyQuarantinedFailures);
@@ -565,7 +803,9 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         int portBase,
         long fence = 1,
         string? resultRef = null,
-        string? integrationRef = null)
+        string? integrationRef = null,
+        IReadOnlyList<ReviewPreparationCommandDto>? preparation = null,
+        IReadOnlyList<string>? preserveGlobs = null)
     {
         var repositoryId = TaskServerClient.RepositoryIdentity(_origin)!;
         var subject = new ReviewSubjectDto(
@@ -583,7 +823,9 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             new ReviewPlanDto(
                 commands,
                 commands.Select(command => command.Aspect).ToArray(),
-                IntegrationRef: integrationRef),
+                IntegrationRef: integrationRef,
+                Preparation: preparation,
+                PreserveGlobs: preserveGlobs),
             DateTime.UtcNow);
         var lease = new ReviewLeaseDto(
             "lease-" + attemptId,
@@ -651,6 +893,48 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         await GitAsync(seed, "push", "origin", "main");
         return (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
     }
+
+    private async Task<string> SeedOriginWithFilesAsync(IReadOnlyDictionary<string, string> files)
+    {
+        Directory.CreateDirectory(_root);
+        var seed = Path.Combine(_root, "seed");
+        await GitAsync(_root, "init", "--bare", _origin);
+        await GitAsync(_root, "init", "-b", "main", seed);
+        foreach (var (relativePath, content) in files)
+        {
+            var path = Path.Combine(seed, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, content);
+            if (!OperatingSystem.IsWindows()
+                && relativePath.Equals("frontend/fixture-cli/index.js", StringComparison.Ordinal))
+            {
+                File.SetUnixFileMode(
+                    path,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
+        }
+        await File.WriteAllTextAsync(Path.Combine(seed, "product.txt"), "immutable product");
+        await GitAsync(seed, "add", "--all");
+        await GitAsync(seed, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "commit", "-m", "result");
+        await GitAsync(seed, "remote", "add", "origin", _origin);
+        await GitAsync(seed, "push", "origin", "main");
+        return (await GitAsync(seed, "rev-parse", "HEAD")).StdOut.Trim();
+    }
+
+    private static string ArtifactText(
+        IReadOnlyList<ReviewArtifactEvidenceDto> artifacts,
+        string digest)
+    {
+        var artifact = Assert.Single(artifacts, item => item.Sha256 == digest);
+        return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(artifact.ContentBase64!));
+    }
+
+    private static ReviewCommandEvidenceDto CandidateVerification(ReviewExecutionEvidence evidence)
+        => Assert.Single(evidence.Commands, item =>
+            item is { Phase: "verification", WorkspaceRole: "candidate" });
 
     private static async Task<ProcessResult> GitAsync(string workingDirectory, params string[] args)
     {

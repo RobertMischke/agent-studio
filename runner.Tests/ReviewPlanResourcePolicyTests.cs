@@ -80,4 +80,25 @@ public sealed class ReviewPlanResourcePolicyTests
             "dotnet test -maxcpucount:2 -p:ParallelizeTestCollections=false --filter \"Name~two  spaces\"",
             Assert.Single(limited.Commands).Arguments[1]);
     }
+
+    [Fact]
+    public void Preparation_and_verification_share_the_same_dotnet_resource_policy()
+    {
+        var plan = new ReviewPlanDto(
+            [new ReviewCommandDto("verify", "build-tests", "git", ["status"])],
+            ["build-tests"],
+            Preparation:
+            [
+                new ReviewPreparationCommandDto(
+                    "prepare",
+                    "bash",
+                    ["-lc", "dotnet test --filter Category!=MachineBound && npm ci"]),
+            ]);
+
+        var limited = ReviewPlanResourcePolicy.Apply(plan, dotNetMaxCpuCount: 2);
+
+        Assert.Equal(
+            "dotnet test -maxcpucount:2 -p:ParallelizeTestCollections=false --filter Category!=MachineBound && npm ci",
+            Assert.Single(limited.Preparation!).Arguments[1]);
+    }
 }
