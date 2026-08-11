@@ -55,6 +55,16 @@ describe('offlineGuardInterceptor', () => {
     expect(ok).toBe(true);
   });
 
+  it('lets the read-only reference-status batch through while offline', () => {
+    const { http, httpMock } = configure(true);
+    let ok = false;
+
+    http.post('/api/tasks/reference-status', { keys: ['AGT-1'] }).subscribe({ next: () => (ok = true) });
+    httpMock.expectOne('/api/tasks/reference-status').flush({ items: [] });
+
+    expect(ok).toBe(true);
+  });
+
   it('lets mutating requests through when online', () => {
     const { http, httpMock } = configure(false);
     let ok = false;

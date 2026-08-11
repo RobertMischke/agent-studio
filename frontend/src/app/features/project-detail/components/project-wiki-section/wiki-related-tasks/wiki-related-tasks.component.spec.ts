@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
+import { AppTooltipDirective } from '../../../../../components/tooltip/app-tooltip.directive';
 import { WikiRelatedTasksComponent } from './wiki-related-tasks.component';
 import { TaskService } from '../../../../../services/task.service';
 import { TaskReferenceNavigationService } from '../../../../../services/task-reference-navigation.service';
@@ -68,7 +70,9 @@ describe('WikiRelatedTasksComponent', () => {
     expect(ghost).toBeTruthy();
     expect(fixture.nativeElement.querySelector('a')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('GONE-9');
-    expect(fixture.nativeElement.textContent).toContain('Retired page task');
+    const tooltip = fixture.debugElement.query(By.directive(AppTooltipDirective))
+      .injector.get(AppTooltipDirective);
+    expect(tooltip.appTooltip()).toContain('Retired page task');
   });
 
   it('preserves stored order and shows every reference (live and ghost together)', async () => {

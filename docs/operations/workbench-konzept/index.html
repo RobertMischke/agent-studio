@@ -231,7 +231,7 @@
   <li><b>Slice 3: central page + project-level list:</b> cross-project overview analogous to Epics, with decision-pending and its open count first, and decisions directly from the list; History separated into discarded/documented; the same page filtered for each project. Includes SignalR events (created/updated/decisionRecorded/statusChanged) for the tree, lists, and open viewer.</li>
   <li><b>Slice 4: template v2:</b> canonical article stylesheet + authoring documentation + <code>pattern</code> field; migrate existing active Dossiers only when touched.</li>
   <li><b>Slice 5: lifecycle through documentation:</b> tracking completion + <code>documented</code> stage + transition mechanism (all referencing cards terminal ⇒ suggestion to "mark as documented").</li>
-  <li><b>Slice 6: refresh card:</b> the "Refresh" action creates a prefilled update card with document context.</li>
+  <li><b>Slice 6: live freshness:</b> the persistent refresh action was retired after the jobs-hub live path landed. The details menu reports connection and last-read status; only a disconnected viewer exposes a manual read fallback.</li>
   <li><b>Slice 7: rename</b> (if decided): UI surface + documentation, while code identifiers remain.</li>
   <li><b>Slice 8: website:</b> explain the working model (analysis → decision → cards → documentation) in a section on agent-orchestrator.dev, plainly and with the lifecycle diagram (AOW card, after the naming decision).</li>
 </ol>
