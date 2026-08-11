@@ -286,6 +286,7 @@
         <li><a href="#audit">04 · Violation audit</a></li>
         <li><a href="#adoption">05 · Adoption contract</a></li>
         <li><a href="#open-decisions">06 · Open decision</a></li>
+        <li><a href="#applied-surfaces">09 · Applied surfaces</a></li>
       </ul>
     </nav>
   </header>
@@ -854,6 +855,25 @@
     <div class="note">
       <h4>Recommended delivery boundary</h4>
       <p>Ship Variant B first: document icon, shared chevron, neutral sum of waiting decisions, zero omission, and error-only orange. Cover resting, hover, overview-active, leaf-active, expanded children, zero current with History available, and both themes. Keep shared TreeRow API work and history-summary work as separate follow-ups unless the implementation proves they are required for this parent-row slice.</p>
+    </div>
+  </section>
+
+  <section id="applied-surfaces" data-concept-section="evidence">
+    <h2><span class="section-no">09</span>Applied surfaces</h2>
+    <p>This register records scoped adoption of the flat admin grammar. Each row names the implemented surface and the review evidence that proves the relevant contract.</p>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Surface</th><th>Applied contract</th><th>Evidence</th><th>State</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>11 August 2026</td>
+            <td><code>#/workspace/settings/execution-hosts</code></td>
+            <td>One sortable host table with Name, Status, Slots, Load, Last activity, Release, and Actions. A persisted row disclosure contains identity, capabilities and authentication, connection, capacity and lease internals, and system telemetry. Only current host, authentication, connection, or delivery failures use warning semantics.</td>
+            <td><code>execution-hosts-before-light--mocked.png</code>, dark variant, <code>execution-hosts-after-light--mocked.png</code>, and dark variant.</td>
+            <td><span class="status owned">Applied</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 

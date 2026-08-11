@@ -8,12 +8,12 @@ import { RemoteHostsPanelComponent } from './remote-hosts-panel';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 
 /**
- * Render-path test: the panel seeds its registry on init and renders one card
- * per host with a summary line whose counts reconcile to the visible rows
+ * Render-path test: the panel seeds its registry on init and renders one table
+ * row per host with a summary line whose counts reconcile to the visible rows
  * (R3 sum invariant).
  */
 describe('RemoteHostsPanelComponent', () => {
-  it('mounts, seeds the registry, and renders a card per host', async () => {
+  it('mounts, seeds the registry, and renders a sortable row per host', async () => {
     await TestBed.configureTestingModule({
       imports: [RemoteHostsPanelComponent],
       providers: [
@@ -33,15 +33,19 @@ describe('RemoteHostsPanelComponent', () => {
     const cards = el.querySelectorAll('[data-testid="remote-host-card"]');
     expect(cards.length).toBe(fixture.componentInstance.total());
     expect(cards.length).toBeGreaterThanOrEqual(2);
-    expect(cards.item(0).querySelector('[data-role="local"]')?.textContent).toContain('Local');
-    expect(cards.item(0).querySelector('[data-testid="remote-host-name"]')?.textContent)
+    const local = el.querySelector('[data-host="local"]');
+    expect(local?.querySelector('[data-testid="remote-host-name"]')?.textContent)
       .toContain('Local machine');
+    expect(el.querySelector('[data-testid="remote-hosts-table"]')).toBeTruthy();
 
     // Summary total equals the number of rendered cards (R3).
     const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
     expect(summary).toContain(String(cards.length));
 
-    const setupButton = el.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
+    const remote = el.querySelector('[data-host="agent-runner-01"]') as HTMLElement;
+    (remote.querySelector('[data-testid="remote-host-disclosure"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const setupButton = remote.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
     setupButton.click();
     fixture.detectChanges();
     expect(fixture.componentInstance.setupHost()?.id).toBe('agent-runner-01');

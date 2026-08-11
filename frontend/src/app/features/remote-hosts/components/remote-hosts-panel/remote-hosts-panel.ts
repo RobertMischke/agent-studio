@@ -15,15 +15,19 @@ import {
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
+import {
+  RemoteHostTableState,
+  type RemoteHostSortKey,
+} from './remote-host-table-state';
 
 /**
  * Execution Hosts settings page (AGT-1921).
  *
  * The single visible entry point into execution-host management: the local
- * machine and each remote runner in one list
- * so the whole fleet reads as one picture. Each row carries heartbeat status,
- * capabilities, live system vitals (RAM / CPU / Disk), per-CLI quota, and the
- * Re-Probe / Drain / Retire actions ({@link RemoteHostCardComponent}).
+ * machine and each remote runner in one sortable table so the whole fleet reads
+ * as one picture. Each row carries current operator truth while secondary
+ * identity, capability, connection, capacity, and deployment facts are disclosed
+ * on demand ({@link RemoteHostCardComponent}).
  *
  * Host definitions come from {@link RemoteHostsService}; real Task Server
  * client LastSeen values hydrate liveness on every reload.
@@ -39,6 +43,7 @@ import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-
 export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
   private readonly tasks = inject(TaskService);
+  private readonly tableState = new RemoteHostTableState();
 
   readonly hosts = this.service.hosts;
   readonly loading = this.service.loading;
@@ -67,16 +72,21 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly now = signal<number>(Date.now());
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
-  /** Header tallies - each reconciles to the visible cards (R3 sum invariant). */
+  /** Header tallies - each reconciles to the visible rows (R3 sum invariant). */
   readonly activeHosts = computed(() => this.hosts().filter(host => host.status !== 'retired'));
   readonly retiredHosts = computed(() => this.hosts().filter(host => host.status === 'retired'));
-  readonly total = computed(() => this.activeHosts().length);
+  readonly total = computed(() => this.hosts().length);
   readonly onlineCount = computed(() => this.activeHosts().filter((h) => h.status === 'online').length);
   readonly remoteCount = computed(() => this.activeHosts().filter((h) => h.role === 'remote').length);
   readonly boardRunningTruth = computed(() =>
     deriveBoardRunningTruth(this.tasks.grouped().progress));
+  readonly sortKey = this.tableState.sortKey;
+  readonly sortDirection = this.tableState.direction;
+  readonly sortedHosts = computed(() =>
+    this.tableState.sort(this.hosts(), host => this.boardSlots(host)));
 
   ngOnInit(): void {
+    this.tableState.hydrate();
     this.service.ensureLoaded();
     this.tickHandle = setInterval(() => this.now.set(Date.now()), 30_000);
   }
@@ -97,6 +107,28 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
     return host.role === 'local'
       ? []
       : boardProjectSlotsForHost(this.boardRunningTruth(), host);
+  }
+
+  sort(key: RemoteHostSortKey): void {
+    this.tableState.selectSort(key);
+  }
+
+  ariaSort(key: RemoteHostSortKey): 'ascending' | 'descending' | 'none' {
+    if (this.sortKey() !== key) return 'none';
+    return this.sortDirection() === 'asc' ? 'ascending' : 'descending';
+  }
+
+  sortIndicator(key: RemoteHostSortKey): string {
+    if (this.sortKey() !== key) return '';
+    return this.sortDirection() === 'asc' ? '↑' : '↓';
+  }
+
+  isExpanded(hostId: string): boolean {
+    return this.tableState.isExpanded(hostId);
+  }
+
+  setExpanded(hostId: string, expanded: boolean): void {
+    this.tableState.setExpanded(hostId, expanded);
   }
 
   openWizard(): void { this.wizardOpen.set(true); }

@@ -2,10 +2,8 @@
 
 .telemetry {
   margin-top: var(--studio-spacing-4);
-  padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-bg-elevated);
+  padding-top: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-border);
 }
 
 .telemetry__head {

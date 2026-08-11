@@ -30,6 +30,7 @@ const HOST: RemoteHost = {
   },
   activeTaskCount: 1,
   availableSlots: 19,
+  releaseId: 'release-20260811.1',
   activeGateCount: 2,
   gateCapacity: 4,
   telemetry: {
@@ -54,7 +55,7 @@ const HOST: RemoteHost = {
   },
 };
 
-function mount(host: RemoteHost) {
+function mount(host: RemoteHost, expanded = true) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     imports: [RemoteHostCardComponent],
@@ -63,11 +64,21 @@ function mount(host: RemoteHost) {
   const fixture = TestBed.createComponent(RemoteHostCardComponent);
   fixture.componentRef.setInput('host', host);
   fixture.componentRef.setInput('now', Date.parse('2026-07-10T12:00:00Z'));
+  fixture.componentRef.setInput('expanded', expanded);
   fixture.detectChanges();
   return fixture;
 }
 
 describe('RemoteHostCardComponent', () => {
+  it('keeps the primary table row compact until its detail is disclosed', () => {
+    const el: HTMLElement = mount(HOST, false).nativeElement;
+    expect(el.querySelector('[data-testid="remote-host-detail-row"]')).toBeNull();
+    expect(el.querySelector('[data-testid="remote-host-slots-summary"]')?.textContent).toContain('0 / 20');
+    expect(el.querySelector('[data-testid="remote-host-load"]')?.textContent).toContain('54%');
+    expect(el.querySelector('[data-testid="remote-host-release"]')?.textContent)
+      .toContain('release-20260811.1');
+  });
+
   it('renders name, status badge, role, and the three vitals meters', () => {
     const el: HTMLElement = mount(HOST).nativeElement;
     expect(el.querySelector('[data-testid="remote-host-name"]')?.textContent).toContain('agent-runner');

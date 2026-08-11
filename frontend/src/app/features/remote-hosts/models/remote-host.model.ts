@@ -246,6 +246,11 @@ export interface RemoteHost {
   address: string | null;
   /** Task-server client identity used as X-Client-Id by this host. */
   clientId: string;
+  /** Exact release identity advertised by the runner registration. */
+  releaseId?: string | null;
+  /** Process instance and wire version used for deployment diagnosis. */
+  runnerInstanceId?: string | null;
+  runnerProtocolVersion?: number | null;
   status: HostHeartbeatStatus;
   os: string;
   /** ISO timestamp of the last heartbeat, or null if never seen. */
