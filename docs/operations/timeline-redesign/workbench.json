@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "timeline-redesign",
+  "title": "Task Timeline redesign",
+  "summary": "Decision-ready redesign for the Task Timeline and its shared Activity presentation rules. It defines six event categories in one grid, three structural row registers, acute failure and refusal treatment, explicit recovery links for self-healing incidents, newest-first day and run navigation, explanation-first technical popovers with exact Copy, collapsed gate and raw-frame evidence, one Trace entry point, Codex lifecycle condensation, four light/dark AGT-2577 inline SVG mockups, a central glossary, and seven delivery slices.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "pattern": "ui",
+  "updatedAt": "2026-08-11T17:10:00Z",
+  "sourceTaskKeys": [
+    "AGT-2631"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2577",
+    "AGT-2578",
+    "AGT-2526",
+    "AGT-2556",
+    "AGT-2606",
+    "AGT-2609",
+    "AGT-2613",
+    "CAC-21"
+  ],
+  "implementationTasks": [],
+  "key": "AGT-W35"
+}
