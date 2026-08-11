@@ -1,6 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installOrchestratorChatBootstrap } from '../helpers/orchestrator-chat-bootstrap';
 
 test.describe('orchestrator project chat', () => {
+  test.beforeEach(async ({ page }) => {
+    await installOrchestratorChatBootstrap(page, 'Runbook');
+  });
+
   async function expectProjectChatOpen(page: Page) {
     const chat = page.getByTestId('orch-side-sheet');
     await expect(chat).toBeVisible();
@@ -9,9 +14,11 @@ test.describe('orchestrator project chat', () => {
       { message: 'orchestrator side sheet width' }
     ).toBeGreaterThan(300);
     await expect(chat.getByRole('heading', { name: 'Chat' })).toBeVisible();
-    await expect(chat.getByText('Runbook · canonical session')).toBeVisible();
-    await expect(chat.getByRole('button', { name: /Project/ })).toBeVisible();
-    await expect(chat.getByTestId('orch-side-sheet-project-combo')).toBeVisible();
+    await expect(chat.getByTestId('orch-execution-host')).toBeVisible();
+    const projectPicker = chat.getByTestId('orch-side-sheet-project-combo');
+    await expect(projectPicker).toBeVisible();
+    await expect(projectPicker).toHaveAttribute('placeholder', 'Runbook');
+    await expect(chat.getByTestId('chat-context-attachment-add')).toBeVisible();
     await expect(chat.getByPlaceholder(/Ask a question/i)).toBeVisible();
 
     await expect(chat.getByRole('button', { name: /Search/i })).toHaveCount(0);
