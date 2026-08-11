@@ -236,6 +236,14 @@ public sealed record PipelineStepExecution
     public string? SelectionSource { get; init; }
     /// <summary>Heuristic saving versus the live catalogue's top rung.</summary>
     public int? EstimatedSavingsPercent { get; init; }
+    /// <summary>Physical execution placement: local or remote.</summary>
+    public string? ExecutionLocation { get; init; }
+    /// <summary>Executor identity that performed the step.</summary>
+    public string? ExecutorId { get; init; }
+    /// <summary>Host identity reported by the executor.</summary>
+    public string? HostId { get; init; }
+    /// <summary>Opaque workspace identity used for immutable-subject proof.</summary>
+    public string? WorkspaceIdentity { get; init; }
     public PipelineStepStatus Status { get; init; } = PipelineStepStatus.Pending;
     public DateTime? StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }

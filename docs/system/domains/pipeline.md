@@ -27,6 +27,47 @@ pipeline view.
   records the serialized-argument failure mode and the validation and resource
   caps required before parallel work starts.
 
+## Execution placement matrix
+
+The placement rule is capability-based, not process-based. Repository and CLI
+work belongs on a registered Agent Host. Task and lane authority belongs on the
+Task Server. Studio is only an operator surface, except for probes whose subject
+is the Studio process or desktop itself. This is the
+[Remote-Ready line](../../concepts/review-pipeline-health/decision-history.md)
+and the [W18 target architecture](../../operations/remote-gate-zielbild/): a
+host claims a capacity slot, receives a lease and fence, materializes the exact
+subject, and returns typed evidence. The earlier SSH gate with its shared npm
+cache is a migration bridge and implementation precedent, not the final
+scheduler.
+
+| Step class | Before this change | Placement after parity | Remote capable | Reason and boundary |
+| --- | --- | --- | --- | --- |
+| Deterministic repository tools | `ReviewDecisionOrchestrator` and its runners opened the project repository from `ProjectRegistry` and launched the Studio process's shell. Only the SSH gate bridge could leave the host. | Runner Host for Remote tasks | Yes, delivered for build/test and lint commands through the ReviewAttempt plan | These steps need the candidate repository, build toolchains, and dependency caches. None is Studio-specific. The executor reports command, duration, Result-SHA, host, workspace identity, output digests, and verdict under the Review lease. Regression Radar and repository-writing wiki helpers remain backend compatibility paths until their snapshot/read or mutation APIs are complete; that is migration debt, not a reason to prefer Studio execution. |
+| Semantic aspects | `AspectRunnerService` read `prompt.md`, status, CLI logs, and result inventory from the task folder, then launched the CLI available to Studio. The Remote projection marked those aspect rows skipped. | Runner Host for Remote tasks | Yes, delivered for requirement fit, code quality, documentation impact, and tests/evidence | The Task Server now freezes the bounded prompt, model, thinking level, CLI type, and pipeline step id. A host advertising `review:semantic` resolves and executes that provider CLI in the exact-subject worktree. Credentials and CLI installation are host capabilities governed by Review Executor policy. Local coding tasks retain the local `AspectRunnerService` compatibility path. |
+| Decision support | Code-review grading, drift dimensions, Regression Radar, and task-spawner analysis were in backend services because they read task history and sometimes mutated lanes or created tasks. | Split between Runner Host evidence production and Task Server authority | Yes for evidence production; no for authoritative mutation | Read-only repository analysis and model calls belong on a capable Runner Host. The Task Server or API-only Engine owns final review decisions, retry policy, lane transitions, and creation of another task. Legacy decision-support steps that still read backend-only history or combine analysis with mutation remain backend-bound until the W18 `R1` and `B1-B3` contracts are complete. This is a missing contract boundary, not a Studio UI or CLI requirement. |
+| Deterministic gates | Build/test used the remote SSH gate when configured, but its fallback ran in the Studio repository. Metadata gates ran inside backend orchestration against the task folder. | Runner Host for repository gates; Task Server for policy gates | Yes for repository execution | Build/test and lint run remotely against the immutable Result-SHA. Completion, lease/fence, capability admission, integration admission, and final review routing are control-plane decisions and do not execute in Studio. Dossier and other task-store gates stay server-side when they inspect canonical task metadata rather than a repository. The old SSH/local fallback is compatibility only; W18 fallback means another registered host, never in-process Studio execution. |
+| Studio UI and desktop probes | Local by definition because their subject was Studio loopback, desktop state, native credentials, or service installation. | Studio Host | No | A probe of Studio loopback, the live desktop shell, native credential manager, Windows service integration, or Update Service installation must run where that subject exists. Browser tests of a product served from the task worktree are ordinary host-capable tests and must not be labelled Studio-only. The reason must name the concrete Studio-owned subject, not merely a local path. |
+| Human gates | Rendered in Studio and persisted by the backend. | Operator surface backed by Task Server state | Not an executable step | Sight review and acceptance are human decisions. Studio may render and submit them, but Task Server history is authoritative. |
+
+For a Remote task, the review workspace is a task-scoped disposable Git
+worktree on the Runner Host, detached at the immutable Result-SHA. It is not the
+already completed mutable coding checkout. This satisfies task-worktree
+execution while preserving exact-subject proof, baseline comparison, retry
+adoption, and cleanup. Scheduling uses the existing Review Executor
+registration, advertised capabilities, available-slot claim, lease renewal,
+fence, and resource namespace. There is no second local semaphore or special
+Tool/Aspect queue.
+
+Every remotely executed pipeline command carries `pipelineStepId`,
+`pipelineStepClass`, and `executionLocation=remote`. Accepted command evidence
+is projected into paired `post_step_started` and `post_step_finished` timeline
+events with executor, host, workspace identity, attempt, exact SHA, duration,
+status, verdict, classification, and the Remote Review evidence reference. The
+pipeline read model consumes those same events, so a remotely run Aspect is no
+longer presented as a skipped local row. Local `pipeline-execution.json` writers
+stamp `executionLocation=local` when a legacy local step does not state a more
+specific placement.
+
 ## Key Code
 
 - [Model Routing Policy](./model-routing-policy.md) is the canonical model and
@@ -75,7 +116,8 @@ pipeline view.
   bridge for remote cards. It overlays the remote claim and completion facts
   from session/timeline data, the latest Review Plane grade, and canonical
   token-ledger calls onto the normal pipeline catalogue while preserving
-  locally recorded integration gates. It never writes
+  remotely attributed Tool/Aspect timeline rows, and locally recorded
+  integration gates. It never writes
   `pipeline-execution.json` or another lifecycle state.
 - `contracts/TaskServer.Contracts/OrchestrationContracts.cs`,
   `task-server/TaskServerOrchestrationStore.cs`, and
@@ -374,14 +416,13 @@ pipeline view.
   use the lightweight planning chain and never inherit migrated coding
   overrides. Concept retains its dedicated document-first catalogue.
 - The task pipeline endpoint projects local and remote lifecycle facts at read
-  time. A remote claim/completion becomes CORE work, a Review Plane grade
-  becomes the DECISION verdict, and recorded integration gates remain TOOL
-  steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
-  structurally omits are `Skipped` with an explicit remote/not-applicable
-  reason and are projected as `Not applicable` in the Overview. `Not run` is
-  reserved for a step the current attempt genuinely never reached. Remote token
-  totals, historical list-price estimates, and call counts come from the same
-  token ledger as the Task tab.
+  time. A remote claim/completion becomes CORE work, remotely executed Tool and
+  Aspect command evidence becomes its named pipeline row with host/workspace
+  attribution, and a Review Plane grade becomes the DECISION verdict. Only
+  steps structurally omitted by the Remote route are `Skipped` with an explicit
+  remote/not-applicable reason. `Not run` is reserved for a step the current
+  attempt genuinely never reached. Remote token totals, historical list-price
+  estimates, and call counts come from the same token ledger as the Task tab.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project

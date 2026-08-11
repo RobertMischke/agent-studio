@@ -31,7 +31,14 @@ public sealed record ReviewCommandDto(
     IReadOnlyList<string> Arguments,
     bool Required = true,
     int TimeoutSeconds = 1800,
-    bool CompareToBaseline = false);
+    bool CompareToBaseline = false,
+    string ExecutionKind = "process",
+    string? CliType = null,
+    string? Model = null,
+    string? ThinkingLevel = null,
+    string? Prompt = null,
+    string? PipelineStepId = null,
+    string? PipelineStepClass = null);
 
 public sealed record ReviewPlanDto(
     IReadOnlyList<ReviewCommandDto> Commands,
@@ -150,7 +157,10 @@ public sealed record ReviewCommandEvidenceDto(
     string WorkspaceRole = "candidate",
     ReviewCommandBudgetEvidenceDto? Budget = null,
     bool DependencyCacheHit = false,
-    IReadOnlyList<ReviewDependencyCacheEvidenceDto>? DependencyCache = null);
+    IReadOnlyList<ReviewDependencyCacheEvidenceDto>? DependencyCache = null,
+    string? PipelineStepId = null,
+    string? PipelineStepClass = null,
+    string ExecutionLocation = "remote");
 
 public sealed record ReviewCommandBudgetEvidenceDto(
     string Name,

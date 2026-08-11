@@ -278,12 +278,7 @@ public sealed class AspectRunnerService
                 StartedAt = startedAt,
             });
 
-            var prompt = !string.IsNullOrWhiteSpace(promptOverride)
-                ? _prompts.UseProjectOverride(
-                    def.PromptTemplate,
-                    promptOverride!,
-                    new PromptCallContext(inputs.Project, pipelineStepId, model))
-                : BuildAspectPrompt(def, inputs, model);
+            var prompt = RenderPrompt(def, inputs, model, promptOverride);
             string response;
             OrchestratorTokenUsage? callUsage = null;
             long durationMs = 0;
@@ -420,12 +415,29 @@ public sealed class AspectRunnerService
     }
 
     /// <summary>
-    /// Compose the per-aspect prompt by rendering the aspect's runtime
-    /// template with the standard variables. Falls back to a minimal
-    /// inline prompt if the template is missing so the pipeline still
-    /// produces a verdict (the missing template surfaces as a build /
-    /// startup smell, not as a quiet "no-op" run).
+    /// Compose the canonical bounded aspect prompt without invoking a CLI. The
+    /// Remote Review planner uses the same renderer so local and remote aspect
+    /// execution receive the same template, project override, and evidence
+    /// framing. A missing template falls back to a minimal inline prompt so the
+    /// pipeline still produces a verdict and exposes the startup smell.
     /// </summary>
+    public string RenderPrompt(
+        AspectDefinition def,
+        AspectRunInputs inputs,
+        string model,
+        string? promptOverride = null)
+    {
+        if (!string.IsNullOrWhiteSpace(promptOverride))
+        {
+            return _prompts.UseProjectOverride(
+                def.PromptTemplate,
+                promptOverride,
+                new PromptCallContext(inputs.Project, $"aspect-{def.Id}", model));
+        }
+
+        return BuildAspectPrompt(def, inputs, model);
+    }
+
     private string BuildAspectPrompt(AspectDefinition def, AspectRunInputs inputs, string model)
     {
         var values = new Dictionary<string, string?>

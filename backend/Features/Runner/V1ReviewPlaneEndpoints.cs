@@ -195,6 +195,7 @@ public static class V1ReviewPlaneEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
+            AspectRunnerService aspectRunner,
             HumanReviewEscalation escalation,
             TaskMutationService mutations,
             TimelineLog timeline,
@@ -219,6 +220,10 @@ public static class V1ReviewPlaneEndpoints
                 return Results.Conflict(new Contract.ApiError(
                     "review-dependency-preparation-required",
                     "Update this Review Executor to one that advertises dependency-preparation support."));
+            if (!executor.Capabilities.Contains(Contract.ReviewCapabilities.SemanticReview))
+                return Results.Conflict(new Contract.ApiError(
+                    "review-semantic-capability-required",
+                    "Update this Review Executor to one that advertises semantic-review support."));
             // A drained capability pauses this executor rather than feeding it
             // attempts it just reported itself unable to materialize. The pause
             // lifts on cooldown expiry or on the next full registration (a
@@ -272,7 +277,23 @@ public static class V1ReviewPlaneEndpoints
                 return AttemptError(claimed);
 
             var review = claimed.ReviewAttempt;
-            var subject = ToSubject(review, scanner, projects, settings, out var subjectTask, out var baseline);
+            var subject = ToSubject(
+                review,
+                scanner,
+                projects,
+                settings,
+                aspectRunner,
+                out var subjectTask,
+                out var baseline);
+            if (review.Subject.Plan is null)
+            {
+                var frozen = authority.FreezeReviewPlan(
+                    review.AttemptId,
+                    review.Lease!.Fence,
+                    subject.Plan);
+                if (!frozen.Accepted)
+                    return AttemptError(frozen);
+            }
             CorrectOutdatedIntegrationBranch(
                 subjectTask,
                 baseline,
@@ -336,6 +357,7 @@ public static class V1ReviewPlaneEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
+            AspectRunnerService aspectRunner,
             TaskTransitionService transitions,
             HumanReviewEscalation escalation,
             RemoteDeliveryIntegrationCoordinator remoteIntegration,
@@ -441,6 +463,13 @@ public static class V1ReviewPlaneEndpoints
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
+            RemotePipelineStepTimeline.Record(
+                timeline,
+                task.FolderPath,
+                attemptId,
+                evidenceFile,
+                request);
+
             var infrastructureFailure = string.Equals(
                 request.Outcome,
                 "ReviewInfra",
@@ -479,6 +508,7 @@ public static class V1ReviewPlaneEndpoints
                                             scanner,
                                             projects,
                                             settings,
+                                            aspectRunner,
                                             out _,
                                             out _).Plan;
                 var integrationDecision = RemoteDeliveryIntegrationPolicy.Decide(
@@ -748,6 +778,7 @@ public static class V1ReviewPlaneEndpoints
         TaskScannerService scanner,
         AgentStudio.Registry.ProjectRegistry projects,
         AgentStudio.Projects.ProjectSettingsService settings,
+        AspectRunnerService aspectRunner,
         out TaskInfo? subjectTask,
         out ReviewBaselineBranchDecision? baseline)
     {
@@ -762,7 +793,12 @@ public static class V1ReviewPlaneEndpoints
         baseline = task is null ? null : ResolveBaselineBranch(task, project, settings);
         var integrationRef = baseline?.IntegrationRef;
         var plan = review.Subject.Plan
-                   ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
+                   ?? RemoteReviewPlanBuilder.Build(
+                       FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef),
+                       task,
+                       settings,
+                       aspectRunner,
+                       integrationRef);
         // The plan is frozen with the subject, so a retry inherits whatever ref
         // the first attempt was handed. AGT-2220 replayed a stale
         // refs/heads/main through four attempts that way. Re-stamping the ref at
@@ -879,13 +915,21 @@ public static class V1ReviewPlaneEndpoints
                     "sh",
                     ["-lc", shellCommand],
                     TimeoutSeconds: 7200,
-                    CompareToBaseline: command.Kind == VerifyCommandKind.Test);
+                    CompareToBaseline: command.Kind == VerifyCommandKind.Test,
+                    PipelineStepId: command.Kind == VerifyCommandKind.Lint
+                        ? PipelineCatalogue.LintScssStepId
+                        : PipelineCatalogue.BuildTestGateStepId,
+                    // Build/test gates are StepKind.Tool in the pipeline
+                    // catalogue; the step id carries their gate semantics.
+                    PipelineStepClass: "tool");
             })
             .ToList();
         if (commands.Count == 0)
         {
             commands.Add(new Contract.ReviewCommandDto(
-                "verify-subject", "completion", "git", ["rev-parse", "--verify", "HEAD"]));
+                "verify-subject", "completion", "git", ["rev-parse", "--verify", "HEAD"],
+                PipelineStepId: PipelineCatalogue.BuildTestGateStepId,
+                PipelineStepClass: "tool"));
         }
         return new Contract.ReviewPlanDto(
             commands,

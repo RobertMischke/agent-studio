@@ -59,6 +59,10 @@ export interface PipelineStepExecution {
   /** Effective route source: policy, policy-economy, or task-override. */
   selectionSource?: string | null;
   estimatedSavingsPercent?: number | null;
+  executionLocation?: 'local' | 'remote' | string | null;
+  executorId?: string | null;
+  hostId?: string | null;
+  workspaceIdentity?: string | null;
   status: PipelineStepStatus;
   startedAt?: string | null;
   completedAt?: string | null;

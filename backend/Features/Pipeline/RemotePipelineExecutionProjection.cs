@@ -78,6 +78,22 @@ internal static class RemotePipelineExecutionProjection
             .Select(step => step with { Attempt = step.Attempt ?? attempt })
             .ToList();
 
+        foreach (var remoteStep in timeline
+                     .Where(item =>
+                         item.Kind == TimelineEventKinds.PostStepFinished
+                         && string.Equals(Detail(item, "executionLocation"), "remote", StringComparison.OrdinalIgnoreCase))
+                     .GroupBy(item => Detail(item, "step"), StringComparer.OrdinalIgnoreCase)
+                     .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+                     .Select(group => group.OrderBy(item => item.Ts).Last()))
+        {
+            var stepId = Detail(remoteStep, "step")!;
+            Upsert(
+                steps,
+                pipeline,
+                stepId,
+                BuildRemotePostStep(stepId, remoteStep, timeline, attempt));
+        }
+
         SkipRemoteOnlySteps(steps, pipeline.Pre.Select(step => step.Id));
         SkipRemoteOnlySteps(
             steps,
@@ -189,6 +205,10 @@ internal static class RemotePipelineExecutionProjection
                     ? "Remote runner completed the fenced coding run."
                     : completion.Summary,
                 Verdict = statusToken,
+                ExecutionLocation = "remote",
+                ExecutorId = Detail(completion, "runner") ?? Detail(completion, "executor"),
+                HostId = Detail(completion, "host") ?? Detail(completion, "hostId"),
+                WorkspaceIdentity = Detail(completion, "workspace") ?? Detail(completion, "worktree"),
             },
             calls,
             task.Model);
@@ -224,9 +244,52 @@ internal static class RemotePipelineExecutionProjection
                 Reason = reason,
                 Verdict = verdict,
                 VerdictSummary = grade.Summary,
+                ExecutionLocation = "task-server",
             },
             calls,
             calls.LastOrDefault()?.Model);
+    }
+
+    private static PipelineStepExecution BuildRemotePostStep(
+        string stepId,
+        TimelineEvent finished,
+        IReadOnlyList<TimelineEvent> timeline,
+        int attempt)
+    {
+        var started = timeline
+            .Where(item =>
+                item.Kind == TimelineEventKinds.PostStepStarted
+                && string.Equals(item.RunId, finished.RunId, StringComparison.Ordinal)
+                && string.Equals(Detail(item, "step"), stepId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.Ts)
+            .FirstOrDefault();
+        var status = Detail(finished, "status");
+        var passed = string.Equals(status, "passed", StringComparison.OrdinalIgnoreCase);
+        var startedAt = started?.Ts ?? finished.Ts;
+        var duration = long.TryParse(
+            Detail(finished, "durationMs"),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var parsedDuration)
+            ? parsedDuration
+            : DurationMs(startedAt, finished.Ts);
+        return new PipelineStepExecution
+        {
+            StepId = stepId,
+            Attempt = attempt,
+            Status = passed ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+            StartedAt = startedAt,
+            CompletedAt = finished.Ts,
+            DurationMs = Math.Max(0, duration),
+            Reason = finished.Summary,
+            FailureCode = passed ? null : Detail(finished, "classification"),
+            Verdict = Detail(finished, "verdict") ?? status,
+            VerdictSummary = Detail(finished, "verdictSummary"),
+            ExecutionLocation = "remote",
+            ExecutorId = Detail(finished, "executor"),
+            HostId = Detail(finished, "host"),
+            WorkspaceIdentity = Detail(finished, "workspace"),
+        };
     }
 
     private static PipelineStepExecution WithLedgerUsage(

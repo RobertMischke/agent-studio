@@ -95,8 +95,8 @@ internal static class RemoteReviewReportEvidence
         }
         else
         {
-            text.AppendLine("| Phase | Workspace | Step | Command | Exit | Budget | Output | Errors |");
-            text.AppendLine("| --- | --- | --- | --- | ---: | --- | --- | --- |");
+            text.AppendLine("| Phase | Workspace | Step | Class | Location | Command | Exit | Budget | Output | Errors |");
+            text.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- |");
             foreach (var command in request.Commands)
             {
                 var budget = command.Budget is null
@@ -104,7 +104,8 @@ internal static class RemoteReviewReportEvidence
                     : $"{command.Budget.Name}: {command.Budget.ConsumedMs}/{command.Budget.LimitMs} ms" +
                       (command.Budget.Violated ? " (violated)" : "");
                 text.AppendLine(
-                    $"| {Cell(command.Phase)} | {Cell(command.WorkspaceRole)} | {Cell(command.StepId)} | " +
+                    $"| {Cell(command.Phase)} | {Cell(command.WorkspaceRole)} | {Cell(command.PipelineStepId ?? command.StepId)} | " +
+                    $"{Cell(command.PipelineStepClass ?? "preparation")} | {Cell(command.ExecutionLocation)} | " +
                     $"`{Cell(CommandLine(command))}` | {Cell(command.ExitCode?.ToString() ?? command.Signal ?? "n/a")} | " +
                     $"{Cell(budget)} | {ArtifactLink("stdout", command.StdoutSha256, artifactFiles)} | " +
                     $"{ArtifactLink("stderr", command.StderrSha256, artifactFiles)} |");
@@ -120,7 +121,10 @@ internal static class RemoteReviewReportEvidence
         text.AppendLine($"- Tree: `{request.Workspace.TreeHash}`");
         text.AppendLine($"- Dirty before: `{request.Workspace.DirtyBefore.ToString().ToLowerInvariant()}`");
         text.AppendLine($"- Dirty after: `{request.Workspace.DirtyAfter.ToString().ToLowerInvariant()}`");
+        text.AppendLine($"- Execution location: `remote`");
+        text.AppendLine($"- Host: `{request.Environment.HostId}`");
         text.AppendLine($"- Executor: `{request.ExecutorId}`");
+        text.AppendLine($"- Workspace identity: `{request.Workspace.WorkspaceIdentity}`");
         text.AppendLine($"- Fence: `{request.Fence}`");
         text.AppendLine($"- Authority epoch: `{request.AuthorityEpoch}`");
         return text.ToString();

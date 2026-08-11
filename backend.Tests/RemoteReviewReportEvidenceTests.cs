@@ -70,6 +70,7 @@ public sealed class RemoteReviewReportEvidenceTests : IDisposable
 
         var report = await File.ReadAllTextAsync(Path.Combine(_root, reportFile));
         Assert.Contains("| preparation | candidate | prepare-dependencies |", report, StringComparison.Ordinal);
+        Assert.Contains("| preparation | remote |", report, StringComparison.Ordinal);
         Assert.Contains(
             "`/bin/bash -lc dotnet restore Studio.slnx && npm --prefix frontend ci`",
             report,
@@ -77,6 +78,9 @@ public sealed class RemoteReviewReportEvidenceTests : IDisposable
         Assert.Contains("review-command: 3000/120000 ms", report, StringComparison.Ordinal);
         Assert.Contains("[stdout](remote-review-attempt-1-candidate_prepare-dependencies_stdout_log)", report, StringComparison.Ordinal);
         Assert.Contains("[stderr](remote-review-attempt-1-candidate_prepare-dependencies_stderr_log)", report, StringComparison.Ordinal);
+        Assert.Contains("- Execution location: `remote`", report, StringComparison.Ordinal);
+        Assert.Contains("- Host: `host`", report, StringComparison.Ordinal);
+        Assert.Contains("- Workspace identity: `workspace`", report, StringComparison.Ordinal);
         Assert.Equal(
             stdout,
             await File.ReadAllBytesAsync(Path.Combine(

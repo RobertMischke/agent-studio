@@ -1,6 +1,7 @@
 using AgentRunner;
 using AgentStudio.TaskServer.Contracts;
 using AgentStudio.TestSupport;
+using System.Text;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -183,6 +184,70 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal(workspace.BaselineCacheRoot, environment.Isolation["baselineResultCache"]);
         Assert.True(await workspace.CleanupAsync());
         Assert.False(Directory.Exists(workspace.AttemptRoot));
+    }
+
+    [Fact]
+    public async Task Exact_sha_workspace_executes_tool_and_semantic_aspect_on_review_host()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var sha = await SeedOriginAsync();
+        var cli = Path.Combine(_root, "fake-codex-aspect.sh");
+        await File.WriteAllTextAsync(
+            cli,
+            "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Reviewed on host.\\n[[ASPECT_VERDICT: status=pass; summary=Remote aspect passed.]]\"}}'\n");
+        File.SetUnixFileMode(
+            cli,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var commands = new ReviewCommandDto[]
+        {
+            new(
+                "verify-subject",
+                "build-tests",
+                "git",
+                ["rev-parse", "--verify", "HEAD"],
+                PipelineStepId: "post-build-test-gate",
+                PipelineStepClass: "tool"),
+            new(
+                "aspect-requirement-fit",
+                "requirement-fit",
+                "agent-cli",
+                [],
+                ExecutionKind: "semantic-aspect",
+                CliType: "codex",
+                Model: "gpt-5.4-mini",
+                ThinkingLevel: "high",
+                Prompt: "Inspect this immutable worktree and return the required aspect sentinel.",
+                PipelineStepId: "aspect-requirement-fit",
+                PipelineStepClass: "aspect"),
+        };
+        var (workspace, _) = Workspace(
+            "attempt-tool-aspect",
+            sha,
+            commands,
+            24020,
+            codexCliBin: cli);
+
+        await workspace.PrepareAsync(null!, default);
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("Pass", evidence.Outcome);
+        Assert.Equal(2, evidence.Commands.Count);
+        var tool = evidence.Commands.Single(command => command.PipelineStepClass == "tool");
+        Assert.Equal("post-build-test-gate", tool.PipelineStepId);
+        Assert.Equal("remote", tool.ExecutionLocation);
+        var aspect = evidence.Commands.Single(command => command.PipelineStepClass == "aspect");
+        Assert.Equal("aspect-requirement-fit", aspect.PipelineStepId);
+        Assert.Equal("remote", aspect.ExecutionLocation);
+        Assert.Equal("pass", evidence.Verdicts.Single(verdict =>
+            verdict.Aspect == "requirement-fit").Status);
+        var aspectOutput = evidence.Artifacts.Single(artifact =>
+            artifact.Name.Contains("aspect-requirement-fit.stdout", StringComparison.Ordinal));
+        Assert.NotNull(aspectOutput.ContentBase64);
+        Assert.Contains(
+            "Remote aspect passed",
+            Encoding.UTF8.GetString(Convert.FromBase64String(aspectOutput.ContentBase64!)),
+            StringComparison.Ordinal);
+        Assert.False(evidence.Workspace.DirtyAfter);
     }
 
     [Fact]
@@ -805,7 +870,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         string? resultRef = null,
         string? integrationRef = null,
         IReadOnlyList<ReviewPreparationCommandDto>? preparation = null,
-        IReadOnlyList<string>? preserveGlobs = null)
+        IReadOnlyList<string>? preserveGlobs = null,
+        string? codexCliBin = null)
     {
         var repositoryId = TaskServerClient.RepositoryIdentity(_origin)!;
         var subject = new ReviewSubjectDto(
@@ -853,6 +919,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             BaseBranch = "main",
             CliBin = "unused",
             CliArgs = "",
+            CodexCliBin = codexCliBin ?? "codex",
             TtlSeconds = 120,
             HeartbeatSeconds = 30,
         };

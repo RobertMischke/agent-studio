@@ -497,6 +497,55 @@ public sealed class AttemptAuthorityService
         }
     }
 
+    /// <summary>
+    /// Freezes the server-composed execution plan onto a legacy ReviewSubject
+    /// whose completion handoff predates plan composition. Only the active
+    /// leased attempt and its current fence may perform this one-way fill. A
+    /// retry then reuses the same subject plan instead of re-reading mutable
+    /// project settings.
+    /// </summary>
+    public AttemptWriteResult FreezeReviewPlan(
+        string attemptId,
+        long fence,
+        AgentStudio.TaskServer.Contracts.ReviewPlanDto plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        lock (_gate)
+        {
+            var review = FindReview(attemptId);
+            if (review is null)
+                return new AttemptWriteResult(AttemptWriteStatus.NotFound, attemptId);
+            if (!IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded)
+                return new AttemptWriteResult(
+                    AttemptWriteStatus.Superseded,
+                    attemptId,
+                    ReviewAttempt: ToDto(review));
+            if (review.State != AttemptLifecycleState.Leased || review.Lease is null)
+                return new AttemptWriteResult(
+                    AttemptWriteStatus.InvalidState,
+                    attemptId,
+                    "Review plan can be frozen only by the active leased attempt.",
+                    ReviewAttempt: ToDto(review));
+            if (review.Lease.Fence != fence)
+                return new AttemptWriteResult(
+                    AttemptWriteStatus.StaleFence,
+                    attemptId,
+                    ReviewAttempt: ToDto(review));
+            if (review.Subject.Plan is not null)
+                return new AttemptWriteResult(
+                    AttemptWriteStatus.Duplicate,
+                    attemptId,
+                    ReviewAttempt: ToDto(review));
+
+            review.Subject.Plan = plan;
+            PersistLocked();
+            return new AttemptWriteResult(
+                AttemptWriteStatus.Accepted,
+                attemptId,
+                ReviewAttempt: ToDto(review));
+        }
+    }
+
     public AttemptWriteResult RenewReview(AttemptWriteReference write, string executorId, int? requestedTtlSeconds)
     {
         lock (_gate)

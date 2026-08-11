@@ -245,6 +245,80 @@ public sealed class RemotePipelineExecutionProjectionTests
     }
 
     [Fact]
+    public void Project_RemotePostStepTimeline_ProjectsHostAndWorkspaceInsteadOfSkippingAspect()
+    {
+        var pipeline = PipelineCatalogue.Standard;
+        var task = new TaskInfo
+        {
+            Id = "remote-tool-aspect",
+            ProjectName = "Agent Taskboard",
+            CreatedAt = Utc(8, 0),
+            State = TaskStates.HumanReview,
+        };
+        var started = new TimelineEvent
+        {
+            Ts = Utc(8, 11),
+            Kind = TimelineEventKinds.PostStepStarted,
+            RunId = "review-1",
+            Details = new Dictionary<string, string>
+            {
+                ["step"] = PipelineCatalogue.AspectStepIds[0],
+                ["executionLocation"] = "remote",
+            },
+        };
+        var finished = new TimelineEvent
+        {
+            Ts = Utc(8, 13),
+            Kind = TimelineEventKinds.PostStepFinished,
+            RunId = "review-1",
+            Summary = "requirement fit passed on runner-host-1",
+            Details = new Dictionary<string, string>
+            {
+                ["step"] = PipelineCatalogue.AspectStepIds[0],
+                ["stepClass"] = "aspect",
+                ["executionLocation"] = "remote",
+                ["executor"] = "review-runner-1",
+                ["host"] = "runner-host-1",
+                ["workspace"] = "workspace-proof-1",
+                ["status"] = "passed",
+                ["durationMs"] = "120000",
+                ["verdict"] = "pass",
+            },
+        };
+
+        var projected = RemotePipelineExecutionProjection.Project(
+            null,
+            pipeline,
+            task,
+            [new SessionEvent { Ts = Utc(8, 0), Kind = "start", Cli = "remote-runner" }],
+            [
+                new TimelineEvent
+                {
+                    Ts = Utc(8, 10),
+                    Kind = TimelineEventKinds.AgentRunFinished,
+                    Summary = "remote run done",
+                    Details = new Dictionary<string, string>
+                    {
+                        ["cli"] = "remote-runner",
+                        ["status"] = "done",
+                    },
+                },
+                started,
+                finished,
+            ],
+            null);
+
+        var aspect = Step(projected.Execution!, PipelineCatalogue.AspectStepIds[0]);
+        Assert.Equal(PipelineStepStatus.Passed, aspect.Status);
+        Assert.Equal("remote", aspect.ExecutionLocation);
+        Assert.Equal("review-runner-1", aspect.ExecutorId);
+        Assert.Equal("runner-host-1", aspect.HostId);
+        Assert.Equal("workspace-proof-1", aspect.WorkspaceIdentity);
+        Assert.Equal(120000, aspect.DurationMs);
+        Assert.Equal("pass", aspect.Verdict);
+    }
+
+    [Fact]
     public void Project_LaterLocalRun_DoesNotReuseEarlierRemoteEvidence()
     {
         var record = new PipelineExecutionRecord

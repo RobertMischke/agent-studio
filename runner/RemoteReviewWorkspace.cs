@@ -200,8 +200,8 @@ public sealed class RemoteReviewWorkspace
                     commands.Add(await AddCommandEvidenceAsync(
                         command.StepId,
                         command.Aspect,
-                        command.FileName,
-                        command.Arguments,
+                        execution.FileName,
+                        execution.Arguments,
                         headBefore,
                         treeBefore,
                         execution.Process,
@@ -255,8 +255,8 @@ public sealed class RemoteReviewWorkspace
                             commands.Add(await AddCommandEvidenceAsync(
                                 command.StepId,
                                 command.Aspect,
-                                command.FileName,
-                                command.Arguments,
+                                execution.FileName,
+                                execution.Arguments,
                                 headBefore,
                                 treeBefore,
                                 execution.Process,
@@ -291,8 +291,8 @@ public sealed class RemoteReviewWorkspace
                 commands.Add(await AddCommandEvidenceAsync(
                     command.StepId,
                     command.Aspect,
-                    command.FileName,
-                    command.Arguments,
+                    execution.FileName,
+                    execution.Arguments,
                     headBefore,
                     treeBefore,
                     execution.Process,
@@ -344,14 +344,72 @@ public sealed class RemoteReviewWorkspace
         string workingDirectory,
         CancellationToken ct,
         IReadOnlyDictionary<string, string?>? environment = null)
-        => await RunCommandAsync(
-            command.StepId,
-            command.FileName,
-            command.Arguments,
-            command.TimeoutSeconds,
-            workingDirectory,
-            ct,
-            environment);
+    {
+        if (!string.Equals(
+                command.ExecutionKind,
+                RemoteAspectOutput.SemanticAspectExecutionKind,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunCommandAsync(
+                command.StepId,
+                command.FileName,
+                command.Arguments,
+                command.TimeoutSeconds,
+                workingDirectory,
+                ct,
+                environment);
+        }
+
+        if (string.IsNullOrWhiteSpace(command.Prompt))
+            throw new ReviewInfrastructureException(
+                "ReviewPlanInvalid",
+                $"Semantic aspect '{command.StepId}' has no frozen prompt.");
+
+        var startedAt = DateTime.UtcNow;
+        var executable = command.CliType ?? command.FileName;
+        try
+        {
+            executable = RemoteAspectCliExecution.ResolveExecutable(_options, command);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(command.TimeoutSeconds, 1, 7200)));
+            var result = await RemoteAspectCliExecution.RunAsync(
+                _options,
+                workingDirectory,
+                command,
+                environment ?? ProcessEnvironment(),
+                timeout.Token);
+            return new CommandExecution(
+                result.Process with { StdOut = RemoteAspectOutput.Extract(result.Process.StdOut) },
+                result.StartedAt,
+                result.FinishedAt,
+                result.Signal,
+                result.FileName,
+                result.Arguments);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new CommandExecution(
+                new ProcessResult(-1, string.Empty, "Review command timed out."),
+                startedAt,
+                DateTime.UtcNow,
+                "timeout",
+                executable,
+                []);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new CommandExecution(
+                new ProcessResult(
+                    127,
+                    string.Empty,
+                    $"Review step '{command.StepId}' could not start: {exception.Message}"),
+                startedAt,
+                DateTime.UtcNow,
+                null,
+                executable,
+                []);
+        }
+    }
 
     private async Task<CommandExecution> RunCommandAsync(
         string stepId,
@@ -360,7 +418,8 @@ public sealed class RemoteReviewWorkspace
         int timeoutSeconds,
         string workingDirectory,
         CancellationToken ct,
-        IReadOnlyDictionary<string, string?>? environment = null)
+        IReadOnlyDictionary<string, string?>? environment = null,
+        string? stdin = null)
     {
         var started = DateTime.UtcNow;
         ProcessResult process;
@@ -375,6 +434,7 @@ public sealed class RemoteReviewWorkspace
                 fileName,
                 arguments,
                 workingDirectory,
+                stdin: stdin,
                 onStdOut: line => completeStdout.AppendLine(line),
                 onStdErr: line => completeStderr.AppendLine(line),
                 environment: environment ?? ProcessEnvironment(),
@@ -397,7 +457,13 @@ public sealed class RemoteReviewWorkspace
                 string.Empty,
                 $"Review step '{stepId}' could not start: {exception.Message}");
         }
-        return new CommandExecution(process, started, DateTime.UtcNow, signal);
+        return new CommandExecution(
+            process,
+            started,
+            DateTime.UtcNow,
+            signal,
+            fileName,
+            arguments);
     }
 
     private async Task<DependencyCacheSession?> ExecutePreparationAsync(
@@ -478,7 +544,9 @@ public sealed class RemoteReviewWorkspace
                             $"Dependency preparation directory is missing: {workingDirectory}"),
                         DateTime.UtcNow,
                         DateTime.UtcNow,
-                        null);
+                        null,
+                        command.FileName,
+                        command.Arguments);
             }
             else
             {
@@ -487,7 +555,13 @@ public sealed class RemoteReviewWorkspace
                     cacheMessages.Concat(dependencyDecisions.Select(item =>
                         $"dependency-cache hit scope={item.Decision.Scope} " +
                         $"reason={item.Decision.Reason} lockHash={item.Decision.LockHash}")));
-                execution = new CommandExecution(new ProcessResult(0, output, string.Empty), now, now, null);
+                execution = new CommandExecution(
+                    new ProcessResult(0, output, string.Empty),
+                    now,
+                    now,
+                    null,
+                    command.FileName,
+                    command.Arguments);
             }
 
             var evidence = dependencyDecisions
@@ -567,9 +641,16 @@ public sealed class RemoteReviewWorkspace
         ICollection<ReviewArtifactEvidenceDto> artifacts,
         CancellationToken ct)
     {
+        var planned = _subject.Plan.Commands.FirstOrDefault(command =>
+            string.Equals(command.StepId, stepId, StringComparison.Ordinal));
         var stdoutName = ArtifactName(workspaceRole, stepId, "stdout");
         var stderrName = ArtifactName(workspaceRole, stepId, "stderr");
-        var includeContent = !process.Success || signal is not null;
+        var includeContent = !process.Success
+                             || signal is not null
+                             || string.Equals(
+                                 planned?.ExecutionKind,
+                                 RemoteAspectOutput.SemanticAspectExecutionKind,
+                                 StringComparison.OrdinalIgnoreCase);
         var stdout = await WriteArtifactAsync(stdoutName, process.StdOut, includeContent, ct);
         var stderr = await WriteArtifactAsync(stderrName, process.StdErr, includeContent, ct);
         artifacts.Add(stdout);
@@ -604,7 +685,10 @@ public sealed class RemoteReviewWorkspace
                 consumed,
                 signal == "timeout" || consumed > limit),
             dependencyCacheHit,
-            dependencyCache);
+            dependencyCache,
+            planned?.PipelineStepId,
+            planned?.PipelineStepClass,
+            "remote");
     }
 
     private async Task<ReviewArtifactEvidenceDto> WriteArtifactAsync(
@@ -1028,7 +1112,17 @@ public sealed class RemoteReviewWorkspace
             ["git"] = ExecutableIdentity("git"),
         };
         foreach (var command in _subject.Plan.Commands)
-            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
+        {
+            var fileName = command.FileName;
+            if (string.Equals(
+                    command.ExecutionKind,
+                    RemoteAspectOutput.SemanticAspectExecutionKind,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                fileName = RemoteAspectCliExecution.ResolveExecutable(_options, command);
+            }
+            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(fileName);
+        }
         foreach (var command in _subject.Plan.Preparation ?? [])
             toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
         return new ReviewEnvironmentDto(
@@ -1464,7 +1558,9 @@ internal sealed record CommandExecution(
     ProcessResult Process,
     DateTime StartedAt,
     DateTime FinishedAt,
-    string? Signal);
+    string? Signal,
+    string FileName,
+    IReadOnlyList<string> Arguments);
 
 internal sealed record BaselineCacheEntry(
     int ParserVersion,

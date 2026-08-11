@@ -43,6 +43,7 @@ using RDurableAgentProcess = Runner::AgentRunner.DurableAgentProcess;
 using RRemoteCompletionResponse = Runner::AgentRunner.RemoteRunCompletionResponse;
 using RReviewDaemon = Runner::AgentRunner.RemoteReviewDaemon;
 using RReviewStateStore = Runner::AgentRunner.ReviewStateStore;
+using RReviewWorkspace = Runner::AgentRunner.RemoteReviewWorkspace;
 
 namespace AgentStudio.Tests;
 
@@ -3462,6 +3463,31 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             lease.AuthorityEpoch);
     }
 
+    private static Contract.ReviewCommandEvidenceDto RemotePipelineCommandEvidence(
+        Contract.ReviewClaimResponse claim,
+        Contract.ReviewCommandDto command,
+        DateTime startedAt)
+    {
+        var sha = claim.Subject!.ExpectedResultSha;
+        return new Contract.ReviewCommandEvidenceDto(
+            command.StepId,
+            command.Aspect,
+            command.FileName,
+            command.Arguments,
+            sha,
+            sha,
+            new string('b', 40),
+            startedAt,
+            startedAt.AddSeconds(1),
+            0,
+            null,
+            new string('c', 64),
+            new string('d', 64),
+            PipelineStepId: command.PipelineStepId,
+            PipelineStepClass: command.PipelineStepClass,
+            ExecutionLocation: "remote");
+    }
+
     /// <summary>
     /// task.json is written without a naming policy, so persisted commit entries
     /// keep their CLR casing while the HTTP projection is camelCase. Reading the
@@ -3604,6 +3630,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(claim.Lease!.Fence > 0);
         Assert.True(claim.Lease.AuthorityEpoch > 0);
         Assert.Equal(resultSha, claim.Subject!.ExpectedResultSha);
+        var plannedTool = claim.Subject.Plan.Commands.First(command =>
+            command.PipelineStepId == PipelineCatalogue.BuildTestGateStepId);
+        var plannedAspect = claim.Subject.Plan.Commands.First(command =>
+            command.PipelineStepId == PipelineCatalogue.AspectStepIds[0]);
+        Assert.Equal("semantic-aspect", plannedAspect.ExecutionKind);
+        Assert.False(string.IsNullOrWhiteSpace(plannedAspect.Prompt));
 
         var renewed = await reviewClient.RenewReviewLeaseAsync(
             claim.Attempt.AttemptId,
@@ -3645,9 +3677,23 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 "10.0",
                 new Dictionary<string, string>(),
                 new Dictionary<string, string>()),
+            [
+                RemotePipelineCommandEvidence(claim, plannedTool, DateTime.UtcNow.AddSeconds(-3)),
+                RemotePipelineCommandEvidence(claim, plannedAspect, DateTime.UtcNow.AddSeconds(-2)),
+            ],
             [],
-            [],
-            [new Contract.ReviewVerdictDto("build-tests", "pass", "GatePassed", "Focused gate passed.")],
+            [
+                new Contract.ReviewVerdictDto(
+                    plannedTool.Aspect,
+                    "pass",
+                    "GatePassed",
+                    "Focused gate passed."),
+                new Contract.ReviewVerdictDto(
+                    plannedAspect.Aspect,
+                    "pass",
+                    "RemoteAspectVerdict",
+                    "Requirement fit passed."),
+            ],
             claim.Lease.AuthorityEpoch);
         var report = await reviewClient.ReportReviewAsync(
             claim.Attempt.AttemptId,
@@ -3655,7 +3701,20 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             ct);
         Assert.Equal("Pass", report.Outcome);
         Assert.Equal(TaskStates.HumanReview, report.TaskState);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)));
+        var reviewedFolder = Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey);
+        Assert.True(Directory.Exists(reviewedFolder));
+        var remoteTimeline = new TimelineLog(NullLogger<TimelineLog>.Instance)
+            .ReadAll(reviewedFolder)
+            .Where(item => item.Kind == TimelineEventKinds.PostStepFinished)
+            .ToList();
+        Assert.Contains(remoteTimeline, item =>
+            item.Details is { } details
+            && details.GetValueOrDefault("step") == plannedTool.PipelineStepId
+            && details.GetValueOrDefault("executionLocation") == "remote");
+        Assert.Contains(remoteTimeline, item =>
+            item.Details is { } details
+            && details.GetValueOrDefault("step") == plannedAspect.PipelineStepId
+            && details.GetValueOrDefault("host") == "review-host");
 
         var duplicate = await reviewClient.ReportReviewAsync(
             claim.Attempt.AttemptId,
@@ -3667,6 +3726,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             $"/api/v1/reviews/attempts/{claim.Attempt.AttemptId}",
             ct);
         Assert.Equal("Pass", reportedAttempt!.Outcome);
+        var frozenSubject = factory.Services.GetRequiredService<AttemptAuthorityService>()
+            .GetTaskProjection(TaskKey)
+            .CurrentReviewSubject!;
+        Assert.Contains(frozenSubject.Plan!.Commands, command =>
+            command.ExecutionKind == "semantic-aspect"
+            && command.PipelineStepClass == "aspect");
 
         var cleanup = await reviewClient.CleanupReviewAsync(
             claim.Attempt.AttemptId,
@@ -3767,18 +3832,70 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new Contract.ReviewClaimRequest(reviewRunnerId, reviewInstance, 120),
             ct);
         Assert.Equal("claimed", claim.Status);
-        var reportRequest = PassingV1ReviewReport(claim, "immediate-integration-review") with
-        {
-            Summary = "All applicable Remote gates passed; build/test is not applicable.",
-            Verdicts =
-            [
-                new Contract.ReviewVerdictDto(
-                    "completion",
-                    "pass",
-                    "Verified",
-                    "The immutable delivery is complete."),
-            ],
-        };
+        var reviewLease = claim.Lease!;
+        var plannedTool = claim.Subject!.Plan.Commands.First(command =>
+            command.PipelineStepId == PipelineCatalogue.BuildTestGateStepId);
+        var plannedAspect = Assert.Single(
+            claim.Subject.Plan.Commands,
+            command => command.PipelineStepId == PipelineCatalogue.AspectStepIds[0]);
+        Assert.Equal("semantic-aspect", plannedAspect.ExecutionKind);
+        Assert.Equal("gpt-5.4-mini", plannedAspect.Model);
+        Assert.Equal("high", plannedAspect.ThinkingLevel);
+        Assert.False(string.IsNullOrWhiteSpace(plannedAspect.Prompt));
+        var fakeCodex = Path.Combine(_workspace, "fake-remote-aspect.sh");
+        await File.WriteAllTextAsync(
+            fakeCodex,
+            "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Reviewed in the exact Result-SHA workspace.\\n[[ASPECT_VERDICT: status=pass; summary=Remote aspect passed.]]\"}}'\n",
+            ct);
+        File.SetUnixFileMode(
+            fakeCodex,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var remoteWorkspace = new RReviewWorkspace(
+            new ROptions
+            {
+                ServerUrl = "http://localhost",
+                RunnerId = reviewRunnerId,
+                RunnerName = reviewRunnerId,
+                Hostname = "review-host",
+                BackendName = "remote-review-e2e",
+                Role = "review",
+                WorkDir = Path.Combine(_workspace, "coding-work"),
+                ReviewWorkDir = Path.Combine(_workspace, "review-work"),
+                BaseBranch = "develop",
+                CliBin = fakeCodex,
+                CliArgs = string.Empty,
+                CodexCliBin = fakeCodex,
+                TtlSeconds = 120,
+                HeartbeatSeconds = 30,
+            },
+            claim.Subject,
+            reviewLease,
+            _ => { });
+        await remoteWorkspace.PrepareAsync(reviewClient, ct);
+        var remoteEvidence = await remoteWorkspace.ExecutePlanAsync(ct);
+        Assert.Equal("Pass", remoteEvidence.Outcome);
+        Assert.False(remoteEvidence.Workspace.DirtyAfter);
+        Assert.Contains(remoteEvidence.Commands, command =>
+            command.PipelineStepId == plannedTool.PipelineStepId
+            && command.ExecutionLocation == "remote");
+        Assert.Contains(remoteEvidence.Commands, command =>
+            command.PipelineStepId == plannedAspect.PipelineStepId
+            && command.ExecutionLocation == "remote");
+        var reportRequest = new Contract.ReviewReportRequest(
+            reviewRunnerId,
+            reviewInstance,
+            reviewLease.LeaseId,
+            reviewLease.Fence,
+            "immediate-integration-review",
+            remoteEvidence.Outcome,
+            null,
+            "Tool, gate, and semantic aspect steps ran in the exact remote workspace.",
+            remoteEvidence.Workspace,
+            remoteWorkspace.EnvironmentEvidence(),
+            remoteEvidence.Commands,
+            remoteEvidence.Artifacts,
+            remoteEvidence.Verdicts,
+            reviewLease.AuthorityEpoch);
 
         var report = await reviewClient.ReportReviewAsync(
             claim.Attempt!.AttemptId,
@@ -3815,6 +3932,38 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             && item.Details?.GetValueOrDefault("to") == TaskStates.HumanReview);
         Assert.True(integratedAt >= 0, "Immediate integration evidence was not recorded.");
         Assert.True(humanReviewAt > integratedAt, "Human Review was entered before integration settled.");
+        var remoteSteps = timeline
+            .Where(item =>
+                item.Kind == TimelineEventKinds.PostStepFinished
+                && item.Details?.GetValueOrDefault("executionLocation") == "remote")
+            .ToList();
+        Assert.Contains(remoteSteps, item =>
+            item.Details is { } details
+            && details.GetValueOrDefault("step") == plannedTool.PipelineStepId
+            && details.GetValueOrDefault("host") == "review-host"
+            && details.GetValueOrDefault("workspace") == remoteEvidence.Workspace.WorkspaceIdentity);
+        Assert.Contains(remoteSteps, item =>
+            item.Details is { } details
+            && details.GetValueOrDefault("step") == plannedAspect.PipelineStepId
+            && details.GetValueOrDefault("executor") == reviewRunnerId);
+
+        var projected = RemotePipelineExecutionProjection.Project(
+            null,
+            PipelineCatalogue.Standard,
+            reviewed,
+            [new SessionEvent { Ts = DateTime.UtcNow.AddMinutes(-2), Kind = "start", Cli = "remote-runner" }],
+            timeline,
+            null).Execution!;
+        var projectedAspect = projected.Steps.Single(step =>
+            step.StepId == plannedAspect.PipelineStepId);
+        Assert.Equal(PipelineStepStatus.Passed, projectedAspect.Status);
+        Assert.Equal("remote", projectedAspect.ExecutionLocation);
+        Assert.Equal("review-host", projectedAspect.HostId);
+        var projectedTool = projected.Steps.Single(step =>
+            step.StepId == plannedTool.PipelineStepId);
+        Assert.Equal(PipelineStepStatus.Passed, projectedTool.Status);
+        Assert.Equal("remote", projectedTool.ExecutionLocation);
+        Assert.True(await remoteWorkspace.CleanupAsync());
 
         var developBeforeAcceptance = (await GitAsync(repository, "rev-parse", "develop")).StdOut.Trim();
         var pipelineBeforeAcceptance = factory.Services.GetRequiredService<PipelineExecutionLog>()

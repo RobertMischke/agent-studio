@@ -287,7 +287,13 @@ public sealed class PipelineExecutionLog
                 return;
             }
 
-            stepResult = stepResult with { Attempt = current.Attempt };
+            stepResult = stepResult with
+            {
+                Attempt = current.Attempt,
+                ExecutionLocation = string.IsNullOrWhiteSpace(stepResult.ExecutionLocation)
+                    ? "local"
+                    : stepResult.ExecutionLocation,
+            };
 
             var updatedSteps = new List<PipelineStepExecution>(current.Steps.Count);
             var replaced = false;
