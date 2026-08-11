@@ -1,5 +1,7 @@
 import type { TaskInfo } from '../../models/task.model';
-import { projectRailLabel } from '../project-detail';
+import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
+import { pageTypeIcon, pageTypeLabel, type PageContext } from '../../models/page-context.model';
+import { projectRailLabel } from '../project-detail/components/project-shell/project-shell.config';
 import type { StudioTab } from '../studio-shell';
 
 /**
@@ -15,6 +17,8 @@ export interface ComposerLocationContext {
   project: string | null;
   surface: string;
   detail?: string;
+  /** Stable short reference for compact context chips, such as a Dossier key. */
+  referenceKey?: string;
   /** Task identity carried by the same active-tab projection the footer shows. */
   taskKey?: string;
   taskId?: string;
@@ -27,6 +31,39 @@ export interface ComposerLocationContext {
 export function composerLocationLabel(context: ComposerLocationContext | null): string | null {
   if (!context) return null;
   return context.detail ? `${context.surface} · ${context.detail}` : context.surface;
+}
+
+export interface ContextChipPresentation {
+  label: string;
+  key: string | null;
+  typeLabel: string;
+  icon: StudioIconName;
+}
+
+export function buildContextChipPresentation(input: {
+  project: string | null;
+  page: PageContext | null;
+  contextKind: 'task' | 'project';
+  taskKey: string | null;
+  taskTitle: string | null;
+  location: ComposerLocationContext | null;
+}): ContextChipPresentation {
+  const { project, page, contextKind, taskKey, taskTitle, location } = input;
+  if (page && page.projectName === project) {
+    return { label: page.title, key: null, typeLabel: pageTypeLabel(page.pageType), icon: pageTypeIcon(page.pageType) };
+  }
+  if (contextKind === 'task') {
+    return { label: taskTitle ?? taskKey ?? 'Current task', key: taskKey, typeLabel: 'Task', icon: 'backlog' };
+  }
+  if (location && (!location.project || location.project === project)) {
+    return {
+      label: location.detail ?? location.surface,
+      key: location.referenceKey ?? null,
+      typeLabel: location.surface,
+      icon: composerSurfaceIcon(location.surface),
+    };
+  }
+  return { label: 'Project overview', key: null, typeLabel: 'Project', icon: 'grid' };
 }
 
 function taskFor(tabKey: string, tasks: readonly TaskInfo[]): TaskInfo | undefined {
@@ -69,7 +106,12 @@ export function buildComposerLocationContext(
     case 'task':
       return taskContext('Task', tab.taskKey, tasks);
     case 'workbench':
-      return { project: tab.projectName, surface: 'Dossier', detail: tab.title ?? tab.workbenchId };
+      return {
+        project: tab.projectName,
+        surface: 'Dossier',
+        detail: tab.title ?? tab.workbenchId,
+        ...(tab.key ? { referenceKey: tab.key } : {}),
+      };
     case 'workbenches':
       return { project: tab.projectName, surface: 'Dossiers' };
     case 'activity':
@@ -91,5 +133,17 @@ export function buildComposerLocationContext(
       return { project: null, surface: 'Workspace Settings' };
     case 'welcome':
       return { project: null, surface: 'Welcome' };
+  }
+}
+
+function composerSurfaceIcon(surface: string): StudioIconName {
+  switch (surface.toLocaleLowerCase()) {
+    case 'board': return 'grid';
+    case 'dossier':
+    case 'dossiers': return 'eye';
+    case 'wiki': return 'book';
+    case 'url preview': return 'eye';
+    case 'project overview': return 'grid';
+    default: return 'file';
   }
 }

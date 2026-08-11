@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { TaskInfo, RegistryWorkspaceListItem, RegistryProjectSummary, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
+import type { WorkbenchListItem } from '../../models/project-docs.model';
 import { forkJoin } from 'rxjs';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
@@ -711,8 +712,14 @@ export class StudioShellComponent {
     this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
   }
 
-  openWorkbench(event: { projectName: string; workbench: { id: string; title: string } }): void {
-    this.tabState.open({ kind: 'workbench', projectName: event.projectName, workbenchId: event.workbench.id, title: event.workbench.title });
+  openWorkbench(event: { projectName: string; workbench: WorkbenchListItem }): void {
+    this.tabState.open({
+      kind: 'workbench',
+      projectName: event.projectName,
+      workbenchId: event.workbench.id,
+      title: event.workbench.title,
+      key: event.workbench.key ?? undefined,
+    });
   }
 
   openWorkbenches(projectName: string | null): void {

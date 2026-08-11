@@ -49,7 +49,9 @@ export { buildChatNavigationContext } from './chat-navigation-context';
 export { buildOrchestratorContextEnvelope } from './orchestrator-context-envelope';
 export { buildOrchestratorConversationEvents } from './components/orchestrator-side-sheet/orchestrator-side-sheet.util';
 export {
+  buildContextChipPresentation,
   buildComposerLocationContext,
   composerLocationLabel,
+  type ContextChipPresentation,
   type ComposerLocationContext,
 } from './composer-location-context';
