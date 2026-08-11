@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escalation view information architecture | Decision dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  h4 { margin: 0 0 8px; font-size: 15px; }
+  p { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  a { color: var(--develop); text-underline-offset: 3px; }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg, figure img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.keep { background: var(--ok-soft); color: var(--ok); }
+  .pill.move { background: var(--accent-soft); color: var(--develop); }
+  .pill.remove { background: var(--bad-soft); color: var(--bad); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .evidence-grid, .mockup-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 22px 0; }
+  .evidence-grid figure, .mockup-grid figure { margin: 0; min-width: 0; }
+  .decision { display: grid; grid-template-columns: 170px 1fr; gap: 18px; padding: 15px 0; border-top: 1px solid var(--line); }
+  .decision:last-child { border-bottom: 1px solid var(--line); }
+  .decision strong { color: var(--develop); font: 700 12px/1.5 ui-monospace, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+  .decision p { margin: 0; }
+  .slice { display: grid; grid-template-columns: 110px 1fr; gap: 18px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .slice:last-child { border-bottom: 1px solid var(--line); }
+  .slice b { color: var(--ink-2); }
+  .s-canvas { fill: var(--surface-1); }
+  .s-surface { fill: var(--surface-2); stroke: var(--line); }
+  .s-flat { fill: var(--surface-1); stroke: var(--line); }
+  .s-soft { fill: var(--surface-3); }
+  .s-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .s-bad-flat { fill: var(--bad-soft); }
+  .s-ok-flat { fill: var(--ok-soft); }
+  .s-text { fill: var(--ink-1); font: 13px system-ui, sans-serif; }
+  .s-strong { fill: var(--ink-1); font: 650 13px system-ui, sans-serif; }
+  .s-meta { fill: var(--ink-2); font: 11px system-ui, sans-serif; }
+  .s-label { fill: var(--ink-3); font: 700 10px ui-monospace, Consolas, monospace; letter-spacing: .08em; }
+  .s-danger { fill: var(--bad); font: 650 12px system-ui, sans-serif; }
+  .s-ok-text { fill: var(--ok); font: 650 12px system-ui, sans-serif; }
+  footer { margin-top: 52px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  @media (max-width: 760px) {
+    main { padding: 0 18px; }
+    h1 { font-size: 27px; }
+    .toc { columns: 1; }
+    .evidence-grid, .mockup-grid { grid-template-columns: 1fr; }
+    .decision, .slice { grid-template-columns: 1fr; gap: 5px; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Decision dossier · Agent Studio · AGT-2643</p>
+  <h1>Escalation view information architecture</h1>
+  <p class="lede">An escalated task should state the blocker once, identify the failed step once, and leave the Result view to explain the run. The current detail view repeats the failure while hiding the actual problem.</p>
+  <div class="meta">
+    <span><b>Status:</b> decision pending</span>
+    <span><b>Phase:</b> decision ready</span>
+    <span><b>Evidence:</b> AGT-2599 and AGT-2278 operator sightings, plus live Stable capture on 12 August 2026</span>
+    <span><b>Scope:</b> information architecture and delivery slices only; no UI implementation</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Dossier contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#decision">Decision in one minute</a></li>
+    <li><a href="#evidence">Current-state evidence</a></li>
+    <li><a href="#inventory">Angular ownership inventory</a></li>
+    <li><a href="#alternatives">Alternatives considered</a></li>
+    <li><a href="#target">Target information architecture</a></li>
+    <li><a href="#mockups">Before and after</a></li>
+    <li><a href="#slices">Implementation slice plan</a></li>
+    <li><a href="#open-decisions">Operator decision</a></li>
+  </ul>
+</nav>
+
+<section id="decision" class="box accent">
+  <h4>Recommendation</h4>
+  <p><b>Make the escalation header the sole owner of the actual blocker and the human-decision state.</b> Remove the terminal escalation strip and GAP from Pipeline on escalated cards. Remove the Pipeline failure case badge from Result on escalated cards. Keep the CORE AGENT WORK ATTENTION marker because it identifies the failed locus rather than restating the task outcome.</p>
+</section>
+
+<section id="evidence" data-concept-section="evidence">
+  <h2><span class="no">01</span>Current-state evidence</h2>
+  <p>The live Stable view for AGT-2278 reproduces all three competing failure surfaces. The header is prominent but content-free; Pipeline owns the only concrete blocker; Result adds a third red outcome label. The same geometry and hierarchy appear in both themes.</p>
+  <p class="dim">AGT-2599 had already advanced to Post Processing when this dossier was captured, so its former escalation view was not recreated or mislabeled as current. AGT-2278 remained in the Escalated lane and supplied the live current-state proof below.</p>
+  <div class="evidence-grid">
+    <figure>
+      <img src="assets/agt-2278-escalation-current-light--real.png" alt="Current AGT-2278 escalated task detail in the light theme, showing the empty escalation header, Escalated to human and GAP in Pipeline, CORE AGENT WORK attention, and a Pipeline failure badge in Result.">
+      <figcaption><b>Light theme, real Stable data.</b> Captured 12 August 2026 from AGT-2278. The unrelated crash-recovery modal was hidden only in this browser page before capture; no task content or Stable data was changed.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/agt-2278-escalation-current-dark--real.png" alt="Current AGT-2278 escalated task detail in the dark theme with the same redundant error surfaces and buried blocker.">
+      <figcaption><b>Dark theme, real Stable data.</b> The hierarchy is invariant, including the three competing escalation statements and the nested Result overview surface.</figcaption>
+    </figure>
+  </div>
+  <div class="box bad">
+    <h4>Observed blocker</h4>
+    <p><code>The remote agent reported a blocker: agt-2404-phase-b-not-approved</code> is the useful decision input. It is currently below the Pipeline heading while the global header says only <code>0 review rounds · Grade not recorded · 0 open findings · Human decision required</code>.</p>
+  </div>
+</section>
+
+<section id="inventory">
+  <h2><span class="no">02</span>Current-state Angular ownership inventory</h2>
+  <p>The duplication is produced by three independent projections of overlapping source data. The failed-step marker is a fourth surface, but it carries different information and remains.</p>
+  <table>
+    <thead><tr><th>Visible surface</th><th>Where it renders</th><th>Angular owner and source</th><th>Assessment</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Escalation</b> header with zero or missing review metrics and <q>Human decision required</q></td>
+        <td>Above both task-detail panes</td>
+        <td><code>TaskDetailComponent</code> mounts <code>EscalationSummaryComponent</code> in <code>frontend/src/app/features/task-detail/task-detail.html</code>. Its visible line is <code>v.essence.label</code>, built by <code>components/escalation-summary/escalation-summary.util.ts</code>.</td>
+        <td><span class="pill move">REPURPOSE</span> Keep the global location and actions; replace the essence with the actual blocker summary. Suppress zero or unrecorded metrics.</td>
+      </tr>
+      <tr>
+        <td><b>Escalated to human</b> chip plus <b>GAP</b></td>
+        <td>Immediately inside the Overview tab's Pipeline section</td>
+        <td><code>OverviewPaneComponent</code> mounts <code>CompletionLoopIndicatorComponent</code> in <code>components/prompt-pane/overview-pane/overview-pane.component.html</code>. The indicator lives under <code>features/task-timeline/components/completion-loop-indicator/</code>, reads <code>TaskTimelinePollService</code>, and uses <code>task-timeline.model.ts</code> for the label and reason.</td>
+        <td><span class="pill remove">REMOVE HERE</span> A terminal escalation and its GAP do not describe a pipeline step. Do not render this strip for the escalated terminal state.</td>
+      </tr>
+      <tr>
+        <td><b>Pipeline failure</b> case badge</td>
+        <td>Result tab metric head</td>
+        <td><code>ResultViewComponent</code> renders <code>verdict().label</code> in <code>components/protocol-pane/result-view/result-view.component.html</code>. <code>TaskDetailComponent.runOutcomePresentation</code> calls <code>deriveProtocolVerdict</code> in <code>components/protocol-pane/protocol-verdict.ts</code>, where a failed pipeline step produces the leading label.</td>
+        <td><span class="pill remove">REMOVE HERE</span> On an escalated card this is another global outcome label, not Result content.</td>
+      </tr>
+      <tr>
+        <td><b>ATTENTION</b> in CORE AGENT WORK and the failed Agent execution row</td>
+        <td>Pipeline phase and step table</td>
+        <td><code>OverviewPaneComponent</code> builds phase tone, concern count, step status, and failed-step detail in <code>overview-pane.component.ts</code> and renders them in <code>overview-pane.component.html</code>.</td>
+        <td><span class="pill keep">KEEP</span> It answers which step failed. It is local, specific, and not a fourth task-level outcome statement.</td>
+      </tr>
+      <tr>
+        <td><b>GOAL</b> and <b>WHERE IT STOPPED</b> overview treatment</td>
+        <td>Result tab body</td>
+        <td><code>ResultViewComponent</code> renders the labels from <code>components/protocol-pane/result-case.ts</code>. <code>components/protocol-pane/result-view/result-view.component.scss</code> currently gives the overview an outer bordered box and the stopped row another inset rounded tint.</td>
+        <td><span class="pill move">FLATTEN</span> Keep the information as sibling rows. Remove the outer card and inner box nesting; use a calm whole-row red tint only for the stopped state.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="alternatives" data-concept-section="alternatives">
+  <h2><span class="no">03</span>Alternatives considered</h2>
+  <div class="decision">
+    <strong>Selected</strong>
+    <p><b>The header owns the blocker.</b> It is the only location visible regardless of the active tab and already owns the operator actions. The exact recorded reason is promoted without inventing a second summary.</p>
+  </div>
+  <div class="decision">
+    <strong>Not selected</strong>
+    <p><b>Result owns the GAP.</b> This would make Result self-contained, but the operator could still arrive on Overview and see a content-free decision header. It also separates the reason from the actions that resolve it.</p>
+  </div>
+  <div class="decision">
+    <strong>Rejected</strong>
+    <p><b>Keep every surface and improve their copy.</b> Better wording does not cure duplication. Three red outcome statements still compete, and Pipeline still explains a task-level decision above its step evidence.</p>
+  </div>
+</section>
+
+<section id="target" data-concept-section="recommendation">
+  <h2><span class="no">04</span>Target information architecture</h2>
+  <p>Each fact has one owner. Related facts may appear together, but the same outcome or blocker text is not repeated across the header, Pipeline, and Result.</p>
+  <table>
+    <thead><tr><th>Information</th><th>Single owner</th><th>Rendering contract</th></tr></thead>
+    <tbody>
+      <tr><td><b>Actual blocker / GAP</b></td><td>Escalation header</td><td>One readable summary line under <q>Escalation</q>. Source priority: recorded status-stub reason, structured steering reason, first structured open finding, then the explicit fallback <q>No blocker summary was recorded.</q> Do not synthesize a plausible cause.</td></tr>
+      <tr><td><b>Human decision state and actions</b></td><td>Escalation header</td><td>One <q>Needs decision</q> status with Continue, Accept as-is, and Abort. Remove <q>Human decision required</q> from the descriptive line.</td></tr>
+      <tr><td><b>Review and delivery context</b></td><td>Escalation header disclosure/body</td><td>Show only facts that exist. Zero review rounds, grade not recorded, zero findings, and empty delivery context do not displace the blocker.</td></tr>
+      <tr><td><b>Failure locus</b></td><td>Pipeline</td><td>Keep CORE AGENT WORK ATTENTION, its concern count, and the failed Agent execution row. Remove the terminal completion-loop escalation chip and GAP from this section.</td></tr>
+      <tr><td><b>Run goal and stop boundary</b></td><td>Result</td><td>GOAL and WHERE IT STOPPED are flat sibling rows. GOAL is neutral. WHERE IT STOPPED uses a calm full-row red tint with no colored left bar, border, radius, or nested panel. It describes the execution boundary, not a second copy of the header blocker; omit it when no distinct boundary was recorded.</td></tr>
+      <tr><td><b>Result evidence and metrics</b></td><td>Result</td><td>Keep real metrics, detail Markdown, artifacts, and provenance. Suppress the task-level outcome case badge on escalated cards because the header already owns that outcome.</td></tr>
+    </tbody>
+  </table>
+  <div class="box warn">
+    <h4>Consistency rule</h4>
+    <p>Once a card is in the escalated terminal state, the exact GAP text appears only in the header. Timeline may retain the historical event record, but Overview and Result do not restate it as persistent chrome.</p>
+  </div>
+</section>
+
+<section id="mockups">
+  <h2><span class="no">05</span>Before and after</h2>
+  <p>These inline SVGs isolate the information hierarchy. They are not pixel specifications. The after state follows ADM-01, ADM-05, and the no-left-accent hard rule.</p>
+  <div class="mockup-grid">
+    <figure>
+      <svg viewBox="0 0 520 600" role="img" aria-labelledby="before-title before-desc">
+        <title id="before-title">Before: three competing escalation surfaces</title>
+        <desc id="before-desc">The header contains empty metrics, Pipeline repeats escalation and owns the GAP, and Result repeats Pipeline failure above nested Goal and Where it stopped boxes.</desc>
+        <rect class="s-canvas" width="520" height="600"/>
+        <text class="s-label" x="20" y="30">GLOBAL HEADER</text>
+        <rect class="s-bad" x="20" y="44" width="480" height="86" rx="8"/>
+        <text class="s-strong" x="38" y="70">Escalation</text>
+        <text class="s-meta" x="38" y="92">0 review rounds · Grade not recorded</text>
+        <text class="s-meta" x="38" y="111">0 findings · Human decision required</text>
+
+        <text class="s-label" x="20" y="166">OVERVIEW / PIPELINE</text>
+        <rect class="s-surface" x="20" y="180" width="230" height="372" rx="8"/>
+        <text class="s-strong" x="36" y="207">Pipeline</text>
+        <rect class="s-bad" x="36" y="224" width="146" height="27" rx="13"/>
+        <text class="s-danger" x="50" y="242">Escalated to human</text>
+        <rect class="s-soft" x="36" y="264" width="198" height="70" rx="6"/>
+        <text class="s-label" x="48" y="285">GAP</text>
+        <text class="s-text" x="48" y="306">remote agent reported</text>
+        <text class="s-text" x="48" y="324">a blocker: endpoint missing</text>
+        <rect class="s-bad-flat" x="36" y="358" width="198" height="31" rx="5"/>
+        <text class="s-danger" x="48" y="378">CORE AGENT WORK · ATTENTION</text>
+        <text class="s-meta" x="48" y="411">Agent execution · blocked</text>
+
+        <text class="s-label" x="270" y="166">RESULT</text>
+        <rect class="s-surface" x="270" y="180" width="230" height="372" rx="8"/>
+        <rect class="s-bad" x="286" y="198" width="126" height="27" rx="13"/>
+        <text class="s-danger" x="300" y="216">Pipeline failure</text>
+        <rect class="s-surface" x="286" y="246" width="198" height="222" rx="8"/>
+        <text class="s-label" x="302" y="270">GOAL</text>
+        <text class="s-text" x="302" y="293">Ship the endpoint</text>
+        <rect class="s-bad" x="302" y="320" width="166" height="102" rx="7"/>
+        <text class="s-label" x="316" y="344">WHERE IT STOPPED</text>
+        <text class="s-text" x="316" y="369">Stable deployment</text>
+        <text class="s-text" x="316" y="389">was unavailable</text>
+      </svg>
+      <figcaption><b>Before.</b> Global outcome, Pipeline outcome, and Result outcome compete. The only useful reason sits in Pipeline, while Result nests a stopped-state box inside another box.</figcaption>
+    </figure>
+
+    <figure>
+      <svg viewBox="0 0 520 600" role="img" aria-labelledby="after-title after-desc">
+        <title id="after-title">After: one owner per fact</title>
+        <desc id="after-desc">The header owns the blocker and decisions, Pipeline keeps only step-local attention, and Result presents Goal and Where it stopped as flat sibling rows.</desc>
+        <rect class="s-canvas" width="520" height="600"/>
+        <text class="s-label" x="20" y="30">GLOBAL HEADER</text>
+        <rect class="s-bad-flat" x="20" y="44" width="480" height="98"/>
+        <text class="s-strong" x="38" y="70">Escalation · Needs decision</text>
+        <text class="s-danger" x="38" y="96">Remote agent reported a blocker:</text>
+        <text class="s-text" x="38" y="119">stable-integration-record-endpoint-not-deployed</text>
+
+        <text class="s-label" x="20" y="178">OVERVIEW / PIPELINE</text>
+        <rect class="s-flat" x="20" y="192" width="230" height="360"/>
+        <text class="s-strong" x="36" y="219">Pipeline</text>
+        <rect class="s-ok-flat" x="36" y="245" width="198" height="31" rx="5"/>
+        <text class="s-ok-text" x="48" y="265">PRE STEPS · PASSED</text>
+        <rect class="s-bad-flat" x="36" y="292" width="198" height="31" rx="5"/>
+        <text class="s-danger" x="48" y="312">CORE AGENT WORK · ATTENTION</text>
+        <text class="s-meta" x="48" y="345">Agent execution · blocked</text>
+        <text class="s-meta" x="48" y="367">Failed locus stays visible here.</text>
+        <line x1="36" y1="395" x2="234" y2="395" stroke="var(--line)"/>
+        <text class="s-meta" x="48" y="422">No terminal escalation row.</text>
+        <text class="s-meta" x="48" y="442">No GAP explanation.</text>
+
+        <text class="s-label" x="270" y="178">RESULT</text>
+        <rect class="s-flat" x="270" y="192" width="230" height="360"/>
+        <text class="s-meta" x="286" y="219">Metrics and actions only</text>
+        <line x1="286" y1="237" x2="484" y2="237" stroke="var(--line)"/>
+        <text class="s-label" x="286" y="268">GOAL</text>
+        <text class="s-text" x="286" y="292">Ship the endpoint</text>
+        <line x1="286" y1="316" x2="484" y2="316" stroke="var(--line)"/>
+        <rect class="s-bad-flat" x="286" y="332" width="198" height="88"/>
+        <text class="s-label" x="300" y="356">WHERE IT STOPPED</text>
+        <text class="s-text" x="300" y="381">Core agent work ended</text>
+        <text class="s-text" x="300" y="401">before automated review.</text>
+        <text class="s-meta" x="286" y="451">No Pipeline failure badge.</text>
+      </svg>
+      <figcaption><b>After.</b> The exact blocker is adjacent to the decision actions. Pipeline identifies only the failed locus. Result is flat, and the stopped-state row uses a calm whole-surface red tint without an accent rail or nested boundary.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="slices">
+  <h2><span class="no">06</span>Implementation slice plan</h2>
+  <p>These are review-ready delivery boundaries, not implementation cards. Cards are created only after the operator approves this dossier.</p>
+  <div class="slice"><b>Slice 1</b><div><strong>Header summary projection.</strong> Extend <code>escalation-summary.util.ts</code> with one typed <code>problemSummary</code> and the documented source priority. Render it in <code>EscalationSummaryComponent</code>; hide empty metrics and remove the redundant <q>Human decision required</q> phrase. Add pure priority tests and component rendering tests.</div></div>
+  <div class="slice"><b>Slice 2</b><div><strong>Pipeline de-duplication.</strong> Prevent <code>CompletionLoopIndicatorComponent</code> from rendering its terminal <code>escalated</code> verdict and reason inside Pipeline. Preserve reopened attempt-cycle information for non-terminal work. Assert that CORE ATTENTION and the failed step remain.</div></div>
+  <div class="slice"><b>Slice 3</b><div><strong>Flat escalated Result.</strong> Suppress <code>result-case-badge</code> on escalated cards. Remove the outer overview card boundary and the nested blocked-row box. Render GOAL and WHERE IT STOPPED as sibling rows, using the semantic high-severity tint for the stopped row and no left accent. Do not repeat the header blocker.</div></div>
+  <div class="slice"><b>Slice 4</b><div><strong>Acceptance proof.</strong> Extend the AGT-2278-shaped Playwright fixture and real Stable probe. Cover light and dark, wide and narrow, header expanded and collapsed, a recorded blocker, a missing blocker fallback, no Result outcome badge, no terminal Pipeline strip, and retained CORE ATTENTION.</div></div>
+  <div class="box">
+    <h4>Expected code scope after approval</h4>
+    <p><code>features/task-detail/components/escalation-summary/</code>, <code>features/task-timeline/components/completion-loop-indicator/</code>, <code>features/task-detail/components/protocol-pane/result-view/</code>, the pure result/escalation projections, and focused unit and Playwright specs. No backend or wire-contract change is required for the observed status-stub and timeline data.</p>
+  </div>
+</section>
+
+<section id="open-decisions" data-concept-section="open-decisions">
+  <h2><span class="no">07</span>Operator decision</h2>
+  <p>This dossier is decision-ready. One approval unlocks the implementation-card cut:</p>
+  <ul>
+    <li><b>Approve the header as the single owner of the exact blocker and human-decision state.</b></li>
+    <li><b>Approve removal of the terminal escalation strip from Pipeline and the outcome case badge from Result on escalated cards.</b></li>
+    <li><b>Approve flat sibling Result rows with a calm red full-row tint for WHERE IT STOPPED.</b></li>
+  </ul>
+  <p>The recommendation is to approve all three as one information-architecture contract. No UI code, backend code, task creation, or task movement is part of AGT-2643.</p>
+</section>
+
+<footer>Prepared 12 August 2026 from fresh <code>origin/develop</code>. Source card AGT-2643. Operator evidence: AGT-2599 and AGT-2278. Governing design dossier: AGT-W1.</footer>
+</main>
+</body>
+</html>
