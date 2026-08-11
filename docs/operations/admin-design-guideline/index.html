@@ -387,6 +387,13 @@
           <p>Inter and JetBrains Mono MUST be served as versioned local font assets with their license files and <code>font-display: swap</code>. Production surfaces MUST NOT fetch fonts from Google Fonts, another CDN, or a runtime network dependency. System fallbacks remain mandatory. This dossier itself makes no font request.</p>
         </div>
       </article>
+      <article class="rule">
+        <div class="rule-id">ADM-11</div>
+        <div>
+          <h4>Side panels are structural layers</h4>
+          <p>A push side panel MUST use its own semantic background level and a neutral hairline or shell elevation at the resizable boundary. This is a shell edge, not a boxed card or a status accent. Its normal header MUST remain one fixed-height row: context type and name take the flexible space, while status, panel access, and Close keep one shared control height. Execution details belong with status, not in the context title. Only the context name and secondary status copy may ellipsize, and their complete values MUST remain accessible. A jump-to-latest control belongs in a reserved transcript-control row immediately above and below the stacking layer of the composer. It MUST never float over message text.</p>
+        </div>
+      </article>
     </div>
 
     <h3>Decision provenance</h3>
@@ -402,6 +409,7 @@
           <tr><td>ADM-08</td><td>Use compact system density while letting Markdown occupy the panel up to a useful reading measure.</td><td>AGT-2549, density tokens, and product design principles.</td></tr>
           <tr><td>ADM-09</td><td>Light and dark change semantic tokens, not structure or behavior.</td><td>Style-guide hard rule R5.</td></tr>
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
+          <tr><td>ADM-11</td><td>Push panels use a distinct shell layer, one fixed header row, and collision-free transcript controls.</td><td>AGT-2613 and operator evidence from 11.08.</td></tr>
         </tbody>
       </table>
     </div>
@@ -643,7 +651,7 @@
 
     <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
       <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
-      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-10 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-11 to the new or changed surface and its immediate family.</p></div>
       <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
       <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
     </div>
@@ -658,6 +666,7 @@
       <li>Repeated facts and narrative chrome are removed within the touched scope.</li>
       <li>Rows track stable identity and use the same grid for comparable entries.</li>
       <li>Both themes and relevant widths are covered by Playwright and preserved screenshots.</li>
+      <li>Push-panel boundaries, fixed header geometry, ellipsis behavior, and transcript overlays remain collision-free where applicable.</li>
       <li>Any intentional exception names the user need, scope, and review evidence. Existing drift is not precedent.</li>
     </ol>
   </section>
