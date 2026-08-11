@@ -67,6 +67,27 @@ public sealed class DossierMaintenanceServiceTests : IDisposable
     }
 
     [Fact]
+    public void RemoteRunFraming_CarriesTheResolvedDossierContract()
+    {
+        WriteWorkbench("context-chat", "ASW-W8", ["AGT-42"]);
+        var task = new TaskInfo
+        {
+            Id = "source-task",
+            Key = "AGT-42",
+            ProjectName = "Project",
+            Mode = TaskModes.Coding,
+        };
+
+        var framing = LeaseEndpoints.BuildModeFraming(task, Prompts(), Service());
+
+        Assert.NotNull(framing);
+        Assert.Contains("Dossier implementation update", framing);
+        Assert.Contains("docs/context-chat/index.html", framing);
+        Assert.Contains("ASW-W8", framing);
+        Assert.Contains("AGT-42", framing);
+    }
+
+    [Fact]
     public void Review_GatesMissingEntryAndAcceptsAnExistingIdempotentEntry()
     {
         WriteWorkbench("context-chat", "ASW-W8", ["AGT-42"]);
@@ -173,6 +194,27 @@ public sealed class DossierMaintenanceServiceTests : IDisposable
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var catalogue = new WorkbenchCatalogueService(scanner, registry, git);
         return new DossierMaintenanceService(catalogue, git);
+    }
+
+    private RuntimePromptService Prompts()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PromptTemplates:RuntimePath"] = FindPromptRoot(),
+        }).Build();
+        return new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+    }
+
+    private static string FindPromptRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "prompts", "runtime");
+            if (Directory.Exists(candidate)) return candidate;
+            directory = directory.Parent;
+        }
+        throw new DirectoryNotFoundException("Could not locate prompts/runtime from test base directory.");
     }
 
     private void WriteWorkbench(string id, string key, string[] sourceTaskKeys)

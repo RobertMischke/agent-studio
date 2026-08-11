@@ -153,6 +153,7 @@ public static class LeaseEndpoints
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
             PromptEnrichmentService promptEnrichment,
+            DossierMaintenanceService dossierMaintenance,
             RemoteDispatchRejectionStore dispatchRejections,
             CancellationToken ct) =>
         {
@@ -411,7 +412,7 @@ public static class LeaseEndpoints
                             // A replay must describe the same run as the original
                             // claim, including the persisted enrichment framing.
                             RunSpec: AddPersistedPromptEnrichment(
-                                BuildRunSpec(replayedTask, settings, prompts),
+                                BuildRunSpec(replayedTask, settings, prompts, dossierMaintenance),
                                 replayedTask))));
                     }
                 }
@@ -767,7 +768,7 @@ public static class LeaseEndpoints
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
-                var runSpec = BuildRunSpec(candidate, settings, prompts);
+                var runSpec = BuildRunSpec(candidate, settings, prompts, dossierMaintenance);
                 PromptEnrichmentPreparation? enrichmentPreparation = null;
                 try
                 {
@@ -1947,7 +1948,8 @@ public static class LeaseEndpoints
     private static RunSpecDto BuildRunSpec(
         TaskInfo task,
         ProjectSettingsService settings,
-        AgentStudio.Prompts.RuntimePromptService prompts)
+        AgentStudio.Prompts.RuntimePromptService prompts,
+        DossierMaintenanceService? dossierMaintenance)
     {
         var cliType = CliTypes.Normalize(task.CliType);
         var projectSettings = settings.Get(task.ProjectName);
@@ -1968,19 +1970,7 @@ public static class LeaseEndpoints
             ? null
             : CliThinkingLevels.Normalize(cliType, model, thinkingLevel);
 
-        // The standalone runner fetches prompt.md verbatim, so the per-mode
-        // contract (read-only / research / concept / web) must travel with the
-        // claim. Best-effort: a framing render failure must never block a claim.
-        string? modeFraming = null;
-        try
-        {
-            var framing = prompts.RenderModeFraming(task.Mode, task.AllowWebAccess);
-            modeFraming = string.IsNullOrWhiteSpace(framing) ? null : framing;
-        }
-        catch (Exception ex)
-        {
-            SilentCatch.Note(ex, "BuildRunSpec: mode framing is best-effort");
-        }
+        var modeFraming = BuildModeFraming(task, prompts, dossierMaintenance);
 
         return new RunSpecDto(
             cliType,
@@ -1989,6 +1979,52 @@ public static class LeaseEndpoints
             settings.ResolveCliMode(task.ProjectName, cliType).Mode,
             settings.ResolveContextMode(task.ProjectName, cliType, task.ContextMode).Mode,
             modeFraming);
+    }
+
+    internal static string? BuildModeFraming(
+        TaskInfo task,
+        AgentStudio.Prompts.RuntimePromptService prompts,
+        DossierMaintenanceService? dossierMaintenance)
+    {
+        // The standalone runner fetches prompt.md verbatim, so mode and Dossier
+        // contracts must travel with the claim. Best-effort: discovery or a
+        // framing render failure must never block a claim.
+        string framing;
+        try
+        {
+            framing = prompts.RenderModeFraming(task.Mode, task.AllowWebAccess);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "BuildRunSpec: mode framing is best-effort");
+            return null;
+        }
+
+        try
+        {
+            if (!TaskModes.IsReportOnly(task.Mode)
+                && !TaskModes.IsConcept(task.Mode)
+                && dossierMaintenance is not null)
+            {
+                var targets = dossierMaintenance.ResolveTargets(task.ProjectName, task);
+                if (targets.Count > 0)
+                {
+                    var taskKey = string.IsNullOrWhiteSpace(task.Key) ? task.Id : task.Key;
+                    framing += prompts.RenderDossierMaintenanceFraming(
+                        taskKey,
+                        DossierMaintenanceService.RenderTargetList(targets),
+                        new PromptCallContext(
+                            task.ProjectName,
+                            PipelineCatalogue.DossierMaintenanceStepId,
+                        task.Model));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "BuildRunSpec: Dossier framing is best-effort");
+        }
+        return string.IsNullOrWhiteSpace(framing) ? null : framing;
     }
 
     private static RunSpecDto AddPromptEnrichment(RunSpecDto runSpec, string? enrichmentContext)
