@@ -272,10 +272,11 @@ public static class TimelineEventKinds
     /// </summary>
     public const string IntegrationPendingWarning = "integration_pending_warning";
     /// <summary>
-    /// An operator invoked the accepted-delivery recovery action after a merge
-    /// conflict. The task was queued in Ready with a focused steer prompt that
-    /// resumes its fenced delivery ref and rebases it onto the current
-    /// integration branch.
+    /// Delivery integration queued a focused recovery steer round. The event
+    /// may represent an operator action for a legacy conflict or the bounded
+    /// automatic round used when a mechanical rebase cannot retain unambiguous
+    /// SHA attribution. <see cref="TimelineEvent.Details"/> identifies whether
+    /// the round was automatic.
     /// </summary>
     public const string IntegrationRecoveryQueued = "integration_recovery_queued";
     /// <summary>

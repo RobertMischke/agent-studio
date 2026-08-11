@@ -31,6 +31,12 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             true
         },
         {
+            "agent-round-required",
+            "Mechanical rebase changed the delivery commit cardinality.",
+            AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous,
+            false
+        },
+        {
             "error",
             "The accepted task has no stable key for review-subject validation.",
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,
