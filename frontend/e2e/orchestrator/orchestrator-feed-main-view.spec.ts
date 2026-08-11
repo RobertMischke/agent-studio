@@ -337,6 +337,7 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   await expect(page.getByTestId('global-orchestrator-model')).toBeVisible();
   await expect(page.getByTestId('global-orchestrator-booted')).toBeVisible();
   await expect(page.getByTestId('global-orchestrator-command')).toBeVisible();
+  expect((await globalStatus.boundingBox())?.height).toBeLessThanOrEqual(40);
   for (const theme of ['light', 'dark'] as Theme[]) {
     await setTheme(page, theme);
     await expect(page.getByTestId('orchestrator-feed')).toBeVisible();
