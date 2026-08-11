@@ -46,6 +46,11 @@ function overview(items: WorkbenchOverviewItem[], projectName: string | null = n
 }
 
 describe('WorkbenchOverviewComponent', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/#/workbenches');
+  });
+
   it('renders tracking items in the current queue and keeps discarded and documented history separate', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchOverviewComponent],
@@ -155,4 +160,59 @@ describe('WorkbenchOverviewComponent', () => {
       vi.useRealTimers();
     }
   });
+
+  it('filters live and toggles a sort heading while persisting URL and session state', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchOverviewComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchOverviewComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const other = item('other-bravo', 'active');
+    other.workbench.key = 'WB-20';
+    other.workbench.title = 'Bravo route';
+    const demo = item('alpha', 'active');
+    demo.workbench.key = 'WB-3';
+    demo.workbench.title = 'Alpha route';
+    http.expectOne('/api/workbenches').flush(overview([other, demo]));
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector('[data-testid="workbench-filter-input"]') as HTMLInputElement;
+    input.value = 'Other';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-item-Other-other-bravo"]'))
+      .not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-item-Demo-alpha"]'))
+      .toBeNull();
+    expect(window.location.hash).toContain('?view=q%3DOther');
+    expect(window.sessionStorage.getItem('atp.workbenches.overview.view.v1')).toContain('Other');
+
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    (fixture.nativeElement.querySelector('[data-testid="workbench-sort-project"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(currentItemIds(fixture)).toEqual([
+      'workbench-overview-item-Demo-alpha',
+      'workbench-overview-item-Other-other-bravo',
+    ]);
+    expect(window.location.hash).toContain('view=sort%3Dproject%26dir%3Dasc');
+
+    (fixture.nativeElement.querySelector('[data-testid="workbench-sort-project"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(currentItemIds(fixture)).toEqual([
+      'workbench-overview-item-Other-other-bravo',
+      'workbench-overview-item-Demo-alpha',
+    ]);
+    expect(window.location.hash).toContain('view=sort%3Dproject%26dir%3Ddesc');
+    http.verify();
+  });
 });
+
+function currentItemIds(fixture: { nativeElement: HTMLElement }): string[] {
+  return [...fixture.nativeElement.querySelectorAll(
+    '[data-testid="workbench-overview-sorted"] [data-testid^="workbench-overview-item-"]',
+  )].map(element => element.getAttribute('data-testid') ?? '');
+}

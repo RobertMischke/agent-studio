@@ -18,6 +18,9 @@ that origin.
 | Project Hub rail | `/#/projects/PROJ-002/<rail-key>` | Project id plus documented rail key |
 | Project Wiki page | `/#/projects/PROJ-002/wiki?page=concepts%2Foverview.md` | Project id plus repository-relative page path |
 | Project Wiki folder | `/#/projects/PROJ-002/wiki?folder=concepts` | Project id plus repository-relative folder path |
+| Workspace Dossiers | `/#/workbenches[?view=<encoded-list-state>]` | Global scope plus optional filter and sort state |
+| Project Dossiers | `/#/projects/PROJ-002/workbenches[?view=<encoded-list-state>]` | Project id plus optional filter and sort state |
+| Dossier | `/#/projects/PROJ-002/workbenches/<dossier-id>` | Project id plus repository-defined Dossier id |
 | Workspace settings home | `/#/workspace/settings` | Global route |
 | Workspace settings section | `/#/workspace/settings/<section-key>` | Global route plus settings section key |
 
@@ -56,6 +59,17 @@ https://studio.example.net/#/projects/PROJ-002/wiki?page=concepts%2Frouting.md
 Do not put a filesystem `watchPath`, storage slug, display name, tab order, or
 local browser state into a shareable link. Display names and short codes can be
 edited. `PROJ-NNN` and the public task key are the durable identities.
+
+The optional Dossier overview `view` value is one percent-encoded nested query.
+After decoding it, `q` is the live text filter, `sort` is one of `status`,
+`updated`, `project`, `key`, or `decisions`, and `dir` is `asc` or `desc`.
+Omitting `sort` keeps the server-defined default order with decision-pending
+items first. For example, the decoded state `q=review&sort=updated&dir=desc`
+is serialized as:
+
+```text
+/#/workbenches?view=q%3Dreview%26sort%3Dupdated%26dir%3Ddesc
+```
 
 ## Ownership and composition
 

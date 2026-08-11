@@ -1,0 +1,40 @@
+<section class="dossier-controls" aria-label="Dossier list controls" data-testid="workbench-overview-controls">
+  <label class="dossier-controls__filter">
+    <span>Filter</span>
+    <input
+      type="search"
+      autocomplete="off"
+      placeholder="Key, title, project, or status"
+      data-testid="workbench-filter-input"
+      [value]="query()"
+      (input)="queryChange.emit(inputValue($event))" />
+  </label>
+
+  <div class="dossier-controls__sort" role="group" aria-label="Sort Dossiers">
+    <span class="dossier-controls__sort-label">Sort by</span>
+    <div class="dossier-controls__sort-options">
+      @for (option of sortOptions; track option.key) {
+        <button
+          type="button"
+          [class.dossier-controls__sort-button--active]="sortKey() === option.key"
+          [attr.aria-label]="sortAriaLabel(option)"
+          [attr.aria-pressed]="sortKey() === option.key"
+          [attr.data-testid]="'workbench-sort-' + option.key"
+          (click)="sortSelected.emit(option.key)">
+          <span>{{ option.label }}</span>
+          @if (sortKey() === option.key && option.key !== 'default') {
+            <span class="dossier-controls__direction" aria-hidden="true">
+              {{ direction() === 'asc' ? '↑' : '↓' }}
+            </span>
+          }
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (query().trim()) {
+    <span class="dossier-controls__result" aria-live="polite" data-testid="workbench-filter-result-count">
+      {{ visibleCount() }} of {{ totalCount() }} matching
+    </span>
+  }
+</section>

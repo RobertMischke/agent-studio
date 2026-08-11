@@ -32,7 +32,9 @@ The convention is:
    Dossier id, Hub section, and settings section are path segments.
 2. **One route-local hash query value for replaceable substate.** Wiki uses
    `page=` or `folder=`. Task detail uses one `view=<left-tab>:<right-tab>`
-   value. One value avoids ambiguity with the shared hash segment delimiter.
+   value. Dossier overviews use one encoded `view=` value containing their
+   text filter, sort key, and direction. One outer value avoids ambiguity with
+   the shared hash segment delimiter.
 3. **Sibling hash key-value segments for orthogonal state.** Board filters keep
    the established `filters=<encoded-expression>` segment and coexist with the
    route. Active expressions remain visible as removable chips above the board;
@@ -67,8 +69,8 @@ such as `AGT-2291`. Values are percent encoded.
 | Wiki Overview | `#/projects/<project>/wiki` | Project Hub, Wiki rail, Wiki landing | Tree expansion, scroll, search draft, hover state |
 | Wiki page | `#/projects/<project>/wiki?page=<relative-path>` | Exact repository-relative Wiki document | Reading scroll, history flyout, editor draft, lightbox |
 | Wiki folder | `#/projects/<project>/wiki?folder=<relative-path>` | Exact Wiki folder overview | Folder scroll, transient selection and hover |
-| Workspace Dossiers | `#/workbenches` | Workspace-wide ordered overview | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
-| Project Dossiers | `#/projects/<project>/workbenches` | Project-scoped ordered overview | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
+| Workspace Dossiers | `#/workbenches[?view=<encoded-list-state>]` | Workspace-wide overview plus text filter, sort key, and direction | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
+| Project Dossiers | `#/projects/<project>/workbenches[?view=<encoded-list-state>]` | Project-scoped overview plus text filter, sort key, and direction | Inline decision expansion, decision draft, History disclosures, scroll, hover state |
 | Dossier | `#/projects/<project>/workbenches/<workbench-id>` | Project, exact Dossier, repository HTML artifact | iframe scroll, in-artifact anchor, runtime script state |
 | Task detail | `#/tasks/<task>` | Exact task and default Overview / Result tabs | Pane sizes, visible pane set, maximized pane, edit drafts, open menus, poll cache |
 | Task detail with active tabs | `#/tasks/<task>?view=<detail-tab>:<inspector-tab>` | Exact task, left detail tab (`overview`, `timeline`, `evidence`, `code-review`, `description`) and right inspector tab (`protocol`, `activity`) | Activity subview, selected run, source viewer, splitter positions, composer draft |
@@ -103,6 +105,12 @@ shared Wiki or Dossier route during cold boot before project data arrives.
 Local storage still owns workspace preferences and the open-tab collection. It
 may seed the shell only when the URL does not identify another surface. URL
 state always wins for the active surface.
+
+Dossier overview controls also write their latest state to session storage.
+An explicit `view=` route value wins over that session fallback; a Dossier
+overview route without `view=` may restore the current browser session. Filter
+and sort changes replace the current history entry, so typing does not turn the
+Back button into an input undo stack.
 
 The Orchestrator Chat side sheet is deliberately not another route owner. Once
 a project route has resolved, the default-on local **Open project Chat on
@@ -189,3 +197,5 @@ review screenshots under the managed task's `results/` directory.
 - **2026-08-10:** Made the existing Orchestrator Chat side sheet the default
   project entry after route hydration, while keeping its visibility out of the
   canonical URL and preserving task deep links.
+- **2026-08-11:** Added shareable, session-backed Dossier overview text filter,
+  sort key, and direction state for workspace and project scopes.

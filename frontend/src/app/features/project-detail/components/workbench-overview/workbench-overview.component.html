@@ -10,14 +10,27 @@
         }
         @if (overview(); as value) {
           <span aria-hidden="true">·</span>
-          <strong data-testid="workbench-overview-current-count">{{ value.count }} total</strong>
+          <strong data-testid="workbench-overview-current-count">
+            @if (hasFilter()) { {{ visibleCount() }} of {{ value.count }} total } @else { {{ value.count }} total }
+          </strong>
         }
       </p>
     </div>
     <p class="workbench-overview__context">
-      Items needing a decision come first. Other active items follow by latest movement.
+      Default order keeps decisions first. Choose a sort heading to change the order.
     </p>
   </header>
+
+  @if (overview(); as value) {
+    <app-workbench-overview-controls
+      [query]="viewState.query()"
+      [sortKey]="viewState.sortKey()"
+      [direction]="viewState.direction()"
+      [visibleCount]="visibleCount()"
+      [totalCount]="value.count"
+      (queryChange)="viewState.setQuery($event)"
+      (sortSelected)="selectSort($event)" />
+  }
 
   @if (loading() && !overview()) {
     <app-loading-surface kind="list" label="Loading Dossiers…" />
@@ -29,9 +42,31 @@
         <strong>No Dossiers yet</strong>
         <span>Repository-owned Dossiers appear here when a descriptor is added.</span>
       </div>
+    } @else if (visibleCount() === 0) {
+      <div class="workbench-overview__empty" data-testid="workbench-overview-filter-empty">
+        <strong>No matching Dossiers</strong>
+        <span>Change the text filter to show items from this overview.</span>
+      </div>
     } @else {
       <div class="workbench-overview__body">
-        @if (decisionPending().length > 0) {
+        @if (!usesDefaultSort() && currentQueue().length > 0) {
+          <section class="workbench-overview__section" data-testid="workbench-overview-sorted">
+            <header class="workbench-overview__section-head">
+              <div>
+                <h2>Sorted view</h2>
+                <p>The selected sort applies across all current statuses.</p>
+              </div>
+              <span>{{ currentQueue().length }}</span>
+            </header>
+            <div class="workbench-overview__list">
+              @for (item of currentQueue(); track item.projectName + ':' + item.workbench.id) {
+                <ng-container *ngTemplateOutlet="queueCard; context: { $implicit: item }" />
+              }
+            </div>
+          </section>
+        }
+
+        @if (usesDefaultSort() && decisionPending().length > 0) {
           <section class="workbench-overview__section" data-testid="workbench-overview-decision-pending">
             <header class="workbench-overview__section-head">
               <div>
@@ -42,104 +77,38 @@
             </header>
             <div class="workbench-overview__list">
               @for (item of decisionPending(); track item.projectName + ':' + item.workbench.id) {
-                <article class="workbench-overview__card workbench-overview__card--acute"
-                         [class.workbench-overview__card--expanded]="inlineDecisionExpanded(item)"
-                         [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
-                  <div class="workbench-overview__card-main">
-                    <div class="workbench-overview__card-meta">
-                      <span class="workbench-overview__project">{{ item.projectName }}</span>
-                      <span class="workbench-overview__status" data-status="decision-pending">{{ statusLabel(item) }}</span>
-                      <span class="workbench-overview__open-count">{{ openDecisionCount(item) }} open</span>
-                    </div>
-                    <div class="workbench-overview__card-title">
-                      <span class="workbench-overview__pattern"
-                            role="img"
-                            [attr.aria-label]="documentPattern(item) + ' pattern'"
-                            [attr.data-pattern]="documentPattern(item)"
-                            [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
-                        <app-studio-icon [name]="patternIcon(item)" [size]="14" />
-                      </span>
-                      <h3>{{ item.workbench.title }}</h3>
-                    </div>
-                    <p>{{ item.workbench.summary }}</p>
-                  </div>
-                  <div class="workbench-overview__card-actions">
-                    <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
-                    <div class="workbench-overview__card-buttons">
-                      <button type="button"
-                              [attr.data-testid]="'workbench-overview-full-' + item.projectName + '-' + item.workbench.id"
-                              (click)="open(item)">Open full view</button>
-                      <button type="button"
-                            [attr.aria-expanded]="inlineDecisionExpanded(item)"
-                            [attr.data-testid]="'workbench-overview-open-' + item.projectName + '-' + item.workbench.id"
-                            (click)="toggleInlineDecision(item)">
-                        {{ inlineDecisionExpanded(item) ? 'Close decisions' : 'Review here' }}
-                      </button>
-                    </div>
-                  </div>
-                  @if (inlineDecisionExpanded(item)) {
-                    <div class="workbench-overview__inline-viewer"
-                         [attr.data-testid]="'workbench-overview-inline-' + item.projectName + '-' + item.workbench.id">
-                      <app-workbench-viewer
-                        [projectName]="item.projectName"
-                        [workbenchId]="item.workbench.id" />
-                    </div>
-                  }
-                </article>
+                <ng-container *ngTemplateOutlet="queueCard; context: { $implicit: item }" />
               }
             </div>
           </section>
         }
 
-        @if (active().length > 0 || tracking().length > 0 || invalid().length > 0) {
+        @if (usesDefaultSort() && current().length > 0) {
           <section class="workbench-overview__section" data-testid="workbench-overview-active">
             <header class="workbench-overview__section-head">
-              <div><h2>Current</h2><p>Active work and tracked delivery, ordered by latest movement.</p></div>
-              <span>{{ active().length + tracking().length + invalid().length }}</span>
+              <div><h2>Current</h2><p>Active work and tracked delivery.</p></div>
+              <span>{{ current().length }}</span>
             </header>
             <div class="workbench-overview__list">
-              @for (item of active().concat(tracking(), invalid()); track item.projectName + ':' + item.workbench.id) {
-                <article class="workbench-overview__card"
-                         [class.workbench-overview__card--invalid]="!item.workbench.valid"
-                         [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
-                  <div class="workbench-overview__card-main">
-                    <div class="workbench-overview__card-meta">
-                      <span class="workbench-overview__project">{{ item.projectName }}</span>
-                      <span class="workbench-overview__status" [attr.data-status]="item.workbench.status">{{ statusLabel(item) }}</span>
-                    </div>
-                    <div class="workbench-overview__card-title">
-                      <span class="workbench-overview__pattern"
-                            role="img"
-                            [attr.aria-label]="documentPattern(item) + ' pattern'"
-                            [attr.data-pattern]="documentPattern(item)"
-                            [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
-                        <app-studio-icon [name]="patternIcon(item)" [size]="14" />
-                      </span>
-                      <h3>{{ item.workbench.title }}</h3>
-                    </div>
-                    <p>{{ item.workbench.error || item.workbench.summary }}</p>
-                  </div>
-                  <div class="workbench-overview__card-actions">
-                    <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
-                    <button type="button" [disabled]="!item.workbench.valid" (click)="open(item)">Open</button>
-                  </div>
-                </article>
+              @for (item of current(); track item.projectName + ':' + item.workbench.id) {
+                <ng-container *ngTemplateOutlet="queueCard; context: { $implicit: item }" />
               }
             </div>
           </section>
         }
 
+        @if (!hasFilter() || discarded().length > 0 || documented().length > 0) {
         <section class="workbench-overview__history" data-testid="workbench-overview-history">
           <h2>History</h2>
           <div class="workbench-overview__history-groups">
             <section>
               <button type="button" class="workbench-overview__history-toggle"
                       data-testid="workbench-overview-discarded-toggle"
-                      [attr.aria-expanded]="discardedOpen()"
+                      [attr.aria-expanded]="discardedOpen() || hasFilter()"
                       (click)="toggleDiscarded()">
                 <span>Discarded</span><strong>{{ discarded().length }}</strong><i aria-hidden="true">›</i>
               </button>
-              @if (discardedOpen()) {
+              @if (discardedOpen() || hasFilter()) {
                 <div class="workbench-overview__history-list" data-testid="workbench-overview-discarded-list">
                   @for (item of discarded(); track item.projectName + ':' + item.workbench.id) {
                     <button type="button" (click)="open(item)">
@@ -149,7 +118,7 @@
                               [attr.data-pattern]="documentPattern(item)">
                           <app-studio-icon [name]="patternIcon(item)" [size]="14" />
                         </span>
-                        <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                        <span><strong>{{ item.workbench.title }}</strong><small>{{ keyLabel(item) }} · {{ item.projectName }}</small></span>
                       </span>
                       <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
                     </button>
@@ -160,11 +129,11 @@
             <section>
               <button type="button" class="workbench-overview__history-toggle"
                       data-testid="workbench-overview-completed-toggle"
-                      [attr.aria-expanded]="completedOpen()"
+                      [attr.aria-expanded]="completedOpen() || hasFilter()"
                       (click)="toggleCompleted()">
                 <span>Documented</span><strong>{{ documented().length }}</strong><i aria-hidden="true">›</i>
               </button>
-              @if (completedOpen()) {
+              @if (completedOpen() || hasFilter()) {
                 <div class="workbench-overview__history-list" data-testid="workbench-overview-completed-list">
                   @for (item of documented(); track item.projectName + ':' + item.workbench.id) {
                     <button type="button" (click)="open(item)">
@@ -174,7 +143,7 @@
                               [attr.data-pattern]="documentPattern(item)">
                           <app-studio-icon [name]="patternIcon(item)" [size]="14" />
                         </span>
-                        <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                        <span><strong>{{ item.workbench.title }}</strong><small>{{ keyLabel(item) }} · {{ item.projectName }}</small></span>
                       </span>
                       <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
                     </button>
@@ -184,7 +153,64 @@
             </section>
           </div>
         </section>
+        }
       </div>
     }
   }
 </section>
+
+<ng-template #queueCard let-item>
+  <article class="workbench-overview__card"
+           [class.workbench-overview__card--acute]="item.workbench.status === 'decision-pending'"
+           [class.workbench-overview__card--expanded]="inlineDecisionExpanded(item)"
+           [class.workbench-overview__card--invalid]="!item.workbench.valid"
+           [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
+    <div class="workbench-overview__card-main">
+      <div class="workbench-overview__card-meta">
+        <span class="workbench-overview__project">{{ item.projectName }}</span>
+        <span class="workbench-overview__key">{{ keyLabel(item) }}</span>
+        <span class="workbench-overview__status" [attr.data-status]="item.workbench.status">{{ statusLabel(item) }}</span>
+        @if (item.workbench.status === 'decision-pending') {
+          <span class="workbench-overview__open-count">{{ openDecisionCount(item) }} open</span>
+        }
+      </div>
+      <div class="workbench-overview__card-title">
+        <span class="workbench-overview__pattern"
+              role="img"
+              [attr.aria-label]="documentPattern(item) + ' pattern'"
+              [attr.data-pattern]="documentPattern(item)"
+              [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
+          <app-studio-icon [name]="patternIcon(item)" [size]="14" />
+        </span>
+        <h3>{{ item.workbench.title }}</h3>
+      </div>
+      <p>{{ item.workbench.error || item.workbench.summary }}</p>
+    </div>
+    <div class="workbench-overview__card-actions">
+      <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+      @if (item.workbench.status === 'decision-pending') {
+        <div class="workbench-overview__card-buttons">
+          <button type="button"
+                  [attr.data-testid]="'workbench-overview-full-' + item.projectName + '-' + item.workbench.id"
+                  (click)="open(item)">Open full view</button>
+          <button type="button"
+                  [attr.aria-expanded]="inlineDecisionExpanded(item)"
+                  [attr.data-testid]="'workbench-overview-open-' + item.projectName + '-' + item.workbench.id"
+                  (click)="toggleInlineDecision(item)">
+            {{ inlineDecisionExpanded(item) ? 'Close decisions' : 'Review here' }}
+          </button>
+        </div>
+      } @else {
+        <button type="button" [disabled]="!item.workbench.valid" (click)="open(item)">Open</button>
+      }
+    </div>
+    @if (item.workbench.status === 'decision-pending' && inlineDecisionExpanded(item)) {
+      <div class="workbench-overview__inline-viewer"
+           [attr.data-testid]="'workbench-overview-inline-' + item.projectName + '-' + item.workbench.id">
+        <app-workbench-viewer
+          [projectName]="item.projectName"
+          [workbenchId]="item.workbench.id" />
+      </div>
+    }
+  </article>
+</ng-template>

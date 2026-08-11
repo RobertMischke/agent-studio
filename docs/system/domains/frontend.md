@@ -193,6 +193,12 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   project-scoped `#/projects/<project>/workbenches` overview share one ordered
   projection: decision-pending items sort by open gate count, active items sort
   by latest movement, and discarded and completed history remain separate.
+  Both overview scopes share one live text filter across Key, title, project,
+  and visible status, plus sortable Status, Last movement, Project, Key, and
+  Open decisions headings. The server projection remains the default order.
+  One encoded route-local `view=` value makes filter, sort key, and direction
+  shareable, while session storage restores the latest controls when the route
+  does not provide them.
   Pending overview cards expand the existing isolated viewer and inline decision
   controls in place, while retaining a direct link to the full viewer.
   Explorer project children stay available as quick links. Created, updated,

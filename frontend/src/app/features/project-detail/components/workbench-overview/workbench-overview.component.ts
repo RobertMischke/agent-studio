@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,17 +15,31 @@ import { LoadingSurfaceComponent } from '../../../../components/async-feedback';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { WorkbenchOverviewControlsComponent } from '../workbench-overview-controls/workbench-overview-controls.component';
 import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.component';
 import type {
   ArticlePattern,
   WorkbenchOverview,
   WorkbenchOverviewItem,
 } from '../../../../models/project-docs.model';
+import {
+  projectWorkbenchOverviewItems,
+  WorkbenchOverviewViewState,
+  type WorkbenchOverviewSortKey,
+  workbenchOverviewKey,
+  workbenchOverviewStatusLabel,
+} from './workbench-overview-state';
 
 @Component({
   selector: 'app-workbench-overview',
   standalone: true,
-  imports: [LoadingSurfaceComponent, StudioIconComponent, WorkbenchViewerComponent],
+  imports: [
+    LoadingSurfaceComponent,
+    NgTemplateOutlet,
+    StudioIconComponent,
+    WorkbenchOverviewControlsComponent,
+    WorkbenchViewerComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-overview.component.html',
   styleUrl: './workbench-overview.component.scss',
@@ -45,11 +60,30 @@ export class WorkbenchOverviewComponent {
   readonly discardedOpen = signal(false);
   readonly completedOpen = signal(false);
   readonly expandedDecisionKey = signal<string | null>(null);
+  readonly viewState = new WorkbenchOverviewViewState();
+
+  readonly visibleItems = computed(() => projectWorkbenchOverviewItems(
+    this.overview()?.items ?? [],
+    {
+      query: this.viewState.query(),
+      sortKey: this.viewState.sortKey(),
+      direction: this.viewState.direction(),
+    },
+  ));
+  readonly visibleCount = computed(() => this.visibleItems().length);
+  readonly hasFilter = computed(() => this.viewState.query().trim().length > 0);
+  readonly usesDefaultSort = computed(() => this.viewState.sortKey() === 'default');
 
   readonly decisionPending = computed(() => this.itemsWithStatus('decision-pending'));
   readonly active = computed(() => this.itemsWithStatus('active'));
   readonly tracking = computed(() => this.itemsWithStatus('decided'));
   readonly invalid = computed(() => this.itemsWithStatus('invalid'));
+  readonly current = computed(() => this.visibleItems().filter(item =>
+    ['active', 'decided', 'invalid'].includes(item.workbench.status),
+  ));
+  readonly currentQueue = computed(() => this.visibleItems().filter(item =>
+    ['decision-pending', 'active', 'decided', 'invalid'].includes(item.workbench.status),
+  ));
   readonly discarded = computed(() => this.itemsWithStatus('archived'));
   readonly documented = computed(() => this.itemsWithStatus('documented'));
 
@@ -57,6 +91,7 @@ export class WorkbenchOverviewComponent {
     effect(() => {
       const projectName = this.projectName();
       untracked(() => {
+        this.viewState.hydrate();
         this.discardedOpen.set(false);
         this.completedOpen.set(false);
         this.expandedDecisionKey.set(null);
@@ -75,6 +110,16 @@ export class WorkbenchOverviewComponent {
     this.destroyRef.onDestroy(() => {
       if (this.refreshHandle) clearTimeout(this.refreshHandle);
     });
+
+    if (typeof window !== 'undefined') {
+      const restoreViewState = () => this.viewState.hydrate();
+      window.addEventListener('hashchange', restoreViewState);
+      window.addEventListener('popstate', restoreViewState);
+      this.destroyRef.onDestroy(() => {
+        window.removeEventListener('hashchange', restoreViewState);
+        window.removeEventListener('popstate', restoreViewState);
+      });
+    }
   }
 
   open(item: WorkbenchOverviewItem): void {
@@ -103,6 +148,14 @@ export class WorkbenchOverviewComponent {
       ?? (item.workbench.status === 'decision-pending' ? 1 : 0);
   }
 
+  selectSort(sortKey: WorkbenchOverviewSortKey): void {
+    this.viewState.selectSort(sortKey);
+  }
+
+  keyLabel(item: WorkbenchOverviewItem): string {
+    return workbenchOverviewKey(item);
+  }
+
   documentPattern(item: WorkbenchOverviewItem): ArticlePattern {
     return item.workbench.pattern === 'ui' ? 'ui' : 'concept';
   }
@@ -112,15 +165,7 @@ export class WorkbenchOverviewComponent {
   }
 
   statusLabel(item: WorkbenchOverviewItem): string {
-    const workbench = item.workbench;
-    if (!workbench.valid) return 'Needs attention';
-    if (workbench.documentation?.eligible) return 'Ready to document';
-    if (workbench.status === 'decision-pending') return 'Decision pending';
-    if (workbench.status === 'active') return workbench.phase ?? 'Active';
-    if (workbench.status === 'decided') return 'Tracking';
-    if (workbench.status === 'archived') return 'Discarded';
-    if (workbench.status === 'documented') return 'Documented';
-    return workbench.status;
+    return workbenchOverviewStatusLabel(item.workbench);
   }
 
   updatedLabel(value: string): string {
@@ -131,7 +176,7 @@ export class WorkbenchOverviewComponent {
   }
 
   private itemsWithStatus(status: string): WorkbenchOverviewItem[] {
-    return (this.overview()?.items ?? []).filter(item => item.workbench.status === status);
+    return this.visibleItems().filter(item => item.workbench.status === status);
   }
 
   private itemKey(item: WorkbenchOverviewItem): string {

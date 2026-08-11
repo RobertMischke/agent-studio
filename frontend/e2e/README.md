@@ -401,7 +401,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `perf-frontend.spec.ts` | Frontend perceived latency |
 | `perf-stress.spec.ts` | Frontend stress: render perf at scale |
 
-### `project/` - 49 specs
+### `project/` - 50 specs
 
 | Spec | Summary |
 |------|---------|
@@ -450,6 +450,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `wiki-folder-git-date.spec.ts` | wiki folder marks the filesystem-time fallback for an untracked page |
 | `wiki-pulse.spec.ts` | Wiki Pulse landing view (PULSE-2) |
 | `wiki-source-branch.spec.ts` | branch source is visible and read-only in both themes |
+| `workbench-overview-sort-filter.spec.ts` | Dossier sort and live filter round-trip on workspace and project overviews |
 | `workbench-readonly.spec.ts` | Dossier Explorer, isolated viewer, and Pulse lifecycle use real repository artifacts in both themes |
 | `workflow-lanes-t6a.spec.ts` | Workflow rail renders lane list, transitions, and stage 2/3 placeholders |
 | `workspace-create-and-delete.spec.ts` | create dialog rejects empty + duplicate names client-side |

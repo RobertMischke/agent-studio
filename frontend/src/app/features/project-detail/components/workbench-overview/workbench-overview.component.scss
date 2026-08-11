@@ -170,6 +170,7 @@
   }
 
   &__project,
+  &__key,
   &__status,
   &__open-count {
     display: inline-flex;
@@ -183,6 +184,11 @@
   &__project {
     border: 1px solid var(--studio-border);
     color: var(--studio-fg-muted);
+  }
+
+  &__key {
+    color: var(--studio-fg-dim);
+    font-family: var(--font-mono);
   }
 
   &__status { background: var(--studio-bg-hover); color: var(--studio-fg-muted); }
