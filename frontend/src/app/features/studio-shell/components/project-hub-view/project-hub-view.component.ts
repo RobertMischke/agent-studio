@@ -192,7 +192,13 @@ export class ProjectHubViewComponent {
 
   openWorkbench(workbench: WorkbenchListItem): void {
     if (!workbench.valid) return;
-    this.tabState.open({ kind: 'workbench', projectName: this.projectName(), workbenchId: workbench.id, title: workbench.title });
+    this.tabState.open({
+      kind: 'workbench',
+      projectName: this.projectName(),
+      workbenchId: workbench.id,
+      title: workbench.title,
+      key: workbench.key ?? undefined,
+    });
   }
 
   /** Deck closes when the user closes the editor tab; the in-rail button only collapses navigation. */
