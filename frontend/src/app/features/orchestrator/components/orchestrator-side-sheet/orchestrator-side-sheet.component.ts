@@ -45,6 +45,7 @@ import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-st
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
 import {
+  buildCurrentTabSource,
   buildOrchestratorConversationEvents,
   sameOrchestratorChatTurns,
 } from './orchestrator-side-sheet.util';
@@ -54,8 +55,9 @@ import {
   parseOrchestratorContextKey,
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
-import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
+import type { PageContext } from '../../../../models/page-context.model';
 import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
+import { OrchestratorSurfaceContextService } from '../../../../services/orchestrator-surface-context.service';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -91,6 +93,7 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
   readonly composerModel = inject(OrchestratorComposerModelService);
+  private readonly surfaceContext = inject(OrchestratorSurfaceContextService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
   /** Prevent a persisted tab from opening Chat before a copied route resolves. */
@@ -101,6 +104,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * CAC's `composerContext` input.
    */
   readonly composerContext = input<ComposerLocationContext | null>(null);
+  readonly currentContextReference = computed(() => {
+    const reference = this.composerContext()?.contextReference ?? null;
+    if (reference?.kind !== 'diff') return reference;
+    const selection = this.surfaceContext.diffSelection();
+    if (!selection
+      || selection.projectName !== reference.projectId
+      || selection.commitSha !== reference.reference) return reference;
+    return { ...reference, path: selection.path, lineRanges: selection.lineRanges };
+  });
   /** Active repository page carried inside the existing project chat. */
   readonly pageContext = input<PageContext | null>(null);
 
@@ -362,19 +374,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   readonly currentTabSource = computed<OrchestratorContextSourceOption | null>(() => {
-    if (this.contextKind() !== 'project') return null;
-    const project = this.effectiveProject();
-    const page = this.pageContext();
-    if (!project || !page || page.projectName !== project) return null;
-    const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
-    return {
-      id: `${reference.kind}:${project}:${reference.reference}`,
-      category: 'current',
-      label: page.title,
-      detail: `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.relPath}`,
-      estimateTokens: 1_200,
-      reference,
-    };
+    return buildCurrentTabSource(
+      this.contextKind(),
+      this.effectiveProject(),
+      this.currentContextReference(),
+      this.pageContext(),
+    );
   });
   readonly cacComposerContext = computed<ChatComposerContext | null>(() => {
     const context = this.composerContext();
@@ -829,6 +834,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobTitle: this.effectiveJobTitle(),
       jobState: this.effectiveJobState(),
       page: this.pageContext(),
+      source: this.currentContextReference(),
     };
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
@@ -932,6 +938,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         contextKey,
         contextPayload,
         explicitReferenceSnapshot,
+        navigationSnapshot.source,
         () => capturedAt,
       ),
       model: this.composerModel.effectiveSelection().model || null,
@@ -942,6 +949,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     send$.subscribe({
       next: (response) => {
         if (response.executionContext) this.executionContext.set(response.executionContext);
+        this.contextPicker()?.close();
         if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
         this.contextAttachments.set([]);
         this.sending.set(false);

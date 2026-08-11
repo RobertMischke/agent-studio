@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildCurrentTabSource,
   buildOrchestratorConversationEvents,
   resolveAttachmentUrl,
   sameOrchestratorChatTurns,
@@ -17,6 +18,34 @@ import type { ChatEvent } from 'coding-agent-chat/core';
  * util file made them unit-addressable, so pin them here.
  */
 describe('orchestrator-side-sheet.util', () => {
+  describe('buildCurrentTabSource', () => {
+    it('projects a selected diff with owning repository and line ranges', () => {
+      const reference = {
+        kind: 'diff' as const,
+        reference: '0123456789abcdef0123456789abcdef01234567',
+        projectId: 'Agent Studio',
+        repositoryId: 'Agent Studio',
+        path: 'src/app.ts',
+        lineRanges: [{ startLine: 4, endLine: 7 }],
+      };
+
+      expect(buildCurrentTabSource('project', 'Agent Studio', reference, null)).toMatchObject({
+        category: 'current',
+        label: 'src/app.ts',
+        detail: 'Diff · 01234567 · L4-L7',
+        reference,
+      });
+    });
+
+    it('does not expose an active Git source across projects', () => {
+      expect(buildCurrentTabSource('project', 'Other', {
+        kind: 'repository-file',
+        reference: 'README.md',
+        projectId: 'Agent Studio',
+      }, null)).toBeNull();
+    });
+  });
+
   describe('parseBugHashtags', () => {
     it('collects hashtags at the start of a line and skips markdown headings', () => {
       expect(parseBugHashtags('#frontend #ux\nsome detail')).toEqual(['frontend', 'ux']);
@@ -84,6 +113,16 @@ describe('orchestrator-side-sheet.util', () => {
         taskKey: 'AGT-2235',
         includedBlocks: ['task metadata', 'status.md'],
         capturedAt: '2026-07-23T11:59:58Z',
+        receiptId: 'receipt-1',
+        sources: [{
+          sourceId: 'repository-file:Agent Studio:README.md',
+          kind: 'repository-file',
+          revision: '0123456789012345678901234567890123456789',
+          freshness: 'immutable',
+          includedCharacters: 120,
+          estimatedTokens: 30,
+          status: 'included',
+        }],
       },
       attachments: [{
         alt: 'evidence',
@@ -110,6 +149,13 @@ describe('orchestrator-side-sheet.util', () => {
       expect(sameOrchestratorChatTurns([turn], [{
         ...turn,
         contextReceipt: { ...turn.contextReceipt!, includedBlocks: ['task metadata'] },
+      }])).toBe(false);
+      expect(sameOrchestratorChatTurns([turn], [{
+        ...turn,
+        contextReceipt: {
+          ...turn.contextReceipt!,
+          sources: [{ ...turn.contextReceipt!.sources![0], status: 'blocked' }],
+        },
       }])).toBe(false);
       expect(sameOrchestratorChatTurns([turn], [turn, { ...turn, id: 'turn-2' }])).toBe(false);
     });
