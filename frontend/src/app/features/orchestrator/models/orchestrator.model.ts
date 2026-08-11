@@ -71,7 +71,9 @@ export interface OrchestratorContextSession {
   kind: 'global' | 'project' | 'task';
   projectId: string | null;
   taskKey: string | null;
+  createdAt?: string;
   updatedAt: string;
+  lastUsedAt?: string;
   model: string | null;
   cumulativeInputTokens: number;
   cumulativeOutputTokens: number;
@@ -79,6 +81,8 @@ export interface OrchestratorContextSession {
   cumulativeCacheCreationTokens: number;
   runtimeStatus: 'idle' | 'active' | 'queued' | 'parked';
   queuePosition: number;
+  calls?: number;
+  hiddenAt?: string | null;
   /** Short Task Server-owned preview of the latest user intent. */
   summary?: string | null;
 }

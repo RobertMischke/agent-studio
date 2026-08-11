@@ -18,6 +18,7 @@ export type TaskInspectorRouteTab = 'task' | 'activity' | 'chat' | 'protocol';
 export type StudioRoute =
   | { kind: 'board'; projectSlug: string | null }
   | { kind: 'feed' }
+  | { kind: 'chat-history' }
   | { kind: 'hub'; projectSlug: string; section: string; page: string | null; folder: string | null }
   | { kind: 'workbenches'; projectSlug: string | null }
   | { kind: 'workbench'; projectSlug: string; workbenchId: string }
@@ -46,6 +47,9 @@ export function parseStudioRoute(hash: string): StudioRoute | null {
   }
   if (segments.length === 1 && segments[0] === 'feed') {
     return { kind: 'feed' };
+  }
+  if (segments.length === 1 && segments[0] === 'chat-history') {
+    return { kind: 'chat-history' };
   }
   if (segments.length === 1 && segments[0] === 'epics') {
     return { kind: 'epics', projectSlug: null };
@@ -116,6 +120,8 @@ export function studioRouteForTab(
         : `/projects/${studioProjectSlug(tab.projectName)}/board`;
     case 'feed':
       return '/feed';
+    case 'chat-history':
+      return '/chat-history';
     case 'hub': {
       const base = `/projects/${studioProjectSlug(tab.projectName)}`;
       return !tab.section || tab.section === 'overview' ? base : `${base}/${encodeURIComponent(tab.section)}`;
