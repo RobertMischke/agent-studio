@@ -21,11 +21,12 @@ public static class WorkbenchOverviewPolicy
     private static int SectionRank(string status) => status switch
     {
         "decision-pending" => 0,
-        "active" => 1,
-        "decided" => 2,
-        "invalid" => 3,
-        "archived" => 4,
-        "documented" => 5,
-        _ => 6,
+        "living-standard" => 1,
+        "active" => 2,
+        "decided" => 3,
+        "invalid" => 4,
+        "archived" => 5,
+        "documented" => 6,
+        _ => 7,
     };
 }
