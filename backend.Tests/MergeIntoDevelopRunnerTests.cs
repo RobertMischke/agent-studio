@@ -274,6 +274,126 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RunAsync_MainTarget_WithDevelop_IntegratesDevelopThenFastForwardsMainAlongOneLine()
+    {
+        var repo = SeedRepo("runner-main-through-develop");
+        var mainBefore = RunGit(repo, "rev-parse main").Out.Trim();
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "develop.txt"), "work line advanced");
+        Commit(repo, "chore: advance develop");
+        RunGit(repo, "checkout -q -b task/50-lineage");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "release work");
+        Commit(repo, "feat: release work");
+        var taskSha = RunGit(repo, "rev-parse task/50-lineage").Out.Trim();
+        RunGit(repo, "checkout -q main");
+
+        var candidateWasDescendantOfMain = false;
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(
+            new BuildTestGateResult(
+                BuildTestGateVerdict.Ok,
+                0,
+                20,
+                string.Empty,
+                "full suite passed",
+                true,
+                false)
+            {
+                TestSelection = new TestSelectionAudit
+                {
+                    Level = TestExecutionLevels.Full,
+                    FullSuiteRequired = true,
+                    FullSuiteRan = true,
+                },
+            },
+            () =>
+            {
+                var candidate = RunGit(repo, "rev-parse develop").Out.Trim();
+                candidateWasDescendantOfMain =
+                    RunGit(repo, $"merge-base --is-ancestor main {candidate}").Code == 0;
+            });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "50-lineage");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "50-lineage",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        var developTip = RunGit(repo, "rev-parse develop").Out.Trim();
+        var mainTip = RunGit(repo, "rev-parse main").Out.Trim();
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Equal(developTip, outcome.MergedSha);
+        Assert.Equal(developTip, mainTip);
+        Assert.NotEqual(taskSha, developTip);
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {taskSha} develop").Code);
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {mainBefore} {developTip}").Code);
+        Assert.True(candidateWasDescendantOfMain);
+        Assert.Equal(developTip, gateRunner.Request!.ExpectedSha);
+        Assert.Equal("develop", gateRunner.Request.SubjectRef);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task RunAsync_MainTarget_WithDivergedDevelop_BlocksBeforeMergingTheDelivery()
+    {
+        var repo = SeedRepo("runner-main-diverged-from-develop");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "develop.txt"), "develop-only work");
+        Commit(repo, "chore: advance develop");
+        var developBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+        RunGit(repo, "checkout -q -b task/diverged-lineage");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "delivery work");
+        Commit(repo, "feat: delivery work");
+        var taskSha = RunGit(repo, "rev-parse task/diverged-lineage").Out.Trim();
+        RunGit(repo, "checkout -q main");
+        File.WriteAllText(Path.Combine(repo, "main.txt"), "main-only work");
+        Commit(repo, "chore: advance main independently");
+        var mainBefore = RunGit(repo, "rev-parse main").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok,
+            0,
+            20,
+            string.Empty,
+            "full suite passed",
+            true,
+            false));
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "diverged-lineage");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "diverged-lineage",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains("main is not an ancestor of develop", outcome.Error);
+        Assert.Equal(mainBefore, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.Equal(developBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.NotEqual(0, RunGit(repo, $"merge-base --is-ancestor {taskSha} develop").Code);
+        Assert.Equal(0, gateRunner.Invocations);
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_DocsOnlyDelivery_SkipsFullSuiteAndRebaseRequirement()
     {
         // AGT-2417 docs rule: a delivery whose whole diff is documentation
@@ -821,6 +941,53 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Equal(approved, result.Sha);
         Assert.Equal(approved, RemoteSha(remote, "develop"));
         Assert.NotEqual(tip, RemoteSha(remote, "develop"));
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task PushIntegrationBranch_MainTarget_DoesNotPublishMainWhenDevelopPushFails()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("push-main-lineage");
+        var originalMain = RunGit(repo, "rev-parse main").Out.Trim();
+        RunGit(repo, "branch develop main");
+        RunGit(repo, "push -q origin main:develop");
+
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "candidate.txt"), "local candidate");
+        Commit(repo, "feat: local candidate");
+        var candidate = RunGit(repo, "rev-parse develop").Out.Trim();
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, "merge -q --ff-only develop");
+
+        var competing = Path.Combine(_tempDir, "push-main-lineage-competing");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{competing}\"");
+        RunGit(competing, "config user.email test@example.com");
+        RunGit(competing, "config user.name test");
+        RunGit(competing, "checkout -q -b develop origin/develop");
+        File.WriteAllText(Path.Combine(competing, "competing.txt"), "remote develop moved");
+        Commit(competing, "feat: competing develop change");
+        RunGit(competing, "push -q origin develop");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "push-main-lineage");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            environmentalBackoff: _ => TimeSpan.Zero);
+
+        var result = await runner.PushIntegrationBranchAsync(
+            "Fixture",
+            "push-main-lineage",
+            jobFolder,
+            repo,
+            "main",
+            approvedSha: candidate);
+
+        Assert.False(result.Success);
+        Assert.Equal("remote-rejected", result.Status);
+        Assert.Equal(originalMain, RemoteSha(remote, "main"));
+        Assert.NotEqual(candidate, RemoteSha(remote, "develop"));
     }
 
     [Fact]

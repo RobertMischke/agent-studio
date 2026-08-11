@@ -34,6 +34,7 @@ Driven by `TaskTransitionService.MoveAsync` (`backend/Features/Tasks/TaskTransit
   - `never` - commits stay local.
   - `on-completed` - pushed when the task reaches `6-completed` (queued to a background push worker; a periodic backstop covers shutdown drops).
   - `always-immediate` (default) - queued for push as soon as the platform-owned commit exists. Network work stays off the transition/run path.
+- A repository with both `develop` and `main` has one integration writer. Legacy stamped-SHA pushes cannot advance `main` with a raw task or delivery commit; they may only no-op when the SHA is already present or advance to the exact tip already published on `develop`. The immediate integration runner merges into `develop`, queues that push first, and then fast-forwards and pushes `main` to the same commit.
 - Integration-branch commits are also queued for push after merge. A final push failure is recorded as the typed `managed-repo-push-failed` operator-feed event; verified remote status remains ahead until a retry succeeds.
 - Workspace artifact commits use the global `WorkspaceArtifacts:AutoPushEnabled` switch (default `true`) and `WorkspaceArtifacts:PushRetrySeconds` retry base (default `30`). Every successful artifact commit queues an immediate `origin/main` push.
 

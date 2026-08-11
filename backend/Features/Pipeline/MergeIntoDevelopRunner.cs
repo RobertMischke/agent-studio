@@ -210,21 +210,75 @@ public sealed class MergeIntoDevelopRunner
             var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
             var taskBranch = delivery.Ref;
             var strategy = IntegrationStrategies.Normalize(integrationStrategy);
+            var isPullRequest = string.Equals(
+                strategy,
+                IntegrationStrategies.PullRequest,
+                StringComparison.Ordinal);
             BuildTestGateResult? preMainResult = null;
             BuildTestGateResult? preDevelopResult = null;
+            string? pushBranch = null;
+            string? approvedPushSha = null;
+            var mechanicalAttributionHandled = false;
             MergeIntoIntegrationResult result;
-            var synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch, ct);
+            ImmediateIntegrationLineageDecision? lineage = null;
+            IntegrationBranchSyncResult synchronized;
+            if (!isPullRequest && IsReleaseBranch(branch) && HasDevelopLine(repoRoot))
+            {
+                synchronized = _git.SynchronizeIntegrationBranch(repoRoot, "develop", ct);
+                if (synchronized.Success)
+                    synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch, ct);
+
+                if (synchronized.Success)
+                {
+                    lineage = ImmediateIntegrationLineagePolicy.Decide(
+                        branch,
+                        developAvailable: true,
+                        mainIsAncestorOfDevelop: _git.IsAncestor(repoRoot, branch, "develop"));
+                }
+            }
+            else
+            {
+                synchronized = _git.SynchronizeIntegrationBranch(repoRoot, branch, ct);
+                lineage = ImmediateIntegrationLineagePolicy.Decide(
+                    branch,
+                    developAvailable: false,
+                    mainIsAncestorOfDevelop: false);
+            }
+
             if (!synchronized.Success)
             {
                 result = MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
                     error: synchronized.Error);
             }
-            else if (string.Equals(strategy, IntegrationStrategies.PullRequest, StringComparison.Ordinal))
+            else if (lineage?.Mode == ImmediateIntegrationLineageMode.Blocked)
+            {
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: lineage.Reason);
+            }
+            else if (isPullRequest)
             {
                 result = MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.PushedForReview,
                     error: $"Delivery '{taskBranch}' remains outside {branch} because the project uses the pull-request integration strategy.");
+            }
+            else if (lineage?.Mode == ImmediateIntegrationLineageMode.DevelopThenMain)
+            {
+                var advance = await MergeIntoDevelopThenMainAsync(
+                    project,
+                    jobId,
+                    jobFolderPath,
+                    repoRoot,
+                    delivery,
+                    branch,
+                    ct).ConfigureAwait(false);
+                result = advance.Merge;
+                preMainResult = advance.PreMainGate;
+                preDevelopResult = advance.PreDevelopGate;
+                pushBranch = advance.PushBranch;
+                approvedPushSha = advance.ApprovedPushSha;
+                mechanicalAttributionHandled = advance.MechanicalAttributionHandled;
             }
             else if (IsReleaseBranch(branch))
             {
@@ -263,7 +317,8 @@ public sealed class MergeIntoDevelopRunner
                     () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch, ct)).ConfigureAwait(false);
             }
 
-            if (result.Outcome == MergeIntoIntegrationOutcome.MergedAfterRebase
+            if (!mechanicalAttributionHandled
+                && result.Outcome == MergeIntoIntegrationOutcome.MergedAfterRebase
                 && result.RebasedCommits.Count > 0
                 && _taskMutations is not null
                 && !_taskMutations.RecordMechanicalRebaseOnFolder(
@@ -290,7 +345,7 @@ public sealed class MergeIntoDevelopRunner
             // local. Offloaded to the background worker (the same "not on the
             // request path" strategy as the completed-job workspace push), so the
             // accept transition never awaits the network round-trip.
-            if (result.Outcome.IsSuccessfulIntegration())
+            if (pushBranch is null && result.Outcome.IsSuccessfulIntegration())
             {
                 // Pin the object the push may publish: the merge result this card's
                 // gate released, or, for AlreadyMerged, the exact SHA recovered
@@ -298,11 +353,21 @@ public sealed class MergeIntoDevelopRunner
                 // the branch tip as it stands at release time. Reading it here and
                 // not in the worker closes the gate window: by the time the queued
                 // push runs, the tip may carry a merge no gate approved.
-                var approvedSha = !string.IsNullOrWhiteSpace(result.MergedSha)
+                approvedPushSha = !string.IsNullOrWhiteSpace(result.MergedSha)
                     ? result.MergedSha
                     : _git.GetBranchTip(repoRoot, branch);
+                pushBranch = branch;
+            }
+            if (pushBranch is not null)
+            {
                 MaybeEnqueueIntegrationPush(
-                    project, jobId, jobFolderPath, watchPath, branch, approvedSha, pipelineType);
+                    project,
+                    jobId,
+                    jobFolderPath,
+                    watchPath,
+                    pushBranch,
+                    approvedPushSha,
+                    pipelineType);
             }
 
             return result;
@@ -329,6 +394,139 @@ public sealed class MergeIntoDevelopRunner
             }
             return errored;
         }
+    }
+
+    /// <summary>
+    /// Integrates a delivery into the work line and advances the release line
+    /// only from the exact resulting <c>develop</c> commit. Both mutations run
+    /// under the caller's merge gate, so another immediate integration cannot
+    /// interleave between them.
+    /// </summary>
+    private async Task<LineageAdvanceResult> MergeIntoDevelopThenMainAsync(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string repoRoot,
+        DeliveryRefResolution delivery,
+        string releaseBranch,
+        CancellationToken ct)
+    {
+        const string workBranch = "develop";
+        var (developMerge, preDevelopGate) = delivery.IsRemote
+            ? await MergeIntoIntegrationGatedAsync(
+                project,
+                jobId,
+                jobFolderPath,
+                repoRoot,
+                workBranch,
+                () => _git.MergeRemoteDeliveryIntoIntegration(
+                    repoRoot,
+                    delivery.Ref,
+                    delivery.ExpectedResultSha ?? string.Empty,
+                    workBranch,
+                    ct)).ConfigureAwait(false)
+            : await MergeIntoIntegrationGatedAsync(
+                project,
+                jobId,
+                jobFolderPath,
+                repoRoot,
+                workBranch,
+                () => _git.MergeBranchIntoIntegration(
+                    repoRoot,
+                    delivery.Ref,
+                    workBranch,
+                    ct)).ConfigureAwait(false);
+
+        if (!developMerge.Outcome.IsSuccessfulIntegration())
+        {
+            return new(
+                developMerge,
+                null,
+                preDevelopGate,
+                null,
+                null,
+                MechanicalAttributionHandled: false);
+        }
+
+        var developSha = !string.IsNullOrWhiteSpace(developMerge.MergedSha)
+            ? developMerge.MergedSha
+            : _git.GetBranchTip(repoRoot, workBranch);
+        if (string.IsNullOrWhiteSpace(developSha))
+        {
+            return new(
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: "Immediate integration could not resolve the exact develop merge commit."),
+                null,
+                preDevelopGate,
+                null,
+                null,
+                MechanicalAttributionHandled: false);
+        }
+
+        var attributionHandled = false;
+        if (developMerge.Outcome == MergeIntoIntegrationOutcome.MergedAfterRebase
+            && developMerge.RebasedCommits.Count > 0
+            && _taskMutations is not null)
+        {
+            attributionHandled = true;
+            if (!_taskMutations.RecordMechanicalRebaseOnFolder(
+                    jobFolderPath,
+                    developMerge.RebasedCommits))
+            {
+                var rollback = string.IsNullOrWhiteSpace(developMerge.PreviousIntegrationSha)
+                    ? null
+                    : _git.ResetHard(repoRoot, developMerge.PreviousIntegrationSha);
+                var detail = rollback?.Success == true
+                    ? "Mechanical rebase attribution could not be persisted; develop was rolled back and main remained unchanged."
+                    : $"Mechanical rebase attribution could not be persisted and develop rollback failed ({rollback?.Error ?? "missing rollback anchor"}); manual repair is required.";
+                return new(
+                    MergeIntoIntegrationResult.Of(
+                        MergeIntoIntegrationOutcome.Error,
+                        error: detail),
+                    null,
+                    preDevelopGate,
+                    null,
+                    null,
+                    MechanicalAttributionHandled: true);
+            }
+        }
+
+        var (mainAdvance, preMainGate) = await PromoteDevelopToMainAsync(
+            project,
+            jobId,
+            jobFolderPath,
+            repoRoot,
+            workBranch,
+            releaseBranch,
+            ct).ConfigureAwait(false);
+        if (!mainAdvance.Outcome.IsSuccessfulIntegration())
+        {
+            return new(
+                mainAdvance,
+                preMainGate,
+                preDevelopGate,
+                workBranch,
+                developSha,
+                attributionHandled);
+        }
+
+        var result = developMerge.Outcome == MergeIntoIntegrationOutcome.MergedAfterRebase
+            ? mainAdvance with
+            {
+                Outcome = MergeIntoIntegrationOutcome.MergedAfterRebase,
+                MergedSha = developSha,
+                RebasedCommits = developMerge.RebasedCommits,
+                PreviousIntegrationSha = developMerge.PreviousIntegrationSha,
+            }
+            : mainAdvance with { MergedSha = developSha };
+        return new(
+            result,
+            preMainGate,
+            preDevelopGate,
+            releaseBranch,
+            developSha,
+            attributionHandled);
     }
 
     /// <summary>
@@ -561,6 +759,111 @@ public sealed class MergeIntoDevelopRunner
         }
     }
 
+    private async Task<(MergeIntoIntegrationResult Merge, BuildTestGateResult? Gate)> PromoteDevelopToMainAsync(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string repoRoot,
+        string workBranch,
+        string releaseBranch,
+        CancellationToken ct)
+    {
+        var sourceSha = _git.GetBranchTip(repoRoot, workBranch);
+        var targetSha = _git.GetBranchTip(repoRoot, releaseBranch);
+        if (string.IsNullOrWhiteSpace(sourceSha) || string.IsNullOrWhiteSpace(targetSha))
+        {
+            return (
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: "Could not resolve the exact develop and main SHAs for immediate release integration."),
+                null);
+        }
+        if (!_git.IsAncestor(repoRoot, releaseBranch, workBranch))
+        {
+            return (
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: "Immediate integration refused to advance main because the develop candidate is not a descendant of main."),
+                null);
+        }
+        if (string.Equals(sourceSha, targetSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return (
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.AlreadyMerged,
+                    mergedSha: sourceSha),
+                null);
+        }
+        if (_preMainTestGate is null || _projectSettings is null)
+        {
+            return (
+                MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: "Pre-main test gate is unavailable; refusing to advance main."),
+                null);
+        }
+
+        var changedPaths = _git.ChangedPathsAgainstMergeBase(repoRoot, releaseBranch, workBranch);
+        BuildTestGateResult gate;
+        if (DocsOnlyDeliveryPolicy.IsDocsOnly(changedPaths))
+        {
+            gate = new BuildTestGateResult(
+                BuildTestGateVerdict.Skipped,
+                null,
+                0,
+                string.Empty,
+                $"Docs-only develop candidate ({changedPaths!.Count} changed path(s), all documentation/evidence); "
+                + "the full-suite release gate is not applicable and main may fast-forward to the exact develop commit.",
+                false,
+                false)
+            {
+                ExpectedSha = sourceSha,
+                TestedSha = sourceSha,
+            };
+            RecordGateEvidence(jobFolderPath, "pre-main-test-gate", gate);
+            _logger.LogInformation(
+                "merge-into-main develop-candidate docs-only light gate for project={Project} job={JobId} changedPaths={Count}",
+                project,
+                jobId,
+                changedPaths.Count);
+        }
+        else
+        {
+            var settings = _projectSettings.Get(project);
+            gate = await _preMainTestGate.RunAsync(
+                new BuildTestGateRequest(repoRoot, sourceSha, "merge-into-main")
+                {
+                    Project = project,
+                    JobId = jobId,
+                    Lane = TaskStates.Completed,
+                    TestExecution = settings.TestExecution,
+                    JobFolderPath = jobFolderPath,
+                    SubjectRef = workBranch,
+                },
+                settings.BuildProfile,
+                _preMainTimeout,
+                ct).ConfigureAwait(false);
+            RecordGateEvidence(jobFolderPath, "pre-main-test-gate", gate);
+            if (gate.Verdict != BuildTestGateVerdict.Ok)
+            {
+                return (
+                    MergeIntoIntegrationResult.Of(
+                        MergeIntoIntegrationOutcome.Error,
+                        error: $"Pre-main full suite blocked the develop-to-main fast-forward: {gate.Reason}"),
+                    gate);
+            }
+        }
+
+        return (
+            _git.MergeBranchFastForward(
+                repoRoot,
+                workBranch,
+                releaseBranch,
+                sourceSha,
+                targetSha),
+            gate);
+    }
+
     private async Task<(MergeIntoIntegrationResult Merge, BuildTestGateResult? Gate)> MergeIntoMainAsync(
         string project,
         string jobId,
@@ -721,6 +1024,20 @@ public sealed class MergeIntoDevelopRunner
     private static bool IsReleaseBranch(string branch)
         => string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase);
 
+    private bool HasDevelopLine(string repoRoot)
+        => string.Equals(
+            _git.ResolveIntegrationBranch(repoRoot, "develop"),
+            "develop",
+            StringComparison.OrdinalIgnoreCase);
+
+    private sealed record LineageAdvanceResult(
+        MergeIntoIntegrationResult Merge,
+        BuildTestGateResult? PreMainGate,
+        BuildTestGateResult? PreDevelopGate,
+        string? PushBranch,
+        string? ApprovedPushSha,
+        bool MechanicalAttributionHandled);
+
     /// <summary>
     /// Enqueues the integration-branch push onto the background
     /// <see cref="IntegrationPushQueue"/> when one is wired (production) and the
@@ -804,6 +1121,38 @@ public sealed class MergeIntoDevelopRunner
         await _pushGate.WaitAsync(ct);
         try
         {
+            var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath)
+                ?? (string.IsNullOrWhiteSpace(watchPath) ? null : watchPath);
+            if (!string.IsNullOrWhiteSpace(repoRoot)
+                && IsReleaseBranch(integrationBranch)
+                && HasDevelopLine(repoRoot))
+            {
+                var decision = ImmediateIntegrationLineagePolicy.Decide(
+                    integrationBranch,
+                    developAvailable: true,
+                    mainIsAncestorOfDevelop: _git.IsAncestor(repoRoot, integrationBranch, "develop"));
+                if (decision.Mode == ImmediateIntegrationLineageMode.Blocked)
+                {
+                    return new GitPushResult(
+                        false,
+                        approvedSha ?? string.Empty,
+                        "lineage-blocked",
+                        decision.Reason);
+                }
+
+                var developPush = await PushIntegrationBranchSerializedAsync(
+                    project,
+                    jobId,
+                    jobFolderPath,
+                    watchPath,
+                    "develop",
+                    approvedSha,
+                    ct,
+                    recordSuccessfulStep: false);
+                if (!developPush.Success)
+                    return developPush;
+            }
+
             return await PushIntegrationBranchSerializedAsync(
                 project,
                 jobId,
@@ -826,7 +1175,8 @@ public sealed class MergeIntoDevelopRunner
         string? watchPath,
         string integrationBranch,
         string? approvedSha,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool recordSuccessfulStep = true)
     {
         var startedAt = DateTime.UtcNow;
         GitPushResult result;
@@ -879,7 +1229,11 @@ public sealed class MergeIntoDevelopRunner
         _logger.LogInformation(
             "merge-into-develop-push project={Project} job={JobId} branch={Branch} status={Status} retries={Retries}",
             project, jobId, integrationBranch, result.Status, environmentalRetries);
-        try { RecordPushStep(jobFolderPath, project, jobId, result, startedAt, environmentalRetries); }
+        try
+        {
+            if (!result.Success || recordSuccessfulStep)
+                RecordPushStep(jobFolderPath, project, jobId, result, startedAt, environmentalRetries);
+        }
         catch (Exception ex) { SilentCatch.Note(ex, "MergeIntoDevelopRunner: push-step recording is best-effort"); }
         return result;
     }
