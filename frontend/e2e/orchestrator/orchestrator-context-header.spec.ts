@@ -212,7 +212,7 @@ async function stubWorkspace(
     );
   });
 
-  await page.route(new RegExp(`/api/orchestrator/context/project:${project}$`), async (route) => {
+  await page.route(new RegExp(`/api/orchestrator/context/project:${encodeURIComponent(project)}$`), async (route) => {
     await fulfillKnownGet(
       route,
       {
@@ -612,6 +612,187 @@ test.describe('Orchestrator context header · where am I', () => {
           RESULTS,
           `orchestrator-composer-long-context--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
+      });
+      expect(unexpectedRequests).toEqual([]);
+    });
+  }
+  for (const variant of [
+    { name: 'wide-light', width: 1440, panelWidth: 640, theme: 'light' as const },
+    { name: 'wide-dark', width: 1440, panelWidth: 640, theme: 'dark' as const },
+    { name: 'narrow-light', width: 900, panelWidth: 420, theme: 'light' as const },
+    { name: 'narrow-dark', width: 900, panelWidth: 420, theme: 'dark' as const },
+  ]) {
+    test(`AGT-2613 keeps the panel frame and header collision-free in ${variant.name}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: variant.width, height: 900 });
+      await seedActiveTab(
+        page,
+        { kind: 'board', projectName: LONG_CONTEXT_PROJECT },
+        `board:${LONG_CONTEXT_PROJECT}`,
+        variant.theme,
+      );
+      await page.addInitScript((width) => {
+        localStorage.setItem('atp.studio.orchestratorWidth', String(width));
+      }, variant.panelWidth);
+      const unexpectedRequests = await stubWorkspace(page, {
+        withRunningTask: false,
+        project: LONG_CONTEXT_PROJECT,
+      });
+      const turns = Array.from({ length: 60 }, (_, index) => ({
+        id: `agt-2613-turn-${index}`,
+        ts: new Date(Date.UTC(2026, 7, 11, 9, index)).toISOString(),
+        role: index % 2 === 0 ? 'user' : 'orchestrator',
+        text: `Panel layering regression message ${index}. This line remains readable behind transient controls.`,
+      }));
+      await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            project: LONG_CONTEXT_PROJECT,
+            turns,
+            executionContext: {
+              executionKind: 'remote',
+              hostName: 'agent-runner-01',
+              repoPath: '/srv/agent-runner/work/PROJ-002/agent-studio',
+              branch: 'develop',
+              headSha: '0123456789abcdef0123456789abcdef01234567',
+              state: 'ready',
+              capturedAt: '2026-08-11T09:00:00Z',
+            },
+          }),
+        }),
+      );
+      await page.goto('/');
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.getByTestId('lane-2-ready')).toBeVisible();
+      await showSideSheet(page, false);
+
+      const sheet = page.getByTestId('orch-side-sheet');
+      const sheetHost = page.locator('app-orchestrator-side-sheet');
+      const ensureSideSheetOpen = async () => {
+        const width = (await sheetHost.boundingBox())?.width ?? 0;
+        if (width < variant.panelWidth - 2) {
+          await page.getByTestId('orch-side-sheet-toggle').click();
+        }
+        await expect
+          .poll(async () => (await sheetHost.boundingBox())?.width ?? 0)
+          .toBeGreaterThanOrEqual(variant.panelWidth - 1);
+        await expect(sheet).toBeVisible();
+      };
+      const phase = process.env.AGT2613_PHASE ?? 'after';
+      if (phase === 'before') {
+        await ensureSideSheetOpen();
+        await page.getByTestId('orchestrator-conversation').hover();
+        await page.mouse.wheel(0, -600);
+        await expect(page.getByTestId('conversation-jump-latest')).toBeVisible();
+        await ensureSideSheetOpen();
+        await page.screenshot({
+          path: resolve(RESULTS, `${phase}-${variant.name}.png`),
+          fullPage: false,
+        });
+        expect(unexpectedRequests).toEqual([]);
+        return;
+      }
+
+      await ensureSideSheetOpen();
+      const header = page.getByTestId('orch-panel-header');
+      const contextName = page.getByTestId('orch-panel-context-name');
+      const chats = page.getByTestId('orch-context-badge');
+      const close = sheet.getByTestId('sidesheet-close');
+      await expect(header).toBeVisible();
+      await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Project');
+      await expect(contextName).toHaveText(LONG_CONTEXT_PROJECT);
+      await expect(page.getByTestId('orch-execution-host')).toHaveText('agent-runner-01');
+      await expect(page.getByTestId('orch-execution-revision')).toHaveText('· develop@01234567');
+
+      const scroller = page.getByTestId('conversation-view');
+      await expect(
+        scroller.getByText('Panel layering regression message 59.', { exact: false }),
+      ).toBeAttached();
+      await scroller.evaluate((element) => {
+        element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight - 120);
+        element.dispatchEvent(new Event('scroll'));
+      });
+      const jump = page.getByTestId('orchestrator-jump-latest');
+      await expect(jump).toBeVisible();
+      await ensureSideSheetOpen();
+
+      const geometry = await page.evaluate(() => {
+        const sheet = document.querySelector<HTMLElement>('[data-testid="orch-side-sheet"]')!;
+        const editor = document.querySelector<HTMLElement>('app-studio-shell .studio-editor')!;
+        const sharedHeader = sheet.querySelector<HTMLElement>('.sidesheet__header')!;
+        const chats = sheet.querySelector<HTMLElement>('[data-testid="orch-context-badge"]')!;
+        const close = sheet.querySelector<HTMLElement>('[data-testid="sidesheet-close"]')!;
+        const jump = sheet.querySelector<HTMLElement>('[data-testid="orchestrator-jump-latest"]')!;
+        const composer = sheet.querySelector<HTMLElement>('.sheet__composer')!;
+        const scroller = sheet.querySelector<HTMLElement>('[data-testid="conversation-view"]')!;
+        const rect = (element: HTMLElement) => {
+          const box = element.getBoundingClientRect();
+          return {
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            width: box.width,
+            height: box.height,
+          };
+        };
+        const scrollerBox = rect(scroller);
+        const jumpBox = rect(jump);
+        const visibleRows = Array.from(
+          sheet.querySelectorAll<HTMLElement>('[data-testid^="conversation-message-message."]'),
+        )
+          .map((row) => {
+            const box = rect(row);
+            return {
+              ...box,
+              top: Math.max(box.top, scrollerBox.top),
+              bottom: Math.min(box.bottom, scrollerBox.bottom),
+            };
+          })
+          .filter(
+            (box) =>
+              box.bottom > box.top &&
+              box.bottom > jumpBox.top - 80 &&
+              box.top < jumpBox.bottom + 80,
+          );
+        const sheetStyle = getComputedStyle(sheet);
+        return {
+          sheet: rect(sheet),
+          editor: rect(editor),
+          header: rect(sharedHeader),
+          chats: rect(chats),
+          close: rect(close),
+          jump: rect(jump),
+          composer: rect(composer),
+          nearbyRows: visibleRows,
+          borderLeftWidth: sheetStyle.borderLeftWidth,
+          panelBackground: sheetStyle.backgroundColor,
+          editorBackground: getComputedStyle(editor).backgroundColor,
+        };
+      });
+      expect(geometry.borderLeftWidth).toBe('1px');
+      expect(Math.round(geometry.sheet.width)).toBe(variant.panelWidth);
+      expect(geometry.panelBackground).not.toBe(geometry.editorBackground);
+      expect(geometry.editor.right).toBeLessThanOrEqual(geometry.sheet.left + 1);
+      expect(geometry.header.height).toBe(36);
+      expect(geometry.chats.height).toBe(28);
+      expect(geometry.close.height).toBe(28);
+      expect(geometry.jump.bottom).toBeLessThanOrEqual(geometry.composer.top);
+      expect(
+        geometry.nearbyRows.every(
+          (row) => row.bottom <= geometry.jump.top || row.top >= geometry.jump.bottom,
+        ),
+      ).toBe(true);
+      await expect(contextName).toHaveCSS('text-overflow', 'ellipsis');
+      await expect(contextName).toHaveAttribute('title', LONG_CONTEXT_PROJECT);
+
+      await ensureSideSheetOpen();
+      await page.screenshot({
+        path: resolve(RESULTS, `${phase}-${variant.name}.png`),
+        fullPage: false,
       });
       expect(unexpectedRequests).toEqual([]);
     });

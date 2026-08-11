@@ -38,7 +38,8 @@ import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.c
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
-import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
+import { OrchestratorPanelHeaderComponent } from '../orchestrator-panel-header/orchestrator-panel-header.component';
+import { OrchestratorJumpLatestComponent } from '../orchestrator-jump-latest/orchestrator-jump-latest.component';
 import { OrchestratorContextReceiptComponent } from '../orchestrator-context-receipt/orchestrator-context-receipt.component';
 import { OrchestratorContextPickerComponent } from '../orchestrator-context-picker/orchestrator-context-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
@@ -56,6 +57,7 @@ import {
 } from './orchestrator-context-key.util';
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
 import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
+
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
@@ -73,7 +75,8 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
     OrchestratorContextReceiptComponent,
     OrchestratorContextPickerComponent,
     ChatSwitcherRailComponent,
-    OrchestratorProjectPickerComponent
+    OrchestratorPanelHeaderComponent,
+    OrchestratorJumpLatestComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
@@ -307,43 +310,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
   readonly executionContext = signal<ChatExecutionContext | null>(null);
-  readonly executionHostLabel = computed(() => {
-    const context = this.executionContext();
-    if (!context) return 'Execution context unavailable';
-    return context.executionKind === 'local' ? 'Local' : context.hostName;
-  });
-  readonly executionRefLabel = computed(() => {
-    const context = this.executionContext();
-    if (!context) return '';
-    if (context.state !== 'ready' || !context.repoPath)
-      return `Resolving ${context.branch ?? 'project'} checkout`;
-    const head = context.headSha ? context.headSha.slice(0, 8) : 'unknown';
-    return `${context.repoPath} · ${context.branch ?? 'detached'}@${head}`;
-  });
-  readonly executionRepoLabel = computed(() => {
-    const context = this.executionContext();
-    if (!context) return '';
-    if (context.state !== 'ready' || !context.repoPath) return 'Resolving checkout';
-    return context.repoPath;
-  });
-  readonly executionRevisionLabel = computed(() => {
-    const context = this.executionContext();
-    if (!context) return '';
-    if (context.state !== 'ready' || !context.repoPath) return context.branch ?? 'project';
-    const head = context.headSha ? context.headSha.slice(0, 8) : 'unknown';
-    return `· ${context.branch ?? 'detached'}@${head}`;
-  });
-  readonly executionContextTitle = computed(() => {
-    const context = this.executionContext();
-    if (!context) return 'Execution context unavailable';
-    return [
-      `Execution: ${this.executionHostLabel()}`,
-      `Repository: ${context.repoPath ?? 'resolving'}`,
-      `Branch: ${context.branch ?? 'unknown'}`,
-      `HEAD: ${context.headSha ?? 'unknown'}`,
-    ].join('\n');
-  });
-
   /** Project scope may explicitly omit context once. Task scope is mandatory. */
   readonly contextDismissed = signal(false);
   readonly contextAttachments = signal<OrchestratorContextSourceOption[]>([]);

@@ -8,46 +8,21 @@
        (mousedown)="startResize($event)"></div>
 }
 
-<app-sidesheet title="Orchestrator"
+<app-sidesheet title="Orchestrator chat"
                testid="orch-side-sheet"
                (closeRequest)="hide()">
-  <div header-actions class="sheet__header-extras">
-    <div class="sheet__execution-context"
-         [attr.title]="executionContextTitle()"
-         [class.sheet__execution-context--resolving]="executionContext()?.state !== 'ready'"
-         data-testid="orch-execution-context">
-      <span class="sheet__execution-dot" aria-hidden="true"></span>
-      <span class="sheet__execution-copy">
-        <strong data-testid="orch-execution-host">{{ executionHostLabel() }}</strong>
-        <small data-testid="orch-execution-ref" [attr.aria-label]="executionRefLabel()">
-          <span class="sheet__execution-repo"
-                data-testid="orch-execution-repo">{{ executionRepoLabel() }}</span>
-          @if (executionRevisionLabel(); as revision) {
-            <span class="sheet__execution-revision"
-                  data-testid="orch-execution-revision">{{ revision }}</span>
-          }
-        </small>
-      </span>
-    </div>
-
-    <app-orchestrator-project-picker
-      [projects]="projects()"
-      [activeProject]="effectiveProject()"
-      [disabled]="pinned()"
-      (projectSelected)="selectProjectTab($event)" />
-
-    <button class="sheet__context-badge"
-            type="button"
-            aria-controls="orch-context-menu"
-            [attr.aria-expanded]="contextMenuOpen()"
-            [class.sheet__context-badge--open]="contextMenuOpen()"
-            (click)="toggleContextMenu()"
-            data-testid="orch-context-badge">
-      <span>Chats</span>
-      <strong data-testid="orch-context-count">{{ contextCount() }}</strong>
-      <span class="sheet__context-caret" aria-hidden="true">{{ contextMenuOpen() ? '▴' : '▾' }}</span>
-    </button>
-  </div>
+  <app-orchestrator-panel-header
+    header-actions
+    [project]="effectiveProject()"
+    [taskKey]="effectiveJobKey()"
+    [taskTitle]="effectiveJobTitle()"
+    [pageContext]="pageContext()"
+    [contextKey]="contextKey()"
+    [executionContext]="executionContext()"
+    [contextCount]="contextCount()"
+    [chatsOpen]="contextMenuOpen()"
+    [active]="sending() || activeRun() !== null"
+    (chatsToggle)="toggleContextMenu()" />
 
   <main class="sheet__workspace">
     @if (contextMenuOpen()) {
@@ -136,7 +111,7 @@
           </section>
         } @else if (effectiveProject()) {
           <section class="sheet__chat">
-            <div class="sheet__conversation" data-testid="orchestrator-conversation">
+            <div #conversationHost class="sheet__conversation" data-testid="orchestrator-conversation">
               <cac-conversation-view
                 variant="embedded"
                 [events]="conversationEvents()"
@@ -173,6 +148,8 @@
                 (attachmentAdded)="addContextAttachment($event)"
                 (attachmentRemoved)="removeContextAttachment($event)" />
             }
+
+            <app-orchestrator-jump-latest [conversationHost]="conversationHost" />
 
             <!-- `cac-chat` is deliberately composer-only here. With no
                  messages/events and an empty state, the library suppresses

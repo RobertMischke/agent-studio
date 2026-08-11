@@ -1,0 +1,59 @@
+<div class="panel-head" data-testid="orch-panel-header">
+  <div
+    class="panel-head__identity"
+    [attr.title]="identityTitle()"
+    data-testid="orch-panel-context-identity"
+  >
+    <app-studio-icon [name]="identity().icon" [size]="14" />
+    <span class="panel-head__type" data-testid="orch-panel-context-type">{{
+      identity().type
+    }}</span>
+    <span class="panel-head__separator" aria-hidden="true">·</span>
+    <strong
+      class="panel-head__name"
+      data-testid="orch-panel-context-name"
+      [attr.title]="identity().name"
+      >{{ identity().name }}</strong
+    >
+  </div>
+
+  <button
+    class="panel-head__chats"
+    type="button"
+    aria-controls="orch-context-menu"
+    [attr.aria-expanded]="chatsOpen()"
+    [class.panel-head__chats--open]="chatsOpen()"
+    (click)="chatsToggle.emit()"
+    data-testid="orch-context-badge"
+  >
+    <span
+      class="panel-head__execution"
+      [attr.title]="executionTitle()"
+      data-testid="orch-execution-context"
+    >
+      <span
+        class="panel-head__status-dot"
+        [attr.data-state]="statusState()"
+        data-testid="orch-chat-active-indicator"
+        aria-hidden="true"
+      ></span>
+      <span class="panel-head__execution-copy">
+        <strong data-testid="orch-execution-host">{{ executionHostLabel() }}</strong>
+        <small data-testid="orch-execution-ref" [attr.aria-label]="executionRefLabel()">
+          <span class="panel-head__sr-only" data-testid="orch-execution-repo">{{
+            executionRepoLabel()
+          }}</span>
+          <span data-testid="orch-execution-revision">{{ executionRevisionLabel() }}</span>
+        </small>
+      </span>
+    </span>
+    <span class="panel-head__divider" aria-hidden="true"></span>
+    <span>Chats</span>
+    <strong class="panel-head__count" data-testid="orch-context-count">{{ contextCount() }}</strong>
+    <app-studio-icon
+      class="panel-head__caret"
+      [name]="chatsOpen() ? 'chevronDown' : 'chevronRight'"
+      [size]="12"
+    />
+  </button>
+</div>
