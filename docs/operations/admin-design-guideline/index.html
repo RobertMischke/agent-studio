@@ -103,6 +103,10 @@
   }
   .toc a { color: var(--ink-2); text-decoration: none; }
   .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .dossier-pages { display: flex; flex-wrap: wrap; gap: 6px; margin: 20px 0 0; }
+  .dossier-pages a { border-radius: 5px; padding: 5px 9px; color: var(--ink-2); font-size: 12px; text-decoration: none; }
+  .dossier-pages a:hover { background: var(--surface-2); color: var(--ink-1); }
+  .dossier-pages a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
   .section-no { margin-right: 9px; color: var(--ink-3); font-weight: 600; }
   .rule-list { margin-top: 18px; }
   .rule {
@@ -278,6 +282,10 @@
       <strong>Recommendation</strong>
       <p>Approve this dossier as the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them.</p>
     </div>
+    <nav class="dossier-pages" aria-label="Dossier pages">
+      <a href="index.html" aria-current="page">Standard</a>
+      <a href="pages/dos-and-donts.html">Visual dos and don'ts</a>
+    </nav>
     <nav aria-label="Dossier contents">
       <ul class="toc">
         <li><a href="#decision">01 · Decision</a></li>
@@ -628,6 +636,13 @@
             <td class="state"><span class="status owned">Owned</span></td>
           </tr>
           <tr>
+            <td><strong>Task-header CURRENT / NEXT status zone</strong></td>
+            <td>A waiting state floats as a rounded, pastel, inset island between the task tab and pane tabs instead of participating in their flat grid.</td>
+            <td><code>agt-2637--before--light--mocked.png</code>, dark variant, and rendered after variants, 11.08.</td>
+            <td><strong>AGT-2637</strong><br>Flat, edge-aligned status zone with compact CURRENT and NEXT rows.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
+          <tr>
             <td><strong>Prompt enrichment side column</strong></td>
             <td>The report sits beside Markdown, reducing the prompt to a word column and wasting the panel width.</td>
             <td><code>mkt-17-task-layout-before-wide-light--mocked.png</code>, dark and narrow variants, 09.08.</td>
@@ -887,7 +902,7 @@
     </div>
   </section>
 
-  <footer>Prepared 10 August 2026; flat outcome-summary guidance extended 12 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2643.</footer>
+  <footer>Prepared 10 August 2026; flat outcome-summary guidance extended 12 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2643. Multi-page reference introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
 </main>
 </body>
 </html>
