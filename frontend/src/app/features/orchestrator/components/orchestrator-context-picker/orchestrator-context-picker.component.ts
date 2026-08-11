@@ -30,6 +30,7 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
   readonly disabled = input(false);
   readonly attachmentAdded = output<OrchestratorContextSourceOption>();
 
+  readonly actionsOpen = signal(false);
   readonly open = signal(false);
   readonly query = signal('');
   readonly loading = signal(false);
@@ -45,11 +46,20 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
   ] as const);
   readonly hasResults = computed(() => this.groups().some(group => group.items.length > 0));
 
+  request(): void {
+    if (this.disabled()) return;
+    this.open.set(false);
+    this.actionsOpen.update(open => !open);
+  }
+
   show(): void {
-    if (!this.disabled()) this.open.set(true);
+    if (this.disabled()) return;
+    this.actionsOpen.set(false);
+    this.open.set(true);
   }
 
   close(): void {
+    this.actionsOpen.set(false);
     this.open.set(false);
   }
 
@@ -133,7 +143,7 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    if (this.open()) this.close();
+    if (this.actionsOpen() || this.open()) this.close();
   }
 
   ngOnDestroy(): void {

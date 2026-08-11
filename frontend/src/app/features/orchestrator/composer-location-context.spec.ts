@@ -65,7 +65,11 @@ describe('buildComposerLocationContext', () => {
       .toEqual({
         project: 'Agent Studio',
         surface,
-        ...(tab.kind === 'workbench' ? { detail: 'Routing', referenceKey: 'AGT-W34' } : {}),
+        ...(tab.kind === 'workbench' ? {
+          detail: 'Routing',
+          referenceKey: 'AGT-W34',
+          referencePath: 'workbenches/routing/index.html',
+        } : {}),
       });
   });
 });

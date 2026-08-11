@@ -5,13 +5,11 @@ import { projectRailLabel } from '../project-detail/components/project-shell/pro
 import type { StudioTab } from '../studio-shell';
 
 /**
- * Presentational location context the host feeds into the composer's
- * standard footer: the large scope (project), the active surface, and an
- * optional identity detail (task key, URL id, commit…).
+ * Location context the host feeds into Chat scope resolution and context
+ * suggestions: the project, active surface, and optional identity detail.
  *
- * The side sheet maps this host-owned location shape to the chat library's
- * `composerContext` input. Keeping the shell contract separate preserves
- * nullable navigation state at the application boundary.
+ * Keeping this host-owned contract separate preserves nullable navigation
+ * state without adding a second permanent information row to the composer.
  */
 export interface ComposerLocationContext {
   project: string | null;
@@ -19,6 +17,8 @@ export interface ComposerLocationContext {
   detail?: string;
   /** Stable short reference for compact context chips, such as a Dossier key. */
   referenceKey?: string;
+  /** Repository-relative page path when the active surface can be attached explicitly. */
+  referencePath?: string;
   /** Task identity carried by the same active-tab projection the footer shows. */
   taskKey?: string;
   taskId?: string;
@@ -50,7 +50,12 @@ export function buildContextChipPresentation(input: {
 }): ContextChipPresentation {
   const { project, page, contextKind, taskKey, taskTitle, location } = input;
   if (page && page.projectName === project) {
-    return { label: page.title, key: null, typeLabel: pageTypeLabel(page.pageType), icon: pageTypeIcon(page.pageType) };
+    return {
+      label: page.title,
+      key: location?.project === project ? (location.referenceKey ?? null) : null,
+      typeLabel: pageTypeLabel(page.pageType),
+      icon: pageTypeIcon(page.pageType),
+    };
   }
   if (contextKind === 'task') {
     return { label: taskTitle ?? taskKey ?? 'Current task', key: taskKey, typeLabel: 'Task', icon: 'backlog' };
@@ -111,6 +116,7 @@ export function buildComposerLocationContext(
         surface: 'Dossier',
         detail: tab.title ?? tab.workbenchId,
         ...(tab.key ? { referenceKey: tab.key } : {}),
+        referencePath: `workbenches/${tab.workbenchId}/index.html`,
       };
     case 'workbenches':
       return { project: tab.projectName, surface: 'Dossiers' };

@@ -159,13 +159,22 @@
               [contextAttachments]="cacContextAttachments()"
               [placeholder]="'Ask a question... try /bug &lt;description&gt; to file a bug'"
               [modelControl]="composerModel.control()"
-              [composerContext]="cacComposerContext()"
               (contextAttachmentRemoved)="removeContextAttachment($event)"
               (contextAttachmentAddRequested)="requestContextAttachment()"
               (submitMessage)="onSubmit($event)"
               (modelCommit)="onModelCommit($event)"
               (modelCatalogRequested)="composerModel.requestCatalog()"
               (modelRefreshRequested)="composerModel.requestCatalog(true)">
+              <button chat-foot-start
+                      type="button"
+                      class="sheet__composer-more"
+                      aria-label="More composer actions"
+                      aria-haspopup="menu"
+                      [attr.aria-expanded]="contextPicker.actionsOpen()"
+                      [appTooltip]="'More composer actions'"
+                      [disabled]="sending()"
+                      (click)="requestContextAttachment()"
+                      data-testid="orch-composer-more">+</button>
             </cac-chat>
           </section>
         } @else {

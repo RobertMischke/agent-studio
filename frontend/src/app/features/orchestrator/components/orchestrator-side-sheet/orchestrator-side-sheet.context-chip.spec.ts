@@ -87,10 +87,10 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     const root = fixture.nativeElement as HTMLElement;
 
     expect(root.querySelectorAll('[data-testid="chat-composer-foot"]')).toHaveLength(1);
-    expect(root.querySelector('[data-testid="chat-composer-context-project"]')?.textContent?.trim())
-      .toBe('Agent Studio');
-    expect(root.querySelector('[data-testid="chat-composer-context-surface"]')?.textContent?.trim())
-      .toBe('Board');
+    expect(root.querySelector('[data-testid="chat-composer-context"]')).toBeNull();
+    expect(root.querySelector('[data-testid="orch-composer-more"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="cac-model-selector-trigger"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="chat-send"]')).not.toBeNull();
     expect(root.textContent).not.toContain('Make a task from your message');
     expect(root.textContent).not.toContain('Make a task from this reply');
     expect(root.querySelector('[data-testid="orch-side-sheet-draft-actions"]')).toBeNull();
@@ -119,9 +119,7 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect(secondChat).toBe(firstChat);
     expect(textarea.value).toBe('Draft survives navigation');
     expect((fixture.nativeElement as HTMLElement)
-      .querySelector('[data-testid="chat-composer-context-surface"]')?.textContent?.trim()).toBe('Task');
-    expect((fixture.nativeElement as HTMLElement)
-      .querySelector('[data-testid="chat-composer-context-detail"]')?.textContent?.trim()).toBe('AGT-2162');
+      .querySelector('[data-testid="chat-composer-context"]')).toBeNull();
   });
 
   it('shows the persisted context receipt for the latest orchestrator answer', async () => {

@@ -35,6 +35,7 @@ async function stubWorkspace(page: Page, sent: Record<string, unknown>[] = []) {
     }
     if (/\/api\/(?:tags|workspaces|clients|git\/summary|crash-recovery\/pending)\/?$/.test(requestPath)) body = '[]';
     if (requestPath === '/api/projects') body = '[]';
+    if (/\/api\/projects\/[^/]+\/workbenches(?:\?.*)?$/.test(requestPath)) body = '{"items":[]}';
     if (requestPath.startsWith('/api/bus/')) body = '[]';
     if (requestPath === '/api/v1/management/remote-hosts') body = '[]';
     if (requestPath === '/api/runner/status') body = '{"projects":{}}';
@@ -147,7 +148,7 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
   await page.getByTestId('orch-side-sheet-toggle').click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
+  await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
   await expect(page.getByTestId('chat-toolbar')).toHaveCount(0);
   await expect(page.getByTestId('chat-attach')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-draft-actions')).toHaveCount(0);
@@ -191,11 +192,10 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await choose(page, 'gpt-5.6-sol', 'xhigh');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
-  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Deck');
+  await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await page.getByTestId(`studio-tab-url-preview:${PROJECT}:preview`).click();
-  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('URL preview');
-  await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('preview');
+  await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await expect(page.getByTestId('cac-model-selector-trigger'))
     .toHaveAttribute('aria-label', /gpt-5\.6-sol.*xhigh/);

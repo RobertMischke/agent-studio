@@ -31,12 +31,18 @@ describe('OrchestratorSideSheetComponent context attachments', () => {
     expect(root.querySelector('.sidesheet__title')?.textContent?.trim()).toBe('Chat');
     expect(root.querySelector('[data-testid="chat-input"]')?.getAttribute('placeholder'))
       .toContain('Ask a question');
-    expect(root.querySelector('[data-testid="chat-context-attachment-add"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="orch-composer-more"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="chat-toolbar"]')).toBeNull();
     expect(root.querySelector('[data-testid="chat-attach"]')).toBeNull();
     expect(root.querySelector('input[type="file"]')).toBeNull();
 
-    root.querySelector<HTMLButtonElement>('[data-testid="chat-context-attachment-add"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-testid="orch-composer-more"]')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="orch-composer-actions-menu"]')?.textContent?.trim())
+      .toBe('Add context');
+    expect(root.textContent).not.toContain('Upload from computer');
+    expect(root.textContent).not.toContain('Browse the web');
+    root.querySelector<HTMLButtonElement>('[data-testid="orch-composer-add-context"]')!.click();
     fixture.detectChanges();
     expect(root.querySelector('[data-testid="orch-context-source-picker"]')).not.toBeNull();
   });
@@ -53,6 +59,7 @@ describe('OrchestratorSideSheetComponent context attachments', () => {
     const source = {
       id: 'repository-file:demo-project:docs/context-proof.md',
       category: 'files' as const,
+      key: 'CTX-PROOF',
       label: 'docs/context-proof.md',
       detail: 'Repository file',
       estimateTokens: 700,
@@ -63,15 +70,15 @@ describe('OrchestratorSideSheetComponent context attachments', () => {
     fixture.detectChanges();
     expect(component.cacContextAttachments()).toEqual([{
       id: source.id,
-      label: source.label,
-      hint: source.detail,
+      label: source.key,
+      hint: 'Repository file · about 700 tokens · resolved when you send',
     }]);
     expect((fixture.nativeElement as HTMLElement)
       .querySelector('[data-testid="chat-context-attachments"]')?.textContent)
-      .toContain('docs/context-proof.md');
+      .toContain('CTX-PROOF');
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('[aria-label="Remove docs/context-proof.md from context"]')!
+      .querySelector<HTMLButtonElement>('[aria-label="Remove CTX-PROOF from context"]')!
       .click();
     fixture.detectChanges();
     expect(component.contextAttachments()).toEqual([]);

@@ -29,7 +29,6 @@ import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
 import {
   ChatEvent,
-  ChatComposerContext,
   ChatContextAttachment,
   ChatModelSelection,
   ChatSubmitEvent,
@@ -100,10 +99,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   /** Prevent a persisted tab from opening Chat before a copied route resolves. */
   readonly projectEntryReady = input(true);
   readonly watchPaths = input<WatchPathEntry[]>([]);
-  /**
-   * Canonical active-tab context, derived by Studio and rendered through
-   * CAC's `composerContext` input.
-   */
+  /** Canonical active-tab context used for scope and attachment suggestions. */
   readonly composerContext = input<ComposerLocationContext | null>(null);
   /** Active repository page carried inside the existing project chat. */
   readonly pageContext = input<PageContext | null>(null);
@@ -320,8 +316,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly cacContextAttachments = computed<readonly ChatContextAttachment[]>(() =>
     this.contextAttachments().map(item => ({
       id: item.id,
-      label: item.label,
-      hint: item.detail,
+      label: item.key?.trim() || item.label,
+      hint: `${item.detail} · about ${new Intl.NumberFormat('en-US').format(item.estimateTokens)} tokens · resolved when you send`,
     })));
 
   readonly automaticContextPresentation = computed(() => buildContextChipPresentation({
@@ -349,23 +345,36 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       };
     }
     const page = this.pageContext();
-    if (!page || page.projectName !== project) return null;
-    const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
+    if (page?.projectName === project) {
+      const reference = { kind: 'page' as const, reference: pageContextKey(page), projectId: project };
+      const presentation = this.automaticContextPresentation();
+      return {
+        id: `${reference.kind}:${project}:${reference.reference}`,
+        category: 'current',
+        ...(presentation.key ? { key: presentation.key } : {}),
+        label: page.title,
+        detail: `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.relPath}`,
+        estimateTokens: 1_200,
+        reference,
+      };
+    }
+    const location = this.composerContext();
+    if (!location?.referencePath || location.project !== project) return null;
+    const reference = {
+      kind: 'page' as const,
+      reference: `page:${project}/${location.referencePath}`,
+      projectId: project,
+    };
     return {
       id: `${reference.kind}:${project}:${reference.reference}`,
       category: 'current',
-      label: page.title,
-      detail: `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.relPath}`,
+      ...(location.referenceKey ? { key: location.referenceKey } : {}),
+      label: location.detail ?? location.surface,
+      detail: `${location.surface} · ${location.referencePath}`,
       estimateTokens: 1_200,
       reference,
     };
   });
-  readonly cacComposerContext = computed<ChatComposerContext | null>(() => {
-    const context = this.composerContext();
-    if (!context?.project) return null;
-    return { project: context.project, surface: context.surface, detail: context.detail ?? '' };
-  });
-
   /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
   private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
 
@@ -715,7 +724,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   requestContextAttachment(): void {
-    this.contextPicker()?.show();
+    this.contextPicker()?.request();
   }
 
   onOpenVerboseDebug(): void {

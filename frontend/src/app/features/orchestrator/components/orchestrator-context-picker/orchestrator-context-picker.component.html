@@ -1,3 +1,15 @@
+@if (actionsOpen()) {
+  <div class="source-actions"
+       role="menu"
+       aria-label="Composer actions"
+       data-testid="orch-composer-actions-menu">
+    <button type="button"
+            role="menuitem"
+            (click)="show()"
+            data-testid="orch-composer-add-context">Add context</button>
+  </div>
+}
+
 @if (open()) {
   <section class="source-picker"
            role="dialog"

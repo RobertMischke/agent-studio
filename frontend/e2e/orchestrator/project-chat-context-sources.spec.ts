@@ -123,7 +123,17 @@ test('project chat attaches context references, blocks images, and keeps one per
   await expect(page.getByTestId('chat-drafts')).toHaveCount(0);
   await expect(page.getByTestId('chat-composer-foot').getByTestId('chat-send')).toHaveCount(1);
 
-  await page.getByTestId('chat-context-attachment-add').click();
+  await page.getByTestId('orch-composer-more').click();
+  const composerMenu = page.getByTestId('orch-composer-actions-menu');
+  await expect(composerMenu).toContainText('Add context');
+  await expect(composerMenu).not.toContainText('Upload from computer');
+  await expect(composerMenu).not.toContainText('Browse the web');
+  await setTheme(page, 'light');
+  await page.screenshot({
+    path: resolve(RESULTS, 'project-chat-composer-actions--light--mocked.png'),
+    fullPage: false,
+  });
+  await page.getByTestId('orch-composer-add-context').click();
   await expect(page.getByTestId('orch-context-current-automatic')).toContainText('already included');
   await page.getByTestId('orch-context-source-search').fill('context');
 
@@ -138,7 +148,7 @@ test('project chat attaches context references, blocks images, and keeps one per
   await page.getByTestId('orch-context-source-search').fill('context');
   await expect(page.getByTestId('orch-context-group-commits')).toContainText('persist context receipts');
   await page.getByTestId('orch-context-group-commits').getByRole('button', { name: /persist context receipts/ }).click();
-  await expect(page.getByTestId('chat-context-attachments')).toContainText('Context workbench');
+  await expect(page.getByTestId('chat-context-attachments')).toContainText('CTX-WB');
   await expect(page.getByTestId('chat-context-attachments')).toContainText('docs/missing.md');
   await expect(page.getByTestId('chat-context-attachments')).toContainText('persist context receipts');
 

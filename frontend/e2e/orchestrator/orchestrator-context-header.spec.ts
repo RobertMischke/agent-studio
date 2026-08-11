@@ -502,17 +502,15 @@ test.describe('Orchestrator context header · where am I', () => {
 
     const sheet = page.getByTestId('orch-side-sheet');
     await expect(page.getByTestId('chat-composer-foot')).toHaveCount(1);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
-    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
     await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
 
     const input = page.getByTestId('chat-input');
     await input.fill('Keyboard order draft');
     await input.focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByTestId('chat-context-attachment-add')).toBeFocused();
-    await input.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('orch-composer-more')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
     await page.keyboard.press('Tab');
@@ -535,9 +533,7 @@ test.describe('Orchestrator context header · where am I', () => {
     await openSideSheet(page, false);
 
     const sheet = page.getByTestId('orch-side-sheet');
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
-    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
-    await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('AGT-1916');
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
     const box = await sheet.boundingBox();
     expect(box?.width ?? 999).toBeLessThanOrEqual(390);
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
@@ -573,41 +569,30 @@ test.describe('Orchestrator context header · where am I', () => {
         await showSideSheet(page, false);
       }
 
-      const draft = page.getByTestId('orch-context-draft');
-      const chip = page.getByTestId('orch-current-tab-chip');
-      const chipLabel = page.getByTestId('orch-current-tab-label');
-      const estimate = page.getByTestId('orch-context-estimate');
-      await expect(draft).toBeVisible();
-      await expect(chip).toHaveAttribute('data-context-type', 'Dossier');
-      await expect(page.getByTestId('orch-current-tab-type-icon')).toBeVisible();
-      await expect(chipLabel).toHaveText('AOW-W1');
-      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
-      await expect(estimate).toHaveText('~1.6k');
-      await expect(estimate).not.toContainText('resolved when you send');
+      await page.getByTestId('orch-composer-more').click();
+      const actions = page.getByTestId('orch-composer-actions-menu');
+      await expect(actions).toHaveText('Add context');
+      await expect(actions).not.toContainText('Upload from computer');
+      await expect(actions).not.toContainText('Browse the web');
+      await page.getByTestId('orch-composer-add-context').click();
 
-      const layout = await draft.evaluate((element) => {
-        const rowItems = [
-          element.querySelector<HTMLElement>('[data-testid="orch-current-tab-chip"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-add-context"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-context-estimate"]')!,
-        ];
-        const label = element.querySelector<HTMLElement>('[data-testid="orch-current-tab-label"]')!;
-        return {
-          fits: element.scrollWidth <= element.clientWidth + 1,
-          rowCount: new Set(rowItems.map(item => {
-            const box = item.getBoundingClientRect();
-            return Math.round(box.top + box.height / 2);
-          })).size,
-          chipWhiteSpace: getComputedStyle(rowItems[0]).whiteSpace,
-          labelOverflow: getComputedStyle(label).textOverflow,
-        };
-      });
-      expect(layout).toEqual({
-        fits: true,
-        rowCount: 1,
-        chipWhiteSpace: 'nowrap',
-        labelOverflow: 'ellipsis',
-      });
+      const currentSurface = page.getByTestId('orch-context-current-source');
+      await expect(currentSurface).toContainText(LONG_CONTEXT_TITLE);
+      await expect(currentSurface).toContainText('Dossier');
+      await currentSurface.click();
+
+      const chipRow = page.getByTestId('chat-context-attachments');
+      const chip = chipRow.getByRole('listitem').filter({ hasText: 'AOW-W1' });
+      await expect(chipRow).toBeVisible();
+      await expect(chip).toBeVisible();
+      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
+      await expect(page.getByTestId('orch-composer-more')).toBeVisible();
+
+      const layout = await chipRow.evaluate((element) => ({
+        fits: element.scrollWidth <= element.clientWidth + 1,
+        whiteSpace: getComputedStyle(element.querySelector('li')!).whiteSpace,
+      }));
+      expect(layout).toEqual({ fits: true, whiteSpace: 'nowrap' });
 
       await page.mouse.move(1, 1);
       await page.getByTestId('orch-side-sheet').screenshot({
@@ -618,14 +603,10 @@ test.describe('Orchestrator context header · where am I', () => {
       });
 
       await chip.hover();
-      await expect(page.locator('.app-tooltip-overlay')).toContainText(LONG_CONTEXT_TITLE);
-      await expect(page.locator('.app-tooltip-overlay')).toContainText('Current tab · Dossier');
-
-      await page.mouse.move(1, 1);
-      await expect(page.locator('.app-tooltip-overlay')).toHaveCount(0);
-      await estimate.hover();
-      await expect(page.locator('.app-tooltip-overlay'))
-        .toHaveText('1 source · about 1,600 tokens · resolved when you send');
+      const tooltip = page.getByTestId('cac-tooltip');
+      await expect(tooltip).toContainText('Dossier');
+      await expect(tooltip).toContainText('about 1,200 tokens');
+      await expect(tooltip).toContainText('resolved when you send');
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,

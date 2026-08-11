@@ -256,8 +256,7 @@ test.describe('Project chat context awareness', () => {
     await page.waitForLoadState('domcontentloaded');
     await openSideSheet(page);
 
-    await expect(page.getByTestId('chat-composer-context-surface')).toContainText('Task');
-    await expect(page.getByTestId('chat-composer-context-detail')).toContainText('CTX-1');
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
 
     await sendChat(page, 'Why is status.md relevant here?');
     await sendChat(page, 'What does it say now?');
