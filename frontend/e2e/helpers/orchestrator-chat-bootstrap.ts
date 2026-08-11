@@ -31,6 +31,19 @@ export async function installOrchestratorChatBootstrap(
   page: Page,
   project = 'composer-fixture',
 ): Promise<void> {
+  await page.route('**/hubs/jobs/negotiate**', route => fulfillJson(route, {
+    negotiateVersion: 1,
+    connectionId: 'composer-fixture-hub',
+    connectionToken: 'composer-fixture-hub',
+    availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+  }));
+  await page.routeWebSocket('**/hubs/jobs**', socket => {
+    socket.onMessage(message => {
+      const text = typeof message === 'string' ? message : message.toString('utf8');
+      if (text.includes('"protocol"')) socket.send('{}\u001e');
+    });
+  });
+
   await page.route('**/api/**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;

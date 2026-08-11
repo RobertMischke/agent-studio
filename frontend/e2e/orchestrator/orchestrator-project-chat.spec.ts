@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installOrchestratorChatBootstrap } from '../helpers/orchestrator-chat-bootstrap';
+
+const PROJECT = 'Runbook';
 
 test.describe('orchestrator project chat', () => {
   async function expectProjectChatOpen(page: Page) {
@@ -8,11 +11,12 @@ test.describe('orchestrator project chat', () => {
       () => chat.evaluate((el) => (el as HTMLElement).offsetWidth),
       { message: 'orchestrator side sheet width' }
     ).toBeGreaterThan(300);
-    await expect(chat.getByRole('heading', { name: 'Orchestrator' })).toBeVisible();
-    await expect(chat.getByText('Runbook · canonical session')).toBeVisible();
-    await expect(chat.getByRole('button', { name: /Project/ })).toBeVisible();
-    await expect(chat.getByTestId('orch-side-sheet-project-combo')).toBeVisible();
-    await expect(chat.getByPlaceholder(/Ask the orchestrator/i)).toBeVisible();
+    await expect(chat).toHaveAttribute('aria-label', 'Chat');
+    await expect(chat.getByTestId('orch-panel-header')).toBeVisible();
+    await expect(chat.getByTestId('orch-panel-context-type')).toHaveText('Project');
+    await expect(chat.getByTestId('orch-panel-context-name')).toHaveText(PROJECT);
+    await expect(chat.getByText('Orchestrator', { exact: true })).toHaveCount(0);
+    await expect(chat.getByPlaceholder(/Ask a question/i)).toBeVisible();
 
     await expect(chat.getByRole('button', { name: /Search/i })).toHaveCount(0);
     await expect(chat.getByTestId('pchat-search-input')).toHaveCount(0);
@@ -20,6 +24,7 @@ test.describe('orchestrator project chat', () => {
   }
 
   test('opens the redesigned project chat from the titlebar', async ({ page }) => {
+    await installOrchestratorChatBootstrap(page, PROJECT);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const titlebarChat = page.getByTestId('studio-titlebar-chat');
@@ -30,6 +35,7 @@ test.describe('orchestrator project chat', () => {
   });
 
   test('opens the redesigned project chat from the bottom status bar', async ({ page }) => {
+    await installOrchestratorChatBootstrap(page, PROJECT);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const statusbarChat = page.getByTestId('orch-side-sheet-toggle');

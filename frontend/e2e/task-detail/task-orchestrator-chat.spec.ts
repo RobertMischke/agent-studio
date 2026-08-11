@@ -224,6 +224,9 @@ test('Task detail uses the Orchestrator side sheet for task context without a Ch
   await expect(sideSheet).toBeVisible();
   await expect(sideSheet.getByTestId('orch-panel-context-type')).toHaveText('Task');
   await expect(sideSheet.getByTestId('orch-panel-context-name')).toContainText(TASK_KEY);
+  await expect(sideSheet.getByTestId('chat-toolbar')).toHaveCount(0);
+  await expect(sideSheet.getByTestId('chat-attach')).toHaveCount(0);
+  await expect(sideSheet.locator('input[type="file"]')).toHaveCount(0);
   await expect(sideSheet.getByTestId('orch-task-context-note')).toContainText(
     `Questions automatically refer to ${TASK_KEY}.`,
   );
@@ -248,6 +251,7 @@ test('Task detail uses the Orchestrator side sheet for task context without a Ch
     scope: { kind: 'task', contextKey: CONTEXT_KEY, projectId: PROJECT, taskKey: TASK_KEY },
     activeSurface: { kind: 'task', taskKey: TASK_KEY },
   });
+  expect(requestBody).not.toHaveProperty('attachments');
   expect(taskAgentMutations).toEqual([]);
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
 
