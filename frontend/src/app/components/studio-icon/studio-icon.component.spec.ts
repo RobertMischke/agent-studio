@@ -47,4 +47,31 @@ describe('StudioIconComponent (smoke)', () => {
       expect(StudioIconComponent).toBeTruthy();
     }
   });
+
+  it('renders the selected Deck project-facets icon on the canonical grid', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StudioIconComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StudioIconComponent);
+    fixture.componentRef.setInput('name', 'deck');
+    fixture.detectChanges();
+
+    const svg = fixture.nativeElement.querySelector('svg') as SVGElement;
+    const frame = svg.querySelector('rect');
+    const facets = svg.querySelector('path');
+    const focus = svg.querySelector('circle');
+
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(svg.getAttribute('stroke')).toBe('currentColor');
+    expect(frame?.getAttribute('x')).toBe('3');
+    expect(frame?.getAttribute('y')).toBe('3');
+    expect(frame?.getAttribute('width')).toBe('18');
+    expect(frame?.getAttribute('height')).toBe('18');
+    expect(frame?.getAttribute('rx')).toBe('3');
+    expect(facets?.getAttribute('d')).toBe('M9 3v18M9 10h12');
+    expect(focus?.getAttribute('cx')).toBe('15');
+    expect(focus?.getAttribute('cy')).toBe('15.5');
+    expect(focus?.getAttribute('r')).toBe('2');
+  });
 });
