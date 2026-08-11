@@ -396,7 +396,7 @@
     <article class="decision-card primary">
       <span class="label">Operator decision, 10 August 2026</span>
       <h2>Single Chat System with Three Context Concepts</h2>
-      <p>Keep the existing project and task transcript scopes. Add a typed, per-turn context envelope made from the current surface plus explicit references. Reuse the task transcript inside a new task-detail Chat tab. Every model turn returns and persists a context receipt.</p>
+      <p>Keep the existing project and task transcript scopes. Add a typed, per-turn context envelope made from the current surface plus explicit references. Render both scopes in the right Orchestrator side sheet and let context follow navigation unless pinned. Every model turn returns and persists a context receipt.</p>
     </article>
     <article class="decision-card">
       <span class="label">Approved rollout</span>
@@ -413,6 +413,15 @@
       <li>Every project owns a permanently visible project context. Task contexts remain visible until archive; archive hides them without deletion.</li>
       <li>The Task Server centrally owns contexts, transcripts, receipts, lifecycle visibility, and short summaries. Machine-local JSONL is migration input only.</li>
       <li>Chat History lists every current context with a compact summary. The follow-up management surface is delivered by AGT-2577.</li>
+    </ul>
+  </div>
+
+  <div class="callout blue">
+    <strong>Binding operator clarification from 11 August 2026</strong>
+    <ul>
+      <li>Task-scoped Orchestrator conversation uses the right side sheet, not a task-detail Chat tab.</li>
+      <li>Opening a task makes its managed task context active when the side sheet opens; retained task contexts remain available in Chat History.</li>
+      <li>The former Chat boundary copy moves into a compact side-sheet header note. Task, Activity, Result, and the existing non-chat tabs remain unchanged.</li>
     </ul>
   </div>
 
@@ -811,16 +820,16 @@
         <span class="section-kicker">04 · Task Chat</span>
         <h2>Boundary between Task Questions and Agent Continuation</h2>
       </div>
-      <p>The task detail already has an Activity composer that calls <code>continueJob</code>, starts or queues a CLI run, and pause-then-sends while running. The new Task Chat must not reuse that mutation path.</p>
+      <p>The task detail already has an Activity composer that calls <code>continueJob</code>, starts or queues a CLI run, and pause-then-sends while running. Task-scoped Orchestrator Q&amp;A stays in the right side sheet and must not reuse that mutation path.</p>
     </div>
 
     <div class="table-wrap">
       <table>
-        <caption>Boundary between the two task-detail conversations</caption>
+        <caption>Boundary between Orchestrator task context and task-agent Activity</caption>
         <thead>
           <tr>
             <th>Dimension</th>
-            <th>Task Chat: new orchestrator Q&amp;A</th>
+            <th>Orchestrator side sheet: task-scoped Q&amp;A</th>
             <th>Activity: existing task-agent control</th>
           </tr>
         </thead>
@@ -847,12 +856,12 @@
           </tr>
           <tr>
             <th>UI label</th>
-            <td><strong>Chat</strong>, with “Ask about AGT-2514” composer copy and an Orchestrator actor label.</td>
+            <td><strong>Orchestrator</strong> in the right side sheet, with a compact note that questions automatically refer to the active task and do not control the task agent.</td>
             <td><strong>Activity</strong>, with “Continue task agent” action copy when a send will run work.</td>
           </tr>
           <tr>
             <th>Project chat relationship</th>
-            <td>A separate task thread. Project chat can attach the task and link into this tab, but does not merge histories.</td>
+            <td>A separate task thread. Navigating to the task activates that context in the side sheet, but does not merge histories.</td>
             <td>Evidence remains within task detail and can be cited by the orchestrator through bounded resolvers.</td>
           </tr>
         </tbody>
@@ -933,8 +942,8 @@
       <figure class="sketch">
         <figcaption><span>Task detail</span><span class="small">Concept sketch</span></figcaption>
         <svg viewBox="0 0 680 520" role="img" aria-labelledby="task-chat-title task-chat-desc">
-          <title id="task-chat-title">Task detail Chat</title>
-          <desc id="task-chat-desc">Task detail with a separate Chat tab, automatic AGT-2514 context, and an Orchestrator actor note explaining the read-only boundary.</desc>
+          <title id="task-chat-title">Task detail with Orchestrator side sheet</title>
+          <desc id="task-chat-desc">Task detail without a Chat tab, alongside the right Orchestrator side sheet with automatic AGT-2514 context and a compact note explaining the read-only boundary.</desc>
           <rect class="ux-frame" x="10" y="10" width="660" height="500" rx="12"/>
           <rect class="ux-panel" x="10" y="10" width="660" height="58" rx="12"/>
           <rect class="ux-frame" x="28" y="24" width="74" height="28" rx="14"/>
@@ -943,10 +952,7 @@
           <text class="s-sub" x="132" y="43">Result</text>
           <rect class="ux-frame" x="204" y="24" width="92" height="28" rx="14"/>
           <text class="s-sub" x="223" y="43">Activity</text>
-          <rect class="ux-ok" x="306" y="24" width="74" height="28" rx="14"/>
-          <text class="s-label" x="326" y="43">Chat</text>
-
-          <text class="s-label" x="34" y="108">Chat about AGT-2514</text>
+          <text class="s-label" x="34" y="108">Orchestrator side sheet · AGT-2514 context</text>
           <text class="s-sub" x="34" y="135">Automatic: task brief, latest status, 2 runs, 0 commits</text>
           <path class="ux-placeholder" d="M34 172H510"/>
           <path class="ux-placeholder" d="M34 196H620"/>
@@ -1126,7 +1132,7 @@
       <article class="slice">
         <div class="slice-id"><span>3</span>CTX-3</div>
         <div class="slice-body">
-          <h3>Task-detail Chat backed by the existing task transcript</h3>
+          <h3>Task context in the Orchestrator side sheet</h3>
           <div class="slice-meta">
             <span>Depends: Slices 1 + 2</span>
             <span>Task workflow</span>
@@ -1136,10 +1142,10 @@
             <div>
               <h4>Outcome</h4>
               <ul>
-                <li>Add a Chat tab to task detail using <code>task:&lt;project&gt;/&lt;key&gt;</code> and the reusable orchestrator chat component.</li>
+                <li>Use <code>task:&lt;project&gt;/&lt;key&gt;</code> in the reusable right Orchestrator side sheet when navigation opens a task. Do not add a task-detail Chat tab.</li>
                 <li>Automatically load card metadata, authored prompt intent, latest status, last two run summaries with acute excerpts, commits, and recent task-chat turns.</li>
-                <li>Keep the Activity tab and all of its task-agent execution semantics unchanged. Clarify actor and side-effect copy in Chat without repurposing Activity.</li>
-                <li>Project-chat task references open this Chat tab; histories remain separate and linkable.</li>
+                <li>Keep the Activity tab and all of its task-agent execution semantics unchanged. Put actor and side-effect copy in the compact side-sheet context note without repurposing Activity.</li>
+                <li>Project-chat task references navigate to the task and activate its side-sheet context; histories remain separate and linkable.</li>
               </ul>
             </div>
             <div>
@@ -1284,7 +1290,7 @@
     <details open>
       <summary>Accepted decision record, 10 August 2026</summary>
       <div>
-        <p><strong>Decision:</strong> Orchestrator Chat becomes the primary project conversation. Conversation scope remains project or task; the active surface is a per-turn context input; explicit references are additive. The Task Server centrally owns managed contexts, transcripts, receipts, lifecycle visibility, and short summaries. Project contexts are permanent. Opening task Chat creates a managed task context; archive hides it without deletion. Task-detail Chat is read-only orchestrator Q&amp;A and remains separate from the unchanged Activity tab. Every model turn persists a source receipt. Slices 1 through 5 are approved.</p>
+        <p><strong>Decision, amended 11 August 2026:</strong> Orchestrator Chat is the primary project and task conversation in the right side sheet. Conversation scope remains project or task; navigation selects the active scope unless the operator pins another context; explicit references are additive. The Task Server centrally owns managed contexts, transcripts, receipts, lifecycle visibility, and short summaries. Project contexts are permanent. Opening a task activates and materializes its managed context; archive hides it without deletion. Task detail has no Chat tab. Activity retains its task-agent execution semantics, while the side-sheet header explains that task-scoped Orchestrator answers do not start, pause, or continue the task agent. Every model turn persists a source receipt.</p>
       </div>
     </details>
   </section>
@@ -1310,7 +1316,7 @@
       <li><strong>ORCH-1 digest scope and caps:</strong> <code>backend/Features/Orchestrator/OrchestratorContextDigestService.cs:14-18</code>, <code>:57-114</code>, and <code>:406-524</code>.</li>
       <li><strong>Scoped prompt preamble:</strong> <code>backend/Features/Runner/OrchestratorChat.cs</code>. Confirms project and task side-sheet turns no longer prepend the all-project global boot prompt.</li>
       <li><strong>Existing task-agent composer semantics:</strong> <code>frontend/src/app/features/task-detail/task-detail.ts:822-910</code> and <code>frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html:464-493</code>.</li>
-      <li><strong>Product placement doctrine:</strong> <code>docs/quality/design-principles.md</code>, “Chat is a multi-actor conversation”. It places task-scoped conversation in task detail and project-scoped conversation in the resizable side sheet.</li>
+      <li><strong>Product placement doctrine:</strong> <code>docs/quality/design-principles.md</code>, “Chat is a multi-actor conversation”. It places project- and task-scoped Orchestrator conversation in the resizable right side sheet, with context following navigation unless pinned.</li>
       <li><strong>Live Task API snapshot, 8 August 2026:</strong> AGT-2506 was <code>2-ready</code>, blocked by CAC-20 in <code>5-human-review</code> and not released. AGT-2512 was <code>2-ready</code> with no attributed App commit. CAC-20 had result commit <code>928ebeb</code> but remained unintegrated/unpublished.</li>
       <li><strong>Live digest measurement:</strong> stable <code>project:Agent Studio</code> returned 6,147 characters; task scopes AGT-2506 and AGT-2512 returned 6,363 and 6,358 characters. Rough token values use a planning estimate of four characters per token, not provider billing telemetry.</li>
     </ul>

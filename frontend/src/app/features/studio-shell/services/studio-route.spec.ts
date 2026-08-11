@@ -177,13 +177,13 @@ describe('Studio route contract', () => {
     });
   });
 
-  it('round-trips the Task Chat inspector tab', () => {
+  it('falls back to Result for a legacy Task Chat inspector route', () => {
     const parsed = parseStudioRoute('#/tasks/AGT-2574?view=overview%3Achat');
     expect(parsed).toEqual({
       kind: 'task',
       reference: 'AGT-2574',
       tab: 'overview',
-      inspector: 'chat',
+      inspector: 'protocol',
     });
   });
 });

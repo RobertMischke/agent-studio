@@ -13,14 +13,14 @@ function resultTab(overrides: Partial<Parameters<typeof buildInspectorTabs>[0]> 
 }
 
 describe('buildInspectorTabs', () => {
-  it('keeps the fixed Task, Activity, Chat, Result order', () => {
+  it('keeps the fixed Task, Activity, Result order without a Chat tab', () => {
     expect(buildInspectorTabs({
       summaryStatus: 'none',
       hasStatusMarkdown: false,
       hasCliActivity: false,
       isHumanReview: false,
       isRunning: false,
-    }).map(tab => tab.label)).toEqual(['Task', 'Activity', 'Chat', 'Result']);
+    }).map(tab => tab.label)).toEqual(['Task', 'Activity', 'Result']);
   });
 
   it('keeps Result disabled for a fresh task with no run activity', () => {

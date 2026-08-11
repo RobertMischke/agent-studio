@@ -52,7 +52,7 @@ describe('TaskDetailComponent (smoke)', () => {
   });
 });
 
-describe('TaskDetailComponent task-chat send flow', () => {
+describe('TaskDetailComponent Activity send flow', () => {
   function continueHarness(response = of({ status: 'queued' as const })) {
     const continueJob = vi.fn(() => response);
     return {

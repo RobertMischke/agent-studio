@@ -154,7 +154,7 @@ The meta layer belongs beside or behind the transcript. Metrics, run timelines, 
 
 Task starts, continuations, and task boundaries are real events, but they should not dominate the default transcript. They appear as subtle timeline markers inside the continuous project chat. Hover or click exposes job id, lane, model, prompt, duration, tokens, commits, and evidence.
 
-Chat surfaces must stay embedded in the existing application. Task-scoped conversation belongs in the task detail Chat tab. Project-scoped conversation belongs in the resizable side sheet. Do not introduce a new global chat window to solve a layout problem that belongs in those two surfaces.
+Chat surfaces must stay embedded in the existing application. Project- and task-scoped Orchestrator conversation belongs in the resizable right side sheet, whose context follows navigation unless pinned. Task detail keeps Task, Activity, Result, and its other non-chat tabs; it does not duplicate the Orchestrator transcript in a Chat tab. The side-sheet header states when questions automatically refer to the active task and clarifies that answers do not start, pause, or continue the task agent. Do not introduce a new global chat window to solve a layout problem that belongs in the side sheet.
 
 Light theme is a first-class product surface. Dark theme must use the same component grammar, spacing, actor labels, warning signals, and debug affordances, but light mode is not a secondary skin.
 

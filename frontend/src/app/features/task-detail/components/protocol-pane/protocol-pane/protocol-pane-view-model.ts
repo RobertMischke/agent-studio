@@ -8,7 +8,7 @@ import {
 } from '../../../../../services/format.util';
 
 /**
- * Builds the inspector tab strip (Task / Activity / Chat / Result) for the shared
+ * Builds the inspector tab strip (Task / Activity / Result) for the shared
  * pane-tabs component. Pure function so the protocol pane controller
  * stays compact and the tab catalogue is unit-testable in isolation.
  */
@@ -40,13 +40,6 @@ export function buildInspectorTabs(args: {
       testid: 'inspector-tab-activity',
       indicator: args.isRunning ? 'live' : undefined,
       modifier: 'activity',
-    },
-    {
-      id: 'chat',
-      label: 'Chat',
-      icon: 'bot',
-      testid: 'inspector-tab-chat',
-      modifier: 'chat',
     },
     {
       // The user-facing area was renamed Protocol -> Result. The tab `id`
