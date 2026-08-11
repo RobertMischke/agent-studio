@@ -80,7 +80,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Public demo instance decision dossier: pinned content, Dossier lifecycle gallery, execution denial, security, hosting, reset operations, and slices (AGT-2582) | [decision dossier](../operations/demo-instanz/index.html) |
 | Context-aware Orchestrator Chats as the project workspace, with Task Chat boundaries, token budgets, UX sketches, and five follow-up slices (AGT-2514) | [decision dossier](../operations/kontext-orchestrator-chats/index.html) |
 | Admin surface design guideline: flat composition, compact disclosure, one stream grid, light/dark Activity reference, and incremental adoption (AGT-2583) | [decision dossier](../operations/admin-design-guideline/index.html) |
-| Naming the living decision-to-documentation artifact: weighted comparison, Dossier recommendation, Living Dossier runner-up, and rename consequence chains (AGT-2584) | [decision dossier](../operations/living-document-naming/index.html) |
+| Accepted naming decision for the living decision-to-documentation artifact: Dossier remains the product noun, “living dossier” is explanatory copy, Living Dossier is the runner-up, and consequence delivery remains tracked to documented (AGT-W33) | [decision dossier](../operations/living-document-naming/index.html) |
 | Missing generated status.md on Concept and Planning cards: scaffold inventory, root-cause chain, and repair decision (AGT-2555) | [decision dossier](../operations/statusmd-konzept-karten/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |

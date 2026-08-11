@@ -198,14 +198,14 @@
     <h1>Naming the living decision-to-documentation artifact</h1>
     <p class="lede">The artifact now carries one subject from exploration through decision and implementation into permanent documentation. The name must describe that whole record without pretending it is only a specification, a plan, or a log.</p>
     <div class="meta">
-      <span><b>Status:</b> decision pending</span>
-      <span><b>Phase:</b> decision ready</span>
-      <span><b>Date:</b> 10 August 2026</span>
-      <span><b>Scope:</b> naming analysis only</span>
+      <span><b>Status:</b> accepted · implementation in progress</span>
+      <span><b>Phase:</b> consequence tracking</span>
+      <span><b>Confirmed:</b> 11 August 2026</span>
+      <span><b>Authority:</b> Operator</span>
     </div>
     <div class="decision-strip">
-      <strong>Recommendation: keep Dossier</strong>
-      <p>Use “Dossier” as the stable product noun and “living dossier” as explanatory copy. A dossier can grow without semantic strain. “Living Dossier” is the runner-up if explicit liveness in every label is worth a longer, less natural name. Do not choose “Living Spec.”</p>
+      <strong>Decision confirmed: keep Dossier</strong>
+      <p>“Dossier” is the stable product noun. Use “living dossier” as the explanatory second line, not as the product name. “Living Dossier” remains the runner-up.</p>
     </div>
     <nav aria-label="Dossier contents">
       <ul class="toc">
@@ -215,7 +215,7 @@
         <li><a href="#culture">04 · Adjacent culture</a></li>
         <li><a href="#recommendation">05 · Recommendation</a></li>
         <li><a href="#consequences">06 · Consequences</a></li>
-        <li><a href="#open-decisions">07 · Decision request</a></li>
+        <li><a href="#decision">07 · Decision record</a></li>
         <li><a href="#evidence">08 · Evidence</a></li>
       </ul>
     </nav>
@@ -236,7 +236,7 @@
 
     <div class="note">
       <h4>Current naming boundary</h4>
-      <p>The operator chose “Dossier” on 9 August. AGT-2539 contains the one UI and documentation rename and is held for this decision. Code identifiers, <code>workbench.json</code>, API routes, and the <code>AGT-W4</code> key family remain <code>workbench*</code> by prior decision. Choosing another public noun changes AGT-2539; it must not create a second rename card or a second code migration.</p>
+      <p>The operator confirmed “Dossier” on 11 August. AGT-2539 completed the one UI and documentation rename and is archived. Code identifiers, <code>workbench.json</code>, API routes, and the <code>AGT-W*</code> key family remain <code>workbench*</code> by prior decision. No second rename card or code migration is required.</p>
     </div>
   </section>
 
@@ -339,17 +339,17 @@
   </section>
 
   <section id="recommendation" data-concept-section="recommendation">
-    <h2><span class="section-no">05</span>Recommendation and runner-up</h2>
+    <h2><span class="section-no">05</span>Decision rationale and runner-up</h2>
 
     <div class="shortlist">
       <article><span class="rank">01 · RECOMMENDED</span><h3>Dossier</h3><p>Short, durable, collision-resistant, and equally usable in English and German. It names the subject record rather than one phase or one update mechanism.</p></article>
-      <article><span class="rank">02 · RUNNER-UP</span><h3>Living Dossier</h3><p>Use only if explicit liveness in the nav is a hard requirement. It preserves the right noun, but adds length and an awkward permanent-state claim.</p></article>
+      <article><span class="rank">02 · RUNNER-UP</span><h3>Living Dossier</h3><p>The documented second choice preserves the right noun, but adds length and an awkward permanent-state claim.</p></article>
       <article><span class="rank">COPY RULE</span><h3>A living dossier</h3><p>Best explanatory phrase, lower-case when descriptive: “A dossier is a living record from exploration through documented outcome.” The UI noun remains Dossier.</p></article>
     </div>
 
-    <h3>Is a second rename worth it?</h3>
+    <h3>Why the accepted decision avoids a second rename</h3>
     <p><strong>No.</strong> There is no material semantic defect in “Dossier” to justify reopening the product noun. A dossier is a collected record about one subject; adding evidence, decisions, task state, and delivery notes is normal growth, not a category error. The documented end state also matters: a completed dossier remains accurate when it is stable and no longer “living” in the active sense.</p>
-    <p>Technically, the application has not performed two migrations because AGT-2539 is held. Cognitively, however, choosing a new label now would be a second naming reversal. It would invalidate newly written public copy, reopen operator vocabulary, and make the AGT-2539 sweep review more complex. That cost is modest but real, and the alternative needs a clear semantic gain to pay for it. “Living Dossier” adds explicitness, not enough new meaning.</p>
+    <p>The confirmed decision avoided a second naming reversal while AGT-2539 completed the existing rename. Choosing a new label would have invalidated newly written public copy, reopened operator vocabulary, and made the delivery sweep more complex. That cost was modest but real, and “Living Dossier” added explicitness without enough new meaning to pay for it.</p>
 
     <div class="note good">
       <h4>Why “Living Spec” is not the runner-up</h4>
@@ -358,59 +358,60 @@
   </section>
 
   <section id="consequences">
-    <h2><span class="section-no">06</span>Consequence chain for either decision</h2>
-    <p>Both branches use the existing AGT-2539 machinery. Neither branch authorizes a second rename card, code-identifier migration, API alias, descriptor rename, or key-prefix change.</p>
+    <h2><span class="section-no">06</span>Accepted consequence chain</h2>
+    <p>The accepted branch uses the existing delivery cards. It does not authorize a second rename card, code-identifier migration, API alias, descriptor rename, or key-prefix change.</p>
 
     <div class="table-wrap">
       <table class="fork">
-        <caption>Execution consequences after the operator chooses the product noun.</caption>
-        <thead><tr><th>Surface</th><th>Keep Dossier, recommended</th><th>Approve Living Dossier, runner-up</th></tr></thead>
+        <caption>Live consequence status checked through the Task API on 11 August 2026.</caption>
+        <thead><tr><th>Consequence</th><th>Accepted outcome</th><th>Delivery state</th></tr></thead>
         <tbody>
-          <tr><td><strong>AGT-2539</strong></td><td>Resume the held card with its core wording intact: visible English UI uses “Dossier” and “Dossiers”; code identifiers remain <code>workbench*</code>. Replace the HOLD note with this decision reference.</td><td>Resume the same card, changing only its public target wording to “Living Dossier” and “Living Dossiers.” Do not create a new rename card. Add width coverage for nav, list, viewer header, tooltips, and empty states.</td></tr>
-          <tr><td><strong>Repository docs</strong></td><td>Sweep user-facing “Workbench” terminology as already planned. Define the noun once as a living record; do not capitalize “Living” as part of the name.</td><td>Sweep both legacy “Workbench” and newly committed “Dossier” product wording. Historical task titles and code symbols remain unchanged; current explanatory pages use the full two-word label.</td></tr>
-          <tr><td><strong>AGT-2580 and AGT-2537</strong></td><td>Keep “Dossier update” wording for the maintenance step and “documented Dossier” for the terminal state. Their behavior is the proof that the dossier is living.</td><td>Align any exposed strings through AGT-2539 after AGT-2580 lands. AGT-2537’s internal <code>workbench*</code> symbols remain untouched; only visible copy changes.</td></tr>
-          <tr><td><strong>AOW-13</strong></td><td>The archived website delivery already created <code>site/dossier/index.html</code>. Keep its noun and route; a short first-use explanation may call it a living dossier.</td><td>The delivered page becomes copy debt: update its heading and prose to “Living Dossier.” Keep <code>/dossier/</code> as the stable short URL unless a separate redirect-backed URL decision is explicitly made.</td></tr>
-          <tr><td><strong>WEB-18</strong></td><td>Leave the ready card’s “Dossier working model” wording intact. Its article explains the live lifecycle without changing the product noun.</td><td>Update the prompt before pickup to “Living Dossier working model” and audit diagram labels, headings, navigation copy, and metadata. Its dependency on WEB-16 does not change.</td></tr>
-          <tr><td><strong>Website and public register</strong></td><td>Use: “A Dossier follows work from exploration through decisions and implementation to a documented outcome.” Keep headings and navigation at the single noun.</td><td>Use the full name on first reference and product navigation. Avoid shortening it back to “Dossier” inconsistently, which would erase the only reason to rename.</td></tr>
-          <tr><td><strong>Keys and internals</strong></td><td colspan="2">Keep <code>AGT-W4</code>, <code>workbench.json</code>, <code>WorkbenchCatalogueService</code>, existing routes, repository paths, and stable public URLs unless independently decided. The key is an opaque stable identifier, not a reason to preserve “Workbench” in UI.</td></tr>
+          <tr><td><strong>✓ AGT-2539</strong></td><td>The visible English UI and current documentation use “Dossier” and “Dossiers”; code identifiers remain <code>workbench*</code>.</td><td><strong>Delivered and terminal.</strong> Archived in <code>7-archive</code>.</td></tr>
+          <tr><td><strong>◐ AGT-2580</strong></td><td>Keep “Dossier update” wording for the maintenance step. Its delivered implementation is the operational proof that a dossier is living.</td><td><strong>Delivered, not terminal.</strong> The green delivery is in <code>4-auto-review</code> (Post Processing) and is not yet integrated into <code>develop</code>.</td></tr>
+          <tr><td><strong>✓ AGT-2537</strong></td><td>Keep “documented Dossier” for the quiet terminal state and use its guarded completion transition.</td><td><strong>Delivered and terminal.</strong> Archived in <code>7-archive</code>.</td></tr>
+          <tr><td><strong>✓ AOW-13</strong></td><td>Keep <code>site/dossier/index.html</code>, its noun, and its route. First-use explanation may call it a living dossier.</td><td><strong>Done.</strong> Archived in <code>7-archive</code>; the delivery is present on both integration and release branches.</td></tr>
+          <tr><td><strong>○ WEB-18</strong></td><td>Leave the card’s “Dossier working model” wording intact. Its article should explain the live lifecycle without changing the product noun.</td><td><strong>Open.</strong> Ready in <code>2-ready</code> and still blocked by WEB-16, which is also Ready.</td></tr>
+          <tr><td><strong>✓ Keys and internals</strong></td><td>Keep <code>AGT-W33</code>, <code>workbench.json</code>, <code>WorkbenchCatalogueService</code>, existing routes, repository paths, and stable public URLs.</td><td><strong>Settled.</strong> The reference key and internal vocabulary remain unchanged.</td></tr>
         </tbody>
       </table>
     </div>
+
+    <p class="note"><strong>Documented gate:</strong> three of the five consequence cards are terminal. AGT-2580 and WEB-18 are still open, so this dossier remains <code>decided</code> and must show Accepted / In progress. When all five references are terminal, use the AGT-2537 guarded transition to persist <code>documented</code> and move the dossier into permanent documented history.</p>
   </section>
 
-  <section id="open-decisions" data-concept-section="open-decisions">
-    <h2><span class="section-no">07</span>Decision request</h2>
-    <p>This dossier is decision-ready. Choose one of the two bounded options:</p>
+  <section id="decision" data-concept-section="decision">
+    <h2><span class="section-no">07</span>Accepted decision record</h2>
+    <p><strong>Confirmed 11 August 2026 by the Operator.</strong> The naming decision is complete:</p>
 
     <div class="decision-options">
       <article class="option recommended">
-        <span class="label">OPTION A · RECOMMENDED</span>
-        <h3>Keep Dossier</h3>
-        <p>Resume AGT-2539 with “Dossier / Dossiers.” Use “living dossier” only as descriptive copy. Keep all <code>workbench*</code> identifiers and <code>AGT-W*</code> keys.</p>
+        <span class="label">ACCEPTED</span>
+        <h3>Dossier</h3>
+        <p>Use “Dossier” and “Dossiers” as the stable product noun. Use “living dossier” as the explanatory second line. Keep all <code>workbench*</code> identifiers and <code>AGT-W*</code> keys.</p>
       </article>
       <article class="option">
-        <span class="label">OPTION B · RUNNER-UP</span>
-        <h3>Approve Living Dossier</h3>
-        <p>Retarget the existing AGT-2539 card to “Living Dossier / Living Dossiers,” then update AOW-13’s delivered copy and WEB-18 before pickup. Do not open another rename card.</p>
+        <span class="label">RUNNER-UP</span>
+        <h3>Living Dossier</h3>
+        <p>Retain this as the documented second choice, not as current product copy. It adds explicit liveness but is longer and remains awkward once the artifact becomes quiet documentation.</p>
       </article>
     </div>
 
-    <p class="note warn"><strong>Requested operator response:</strong> “Keep Dossier” or “Approve Living Dossier.” Any third name should reopen the matrix only if it solves a stated defect that both finalists miss.</p>
+    <p class="note good"><strong>Copy rule:</strong> headings and navigation use the single noun. Explanatory copy may say, “A dossier is a living record from exploration through documented outcome.”</p>
   </section>
 
   <section id="evidence">
     <h2><span class="section-no">08</span>Evidence boundary and sources</h2>
-    <p>The scoring is a reasoned naming model, not a user-research statistic. Repository and task facts were checked on 10 August 2026. External sources establish the normal meanings of adjacent document practices; they do not prove a product preference.</p>
+    <p>The scoring is a reasoned naming model, not a user-research statistic. Repository and task facts were refreshed on 11 August 2026. External sources establish the normal meanings of adjacent document practices; they do not prove a product preference.</p>
 
     <ul class="source-list">
       <li><strong>Repository lifecycle:</strong> <a href="../workbench-konzept/index.html">Dossiers: Name, patterns, and becoming an app</a>, plus the canonical <a href="../../system/domains/tasks.md">Tasks domain map</a> and <a href="../../system/domains/pipeline.md">Pipeline domain map</a>.</li>
-      <li><strong>Task state:</strong> Task API snapshot on 10 August 2026. AGT-2539 was held in Preparation; AGT-2580 was in Progress; AGT-2537 and AOW-13 were archived with deliveries; WEB-18 was Ready and waiting on WEB-16.</li>
+      <li><strong>Task state:</strong> Task API snapshot on 11 August 2026. AGT-2539, AGT-2537, and AOW-13 were archived; AGT-2580 had a green delivery in Post Processing but was not terminal or integrated into <code>develop</code>; WEB-18 was Ready and blocked by WEB-16.</li>
       <li><strong>Public process vocabulary:</strong> Basecamp Shape Up, Amazon Working Backwards, the RFC Editor, the ADR community, Living Documentation, and Cucumber sources linked in section 04.</li>
       <li><strong>Collision observations:</strong> this repository already reserves <code>docs/</code> for documentation, <code>*.spec.ts</code> for tests, Epics for bundles of decided work, ADRs for architectural decisions, and logs for runtime evidence.</li>
     </ul>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2584. Related cards: AGT-2539, AGT-2580, and AGT-2537. Analysis only; no naming implementation is authorized by this dossier.</footer>
+  <footer>Prepared 10 August 2026; decision confirmed and consequence state refreshed 11 August 2026. Source card AGT-2584. Related cards: AGT-2539, AGT-2580, AGT-2537, AOW-13, and WEB-18.</footer>
 </main>
 </body>
 </html>
