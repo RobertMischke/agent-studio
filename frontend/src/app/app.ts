@@ -39,6 +39,7 @@ import {
 import {
   TaskDetailComponent,
   DetailLoadErrorComponent,
+  TaskDetailLoadSectionsComponent,
   TaskSelectionService,
   TriageController,
   LanePagerService,
@@ -163,6 +164,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TaskColumnComponent,
     TaskDetailComponent,
     DetailLoadErrorComponent,
+    TaskDetailLoadSectionsComponent,
     OrchestratorSideSheetComponent,
     OrchestratorChatHistoryComponent,
     OrchestratorFeedComponent,
@@ -247,18 +249,11 @@ export class App implements OnInit, OnDestroy {
   private readonly studioPanelState = inject(StudioPanelStateService);
   private readonly nowTick = inject(NowTickService).now;
 
-  /**
-   * Cycle 9j: selection state (selected detail, triage toast, lane
-   * peers, URL sync, request-token guard) lives in TaskSelectionService.
-   * The shell re-exposes the read signals so existing template
-   * bindings + keyboard guards keep working unchanged. The triage
-   * HANDLERS (onTriageMove/Delete/Start, advanceToNextInLane) stay
-   * here because they orchestrate TaskService mutations + the
-   * TaskDetailComponent ViewChild (`clearTriageActing`).
-   */
+  /** Task selection state lives in TaskSelectionService; handlers stay here. */
   private readonly jobSelection = inject(TaskSelectionService);
   private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
+  readonly detailPreview = this.jobSelection.detailPreview;
   readonly boardLoading = this.jobService.loading;
   readonly detailLoading = this.jobSelection.detailLoading;
   readonly detailLoadError = this.jobSelection.detailLoadError;
@@ -1102,7 +1097,7 @@ export class App implements OnInit, OnDestroy {
         const selected = this.selectedJob();
         if (tab?.kind === 'task') {
           this.studioActiveTabWasTask = true;
-          if (selected?.info.taskKey === tab.taskKey) return;
+          if (selected?.info.taskKey === tab.taskKey || this.detailPreview()?.taskKey === tab.taskKey) return;
           this.jobSelection.openDetailByTaskKey(tab.taskKey);
         } else if (tab?.kind === 'epic') {
           this.studioActiveTabWasTask = true;
@@ -1348,7 +1343,10 @@ export class App implements OnInit, OnDestroy {
     }
     this.routeDetailTab.set(null);
     this.routeInspectorTab.set(null);
-    this.jobSelection.openDetail(job);
+    if (this.featureFlags.vsCodeLayout()) {
+      this.studioTabState.open({ kind: 'task', taskKey: job.taskKey });
+    }
+    this.jobSelection.openDetailAfterPaint(job);
   }
   closeDetail() {
     this.jobSelection.closeDetail();

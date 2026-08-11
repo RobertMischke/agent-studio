@@ -1,0 +1,47 @@
+<header class="task-load-head" data-testid="task-detail-head">
+  <button type="button" class="task-load-head__back" aria-label="Back to board" (click)="back.emit()">←</button>
+  <div class="task-load-head__identity">
+    <span class="task-load-head__project">{{ info().projectName }}</span>
+    <div class="task-load-head__title-row">
+      <span class="task-load-head__key">{{ info().key || info().displayKey || info().id }}</span>
+      <h1>{{ info().title || info().id }}</h1>
+    </div>
+  </div>
+  <span class="task-load-head__lane">{{ laneLabel(info().state) }}</span>
+</header>
+
+<div class="task-load-sections" data-testid="task-detail-load-sections">
+  @for (section of sections; track section.id) {
+    <section class="task-load-section"
+             [attr.data-testid]="'task-detail-section-' + section.id"
+             [attr.aria-busy]="errorMessage() ? 'false' : 'true'">
+      <header class="task-load-section__header">
+        <h2>{{ section.label }}</h2>
+        <span class="task-load-section__state">
+          <span class="task-load-section__state-dot" aria-hidden="true"></span>
+          {{ errorMessage() ? 'Unavailable' : 'Loading' }}
+        </span>
+      </header>
+
+      @if (errorMessage(); as message) {
+        <div class="task-load-section__error" role="alert">
+          <p>{{ message }}</p>
+          <button type="button"
+                  [attr.data-testid]="'task-detail-section-retry-' + section.id"
+                  (click)="retry.emit()">
+            Retry {{ section.label }}
+          </button>
+        </div>
+      } @else {
+        <div class="task-load-section__skeleton"
+             role="status"
+             [attr.aria-label]="'Loading ' + section.label">
+          <span class="task-load-section__line task-load-section__line--wide"></span>
+          <span class="task-load-section__line"></span>
+          <span class="task-load-section__line task-load-section__line--short"></span>
+          <span class="task-load-section__hint">Loading {{ section.label.toLowerCase() }}…</span>
+        </div>
+      }
+    </section>
+  }
+</div>

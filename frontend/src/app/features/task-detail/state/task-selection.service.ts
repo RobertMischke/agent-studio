@@ -1,4 +1,5 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Observable, timeout } from 'rxjs';
 import { TaskDetail, TaskInfo, TaskState } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -52,6 +53,7 @@ export class TaskSelectionService {
 
   /** How many slots ahead of the current pager index to warm. */
   private static readonly PREFETCH_LOOKAHEAD = 2;
+  private static readonly DETAIL_TIMEOUT_MS = 15_000;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -149,6 +151,8 @@ export class TaskSelectionService {
   }
 
   readonly selected = signal<TaskDetail | null>(null);
+  /** Cheap board snapshot used to paint the task route before detail I/O. */
+  readonly detailPreview = signal<TaskInfo | null>(null);
 
   /** Monotonic event consumed by the studio shell when Back returns to a non-task URL. */
   readonly browserRouteCleared = signal(0);
@@ -268,7 +272,11 @@ export class TaskSelectionService {
       info.watchPath,
     );
     const handle = project.id ?? project.shortCode ?? project.displayName;
-    return this.jobService.getDetail(info.id, undefined, handle);
+    return this.withDetailTimeout(this.jobService.getDetail(info.id, undefined, handle));
+  }
+
+  private withDetailTimeout(request: Observable<TaskDetail>): Observable<TaskDetail> {
+    return request.pipe(timeout({ first: TaskSelectionService.DETAIL_TIMEOUT_MS }));
   }
 
   /**
@@ -293,9 +301,29 @@ export class TaskSelectionService {
   private getDetailForPagerEntry(entry: LanePagerEntry) {
     const liveInfo = this.jobService.jobs().find(task => task.taskKey === entry.taskKey);
     if (liveInfo) return this.getDetailFor(liveInfo);
-    if (entry.routeKey) return this.jobService.getDetail(entry.routeKey);
+    if (entry.routeKey) return this.withDetailTimeout(this.jobService.getDetail(entry.routeKey));
     const project = this.projectHandleForStorageReference(entry.watchPath);
-    return this.jobService.getDetail(entry.id, undefined, project);
+    return this.withDetailTimeout(this.jobService.getDetail(entry.id, undefined, project));
+  }
+
+  /**
+   * Board and Explorer entry point. Publishes the cheap route shell now and
+   * starts detail work only after the browser has had a frame to paint it.
+   */
+  openDetailAfterPaint(job: TaskInfo): void {
+    const previewToken = ++this.openDetailToken;
+    this.prepareDetailLoad(() => this.openDetailAfterPaint(job));
+    this.detailPreview.set(job);
+    this.detailLoading.set(true);
+    const start = () => {
+      if (previewToken !== this.openDetailToken) return;
+      this.openDetail(job);
+    };
+    if (typeof requestAnimationFrame !== 'function') {
+      start();
+      return;
+    }
+    requestAnimationFrame(() => setTimeout(start, 0));
   }
 
   /**
@@ -310,6 +338,10 @@ export class TaskSelectionService {
     // this one covers ad-hoc board clicks where no accept-click preceded.
     perfMark('job-select-click');
     this.prepareDetailLoad(() => this.openDetail(job, opts));
+    // Paint the task shell from the already-resident board record. The heavy
+    // detail request and all child-section requests can now run after the
+    // route is visible instead of holding the user on the board.
+    this.detailPreview.set(job);
     this.syncTaskUrl(job, 'push');
     this.triageLaneState = job.state;
     if (!opts.keepPagerSnapshot) {
@@ -329,6 +361,7 @@ export class TaskSelectionService {
     if (cached) {
       this.detailLoading.set(false);
       this.selected.set(cached);
+      this.detailPreview.set(null);
       this.markNextTaskRendered();
       perfMark('job-select-rendered');
       perfMeasure('job-select-to-rendered', 'job-select-click', 'job-select-rendered');
@@ -341,6 +374,7 @@ export class TaskSelectionService {
         this.detailLoading.set(false);
         this.clearDetailLoadFailure();
         this.selected.set(detail);
+        this.detailPreview.set(null);
         if (!cached) {
           this.markNextTaskRendered();
           perfMark('job-select-rendered');
@@ -441,6 +475,7 @@ export class TaskSelectionService {
     this.openDetailToken++;
     this.detailLoading.set(false);
     this.clearDetailLoadFailure();
+    this.detailPreview.set(null);
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
@@ -474,15 +509,16 @@ export class TaskSelectionService {
     }
     const label = liveInfo?.key || liveInfo?.id || jobId;
     this.prepareDetailLoad(() => this.openDetailByTaskKey(taskKey));
+    if (liveInfo) this.detailPreview.set(liveInfo);
     this.detailLoading.set(true);
     const token = ++this.openDetailToken;
     const request = liveInfo
       ? this.getDetailFor(liveInfo)
-      : this.jobService.getDetail(
+      : this.withDetailTimeout(this.jobService.getDetail(
           jobId,
           undefined,
           this.projectHandleForStorageReference(storageReference),
-        );
+        ));
     request.subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
@@ -490,6 +526,7 @@ export class TaskSelectionService {
         this.clearDetailLoadFailure();
         this.syncTaskUrl(detail.info, 'replace');
         this.selected.set(detail);
+        this.detailPreview.set(null);
         this.triageLaneState = detail.info.state;
       },
       error: (err) => {
@@ -511,6 +548,7 @@ export class TaskSelectionService {
     this.openDetailToken++;
     this.detailLoading.set(false);
     this.clearDetailLoadFailure();
+    this.detailPreview.set(null);
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
@@ -542,6 +580,7 @@ export class TaskSelectionService {
       if (fromPopState) {
         this.openDetailToken++;
         this.detailLoading.set(false);
+        this.detailPreview.set(null);
         this.selected.set(null);
         this.triageLaneState = null;
         this.browserRouteCleared.update(value => value + 1);
@@ -554,8 +593,8 @@ export class TaskSelectionService {
     this.prepareDetailLoad(() => this.restoreFromUrl(fromPopState));
     this.detailLoading.set(true);
     const request = taskReference
-      ? this.jobService.getDetail(taskReference)
-      : this.jobService.getDetail(legacyJobId!, legacyWatchPath ?? undefined);
+      ? this.withDetailTimeout(this.jobService.getDetail(taskReference))
+      : this.withDetailTimeout(this.jobService.getDetail(legacyJobId!, legacyWatchPath ?? undefined));
 
     request.subscribe({
       next: (detail) => {
@@ -687,9 +726,13 @@ export class TaskSelectionService {
       ? Number((error as { status?: unknown }).status)
       : 0;
     this.detailLoadRetry = retry;
+    const timedOut = typeof error === 'object' && error !== null
+      && 'name' in error && (error as { name?: unknown }).name === 'TimeoutError';
     this.detailLoadError.set({
       taskLabel,
-      message: status === 404
+      message: timedOut
+        ? 'The detail request timed out. Retry to request the sections again.'
+        : status === 404
         ? 'The task reference is no longer current. Retry to resolve its latest location.'
         : 'The detail request failed. Check the connection and try again.',
     });
