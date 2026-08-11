@@ -244,18 +244,112 @@
   .adoption-step p { margin: 4px 0 0; color: var(--ink-2); font-size: 13px; }
   .decision-list { margin-top: 15px; }
   .decision-list li { padding: 4px 0; }
+  .nav-variant {
+    margin-top: 26px;
+    padding: 20px 0 24px;
+    border-top: 1px solid var(--line);
+  }
+  .nav-variant:last-of-type { border-bottom: 1px solid var(--line); }
+  .nav-variant-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, .65fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .nav-variant-head h3 { margin: 0 0 6px; }
+  .nav-variant-head p { margin: 0; color: var(--ink-2); }
+  .nav-proof-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 16px;
+  }
+  .nav-proof-grid figure { margin: 0; }
+  .nav-proof {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    background: var(--nav-shell);
+  }
+  .nav-proof.theme-light {
+    --nav-shell: #e8e8e5;
+    --nav-panel: #f5f5f2;
+    --nav-row-hover: #e9e9e5;
+    --nav-row-active: #e3ebf6;
+    --nav-ink: #20201e;
+    --nav-muted: #77766f;
+    --nav-line: #d6d5cf;
+    --nav-count: #e5e5e1;
+    --nav-count-ink: #66655f;
+    --nav-indicator: #6c7787;
+  }
+  .nav-proof.theme-dark {
+    --nav-shell: #171716;
+    --nav-panel: #20201f;
+    --nav-row-hover: #2a2a28;
+    --nav-row-active: #26354a;
+    --nav-ink: #f1f0eb;
+    --nav-muted: #9d9b93;
+    --nav-line: #3b3b38;
+    --nav-count: #333330;
+    --nav-count-ink: #c5c3bb;
+    --nav-indicator: #9ba8ba;
+  }
+  .nav-shell-bg { fill: var(--nav-shell); }
+  .nav-panel-bg { fill: var(--nav-panel); }
+  .nav-row-hover { fill: var(--nav-row-hover); }
+  .nav-row-active { fill: var(--nav-row-active); }
+  .nav-divider { stroke: var(--nav-line); stroke-width: 1; }
+  .nav-icon,
+  .nav-chevron {
+    fill: none;
+    stroke: var(--nav-muted);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .nav-row-text {
+    fill: var(--nav-ink);
+    font: 500 12px Inter, "Segoe UI", sans-serif;
+  }
+  .nav-row-text.small { font-size: 10.5px; }
+  .nav-row-text.active { font-weight: 650; }
+  .nav-overline {
+    fill: var(--nav-muted);
+    font: 650 9px Inter, "Segoe UI", sans-serif;
+    letter-spacing: .1em;
+  }
+  .nav-count-bg { fill: var(--nav-count); }
+  .nav-count-text {
+    fill: var(--nav-count-ink);
+    font: 650 9px Inter, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .nav-dot { fill: var(--nav-indicator); }
+  .nav-state-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 30px;
+    margin-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .nav-state { padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .nav-state p { margin: 0; color: var(--ink-2); }
+  .slice-note { margin-top: 22px; }
   footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }
   @media (max-width: 820px) {
     main { width: min(100% - 24px, 1160px); }
     .toc { grid-template-columns: 1fr 1fr; }
     .rule { grid-template-columns: 58px minmax(0, 1fr); gap: 10px; }
     .spec-grid { grid-template-columns: 1fr; }
+    .nav-variant-head { grid-template-columns: 1fr; gap: 8px; }
     .adoption-flow { grid-template-columns: 1fr 1fr; }
     .adoption-step:nth-child(3) { border-left: 0; }
     .adoption-step:nth-child(n+3) { border-top: 1px solid var(--line); }
   }
   @media (max-width: 520px) {
-    .toc, .adoption-flow { grid-template-columns: 1fr; }
+    .toc, .adoption-flow, .nav-proof-grid, .nav-state-grid { grid-template-columns: 1fr; }
     .adoption-step + .adoption-step { border-left: 0; border-top: 1px solid var(--line); }
     header.page { padding-top: 30px; }
   }
@@ -286,6 +380,7 @@
         <li><a href="#audit">04 · Violation audit</a></li>
         <li><a href="#adoption">05 · Adoption contract</a></li>
         <li><a href="#open-decisions">06 · Open decision</a></li>
+        <li><a href="#navigation-citizenship">07 · Navigation citizenship</a></li>
       </ul>
     </nav>
   </header>
@@ -669,6 +764,261 @@
       <li><strong>Approve the recommended standard</strong> as binding for new and touched admin surfaces, keep incremental adoption, and create separate cards only for the two unowned gaps when they become delivery priorities.</li>
     </ul>
     <p>The recommendation is approval. No product implementation, migration wave, or bulk task creation is part of this dossier.</p>
+  </section>
+
+  <section id="navigation-citizenship">
+    <h2><span class="section-no">07</span>Navigation citizenship</h2>
+    <p>Operator evidence from 11 August shows the Dossiers entry reading as a foreign object in the project tree: an orange folder, a separate disclosure treatment, and an orange count compete with the calm Board, Deck, Wiki, and Epics rows. Dossiers are a document destination and a disclosure parent. They should inherit the tree's visual grammar before expressing their own lifecycle.</p>
+
+    <h3>Icon register</h3>
+    <p>Use one monochrome document motif from the canonical Studio icon set. It should use the same 12 px footprint, 1.5 stroke, rounded joins, and muted foreground token as Wiki and Epics. A folded page with one or two short text lines distinguishes a Dossier from a repository folder without creating a new color identity. Do not tint it by article pattern, lifecycle, or decision state. The disclosure chevron stays in its reserved tree column and uses the shared collapsed and expanded glyphs; it is not part of the Dossier icon.</p>
+
+    <h3>Counter semantics</h3>
+    <p>The parent number means <strong>waiting decisions</strong>, not Dossier inventory. It is the sum of open decision counts for the current, visible Dossier children and therefore follows ADM-05 and hard rule R3. The value is omitted at zero. Its resting treatment is the same neutral, tabular-number count badge used by other navigation rows. Orange is reserved for current error classes, following AGT-2606; an invalid descriptor may receive a separate accessible error signal, but it must not recolor the decision count.</p>
+    <ul>
+      <li><strong>No counter:</strong> the quietest treatment, correct whenever the waiting-decision total is zero, but too easy to miss as the permanent treatment when decisions are queued.</li>
+      <li><strong>Neutral counter:</strong> preserves magnitude and reconciliation with visible children without suggesting an error. This is the recommended default when the total is greater than zero.</li>
+      <li><strong>Point indicator:</strong> says that attention exists but hides magnitude. It is a compact fallback for a constrained rail, not the default desktop treatment.</li>
+    </ul>
+
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+      <defs>
+        <symbol id="nav-variant-none" viewBox="0 0 460 210">
+          <rect class="nav-shell-bg" x="0" y="0" width="460" height="210"/>
+          <rect class="nav-panel-bg" x="12" y="12" width="436" height="186"/>
+          <text class="nav-overline" x="26" y="31">PROJECT</text>
+          <line class="nav-divider" x1="26" y1="39" x2="434" y2="39"/>
+
+          <g class="nav-icon">
+            <rect x="51" y="51" width="5" height="5"/><rect x="59" y="51" width="5" height="5"/>
+            <rect x="51" y="59" width="5" height="5"/><rect x="59" y="59" width="5" height="5"/>
+          </g>
+          <text class="nav-row-text" x="78" y="63">Board</text>
+
+          <g class="nav-icon"><rect x="50" y="80" width="15" height="13"/><line x1="50" y1="85" x2="65" y2="85"/></g>
+          <text class="nav-row-text" x="78" y="92">Deck</text>
+
+          <g class="nav-icon"><path d="M50 110a2 2 0 0 1 2-2h13v15H52a2 2 0 0 0-2 2z"/><line x1="54" y1="113" x2="62" y2="113"/><line x1="54" y1="117" x2="62" y2="117"/></g>
+          <text class="nav-row-text" x="78" y="122">Wiki</text>
+
+          <rect class="nav-row-hover" x="20" y="132" width="416" height="27"/>
+          <polyline class="nav-chevron" points="33 139 37 143 33 147"/>
+          <g class="nav-icon"><path d="M51 136h9l5 5v13H51z"/><polyline points="60 136 60 141 65 141"/><line x1="54" y1="146" x2="62" y2="146"/><line x1="54" y1="150" x2="60" y2="150"/></g>
+          <text class="nav-row-text" x="78" y="151">Dossiers</text>
+
+          <g class="nav-icon"><path d="M50 169a2 2 0 0 1 2-2h13v15H52a2 2 0 0 0-2 2z"/><line x1="54" y1="172" x2="62" y2="172"/><line x1="54" y1="176" x2="62" y2="176"/></g>
+          <text class="nav-row-text" x="78" y="181">Epics</text>
+        </symbol>
+
+        <symbol id="nav-variant-count" viewBox="0 0 460 210">
+          <rect class="nav-shell-bg" x="0" y="0" width="460" height="210"/>
+          <rect class="nav-panel-bg" x="12" y="12" width="436" height="186"/>
+          <text class="nav-overline" x="26" y="31">PROJECT</text>
+          <line class="nav-divider" x1="26" y1="39" x2="434" y2="39"/>
+
+          <g class="nav-icon">
+            <rect x="51" y="51" width="5" height="5"/><rect x="59" y="51" width="5" height="5"/>
+            <rect x="51" y="59" width="5" height="5"/><rect x="59" y="59" width="5" height="5"/>
+          </g>
+          <text class="nav-row-text" x="78" y="63">Board</text>
+
+          <g class="nav-icon"><rect x="50" y="80" width="15" height="13"/><line x1="50" y1="85" x2="65" y2="85"/></g>
+          <text class="nav-row-text" x="78" y="92">Deck</text>
+
+          <g class="nav-icon"><path d="M50 110a2 2 0 0 1 2-2h13v15H52a2 2 0 0 0-2 2z"/><line x1="54" y1="113" x2="62" y2="113"/><line x1="54" y1="117" x2="62" y2="117"/></g>
+          <text class="nav-row-text" x="78" y="122">Wiki</text>
+
+          <polyline class="nav-chevron" points="33 139 37 143 33 147"/>
+          <g class="nav-icon"><path d="M51 136h9l5 5v13H51z"/><polyline points="60 136 60 141 65 141"/><line x1="54" y1="146" x2="62" y2="146"/><line x1="54" y1="150" x2="60" y2="150"/></g>
+          <text class="nav-row-text" x="78" y="151">Dossiers</text>
+          <rect class="nav-count-bg" x="407" y="136" width="22" height="14" rx="7"/>
+          <text class="nav-count-text" x="418" y="146" text-anchor="middle">3</text>
+
+          <g class="nav-icon"><path d="M50 169a2 2 0 0 1 2-2h13v15H52a2 2 0 0 0-2 2z"/><line x1="54" y1="172" x2="62" y2="172"/><line x1="54" y1="176" x2="62" y2="176"/></g>
+          <text class="nav-row-text" x="78" y="181">Epics</text>
+        </symbol>
+
+        <symbol id="nav-variant-dot" viewBox="0 0 460 292">
+          <rect class="nav-shell-bg" x="0" y="0" width="460" height="292"/>
+          <rect class="nav-panel-bg" x="12" y="12" width="436" height="268"/>
+          <text class="nav-overline" x="26" y="31">PROJECT</text>
+          <line class="nav-divider" x1="26" y1="39" x2="434" y2="39"/>
+
+          <g class="nav-icon">
+            <rect x="51" y="51" width="5" height="5"/><rect x="59" y="51" width="5" height="5"/>
+            <rect x="51" y="59" width="5" height="5"/><rect x="59" y="59" width="5" height="5"/>
+          </g>
+          <text class="nav-row-text" x="78" y="63">Board</text>
+
+          <g class="nav-icon"><rect x="50" y="80" width="15" height="13"/><line x1="50" y1="85" x2="65" y2="85"/></g>
+          <text class="nav-row-text" x="78" y="92">Deck</text>
+
+          <g class="nav-icon"><path d="M50 110a2 2 0 0 1 2-2h13v15H52a2 2 0 0 0-2 2z"/><line x1="54" y1="113" x2="62" y2="113"/><line x1="54" y1="117" x2="62" y2="117"/></g>
+          <text class="nav-row-text" x="78" y="122">Wiki</text>
+
+          <polyline class="nav-chevron" points="32 139 36 143 40 139"/>
+          <g class="nav-icon"><path d="M51 136h9l5 5v13H51z"/><polyline points="60 136 60 141 65 141"/><line x1="54" y1="146" x2="62" y2="146"/><line x1="54" y1="150" x2="60" y2="150"/></g>
+          <text class="nav-row-text" x="78" y="151">Dossiers</text>
+          <circle class="nav-dot" cx="418" cy="145" r="3"/>
+
+          <rect class="nav-row-active" x="64" y="160" width="365" height="28"/>
+          <g class="nav-icon"><path d="M73 166h7l4 4v11H73z"/><polyline points="80 166 80 170 84 170"/></g>
+          <text class="nav-row-text small active" x="96" y="178">Admin Surface Design Guideline</text>
+
+          <g class="nav-icon"><path d="M73 194h7l4 4v11H73z"/><polyline points="80 194 80 198 84 198"/></g>
+          <text class="nav-row-text small" x="96" y="206">Model Badge Contrast</text>
+
+          <polyline class="nav-chevron" points="76 223 80 227 76 231"/>
+          <text class="nav-row-text small" x="96" y="230">History</text>
+
+          <g class="nav-icon"><path d="M50 250a2 2 0 0 1 2-2h13v15H52a2 2 0 0 0-2 2z"/><line x1="54" y1="253" x2="62" y2="253"/><line x1="54" y1="257" x2="62" y2="257"/></g>
+          <text class="nav-row-text" x="78" y="262">Epics</text>
+        </symbol>
+      </defs>
+    </svg>
+
+    <article class="nav-variant">
+      <div class="nav-variant-head">
+        <div>
+          <h3>Variant A: quiet row, no counter</h3>
+          <p>The Dossiers row is visually identical to its siblings and carries no trailing signal.</p>
+        </div>
+        <p><strong>Use:</strong> zero waiting decisions. As a permanent treatment it hides actionable queue state.</p>
+      </div>
+      <div class="nav-proof-grid">
+        <figure>
+          <div class="proof-label"><span>Light</span><span>Hover · no counter</span></div>
+          <svg class="nav-proof theme-light" viewBox="0 0 460 210" role="img" aria-labelledby="nav-none-light-title nav-none-light-desc">
+            <title id="nav-none-light-title">Light project tree without a Dossiers counter</title>
+            <desc id="nav-none-light-desc">Board, Deck, Wiki, Dossiers, and Epics use the same grey stroke icon register. The hovered Dossiers row has a document icon and collapsed chevron.</desc>
+            <use href="#nav-variant-none"/>
+          </svg>
+        </figure>
+        <figure>
+          <div class="proof-label"><span>Dark</span><span>Hover · no counter</span></div>
+          <svg class="nav-proof theme-dark" viewBox="0 0 460 210" role="img" aria-labelledby="nav-none-dark-title nav-none-dark-desc">
+            <title id="nav-none-dark-title">Dark project tree without a Dossiers counter</title>
+            <desc id="nav-none-dark-desc">The same geometry and muted document icon are preserved in the dark theme.</desc>
+            <use href="#nav-variant-none"/>
+          </svg>
+        </figure>
+      </div>
+    </article>
+
+    <article class="nav-variant">
+      <div class="nav-variant-head">
+        <div>
+          <h3>Variant B: neutral decision counter</h3>
+          <p>A quiet trailing badge reports the exact number of decisions waiting across current visible children.</p>
+        </div>
+        <p><strong>Recommendation:</strong> use this treatment above zero, and fall back to Variant A at zero.</p>
+      </div>
+      <div class="nav-proof-grid">
+        <figure>
+          <div class="proof-label"><span>Light</span><span>Recommended</span></div>
+          <svg class="nav-proof theme-light" viewBox="0 0 460 210" role="img" aria-labelledby="nav-count-light-title nav-count-light-desc">
+            <title id="nav-count-light-title">Light project tree with a neutral Dossiers decision counter</title>
+            <desc id="nav-count-light-desc">The Dossiers row has a document icon, a shared chevron, and a neutral badge showing three waiting decisions.</desc>
+            <use href="#nav-variant-count"/>
+          </svg>
+        </figure>
+        <figure>
+          <div class="proof-label"><span>Dark</span><span>Recommended</span></div>
+          <svg class="nav-proof theme-dark" viewBox="0 0 460 210" role="img" aria-labelledby="nav-count-dark-title nav-count-dark-desc">
+            <title id="nav-count-dark-title">Dark project tree with a neutral Dossiers decision counter</title>
+            <desc id="nav-count-dark-desc">The neutral decision badge and document icon retain the same hierarchy in the dark theme.</desc>
+            <use href="#nav-variant-count"/>
+          </svg>
+        </figure>
+      </div>
+    </article>
+
+    <article class="nav-variant">
+      <div class="nav-variant-head">
+        <div>
+          <h3>Variant C: point indicator with children</h3>
+          <p>A neutral point announces waiting attention while the expanded tree demonstrates active-leaf and History behavior.</p>
+        </div>
+        <p><strong>Use:</strong> constrained widths only. The point needs an accessible label because it does not expose magnitude.</p>
+      </div>
+      <div class="nav-proof-grid">
+        <figure>
+          <div class="proof-label"><span>Light</span><span>Compact alternative</span></div>
+          <svg class="nav-proof theme-light" viewBox="0 0 460 292" role="img" aria-labelledby="nav-dot-light-title nav-dot-light-desc">
+            <title id="nav-dot-light-title">Light expanded Dossiers row with a point indicator</title>
+            <desc id="nav-dot-light-desc">Dossiers is expanded with two document children and a collapsed History disclosure. The selected child receives the active row tint while the parent stays neutral.</desc>
+            <use href="#nav-variant-dot"/>
+          </svg>
+        </figure>
+        <figure>
+          <div class="proof-label"><span>Dark</span><span>Compact alternative</span></div>
+          <svg class="nav-proof theme-dark" viewBox="0 0 460 292" role="img" aria-labelledby="nav-dot-dark-title nav-dot-dark-desc">
+            <title id="nav-dot-dark-title">Dark expanded Dossiers row with a point indicator</title>
+            <desc id="nav-dot-dark-desc">The expanded hierarchy, neutral attention point, active child, and History disclosure preserve the same structure in the dark theme.</desc>
+            <use href="#nav-variant-dot"/>
+          </svg>
+        </figure>
+      </div>
+    </article>
+
+    <h3>State contract</h3>
+    <div class="nav-state-grid">
+      <div class="nav-state">
+        <h4>Default and hover</h4>
+        <p>The row rests on the sidebar surface. Hover applies the shared full-row hover tint. Icon, chevron, and counter do not acquire lifecycle colors.</p>
+      </div>
+      <div class="nav-state">
+        <h4>Active</h4>
+        <p>The parent is active only on the Dossiers overview. When a Dossier child is open, that leaf receives the shared navigation active treatment and <code>aria-current="page"</code>; the disclosure parent remains expanded but not active.</p>
+      </div>
+      <div class="nav-state">
+        <h4>With children</h4>
+        <p>The shared chevron turns down, current Dossiers appear one tree level deeper, and stable Dossier identity tracks each row. Settled items remain behind the quiet History disclosure.</p>
+      </div>
+      <div class="nav-state">
+        <h4>Zero visible Dossiers</h4>
+        <p>Keep the Dossiers destination. Omit the counter. If History contains items, keep a chevron and reveal a quiet <q>No current Dossiers</q> state followed by the collapsed History toggle. If current and historical counts are both zero, reserve the chevron column without drawing a chevron; selecting the row opens the empty overview. Opening a historical Dossier expands both the parent and History.</p>
+      </div>
+    </div>
+
+    <h3>Follow-up slice note: immediate changes and framework dependencies</h3>
+    <p class="slice-note">This is a violation cross-check for a follow-up card, not implementation authorization. The 11 August capture and the active checkout differ in one useful detail: the capture shows an orange folder, while the current Dossiers parent uses the shared tree row with an <code>eye</code> icon. The source has already converged on shared row geometry, but not on the document metaphor or decision-count meaning.</p>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>Idea</th><th>Can ship in a Dossiers-local slice</th><th>Depends on shared tree or data contract</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Document icon and normal chevron</strong></td>
+            <td>Replace the Dossiers-only glyph with the existing monochrome <code>file</code> motif and retain <code>app-tree-row</code>'s chevron, hover, focus, and active behavior.</td>
+            <td>Only a bespoke document-lines glyph would require extending the canonical <code>StudioIcon</code> register. It should not create a Dossiers color token.</td>
+          </tr>
+          <tr>
+            <td><strong>Neutral waiting-decision count</strong></td>
+            <td>Derive the sum from current catalogue items, pass it to the existing neutral <code>app-count-badge</code>, and pass <code>null</code> at zero. Keep the accessible label explicit.</td>
+            <td>A shared semantic count API is needed only if other tree families must distinguish inventory, attention, and error counts in the same way.</td>
+          </tr>
+          <tr>
+            <td><strong>Parent and leaf selection</strong></td>
+            <td>The current Dossiers component already keeps an active leaf separate from the overview-active parent and automatically reveals a selected historical item. Preserve and cover this behavior.</td>
+            <td>Moving the two-line Dossier leaves fully onto <code>app-tree-row</code> would require a supported secondary line or a documented compact-leaf variant in the shared component.</td>
+          </tr>
+          <tr>
+            <td><strong>Correct zero-visible behavior</strong></td>
+            <td>The parent can remain visible and suppress a zero decision badge immediately.</td>
+            <td>The current non-history catalogue exposes no <code>hasHistory</code> or historical count. Correct chevron visibility without eager history loading requires that API projection, then a tree disclosure decision based on current plus historical children.</td>
+          </tr>
+          <tr>
+            <td><strong>Point alternative</strong></td>
+            <td>A projected trailing point can be prototyped locally with a label such as <q>Waiting decisions</q>.</td>
+            <td>Promoting it beyond Dossiers needs a shared semantic indicator contract so neutral attention and orange error states cannot drift between rails.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <h4>Recommended follow-up boundary</h4>
+      <p>Ship Variant B plus its zero state: document icon, shared chevron, neutral waiting-decision sum, and existing parent-versus-leaf selection. Add a small history-availability projection only if acceptance requires a perfectly truthful chevron at zero current items. Do not restyle sibling rows, redesign <code>app-tree-row</code>, or implement the point alternative in the same slice.</p>
+    </div>
   </section>
 
   <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
