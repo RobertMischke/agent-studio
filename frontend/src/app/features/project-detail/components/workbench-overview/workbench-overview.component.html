@@ -91,14 +91,14 @@
           </section>
         }
 
-        @if (active().length > 0 || tracking().length > 0 || invalid().length > 0) {
+        @if (livingStandards().length > 0 || active().length > 0 || tracking().length > 0 || invalid().length > 0) {
           <section class="workbench-overview__section" data-testid="workbench-overview-active">
             <header class="workbench-overview__section-head">
               <div><h2>Current</h2><p>Active work and tracked delivery, ordered by latest movement.</p></div>
-              <span>{{ active().length + tracking().length + invalid().length }}</span>
+              <span>{{ livingStandards().length + active().length + tracking().length + invalid().length }}</span>
             </header>
             <div class="workbench-overview__list">
-              @for (item of active().concat(tracking(), invalid()); track item.projectName + ':' + item.workbench.id) {
+              @for (item of livingStandards().concat(active(), tracking(), invalid()); track item.projectName + ':' + item.workbench.id) {
                 <article class="workbench-overview__card"
                          [class.workbench-overview__card--invalid]="!item.workbench.valid"
                          [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">

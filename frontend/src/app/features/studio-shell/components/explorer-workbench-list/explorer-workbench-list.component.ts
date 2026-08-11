@@ -71,7 +71,8 @@ export class ExplorerWorkbenchListComponent {
         id: 'in-implementation',
         label: 'In implementation',
         empty: 'No Dossiers in implementation',
-        items: items.filter(item => item.status === 'active' || item.status === 'decided'),
+        items: items.filter(item =>
+          item.status === 'living-standard' || item.status === 'active' || item.status === 'decided'),
       },
     ];
   });
@@ -160,6 +161,7 @@ export class ExplorerWorkbenchListComponent {
     if (!item.valid) return 'Needs attention';
     if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
+    if (item.status === 'living-standard') return 'Living standard';
     if (item.status === 'active') return item.phase ?? 'Active';
     if (item.status === 'decided') return 'In implementation';
     if (item.status === 'documented') return 'Documented';

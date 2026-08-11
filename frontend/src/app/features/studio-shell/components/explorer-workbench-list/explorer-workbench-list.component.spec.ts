@@ -129,7 +129,7 @@ describe('ExplorerWorkbenchListComponent', () => {
   });
 
   it('promotes the catalogue-owned living standard without opening the Dossiers branch', async () => {
-    const guide = item('admin-design-guideline', 'decision-pending', {
+    const guide = item('admin-design-guideline', 'living-standard', {
       key: 'AGT-W20',
       title: 'Admin Surface Design Guideline',
       entryPath: 'docs/operations/admin-design-guideline/index.html',
@@ -148,6 +148,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     expect(styleGuide.textContent).toContain('Style Guide');
     expect(styleGuide.textContent).toContain('AGT-W20');
     expect(styleGuide.getAttribute('aria-current')).toBe('page');
+    expect(styleGuide.getAttribute('aria-label')).toContain('Living standard');
     expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-admin-design-guideline"]'))
       .toBeNull();
 

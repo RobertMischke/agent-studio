@@ -117,9 +117,9 @@ public static class ProjectDocsEndpoints
             return Results.Ok(workbenches.ListOverview(names, requested));
         });
 
-        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, WorkbenchCatalogueService workbenches) =>
+        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, string? page, WorkbenchCatalogueService workbenches) =>
         {
-            var document = workbenches.Read(projectName, id);
+            var document = workbenches.Read(projectName, id, page);
             return document == null
                 ? Results.NotFound(new { error = "Dossier not found, invalid, or path rejected" })
                 : Results.Ok(document);

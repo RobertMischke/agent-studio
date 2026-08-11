@@ -68,6 +68,8 @@ docs/operations/                     # or docs/quality/, docs/system/, ...
   haertung-verteilte-ausfuehrung/
     index.html
     workbench.json
+    pages/                          # optional registered HTML subpages
+      applied-surfaces.html
     brief.md                         # optional, prompt-friendly context
 ```
 
@@ -78,6 +80,13 @@ scripts are disabled, so the ordinary Wiki reader is a useful static fallback.
 A folder, rather than a loose HTML file, leaves room for future local assets
 without adding a global registry. Optional `brief.md` gives the orchestrator a
 bounded semantic source without making it scrape arbitrary HTML.
+
+An optional ordered `pages` array registers viewer subnavigation as
+`{ title, path }` entries. Paths are unique Dossier-relative HTML files below
+`pages/`; unregistered files cannot be opened through the Dossier page API.
+`index.html` remains the default page and decision authority. The Dossier key
+does not change, page paths are stable page identities, and existing anchor ids
+keep their document-local meaning.
 
 `workbench.json` is the small query and lifecycle contract. HTML frontmatter is
 not used: YAML before the doctype makes the file invalid HTML, comments are a
@@ -187,8 +196,9 @@ On confirmation the receipt stores each decision id, kind, selected option ids,
 and optional comment together with the receipt's timestamp and operator. The
 feature-card preview derives its title, goal, and chosen-option summary from
 those responses. Repository revision remains provenance; stale-decision checks
-use the file-scoped SHA-256 fingerprint of `workbench.json` plus the entry HTML,
-so unrelated commits do not invalidate an unchanged Dossier.
+use the file-scoped SHA-256 fingerprint of `workbench.json`, the entry HTML,
+and every registered subpage in stable path order. Unrelated commits do not
+invalidate an unchanged Dossier, while a changed registered page does.
 
 ## 3. Lifecycle
 
@@ -200,6 +210,7 @@ so unrelated commits do not invalidate an unchanged Dossier.
 | Decide | `active / decision-ready` | The operator answers decision points inside the document, then opens the compact feature-card preview or enters an archive reason. Nothing is created yet. |
 | Build pending | `decision-pending / feature-spawn` | Confirmation records an operation id and expected revision; failure remains visible and retryable. |
 | Build settled | `decided / feature-spawn` | The card exists and the Dossier records its task receipt. |
+| Maintain standard | `living-standard` | A permanent first-class reference evolves through refresh or revamp cards and append-only evidence. |
 | Stop | `archived / archive` | Explicit confirmation records why no feature follows. |
 
 The closing invariant mirrors the intent of the

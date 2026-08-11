@@ -47,6 +47,7 @@ export class WorkbenchOverviewComponent {
   readonly expandedDecisionKey = signal<string | null>(null);
 
   readonly decisionPending = computed(() => this.itemsWithStatus('decision-pending'));
+  readonly livingStandards = computed(() => this.itemsWithStatus('living-standard'));
   readonly active = computed(() => this.itemsWithStatus('active'));
   readonly tracking = computed(() => this.itemsWithStatus('decided'));
   readonly invalid = computed(() => this.itemsWithStatus('invalid'));
@@ -116,6 +117,7 @@ export class WorkbenchOverviewComponent {
     if (!workbench.valid) return 'Needs attention';
     if (workbench.documentation?.eligible) return 'Ready to document';
     if (workbench.status === 'decision-pending') return 'Decision pending';
+    if (workbench.status === 'living-standard') return 'Living standard';
     if (workbench.status === 'active') return workbench.phase ?? 'Active';
     if (workbench.status === 'decided') return 'Tracking';
     if (workbench.status === 'archived') return 'Discarded';
