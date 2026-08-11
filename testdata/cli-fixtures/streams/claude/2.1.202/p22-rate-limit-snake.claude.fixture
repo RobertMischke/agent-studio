@@ -1,4 +1,4 @@
-#! {"scenario":"P22","title":"rate_limit_event, snake_case fields plus ISO reset timestamp","cli":"claude","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P22","title":"rate_limit_event, snake_case fields plus ISO reset timestamp","cli":"claude","cliVersion":"2.1.202","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # Same run, the other casing, plus an ISO-8601 resets_at and a stringified
 # boolean - the tolerance CAR-E has to grow. Terminal verdict is identical.
 {"type":"system","subtype":"init","session_id":"9f3b7e5d-14c8-4a02-bb6f-2c81d4907e13","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit"],"slash_commands":[]}

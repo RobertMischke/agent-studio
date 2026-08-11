@@ -21,6 +21,24 @@ public sealed record ClientRegisterRequest(string DisplayName, string? Kind = nu
 
 public sealed record RunnerGitCapabilityRequest(string Status, string? Detail, DateTime CheckedAt);
 
+/// <summary>
+/// Protocol-v0 projection of the existing typed runner-event endpoint. It is
+/// used only to preserve protocol-novelty diagnostics while a co-hosted backend
+/// remains inside the compatibility window.
+/// </summary>
+public sealed record RunnerEventIngestRequest(
+    string TaskKey,
+    string Kind,
+    DateTime Timestamp,
+    string? Message,
+    string? RunnerId = null,
+    string? LeaseId = null,
+    long FencingToken = 0,
+    string? EventId = null,
+    string? Cli = null,
+    string? Severity = null,
+    string? Code = null);
+
 /// <summary>Server projection of a registered client identity; only <see cref="Id"/> is used (as the X-Client-Id).</summary>
 public sealed record ClientRegisterResponse(string Id, string DisplayName, string Kind);
 

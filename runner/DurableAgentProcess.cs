@@ -423,6 +423,13 @@ internal sealed class DurableAgentProcess
                 ? Path.GetFileName(Path.TrimEndingDirectorySeparator(directory))
                 : spec.RunId!;
             using var trace = CarEventTrace.Open(directory);
+            var protocolNovelty = new CliProtocolNoveltyTracker(
+                AgentCliProcess.NormalizeCliType(spec.CliType) ?? AgentCliProcess.ClaudeCli);
+            void ObserveUnclassifiedFrame(string rawDetail)
+            {
+                if (protocolNovelty.TryObserveFrame(rawDetail, out var novelty))
+                    Append("system", novelty.ToMarker());
+            }
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(spec.TimeoutSeconds));
             try
             {
@@ -440,12 +447,21 @@ internal sealed class DurableAgentProcess
                     line =>
                     {
                         Append("stdout", line);
-                        trace.WriteFromRawLine(spec.CliType, runId, "stdout", line);
+                        ObserveUnclassifiedFrame(line);
+                        trace.WriteFromRawLine(
+                            spec.CliType,
+                            runId,
+                            "stdout",
+                            line);
                     },
                     line =>
                     {
                         Append("stderr", line);
-                        trace.WriteFromRawLine(spec.CliType, runId, "stderr", line);
+                        trace.WriteFromRawLine(
+                            spec.CliType,
+                            runId,
+                            "stderr",
+                            line);
                     },
                     environment,
                     clearEnvironment: false,

@@ -207,9 +207,17 @@ Each CLI has a `QuotaProbeBase` subclass under `backend/Features/Cli/Quota/`. Cl
 
 ## Test-fixture story
 
-`backend.Tests/Fixtures/cli/<cliType>/` holds captured stream-json / output samples per CLI. Tests load these fixtures and run `TransformReadLine` over them, asserting marker output. Adding a fixture is the cheapest way to lock a behaviour we observed in the wild.
+`testdata/cli-fixtures/streams/<cliType>/<cliVersion>/` is the shared, versioned
+provider capture corpus. Agent Host tests replay it for events and terminal
+outcomes; CAC uses the same provider bytes for rendering. Backend-only renderer
+snapshots may still live under `backend.Tests/Fixtures/cli/<cliType>/`, but they
+must not duplicate the canonical provider capture.
 
-When you observe a new CLI behaviour (new frame shape, new error mode, new tool name), capture the raw stdout into the fixtures folder and add a regression test the same PR. The fixtures are the long-lived asset; the tests around them are the seatbelt.
+When you observe a new CLI behaviour (new frame shape, new error mode, new tool
+name), capture and scrub the real stream under its exact CLI version and add a
+regression test in the same PR. Update the
+[frame compatibility matrix](../frame-compatibility-matrix.md) and its CAC
+rendering counterpart against the same fixture identity.
 
 ## Things that are not in scope here
 

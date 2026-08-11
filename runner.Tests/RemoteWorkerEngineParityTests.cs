@@ -397,7 +397,7 @@ public sealed class RemoteWorkerEngineParityTests : IDisposable
         => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
 
     private static string FixturePath(string name)
-        => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "streams", name);
+        => CliCaptureFixtureLocator.Resolve(RepoRoot(), name);
 
     private static string FakeCliPath()
         => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");

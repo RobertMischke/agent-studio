@@ -1,4 +1,4 @@
-#! {"scenario":"P3","title":"[[TASK_BLOCKED]] without a stated reason","cli":"codex","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P3","title":"[[TASK_BLOCKED]] without a stated reason","cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 {"type":"thread.started","thread_id":"019dee74-9c1e-70b2-84cd-5ac1e0f39d22"}
 {"type":"turn.started"}
 {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I cannot finish this task here.\n\n[[TASK_BLOCKED]]"}}

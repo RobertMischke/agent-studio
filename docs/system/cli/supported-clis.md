@@ -118,6 +118,17 @@ change the launch model. There was no quota-triggered model or CLI router.
 
 If the CLI emits plain text already in a parser-friendly shape, `TransformReadLine` can be the default identity transform.
 
+**Frame compatibility and drift.** The remote Agent Host and CAC rendering
+share the versioned, scrubbed provider-stream corpus under
+`testdata/cli-fixtures/streams/<cli>/<version>/`. Runner replay tests must assert
+events, terminal outcomes, recovery, and delivery state. CAC may add separate
+render expectations but must consume the same provider bytes. An unknown
+structured top-level frame or nested item type emits the typed
+`runner.protocol.unknown-frame` event with scrubbed counters and a payload hash;
+it is never silently dropped. The current per-version vocabulary and outcome
+differences live in the
+[CLI frame compatibility matrix](frame-compatibility-matrix.md).
+
 ### 2.6 Cancellation
 
 **Contract.** A running job must be cancellable from the UI. CAR owns the Claude and Codex process lifecycle and tree kill. Studio records the stop reason, retains Windows task job-object cleanup, and maps the terminal result. The legacy adapter retains the equivalent cancellation behavior for rollback and Antigravity.

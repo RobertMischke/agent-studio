@@ -1,4 +1,4 @@
-#! {"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"claude","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"claude","cliVersion":"2.1.202","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # Recorded shape: claude -p --output-format stream-json --verbose (the form the
 # CAR path produces; the legacy remote path emits the plaintext sibling).
 {"type":"system","subtype":"init","session_id":"5b1c9f70-2f4a-4c31-9f0e-2f0c9c4a1e77","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit","Bash"],"slash_commands":[]}

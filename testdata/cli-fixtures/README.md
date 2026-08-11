@@ -1,16 +1,23 @@
-# CLI fixtures — level-1 parity material for the CAR migration
+# CLI fixtures - versioned provider capture corpus
 
-Recorded coding-agent CLI transcripts plus a fake CLI that replays them. They
-are the deterministic half ("Ebene 1") of the parity suite described in
-`docs/operations/car-migration-plan.md` §3, tranche T3 (AGT-2372): no model call,
-no network and no token spend. The paired harnesses feed the same bytes to the
-temporary legacy execution layer and to CodingAgentRunner, then compare the
-typed lifecycle and terminal result.
+Scrubbed coding-agent CLI transcripts plus a fake CLI that replays them. They
+are the deterministic half ("level 1") of the parity suite described in
+`docs/operations/car-migration-plan.md` section 3, tranche T3 (AGT-2372): no
+model call, network, or token spend. The paired harnesses feed the same bytes to
+the execution layer and to CodingAgentRunner, then compare typed lifecycle and
+terminal results.
+
+This is also the shared capture contract with Coding Agent Chat (CAC). Runner
+tests consume provider semantics and outcomes. CAC consumes the same raw
+stdout/stderr steps for rendering fixtures. Neither side stores a separately
+rewritten transcript.
 
 ```
 testdata/cli-fixtures/
   fake-cli.mjs      replays one fixture as if it were the CLI
-  streams/          recorded transcripts, one file per scenario × form
+  streams/
+    <cli>/
+      <version>/    captures, one file per scenario and form
   guard/            deliberately broken / deliberately clean C# sources that
                     keep CliInvocationCentralizationGuardTests honest
 ```
@@ -32,15 +39,30 @@ Metadata fields:
 
 | Field | Meaning |
 |---|---|
-| `scenario` | Parity scenario id from the plan (`P1` … `P22`). |
+| `scenario` | Parity scenario id from the plan (`P1` through `P23`). |
 | `title` | One-line human description. |
-| `cli` | `claude` or `codex` — whose frame vocabulary this is. |
+| `schemaVersion` | Capture contract version. Currently `1`. |
+| `cli` | `claude` or `codex`, whose frame vocabulary this is. |
+| `cliVersion` | Exact provider CLI version represented by the containing folder. |
 | `form` | `stream-json` (structured frames) or `plaintext` (raw prose). |
 | `exitCode` | Process exit code the replay ends with. |
+| `durableOutputState` | Delivery fact supplied to outcome classification, currently `local-only` for recorded coding captures. |
+| `captureSource` | `real-cli-stream` or the explicitly synthetic `synthetic-drift-probe`. |
+| `capturedAt` | ISO calendar date of capture or synthetic probe creation. |
+| `scrubbed` | Must be `true` before the fixture can be committed. |
 
-File names follow `<scenario-slug>.<claude|codex|plaintext>.fixture`; the middle
-token is `plaintext` for plaintext form, otherwise the CLI name. The mapping is
-enforced by `runner.Tests/ParityFixtureTests.Every_recorded_fixture_is_well_formed`.
+Paths follow
+`streams/<cli>/<cliVersion>/<scenario-slug>.<claude|codex|plaintext>.fixture`.
+The middle filename token is `plaintext` for plaintext form, otherwise the CLI
+name. The path and metadata mapping is enforced by
+`runner.Tests/ParityFixtureTests.Every_recorded_fixture_is_well_formed`.
+
+Scrubbing removes credentials, account identifiers, operator home paths,
+private repository URLs, and unrelated prompt content. Preserve top-level and
+nested frame type names, field casing, nullability, stream assignment, ordering,
+exit code, and the minimum text needed to assert the terminal outcome. Synthetic
+drift probes must say so in `captureSource`; they never masquerade as observed
+provider frames.
 
 ### Why `form` matters
 
@@ -53,8 +75,8 @@ structured protocol.
 ## Replaying a fixture
 
 ```bash
-node testdata/cli-fixtures/fake-cli.mjs testdata/cli-fixtures/streams/p1-happy-done.claude.fixture
-echo "the prompt" | node fake-cli.mjs streams/p1-happy-done.claude.fixture -p --output-format stream-json
+node testdata/cli-fixtures/fake-cli.mjs testdata/cli-fixtures/streams/claude/2.1.202/p1-happy-done.claude.fixture
+echo "the prompt" | node fake-cli.mjs streams/codex/0.144.1/p1-happy-done.codex.fixture exec --experimental-json
 ```
 
 Everything after the fixture path is ignored, so the fake CLI can be dropped in
@@ -82,8 +104,9 @@ malformed fixture) and never comes from a fixture.
 | **P5** no sentinel | `p5-no-sentinel.{claude,codex,plaintext}.fixture` | The divergence: plaintext → `ProtocolInconclusive` / `AskForHumanInput`; stream-json → `SuccessfulCompletion` at *medium* confidence, because a provider completion plus a final assistant reply is accepted as terminal evidence. Same scenario, two verdicts. |
 | **P9** self-crash | `p9-self-crash.{claude,codex}.fixture` | Non-zero exit with a provider failure frame (`result subtype=error_during_execution` / `turn.failed`) → `CliCrash`. Worded deliberately free of quota/auth/model vocabulary so the diagnostic regexes cannot steal the case. |
 | **P22** rate limit | `p22-rate-limit-{camel,snake}.claude.fixture`, `p22-rate-limit.codex.fixture` | Claude's `rate_limit_event` in both casings (CAR-E tolerance), including an ISO-8601 `resets_at` and a stringified boolean. The frame is informational: the run still ends `[[TASK_DONE]]`. Codex has no such frame — its limit arrives as a terminal `turn.failed` that today classifies as `QuotaExceeded` → `WaitForCapabilityRecovery`; recorded so the CAR path cannot quietly downgrade it to a plain crash. |
+| **P23** protocol novelty | `p23-unknown-frame.{claude,codex}.fixture` | Synthetic unknown-frame probes appended to each real-version folder. Normal completion remains authoritative, while the frame produces `runner.protocol.unknown-frame` with scrubbed per-type and total counters. |
 
-`runner.Tests/ParityFixtureTests` pins P1 through P5, P9 and P22 and checks that
+`runner.Tests/ParityFixtureTests` pins P1 through P5, P9, P22, and P23 and checks that
 every fixture in the folder is well formed. `BackendLocalExecutionEngineParityTests`
 and `RemoteWorkerEngineParityTests` provide the paired executable harnesses.
 

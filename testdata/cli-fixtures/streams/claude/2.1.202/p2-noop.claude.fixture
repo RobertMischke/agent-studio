@@ -1,4 +1,4 @@
-#! {"scenario":"P2","title":"nothing to do, terminal [[TASK_NOOP]]","cli":"claude","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P2","title":"nothing to do, terminal [[TASK_NOOP]]","cli":"claude","cliVersion":"2.1.202","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 {"type":"system","subtype":"init","session_id":"a3f1d0c2-8b44-4f0a-9e1d-77c2b4e6a901","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Bash"],"slash_commands":[]}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git log --oneline -5"}}]}}
 {"type":"user","message":{"content":[{"type":"tool_result","content":"fd1dc23 fix: scanner already handles the reported case"}]}}
