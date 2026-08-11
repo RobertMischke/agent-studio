@@ -4,6 +4,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   output,
   signal,
   untracked,
@@ -30,6 +31,7 @@ export class OrchestratorChatHistoryComponent {
   readonly hub = inject(JobsHubClient);
 
   readonly contextOpened = output<string>();
+  readonly workingContextKeys = input<ReadonlySet<string>>(new Set());
   readonly contexts = signal<readonly OrchestratorContextSession[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
@@ -66,6 +68,18 @@ export class OrchestratorChatHistoryComponent {
 
   contextKindLabel(context: OrchestratorContextSession): string {
     return context.kind === 'task' ? 'Task chat' : 'Project chat';
+  }
+
+  isWorking(context: OrchestratorContextSession): boolean {
+    return this.workingContextKeys().has(context.contextKey)
+      || context.runtimeStatus === 'active'
+      || context.runtimeStatus === 'queued';
+  }
+
+  workingLabel(context: OrchestratorContextSession): string {
+    return context.runtimeStatus === 'queued' && context.queuePosition > 0
+      ? `Queued ${context.queuePosition}`
+      : 'Active';
   }
 
   activityLabel(value: string): string {

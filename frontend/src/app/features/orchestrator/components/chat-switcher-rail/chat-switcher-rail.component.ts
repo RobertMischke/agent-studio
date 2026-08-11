@@ -19,6 +19,7 @@ export class ChatSwitcherRailComponent {
   readonly tasks = input<readonly TaskInfo[]>([]);
   readonly activeContextKey = input<string | null>(null);
   readonly unreadContextKeys = input<ReadonlySet<string>>(new Set());
+  readonly workingContextKeys = input<ReadonlySet<string>>(new Set());
   readonly contextSelected = output<string>();
   readonly locationRequested = output<string>();
 
@@ -65,6 +66,12 @@ export class ChatSwitcherRailComponent {
     if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}m`;
     if (total >= 1_000) return `${Math.round(total / 1_000)}k`;
     return String(total);
+  }
+
+  isWorking(row: RailRow): boolean {
+    return this.workingContextKeys().has(row.contextKey)
+      || row.runtimeStatus === 'active'
+      || row.runtimeStatus === 'queued';
   }
 
   private taskLabel(session: OrchestratorContextSession): string {

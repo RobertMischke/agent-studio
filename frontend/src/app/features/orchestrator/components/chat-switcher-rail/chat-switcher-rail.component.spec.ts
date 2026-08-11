@@ -65,4 +65,13 @@ describe('ChatSwitcherRailComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="chat-switcher-row-project:Alpha"]'))
       .toHaveLength(1);
   });
+
+  it('shows local pending work even before the session runtime status catches up', () => {
+    fixture.componentRef.setInput('workingContextKeys', new Set(['task:Alpha/A-1']));
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]');
+    expect(row.getAttribute('data-working')).toBe('true');
+    expect(row.querySelector('[data-testid="chat-switcher-working"]')?.textContent).toContain('active');
+  });
 });

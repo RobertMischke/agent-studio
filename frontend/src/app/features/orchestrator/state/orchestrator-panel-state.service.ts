@@ -13,7 +13,8 @@ import { Injectable, signal } from '@angular/core';
  */
 @Injectable({ providedIn: 'root' })
 export class OrchestratorPanelStateService {
-  private static readonly STORAGE_KEY = 'atp.studio.orchestratorWidth';
+  private static readonly WIDTH_STORAGE_KEY = 'atp.studio.orchestratorWidth';
+  private static readonly OPEN_STORAGE_KEY = 'atp.studio.orchestratorOpen.v1';
   // Defaults match the previous static `:host(.is-open) { width: min(640px,
   // 96vw) }` cap so existing screenshots / Playwright runs continue to
   // resolve to 640 px at common viewports.
@@ -25,15 +26,40 @@ export class OrchestratorPanelStateService {
   // at 1920 px viewports. Resize clamps to min(MAX_ABS, 96vw) at runtime.
   private static readonly MAX_ABS = 1100;
 
-  private readonly _width = signal<number>(this.readInitial());
+  private readonly initialOpenState = this.readInitialOpenState();
+  private readonly _width = signal<number>(this.readInitialWidth());
+  private readonly _open = signal(this.initialOpenState.open);
+  private openStatePersisted = this.initialOpenState.persisted;
 
   readonly width = this._width.asReadonly();
+  readonly open = this._open.asReadonly();
+
+  show(): void {
+    this.setOpen(true);
+  }
+
+  hide(): void {
+    this.setOpen(false);
+  }
+
+  toggle(): void {
+    this.setOpen(!this._open());
+  }
+
+  /**
+   * S5 is a first-entry default, not a navigation rule. Once the operator has
+   * opened or closed the panel in this browser tab, that persisted posture
+   * wins over the default for the remainder of the session.
+   */
+  showForStandardProjectEntry(): void {
+    if (!this.openStatePersisted) this.setOpen(true);
+  }
 
   setWidth(px: number): void {
     const clamped = this.clamp(px);
     this._width.set(clamped);
     try {
-      localStorage.setItem(OrchestratorPanelStateService.STORAGE_KEY, String(clamped));
+      localStorage.setItem(OrchestratorPanelStateService.WIDTH_STORAGE_KEY, String(clamped));
     } catch {
       // localStorage may throw in private mode or storage-full scenarios.
       // The in-memory signal still tracks the latest value for this session.
@@ -51,9 +77,30 @@ export class OrchestratorPanelStateService {
     return Math.max(OrchestratorPanelStateService.MIN, Math.min(max, Math.round(px)));
   }
 
-  private readInitial(): number {
+  private setOpen(open: boolean): void {
+    this._open.set(open);
+    this.openStatePersisted = true;
     try {
-      const raw = localStorage.getItem(OrchestratorPanelStateService.STORAGE_KEY);
+      sessionStorage.setItem(OrchestratorPanelStateService.OPEN_STORAGE_KEY, open ? '1' : '0');
+    } catch {
+      // The in-memory signal remains authoritative when storage is blocked.
+    }
+  }
+
+  private readInitialOpenState(): { open: boolean; persisted: boolean } {
+    try {
+      const raw = sessionStorage.getItem(OrchestratorPanelStateService.OPEN_STORAGE_KEY);
+      return raw === null
+        ? { open: false, persisted: false }
+        : { open: raw === '1', persisted: true };
+    } catch {
+      return { open: false, persisted: false };
+    }
+  }
+
+  private readInitialWidth(): number {
+    try {
+      const raw = localStorage.getItem(OrchestratorPanelStateService.WIDTH_STORAGE_KEY);
       if (!raw) return OrchestratorPanelStateService.DEFAULT;
       const parsed = parseInt(raw, 10);
       if (!Number.isFinite(parsed)) return OrchestratorPanelStateService.DEFAULT;

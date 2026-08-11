@@ -45,6 +45,9 @@
 
 .context-list__row:hover { background: var(--studio-bg-hover); }
 .context-list__row--active { background: var(--studio-nav-active-bg); }
+.context-list__row--working:not(.context-list__row--active) {
+  background: color-mix(in srgb, var(--studio-accent-success) 9%, transparent);
+}
 
 .context-list__name {
   display: flex;

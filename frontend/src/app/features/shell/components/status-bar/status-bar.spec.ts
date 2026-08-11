@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatOrchestratorLabel, formatRunningLabel, StatusBarComponent } from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -14,6 +14,13 @@ describe('formatRunningLabel', () => {
     { local: 0, remote: 0, expected: 'no runners' },
   ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
     expect(formatRunningLabel(local, remote)).toBe(expected);
+  });
+});
+
+describe('formatOrchestratorLabel', () => {
+  it('keeps idle chat quiet and makes active chats explicit', () => {
+    expect(formatOrchestratorLabel(0)).toBe('Orchestrator');
+    expect(formatOrchestratorLabel(2)).toBe('Orchestrator · 2 active');
   });
 });
 

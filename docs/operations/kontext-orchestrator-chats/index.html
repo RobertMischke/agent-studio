@@ -1200,9 +1200,9 @@
             <div>
               <h4>Outcome</h4>
               <ul>
-                <li>Opening a project reveals its project chat in the existing resizable side sheet by default while the selected project surface remains visible.</li>
+                <li>An explicit project entry from an empty tab context reveals project chat in the existing resizable side sheet. Ordinary route and tab navigation never opens it.</li>
                 <li>Make Chat the primary action on Welcome and project entry surfaces. Preserve a direct Board action and the current status-bar toggle.</li>
-                <li>Add one visible preference, “Open project Chat on project entry”, with the default and rationale inline. Persist the operator's later choice.</li>
+                <li>Add one visible preference, “Open project Chat on project entry”, with the empty-tab boundary and rationale inline. Persist the operator's later panel posture.</li>
                 <li>Do not autofocus on passive restore. An explicit Open Chat action may focus the composer.</li>
               </ul>
             </div>
@@ -1211,6 +1211,7 @@
               <ul>
                 <li>Every configured project can open and answer from its correct checkout, including projects without legacy <code>rootPath</code>.</li>
                 <li>Project switch changes scope, transcript, context receipt, and execution identity atomically with no foreign-project flash.</li>
+                <li>Open state and width survive navigation and reload; active replies remain visible at the shell entry and in Chat History until they settle.</li>
                 <li>Playwright covers first visit, saved preference, project switching, task deep link, light/dark, narrow viewport, and keyboard focus.</li>
                 <li>No new global chat window, no overlay regression, and no hidden task mutation from project Q&amp;A.</li>
               </ul>
@@ -1267,7 +1268,7 @@
           </tr>
           <tr>
             <th>Default entry</th>
-            <td>Project surface plus side-sheet Chat open by default.</td>
+            <td>Side-sheet Chat opens only for explicit empty-tab project entry; otherwise its persisted posture wins.</td>
             <td>New full-screen Chat route.</td>
             <td>The side sheet keeps software and board visible and follows established design doctrine. A new route duplicates navigation and hides the project surface.</td>
           </tr>
@@ -1284,7 +1285,7 @@
     <details open>
       <summary>Accepted decision record, 10 August 2026</summary>
       <div>
-        <p><strong>Decision:</strong> Orchestrator Chat becomes the primary project conversation. Conversation scope remains project or task; the active surface is a per-turn context input; explicit references are additive. The Task Server centrally owns managed contexts, transcripts, receipts, lifecycle visibility, and short summaries. Project contexts are permanent. Opening task Chat creates a managed task context; archive hides it without deletion. Task-detail Chat is read-only orchestrator Q&amp;A and remains separate from the unchanged Activity tab. Every model turn persists a source receipt. Slices 1 through 5 are approved.</p>
+        <p><strong>Decision:</strong> Orchestrator Chat becomes the primary project conversation. Conversation scope remains project or task; the active surface is a per-turn context input; explicit references are additive. The Task Server centrally owns managed contexts, transcripts, receipts, lifecycle visibility, and short summaries. Project contexts are permanent. Opening task Chat creates a managed task context; archive hides it without deletion. Task-detail Chat is read-only orchestrator Q&amp;A and remains separate from the unchanged Activity tab. Every model turn persists a source receipt. Slices 1 through 5 are approved. The 11 August operator refinement limits S5 automatic opening to explicit project entry without an open tab context; navigation follows context but preserves panel posture.</p>
       </div>
     </details>
   </section>
@@ -1333,6 +1334,7 @@
     <p class="small">Linked slices: <strong>AGT-2572</strong>, <strong>AGT-2573</strong>, <strong>AGT-2574</strong>, <strong>AGT-2575</strong>, <strong>AGT-2576</strong>, and <strong>AGT-2577</strong>. A card appears here only after its delivery contains a dated implementation entry.</p>
     <ol class="implementation-log">
 <!-- agent-studio:implementation-log:start -->
+      <li><strong>11 August 2026 · AGT-2605:</strong> Restricted S5 automatic opening to explicit empty-tab project entry, persisted panel posture and width, kept in-flight turns bound to their submit-time context, and projected active replies into the shell entry plus both chat context lists.</li>
 <!-- agent-studio:implementation-log:end -->
     </ol>
   </section>

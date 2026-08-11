@@ -51,7 +51,7 @@ export class UiPreferencesService {
   readonly sideSheetWidth = signal<number>(
     parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
   );
-  /** Project Chat is the standard project entry unless the operator opts out. */
+  /** Project Chat is the empty-tab project-entry default unless the operator opts out. */
   readonly openProjectChatOnEntry = signal<boolean>(
     localStorage.getItem(STORAGE_KEY_OPEN_PROJECT_CHAT_ON_ENTRY) !== '0',
   );

@@ -250,6 +250,7 @@ async function seedBrowserState(
   await page.addInitScript(({ savedPreference, persistedProject }) => {
     if (sessionStorage.getItem('project-entry-fixture-seeded')) return;
     sessionStorage.setItem('project-entry-fixture-seeded', '1');
+    sessionStorage.removeItem('atp.studio.orchestratorOpen.v1');
     if (savedPreference === null) {
       localStorage.removeItem('atp.studio.openProjectChatOnEntry.v1');
     } else {
@@ -269,48 +270,68 @@ async function seedBrowserState(
 test.describe('Orchestrator Chat standard project entry', () => {
   test.setTimeout(120_000);
 
-  test('opens the canonical project route in its project context without a foreign flash or focus steal', async ({ page }, testInfo) => {
+  test('navigation never auto-opens Chat and manual panel posture follows context across navigation and reload', async ({ page }, testInfo) => {
     const requestedChatContexts: string[] = [];
     await installRoutes(page, requestedChatContexts);
     await seedBrowserState(page, null, BETA.name);
+    await page.addInitScript(() => localStorage.setItem('atp.studio.orchestratorWidth', '720'));
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await page.goto(`/#/projects/${ALPHA.id}`, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'false');
+    await page.getByTestId('orch-side-sheet-toggle').click();
+    const panelHost = page.getByTestId('orchestrator-side-sheet-host');
+    await expect(panelHost).toHaveAttribute('data-open', 'true');
+    await expect(panelHost).toHaveCSS('width', '720px');
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(ALPHA.name);
     await expect(page.getByTestId('chat-composer-context-project')).toHaveText(ALPHA.name);
     await expect(page.getByTestId('chat-input')).not.toBeFocused();
     await expect.poll(() => [...requestedChatContexts]).toContain(`project:${ALPHA.name}`);
     expect(requestedChatContexts).not.toContain(`project:${BETA.name}`);
     await expect.poll(() => new URL(page.url()).hash).toBe(`#/projects/${ALPHA.id}`);
 
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await page.screenshot({
-        path: evidencePath(testInfo, `project-entry-wide-${theme}--mocked.png`),
-        fullPage: false,
-      });
-    }
-
     await page.getByTestId('studio-project-picker-trigger')
       .getByText(ALPHA.name, { exact: true })
       .click();
     await page.getByTestId(`studio-project-picker-item-${BETA.name}`).click();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(BETA.name);
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(BETA.name);
     await expect(page.getByTestId('chat-composer-context-project')).toHaveText(BETA.name);
+    await expect(panelHost).toHaveCSS('width', '720px');
     await expect.poll(() => [...requestedChatContexts]).toContain(`project:${BETA.name}`);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(testInfo, `orchestrator-navigation-context-${theme}--mocked.png`),
+        fullPage: false,
+      });
+    }
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'true');
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveCSS('width', '720px');
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(BETA.name);
 
     await page.setViewportSize({ width: 430, height: 844 });
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
-      await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+      await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'true');
       await page.screenshot({
         path: evidencePath(testInfo, `project-entry-narrow-${theme}--mocked.png`),
         fullPage: false,
       });
     }
+
+    await page.getByTestId('orch-side-sheet').getByTestId('sidesheet-close').click();
+    await page.getByTestId('studio-project-picker-trigger')
+      .getByText(BETA.name, { exact: true })
+      .click();
+    await page.getByTestId(`studio-project-picker-item-${ALPHA.name}`).click();
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'false');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'false');
   });
 
   test('persists the visible opt-out while Board and status-bar entry remain available', async ({ page }, testInfo) => {
@@ -334,15 +355,18 @@ test.describe('Orchestrator Chat standard project entry', () => {
       .click();
     await page.getByTestId(`studio-project-picker-item-${ALPHA.name}`).click();
     await expect(page.getByTestId(`studio-tab-board:${ALPHA.name}`)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'false');
 
     await page.getByTestId('orch-side-sheet-toggle').click();
-    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'true');
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(ALPHA.name);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId(`studio-tab-board:${ALPHA.name}`)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'true');
+    await page.getByTestId('orch-side-sheet').getByTestId('sidesheet-close').click();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'false');
   });
 
   test('does not open the project side sheet over a task deep link', async ({ page }) => {
@@ -352,7 +376,70 @@ test.describe('Orchestrator Chat standard project entry', () => {
 
     await expect(page.getByTestId('studio-task')).toBeVisible();
     await expect(page.getByTestId('inspector-tab-activity')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
+    await expect(page.getByTestId('orchestrator-side-sheet-host')).toHaveAttribute('data-open', 'false');
     await expect.poll(() => new URL(page.url()).hash).toBe(`#/tasks/${TASK.key}`);
+  });
+
+  test('active reply stays visible in the shell and central Chat History until it settles', async ({ page }, testInfo) => {
+    await installRoutes(page);
+    await seedBrowserState(page, '1', ALPHA.name);
+
+    const projectContext = {
+      contextKey: `project:${ALPHA.name}`,
+      kind: 'project',
+      projectId: ALPHA.name,
+      taskKey: null,
+      updatedAt: '2026-08-11T10:00:00Z',
+      model: 'gpt-5',
+      cumulativeInputTokens: 1200,
+      cumulativeOutputTokens: 100,
+      cumulativeCacheReadTokens: 0,
+      cumulativeCacheCreationTokens: 0,
+      runtimeStatus: 'idle',
+      queuePosition: 0,
+      summary: 'Review the navigation-state regression.',
+    };
+    await page.route('**/api/orchestrator/sessions', route => json(route, { sessions: [projectContext] }));
+
+    let releaseReply!: () => void;
+    let markPostStarted!: () => void;
+    const replyGate = new Promise<void>(resolveGate => { releaseReply = resolveGate; });
+    const postStarted = new Promise<void>(resolveStarted => { markPostStarted = resolveStarted; });
+    await page.route(/\/api\/runner\/project:[^/]+\/orchestrator-chat$/, async route => {
+      if (route.request().method() === 'POST') {
+        markPostStarted();
+        await replyGate;
+      }
+      return json(route, {
+        contextKey: projectContext.contextKey,
+        project: ALPHA.name,
+        turns: [],
+      });
+    });
+
+    await page.goto(`/#/projects/${ALPHA.id}/board`, { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('orch-side-sheet-toggle').click();
+    await page.getByTestId('chat-input').fill('Keep this reply visible while I navigate.');
+    await page.getByTestId('chat-send').click();
+    await postStarted;
+
+    await expect(page.getByTestId('orch-side-sheet-toggle')).toContainText('1 active');
+    await page.getByTestId('studio-ab-chat-history').click();
+    const activeRow = page.getByTestId('chat-history-row').filter({ hasText: ALPHA.name });
+    await expect(activeRow).toHaveAttribute('data-working', 'true');
+    await expect(activeRow.getByTestId('chat-history-working')).toContainText('Active');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(testInfo, `orchestrator-active-chat-${theme}--mocked.png`),
+        fullPage: false,
+      });
+    }
+
+    releaseReply();
+    await expect(page.getByTestId('orch-side-sheet-toggle')).toHaveText('Orchestrator');
+    await expect(activeRow).toHaveAttribute('data-working', 'false');
+    await expect(activeRow.getByTestId('chat-history-working')).toHaveCount(0);
   });
 });

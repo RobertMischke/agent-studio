@@ -96,6 +96,7 @@
           [tasks]="jobService.jobs()"
           [activeContextKey]="contextKey()"
           [unreadContextKeys]="unreadContextKeys()"
+          [workingContextKeys]="workingContextKeys()"
           (contextSelected)="selectChatContext($event)"
           (locationRequested)="onNavigateToContext($event)" />
       </section>

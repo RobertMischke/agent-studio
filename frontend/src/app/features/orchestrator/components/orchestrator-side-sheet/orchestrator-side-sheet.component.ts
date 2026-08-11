@@ -13,6 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
 import type {
@@ -57,7 +58,6 @@ import {
 } from './orchestrator-context-key.util';
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
 import { buildContextChipPresentation } from '../../composer-location-context';
-import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
 
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
@@ -84,7 +84,9 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
   styleUrl: './orchestrator-side-sheet.component.scss',
   providers: [OrchestratorContextDigestService],
   host: {
+    'data-testid': 'orchestrator-side-sheet-host',
     '[class.is-open]': 'open()',
+    '[attr.data-open]': 'open()',
     // When open, drive the host width from the persisted user choice so
     // the resize handle can grow / shrink the panel live. When closed the
     // binding evaluates to null and the static `:host { width: 0 }` rule
@@ -97,8 +99,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly composerModel = inject(OrchestratorComposerModelService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
-  /** Prevent a persisted tab from opening Chat before a copied route resolves. */
-  readonly projectEntryReady = input(true);
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /**
    * Canonical active-tab context, derived by Studio and rendered through
@@ -152,16 +152,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly openSettings = output<void>();
   readonly navigateToContext = output<string>();
 
-  readonly open = signal(false);
-
-  /** Persisted resize state for the panel — see OrchestratorPanelStateService. */
+  /** Persisted open and resize state for the panel. */
   private readonly panelState = inject(OrchestratorPanelStateService);
-  private readonly uiPreferences = inject(UiPreferencesService);
+  private readonly jobsHub = inject(JobsHubClient);
+  readonly open = this.panelState.open;
   readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
   readonly selectedContextKey = signal<string | null>(null);
   private readonly selectedContextNavigationKey = signal<string | null>(null);
   readonly contextSessions = signal<OrchestratorContextSession[]>([]);
+  readonly pendingContextKeys = signal<ReadonlySet<string>>(new Set());
+  readonly workingContextKeys = computed<ReadonlySet<string>>(() => {
+    const keys = new Set(this.pendingContextKeys());
+    for (const session of this.contextSessions()) {
+      if (session.runtimeStatus === 'active' || session.runtimeStatus === 'queued') {
+        keys.add(session.contextKey);
+      }
+    }
+    return keys;
+  });
+  readonly workingChatCount = computed(() => this.workingContextKeys().size);
   readonly contextMenuOpen = signal(false);
   readonly contextDigestState = inject(OrchestratorContextDigestService);
   private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
@@ -380,7 +390,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   private pollTimer: VisibleIntervalHandle | null = null;
-  private lastProjectEntry: string | null = null;
   private contextSessionsLoading = false;
 
   /** Canonical next-gen transcript consumed by `<cac-conversation-view>`. */
@@ -415,6 +424,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.selectedContextKey.set(null);
         this.selectedContextNavigationKey.set(null);
       });
+    });
+
+    effect(() => {
+      this.jobsHub.orchestratorContextsRevision();
+      untracked(() => this.refreshContextSessions());
     });
 
     // MC-2: reload when the *effective context* changes — pinning freezes
@@ -473,28 +487,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       });
     });
 
-    // Project-level navigation is the standard Chat entry. Wait until route
-    // hydration has won over persisted tabs, then align the context before the
-    // panel becomes visible. Task tabs keep their separate Chat surface.
-    effect(() => {
-      const ready = this.projectEntryReady();
-      const context = this.composerContext();
-      const openOnEntry = this.uiPreferences.openProjectChatOnEntry();
-      untracked(() => {
-        if (!ready) return;
-        const project = context?.project && !context.taskKey ? context.project : null;
-        if (!project) {
-          this.lastProjectEntry = null;
-          return;
-        }
-        if (project === this.lastProjectEntry) return;
-        this.lastProjectEntry = project;
-        if (!openOnEntry || this.pinned()) return;
-        this.setActiveProject(project);
-        this.show();
-      });
-    });
-
   }
 
   /**
@@ -537,7 +529,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     }, 30_000);
 
     this.maybeSeedDemoEvents();
-    this.refreshContextSessions();
   }
 
   /**
@@ -560,20 +551,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.pollTimer = null;
   }
 
-  show(): void { this.open.set(true); }
+  show(): void { this.panelState.show(); }
+  showForStandardProjectEntry(): void { this.panelState.showForStandardProjectEntry(); }
   hide(): void {
     this.contextMenuOpen.set(false);
-    this.open.set(false);
+    this.panelState.hide();
   }
   toggleContextMenu(): void {
     this.contextMenuOpen.update(open => !open);
   }
   toggle(): void {
-    if (this.open()) {
-      this.hide();
-    } else {
-      this.show();
-    }
+    if (this.open()) this.hide();
+    else this.show();
   }
 
   setActiveProject(proj: string): void {
@@ -832,6 +821,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     };
     this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
+    this.setContextPending(contextKey, true);
     const lazy = await import('./orchestrator-side-sheet.lazy');
 
     // Upload each pasted/dropped image first so the chat message can
@@ -863,6 +853,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       }
     } catch (err) {
       this.sending.set(false);
+      this.setContextPending(contextKey, false);
       const message = (err as { message?: string })?.message ?? 'Attachment upload failed';
       this.localTurns.update((curr) =>
         curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
@@ -905,7 +896,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const send$ = this.jobService.sendOrchestratorChatByContext(contextKey, sendBody);
     send$.subscribe({
       next: (response) => {
-        if (response.executionContext) this.executionContext.set(response.executionContext);
+        this.setContextPending(contextKey, false);
+        if (response.executionContext && this.contextKey() === contextKey) {
+          this.executionContext.set(response.executionContext);
+        }
         if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
         this.contextAttachments.set([]);
         this.sending.set(false);
@@ -923,8 +917,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // cached image and the user perceives no swap.
         this.readChat(contextKey).subscribe({
           next: async (resp) => {
-            this.turns.set(resp.turns ?? []);
-            this.errorMsg.set(null);
+            if (this.contextKey() === contextKey) {
+              this.turns.set(resp.turns ?? []);
+              this.errorMsg.set(null);
+            }
             await preloads;
             this.localTurns.set([]);
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
@@ -939,11 +935,21 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.sending.set(false);
+        this.setContextPending(contextKey, false);
         const message = orchestratorContextErrorMessage(err, 'Failed to send');
         this.localTurns.update((curr) =>
           curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
         );
       }
+    });
+  }
+
+  private setContextPending(contextKey: string, pending: boolean): void {
+    this.pendingContextKeys.update(current => {
+      const next = new Set(current);
+      if (pending) next.add(contextKey);
+      else next.delete(contextKey);
+      return next;
     });
   }
 

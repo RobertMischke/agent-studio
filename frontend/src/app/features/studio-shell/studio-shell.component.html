@@ -459,7 +459,7 @@
         @if (activeTab() === null) {
           <app-studio-welcome
             [projects]="projectRows()"
-            (boardOpened)="openBoard($event)"
+            (boardOpened)="openBoardFromWelcome($event)"
             (chatOpened)="chatToggle.emit()" />
         }
         </div>

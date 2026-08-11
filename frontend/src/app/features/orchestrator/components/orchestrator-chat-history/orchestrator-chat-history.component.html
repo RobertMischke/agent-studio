@@ -58,8 +58,10 @@
             <li>
               <button type="button"
                       class="chat-history__row"
+                      [class.chat-history__row--working]="isWorking(context)"
                       data-testid="chat-history-row"
                       [attr.data-context-key]="context.contextKey"
+                      [attr.data-working]="isWorking(context)"
                       (click)="open(context)">
                 <span class="chat-history__identity">
                   <span class="chat-history__kind" data-kind="project">Project</span>
@@ -71,6 +73,12 @@
                   <span>{{ context.summary || 'No conversation yet.' }}</span>
                 </span>
                 <span class="chat-history__activity">
+                  @if (isWorking(context)) {
+                    <span class="chat-history__working" data-testid="chat-history-working">
+                      <span class="chat-history__working-dot" aria-hidden="true"></span>
+                      {{ workingLabel(context) }}
+                    </span>
+                  }
                   <span>Last activity</span>
                   <time [attr.datetime]="context.updatedAt" [title]="activityTitle(context.updatedAt)">
                     {{ activityLabel(context.updatedAt) }}
@@ -98,8 +106,10 @@
               <li>
                 <button type="button"
                         class="chat-history__row"
+                        [class.chat-history__row--working]="isWorking(context)"
                         data-testid="chat-history-row"
                         [attr.data-context-key]="context.contextKey"
+                        [attr.data-working]="isWorking(context)"
                         (click)="open(context)">
                   <span class="chat-history__identity">
                     <span class="chat-history__kind" data-kind="task">Task</span>
@@ -111,6 +121,12 @@
                     <span>{{ context.summary || 'No conversation yet.' }}</span>
                   </span>
                   <span class="chat-history__activity">
+                    @if (isWorking(context)) {
+                      <span class="chat-history__working" data-testid="chat-history-working">
+                        <span class="chat-history__working-dot" aria-hidden="true"></span>
+                        {{ workingLabel(context) }}
+                      </span>
+                    }
                     <span>Last activity</span>
                     <time [attr.datetime]="context.updatedAt" [title]="activityTitle(context.updatedAt)">
                       {{ activityLabel(context.updatedAt) }}

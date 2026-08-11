@@ -88,6 +88,19 @@ describe('OrchestratorChatHistoryComponent', () => {
     expect(opened).toEqual(['project:Agent Studio']);
   });
 
+  it('marks backend-active and locally pending contexts as active work', () => {
+    const { fixture } = mount([
+      context({ contextKey: 'project:Agent Studio', runtimeStatus: 'active' }),
+      context({ contextKey: 'task:Agent Studio/AGT-2605', kind: 'task', taskKey: 'AGT-2605' }),
+    ]);
+    fixture.componentRef.setInput('workingContextKeys', new Set(['task:Agent Studio/AGT-2605']));
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="chat-history-row"][data-working="true"]');
+    expect(rows).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="chat-history-working"]')).toHaveLength(2);
+  });
+
   it('reloads from the Task Server projection after a SignalR refresh hint', () => {
     const { fixture, tasks, hub } = mount([context({})]);
     tasks.sessions = [

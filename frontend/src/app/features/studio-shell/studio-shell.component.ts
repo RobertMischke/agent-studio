@@ -62,7 +62,7 @@ import { ExplorerSectionsService } from './services/explorer-sections.service';
 import { buildProjectSidebarRows, type ProjectSidebarRow } from './studio-shell.project-rows';
 import { StudioTab, studioTabKey } from './studio-shell.types';
 import { GlobalSearchComponent } from './components/global-search/global-search.component';
-import { OrchestratorFeedStore } from '../orchestrator';
+import { OrchestratorFeedStore, OrchestratorPanelStateService } from '../orchestrator';
 
 /** Canonicalise project storage paths so titlebar workspace lookup survives
  * slash style, trailing separator, and case differences. */
@@ -135,6 +135,7 @@ export class StudioShellComponent {
   private readonly panelState = inject(StudioPanelStateService);
   private readonly jobSelection = inject(TaskSelectionService);
   readonly uiPrefs = inject(UiPreferencesService);
+  private readonly orchestratorPanelState = inject(OrchestratorPanelStateService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
@@ -650,6 +651,14 @@ export class StudioShellComponent {
 
   openBoard(projectName: string): void {
     this.tabState.open({ kind: 'board', projectName });
+  }
+
+  openBoardFromWelcome(projectName: string): void {
+    const standardEntry = this.activeTab() === null && projectName !== '__all__';
+    this.openBoard(projectName);
+    if (standardEntry && this.uiPrefs.openProjectChatOnEntry()) {
+      this.orchestratorPanelState.showForStandardProjectEntry();
+    }
   }
 
   openFeed(): void {

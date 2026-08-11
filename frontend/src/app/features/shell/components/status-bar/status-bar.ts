@@ -43,6 +43,10 @@ export function formatRunningLabel(local: number, remote: number): string {
   return 'no runners';
 }
 
+export function formatOrchestratorLabel(working: number): string {
+  return working > 0 ? `Orchestrator · ${working} active` : 'Orchestrator';
+}
+
 @Component({
   selector: 'app-status-bar',
   standalone: true,
@@ -53,6 +57,7 @@ export function formatRunningLabel(local: number, remote: number): string {
   styleUrl: './status-bar.scss',
 })
 export class StatusBarComponent implements OnInit, OnDestroy {
+  readonly formatOrchestratorLabel = formatOrchestratorLabel;
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
@@ -67,6 +72,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   // "is the panel open" lives with the panel, not here.
   readonly usageOpen = input(false);
   readonly orchestratorOpen = input(false);
+  readonly orchestratorWorkingCount = input(0);
   readonly feedOpen = input(false);
   readonly settingsOpen = input(false);
   readonly showSignOut = input(false);

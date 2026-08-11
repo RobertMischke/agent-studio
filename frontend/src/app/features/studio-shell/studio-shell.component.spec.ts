@@ -198,6 +198,32 @@ describe('StudioShellComponent global search', () => {
   });
 });
 
+describe('StudioShellComponent standard project entry', () => {
+  function mount(): StudioShellComponent {
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [], activeKey: null }));
+    localStorage.removeItem('atp.studio.openProjectChatOnEntry.v1');
+    sessionStorage.clear();
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    return TestBed.createComponent(StudioShellComponent).componentInstance;
+  }
+
+  it('applies the S5 default only to an explicit project choice from the empty tab state', () => {
+    const component = mount();
+    component.openBoardFromWelcome('Project A');
+
+    expect(component.activeTab()).toEqual({ kind: 'board', projectName: 'Project A' });
+    expect(sessionStorage.getItem('atp.studio.orchestratorOpen.v1')).toBe('1');
+  });
+});
+
 describe('StudioShellComponent project lane counts', () => {
   function configure(): { component: StudioShellComponent; taskService: TaskService } {
     localStorage.removeItem('atp.studio.tabs.v1');
