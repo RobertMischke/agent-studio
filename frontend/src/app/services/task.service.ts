@@ -2404,12 +2404,6 @@ export class TaskService {
     projectName: string,
     body: {
       text: string;
-      attachments?: {
-        alt: string;
-        relativePath: string;
-        inlineBase64?: string | null;
-        mimeType?: string | null;
-      }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
       contextEnvelope?: import('../features/orchestrator').OrchestratorContextEnvelope | null;
       model?: string | null;
@@ -2439,12 +2433,6 @@ export class TaskService {
     contextKey: string,
     body: {
       text: string;
-      attachments?: {
-        alt: string;
-        relativePath: string;
-        inlineBase64?: string | null;
-        mimeType?: string | null;
-      }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
       contextEnvelope?: import('../features/orchestrator').OrchestratorContextEnvelope | null;
       model?: string | null;
@@ -2459,20 +2447,6 @@ export class TaskService {
     }>(
       `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
       body,
-    );
-  }
-
-  /**
-   * Upload one image to the project's chat-attachments folder so the
-   * subsequent `sendOrchestratorChat` call can reference it by its
-   * relative path. Multipart/form-data with `file` field.
-   */
-  uploadOrchestratorChatAttachment(projectName: string, file: File) {
-    const form = new FormData();
-    form.append('file', file, file.name || 'image.png');
-    return this.http.post<{ fileName: string; relativePath: string; url: string }>(
-      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments`,
-      form,
     );
   }
 

@@ -274,6 +274,87 @@
   background: var(--orch-panel-bg);
 }
 
+// CAC 0.4.1 owns the context chips and event contract. Studio consolidates
+// the add affordance into its one truthful composer-actions menu.
+:host ::ng-deep .sheet__composer .chat__context-add-btn,
+:host ::ng-deep .sheet__composer .chat__context-attachment-add {
+  display: none;
+}
+
+.sheet__composer-actions {
+  position: relative;
+  order: -1;
+  display: flex;
+  align-items: center;
+}
+
+.sheet__composer-actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sheet__composer-actions-trigger:hover:not(:disabled),
+.sheet__composer-actions-trigger[aria-expanded='true'] {
+  border-color: var(--studio-border-strong);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
+}
+
+.sheet__composer-actions-trigger:focus-visible,
+.sheet__composer-actions-menu button:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.sheet__composer-actions-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sheet__composer-actions-menu {
+  position: absolute;
+  z-index: 8;
+  bottom: calc(100% + var(--studio-spacing-2));
+  left: 0;
+  min-width: 148px;
+  padding: var(--studio-spacing-1);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+  box-shadow: var(--elevation-popover);
+}
+
+.sheet__composer-actions-menu button {
+  width: 100%;
+  min-height: 32px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheet__composer-actions-menu button:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+
 .sheet__event-action {
   align-self: flex-start;
 }

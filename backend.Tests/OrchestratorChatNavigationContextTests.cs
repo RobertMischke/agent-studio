@@ -39,7 +39,6 @@ public class OrchestratorChatNavigationContextTests
 
         var req = new SendOrchestratorChatRequest(
             Text: "what is the current task?",
-            Attachments: null,
             NavigationContext: nav);
 
         Assert.NotNull(req.NavigationContext);
@@ -54,8 +53,7 @@ public class OrchestratorChatNavigationContextTests
     public void SendRequest_NavigationContext_IsOptional()
     {
         var req = new SendOrchestratorChatRequest(
-            Text: "hello",
-            Attachments: null);
+            Text: "hello");
 
         Assert.Null(req.NavigationContext);
     }

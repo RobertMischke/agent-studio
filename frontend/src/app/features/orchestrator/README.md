@@ -17,11 +17,12 @@ Imports via `from './features/orchestrator'`. See [`index.ts`](./index.ts).
 
 - `OrchestratorLogEntry`, `OrchestratorTokenUsage`, `OrchestratorLogResponse` — log feed.
 - `OrchestratorSession`, `OrchestratorSessionResponse` — long-lived session (manager-style conversation alongside agent runs).
-- `OrchestratorChatTurn`, `OrchestratorChatAttachment`, `OrchestratorChatResponse` — chat surface.
+- `OrchestratorChatTurn`, `OrchestratorContextEnvelope`, `OrchestratorContextReference`, `OrchestratorChatResponse`: chat surface and typed context references.
 
 ## Notable
 
 - The transcript is rendered by `<cac-conversation-view>` from `coding-agent-chat/conversation`. A pure host adapter maps orchestrator turns and inline events to `ConversationEvent[]`. `<cac-chat>` from `coding-agent-chat/composer` is mounted with no messages or events, so it contributes only the canonical composer.
+- The composer disables library image attachments and uses the native context-attachment row for removable stable references. One host-owned Plus menu in the footer exposes only the available **Add context** action; Upload and Browse actions are not advertised. The library footer retains the model selector and Send action, and no upper composer toolbar is configured.
 - The context-thread switcher remains host-owned because it reads Studio's `/api/orchestrator/sessions` contract, which the library does not know. Collapsed, it is a count badge in the header. Expanded, it is a full-width menu with no outer side frame.
-- The package is a physical `file:` dependency. After rebuilding `coding-agent-chat/dist/coding-agent-chat`, run `npm install` in `frontend/` so the rebuilt files are copied into this host before building or testing.
+- `coding-agent-chat` is an exact npm dependency. Postinstall applies narrowly version-gated compatibility patches until their behavior is available upstream.
 - The sheet's open/close push contract (host `:host(.is-open) { width: min(640px, 96vw) }` + flex-row-reverse `.app-shell` parent + `<app-sidesheet>` inner-width 100 %) is described in [`frontend/AGENTS.md`](../../../../AGENTS.md) under "Side-sheet layout contract" and pinned by `e2e/orchestrator-side-sheet-position.spec.ts`. Don't introduce `position: fixed` on the host or a fixed px width on the inner `.sidesheet`.
