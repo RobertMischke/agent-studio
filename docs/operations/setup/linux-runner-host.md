@@ -393,12 +393,68 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_TTL_SECONDS` | `--ttl` | `900` | Requested lease TTL; the server clamps it. The default grants a bounded 15-minute authority window so an already-claimed run can survive ten minutes of transport loss. |
 | `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
-| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Bootstrap value for first host registration and fallback for an older server. The live ceiling is managed centrally in Execution Hosts. |
+| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Role-local slot ceiling. Coding uses it for bootstrap and as a fallback for an older server; the centrally managed Execution Hosts ceiling can reduce Coding capacity. Review uses the role value directly. Managed hosts accept only values 1 through 6 through the sanctioned role-config command below. |
 | `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
 | `RUNNER_SERVER_REQUEST_TIMEOUT_SECONDS` | `--server-request-timeout-seconds` | `60` | Hard deadline for every Task Server HTTP request, including capability advertisement and worker-loss release. |
 | `RUNNER_IDLE_WATCHDOG_MINUTES` | `--idle-watchdog-minutes` | `5` | A daemon with no active slots exits after this long without starting a claim poll. The fatal journal line is followed by a service-manager restart. |
 | `RUNNER_CLAIM_MAX_LOAD_PER_CORE` | `--claim-max-load-per-core` | `1.5` | Load-per-core ceiling for new work. Coding uses the sustained gate below; Review checks it immediately before each single-slot claim. |
 | `RUNNER_LOAD_GATE_SUSTAINED_SECONDS` | none | `120` | Continuous high-load duration before Coding claim admission closes. Review admission does not use this delay. |
+
+### Sanctioned role configuration changes
+
+Do not grant the Runner service account editor, shell, or general write access to
+`/etc/agent-runner`. Install or update the root-owned bounded helper from an
+operator-owned root session through the host provisioning path:
+
+```bash
+cd /path/to/agent-studio
+sudo ./scripts/harden-agent-runner-host.sh --apply
+```
+
+The migration installs `/usr/local/sbin/agent-runner-deploy`, its root-owned
+configuration policy, and the exact sudoers allowlist. It also preserves the
+existing no-argument immutable-release promotion command. An Agent CLI runs
+with `NoNewPrivileges=true`; initial installation or replacement of these
+root-owned assets therefore remains an operator provisioning action.
+
+The installed helper currently accepts one variable only:
+
+| Role | Unit restarted | Preferred role EnvironmentFile | Clean-install fallback | Accepted value |
+|---|---|---|---|---|
+| `coding` | `agent-runner.service` | `/etc/agent-runner/runner-coding.env` | `/etc/agent-runner/runner.env` | `RUNNER_MAX_PARALLELISM=1..6` |
+| `review` | `agent-runner-review.service` | `/etc/agent-runner/runner-review.env` | `/etc/agent-runner/review.env` | `RUNNER_MAX_PARALLELISM=1..6` |
+
+The helper selects only an approved file that the target unit actually loads,
+requires `root:agent` mode `0640`, replaces the value atomically, and restarts
+only the mapped role unit. It then reads the new main process environment from
+`/proc/<MainPID>/environ`. A restart or process-environment mismatch restores
+the previous file and retries the old configuration. Every accepted change
+writes an `authpriv.notice` journal record tagged `agent-runner-deploy` with the
+role, variable, old value, new value, unit, PID, and result. The sudoers policy
+independently enumerates both roles and every integer from 1 through 6. It does
+not permit another variable, unit, path, or argument shape.
+
+Set Review to four slots and prove the effective process value without reading
+any credential file:
+
+```bash
+sudo /usr/local/sbin/agent-runner-deploy \
+  config review RUNNER_MAX_PARALLELISM 4
+
+review_pid="$(systemctl show -p MainPID --value agent-runner-review.service)"
+tr '\0' '\n' <"/proc/$review_pid/environ" |
+  grep '^RUNNER_MAX_PARALLELISM=4$'
+
+# Run this journal check from the operator session used for provisioning.
+journalctl -t agent-runner-deploy --since '-5 minutes' --no-pager |
+  grep 'action=config role=review .* new=4 .* result=applied'
+```
+
+The hard limit of 6 is a host-flood guard, not a capacity recommendation. Keep
+Review admission load-aware, compare active slots with host telemetry, and
+lower the value if load, memory, or I/O pressure persists. A Coding change sets
+the local bootstrap/fallback ceiling; the Task Server remains authoritative for
+its centrally versioned live capacity.
 
 Recommended per-CLI headless defaults (verify against your installed version):
 
