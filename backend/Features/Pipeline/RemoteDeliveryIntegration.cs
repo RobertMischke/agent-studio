@@ -128,6 +128,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
     private readonly Dictionary<string, ProjectQueue> _projectQueues =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Func<RemoteDeliveryIntegrationRequest, Task<MergeIntoIntegrationResult>> _integrate;
+    private readonly Func<RemoteDeliveryIntegrationRequest, MergeIntoIntegrationResult, Task<IntegrationAgentRoundStartResult>> _startAgentRound;
     private readonly Action<RemoteDeliveryIntegrationRequest, string, string, string> _recordFailure;
     private readonly ILogger<RemoteDeliveryIntegrationCoordinator> _logger;
     private long _sequence;
@@ -138,6 +139,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
         TaskProvenanceService provenance,
         PipelineExecutionLog pipelineLog,
         TimelineLog timeline,
+        IntegrationAgentRoundService agentRounds,
         ILogger<RemoteDeliveryIntegrationCoordinator> logger)
         : this(
             request => IntegrateAndRecordAsync(request, runner, scanner, provenance, timeline),
@@ -148,16 +150,20 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                 summary,
                 detail,
                 pipelineLog,
-                timeline))
+                timeline),
+            agentRounds.TryStartAsync)
     {
     }
 
     internal RemoteDeliveryIntegrationCoordinator(
         Func<RemoteDeliveryIntegrationRequest, Task<MergeIntoIntegrationResult>> integrate,
         ILogger<RemoteDeliveryIntegrationCoordinator> logger,
-        Action<RemoteDeliveryIntegrationRequest, string, string, string>? recordFailure = null)
+        Action<RemoteDeliveryIntegrationRequest, string, string, string>? recordFailure = null,
+        Func<RemoteDeliveryIntegrationRequest, MergeIntoIntegrationResult, Task<IntegrationAgentRoundStartResult>>? startAgentRound = null)
     {
         _integrate = integrate;
+        _startAgentRound = startAgentRound ?? ((_, _) => Task.FromResult(
+            new IntegrationAgentRoundStartResult(false, "No automatic agent-round boundary was configured.")));
         _recordFailure = recordFailure ?? ((_, _, _, _) => { });
         _logger = logger;
     }
@@ -245,6 +251,18 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                     delivery.Sequence,
                     delivery.Request.DeliveredAtUtc);
                 var result = await _integrate(delivery.Request).ConfigureAwait(false);
+                if (result.Outcome == MergeIntoIntegrationOutcome.AgentRoundRequired)
+                {
+                    var continuation = await _startAgentRound(
+                        delivery.Request,
+                        result).ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "remote-delivery-integration continuation project={Project} job={JobId} started={Started} reason={Reason}",
+                        delivery.Request.Project,
+                        delivery.Request.JobId,
+                        continuation.Started,
+                        continuation.Reason);
+                }
                 delivery.Completion.TrySetResult(result);
             }
             catch (Exception ex)
@@ -319,6 +337,9 @@ public sealed class RemoteDeliveryIntegrationCoordinator
         }
 
         var success = result.Outcome.IsSuccessfulIntegration();
+        if (result.Outcome == MergeIntoIntegrationOutcome.AgentRoundRequired)
+            return result;
+
         timeline.Append(
             job.FolderPath,
             success ? TimelineEventKinds.IntegrationSucceeded : TimelineEventKinds.IntegrationFailed,

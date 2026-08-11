@@ -1966,10 +1966,33 @@
             conflicts, even though the missing mechanism remained a correctness and operator-effort gap.
           </td>
           <td>
-            <span class="pill ok">fixed in dev</span> a behind-base delivery now receives one conflict-free replay in a
-            disposable detached worktree. Clean application records <code>MergedAfterRebase</code>, runs the ordinary gate,
-            and persists a superseded SHA chain. A textual conflict aborts with its file list, and cleanup or attribution
-            failure prevents push and leaves no temporary worktree mutation on the target repository.
+            <span class="pill ok">superseded by AGT-2632</span> the first recovery cut added a conflict-free replay in a
+            disposable detached worktree. It correctly refused a textual conflict or ambiguous old-to-new SHA mapping,
+            but it rebased before proving that a merge could preserve the original delivery objects and left a refusal in
+            Review until a manual requeue.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-08-11</td>
+          <td><code>AGT-2632</code><br><span class="small">mechanical rebase changed delivery commit cardinality</span></td>
+          <td>
+            The AGT-2563 mechanical recovery rebased a conflicted delivery and observed a different commit count. It
+            correctly refused to invent an old-to-new SHA attribution, but the timeline ended at that refusal and the
+            card remained in Review until an operator manually started another round.
+          </td>
+          <td>
+            Integration chose history rewrite before exhausting SHA-preserving merge strategies. It also represented
+            cardinality ambiguity as a terminal merge failure instead of a bounded continuation. That breaks the product
+            value established by AGT-2562 and AGT-2624: Grades, Evidence, Records, and review subjects depend on exact
+            delivery SHAs.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> integration now tries a direct merge, then a mechanical three-way
+            <code>ort</code>/<code>rerere</code> merge, and only then a rebase with unchanged cardinality and a one-to-one
+            SHA map. Merge success retains every delivery SHA and adds only one merge commit. A conflict or ambiguous map
+            starts one automatic Steer round per review epoch, moves the card to Ready, and writes
+            <em>Automatically started a new agent round to preserve unambiguous delivery SHA attribution.</em> to the
+            timeline. A repeated ambiguity reaches Human Review after the bounded round.
           </td>
         </tr>
         <tr>

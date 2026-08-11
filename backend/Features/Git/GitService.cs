@@ -99,6 +99,13 @@ public enum MergeIntoIntegrationOutcome
     GateFailed,
     /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
     Error,
+    /// <summary>
+    /// Direct and mechanical merge paths could not preserve an unambiguous
+    /// delivery, and the fallback rebase could not produce a one-to-one commit
+    /// mapping. The caller must start a bounded agent steer round instead of
+    /// leaving this as a terminal integration refusal.
+    /// </summary>
+    AgentRoundRequired,
 }
 
 public static class MergeIntoIntegrationOutcomePolicy
@@ -161,6 +168,17 @@ public record MergeIntoIntegrationResult(
             Array.Empty<string>(),
             replacements,
             previousIntegrationSha);
+
+    public static MergeIntoIntegrationResult RequiresAgentRound(
+        IReadOnlyList<string> conflictedFiles,
+        string error)
+        => new(
+            MergeIntoIntegrationOutcome.AgentRoundRequired,
+            null,
+            error,
+            conflictedFiles,
+            Array.Empty<RebasedCommitReplacement>(),
+            null);
 }
 
 /// <summary>
@@ -3991,8 +4009,10 @@ public class GitService
     /// <item>No task branch -&gt; <see cref="MergeIntoIntegrationOutcome.NoTaskBranch"/> (benign skip, e.g. a sequential run with no worktree branch).</item>
     /// <item>Already contained -&gt; <see cref="MergeIntoIntegrationOutcome.AlreadyMerged"/> (idempotent no-op, so a re-trigger is safe).</item>
     /// <item>Dirty integration tree / missing integration branch / checkout failure -&gt; <see cref="MergeIntoIntegrationOutcome.Error"/> (never merge into a dirty tree).</item>
-    /// <item>Behind target -&gt; one isolated, conflict-free mechanical replay; success returns <see cref="MergeIntoIntegrationOutcome.MergedAfterRebase"/> with old-to-new SHA attribution.</item>
-    /// <item>Conflict -&gt; the merge or replay is aborted so the tree is left clean and the conflicted files are returned (<see cref="MergeIntoIntegrationOutcome.Conflict"/>); the conflict is surfaced, never silently resolved or left half-applied.</item>
+    /// <item>Behind target -&gt; direct merge first, preserving every delivery SHA when Git can merge the histories normally.</item>
+    /// <item>Direct conflict -&gt; one mechanical three-way merge with recorded <c>rerere</c> resolution before any history rewrite.</item>
+    /// <item>Remaining conflict -&gt; one isolated rebase only when it retains a one-to-one old/new SHA mapping; success returns <see cref="MergeIntoIntegrationOutcome.MergedAfterRebase"/>.</item>
+    /// <item>Ambiguous replay -&gt; <see cref="MergeIntoIntegrationOutcome.AgentRoundRequired"/> so the caller can start a bounded steer round instead of parking a refusal in Review.</item>
     /// <item>Otherwise -&gt; <see cref="MergeIntoIntegrationOutcome.Merged"/> with the new integration HEAD sha.</item>
     /// </list>
     /// The merge runs in the working tree at <paramref name="repoRoot"/>; the
@@ -4291,22 +4311,68 @@ public class GitService
                 error: $"Could not resolve the exact tip of integration branch '{integrationBranch}'.");
         }
 
-        var sourceToMerge = sourceRef;
-        MechanicalRebaseAttempt? recovery = null;
-        if (!IsAncestor(repoRoot, integrationTip, sourceRef))
+        var (_, directMergeError, directMergeCode) = RunGitArgs(
+            repoRoot,
+            "-c",
+            "rerere.enabled=false",
+            "merge",
+            "--no-ff",
+            "--no-edit",
+            sourceRef);
+        if (directMergeCode == 0)
         {
-            recovery = TryMechanicalRebase(repoRoot, sourceRef, integrationTip);
-            if (!recovery.Success)
-            {
-                return recovery.ConflictedFiles.Count > 0
-                    ? MergeIntoIntegrationResult.Conflicted(
-                        recovery.ConflictedFiles,
-                        recovery.Error)
-                    : MergeIntoIntegrationResult.Of(
-                        MergeIntoIntegrationOutcome.Error,
-                        error: recovery.Error);
-            }
-            sourceToMerge = recovery.RebasedTip!;
+            var directMergedSha = ReadHeadShaAt(repoRoot);
+            _logger.LogInformation(
+                "Merge-into-develop: directly merged {Task} into {Integration} at {Path} ({Sha}); delivery SHAs preserved",
+                sourceRef,
+                integrationBranch,
+                repoRoot,
+                directMergedSha);
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Merged,
+                mergedSha: directMergedSha);
+        }
+
+        var directConflicts = ListUnmergedFiles(repoRoot);
+        RunGitArgs(repoRoot, "merge", "--abort");
+        if (directConflicts.Count == 0)
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Direct merge failed before conflict recovery: {directMergeError.Trim()}");
+        }
+
+        var mechanicalMerge = TryMechanicalMerge(repoRoot, sourceRef);
+        if (mechanicalMerge.Success)
+        {
+            _logger.LogInformation(
+                "Merge-into-develop: mechanically merged {Task} into {Integration} at {Path} ({Sha}) with recorded three-way resolution; delivery SHAs preserved",
+                sourceRef,
+                integrationBranch,
+                repoRoot,
+                mechanicalMerge.MergedSha);
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Merged,
+                mergedSha: mechanicalMerge.MergedSha);
+        }
+        if (mechanicalMerge.ConflictedFiles.Count == 0)
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: mechanicalMerge.Error);
+
+        var recovery = TryMechanicalRebase(repoRoot, sourceRef, integrationTip);
+        if (!recovery.Success)
+        {
+            return recovery.FailureKind is MechanicalRebaseFailureKind.Conflict
+                    or MechanicalRebaseFailureKind.AttributionAmbiguous
+                ? MergeIntoIntegrationResult.RequiresAgentRound(
+                    recovery.ConflictedFiles.Count > 0
+                        ? recovery.ConflictedFiles
+                        : mechanicalMerge.ConflictedFiles,
+                    recovery.Error ?? mechanicalMerge.Error ?? "Automatic integration recovery requires an agent round.")
+                : MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: recovery.Error);
         }
 
         var currentIntegrationTip = GetBranchTip(repoRoot, integrationBranch);
@@ -4320,32 +4386,81 @@ public class GitService
                 error: $"Integration branch '{integrationBranch}' moved during the isolated mechanical rebase; retry against its current tip.");
         }
 
-        var (_, mergeErr, mergeCode) = RunGitArgs(repoRoot, "merge", "--no-ff", "--no-edit", sourceToMerge);
+        var (_, mergeErr, mergeCode) = RunGitArgs(
+            repoRoot,
+            "-c",
+            "rerere.enabled=false",
+            "merge",
+            "--no-ff",
+            "--no-edit",
+            recovery.RebasedTip!);
         if (mergeCode != 0)
         {
             var conflicted = ListUnmergedFiles(repoRoot);
-            // Abort so the tree is left clean; the conflict is reported, not silently resolved.
             RunGitArgs(repoRoot, "merge", "--abort");
-            _logger.LogWarning(
-                "Merge-into-develop: merging {Task} into {Integration} at {Path} conflicted ({Count} files), aborted: {Error}",
-                sourceToMerge, integrationBranch, repoRoot, conflicted.Count, mergeErr.Trim());
-            return MergeIntoIntegrationResult.Conflicted(conflicted, mergeErr.Trim());
+            return conflicted.Count > 0
+                ? MergeIntoIntegrationResult.RequiresAgentRound(
+                    conflicted,
+                    $"The cardinality-preserving rebase succeeded, but its final merge conflicted: {mergeErr.Trim()}")
+                : MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: $"The rebased delivery could not be merged: {mergeErr.Trim()}");
         }
 
         var mergedSha = ReadHeadShaAt(repoRoot);
         _logger.LogInformation(
-            "Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha}) afterMechanicalRebase={AfterMechanicalRebase}",
+            "Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha}) afterMechanicalRebase=true",
             sourceRef,
             integrationBranch,
             repoRoot,
-            mergedSha,
-            recovery is not null);
-        return recovery is null
-            ? MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha)
-            : MergeIntoIntegrationResult.MergedAfterRebase(
-                mergedSha!,
-                integrationTip,
-                recovery.Replacements);
+            mergedSha);
+        return MergeIntoIntegrationResult.MergedAfterRebase(
+            mergedSha!,
+            integrationTip,
+            recovery.Replacements);
+    }
+
+    /// <summary>
+    /// Retries a real direct-merge conflict through Git's three-way <c>ort</c>
+    /// strategy with recorded rerere resolutions. A rerere resolution is
+    /// eligible only when it stages every conflicted path. The source ref is
+    /// never rewritten, so success preserves every delivery SHA and adds only
+    /// the integration merge commit.
+    /// </summary>
+    private MechanicalMergeAttempt TryMechanicalMerge(
+        string repoRoot,
+        string sourceRef)
+    {
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot,
+            "-c",
+            "rerere.enabled=true",
+            "-c",
+            "rerere.autoupdate=true",
+            "merge",
+            "--strategy=ort",
+            "--no-ff",
+            "--no-edit",
+            sourceRef);
+        if (mergeCode == 0)
+            return MechanicalMergeAttempt.Applied(ReadHeadShaAt(repoRoot)!);
+
+        var conflicted = ListUnmergedFiles(repoRoot);
+        if (conflicted.Count > 0)
+        {
+            RunGitArgs(repoRoot, "merge", "--abort");
+            return MechanicalMergeAttempt.Conflict(
+                conflicted,
+                $"Mechanical three-way merge remained conflicted: {mergeError.Trim()}");
+        }
+
+        var (_, commitError, commitCode) = RunGitArgs(repoRoot, "commit", "--no-edit");
+        if (commitCode == 0)
+            return MechanicalMergeAttempt.Applied(ReadHeadShaAt(repoRoot)!);
+
+        RunGitArgs(repoRoot, "merge", "--abort");
+        return MechanicalMergeAttempt.Failed(
+            $"Mechanical three-way merge resolved its index but could not create the merge commit: {commitError.Trim()}");
     }
 
     /// <summary>
@@ -4386,7 +4501,7 @@ public class GitService
         }
         if (mergeCommitCount > 0)
         {
-            return MechanicalRebaseAttempt.Failed(
+            return MechanicalRebaseAttempt.AttributionAmbiguous(
                 "Mechanical rebase found a non-linear delivery history; refusing ambiguous SHA attribution.");
         }
 
@@ -4453,7 +4568,7 @@ public class GitService
                         || rebasedCommits is null
                         || originalCommits.Count != rebasedCommits.Count)
                     {
-                        attempt = MechanicalRebaseAttempt.Failed(
+                        attempt = MechanicalRebaseAttempt.AttributionAmbiguous(
                             rebasedRangeError
                             ?? "Mechanical rebase changed the delivery commit cardinality; refusing ambiguous SHA attribution.");
                     }
@@ -4568,20 +4683,50 @@ public class GitService
         string? RebasedTip,
         IReadOnlyList<RebasedCommitReplacement> Replacements,
         IReadOnlyList<string> ConflictedFiles,
-        string? Error)
+        string? Error,
+        MechanicalRebaseFailureKind FailureKind)
     {
         public static MechanicalRebaseAttempt Applied(
             string rebasedTip,
             IReadOnlyList<RebasedCommitReplacement> replacements)
-            => new(true, rebasedTip, replacements, [], null);
+            => new(true, rebasedTip, replacements, [], null, MechanicalRebaseFailureKind.None);
 
         public static MechanicalRebaseAttempt Conflict(
             IReadOnlyList<string> conflictedFiles,
             string error)
-            => new(false, null, [], conflictedFiles, error);
+            => new(false, null, [], conflictedFiles, error, MechanicalRebaseFailureKind.Conflict);
+
+        public static MechanicalRebaseAttempt AttributionAmbiguous(string error)
+            => new(false, null, [], [], error, MechanicalRebaseFailureKind.AttributionAmbiguous);
 
         public static MechanicalRebaseAttempt Failed(string error)
-            => new(false, null, [], [], error);
+            => new(false, null, [], [], error, MechanicalRebaseFailureKind.Error);
+    }
+
+    private enum MechanicalRebaseFailureKind
+    {
+        None,
+        Conflict,
+        AttributionAmbiguous,
+        Error,
+    }
+
+    private sealed record MechanicalMergeAttempt(
+        bool Success,
+        string? MergedSha,
+        IReadOnlyList<string> ConflictedFiles,
+        string? Error)
+    {
+        public static MechanicalMergeAttempt Applied(string mergedSha)
+            => new(true, mergedSha, [], null);
+
+        public static MechanicalMergeAttempt Conflict(
+            IReadOnlyList<string> conflictedFiles,
+            string error)
+            => new(false, null, conflictedFiles, error);
+
+        public static MechanicalMergeAttempt Failed(string error)
+            => new(false, null, [], error);
     }
 
     /// <summary>

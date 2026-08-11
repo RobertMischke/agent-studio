@@ -100,6 +100,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet fired in production. ASS-665 (a healthy `ng serve` cold-compile killed by the watchdog as `status=stopped, exitCode=-1`) is the motivating example: with this loop the transient kill self-heals via re-spawn instead of parking in human review.
 - **Notes:** The decider is pure (ADR-0032): it only classifies an issue as a transient abort and checks the remaining issue-specific budget; the binding re-spawn + counter + terminal escalation live in `ProjectRunner`. `EnvironmentBlocker` is unrecoverable and `PermissionBlocked` needs a human, so both still route to review. The counter resets when the job leaves the run loop (moved to review on a clean run, or escalated to human review), so the budget measures consecutive transient aborts without an intervening successful completion. It does NOT persist across backend restart. Pairs with the watchdog long-op widening (same feature): the long-op fix removes the false-positive kill in the first place, this loop recovers a genuine transient kill that still happens. The re-trigger prompt asks the agent to narrate during long operations so a legitimate wait stays visibly alive.
 
+### integration.attribution-agent-round
+
+- **Kind:** Post-Guard
+- **Where:** [`backend/Features/Pipeline/IntegrationAgentRoundService.cs`](../../../backend/Features/Pipeline/IntegrationAgentRoundService.cs) (`RemoteIntegrationContinuationPolicy` and `IntegrationAgentRoundService`), invoked by `RemoteDeliveryIntegrationCoordinator` after `MergeIntoIntegrationOutcome.AgentRoundRequired`.
+- **Re-entry trigger:** Direct merge and mechanical three-way/rerere merge both conflict, then the fallback rebase conflicts or cannot preserve a one-to-one delivery commit mapping.
+- **Budget:** `RemoteIntegrationContinuationPolicy.MaxAutomaticAgentRounds` (exactly 1 automatic agent round per operator-owned review epoch). Prior firings are counted from durable `integration_recovery_queued` timeline events with the same `attemptEpoch`.
+- **Action when budget exhausted:** Do not requeue again. Persist the integration failure and let the settled Remote Review move the task to Human Review with the ambiguous-attribution evidence.
+- **Breaker test:** [`backend.Tests/Architecture/IntegrationAgentRoundBreakerTest.cs`](../../../backend.Tests/Architecture/IntegrationAgentRoundBreakerTest.cs)
+- **Last fired:** 2026-08-11, AGT-2563 follow-up. A mechanical rebase changed delivery commit cardinality and correctly refused ambiguous SHA attribution, but the card remained in Review until manual requeue.
+- **Notes:** The automatic round saves a `steer` pending intent, retains the prior delivery as superseded history, and queues the original card at the front of Ready. An explicit operator requeue opens a new review epoch and therefore a new bounded opportunity. Automatic moves never increment the epoch.
+
 ### ui-task.human-feedback-iterations
 
 - **Kind:** Post-Guard
