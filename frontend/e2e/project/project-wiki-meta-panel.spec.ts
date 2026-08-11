@@ -217,6 +217,14 @@ function evidencePath(testInfo: { outputPath(fileName: string): string }, fileNa
   return path.join(results, fileName);
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('atp.flag.vsCodeLayout', '1');
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
+    localStorage.removeItem('atp.studio.tabs.v1');
+  });
+});
+
 test('meta-panel and section choices survive wiki navigation and reload', async ({ page }, testInfo) => {
   await mockWiki(page, PROJECT_NAME);
 
