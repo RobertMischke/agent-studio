@@ -168,7 +168,11 @@ public sealed class TaskServerClient : IDisposable
     /// Returns the adopted client id (falls back to the provisional id on an empty
     /// reply so a misconfigured open-auth server still gets a stable header).
     /// </summary>
-    public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
+    public async Task<string> RegisterAsync(
+        string displayName,
+        string kind,
+        CancellationToken ct,
+        IReadOnlyList<Contract.RunnerActiveAttemptDto>? activeAttempts = null)
     {
         if (_useV1 || _supportsCapabilityAdvertisement)
         {
@@ -209,7 +213,8 @@ public sealed class TaskServerClient : IDisposable
                 HostOrchestratorMaximum: _supportsHostOrchestrator
                     ? Contract.HostOrchestratorContract.MaximumSupported
                     : null,
-                BootstrapMaxParallelism: options.HostMaxParallelism);
+                BootstrapMaxParallelism: options.HostMaxParallelism,
+                ActiveAttempts: activeAttempts);
             try
             {
                 var registered = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(

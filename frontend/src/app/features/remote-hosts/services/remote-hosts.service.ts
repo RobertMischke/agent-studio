@@ -241,6 +241,7 @@ export class RemoteHostsService {
               projectPolicy: snapshot.projectPolicy !== undefined
                 ? snapshot.projectPolicy
                 : current.projectPolicy ?? null,
+              activeAttempts: snapshot.activeAttempts ?? [],
               taskServerConnection: snapshot.telemetry
                 ? taskServerConnection(snapshot.telemetry)
                 : current.taskServerConnection ?? null,

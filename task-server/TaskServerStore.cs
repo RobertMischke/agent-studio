@@ -556,6 +556,7 @@ public sealed partial class TaskServerStore
             ReviewCapabilities.CodingExecutor,
             StringComparer.Ordinal);
         RuntimeCapacitySettingsDto? runtimeCapacity = null;
+        IReadOnlyList<RunnerAttemptAdoptionDto> attemptAdoptions = [];
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var existingCapabilitiesJson = Convert.ToString(
@@ -644,6 +645,12 @@ public sealed partial class TaskServerStore
                     request.HostId.Trim(),
                     ct);
             }
+            attemptAdoptions = await ReAdoptRegisteredAttemptsAsync(
+                connection,
+                transaction,
+                id,
+                request.ActiveAttempts,
+                ct);
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new
                 {
@@ -655,10 +662,107 @@ public sealed partial class TaskServerStore
                     request.HostOrchestratorMaximum,
                     bootstrapMaxParallelism,
                     runtimeCapacity?.MaxParallelism,
+                    attemptAdoptions,
                 }), ct);
         }, ct);
         return new RunnerDto(id, request.Name.Trim(), request.HostId.Trim(), request.InstanceId.Trim(), request.RunnerVersion,
-            request.ProtocolVersion, "active", Parse(now), Parse(now), runtimeCapacity);
+            request.ProtocolVersion, "active", Parse(now), Parse(now), runtimeCapacity, attemptAdoptions);
+    }
+
+    private async Task<IReadOnlyList<RunnerAttemptAdoptionDto>> ReAdoptRegisteredAttemptsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runnerId,
+        IReadOnlyList<RunnerActiveAttemptDto>? reportedAttempts,
+        CancellationToken ct)
+    {
+        if (reportedAttempts is null || reportedAttempts.Count == 0) return [];
+        var results = new List<RunnerAttemptAdoptionDto>(reportedAttempts.Count);
+        foreach (var attempt in reportedAttempts)
+        {
+            var expires = UtcNow.AddSeconds(NormalizeTtl(attempt.RequestedTtlSeconds));
+            int changed;
+            if (string.Equals(attempt.Kind, RunnerAttemptKinds.Coding, StringComparison.Ordinal)
+                && attempt.AuthorityEpoch == 0)
+            {
+                changed = await ExecuteAsync(connection, """
+                    UPDATE leases
+                       SET status = 'active', expires_at = $expires
+                     WHERE run_id = $attempt
+                       AND runner_id = $runner
+                       AND instance_id = $instance
+                       AND lease_id = $lease
+                       AND fence = $fence
+                       AND status IN ('active', 'process-unknown')
+                       AND EXISTS (
+                           SELECT 1
+                             FROM runs r
+                             JOIN tasks t ON t.id = r.task_id
+                            WHERE r.id = leases.run_id
+                              AND r.status IN ('running', 'process-unknown')
+                              AND (t.task_key = $task OR t.id = $task));
+                    """, ct, transaction,
+                    ("$expires", Iso(expires)),
+                    ("$attempt", attempt.AttemptId),
+                    ("$runner", runnerId),
+                    ("$instance", attempt.LeaseInstanceId),
+                    ("$lease", attempt.LeaseId),
+                    ("$fence", attempt.Fence),
+                    ("$task", attempt.TaskKey));
+                if (changed == 1)
+                {
+                    await ExecuteAsync(connection, """
+                        UPDATE runs
+                           SET status = 'running'
+                         WHERE id = $attempt
+                           AND status = 'process-unknown';
+                        """, ct, transaction, ("$attempt", attempt.AttemptId));
+                }
+            }
+            else if (string.Equals(attempt.Kind, RunnerAttemptKinds.Review, StringComparison.Ordinal)
+                     && attempt.AuthorityEpoch == 0)
+            {
+                changed = await ExecuteAsync(connection, """
+                    UPDATE review_attempts
+                       SET status = 'leased', expires_at = $expires
+                     WHERE id = $attempt
+                       AND executor_id = $runner
+                       AND instance_id = $instance
+                       AND lease_id = $lease
+                       AND fence = $fence
+                       AND status IN ('leased', 'process-unknown')
+                       AND EXISTS (
+                           SELECT 1
+                             FROM tasks t
+                            WHERE t.id = review_attempts.task_id
+                              AND (t.task_key = $task OR t.id = $task));
+                    """, ct, transaction,
+                    ("$expires", Iso(expires)),
+                    ("$attempt", attempt.AttemptId),
+                    ("$runner", runnerId),
+                    ("$instance", attempt.LeaseInstanceId),
+                    ("$lease", attempt.LeaseId),
+                    ("$fence", attempt.Fence),
+                    ("$task", attempt.TaskKey));
+            }
+            else
+            {
+                changed = 0;
+            }
+
+            results.Add(new RunnerAttemptAdoptionDto(
+                attempt.Kind,
+                attempt.AttemptId,
+                attempt.TaskKey,
+                changed == 1
+                    ? RunnerAttemptAdoptionStatuses.Adopted
+                    : RunnerAttemptAdoptionStatuses.Rejected,
+                changed == 1 ? expires : null,
+                changed == 1
+                    ? null
+                    : "Attempt kind, task, lease, instance, fence, epoch, executor, or current state does not match durable authority."));
+        }
+        return results;
     }
 
     public async Task<ClaimResponse> ClaimAsync(ClaimRequest request, string actorId, CancellationToken ct)

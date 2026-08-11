@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Contract = AgentStudio.TaskServer.Contracts;
 
 using Xunit;
 
@@ -10,6 +11,111 @@ namespace AgentStudio.Tests;
 public sealed class AttemptAuthorityServiceTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "attempt-authority-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void Restart_registration_re_adopts_expired_current_coding_attempt_and_accepts_completion()
+    {
+        var now = new DateTime(2026, 8, 11, 20, 0, 0, DateTimeKind.Utc);
+        var first = NewService(() => now);
+        var run = first.AcquireRun(
+            "AGT-CODING",
+            "PROJ-1",
+            null,
+            "runner-coding",
+            "host-a",
+            30,
+            "claim-coding").RunAttempt!;
+
+        now = now.AddSeconds(31);
+        var restarted = NewService(() => now);
+        var adopted = Assert.Single(restarted.ReAdoptRunnerAttempts(
+            "runner-coding",
+            [new Contract.RunnerActiveAttemptDto(
+                Contract.RunnerAttemptKinds.Coding,
+                run.AttemptId,
+                run.TaskKey,
+                run.Lease!.LeaseId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                string.Empty,
+                now,
+                120)]));
+
+        Assert.Equal(Contract.RunnerAttemptAdoptionStatuses.Adopted, adopted.Status);
+        Assert.Contains(
+            restarted.GetActiveRunnerAttempts("runner-coding"),
+            attempt => attempt.AttemptId == run.AttemptId);
+        var settled = restarted.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "completion-after-restart"),
+            Outcome = "environmentfailure",
+            ExecutorId = "runner-coding",
+            LeaseId = run.Lease.LeaseId,
+            ExpectedTaskKey = run.TaskKey,
+            RequireResultSha = false,
+        });
+        Assert.Equal(AttemptWriteStatus.Accepted, settled.Status);
+    }
+
+    [Fact]
+    public void Restart_registration_re_adopts_review_attempt_and_rejects_a_stale_instance()
+    {
+        var now = new DateTime(2026, 8, 11, 20, 0, 0, DateTimeKind.Utc);
+        var first = NewService(() => now);
+        var (run, pendingReview) = CompletedRunWithReview(first, "589c462f");
+        var review = first.ClaimReview(
+            pendingReview.AttemptId,
+            "runner-review",
+            "host-a",
+            30,
+            "claim-review",
+            "instance-original").ReviewAttempt!;
+
+        now = now.AddSeconds(31);
+        var restarted = NewService(() => now);
+        var stale = Assert.Single(restarted.ReAdoptRunnerAttempts(
+            "runner-review",
+            [new Contract.RunnerActiveAttemptDto(
+                Contract.RunnerAttemptKinds.Review,
+                review.AttemptId,
+                review.TaskKey,
+                review.Lease!.LeaseId,
+                review.LastFence,
+                review.AuthorityEpoch,
+                "instance-other",
+                now,
+                120)]));
+        Assert.Equal(Contract.RunnerAttemptAdoptionStatuses.Rejected, stale.Status);
+
+        var adopted = Assert.Single(restarted.ReAdoptRunnerAttempts(
+            "runner-review",
+            [new Contract.RunnerActiveAttemptDto(
+                Contract.RunnerAttemptKinds.Review,
+                review.AttemptId,
+                review.TaskKey,
+                review.Lease.LeaseId,
+                review.LastFence,
+                review.AuthorityEpoch,
+                "instance-original",
+                now,
+                120)]));
+        Assert.Equal(Contract.RunnerAttemptAdoptionStatuses.Adopted, adopted.Status);
+
+        var report = restarted.SettleReview(new SettleReviewAttemptRequest(
+            new AttemptWriteReference(
+                review.AttemptId,
+                review.LastFence,
+                review.AuthorityEpoch,
+                "review-report-after-restart"),
+            run.ResultSha!,
+            ReviewTerminalOutcome.Pass,
+            Reason: "Restarted server accepted the original fenced report."));
+        Assert.Equal(AttemptWriteStatus.Accepted, report.Status);
+    }
 
     [Fact]
     public void Restart_preserves_attempt_lease_expiry_fence_epoch_and_review_subject()

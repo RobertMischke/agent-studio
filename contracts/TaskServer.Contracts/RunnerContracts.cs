@@ -9,7 +9,49 @@ public sealed record RegisterRunnerRequest(
     IReadOnlyList<string>? Capabilities = null,
     string? HostOrchestratorMinimum = null,
     string? HostOrchestratorMaximum = null,
-    int BootstrapMaxParallelism = 2);
+    int BootstrapMaxParallelism = 2,
+    IReadOnlyList<RunnerActiveAttemptDto>? ActiveAttempts = null);
+
+public static class RunnerAttemptKinds
+{
+    public const string Coding = "coding";
+    public const string Review = "review";
+}
+
+/// <summary>
+/// Exact fenced authority a runner still has positive execution evidence for
+/// when it registers again after a Task Server restart. The lease instance can
+/// differ from the new daemon instance because detached work keeps the original
+/// claim generation until it settles.
+/// </summary>
+public sealed record RunnerActiveAttemptDto(
+    string Kind,
+    string AttemptId,
+    string TaskKey,
+    string LeaseId,
+    long Fence,
+    long AuthorityEpoch,
+    string LeaseInstanceId,
+    DateTime ObservedAt,
+    int RequestedTtlSeconds = 120,
+    string? Phase = null,
+    DateTime? ExpiresAt = null,
+    string? ProjectId = null);
+
+public static class RunnerAttemptAdoptionStatuses
+{
+    public const string Adopted = "adopted";
+    public const string Rejected = "rejected";
+}
+
+/// <summary>Server verdict for one active attempt reported during registration.</summary>
+public sealed record RunnerAttemptAdoptionDto(
+    string Kind,
+    string AttemptId,
+    string TaskKey,
+    string Status,
+    DateTime? ExpiresAt = null,
+    string? Message = null);
 
 /// <summary>
 /// Server-owned runtime admission policy for one execution host. Projects use
@@ -56,7 +98,8 @@ public sealed record RunnerDto(
     string Status,
     DateTime RegisteredAt,
     DateTime LastSeenAt,
-    RuntimeCapacitySettingsDto? RuntimeCapacity = null);
+    RuntimeCapacitySettingsDto? RuntimeCapacity = null,
+    IReadOnlyList<RunnerAttemptAdoptionDto>? AttemptAdoptions = null);
 
 public sealed record ClaimRequest(
     string RunnerId,

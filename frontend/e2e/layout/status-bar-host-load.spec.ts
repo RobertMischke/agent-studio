@@ -20,6 +20,7 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  authorityAttempts = 0,
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -148,7 +149,53 @@ async function stubHostLoad(
     }],
     findings: [],
   }));
-  await page.route('**/api/v1/management/remote-hosts', json([]));
+  const activeAttempts = Array.from({ length: authorityAttempts }, (_, index) => ({
+    kind: index < 4 ? 'review' : 'coding',
+    attemptId: `attempt-${index + 1}`,
+    taskKey: `AGT-RESTART-${index + 1}`,
+    leaseId: `lease-authority-${index + 1}`,
+    fence: index + 1,
+    authorityEpoch: 2,
+    leaseInstanceId: index < 4 ? 'review-host:1' : 'coding-host:1',
+    observedAt: now,
+    requestedTtlSeconds: 120,
+    phase: 'running',
+    expiresAt: new Date(Date.now() + 120_000).toISOString(),
+    projectId: index < 3 ? 'Agent Studio' : 'Quality Studio',
+  }));
+  await page.route('**/api/v1/management/remote-hosts', json(authorityAttempts === 0 ? [] : [{
+    runnerId: 'agent-runner-01',
+    name: 'agent-runner-01',
+    hostId: 'agent-runner-01',
+    instanceId: 'agent-runner-01:restart',
+    runnerVersion: '1.0.0',
+    protocolVersion: 2,
+    status: 'active',
+    registeredAt: now,
+    lastSeenAt: now,
+    hostAdmission: {
+      hostId: 'agent-runner-01',
+      admissionState: 'open',
+      automaticDrainReason: null,
+      automaticDrainAt: null,
+      operatorDrainReason: null,
+      operatorDrainAt: null,
+    },
+    capabilities: [],
+    telemetry: null,
+    runtimeCapacity: {
+      hostId: 'agent-runner-01',
+      maxParallelism: 8,
+      targetLoadPercent: 85,
+      rampStrategy: 'balanced',
+      version: 2,
+      updatedAt: now,
+    },
+    effectiveMaxParallelism: 8,
+    runtimeCapacityAppliedAt: now,
+    runtimeCapacityAppliedVersion: 2,
+    activeAttempts,
+  }]));
 }
 
 test.describe('Status bar execution-host load companion signal', () => {
@@ -240,6 +287,31 @@ test.describe('Status bar execution-host load companion signal', () => {
     });
   });
 
+  test('re-adopted server authority restores the footer and host slots before board leases reload', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 5, 4.2, 5);
+    await page.goto('/');
+
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('5 remote');
+    await expect(page.getByTestId('status-bar-running-divergence')).not.toBeVisible();
+    await running.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'Server authority and host telemetry agree on 5 remote runs.',
+    );
+
+    await running.click();
+    const card = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(card).toContainText('5 active / 3 free / 8 total');
+    await expect(card).toContainText('Agent Studio');
+    await expect(card).toContainText('Quality Studio');
+
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'status-bar-re-adopted-attempts-dark--mocked.png'),
+      fullPage: false,
+    });
+  });
+
   test('shows an explicit warning icon when telemetry and board leases diverge', async ({ page }) => {
     await stubHostLoad(page, 0, 2, 3, 4.2);
     await page.goto('/');
@@ -249,7 +321,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await expect(page.getByTestId('status-bar-running-divergence')).toBeVisible();
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(
-      'Board leases report 2 remote, but fresh host telemetry reports 3 active slots.',
+      'Server authority reports 2 remote, but fresh host telemetry reports 3 active slots.',
     );
 
     await setTheme(page, 'dark');

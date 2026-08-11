@@ -51,9 +51,41 @@ public static class ReviewDecisionsEndpoints
         // opinions instead of silently waving jobs through. Returns the
         // last completed tick's accept/reissue/escalate counts plus the
         // job currently under review (if any).
-        app.MapGet("/api/auto-review/status", (AutoReviewStatusSnapshot snapshot) =>
+        app.MapGet("/api/auto-review/status", (
+            AutoReviewStatusSnapshot snapshot,
+            AttemptAuthorityService authority,
+            TaskScannerService scanner) =>
         {
-            return Results.Ok(snapshot.Read());
+            var tasks = scanner.ScanAllJobs()
+                .Where(task => string.Equals(
+                    task.State,
+                    TaskStates.AutoReview,
+                    StringComparison.OrdinalIgnoreCase))
+                .SelectMany(task => new string?[] { task.TaskKey, task.Key, task.Id }
+                    .Where(identity => !string.IsNullOrWhiteSpace(identity))
+                    .Select(identity => (Identity: identity!, Task: task)))
+                .GroupBy(item => item.Identity, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.First().Task,
+                    StringComparer.OrdinalIgnoreCase);
+            var durableReviews = authority.GetActiveRunnerAttempts()
+                .Where(attempt => string.Equals(
+                    attempt.Kind,
+                    AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Review,
+                    StringComparison.Ordinal))
+                .Where(attempt => tasks.ContainsKey(attempt.TaskKey))
+                .Select(attempt =>
+                {
+                    var task = tasks[attempt.TaskKey];
+                    return new AutoReviewActivityView(
+                        task.ProjectName,
+                        task.Id,
+                        AutoReviewActivitySteps.Processing,
+                        attempt.ObservedAt);
+                })
+                .ToList();
+            return Results.Ok(snapshot.Read(durableReviews));
         });
     }
 }

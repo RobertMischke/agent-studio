@@ -53,11 +53,26 @@ public sealed class RemoteReviewDaemon
             }
         }
 
+        var registrationSlots = new List<PersistedReviewSlot>();
+        foreach (var persisted in persistedAtStartup)
+        {
+            var recovered = await RecoverLaunchingIdentityAsync(persisted, state, shutdown);
+            if (DurableReviewProcess.HasCompleted(recovered)
+                || DurableReviewProcess.VerifyLive(recovered, out _))
+            {
+                registrationSlots.Add(recovered);
+            }
+        }
+
         try
         {
             await WithServerRetryAsync(
                 "review registration",
-                () => _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown),
+                () => _client.RegisterAsync(
+                    _options.RunnerName,
+                    "review-executor",
+                    shutdown,
+                    RunnerActiveAttemptReports.Review(registrationSlots, _options.TtlSeconds)),
                 connectivity,
                 () => Math.Max(active.Count, persistedAtStartup.Count),
                 shutdown);
@@ -111,7 +126,13 @@ public sealed class RemoteReviewDaemon
             },
             async ct =>
             {
-                _ = await _client.RegisterAsync(_options.RunnerName, "review-executor", ct);
+                _ = await _client.RegisterAsync(
+                    _options.RunnerName,
+                    "review-executor",
+                    ct,
+                    RunnerActiveAttemptReports.Review(
+                        RunnerActiveAttemptReports.VerifiableReview(state.LoadAll()),
+                        _options.TtlSeconds));
             },
             connectivity,
             () => active.Count,
@@ -187,7 +208,10 @@ public sealed class RemoteReviewDaemon
                             _ = await _client.RegisterAsync(
                                 _options.RunnerName,
                                 "review-executor",
-                                ct);
+                                ct,
+                                RunnerActiveAttemptReports.Review(
+                                    RunnerActiveAttemptReports.VerifiableReview(state.LoadAll()),
+                                    _options.TtlSeconds));
                         },
                         connectivity,
                         () => active.Count,
@@ -324,7 +348,13 @@ public sealed class RemoteReviewDaemon
                     "performing full review executor re-registration");
                 await WithServerRetryAsync(
                     "review claim authority recovery registration",
-                    () => _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown),
+                    () => _client.RegisterAsync(
+                        _options.RunnerName,
+                        "review-executor",
+                        shutdown,
+                        RunnerActiveAttemptReports.Review(
+                            RunnerActiveAttemptReports.VerifiableReview(state.LoadAll()),
+                            _options.TtlSeconds)),
                     connectivity,
                     () => active.Count,
                     shutdown);

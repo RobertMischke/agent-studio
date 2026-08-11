@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Runner;
 
@@ -961,6 +962,141 @@ public sealed class AttemptAuthorityService
         lock (_gate) return FindReview(attemptId) is { } review ? ToDto(review) : null;
     }
 
+    /// <summary>
+    /// Rebuilds live lease authority from exact attempts a re-registering runner
+    /// still proves locally. An expired lease can be extended only while its
+    /// attempt is still current and every lease, fence, epoch, executor, and
+    /// review-instance fact matches. A takeover changes those facts first and
+    /// remains fenced against this path.
+    /// </summary>
+    public IReadOnlyList<Contract.RunnerAttemptAdoptionDto> ReAdoptRunnerAttempts(
+        string executorId,
+        IReadOnlyList<Contract.RunnerActiveAttemptDto>? reportedAttempts)
+    {
+        if (reportedAttempts is null || reportedAttempts.Count == 0) return [];
+
+        lock (_gate)
+        {
+            var now = _utcNow();
+            var changed = false;
+            var results = new List<Contract.RunnerAttemptAdoptionDto>(reportedAttempts.Count);
+            foreach (var reported in reportedAttempts)
+            {
+                var kind = Normalize(reported.Kind).ToLowerInvariant();
+                var run = kind == Contract.RunnerAttemptKinds.Coding
+                    ? FindRun(reported.AttemptId)
+                    : null;
+                var review = kind == Contract.RunnerAttemptKinds.Review
+                    ? FindReview(reported.AttemptId)
+                    : null;
+                var lease = run?.Lease ?? review?.Lease;
+                var exists = run is not null || review is not null;
+                var facts = new AttemptReAdoptionFacts(
+                    kind,
+                    exists,
+                    run is not null ? IsCurrentRun(run) : review is not null && IsCurrentReview(review),
+                    run?.State == AttemptLifecycleState.Leased
+                    || review?.State == AttemptLifecycleState.Leased,
+                    lease is not null,
+                    Same(run?.TaskKey ?? review?.TaskKey, reported.TaskKey),
+                    Same(lease?.ExecutorId, executorId),
+                    Same(lease?.LeaseId, reported.LeaseId),
+                    (run?.LastFence ?? review?.LastFence) == reported.Fence,
+                    (run?.AuthorityEpoch ?? review?.AuthorityEpoch) == reported.AuthorityEpoch,
+                    review is null
+                    || Blank(lease?.ClientId)
+                    || Same(lease?.ClientId, reported.LeaseInstanceId));
+                var decision = AttemptReAdoptionPolicy.Decide(facts);
+                if (decision != AttemptReAdoptionDecision.Adopt)
+                {
+                    _logger.LogWarning(
+                        "runner-attempt-re-adoption-rejected executor={ExecutorId} kind={Kind} attempt={AttemptId} task={TaskKey} decision={Decision}",
+                        executorId,
+                        kind,
+                        reported.AttemptId,
+                        reported.TaskKey,
+                        decision);
+                    results.Add(new Contract.RunnerAttemptAdoptionDto(
+                        kind,
+                        Normalize(reported.AttemptId),
+                        Normalize(reported.TaskKey),
+                        Contract.RunnerAttemptAdoptionStatuses.Rejected,
+                        Message: ReAdoptionMessage(decision)));
+                    continue;
+                }
+
+                lease!.ExpiresAt = now.Add(NormalizeTtl(reported.RequestedTtlSeconds));
+                lease.LastHeartbeat = now;
+                changed = true;
+                _logger.LogInformation(
+                    "runner-attempt-re-adopted executor={ExecutorId} kind={Kind} attempt={AttemptId} task={TaskKey} fence={Fence} epoch={Epoch} expiresAt={ExpiresAt}",
+                    executorId,
+                    kind,
+                    reported.AttemptId,
+                    reported.TaskKey,
+                    reported.Fence,
+                    reported.AuthorityEpoch,
+                    lease.ExpiresAt);
+                results.Add(new Contract.RunnerAttemptAdoptionDto(
+                    kind,
+                    reported.AttemptId,
+                    reported.TaskKey,
+                    Contract.RunnerAttemptAdoptionStatuses.Adopted,
+                    lease.ExpiresAt));
+            }
+
+            if (changed) PersistLocked();
+            return results;
+        }
+    }
+
+    /// <summary>
+    /// Durable read projection for board and host-slot surfaces. It is derived
+    /// from current unexpired authority, not from process-local runner registry
+    /// state, so a backend restart alone cannot make renewable attempts vanish.
+    /// </summary>
+    public IReadOnlyList<Contract.RunnerActiveAttemptDto> GetActiveRunnerAttempts(
+        string? executorId = null)
+    {
+        lock (_gate)
+        {
+            var now = _utcNow();
+            var runs = _state.RunAttempts
+                .Where(run => IsCurrentRun(run)
+                              && run.State == AttemptLifecycleState.Leased
+                              && run.Lease is { } lease
+                              && lease.ExpiresAt > now
+                              && (Blank(executorId) || Same(lease.ExecutorId, executorId)))
+                .Select(run => ActiveAttempt(
+                    Contract.RunnerAttemptKinds.Coding,
+                    run.AttemptId,
+                    run.TaskKey,
+                    run.LastFence,
+                    run.AuthorityEpoch,
+                    run.Lease!,
+                    run.Lease!.AcquiredAt));
+            var reviews = _state.ReviewAttempts
+                .Where(review => IsCurrentReview(review)
+                                 && review.State == AttemptLifecycleState.Leased
+                                 && review.Lease is { } lease
+                                 && lease.ExpiresAt > now
+                                 && (Blank(executorId) || Same(lease.ExecutorId, executorId)))
+                .Select(review => ActiveAttempt(
+                    Contract.RunnerAttemptKinds.Review,
+                    review.AttemptId,
+                    review.TaskKey,
+                    review.LastFence,
+                    review.AuthorityEpoch,
+                    review.Lease!,
+                    review.Lease!.AcquiredAt));
+            return runs.Concat(reviews)
+                .OrderBy(attempt => attempt.Kind, StringComparer.Ordinal)
+                .ThenBy(attempt => attempt.TaskKey, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(attempt => attempt.AttemptId, StringComparer.Ordinal)
+                .ToList();
+        }
+    }
+
     public AttemptAuthorityProjection GetTaskProjection(string taskKey, bool includeArchived = false)
     {
         var key = Normalize(taskKey);
@@ -1504,6 +1640,35 @@ public sealed class AttemptAuthorityService
     private static string Normalize(string? value) => (value ?? string.Empty).Trim();
     private static string? NormalizeNull(string? value) => Blank(value) ? null : value!.Trim();
     private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);
+
+    private static Contract.RunnerActiveAttemptDto ActiveAttempt(
+        string kind,
+        string attemptId,
+        string taskKey,
+        long fence,
+        long authorityEpoch,
+        AttemptLeaseRecord lease,
+        DateTime observedAt)
+        => new(
+            kind,
+            attemptId,
+            taskKey,
+            lease.LeaseId,
+            fence,
+            authorityEpoch,
+            lease.ClientId ?? string.Empty,
+            observedAt,
+            Phase: "running",
+            ExpiresAt: lease.ExpiresAt);
+
+    private static string ReAdoptionMessage(AttemptReAdoptionDecision decision) => decision switch
+    {
+        AttemptReAdoptionDecision.RejectInvalidKind => "Attempt kind must be coding or review.",
+        AttemptReAdoptionDecision.RejectUnknownAttempt => "Attempt authority was not found.",
+        AttemptReAdoptionDecision.RejectNotCurrent => "A newer attempt is current for this task.",
+        AttemptReAdoptionDecision.RejectTerminal => "Attempt no longer has leased write authority.",
+        _ => "Attempt lease, fence, epoch, executor, task, or review instance does not match current authority.",
+    };
     private static TimeSpan NormalizeTtl(int? seconds)
     {
         var ttl = seconds is > 0 ? TimeSpan.FromSeconds(seconds.Value) : TimeSpan.FromMinutes(2);

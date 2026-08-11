@@ -75,12 +75,8 @@ export function freshHostTelemetry(
 }
 
 export function boardRemoteSlotsForHost(truth: BoardRunningTruth, host: RemoteHost): number {
-  const ids = new Set([host.id, host.clientId]);
-  let count = 0;
-  for (const [runnerId, runnerCount] of truth.remoteByRunnerId) {
-    if (ids.has(runnerId)) count += runnerCount;
-  }
-  return count;
+  return boardProjectSlotsForHost(truth, host)
+    .reduce((sum, project) => sum + project.activeSlots, 0);
 }
 
 /**
@@ -100,9 +96,38 @@ export function boardProjectSlotsForHost(
       totals.set(projectName, (totals.get(projectName) ?? 0) + count);
     }
   }
+  const reported = new Map<string, number>();
+  for (const attempt of freshReportedAttempts(host)) {
+    const projectName = attempt.projectId || 'Unknown project';
+    reported.set(projectName, (reported.get(projectName) ?? 0) + 1);
+  }
+  for (const [projectName, count] of reported) {
+    totals.set(projectName, Math.max(totals.get(projectName) ?? 0, count));
+  }
   return [...totals.entries()]
     .map(([projectName, activeSlots]) => ({ projectName, activeSlots }))
     .sort((a, b) => b.activeSlots - a.activeSlots || a.projectName.localeCompare(b.projectName));
+}
+
+/** Unique server-authoritative remote slots, including active ReviewAttempts. */
+export function reportedRemoteAttemptSlots(
+  hosts: readonly RemoteHost[],
+  nowMs = Date.now(),
+): number {
+  const attempts = new Set<string>();
+  for (const host of hosts) {
+    if (host.role !== 'remote') continue;
+    for (const attempt of freshReportedAttempts(host, nowMs)) attempts.add(attempt.attemptId);
+  }
+  return attempts.size;
+}
+
+function freshReportedAttempts(host: RemoteHost, nowMs = Date.now()) {
+  if (host.status === 'offline' || host.status === 'retired') return [];
+  return (host.activeAttempts ?? []).filter(attempt => {
+    const expiresAt = Date.parse(attempt.expiresAt ?? '');
+    return !Number.isFinite(expiresAt) || expiresAt > nowMs;
+  });
 }
 
 /** Sum only fresh remote-host samples. Null means there is no live comparison source. */

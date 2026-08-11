@@ -7,6 +7,7 @@ import {
   deriveBoardRunningTruth,
   freshHostTelemetry,
   freshRemoteTelemetrySlots,
+  reportedRemoteAttemptSlots,
 } from './running-truth';
 
 function task(id: string, patch: Partial<TaskInfo>): TaskInfo {
@@ -144,6 +145,46 @@ describe('running truth', () => {
       task('local', { execution: { status: 'running' } as TaskInfo['execution'] }),
     ]);
     expect(boardProjectSlotsForHost(truth, host(0, '2026-07-26T10:00:00Z'))).toEqual([]);
+  });
+
+  it('restores coding and review slots from fenced server authority when the board is empty', () => {
+    const target = host(0, '2026-08-11T20:00:00Z');
+    target.activeAttempts = [
+      ...Array.from({ length: 4 }, (_, index) => ({
+        kind: 'review',
+        attemptId: `review-${index}`,
+        taskKey: `AGT-REVIEW-${index}`,
+        leaseId: `lease-review-${index}`,
+        fence: index + 1,
+        authorityEpoch: 2,
+        leaseInstanceId: 'review-host:1',
+        observedAt: '2026-08-11T20:00:00Z',
+        requestedTtlSeconds: 120,
+        expiresAt: '2099-08-11T20:02:00Z',
+        projectId: index < 3 ? 'Agent Studio' : 'Quality Studio',
+      })),
+      {
+        kind: 'coding',
+        attemptId: 'coding-1',
+        taskKey: 'AGT-CODING-1',
+        leaseId: 'lease-coding-1',
+        fence: 5,
+        authorityEpoch: 2,
+        leaseInstanceId: 'coding-host:1',
+        observedAt: '2026-08-11T20:00:00Z',
+        requestedTtlSeconds: 120,
+        expiresAt: '2099-08-11T20:02:00Z',
+        projectId: 'Quality Studio',
+      },
+    ];
+    const empty = deriveBoardRunningTruth([]);
+
+    expect(boardRemoteSlotsForHost(empty, target)).toBe(5);
+    expect(boardProjectSlotsForHost(empty, target)).toEqual([
+      { projectName: 'Agent Studio', activeSlots: 3 },
+      { projectName: 'Quality Studio', activeSlots: 2 },
+    ]);
+    expect(reportedRemoteAttemptSlots([target], Date.parse('2026-08-11T20:01:00Z'))).toBe(5);
   });
 
   it('rejects a stale telemetry sample even when the heartbeat is fresh', () => {

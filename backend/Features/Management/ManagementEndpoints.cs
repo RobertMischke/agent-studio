@@ -21,11 +21,21 @@ public static class ManagementEndpoints
         group.MapGet("/remote-hosts", (
             HttpContext context,
             AgentStudio.Runner.V1ReviewExecutorRegistry registry,
+            AgentStudio.Runner.AttemptAuthorityService authority,
+            AgentStudio.Tasks.TaskScannerService scanner,
             IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
-            return Results.Ok(registry.ListCapabilitySnapshots());
+            var projectsByTask = scanner.ScanAllJobs()
+                .GroupBy(task => task.TaskKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.First().ProjectName,
+                    StringComparer.OrdinalIgnoreCase);
+            return Results.Ok(registry.ListCapabilitySnapshots(
+                authority,
+                taskKey => projectsByTask.GetValueOrDefault(taskKey)));
         });
         group.MapPost("/remote-hosts/provider-auth", async (
             HttpContext context,

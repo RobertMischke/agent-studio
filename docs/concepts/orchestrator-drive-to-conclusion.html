@@ -2039,6 +2039,28 @@
             in <span class="lane">4-auto-review</span>.
           </td>
         </tr>
+        <tr id="case-agt-2646">
+          <td>2026-08-11</td>
+          <td><code>AGT-2646</code><br><span class="small">backend restart hid live Coding and Review attempts</span></td>
+          <td>
+            After rollout <code>release/20260811-193706Z</code>, the board reported zero active Post Processing work and
+            the footer reported no runners while the host still ran four detached Review workers plus Coding runs. Both
+            runner identities registered again, but their in-flight attempts remained absent from server counts and their
+            terminal deliveries risked unknown-attempt or superseded rejection.
+          </td>
+          <td>
+            Attempt authority was durable, but runner registrations, Auto Review worker activity, and host-slot snapshots
+            were process-local. Registration carried no surviving attempt identities, so a replacement backend could not
+            extend the exact lease generation or reconstruct its read projections from the persisted fence and epoch.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Coding and Review daemons now report only positively verified
+            persisted attempts during registration. The server re-adopts an exact current lease, fence, epoch, executor,
+            task, and Review instance, extends it durably, and rejects stale generations. Auto Review and Remote Hosts read
+            active attempts from durable authority. Restart integration cases prove that both a Coding completion and a
+            Review report land after process replacement, with active board and host projections restored first.
+          </td>
+        </tr>
       </tbody>
     </table>
 

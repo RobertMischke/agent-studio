@@ -13,6 +13,7 @@ export {
   freshHostTelemetry,
   freshRemoteTelemetrySlots,
   latestHostTelemetry,
+  reportedRemoteAttemptSlots,
   RUNNING_TELEMETRY_FRESH_MS,
 } from './models/running-truth';
 export type { BoardRunningTruth } from './models/running-truth';
@@ -28,6 +29,7 @@ export type {
   HostTelemetryPoint,
   HostTelemetryFinding,
   HostTelemetrySeries,
+  TaskServerActiveAttempt,
   HostStatusTone,
   MeterTone,
 } from './models/remote-host.model';

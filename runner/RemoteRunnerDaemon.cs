@@ -98,9 +98,22 @@ public sealed class RemoteRunnerDaemon
                 startupAuthorityWatch.Token))
             .ToArray();
 
+        var registrationSlots = new List<PersistedRunnerSlot>();
+        foreach (var persisted in persistedAtStartup)
+        {
+            var recovered = await RecoverLaunchingIdentityAsync(persisted, state);
+            var observation = DurableAgentProcess.InspectForReattach(recovered);
+            if (observation.Result is not null || observation.IsLive)
+                registrationSlots.Add(recovered);
+        }
+
         var clientId = await WithServerRetryAsync(
             "runner registration",
-            () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
+            () => _client.RegisterAsync(
+                _options.RunnerName,
+                "service",
+                shutdown,
+                RunnerActiveAttemptReports.Coding(registrationSlots, _options.TtlSeconds)),
             connectivity,
             () => 0,
             shutdown);
@@ -301,7 +314,13 @@ public sealed class RemoteRunnerDaemon
             },
             async ct =>
             {
-                _ = await _client.RegisterAsync(_options.RunnerName, "service", ct);
+                _ = await _client.RegisterAsync(
+                    _options.RunnerName,
+                    "service",
+                    ct,
+                    RunnerActiveAttemptReports.Coding(
+                        RunnerActiveAttemptReports.VerifiableCoding(state.LoadAll()),
+                        _options.TtlSeconds));
             },
             connectivity,
             () => active.Count,
@@ -382,7 +401,13 @@ public sealed class RemoteRunnerDaemon
                             ct),
                         async ct =>
                         {
-                            _ = await _client.RegisterAsync(_options.RunnerName, "service", ct);
+                            _ = await _client.RegisterAsync(
+                                _options.RunnerName,
+                                "service",
+                                ct,
+                                RunnerActiveAttemptReports.Coding(
+                                    RunnerActiveAttemptReports.VerifiableCoding(state.LoadAll()),
+                                    _options.TtlSeconds));
                         },
                         connectivity,
                         () => active.Count,

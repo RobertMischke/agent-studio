@@ -23,6 +23,7 @@ import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
+  reportedRemoteAttemptSlots,
   RemoteHostsService,
 } from '../../../remote-hosts';
 
@@ -93,20 +94,24 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
-  readonly runningCount = computed(() => this.runningTruth().total);
+  readonly reportedRemoteSlots = computed(() =>
+    reportedRemoteAttemptSlots(this.remoteHosts.hosts()));
+  readonly effectiveRemoteSlots = computed(() =>
+    Math.max(this.runningTruth().remote, this.reportedRemoteSlots()));
+  readonly runningCount = computed(() => this.runningTruth().local + this.effectiveRemoteSlots());
   readonly runningLabel = computed(() => {
     const truth = this.runningTruth();
-    return formatRunningLabel(truth.local, truth.remote);
+    return formatRunningLabel(truth.local, this.effectiveRemoteSlots());
   });
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
   readonly runningSourcesDiverge = computed(() => {
     const telemetry = this.remoteTelemetrySlots();
-    return telemetry !== null && telemetry !== this.runningTruth().remote;
+    return telemetry !== null && telemetry !== this.effectiveRemoteSlots();
   });
 
   readonly hostLoad = computed(() =>
-    summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
+    summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.effectiveRemoteSlots()));
 
   readonly autoCount = computed(() => {
     const status = this.jobService.runnerStatus();
@@ -144,13 +149,15 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   runningTooltip(): string {
     const truth = this.runningTruth();
-    const execution = `Running ${truth.total} - ${truth.local} local / ${truth.remote} remote.`;
+    const remote = this.effectiveRemoteSlots();
+    const total = truth.local + remote;
+    const execution = `Running ${total} - ${truth.local} local / ${remote} remote.`;
     const telemetrySlots = this.remoteTelemetrySlots();
     const comparison = telemetrySlots === null
       ? ' Fresh remote slot telemetry is unavailable.'
       : this.runningSourcesDiverge()
-        ? ` Warning: Board leases report ${truth.remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
-        : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
+        ? ` Warning: Server authority reports ${remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
+        : ` Server authority and host telemetry agree on ${remote} remote ${remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
     if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
 

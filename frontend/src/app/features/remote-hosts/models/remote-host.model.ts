@@ -206,6 +206,21 @@ export interface TaskServerTelemetrySnapshot {
   taskServerConnectionLastRecoveredAt?: string | null;
 }
 
+export interface TaskServerActiveAttempt {
+  kind: 'coding' | 'review' | string;
+  attemptId: string;
+  taskKey: string;
+  leaseId: string;
+  fence: number;
+  authorityEpoch: number;
+  leaseInstanceId: string;
+  observedAt: string;
+  requestedTtlSeconds: number;
+  phase?: string | null;
+  expiresAt?: string | null;
+  projectId?: string | null;
+}
+
 /** Wire shape returned by GET /api/v1/management/remote-hosts. */
 export interface TaskServerRunnerCapabilitySnapshot {
   runnerId: string;
@@ -225,6 +240,7 @@ export interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacityAppliedAt?: string | null;
   runtimeCapacityAppliedVersion?: number | null;
   projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
+  activeAttempts?: readonly TaskServerActiveAttempt[];
 }
 
 export interface RemoteHostAdmission {
@@ -295,6 +311,8 @@ export interface RemoteHost {
   projectPolicy?: HostProjectPolicy | null;
   /** Which projects currently occupy this host's shared slot ceiling. */
   projectSlots?: readonly HostProjectSlots[];
+  /** Current fenced coding and review attempts reloaded from server authority. */
+  activeAttempts?: readonly TaskServerActiveAttempt[];
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

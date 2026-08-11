@@ -45,13 +45,14 @@ public static class V1ReviewPlaneEndpoints
             HttpContext context,
             string runnerId,
             Contract.RegisterRunnerRequest request,
-            V1ReviewExecutorRegistry registry) =>
+            V1ReviewExecutorRegistry registry,
+            AttemptAuthorityService authority) =>
         {
             if (!RunnerMatches(context, runnerId))
                 return Results.Unauthorized();
             try
             {
-                return Results.Ok(registry.Register(runnerId, request));
+                return Results.Ok(registry.Register(runnerId, request, authority));
             }
             catch (ArgumentException exception)
             {
@@ -1167,7 +1168,10 @@ public sealed class V1ReviewExecutorRegistry
         new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
-    public Contract.RunnerDto Register(string runnerId, Contract.RegisterRunnerRequest request)
+    public Contract.RunnerDto Register(
+        string runnerId,
+        Contract.RegisterRunnerRequest request,
+        AttemptAuthorityService? authority = null)
     {
         if (!Contract.TaskServerProtocol.Supports(request.ProtocolVersion))
             throw new ArgumentException("Runner protocol is not supported.");
@@ -1229,6 +1233,7 @@ public sealed class V1ReviewExecutorRegistry
             // executor is never born paused by a previous instance's failures.
             ClearCapabilityFailures(runnerId);
         }
+        var adoptions = authority?.ReAdoptRunnerAttempts(runnerId, request.ActiveAttempts) ?? [];
         return new Contract.RunnerDto(
             runnerId,
             registration.Name,
@@ -1238,7 +1243,8 @@ public sealed class V1ReviewExecutorRegistry
             registration.ProtocolVersion,
             "active",
             registration.RegisteredAt,
-            registration.LastSeenAt);
+            registration.LastSeenAt,
+            AttemptAdoptions: adoptions);
     }
 
     public Contract.RunnerCapabilitySnapshotDto AdvertiseCapabilities(
@@ -1571,7 +1577,9 @@ public sealed class V1ReviewExecutorRegistry
     /// runner identity. The standalone Task Server exposes the same wire shape
     /// from its durable store at GET /api/v1/management/remote-hosts.
     /// </summary>
-    public IReadOnlyList<Contract.RunnerCapabilitySnapshotDto> ListCapabilitySnapshots()
+    public IReadOnlyList<Contract.RunnerCapabilitySnapshotDto> ListCapabilitySnapshots(
+        AttemptAuthorityService? authority = null,
+        Func<string, string?>? projectResolver = null)
     {
         var now = DateTime.UtcNow;
         lock (_gate)
@@ -1607,6 +1615,12 @@ public sealed class V1ReviewExecutorRegistry
                         .Where(failure => failure.WholeHost && failure.CooldownUntil > now)
                         .OrderByDescending(failure => failure.CooldownUntil)
                         .FirstOrDefault();
+                    var activeAttempts = authority?.GetActiveRunnerAttempts(runnerId)
+                        .Select(attempt => attempt with
+                        {
+                            ProjectId = projectResolver?.Invoke(attempt.TaskKey),
+                        })
+                        .ToArray() ?? [];
                     return new Contract.RunnerCapabilitySnapshotDto(
                         runnerId,
                         registration.Name,
@@ -1625,7 +1639,8 @@ public sealed class V1ReviewExecutorRegistry
                             null,
                             null),
                         capabilities,
-                        state?.Telemetry);
+                        state?.Telemetry,
+                        ActiveAttempts: activeAttempts);
                 })
                 .ToArray();
         }

@@ -410,6 +410,10 @@ public sealed partial class TaskServerStore
                 if (!string.IsNullOrWhiteSpace(json))
                     telemetry = JsonSerializer.Deserialize<HostTelemetrySnapshotDto>(json);
             }
+            var activeAttempts = await ReadActiveRunnerAttemptsAsync(
+                connection,
+                runner.Id,
+                ct);
             result.Add(new RunnerCapabilitySnapshotDto(
                 runner.Id,
                 runner.Name,
@@ -427,7 +431,57 @@ public sealed partial class TaskServerStore
                 runner.EffectiveMaxParallelism,
                 runner.RuntimeCapacityAppliedAt,
                 runner.RuntimeCapacityAppliedVersion,
-                projectPolicy));
+                projectPolicy,
+                activeAttempts));
+        }
+        return result;
+    }
+
+    private async Task<IReadOnlyList<RunnerActiveAttemptDto>> ReadActiveRunnerAttemptsAsync(
+        SqliteConnection connection,
+        string runnerId,
+        CancellationToken ct)
+    {
+        var result = new List<RunnerActiveAttemptDto>();
+        await using var command = Command(connection, """
+            SELECT 'coding', l.run_id, t.task_key, l.lease_id, l.fence,
+                   l.instance_id, l.acquired_at, l.expires_at, p.name,
+                   CASE WHEN l.status = 'process-unknown' THEN 'process-unknown' ELSE 'running' END
+              FROM leases l
+              JOIN runs r ON r.id = l.run_id
+              JOIN tasks t ON t.id = l.task_id
+              JOIN projects p ON p.id = t.project_id
+             WHERE l.runner_id = $runner
+               AND l.status IN ('active', 'process-unknown')
+               AND l.expires_at > $now
+               AND r.status IN ('running', 'process-unknown')
+            UNION ALL
+            SELECT 'review', a.id, t.task_key, a.lease_id, a.fence,
+                   a.instance_id, a.acquired_at, a.expires_at, p.name,
+                   CASE WHEN a.status = 'process-unknown' THEN 'process-unknown' ELSE 'running' END
+              FROM review_attempts a
+              JOIN tasks t ON t.id = a.task_id
+              JOIN projects p ON p.id = t.project_id
+             WHERE a.executor_id = $runner
+               AND a.status IN ('leased', 'process-unknown')
+               AND a.expires_at > $now
+             ORDER BY 1, 3, 2;
+            """, ("$runner", runnerId), ("$now", Iso(UtcNow)));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add(new RunnerActiveAttemptDto(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetInt64(4),
+                0,
+                reader.GetString(5),
+                Parse(reader.GetString(6)),
+                Phase: reader.GetString(9),
+                ExpiresAt: Parse(reader.GetString(7)),
+                ProjectId: reader.GetString(8)));
         }
         return result;
     }

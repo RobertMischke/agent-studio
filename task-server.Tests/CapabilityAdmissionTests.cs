@@ -436,6 +436,9 @@ public sealed class CapabilityAdmissionTests
         Assert.Equal(
             CapabilityHealthStates.Draining,
             Assert.Single(codex.Capabilities, item => item.Key == capability).HealthState);
+        var retainedAttempt = Assert.Single(codex.ActiveAttempts!);
+        Assert.Equal(running.Run.RunId, retainedAttempt.AttemptId);
+        Assert.Equal("process-unknown", retainedAttempt.Phase);
     }
 
     [Fact]

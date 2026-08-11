@@ -60,4 +60,34 @@ public sealed class AutoReviewStatusSnapshotTests
         Assert.Equal("task-a", activity.JobId);
         Assert.Equal(AutoReviewActivitySteps.Aspects, activity.Step);
     }
+
+    [Fact]
+    public void Read_restores_durable_review_activity_and_keeps_a_more_precise_local_step()
+    {
+        var snapshot = new AutoReviewStatusSnapshot();
+        var started = new DateTime(2026, 8, 11, 20, 0, 0, DateTimeKind.Utc);
+        snapshot.SetCurrentStep("project-a", "task-a", AutoReviewActivitySteps.Aspects);
+
+        var status = snapshot.Read(
+        [
+            new AutoReviewActivityView(
+                "project-a",
+                "task-a",
+                AutoReviewActivitySteps.Processing,
+                started),
+            new AutoReviewActivityView(
+                "project-a",
+                "task-b",
+                AutoReviewActivitySteps.Processing,
+                started),
+        ]);
+
+        Assert.Equal(2, status.ActiveJobs.Count);
+        Assert.Equal(
+            AutoReviewActivitySteps.Aspects,
+            Assert.Single(status.ActiveJobs, activity => activity.JobId == "task-a").Step);
+        Assert.Equal(
+            AutoReviewActivitySteps.Processing,
+            Assert.Single(status.ActiveJobs, activity => activity.JobId == "task-b").Step);
+    }
 }

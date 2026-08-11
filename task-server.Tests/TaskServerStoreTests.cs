@@ -260,6 +260,60 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Restart_registration_re_adopts_exact_coding_lease_and_accepts_completion()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var (_, _, task) = await SeedReadyTaskAsync(first);
+        await first.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await first.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "runner-a",
+            default);
+
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var registration = await restarted.RegisterRunnerAsync(
+            "runner-a",
+            Runner("instance-a") with
+            {
+                ActiveAttempts =
+                [
+                    new RunnerActiveAttemptDto(
+                        RunnerAttemptKinds.Coding,
+                        claim.Run!.RunId,
+                        task.TaskKey,
+                        claim.Lease!.LeaseId,
+                        claim.Lease.Fence,
+                        0,
+                        claim.Lease.InstanceId,
+                        DateTime.UtcNow),
+                ],
+            },
+            "runner-a",
+            default);
+
+        Assert.Equal(
+            RunnerAttemptAdoptionStatuses.Adopted,
+            Assert.Single(registration.AttemptAdoptions!).Status);
+        var completed = await restarted.CompleteRunAsync(
+            claim.Run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                claim.Lease.LeaseId,
+                claim.Lease.Fence,
+                "EnvironmentFailure",
+                IdempotencyKey: "completion-after-restart",
+                Sequence: 1),
+            "runner-a",
+            default);
+
+        Assert.Equal("EnvironmentFailure", completed.Status);
+    }
+
+    [Fact]
     public async Task Backup_restore_preserves_resources_events_artifacts_audit_identity_and_fences()
     {
         await TempDirectory.RunAsync(async temp =>

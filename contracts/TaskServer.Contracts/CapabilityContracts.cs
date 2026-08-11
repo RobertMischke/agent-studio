@@ -155,7 +155,8 @@ public sealed record RunnerCapabilitySnapshotDto(
     int? EffectiveMaxParallelism = null,
     DateTime? RuntimeCapacityAppliedAt = null,
     long? RuntimeCapacityAppliedVersion = null,
-    HostProjectPolicyDto? ProjectPolicy = null);
+    HostProjectPolicyDto? ProjectPolicy = null,
+    IReadOnlyList<RunnerActiveAttemptDto>? ActiveAttempts = null);
 
 public sealed record OperatorHostDrainRequest(string Reason);
 

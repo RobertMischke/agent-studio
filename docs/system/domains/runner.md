@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-04
+Version: 2026-08-11
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -243,6 +243,15 @@ state.
   review settlements become superseded once another subject is current. It
   lives under `<TaskRepository>/.metadata/` and performs no
   checkout, build, test, provider CLI, vision, or semantic review work.
+  Runner registration carries every host-local Coding and Review attempt that
+  still has positive process or durable-result evidence. The report includes
+  attempt, task, lease, fence, authority epoch, and the original lease instance.
+  Registration re-adopts only an exact current leased generation, extends its
+  durable lease, and returns one adoption verdict per report. Expiry alone does
+  not prevent re-adoption while no higher-fence takeover has replaced the
+  generation. Server restarts reload this authority before runner registration;
+  Auto Review status and Remote Hosts active slots derive from the same durable
+  current-attempt projection instead of a process-local worker dictionary.
   Remote claim and completion lane facts carry the same attempt, fence, epoch,
   and idempotency tuple. Claim, standalone acquire, and completion are serialized
   at the Task Server mutation boundary, and canonical Remote completion suppresses

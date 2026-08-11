@@ -326,11 +326,25 @@ describe('RemoteHostsService client registry hydration', () => {
         capability('git:workflow-push', 'ready-no-workflow-scope', 'workflow scope missing'),
       ],
       telemetry: null,
+      activeAttempts: [{
+        kind: 'review',
+        attemptId: 'review-restarted-1',
+        taskKey: 'AGT-2646',
+        leaseId: 'lease-review-1',
+        fence: 4,
+        authorityEpoch: 2,
+        leaseInstanceId: 'runner-host:42',
+        observedAt: now,
+        requestedTtlSeconds: 120,
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        projectId: 'Agent Studio',
+      }],
     }]);
 
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       gitPushStatus: 'ready-no-workflow-scope',
       gitPushDetail: 'workflow scope missing',
+      activeAttempts: [{ attemptId: 'review-restarted-1', kind: 'review' }],
     });
     http.verify();
   });
