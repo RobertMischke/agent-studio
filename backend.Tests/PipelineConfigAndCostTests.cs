@@ -418,6 +418,95 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void SummarizeByModel_SessionRunsUseCanonicalTaskLedgerAndMarkMissingUsage()
+    {
+        var first = new DateTime(2026, 8, 11, 8, 0, 0, DateTimeKind.Utc);
+        var sessions = Enumerable.Range(0, 6)
+            .Select(index => new SessionEvent
+            {
+                Ts = first.AddHours(index),
+                FinishedAt = first.AddHours(index).AddMinutes(20),
+                Kind = index == 0 ? "start" : "continue",
+                Model = "gpt-5.6-sol",
+                Status = "completed",
+            })
+            .ToList();
+        var tokens = new TaskTokenSummary
+        {
+            Calls = 2,
+            InputTokens = 900_000,
+            OutputTokens = 110_000,
+            CacheReadTokens = 300_000,
+            CacheCreationTokens = 40_000,
+            TotalTokens = 1_350_000,
+            AllModelsPriced = true,
+            LastModel = "gpt-5.6-sol",
+            LastUpdate = first.AddHours(5).AddMinutes(10),
+            Entries =
+            [
+                new TaskTokenCall
+                {
+                    Ts = first.AddMinutes(10),
+                    Model = "gpt-5.6-sol",
+                    InputTokens = 500_000,
+                    OutputTokens = 60_000,
+                    CacheReadTokens = 200_000,
+                    CacheCreationTokens = 10_000,
+                },
+                new TaskTokenCall
+                {
+                    Ts = first.AddHours(5).AddMinutes(10),
+                    Model = "gpt-5.6-sol",
+                    InputTokens = 400_000,
+                    OutputTokens = 50_000,
+                    CacheReadTokens = 100_000,
+                    CacheCreationTokens = 30_000,
+                },
+            ],
+        };
+
+        var summary = PipelineCostCalculator.SummarizeByModel(null, sessions, tokens);
+
+        Assert.Equal(6, summary.Runs.Count);
+        Assert.Equal(4, summary.MissingTokenRuns);
+        Assert.True(summary.Runs[0].TokenUsageAvailable);
+        Assert.False(summary.Runs[1].TokenUsageAvailable);
+        Assert.True(summary.Runs[5].TokenUsageAvailable);
+        Assert.Equal(900_000, Assert.Single(summary.TotalByModel).InputTokens);
+        Assert.Equal(110_000, summary.TotalByModel[0].OutputTokens);
+        Assert.Equal(300_000, summary.TotalByModel[0].CacheReadTokens);
+        Assert.Equal(40_000, summary.TotalByModel[0].CacheCreationTokens);
+        Assert.Equal(1_350_000, summary.TotalTokens);
+        Assert.True(summary.TotalCostUsd > 0m);
+        Assert.False(summary.AnyModelUnknown);
+    }
+
+    [Fact]
+    public void SummarizeByModel_SessionRunsWithoutLedgerNeverMasqueradeAsZeroUsage()
+    {
+        var first = new DateTime(2026, 8, 11, 8, 0, 0, DateTimeKind.Utc);
+        var sessions = Enumerable.Range(0, 6)
+            .Select(index => new SessionEvent
+            {
+                Ts = first.AddHours(index),
+                FinishedAt = first.AddHours(index).AddMinutes(20),
+                Kind = index == 0 ? "start" : "continue",
+                Model = "gpt-5.6-sol",
+                Status = "completed",
+            })
+            .ToList();
+
+        var summary = PipelineCostCalculator.SummarizeByModel(null, sessions, null);
+
+        Assert.Equal(6, summary.Runs.Count);
+        Assert.Equal(6, summary.MissingTokenRuns);
+        Assert.All(summary.Runs, run => Assert.False(run.TokenUsageAvailable));
+        Assert.Empty(summary.TotalByModel);
+        Assert.Equal(0, summary.TotalTokens);
+        Assert.Equal(0m, summary.TotalCostUsd);
+    }
+
+    [Fact]
     public void SummarizeByModel_MixedRuns_ReportsPartialCostAndNoPriceForDateReason()
     {
         var priced = new PipelineExecutionRecord

@@ -92,7 +92,8 @@ public sealed record PipelineRunTokenUsage(
     long TotalTokens,
     decimal TotalCostUsd,
     bool AnyModelUnknown,
-    IReadOnlyList<PipelinePricingGap> PricingGaps);
+    IReadOnlyList<PipelinePricingGap> PricingGaps,
+    bool TokenUsageAvailable);
 
 /// <summary>
 /// Per-model token usage for one task across every run: a per-run breakdown
@@ -107,7 +108,8 @@ public sealed record PipelineModelUsageSummary(
     decimal TotalCostUsd,
     bool AnyModelUnknown,
     int UnpricedRuns,
-    IReadOnlyList<PipelinePricingGap> PricingGaps);
+    IReadOnlyList<PipelinePricingGap> PricingGaps,
+    int MissingTokenRuns);
 
 /// <summary>
 /// Derives per-step and task-total cost from an already-recorded
@@ -342,7 +344,7 @@ public static class PipelineCostCalculator
             return new PipelineModelUsageSummary(
                 Array.Empty<PipelineRunTokenUsage>(),
                 Array.Empty<PipelineModelTokenUsage>(),
-                0, 0m, false, 0, Array.Empty<PipelinePricingGap>());
+                0, 0m, false, 0, Array.Empty<PipelinePricingGap>(), 0);
         }
 
         // Oldest first: archived attempts (newest-first on disk) ascending by
@@ -354,6 +356,61 @@ public static class PipelineCostCalculator
         }
         runs.Add(BuildRun(record, current: true));
 
+        return BuildModelSummary(runs);
+    }
+
+    /// <summary>
+    /// Projects the same chronological session rows as the task's RUNS badge,
+    /// then attributes the canonical task token ledger into those run windows.
+    /// This avoids treating a pipeline attempt as a CLI run and keeps missing
+    /// telemetry distinct from a genuine recorded zero.
+    /// </summary>
+    public static PipelineModelUsageSummary SummarizeByModel(
+        PipelineExecutionRecord? record,
+        IReadOnlyList<SessionEvent> sessionEvents,
+        TaskTokenSummary? taskTokens)
+    {
+        if (sessionEvents.Count == 0)
+            return SummarizeByModel(record);
+
+        var calls = CanonicalCalls(taskTokens);
+        if (calls.Count == 0)
+            calls = PipelineCalls(record);
+
+        var callsByRun = Enumerable.Range(0, sessionEvents.Count)
+            .Select(_ => new List<TaskTokenCall>())
+            .ToList();
+        foreach (var call in calls.OrderBy(call => call.Ts))
+        {
+            callsByRun[ResolveRunIndex(call.Ts, sessionEvents)].Add(call);
+        }
+
+        var runs = new List<PipelineRunTokenUsage>(sessionEvents.Count);
+        for (var index = 0; index < sessionEvents.Count; index++)
+        {
+            var session = sessionEvents[index];
+            var runCalls = callsByRun[index];
+            var models = GroupCallsByModel(runCalls, session.Model);
+            runs.Add(new PipelineRunTokenUsage(
+                Attempt: index + 1,
+                Current: index == sessionEvents.Count - 1,
+                StartedAt: session.Ts,
+                CompletedAt: session.FinishedAt,
+                Models: models,
+                TotalTokens: models.Sum(model => model.TotalTokens),
+                TotalCostUsd: Round(models.Sum(model => model.CostUsd)),
+                AnyModelUnknown: models.Any(model => model.TotalTokens > 0 && !model.ModelKnown),
+                PricingGaps: MergePricingGaps(
+                    models.SelectMany(model => model.PricingGaps), oneRun: true),
+                TokenUsageAvailable: runCalls.Count > 0));
+        }
+
+        return BuildModelSummary(runs);
+    }
+
+    private static PipelineModelUsageSummary BuildModelSummary(
+        IReadOnlyList<PipelineRunTokenUsage> runs)
+    {
         var totalByModel = runs
             .SelectMany(r => r.Models)
             .GroupBy(m => m.Model, StringComparer.OrdinalIgnoreCase)
@@ -380,7 +437,14 @@ public static class PipelineCostCalculator
         var pricingGaps = MergePricingGaps(runs.SelectMany(run => run.PricingGaps));
 
         return new PipelineModelUsageSummary(
-            runs, totalByModel, totalTokens, totalCost, anyUnknown, unpricedRuns, pricingGaps);
+            runs,
+            totalByModel,
+            totalTokens,
+            totalCost,
+            anyUnknown,
+            unpricedRuns,
+            pricingGaps,
+            runs.Count(run => !run.TokenUsageAvailable));
     }
 
     private static PipelineRunTokenUsage BuildRun(PipelineExecutionRecord run, bool current)
@@ -396,7 +460,147 @@ public static class PipelineCostCalculator
             TotalCostUsd: Round(models.Sum(m => m.CostUsd)),
             AnyModelUnknown: models.Any(m => m.TotalTokens > 0 && !m.ModelKnown),
             PricingGaps: MergePricingGaps(
-                models.SelectMany(model => model.PricingGaps), oneRun: true));
+                models.SelectMany(model => model.PricingGaps), oneRun: true),
+            TokenUsageAvailable: true);
+    }
+
+    private static List<TaskTokenCall> CanonicalCalls(TaskTokenSummary? summary)
+    {
+        if (summary == null)
+            return [];
+
+        var calls = summary.Entries.ToList();
+        var input = calls.Sum(call => call.InputTokens);
+        var output = calls.Sum(call => call.OutputTokens);
+        var cacheRead = calls.Sum(call => call.CacheReadTokens);
+        var cacheCreation = calls.Sum(call => call.CacheCreationTokens);
+        var residualInput = Math.Max(0, summary.InputTokens - input);
+        var residualOutput = Math.Max(0, summary.OutputTokens - output);
+        var residualCacheRead = Math.Max(0, summary.CacheReadTokens - cacheRead);
+        var residualCacheCreation = Math.Max(0, summary.CacheCreationTokens - cacheCreation);
+        var hasResidual = residualInput + residualOutput + residualCacheRead + residualCacheCreation > 0;
+        var hasRecordedZero = calls.Count == 0 && summary.Calls > 0;
+        if (hasResidual || hasRecordedZero)
+        {
+            calls.Add(new TaskTokenCall
+            {
+                Ts = summary.LastUpdate ?? default,
+                Model = summary.LastModel,
+                InputTokens = residualInput,
+                OutputTokens = residualOutput,
+                CacheReadTokens = residualCacheRead,
+                CacheCreationTokens = residualCacheCreation,
+                EstimatedApiCostUsd = Math.Max(
+                    0m,
+                    summary.EstimatedApiCostUsd - calls.Sum(call => call.EstimatedApiCostUsd)),
+                ModelPriced = summary.AllModelsPriced,
+            });
+        }
+
+        return calls;
+    }
+
+    private static List<TaskTokenCall> PipelineCalls(PipelineExecutionRecord? record)
+    {
+        if (record == null)
+            return [];
+
+        var records = record.PreviousAttempts
+            .OrderBy(attempt => attempt.Attempt)
+            .Append(record);
+        return records
+            .SelectMany(run => run.Steps.Select(step => (Run: run, Step: step)))
+            .Where(item => item.Step.InputTokens + item.Step.OutputTokens
+                + item.Step.CacheReadTokens + item.Step.CacheCreationTokens > 0)
+            .Select(item => new TaskTokenCall
+            {
+                Ts = item.Step.StartedAt ?? item.Run.StartedAt,
+                Model = item.Step.Model,
+                InputTokens = item.Step.InputTokens,
+                OutputTokens = item.Step.OutputTokens,
+                CacheReadTokens = item.Step.CacheReadTokens,
+                CacheCreationTokens = item.Step.CacheCreationTokens,
+            })
+            .ToList();
+    }
+
+    private static int ResolveRunIndex(
+        DateTime recordedAt,
+        IReadOnlyList<SessionEvent> sessions)
+    {
+        if (recordedAt == default)
+            return sessions.Count - 1;
+
+        var index = 0;
+        for (var candidate = 1; candidate < sessions.Count; candidate++)
+        {
+            if (recordedAt < sessions[candidate].Ts)
+                break;
+            index = candidate;
+        }
+        return index;
+    }
+
+    private static IReadOnlyList<PipelineModelTokenUsage> GroupCallsByModel(
+        IReadOnlyList<TaskTokenCall> calls,
+        string? runModel)
+    {
+        var byModel = new List<PipelineModelTokenUsage>();
+        var groups = calls.GroupBy(
+            call => string.IsNullOrWhiteSpace(call.Model)
+                ? string.IsNullOrWhiteSpace(runModel) ? "unknown" : runModel.Trim()
+                : call.Model.Trim(),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            long input = 0;
+            long output = 0;
+            long cacheRead = 0;
+            long cacheCreation = 0;
+            decimal cost = 0m;
+            var modelKnown = true;
+            var gaps = new List<PipelinePricingGap>();
+            foreach (var call in group)
+            {
+                input += call.InputTokens;
+                output += call.OutputTokens;
+                cacheRead += call.CacheReadTokens;
+                cacheCreation += call.CacheCreationTokens;
+                var tokens = call.InputTokens + call.OutputTokens
+                    + call.CacheReadTokens + call.CacheCreationTokens;
+                var estimate = TokenPricing.Estimate(
+                    group.Key,
+                    call.InputTokens,
+                    call.OutputTokens,
+                    call.CacheReadTokens,
+                    call.CacheCreationTokens,
+                    call.Ts == default ? null : call.Ts);
+                var priceResolved = tokens == 0 || call.ModelPriced || estimate.ModelKnown;
+                modelKnown &= priceResolved;
+                if (!priceResolved)
+                    gaps.AddRange(PricingGapsFor(estimate, tokens, group.Key));
+                cost += call.ModelPriced ? call.EstimatedApiCostUsd : estimate.Total;
+            }
+
+            byModel.Add(new PipelineModelTokenUsage(
+                Model: group.Key,
+                ModelKnown: modelKnown,
+                UnpricedRuns: modelKnown ? 0 : 1,
+                PricingGaps: MergePricingGaps(gaps, oneRun: true),
+                Steps: group.Count(),
+                InputTokens: input,
+                OutputTokens: output,
+                CacheReadTokens: cacheRead,
+                CacheCreationTokens: cacheCreation,
+                TotalTokens: input + output + cacheRead + cacheCreation,
+                CostUsd: Round(cost)));
+        }
+
+        return byModel
+            .OrderByDescending(model => model.TotalTokens)
+            .ThenBy(model => model.Model, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     // Sum a flat list of steps into per-model rows, busiest model first.

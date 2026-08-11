@@ -40,6 +40,13 @@ aggregate renders its priced subtotal plus
 `incomplete (n runs without price)`. `$0.00` is reserved for zero-token usage.
 Tooltips expose the model id and resolver reason, including `NoPriceForDate`.
 
+Missing token telemetry is a different state from missing catalog pricing.
+Pipeline run totals carry `tokenUsageAvailable`, and the task aggregate carries
+`missingTokenRuns`. When some visible runs have ledger calls, the UI renders the
+priced recorded subtotal plus `incomplete (n runs without usage)`. When no
+visible run has telemetry, token and cost values render `-` / `- no usage data`,
+never `$0.00`. A recorded zero-token call remains a genuine `$0.00` value.
+
 Ledger rows that were persisted before a model entered the catalog are checked
 again against the historical catalog on read. Once a later TokenEconomy release
 resolves the model at the original call timestamp, Studio uses that historical

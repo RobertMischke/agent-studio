@@ -20,6 +20,7 @@ interface TaskTotal {
   anyModelUnknown: boolean;
   unpricedRuns: number;
   pricingGaps: PipelinePricingGap[];
+  missingTokenRuns: number;
 }
 
 /**
@@ -79,6 +80,8 @@ export class PipelineTokenUsageComponent {
     unpricedRuns: this.summary()?.unpricedRuns
       ?? (this.summary()?.anyModelUnknown ? 1 : 0),
     pricingGaps: this.summary()?.pricingGaps ?? [],
+    missingTokenRuns: this.summary()?.missingTokenRuns
+      ?? this.runs().filter((run) => !this.usageAvailableForRun(run)).length,
   }));
 
   /** TASK TOTAL SUM is collapsed by default (the lifetime number is enough). */
@@ -108,8 +111,22 @@ export class PipelineTokenUsageComponent {
     return formatTokens(n);
   }
 
-  costLabel(usd: number, totalTokens: number, unpricedRuns: number): string {
+  tokenLabel(totalTokens: number, usageAvailable = true): string {
+    return usageAvailable ? formatTokens(totalTokens) : '-';
+  }
+
+  costLabel(
+    usd: number,
+    totalTokens: number,
+    unpricedRuns: number,
+    missingTokenRuns = 0,
+  ): string {
+    if (missingTokenRuns > 0 && totalTokens <= 0) return '- no usage data';
     return formatTokenCostDisplay({ costUsd: usd, totalTokens, unpricedRuns });
+  }
+
+  usageAvailableForRun(run: PipelineRunTokenUsage): boolean {
+    return run.tokenUsageAvailable ?? (run.models.length > 0 || run.totalTokens > 0);
   }
 
   unpricedRunsForRun(run: PipelineRunTokenUsage): number {
@@ -124,6 +141,10 @@ export class PipelineTokenUsageComponent {
     return incompleteTokenCostLabel(unpricedRuns);
   }
 
+  missingUsageLabel(missingRuns: number): string {
+    return `incomplete (${missingRuns} run${missingRuns === 1 ? '' : 's'} without usage)`;
+  }
+
   isPartial(costUsd: number, unpricedRuns: number): boolean {
     return costUsd > 0 && unpricedRuns > 0;
   }
@@ -135,15 +156,22 @@ export class PipelineTokenUsageComponent {
     scope: string,
     unpricedRuns = anyModelUnknown ? 1 : 0,
     pricingGaps: readonly PipelinePricingGap[] = [],
+    missingTokenRuns = 0,
   ): string {
-    return buildTokenCostTooltip({
+    const usage = missingTokenRuns > 0
+      ? `Token usage was not recorded for ${missingTokenRuns} run${missingTokenRuns === 1 ? '' : 's'}; shown amounts are the recorded subtotal.`
+      : null;
+    if (missingTokenRuns > 0 && totalTokens <= 0) {
+      return [`${scope}: token usage unavailable.`, usage].filter(Boolean).join('\n');
+    }
+    return [buildTokenCostTooltip({
       costUsd,
       priceKnown: !anyModelUnknown,
       totalTokens,
       context: `${scope}: ${totalTokens.toLocaleString()} total tokens.`,
       unpricedRuns,
       pricingGaps,
-    });
+    }), usage].filter(Boolean).join('\n');
   }
 
   relativeTime(iso: string | null | undefined): string {

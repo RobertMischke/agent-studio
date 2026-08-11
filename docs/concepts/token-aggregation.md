@@ -3,12 +3,12 @@ id: token-aggregation-concept
 title: "Token aggregators use canonical hybrid projections (concept + living knowledge)"
 status: active
 category: concept
-updatedAt: 2026-08-09
-last-updated: 2026-08-09
-reason: "Document the hybrid history plus durable-receipt repair after the remote-runner telemetry gap"
-taskKey: AGT-2542
+updatedAt: 2026-08-11
+last-updated: 2026-08-11
+reason: "Align pipeline RUNS totals with canonical task-ledger attribution and expose missing run telemetry"
+taskKey: AGT-2626
 tags: [token-aggregation, hybrid-projection, task-receipt, drift-rule, observability, cost]
-related-tasks: [ASS-881, ASS-1717, AGT-2542]
+related-tasks: [ASS-881, ASS-1717, AGT-2542, AGT-2624, AGT-2626]
 related-adrs: []
 related-docs:
   - "docs/system/domains/tokens.md"
@@ -241,6 +241,16 @@ For an operator or an LLM instance working in this area, the rules of the road:
 Append new findings about the token-aggregation area here, newest on top. Keep
 each entry short: date, what was learned, and a pointer to the code/commit/task.
 
+- **2026-08-11 (AGT-2626).** The task-detail pipeline counted visible RUNS
+  from `session-events.jsonl` but built token totals from pipeline attempts.
+  Those are different lifecycles, so six CLI runs could appear beside one
+  empty attempt and a silent zero total. `PipelineCostCalculator` now divides
+  the canonical `ITokenAggregator.WorkspacePerJob` calls into the same session
+  windows used by RUNS, sums input, output, cache-read, and cache-write tokens,
+  and reports `missingTokenRuns` separately from `unpricedRuns`. In-repository
+  `.orchestrator/jobs` receipt discovery and historical repair remain owned by
+  AGT-2624; the pipeline consumes that canonical seam rather than adding a
+  second storage or backfill path.
 - **2026-08-09 (AGT-2542).** Remote task execution became primary around July
   11 but did not traverse `ProjectRunner.EmitTokenUsageRichAsync`; its
   completion envelope contains outcome and evidence rather than token usage.

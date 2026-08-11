@@ -218,6 +218,13 @@
     }
   }
 
+  &__empty {
+    margin: 0;
+    padding: var(--studio-spacing-2) var(--ptu-indent);
+    color: var(--studio-fg-muted);
+    font-size: 11px;
+  }
+
   &__model {
     display: flex;
     align-items: center;

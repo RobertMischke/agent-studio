@@ -18,20 +18,10 @@
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 26px;
-  // Keep the metric columns visually attached to the step row on wide panes.
-  // The surrounding `.studio-measure--tabular-compact` still owns the section
-  // cap; this track stops the step name from absorbing all spare width inside
-  // that cap and pushing time / tokens / cost to the far edge.
-  --ov-pipeline-name-col: fit-content(360px);
-  --ov-pipeline-meta-col: minmax(0, max-content);
-  // Slack-absorbing track between the step metadata and the right-pinned
-  // metric block. Every step is its own grid; without one flexible track the
-  // grid left-packs and the leftover space lands AFTER cost, so the
-  // Time / Duration / Tokens / Cost block sits at a different x on each row
-  // (the "krumm und schief" misalignment). A single `1fr` here eats the
-  // remainder identically on every row, anchoring the metric columns to one
-  // shared right edge across all phase groups.
-  --ov-pipeline-flex-col: minmax(0, 1fr);
+  // The name stays wide enough for "Agent execution" while the single flexible
+  // metadata track owns every badge, verdict, run count, and model on the row.
+  --ov-pipeline-name-col: minmax(9rem, 12rem);
+  --ov-pipeline-meta-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
   --ov-pipeline-cost-col: 11rem;
@@ -46,9 +36,6 @@
     var(--ov-pipeline-kind-col)
     var(--ov-pipeline-name-col)
     var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-flex-col)
     var(--ov-pipeline-time-col)
     var(--ov-pipeline-tokens-col)
     var(--ov-pipeline-cost-col);
@@ -706,15 +693,16 @@
 
   &::before {
     content: '';
-    grid-column: 1 / 8;
+    grid-column: 1 / 5;
   }
 
   &__timing {
-    display: inline-flex;
+    display: grid;
     align-items: baseline;
     justify-content: flex-end;
     gap: 5px;
-    grid-column: 8;
+    grid-template-columns: 38px 52px;
+    grid-column: 5;
   }
 
   &__cell {
@@ -730,11 +718,11 @@
   &__time { width: 38px; }
   &__duration { width: 52px; }
   &__tokens {
-    grid-column: 9;
+    grid-column: 6;
     width: 56px;
   }
   &__cost {
-    grid-column: 10;
+    grid-column: 7;
     width: 100%;
   }
 }
@@ -897,6 +885,7 @@
   // One compact status chip carries both the decision role and its route.
   // Full outcome reasoning remains available from the chip tooltip.
   &__final-decision {
+    flex: 0 0 auto;
     min-width: 0;
     max-width: 100%;
     justify-self: start;
@@ -940,12 +929,14 @@
   }
 
   &__status {
+    justify-self: center;
     font-size: 12px;
     line-height: 1;
     text-align: center;
   }
 
   &__kind {
+    justify-self: center;
     width: 22px;
     height: 20px;
     box-sizing: border-box;
@@ -997,17 +988,24 @@
     align-items: center;
   }
 
-  &__parallel-note { grid-column: 4; }
-  &__running-badge { grid-column: 6; }
-  &__runs { grid-column: 7; }
-  &__verdict { grid-column: 5; }
-  &__final-decision { grid-column: 4 / 6; }
-  &__result { grid-column: 6; }
-  &__model { grid-column: 7; }
-  &__model-select { grid-column: 6; }
-  &__timing { grid-column: 8; }
-  &__tokens { grid-column: 9; }
-  &__cost { grid-column: 10; }
+  &__meta {
+    grid-column: 4;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--studio-spacing-1);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  &__runs {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  &__timing { grid-column: 5; }
+  &__tokens { grid-column: 6; }
+  &__cost { grid-column: 7; }
 
   &__model {
     flex: 0 0 auto;
@@ -1017,7 +1015,7 @@
     background: transparent;
     border-radius: 4px;
     padding: 0 4px;
-    max-width: 112px;
+    max-width: 132px;
     opacity: 0.78;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1044,7 +1042,8 @@
   // aligned as one cell so the times + duration scan as a single column.
   &__timing {
     flex: 0 0 auto;
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: 38px 52px;
     align-items: baseline;
     justify-content: flex-end;
     gap: 5px;
@@ -1136,11 +1135,10 @@
 
 // Responsive degradation, driven by the pipeline block's own inline-size (it
 // sits in a split task-detail pane, so the viewport width is the wrong signal).
-// The columns are dropped from the secondary edge inward — first Cost, then
-// Tokens — by shortening the shared grid template and hiding the matching
-// cells. The slack-absorbing flex track keeps Time / Duration right-pinned at
-// every width, so the grid stays aligned and never overflows horizontally.
-// Schritt-Name + Status + Duration are never dropped.
+// The columns are dropped from the secondary edge inward, first Cost, then
+// Tokens, by shortening the shared grid template and hiding the matching
+// cells. The metadata track absorbs the remaining width while Time / Duration
+// stay right-pinned. Step name, status, and duration are never dropped.
 @container ov-pipeline (max-width: 560px) {
   .ov-pl-header,
   .ov-pl-step {
@@ -1149,20 +1147,16 @@
       var(--ov-pipeline-kind-col)
       var(--ov-pipeline-name-col)
       var(--ov-pipeline-meta-col)
-      var(--ov-pipeline-meta-col)
-      var(--ov-pipeline-meta-col)
-      var(--ov-pipeline-flex-col)
       var(--ov-pipeline-time-col)
       var(--ov-pipeline-tokens-col);
   }
 
   .ov-pl-header__cost,
-  .ov-pl-step__cost {
+  .ov-pl-step__cost,
+  .ov-pl-step__cost.ov-pl-step__cost-button {
     display: none;
   }
 
-  // Keep optional post-step controls inside the name track when the compact
-  // decision chip needs the adjacent metadata columns.
   .ov-pl-step--final-verdict .ov-pl-step__name-cell {
     overflow: hidden;
   }
@@ -1176,9 +1170,6 @@
       var(--ov-pipeline-kind-col)
       var(--ov-pipeline-name-col)
       var(--ov-pipeline-meta-col)
-      var(--ov-pipeline-meta-col)
-      var(--ov-pipeline-meta-col)
-      var(--ov-pipeline-flex-col)
       var(--ov-pipeline-time-col);
   }
 
