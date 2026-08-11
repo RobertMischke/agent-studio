@@ -27,7 +27,13 @@
          data-testid="token-usage-as-of">
       <span class="tup__freshness-dot" aria-hidden="true"></span>
       <span>
-        Data as of
+        Recorded since
+        @if (summary()?.firstActivity; as firstActivity) {
+          <time [attr.datetime]="firstActivity">{{ formatTs(firstActivity) }} UTC</time>
+        } @else {
+          <span>an unavailable start time</span>
+        }
+        · Data as of
         @if (freshness.asOf) {
           <time [attr.datetime]="freshness.asOf">{{ formatTs(freshness.asOf) }} UTC</time>
         } @else {

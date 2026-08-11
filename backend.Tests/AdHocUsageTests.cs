@@ -80,6 +80,9 @@ public class AdHocUsageTests
         Assert.Equal("2026-05-01", agg.ByDay[1].Date);
         Assert.Equal(1, agg.ByDay[0].Calls);
         Assert.Equal(2, agg.ByDay[1].Calls);
+        var haiku = Assert.Single(agg.ByModel);
+        Assert.Equal(day1, haiku.FirstRecordedAt);
+        Assert.Equal(day2, haiku.LastRecordedAt);
     }
 
     [Fact]

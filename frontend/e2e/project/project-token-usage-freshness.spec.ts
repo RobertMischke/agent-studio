@@ -55,12 +55,13 @@ test('current receipt, source timestamp, and partial-data warning render in both
 
   await page.goto(`/#/projects/${slugFor(project.name)}/token-usage`);
   await expect(page.getByTestId('project-token-usage-panel')).toBeVisible();
-  const leaveRecoveryUncommitted = page.getByRole('button', { name: 'Leave all uncommitted' });
+  const leaveRecoveryUncommitted = page.getByRole('button', { name: 'Leave uncommitted' });
   if (await leaveRecoveryUncommitted.isVisible().catch(() => false)) {
     await leaveRecoveryUncommitted.click();
   }
   await expect(page.getByTestId('token-usage-card-total')).toContainText('24.9M');
   await expect(page.getByTestId('token-usage-card-total')).toContainText('Last 24h');
+  await expect(page.getByTestId('token-usage-as-of')).toContainText('Recorded since');
   await expect(page.getByTestId('token-usage-as-of')).toContainText('Data as of');
   await expect(page.getByTestId('token-usage-source-warning')).toContainText('may be incomplete');
   await expect(page.getByTestId('pipeline-cost-source-warning')).toContainText('may be incomplete');

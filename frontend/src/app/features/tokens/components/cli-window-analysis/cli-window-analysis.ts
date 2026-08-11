@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline } from '../../models/tokens.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { recordedUsagePeriod, recordedUsagePeriodLabel } from '../recorded-usage-period';
 
 type AnalysisPeriod = '1h' | '24h' | '7d';
 
@@ -31,8 +32,15 @@ export class CliWindowAnalysisComponent {
   readonly row = computed(() => this.quotaRows().find(row => row.cliType === this.cliType()) ?? null);
   readonly label = computed(() => this.cliType() === 'claude' ? 'Claude' : 'Codex');
   readonly cliModels = computed(() => (this.tokens()?.byModel ?? []).filter(row => this.modelMatches(row.model)));
+  readonly capturedModels = computed(() => [
+    ...this.cliModels(),
+    ...(this.cliType() === 'claude' ? this.adhoc()?.byModel ?? [] : []),
+  ]);
   readonly capturedTokens = computed(() => this.cliModels().reduce((sum, model) => sum + this.modelTotal(model), 0)
     + (this.cliType() === 'claude' ? this.adhocTotal() : 0));
+  readonly capturedPeriodLabel = computed(() =>
+    recordedUsagePeriodLabel(recordedUsagePeriod(this.capturedModels())),
+  );
   readonly streamParts = computed<StreamPart[]>(() => {
     let input = 0, output = 0, cache = 0;
     for (const model of this.cliModels()) {

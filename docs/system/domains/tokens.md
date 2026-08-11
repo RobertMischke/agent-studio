@@ -249,6 +249,12 @@ mixed dashboard:
   aggregate contract has no reasoning-effort field. The UI therefore labels
   the trend as a workspace plausibility baseline and effort as unattributed. It
   does not invent either attribution.
+- Lifetime model rows carry `firstRecordedAt` and `lastRecordedAt`, folded from
+  their telemetry entries. Usage surfaces derive their visible "Since" and
+  "As of" range from the displayed rows; if any displayed row lacks a valid
+  boundary, the UI reports that the recording period is unavailable instead of
+  substituting a configured or fetch timestamp. Provider quota cards remain on
+  their separate window-label and reset-time contract.
 - Per-task cap forecast (TE-4) is a labelled future integration point only.
 
 Workspace and project usage calculations are unchanged by this navigation

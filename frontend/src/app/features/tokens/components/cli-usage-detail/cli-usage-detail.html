@@ -53,7 +53,7 @@
     <div class="cud__trend-head">
       <h4>Token trend</h4>
       @if (tokens(); as t) {
-        <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
+        <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost · {{ recordedPeriodLabel() }}</span>
       }
     </div>
     <div class="cud__sparks">

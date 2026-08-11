@@ -49,8 +49,8 @@ async function stubBackgroundApis(page: Page) {
     projects: 2, orchestratorEntries: 21, orchestratorLlmCalls: 21,
     totalInputTokens: 510000, totalOutputTokens: 94000, totalCacheReadTokens: 180000, totalCacheCreationTokens: 22000,
     estimatedApiCostUsd: 2.4, allModelsPriced: true, byModel: [
-      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true },
-      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true },
+      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true, firstRecordedAt: '2026-01-17T09:15:00Z', lastRecordedAt: '2026-08-11T12:42:00Z' },
+      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true, firstRecordedAt: '2026-02-05T08:00:00Z', lastRecordedAt: '2026-08-10T18:05:00Z' },
     ], byProject: [],
     fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
   }));
@@ -245,6 +245,8 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(page.getByTestId('cli-window-analysis-claude')).toBeVisible();
     await expect(page.getByTestId('cli-window-analysis-claude')).toContainText('CLI account level');
     await expect(page.getByTestId('cli-window-cards')).toContainText('5h session');
+    await expect(page.getByTestId('cli-recorded-period')).toContainText('Since Jan 17, 2026');
+    await expect(page.getByTestId('cli-recorded-period')).toContainText('As of Aug 11, 2026, 12:42 UTC');
     await expect(page.getByTestId('cli-effort-split')).toContainText('Unattributed 100%');
     await expect(page.getByTestId('cli-plausibility')).toContainText('Per-task cap forecast (TE-4)');
 
@@ -257,7 +259,7 @@ test.describe('Workspace settings home (Dach)', () => {
     }
 
     await page.getByTestId('token-usage-nav-codex').click();
-    await expect(page).toHaveURL(/#\/workspace\/tokens\/codex$/);
+    await expect(page).toHaveURL(/#\/workspace\/settings\/tokens\/codex$/);
     await expect(page.getByTestId('cli-window-analysis-codex')).toContainText('Codex usage windows');
     await page.getByTestId('cli-window-period-7d').click();
     await expect(page.getByTestId('cli-window-period-7d')).toHaveAttribute('aria-pressed', 'true');
@@ -266,6 +268,7 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(page.getByTestId('workspace-token-timeline')).toBeVisible();
     await expect(page.getByTestId('token-usage-detail')).toBeVisible();
     await expect(page.getByTestId('cli-usage-detail-trend')).toBeVisible();
+    await expect(page.getByTestId('cli-usage-detail-trend')).toContainText('Since Jan 17, 2026');
     await expect(page.getByTestId('cli-usage-detail-headroom')).toHaveCount(0);
     await expect(page.getByTestId('cli-usage-detail-cli-claude')).toHaveCount(0);
   });

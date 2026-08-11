@@ -32,6 +32,8 @@
   text-transform: uppercase;
 }
 
+.cum__panel-copy { min-width: 0; }
+
 // Plan badge — the subscription tier surfaced next to the windows head.
 .cum__plan {
   font-size: 10px;
@@ -147,7 +149,7 @@
 // Summary head over the model table — token + cost totals as stat tiles.
 // ---------------------------------------------------------------------------
 .cum__scope-note {
-  margin: calc(var(--studio-spacing-2) * -1) 0 var(--studio-spacing-3);
+  margin: var(--studio-spacing-1) 0 0;
   color: var(--studio-fg-dim);
   font-size: 11px;
 }

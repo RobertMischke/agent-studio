@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { recordedUsagePeriod, recordedUsagePeriodLabel } from '../recorded-usage-period';
 
 interface SparkPoint {
   label: string;
@@ -76,6 +77,9 @@ export class CliUsageDetailComponent {
   readonly expensiveJobs = input<WorkspaceExpensiveJob[]>([]);
   readonly refreshing = input<Record<string, boolean>>({});
   readonly refreshingAll = input(false);
+  readonly recordedPeriodLabel = computed(() =>
+    recordedUsagePeriodLabel(recordedUsagePeriod(this.tokens()?.byModel ?? [])),
+  );
 
   readonly refreshAll = output<Event>();
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();

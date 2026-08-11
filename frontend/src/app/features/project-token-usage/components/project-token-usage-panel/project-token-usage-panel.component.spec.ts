@@ -265,6 +265,8 @@ describe('ProjectTokenUsagePanelComponent (freshness)', () => {
 
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="token-usage-as-of"]')?.textContent)
+      .toContain('Recorded since');
+    expect(host.querySelector('[data-testid="token-usage-as-of"]')?.textContent)
       .toContain('2026-08-09 10:00 UTC');
     expect(host.querySelector('[data-testid="token-usage-source-warning"]')?.textContent)
       .toContain('may be incomplete');

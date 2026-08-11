@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
 import { setTheme } from '../helpers/theme';
 
@@ -119,7 +119,8 @@ test.describe('Status bar usage modal', () => {
     await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   });
 
-  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page }) => {
+  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page, devBackend: _devBackend }) => {
+    await page.route('**/api/crash-recovery/pending', route => route.fulfill({ json: { pending: [] } }));
     await page.route('**/api/cli/quota**', async route => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
@@ -157,12 +158,16 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-01-17T09:15:00Z',
+            lastRecordedAt: '2026-08-11T12:42:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-03-02T14:00:00Z',
+            lastRecordedAt: '2026-08-10T18:05:00Z',
           },
         ],
         byProject: [],
@@ -201,21 +206,26 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
-    await page.getByTestId('hquota-card-codex').click();
+    const codexCard = page.getByTestId('hquota-card-codex');
+    await expect(codexCard).toHaveAttribute('aria-label', /5-hour 3%/);
+    await codexCard.click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    const period = modal.getByTestId('cli-usage-model-period');
+    await expect(period).toContainText('Since Jan 17, 2026');
+    await expect(period).toContainText('As of Aug 11, 2026, 12:42 UTC');
+    await expect(period).toContainText('Independent of the quota windows above');
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-time-context--after-light--mocked.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-time-context--after-dark--mocked.png` });
   });
 });
