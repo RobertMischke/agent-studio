@@ -244,12 +244,79 @@
   .adoption-step p { margin: 4px 0 0; color: var(--ink-2); font-size: 13px; }
   .decision-list { margin-top: 15px; }
   .decision-list li { padding: 4px 0; }
+  .nav-variant-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 22px;
+  }
+  .nav-variant {
+    min-width: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .nav-variant h4 { margin-bottom: 3px; }
+  .nav-variant > p { min-height: 4.8em; color: var(--ink-2); font-size: 13px; }
+  .nav-theme-pair { display: grid; gap: 10px; }
+  .nav-proof { display: block; width: 100%; height: auto; }
+  .nav-proof.theme-light {
+    --n-bg: #f5f5f3;
+    --n-hover: #eaeae7;
+    --n-active: #e4eaf2;
+    --n-ink: #242422;
+    --n-muted: #777773;
+    --n-faint: #9a9a95;
+    --n-badge: #dfdfdb;
+    --n-badge-ink: #595956;
+    --n-line: #d2d2ce;
+  }
+  .nav-proof.theme-dark {
+    --n-bg: #202020;
+    --n-hover: #2a2a29;
+    --n-active: #2c3542;
+    --n-ink: #ededeb;
+    --n-muted: #aaa9a4;
+    --n-faint: #7f7f7b;
+    --n-badge: #353533;
+    --n-badge-ink: #c4c3be;
+    --n-line: #3b3b39;
+  }
+  .nav-bg { fill: var(--n-bg); }
+  .nav-hover { fill: var(--n-hover); }
+  .nav-active { fill: var(--n-active); }
+  .nav-badge { fill: var(--n-badge); }
+  .nav-rule { stroke: var(--n-line); }
+  .nav-icon, .nav-chevron {
+    fill: none;
+    stroke: var(--n-muted);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .nav-label { fill: var(--n-ink); font: 500 13px Inter, "Segoe UI", sans-serif; }
+  .nav-label-strong { fill: var(--n-ink); font: 650 13px Inter, "Segoe UI", sans-serif; }
+  .nav-meta { fill: var(--n-muted); font: 500 10.5px Inter, "Segoe UI", sans-serif; }
+  .nav-faint { fill: var(--n-faint); font: 650 9px Inter, "Segoe UI", sans-serif; letter-spacing: .08em; }
+  .nav-badge-text { fill: var(--n-badge-ink); font: 650 10px Inter, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+  .nav-pending-dot { fill: var(--n-muted); }
+  .slice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 30px;
+    margin-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .slice-column { padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .slice-column ul { margin-bottom: 0; color: var(--ink-2); }
   footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }
   @media (max-width: 820px) {
     main { width: min(100% - 24px, 1160px); }
     .toc { grid-template-columns: 1fr 1fr; }
     .rule { grid-template-columns: 58px minmax(0, 1fr); gap: 10px; }
     .spec-grid { grid-template-columns: 1fr; }
+    .nav-variant-grid { grid-template-columns: 1fr; }
+    .nav-variant > p { min-height: 0; }
+    .slice-grid { grid-template-columns: 1fr; }
     .adoption-flow { grid-template-columns: 1fr 1fr; }
     .adoption-step:nth-child(3) { border-left: 0; }
     .adoption-step:nth-child(n+3) { border-top: 1px solid var(--line); }
@@ -286,6 +353,7 @@
         <li><a href="#audit">04 · Violation audit</a></li>
         <li><a href="#adoption">05 · Adoption contract</a></li>
         <li><a href="#open-decisions">06 · Open decision</a></li>
+        <li><a href="#navigation-citizenship">07 · Navigation citizenship</a></li>
       </ul>
     </nav>
   </header>
@@ -669,6 +737,176 @@
       <li><strong>Approve the recommended standard</strong> as binding for new and touched admin surfaces, keep incremental adoption, and create separate cards only for the two unowned gaps when they become delivery priorities.</li>
     </ul>
     <p>The recommendation is approval. No product implementation, migration wave, or bulk task creation is part of this dossier.</p>
+  </section>
+
+  <section id="navigation-citizenship" data-concept-section="recommendation">
+    <h2><span class="section-no">07</span>Navigation citizenship</h2>
+    <p>The Dossiers destination is a peer of Board, Deck, Wiki, and Epics. It must read as one calm project destination with optional disclosure, not as a special folder, a warning, or a second navigation family. This chapter records design direction from the 11 August 2026 project-navigation review. It does not implement the tree.</p>
+
+    <h3>Icon and disclosure register</h3>
+    <ul>
+      <li><strong>Use the shared document motif.</strong> The Dossiers row uses the monochrome outline document icon from the Studio icon register, with the same 1.5 px stroke, size, muted foreground, and active-state inheritance as Wiki and Epics. Do not use a filled or orange folder. A folder communicates a filesystem container; Dossiers is a product destination for decision documents.</li>
+      <li><strong>Keep one icon column.</strong> Board, Deck, Wiki, Dossiers, and Epics align their icons and labels to the same grid. An expandable destination reserves the shared disclosure slot rather than shifting its document icon and label away from its siblings.</li>
+      <li><strong>Reuse the tree disclosure.</strong> The right/down chevron uses the same geometry, muted color, target size, focus behavior, and <code>aria-expanded</code> contract as other expandable tree entries. The chevron changes expansion only; the row opens the Dossiers overview.</li>
+    </ul>
+
+    <h3>Count meaning and signal variants</h3>
+    <p>A number beside Dossiers means <strong>waiting decisions</strong>, not visible Dossiers, all Dossiers, children, pages, or history entries. It is the sum of unresolved decision items in the current non-history catalogue. Use tabular figures and the same neutral count treatment as other navigation totals. Zero renders no signal.</p>
+    <ul>
+      <li><strong>No count:</strong> best when the rail is purely navigational or no decision is waiting. It has the lowest visual weight but provides no queue preview.</li>
+      <li><strong>Neutral count:</strong> recommended when one or more decisions wait. It preserves cardinality without turning ordinary review work into an alert.</li>
+      <li><strong>Neutral dot:</strong> a compact alternative when only presence matters or the rail becomes very narrow. Its accessible label must still state that decisions are waiting.</li>
+    </ul>
+    <p>Orange is reserved for an actual error class, following AGT-2606. Pending review, active work, child count, and “new” are not errors. If the catalogue itself is invalid or failed to load and the navigation must expose that failure, use one error signal with explanatory accessible text. Do not combine an orange icon, orange chevron, and orange badge.</p>
+
+    <h3>State contract</h3>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>State</th><th>Row treatment</th><th>Disclosure and children</th><th>Trailing signal</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Resting</strong></td><td>Transparent row, muted document icon, normal label.</td><td>Right chevron when collapsed.</td><td>None at zero; otherwise the selected neutral variant.</td></tr>
+          <tr><td><strong>Hover / focus</strong></td><td>Shared whole-row hover tint or inset focus ring. No local border, shadow, or color change.</td><td>Chevron follows the shared foreground change.</td><td>Geometry and meaning remain unchanged.</td></tr>
+          <tr><td><strong>Active overview</strong></td><td>Shared filled active row and <code>aria-current="page"</code>. Icon inherits the active foreground.</td><td>May be expanded; down chevron remains in the disclosure slot.</td><td>Neutral count remains legible on the active fill.</td></tr>
+          <tr><td><strong>Active child</strong></td><td>The selected Dossier child owns the active fill. The Dossiers parent stays neutral.</td><td>Children align one level deeper without a decorative guide line. The parent remains expanded.</td><td>Parent count or dot may remain as queue context.</td></tr>
+          <tr><td><strong>Zero visible Dossiers</strong></td><td>Keep the Dossiers destination visible and quiet; hide the zero badge.</td><td>When expanded, show “No open Dossiers”, then the existing Open wiki action and History toggle. Do not open History merely because the current list is empty. A deep link to a settled Dossier may open History to reveal that active item.</td><td>None.</td></tr>
+          <tr><td><strong>Error</strong></td><td>Keep normal row geometry. Expose one bounded error cue and accessible explanation.</td><td>Expansion can reveal recovery context if available.</td><td>Orange is allowed only here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Tree excerpt variants</h3>
+    <p>All variants use the same document glyph and disclosure geometry in light and dark themes. They differ only in how waiting decisions appear. The proofs deliberately keep normal states free of orange.</p>
+
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+      <defs>
+        <symbol id="nav-citizen-no-count" viewBox="0 0 380 236">
+          <rect class="nav-bg" width="380" height="236" rx="4"/>
+          <text class="nav-faint" x="18" y="23">DEMO PROJECT</text>
+          <line class="nav-rule" x1="18" y1="31" x2="362" y2="31"/>
+          <g class="nav-icon" transform="translate(42 45)"><rect x="0" y="0" width="6" height="6"/><rect x="10" y="0" width="6" height="6"/><rect x="0" y="10" width="6" height="6"/><rect x="10" y="10" width="6" height="6"/></g>
+          <text class="nav-label" x="70" y="58">Board</text>
+          <g class="nav-icon" transform="translate(42 78)"><rect x="0" y="0" width="16" height="15" rx="1"/><line x1="0" y1="5" x2="16" y2="5"/></g>
+          <text class="nav-label" x="70" y="91">Deck</text>
+          <g class="nav-icon" transform="translate(42 111)"><path d="M1 2a2 2 0 0 1 2-2h13v16H3a2 2 0 0 0-2 2V2z"/><line x1="5" y1="5" x2="12" y2="5"/><line x1="5" y1="9" x2="12" y2="9"/></g>
+          <text class="nav-label" x="70" y="124">Wiki</text>
+          <rect class="nav-hover" x="12" y="134" width="350" height="30" rx="3"/>
+          <g class="nav-chevron" transform="translate(22 144)"><polyline points="2,0 7,5 2,10"/></g>
+          <g class="nav-icon" transform="translate(42 141)"><path d="M2 0h9l5 5v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z"/><polyline points="10,0 10,6 16,6"/></g>
+          <text class="nav-label" x="70" y="154">Dossiers</text>
+          <g class="nav-icon" transform="translate(42 177)"><path d="M1 2a2 2 0 0 1 2-2h13v16H3a2 2 0 0 0-2 2V2z"/><line x1="5" y1="5" x2="12" y2="5"/><line x1="5" y1="9" x2="12" y2="9"/></g>
+          <text class="nav-label" x="70" y="190">Epics</text>
+          <text class="nav-meta" x="18" y="220">Hover shown · no decisions waiting</text>
+        </symbol>
+
+        <symbol id="nav-citizen-neutral-count" viewBox="0 0 380 300">
+          <rect class="nav-bg" width="380" height="300" rx="4"/>
+          <text class="nav-faint" x="18" y="23">DEMO PROJECT</text>
+          <line class="nav-rule" x1="18" y1="31" x2="362" y2="31"/>
+          <g class="nav-icon" transform="translate(42 45)"><rect x="0" y="0" width="6" height="6"/><rect x="10" y="0" width="6" height="6"/><rect x="0" y="10" width="6" height="6"/><rect x="10" y="10" width="6" height="6"/></g>
+          <text class="nav-label" x="70" y="58">Board</text>
+          <g class="nav-icon" transform="translate(42 78)"><rect x="0" y="0" width="16" height="15" rx="1"/><line x1="0" y1="5" x2="16" y2="5"/></g>
+          <text class="nav-label" x="70" y="91">Deck</text>
+          <g class="nav-icon" transform="translate(42 111)"><path d="M1 2a2 2 0 0 1 2-2h13v16H3a2 2 0 0 0-2 2V2z"/><line x1="5" y1="5" x2="12" y2="5"/><line x1="5" y1="9" x2="12" y2="9"/></g>
+          <text class="nav-label" x="70" y="124">Wiki</text>
+          <rect class="nav-active" x="12" y="134" width="350" height="30" rx="3"/>
+          <g class="nav-chevron" transform="translate(22 144)"><polyline points="0,2 5,7 10,2"/></g>
+          <g class="nav-icon" transform="translate(42 141)"><path d="M2 0h9l5 5v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z"/><polyline points="10,0 10,6 16,6"/></g>
+          <text class="nav-label-strong" x="70" y="154">Dossiers</text>
+          <rect class="nav-badge" x="329" y="142" width="20" height="14" rx="7"/>
+          <text class="nav-badge-text" x="339" y="152" text-anchor="middle">3</text>
+          <g class="nav-icon" transform="translate(66 175) scale(.75)"><path d="M2 0h9l5 5v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z"/><polyline points="10,0 10,6 16,6"/></g>
+          <text class="nav-label" x="89" y="188">Admin surface guideline</text>
+          <text class="nav-meta" x="327" y="188">2 open</text>
+          <g class="nav-icon" transform="translate(66 205) scale(.75)"><path d="M2 0h9l5 5v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z"/><polyline points="10,0 10,6 16,6"/></g>
+          <text class="nav-label" x="89" y="218">Navigation model</text>
+          <text class="nav-meta" x="327" y="218">1 open</text>
+          <text class="nav-meta" x="66" y="246">Open wiki →</text>
+          <text class="nav-meta" x="150" y="246">History</text>
+          <g class="nav-icon" transform="translate(42 263)"><path d="M1 2a2 2 0 0 1 2-2h13v16H3a2 2 0 0 0-2 2V2z"/><line x1="5" y1="5" x2="12" y2="5"/><line x1="5" y1="9" x2="12" y2="9"/></g>
+          <text class="nav-label" x="70" y="276">Epics</text>
+        </symbol>
+
+        <symbol id="nav-citizen-dot" viewBox="0 0 380 270">
+          <rect class="nav-bg" width="380" height="270" rx="4"/>
+          <text class="nav-faint" x="18" y="23">DEMO PROJECT</text>
+          <line class="nav-rule" x1="18" y1="31" x2="362" y2="31"/>
+          <g class="nav-icon" transform="translate(42 45)"><rect x="0" y="0" width="6" height="6"/><rect x="10" y="0" width="6" height="6"/><rect x="0" y="10" width="6" height="6"/><rect x="10" y="10" width="6" height="6"/></g>
+          <text class="nav-label" x="70" y="58">Board</text>
+          <g class="nav-icon" transform="translate(42 78)"><rect x="0" y="0" width="16" height="15" rx="1"/><line x1="0" y1="5" x2="16" y2="5"/></g>
+          <text class="nav-label" x="70" y="91">Deck</text>
+          <g class="nav-icon" transform="translate(42 111)"><path d="M1 2a2 2 0 0 1 2-2h13v16H3a2 2 0 0 0-2 2V2z"/><line x1="5" y1="5" x2="12" y2="5"/><line x1="5" y1="9" x2="12" y2="9"/></g>
+          <text class="nav-label" x="70" y="124">Wiki</text>
+          <g class="nav-chevron" transform="translate(22 144)"><polyline points="0,2 5,7 10,2"/></g>
+          <g class="nav-icon" transform="translate(42 141)"><path d="M2 0h9l5 5v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z"/><polyline points="10,0 10,6 16,6"/></g>
+          <text class="nav-label" x="70" y="154">Dossiers</text>
+          <circle class="nav-pending-dot" cx="339" cy="149" r="3.5"/>
+          <rect class="nav-active" x="55" y="167" width="307" height="30" rx="3"/>
+          <g class="nav-icon" transform="translate(66 175) scale(.75)"><path d="M2 0h9l5 5v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z"/><polyline points="10,0 10,6 16,6"/></g>
+          <text class="nav-label-strong" x="89" y="188">Admin surface guideline</text>
+          <text class="nav-meta" x="66" y="218">Open wiki →</text>
+          <text class="nav-meta" x="150" y="218">History</text>
+          <g class="nav-icon" transform="translate(42 235)"><path d="M1 2a2 2 0 0 1 2-2h13v16H3a2 2 0 0 0-2 2V2z"/><line x1="5" y1="5" x2="12" y2="5"/><line x1="5" y1="9" x2="12" y2="9"/></g>
+          <text class="nav-label" x="70" y="248">Epics</text>
+        </symbol>
+      </defs>
+    </svg>
+
+    <div class="nav-variant-grid">
+      <article class="nav-variant">
+        <h4>A · No count</h4>
+        <p>The quietest baseline. Use it at zero and where the rail does not promise queue awareness.</p>
+        <div class="nav-theme-pair">
+          <svg class="nav-proof theme-light" viewBox="0 0 380 236" role="img" aria-label="Light tree excerpt with a document icon for Dossiers and no count"><use href="#nav-citizen-no-count"/></svg>
+          <svg class="nav-proof theme-dark" viewBox="0 0 380 236" role="img" aria-label="Dark tree excerpt with a document icon for Dossiers and no count"><use href="#nav-citizen-no-count"/></svg>
+        </div>
+      </article>
+      <article class="nav-variant">
+        <h4>B · Neutral decision count <span class="status owned">Recommended</span></h4>
+        <p>Best balance: cardinality is useful to operators, while the row remains a peer of Wiki and Epics.</p>
+        <div class="nav-theme-pair">
+          <svg class="nav-proof theme-light" viewBox="0 0 380 300" role="img" aria-label="Light expanded Dossiers tree excerpt with a neutral count of three waiting decisions"><use href="#nav-citizen-neutral-count"/></svg>
+          <svg class="nav-proof theme-dark" viewBox="0 0 380 300" role="img" aria-label="Dark expanded Dossiers tree excerpt with a neutral count of three waiting decisions"><use href="#nav-citizen-neutral-count"/></svg>
+        </div>
+      </article>
+      <article class="nav-variant">
+        <h4>C · Neutral point indicator</h4>
+        <p>Useful for a narrower rail, but weaker than a number because it hides the size of the decision queue.</p>
+        <div class="nav-theme-pair">
+          <svg class="nav-proof theme-light" viewBox="0 0 380 270" role="img" aria-label="Light Dossiers tree excerpt with a neutral waiting-decisions point and an active child"><use href="#nav-citizen-dot"/></svg>
+          <svg class="nav-proof theme-dark" viewBox="0 0 380 270" role="img" aria-label="Dark Dossiers tree excerpt with a neutral waiting-decisions point and an active child"><use href="#nav-citizen-dot"/></svg>
+        </div>
+      </article>
+    </div>
+
+    <div class="note">
+      <h4>Recommendation</h4>
+      <p>Adopt variant B. Render the shared document glyph, shared disclosure, and a neutral badge containing the number of waiting decisions. Collapse to variant A at zero. Variant C remains a bounded narrow-rail option, not a second status meaning.</p>
+    </div>
+
+    <h3>Follow-up slice note: feature-owned versus framework-owned</h3>
+    <p>This is a scope note for a follow-up delivery card, not an implementation authorization.</p>
+    <div class="slice-grid">
+      <article class="slice-column">
+        <h4>Immediately implementable in the Dossiers slice</h4>
+        <ul>
+          <li>Change the Dossiers glyph to the existing shared document icon and inherit the normal tree-row foreground.</li>
+          <li>Derive the waiting-decision total from the current catalogue items and their existing open-decision data; pass <code>null</code> at zero so no badge renders.</li>
+          <li>Reuse the current default neutral count badge, tree-row active/hover behavior, and disclosure event contract.</li>
+          <li>Preserve the existing empty-current-list behavior: “No open Dossiers”, Open wiki, and a closed History toggle unless a settled deep link must be revealed.</li>
+          <li>Add focused component tests for count semantics, zero suppression, parent-neutral child selection, and both disclosure states.</li>
+        </ul>
+      </article>
+      <article class="slice-column">
+        <h4>Dependent on the shared tree framework</h4>
+        <ul>
+          <li>Standardize a reserved disclosure column across mixed leaf and expandable sibling rows so icons and labels never shift. Until that contract is shared, a local reservation across this five-row project group is acceptable but must be covered as one geometry change.</li>
+          <li>Add a semantic error tone to the shared trailing-status or count API only if catalogue failures must appear in the rail. The current count badge offers neutral and active tones, not an error contract.</li>
+          <li>Move waiting-decision aggregation to the catalogue response only if the client-side sum cannot remain complete before expansion or under live updates. Do not overload the existing catalogue item count.</li>
+          <li>Any change to disclosure focus structure or keyboard ownership belongs to <code>&lt;app-tree-row&gt;</code> and must be verified across every consumer, not patched only for Dossiers.</li>
+        </ul>
+      </article>
+    </div>
+    <p><strong>Follow-up acceptance boundary:</strong> one Dossiers navigation slice, light and dark Playwright evidence, expanded/collapsed and zero/non-zero coverage, no broad rail restyling, and no orange pending state.</p>
   </section>
 
   <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
