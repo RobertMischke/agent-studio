@@ -357,7 +357,6 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
             new TestHttpClientFactory(handler));
         var migration = new OrchestratorChatLegacyMigrationHostedService(
             persistence,
-            configuration,
             scanner,
             legacy,
             NullLogger<OrchestratorChatLegacyMigrationHostedService>.Instance);
@@ -371,6 +370,63 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
         var importedTurn = Assert.Single(document.RootElement.GetProperty("turns").EnumerateArray());
         Assert.Equal("legacy_user", importedTurn.GetProperty("turnId").GetString());
         Assert.Equal(sourceBefore, await File.ReadAllTextAsync(sourcePath));
+    }
+
+    [Fact]
+    public async Task LocalPersistence_RoundTripsProjectAndTaskContextsWithoutHTTP()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _root,
+                ["WatchPaths:0:Name"] = "project-a",
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _watchPath,
+            })
+            .Build();
+        var summary = new SummaryGenerationService(
+            NullLogger<SummaryGenerationService>.Instance,
+            configuration);
+        var scanner = new TaskScannerService(
+            configuration,
+            NullLogger<TaskScannerService>.Instance,
+            summary);
+        var persistence = new LocalOrchestratorChatPersistence(
+            new OrchestratorChat(NullLogger<OrchestratorChat>.Instance),
+            scanner);
+        Assert.True(OrchestratorContextKey.TryParse("task:project-a/A-1", out var taskContext));
+        var projectTurn = new OrchestratorChatTurn
+        {
+            Id = "local_project_user",
+            Role = OrchestratorChatRoles.User,
+            Text = "Local project question",
+        };
+        var taskTurn = new OrchestratorChatTurn
+        {
+            Id = "local_task_user",
+            Role = OrchestratorChatRoles.User,
+            Text = "Local task question",
+        };
+
+        await persistence.AppendAsync(
+            "project-a", _watchPath, context: null, projectTurn, CancellationToken.None);
+        await persistence.AppendAsync(
+            "project-a", _watchPath, taskContext, taskTurn, CancellationToken.None);
+
+        Assert.False(persistence.IsCentralTaskServerStore);
+        Assert.Equal(
+            taskTurn,
+            Assert.Single(await persistence.ReadAsync(
+                "project-a", _watchPath, taskContext, 20, CancellationToken.None)));
+        var contexts = await persistence.ListContextsAsync(
+            includeHidden: false,
+            CancellationToken.None);
+        Assert.Contains(contexts, context =>
+            context.ContextKey == "project:project-a"
+            && context.Summary == projectTurn.Text);
+        Assert.Contains(contexts, context =>
+            context.ContextKey == taskContext.Value
+            && context.Summary == taskTurn.Text);
     }
 
     public void Dispose()

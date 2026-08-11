@@ -284,9 +284,12 @@ builder.Services.AddSingleton<AgentStudio.Tasks.TaskReader>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
+builder.Services.AddSingleton<LocalOrchestratorChatPersistence>();
 builder.Services.AddSingleton<TaskServerOrchestratorChatPersistence>();
 builder.Services.AddSingleton<IOrchestratorChatPersistence>(sp =>
-    sp.GetRequiredService<TaskServerOrchestratorChatPersistence>());
+    TaskServerPlaneProxy.IsConfigured(sp.GetRequiredService<IConfiguration>())
+        ? sp.GetRequiredService<TaskServerOrchestratorChatPersistence>()
+        : sp.GetRequiredService<LocalOrchestratorChatPersistence>());
 builder.Services.AddSingleton<OrchestratorContextDigestService>();
 builder.Services.AddSingleton<OrchestratorTaskPromptContextComposer>();
 builder.Services.AddSingleton<RemoteChatWorkBroker>();

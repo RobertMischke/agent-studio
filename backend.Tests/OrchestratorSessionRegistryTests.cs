@@ -122,6 +122,23 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
     }
 
     [Fact]
+    public async Task Sessions_endpoint_without_Task_Server_configuration_uses_local_context_store()
+    {
+        using var factory = CreateFactory(
+            new BlockingFakeOrchestratorRunner(block: false),
+            useCentralStore: false);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/orchestrator/sessions");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessions = document.RootElement.GetProperty("sessions").EnumerateArray().ToList();
+        Assert.Contains(sessions, session =>
+            session.GetProperty("contextKey").GetString() == "project:agent-taskboard");
+    }
+
+    [Fact]
     public async Task PostTurn_UsesActiveCapAndReportsQueuedPosition()
     {
         var runner = new BlockingFakeOrchestratorRunner();
@@ -195,7 +212,8 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
 
     private WebApplicationFactory<Program> CreateFactory(
         OrchestratorRunner? runner = null,
-        Dictionary<string, string?>? extraConfig = null)
+        Dictionary<string, string?>? extraConfig = null,
+        bool useCentralStore = true)
     {
         var projectRoot = Path.Combine(_root, "projects", "agent-taskboard");
         var codeRoot = Path.Combine(_root, "code");
@@ -223,11 +241,14 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
                     }
                     cfg.AddInMemoryCollection(values);
                 });
-                builder.ConfigureTestServices(services =>
+                if (useCentralStore)
                 {
-                    services.RemoveAll<IOrchestratorChatPersistence>();
-                    services.AddSingleton<IOrchestratorChatPersistence>(_central);
-                });
+                    builder.ConfigureTestServices(services =>
+                    {
+                        services.RemoveAll<IOrchestratorChatPersistence>();
+                        services.AddSingleton<IOrchestratorChatPersistence>(_central);
+                    });
+                }
                 if (runner != null)
                 {
                     builder.ConfigureTestServices(services =>

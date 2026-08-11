@@ -133,13 +133,19 @@ task-server <VERSION>+sha.<40-character-commit>
 
 ## Sole v1 owner and transition proxy
 
-When OrchestratorApi has `TaskServer:BaseUrl` configured, it maps `/api/v1`
-only as a transparent proxy to that origin and does not map its local
-management v1 routes. `TaskServer:AuthTokenFile` or `TaskServer:AuthToken`
-supplies the proxy's service credential. Without `TaskServer:BaseUrl`, the
-legacy local management route remains available for the interim monolith
-profile. Any AGT-2325 compatibility review routes belong only to that fallback
-profile. They must never be mounted beside the standalone proxy.
+Only a valid absolute HTTP or HTTPS `TaskServer:BaseUrl` selects the standalone
+Task Server. OrchestratorApi then maps `/api/v1` only as a transparent proxy to
+that origin and does not map its local management v1 routes.
+`TaskServer:AuthTokenFile` or `TaskServer:AuthToken` supplies the proxy's
+service credential.
+
+Without that remote URL, the interim monolith profile derives local mode from
+its registry-backed watch paths. It keeps the local management routes and uses
+the in-process Orchestrator Chat context store directly. No self-reference URL
+or environment-specific override is required. A missing, blank, or unusable
+remote URL cannot fail boot or a context-list request. Any AGT-2325
+compatibility review routes belong only to that local profile. They must never
+be mounted beside the standalone proxy.
 
 The canonical production bootstrap uses one service credential through
 `AUTH=bearer`. The interim compatibility profile may instead set

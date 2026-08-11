@@ -9,14 +9,13 @@ using AgentStudio.Tasks;
 namespace AgentStudio.Runner;
 
 /// <summary>
-/// Reader for the legacy machine-local Orchestrator Chat history. The active
-/// transcript authority is the Task Server; this JSONL implementation remains
-/// only for idempotent migration and direct compatibility tests.
+/// Context-keyed machine-local Orchestrator Chat history. The monolith profile
+/// uses this store directly; a configured standalone Task Server replaces it
+/// as transcript authority.
 ///
 /// <para>
-/// New production turns must flow through
-/// <see cref="IOrchestratorChatPersistence"/> and cannot select this class as
-/// an active fallback store.
+/// Production turns flow through <see cref="IOrchestratorChatPersistence"/>,
+/// which selects either this in-process store or the remote Task Server.
 /// </para>
 /// </summary>
 public class OrchestratorChat
@@ -182,6 +181,27 @@ public class OrchestratorChat
             }
         }
         return result;
+    }
+
+    internal bool EnsureContext(string watchPath, OrchestratorContextKey? context)
+    {
+        if (!IsTaskContext(context)) return true;
+        try
+        {
+            var path = ResolveContextPath(watchPath, context);
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+            using var _ = File.Open(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to materialize local orchestrator context under {WatchPath}",
+                watchPath);
+            return false;
+        }
     }
 
     private static string ResolvePath(string watchPath) =>
@@ -522,10 +542,10 @@ public class OrchestratorChatService
         => SendAsync(projectName, watchPath, req, clientId, context: null, ct);
 
     /// <summary>
-    /// Send a user message and persist both turns through the configured
-    /// central context store. <paramref name="context"/> selects the Task Server
-    /// transcript and the ORCH-1 read digest injected into this stateless GPT
-    /// turn. Passing <c>null</c> resolves the canonical
+    /// Send a user message and persist both turns through the selected context
+    /// store. <paramref name="context"/> selects the transcript and the ORCH-1
+    /// read digest injected into this stateless GPT turn. Passing <c>null</c>
+    /// resolves the canonical
     /// <c>project:&lt;projectName&gt;</c> context.
     /// </summary>
     public async Task<OrchestratorChatTurn> SendAsync(
