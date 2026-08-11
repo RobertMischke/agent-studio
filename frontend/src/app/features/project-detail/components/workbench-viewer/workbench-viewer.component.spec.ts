@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import type { WorkbenchDocument } from '../../../../models/project-docs.model';
 import {
@@ -37,6 +37,8 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerComponent', () => {
+  beforeEach(() => sessionStorage.clear());
+
   it('ends loading and shows the API reason when a listed Dossier cannot be read', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],
@@ -163,6 +165,8 @@ describe('WorkbenchViewerComponent', () => {
       fixture.nativeElement.querySelector('[data-testid="workbench-viewer-open-decisions"]')
         ?.textContent,
     ).toContain('0 open');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-draft-notice"]'))
+      .not.toBeNull();
 
     const referenceChip = fixture.nativeElement.querySelector(
       '[data-testid="workbench-viewer-key"]',
@@ -174,20 +178,13 @@ describe('WorkbenchViewerComponent', () => {
 
     const wikiTargets: string[] = [];
     fixture.componentInstance.openWiki.subscribe((path) => wikiTargets.push(path));
-    const wikiButton = document.querySelector(
-      '[data-testid="workbench-viewer-open-wiki"]',
-    ) as HTMLButtonElement;
-    wikiButton.click();
-    expect(wikiTargets).toEqual(['workbenches/boundary/index.html']);
+    expect(document.querySelector('[data-testid="workbench-viewer-open-wiki"]')).toBeNull();
 
     fixture.componentInstance.onFrameMessage({
       source: frame.contentWindow,
       data: { type: ISOLATED_HTML_LINK_MESSAGE, href: '../target/index.html' },
     } as MessageEvent);
-    expect(wikiTargets).toEqual([
-      'workbenches/boundary/index.html',
-      'workbenches/target/index.html',
-    ]);
+    expect(wikiTargets).toEqual(['workbenches/target/index.html']);
 
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     fixture.componentInstance.onFrameMessage({

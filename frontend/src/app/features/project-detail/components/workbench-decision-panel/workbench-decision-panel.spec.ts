@@ -73,6 +73,7 @@ describe('WorkbenchDecisionPanelComponent', () => {
   const refresh = vi.fn();
 
   beforeEach(async () => {
+    sessionStorage.clear();
     createJob.mockClear();
     getDetailByProject.mockClear();
     getReferenceStatuses.mockClear();
@@ -108,6 +109,16 @@ describe('WorkbenchDecisionPanelComponent', () => {
   it('prefills a compact feature proposal from inline responses and records the created card', () => {
     click('workbench-decision-prepare');
 
+    const confirmation = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-decision-feature-confirmation"]');
+    expect(confirmation.textContent).toContain('Direct path');
+    expect((confirmation.querySelector('[data-testid="workbench-decision-goal"]') as HTMLTextAreaElement).value)
+      .toContain('Recorded decisions');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-draft-notice"]')
+      .textContent).toContain('Draft saved');
+
+    click('workbench-decision-confirm');
+
     const prepare = http.expectOne(
       '/api/projects/Agent%20Studio/workbenches/routing-policy/decisions/prepare');
     expect(prepare.request.body).toEqual(expect.objectContaining({
@@ -139,14 +150,6 @@ describe('WorkbenchDecisionPanelComponent', () => {
       idempotent: false,
     });
     fixture.detectChanges();
-
-    const confirmation = fixture.nativeElement.querySelector(
-      '[data-testid="workbench-decision-feature-confirmation"]');
-    expect(confirmation.textContent).toContain('Direct path');
-    expect((confirmation.querySelector('[data-testid="workbench-decision-goal"]') as HTMLTextAreaElement).value)
-      .toContain('Recorded decisions');
-
-    click('workbench-decision-confirm');
     expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Implement Routing policy',
       watchPath: '/tasks/agent-studio',
@@ -217,8 +220,49 @@ describe('WorkbenchDecisionPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-confirm"]')).toBeNull();
   });
 
+  it('restores feature fields for the browser session and discards them explicitly', () => {
+    click('workbench-decision-prepare');
+    setValue('workbench-decision-title', 'Build the selected direct route');
+    setValue('workbench-decision-goal', 'Keep the direct route across navigation.');
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(WorkbenchDecisionPanelComponent);
+    fixture.componentRef.setInput('projectName', 'Agent Studio');
+    fixture.componentRef.setInput('document', DOCUMENT);
+    fixture.componentRef.setInput('decisionPoints', POINTS);
+    fixture.componentRef.setInput('responses', RESPONSES);
+    fixture.detectChanges();
+
+    expect(valueOf('workbench-decision-title')).toBe('Build the selected direct route');
+    expect(valueOf('workbench-decision-goal')).toBe('Keep the direct route across navigation.');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-key-chip"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-open-wiki"]')).toBeNull();
+
+    let discarded = 0;
+    fixture.componentInstance.draftDiscarded.subscribe(() => discarded += 1);
+    click('workbench-decision-discard');
+    expect(discarded).toBe(1);
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-draft-notice"]'))
+      .toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-decision-title"]'))
+      .toBeNull();
+  });
+
   function click(testId: string): void {
     (fixture.nativeElement.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement).click();
     fixture.detectChanges();
+  }
+
+  function setValue(testId: string, value: string): void {
+    const field = fixture.nativeElement.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement;
+    field.value = value;
+    field.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+  }
+
+  function valueOf(testId: string): string {
+    return (fixture.nativeElement.querySelector(
+      `[data-testid="${testId}"]`,
+    ) as HTMLInputElement).value;
   }
 });

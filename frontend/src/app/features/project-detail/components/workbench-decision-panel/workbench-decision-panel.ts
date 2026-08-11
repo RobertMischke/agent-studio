@@ -11,41 +11,44 @@ import {
 } from '@angular/core';
 import { EMPTY, Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
-import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import {
   TaskReferenceMicrocardComponent,
   TaskReferenceStatus,
 } from '../../../../components/task-reference-microcard/task-reference-microcard';
-import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import {
   ConfirmWorkbenchDecisionRequest,
   PrepareWorkbenchDecisionRequest,
   WorkbenchDecisionPoint,
   WorkbenchDecisionProjection,
   WorkbenchDecisionResponse,
+  WorkbenchDecisionResult,
   WorkbenchDocument,
   WorkbenchTaskDraft,
 } from '../../../../models/project-docs.model';
 import { TaskService } from '../../../../services/task.service';
+import {
+  WorkbenchDecisionDraftCard,
+  WorkbenchDecisionDraftStore,
+} from '../../state/workbench-decision-draft.store';
 import { WorkbenchDecisionStore } from '../../state/workbench-decision.store';
+import {
+  actionErrorMessage,
+  bounded,
+  cardPrompt,
+  createOperationId,
+  laneLabel,
+  selectedDecisionText,
+  taskKeyTail,
+} from './workbench-decision-panel.util';
 
 type DraftMode = 'feature-spawn' | 'archive' | null;
-
-interface CreatedCard {
-  key: string;
-  taskKey: string;
-  title: string;
-  lane: string;
-}
 
 @Component({
   selector: 'app-workbench-decision-panel',
   standalone: true,
   imports: [
-    CopyableTaskKeyComponent,
     DatePipe,
     PendingButtonDirective,
-    StudioIconComponent,
     TaskReferenceMicrocardComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,12 +60,13 @@ export class WorkbenchDecisionPanelComponent {
   readonly document = input.required<WorkbenchDocument>();
   readonly decisionPoints = input<readonly WorkbenchDecisionPoint[]>([]);
   readonly responses = input<readonly WorkbenchDecisionResponse[]>([]);
-  readonly showWikiAction = input(true);
   readonly decisionChanged = output<void>();
-  readonly openWiki = output<void>();
+  readonly draftDiscarded = output<void>();
 
   private readonly store = inject(WorkbenchDecisionStore);
+  private readonly drafts = inject(WorkbenchDecisionDraftStore);
   private readonly tasks = inject(TaskService);
+  private restoredDraftKey = '';
 
   readonly actor = signal('Operator');
   readonly draftMode = signal<DraftMode>(null);
@@ -71,7 +75,7 @@ export class WorkbenchDecisionPanelComponent {
   readonly archiveReason = signal('');
   readonly validationError = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
-  readonly createdCard = signal<CreatedCard | null>(null);
+  readonly createdCard = signal<WorkbenchDecisionDraftCard | null>(null);
   readonly taskStatuses = signal<TaskReferenceStatus[]>([]);
   private readonly operationId = signal('');
 
@@ -105,9 +109,15 @@ export class WorkbenchDecisionPanelComponent {
   });
   readonly selectedSummary = computed(() => selectedDecisionText(
     this.decisionPoints(), this.responses()));
+  readonly browserDraft = computed(() =>
+    this.drafts.draft(this.projectName(), this.document().workbench.id));
+  readonly hasBrowserDraft = computed(() => this.browserDraft() !== null && !this.settled());
   readonly canPrepareFeature = computed(() =>
     this.gateReady() && !this.settled() && !this.mutationBlocked()
     && !this.pending() && this.answersComplete());
+  readonly canCreateFeature = computed(() =>
+    this.canPrepareFeature() && this.draftMode() === 'feature-spawn'
+    && this.title().trim().length > 0 && this.goal().trim().length > 0);
   readonly canConfirm = computed(() =>
     !this.settled() && !this.mutationBlocked() && this.stage() === 'prepared');
 
@@ -116,6 +126,31 @@ export class WorkbenchDecisionPanelComponent {
       const decision = this.persistedDecision();
       if (decision?.confirmedBy || decision?.preparedBy)
         this.actor.set(decision.confirmedBy || decision.preparedBy);
+    });
+    effect(() => {
+      const projectName = this.projectName();
+      const document = this.document();
+      const key = `${projectName}\u0000${document.workbench.id}`;
+      const draft = this.drafts.draft(projectName, document.workbench.id);
+      if (this.settled()) {
+        this.drafts.discard(projectName, document.workbench.id);
+        return;
+      }
+      if (draft?.mode === 'feature-spawn') {
+        this.draftMode.set('feature-spawn');
+        this.actor.set(draft.actor);
+        this.title.set(draft.title);
+        this.goal.set(draft.goal);
+        this.operationId.set(draft.operationId ?? '');
+        this.createdCard.set(draft.createdCard);
+      } else if (key !== this.restoredDraftKey) {
+        this.draftMode.set(null);
+        this.title.set('');
+        this.goal.set('');
+        this.operationId.set('');
+        this.createdCard.set(null);
+      }
+      this.restoredDraftKey = key;
     });
     effect(onCleanup => {
       const keys = this.persistedDecision()?.spawnedTaskKeys ?? [];
@@ -132,15 +167,22 @@ export class WorkbenchDecisionPanelComponent {
   }
 
   updateActor(event: Event): void {
-    this.actor.set((event.target as HTMLInputElement).value);
+    const actor = (event.target as HTMLInputElement).value;
+    this.actor.set(actor);
+    if (this.hasBrowserDraft())
+      this.drafts.updateFeature(this.projectName(), this.document().workbench.id, { actor });
   }
 
   updateTitle(event: Event): void {
-    this.title.set((event.target as HTMLInputElement).value);
+    const title = (event.target as HTMLInputElement).value;
+    this.title.set(title);
+    this.drafts.updateFeature(this.projectName(), this.document().workbench.id, { title });
   }
 
   updateGoal(event: Event): void {
-    this.goal.set((event.target as HTMLTextAreaElement).value);
+    const goal = (event.target as HTMLTextAreaElement).value;
+    this.goal.set(goal);
+    this.drafts.updateFeature(this.projectName(), this.document().workbench.id, { goal });
   }
 
   updateArchiveReason(event: Event): void {
@@ -151,7 +193,6 @@ export class WorkbenchDecisionPanelComponent {
     if (!this.canPrepareFeature()) return;
     this.seedFeatureDraft();
     this.draftMode.set('feature-spawn');
-    this.prepare('feature-spawn');
   }
 
   beginArchive(): void {
@@ -175,18 +216,36 @@ export class WorkbenchDecisionPanelComponent {
     this.resetFeedback();
   }
 
+  discardDraft(): void {
+    if (this.pending()) return;
+    this.drafts.discard(this.projectName(), this.document().workbench.id);
+    this.draftMode.set(null);
+    this.title.set('');
+    this.goal.set('');
+    this.operationId.set('');
+    this.createdCard.set(null);
+    this.store.clear(this.projectName(), this.document().workbench.id);
+    this.resetFeedback();
+    this.draftDiscarded.emit();
+  }
+
   createFeatureCard(): void {
-    if (!this.canConfirm() || this.pending()) return;
+    if (!this.canCreateFeature() || this.pending()) return;
     const request = this.prepareRequest('feature-spawn');
     if (!request?.task) return;
     this.actionError.set(null);
-    this.createCard(request.task).pipe(
-      switchMap(card => this.confirm(request, [card.key])),
+    this.store.prepare(this.projectName(), this.document().workbench.id, request).pipe(
+      switchMap(prepared => this.createCard(prepared.taskDraft ?? request.task!).pipe(
+        map(card => ({ prepared, card })))),
+      switchMap(({ prepared, card }) => this.confirm(request, [card.key], prepared)),
       catchError(error => {
         this.actionError.set(actionErrorMessage(error));
         return EMPTY;
       }),
-    ).subscribe(() => this.decisionChanged.emit());
+    ).subscribe(() => {
+      this.drafts.discard(this.projectName(), this.document().workbench.id);
+      this.decisionChanged.emit();
+    });
   }
 
   confirmArchive(): void {
@@ -236,8 +295,9 @@ export class WorkbenchDecisionPanelComponent {
   private confirm(
     prepared: PrepareWorkbenchDecisionRequest,
     spawnedTaskKeys: string[],
+    preparedResult: WorkbenchDecisionResult | null = this.result(),
   ): Observable<unknown> {
-    const result = this.result();
+    const result = preparedResult;
     const operationId = result?.operationId ?? prepared.operationId;
     const matches = result?.operationId === operationId;
     const request: ConfirmWorkbenchDecisionRequest = {
@@ -251,7 +311,7 @@ export class WorkbenchDecisionPanelComponent {
     return this.store.confirm(this.projectName(), this.document().workbench.id, request);
   }
 
-  private createCard(draft: WorkbenchTaskDraft): Observable<CreatedCard> {
+  private createCard(draft: WorkbenchTaskDraft): Observable<WorkbenchDecisionDraftCard> {
     const alreadyCreated = this.createdCard();
     if (alreadyCreated) return of(alreadyCreated);
     return this.tasks.getWatchPaths().pipe(
@@ -278,6 +338,7 @@ export class WorkbenchDecisionPanelComponent {
       })),
       tap(card => {
         this.createdCard.set(card);
+        this.drafts.rememberCreatedCard(this.projectName(), this.document().workbench.id, card);
         this.tasks.refresh();
       }),
     );
@@ -334,13 +395,24 @@ export class WorkbenchDecisionPanelComponent {
 
   private seedFeatureDraft(): void {
     this.resetFeedback();
-    this.operationId.set(createOperationId());
-    this.title.set(`Implement ${this.document().workbench.title}`);
+    const operationId = createOperationId();
+    const title = `Implement ${this.document().workbench.title}`;
     const decisions = this.selectedSummary();
-    this.goal.set(bounded([
+    const goal = bounded([
       this.document().workbench.summary.trim(),
       decisions ? `Recorded decisions:\n${decisions}` : '',
-    ].filter(Boolean).join('\n\n'), 20_000));
+    ].filter(Boolean).join('\n\n'), 20_000);
+    const draft = this.drafts.beginFeature(
+      this.projectName(),
+      this.document().workbench.id,
+      { actor: this.actor(), title, goal, operationId },
+      this.responses(),
+    );
+    this.actor.set(draft.actor);
+    this.title.set(draft.title);
+    this.goal.set(draft.goal);
+    this.operationId.set(draft.operationId ?? operationId);
+    this.createdCard.set(draft.createdCard);
   }
 
   private invalid(message: string): null {
@@ -352,69 +424,4 @@ export class WorkbenchDecisionPanelComponent {
     this.validationError.set(null);
     this.actionError.set(null);
   }
-}
-
-function selectedDecisionText(
-  points: readonly WorkbenchDecisionPoint[],
-  responses: readonly WorkbenchDecisionResponse[],
-): string {
-  const responseById = new Map(responses.map(response => [response.decisionId, response]));
-  return points.flatMap(point => {
-    const response = responseById.get(point.id);
-    if (!response) return [];
-    const selected = new Set(response.selectedOptionIds);
-    const labels = point.options.filter(option => selected.has(option.id)).map(option => option.label);
-    const choice = `${point.label}: ${labels.join(', ') || 'No option selected'}`;
-    return [response.comment ? `${choice}. Note: ${response.comment}` : choice];
-  }).join('\n');
-}
-
-function cardPrompt(
-  document: WorkbenchDocument,
-  draft: WorkbenchTaskDraft,
-  points: readonly WorkbenchDecisionPoint[],
-  responses: readonly WorkbenchDecisionResponse[],
-): string {
-  return [
-    '# Dossier-backed feature',
-    '',
-    `Source: \`${document.workbench.entryPath}\``,
-    '',
-    '## Goal',
-    '',
-    draft.goal,
-    '',
-    '## Recorded decisions',
-    '',
-    selectedDecisionText(points, responses) || '(No inline decision points were present.)',
-    '',
-    '## Acceptance criteria',
-    '',
-    ...draft.acceptanceCriteria.map(item => `- ${item}`),
-  ].join('\n');
-}
-
-function taskKeyTail(taskKey: string): string {
-  return taskKey.includes('::') ? taskKey.slice(taskKey.lastIndexOf('::') + 2) : taskKey;
-}
-
-function bounded(value: string, length: number): string {
-  return value.length <= length ? value : value.slice(0, length);
-}
-
-function laneLabel(lane: string | null): string {
-  return lane === '1-preparation' ? 'Preparation' : lane ?? 'Unknown lane';
-}
-
-function actionErrorMessage(error: unknown): string {
-  const candidate = error as { error?: { error?: string } | string; message?: string } | null;
-  if (typeof candidate?.error === 'string') return candidate.error;
-  if (candidate?.error && typeof candidate.error.error === 'string') return candidate.error.error;
-  return candidate?.message || 'The feature card could not be created.';
-}
-
-function createOperationId(): string {
-  const random = globalThis.crypto?.randomUUID?.()
-    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `workbench-ui-${random}`;
 }

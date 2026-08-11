@@ -34,6 +34,7 @@ import {
   discoverWorkbenchDecisionMarkup,
   normalizeWorkbenchDecisionResponses,
 } from '../../../../services/workbench-decision-markup.util';
+import { WorkbenchDecisionDraftStore } from '../../state/workbench-decision-draft.store';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
@@ -54,11 +55,11 @@ import {
 export class WorkbenchViewerComponent {
   readonly projectName = input.required<string>();
   readonly workbenchId = input.required<string>();
-  readonly showWikiAction = input(true);
   readonly openWiki = output<string>();
   private readonly docs = inject(ProjectDocsService);
   private readonly http = inject(HttpClient);
   private readonly hub = inject(JobsHubClient);
+  private readonly decisionDrafts = inject(WorkbenchDecisionDraftStore);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
   private requestGeneration = 0;
 
@@ -105,11 +106,6 @@ export class WorkbenchViewerComponent {
     });
   }
 
-  openCurrentPageInWiki(): void {
-    const path = this.document()?.workbench.entryPath.replace(/^docs\//i, '');
-    if (path) this.openWiki.emit(path);
-  }
-
   @HostListener('window:message', ['$event'])
   onFrameMessage(event: MessageEvent): void {
     const frameWindow = this.frame()?.nativeElement.contentWindow;
@@ -129,7 +125,10 @@ export class WorkbenchViewerComponent {
         message.responses,
         this.decisionMarkup().points,
       );
-      if (normalized) this.decisionResponses.set(normalized);
+      if (normalized) {
+        this.decisionResponses.set(normalized);
+        this.decisionDrafts.saveResponses(this.projectName(), this.workbenchId(), normalized);
+      }
       return;
     }
     if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
@@ -154,6 +153,15 @@ export class WorkbenchViewerComponent {
 
   refreshDecision(): void {
     this.loadDocument(this.projectName(), this.workbenchId(), false);
+  }
+
+  discardDecisionDraft(): void {
+    const document = this.document();
+    if (!document) return;
+    this.decisionDrafts.discard(this.projectName(), this.workbenchId());
+    const discovered = discoverWorkbenchDecisionMarkup(document.html);
+    this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);
+    this.hydrateFrame();
   }
 
   documentationReady(): boolean {
@@ -211,7 +219,15 @@ export class WorkbenchViewerComponent {
         if (generation !== this.requestGeneration) return;
         this.document.set(document);
         const discovered = discoverWorkbenchDecisionMarkup(document.html);
-        this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);
+        if (document.workbench.decision?.state === 'succeeded')
+          this.decisionDrafts.discard(project, id);
+        const saved = this.decisionDrafts.draft(project, id)?.responses;
+        const restored = saved
+          ? normalizeWorkbenchDecisionResponses(saved, discovered.points)
+          : null;
+        this.decisionResponses.set(
+          document.workbench.decision?.responses ?? restored ?? discovered.responses,
+        );
         this.loading.set(false);
       },
       error: response => {
