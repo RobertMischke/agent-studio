@@ -4,9 +4,11 @@
   "title": "Ausf\u00FChrungsmodell: Container-Default",
   "summary": "Richtungswechsel vom host-direkten Betrieb (danger-full-access) zu container-isolierter lokaler Ausf\u00FChrung als Default; lokal/Misch als bewusstes Opt-out in der Host-Verwaltung. Ist-Stand aus Code, Doku und Marketing, Layer-Landkarte, \u00C4nderungen je Projekt (Studio, CAR, Docs/Wiki, Marketing, Orchestrator-Website, Installer), getakteter Plan, Abgleich mit dem Dossier \u0027Verteilte Ausf\u00FChrung\u0027 (Fencing, Ergebnisvertrag, hermetische Verifikation, Kriterienprobe nach dessen \u00A75.4) und sechs ausgearbeitete Entscheidungen E1-E6 inklusive Spawn-Pfad-Konvergenz und Gate-Isolation. Dient als Steuerungs-Ausgangspunkt f\u00FCr das Takten und Pr\u00FCfen der Arbeiten.",
   "entrypoint": "index.html",
-  "status": "decided",
+  "status": "documented",
   "phase": "decision-ready",
-  "updatedAt": "2026-07-26T18:00:00Z",
+  "updatedAt": "2026-08-11T14:45:00Z",
+  "editedBy": "Operator bookkeeping via AGT-2621",
+  "statusReason": "The execution-model shift is implemented and every delivery card linked by this descriptor is archived.",
   "sourceTaskKeys": [
     "AGT-2305",
     "AGT-2334",
