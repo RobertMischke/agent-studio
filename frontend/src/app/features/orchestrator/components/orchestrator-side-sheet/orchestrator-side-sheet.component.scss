@@ -1,21 +1,48 @@
 :host {
+  --orch-panel-bg: color-mix(in srgb, var(--studio-fg) 3%, var(--studio-bg-surface));
   display: block;
   position: relative;
   width: 0;
   max-width: 96vw;
   overflow: hidden;
   flex: 0 0 auto;
+  background: var(--orch-panel-bg);
   transition: width 0.22s ease;
+}
+
+:host app-sidesheet {
+  --studio-bg-editor: var(--orch-panel-bg);
 }
 
 :host(.is-open) {
   width: min(640px, 96vw);
 }
 
-/* The orchestrator owns its internal spacing. Removing the shared body inset
-   lets the expanded context menu reach both panel edges with no pale frame. */
+/* ADM-11: this neutral hairline is the resizable shell boundary, not a
+   decorative status accent. The separate surface prevents adjacent viewer
+   controls from reading as if they belong to Chat. */
 :host ::ng-deep .sidesheet {
-  border-left: 0;
+  border-left: 1px solid var(--studio-border-strong);
+  background: var(--orch-panel-bg);
+  box-shadow: var(--elevation-popover);
+}
+
+:host ::ng-deep .sidesheet__header {
+  box-sizing: border-box;
+  height: var(--studio-titlebar-h);
+  min-height: var(--studio-titlebar-h);
+  flex-wrap: nowrap;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+}
+
+:host ::ng-deep .sidesheet__title-block {
+  display: none;
+}
+
+:host ::ng-deep .sidesheet__close {
+  width: 28px;
+  height: 28px;
 }
 
 :host ::ng-deep .sidesheet__body {
@@ -38,120 +65,10 @@
   }
 }
 
-.sheet__header-extras {
-  display: flex;
-  align-items: center;
-  gap: var(--studio-spacing-2);
-  min-width: 0;
-}
-
-.sheet__execution-context {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--studio-spacing-2);
-  min-width: 0;
-  max-width: 250px;
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 1px solid var(--studio-border);
-  border-radius: 7px;
-  background: var(--studio-bg-elevated);
-  color: var(--studio-fg);
-}
-
-.sheet__execution-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--studio-success);
-}
-
-.sheet__execution-context--resolving .sheet__execution-dot {
-  background: var(--studio-fg-muted);
-}
-
-.sheet__execution-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.sheet__execution-copy strong,
-.sheet__execution-repo {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sheet__execution-copy strong {
-  color: var(--studio-fg-strong);
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.sheet__execution-copy small {
-  display: flex;
-  gap: var(--studio-spacing-1);
-  min-width: 0;
-  color: var(--studio-fg-muted);
-  font-family: var(--studio-font-mono, var(--font-mono));
-  font-size: 9px;
-}
-
-.sheet__execution-repo {
-  min-width: 0;
-}
-
-.sheet__execution-revision {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.sheet__context-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--studio-spacing-1);
-  min-height: 28px;
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 1px solid var(--studio-border);
-  border-radius: 999px;
-  background: var(--studio-bg-elevated);
-  color: var(--studio-fg);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.sheet__context-badge strong {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  min-height: 18px;
-  padding: 0 var(--studio-spacing-1);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-bg-editor));
-  color: var(--studio-accent);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.sheet__context-badge:hover,
-.sheet__context-badge--open {
-  border-color: color-mix(in srgb, var(--studio-accent) 48%, var(--studio-border));
-  background: var(--studio-bg-hover);
-}
-
-.sheet__context-badge:focus-visible,
 .sheet__context-actions button:focus-visible,
 .sheet__event-action:focus-visible {
   outline: 2px solid var(--studio-accent);
   outline-offset: 2px;
-}
-
-.sheet__context-caret {
-  color: var(--studio-fg-muted);
-  font-size: 10px;
 }
 
 .sheet__workspace {
@@ -160,7 +77,7 @@
   min-height: 0;
   display: flex;
   overflow: hidden;
-  background: var(--studio-bg-editor);
+  background: var(--orch-panel-bg);
 }
 
 .sheet__context-menu {
@@ -171,7 +88,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--studio-bg-editor);
+  background: var(--orch-panel-bg);
 }
 
 .sheet__context-menu-head {
@@ -316,15 +233,28 @@
   // real scroll container so appending a turn never swaps measured rows for
   // a fixed-height virtual spacer and then asks sticky-to-bottom to correct
   // the resulting height error.
-  overflow-y: auto;
+  overflow: hidden;
   overflow-anchor: none;
   display: flex;
   flex-direction: column;
+  isolation: isolate;
 }
 
 .sheet__conversation cac-conversation-view {
-  flex: 0 0 auto;
+  display: block;
+  flex: 1 1 auto;
   min-height: 0;
+}
+
+:host ::ng-deep .sheet__conversation .conv {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:host ::ng-deep .sheet__conversation .conv__jump {
+  display: none;
 }
 
 .sheet__no-project {
@@ -337,8 +267,11 @@
 }
 
 .sheet__composer {
+  position: relative;
+  z-index: 2;
   flex: 0 0 auto;
   min-height: 0;
+  background: var(--orch-panel-bg);
 }
 
 .sheet__event-action {
