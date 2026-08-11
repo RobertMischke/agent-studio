@@ -32,7 +32,9 @@ public sealed record TokenSummary(
     bool AllModelsPriced,
     int UnknownModelCount,
     IReadOnlyList<TokenSummaryByModel> ByModel,
-    string Disclaimer);
+    string Disclaimer,
+    DateTime? FirstRecordedAt = null,
+    DateTime? LastRecordedAt = null);
 
 public sealed record TokenSummaryByModel(
     string Model,
@@ -43,7 +45,9 @@ public sealed record TokenSummaryByModel(
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
     bool ModelPriced,
-    bool ModelInCatalog);
+    bool ModelInCatalog,
+    DateTime? FirstRecordedAt = null,
+    DateTime? LastRecordedAt = null);
 
 public class TokenSummaryService
 {
@@ -278,6 +282,8 @@ public class TokenSummaryService
         decimal grandTotal = 0;
         bool allPriced = true;
         bool anyPricedAtAll = false;
+        DateTime? firstRecordedAt = null;
+        DateTime? lastRecordedAt = null;
 
         foreach (var (name, summary) in projectSummaries)
         {
@@ -291,6 +297,8 @@ public class TokenSummaryService
             grandTotal += summary.EstimatedApiCostUsd;
             if (summary.OrchestratorLlmCalls > 0 && !summary.AllModelsPriced) allPriced = false;
             if (summary.OrchestratorLlmCalls > 0) anyPricedAtAll = anyPricedAtAll || summary.AllModelsPriced;
+            firstRecordedAt = Earlier(firstRecordedAt, summary.FirstRecordedAt);
+            lastRecordedAt = Later(lastRecordedAt, summary.LastRecordedAt);
 
             perProject.Add(new TokenSummaryByProject(
                 Project: name,
@@ -316,6 +324,8 @@ public class TokenSummaryService
                 bucket.Cost += m.EstimatedApiCostUsd;
                 if (!m.ModelPriced) bucket.AnyUnpriced = true;
                 if (!m.ModelInCatalog) bucket.AnyUnknownModel = true;
+                bucket.FirstRecordedAt = Earlier(bucket.FirstRecordedAt, m.FirstRecordedAt);
+                bucket.LastRecordedAt = Later(bucket.LastRecordedAt, m.LastRecordedAt);
             }
         }
 
@@ -330,7 +340,9 @@ public class TokenSummaryService
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
                 ModelPriced: !b.AnyUnpriced,
-                ModelInCatalog: !b.AnyUnknownModel))
+                ModelInCatalog: !b.AnyUnknownModel,
+                FirstRecordedAt: b.FirstRecordedAt,
+                LastRecordedAt: b.LastRecordedAt))
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -351,7 +363,9 @@ public class TokenSummaryService
                 .OrderByDescending(p => p.InputTokens + p.OutputTokens)
                 .ToList(),
             FetchedAt: DateTime.UtcNow.ToString("o"),
-            Disclaimer: DefaultDisclaimer);
+            Disclaimer: DefaultDisclaimer,
+            FirstRecordedAt: firstRecordedAt,
+            LastRecordedAt: lastRecordedAt);
 
         // Persist for next-app-start display. Best-effort.
         try { cache?.Write(aggregate); } catch (Exception __ex) { SilentCatch.Note(__ex, "TokenSummary: swallow; tolerant by design"); /* swallow; tolerant by design */ }
@@ -392,6 +406,8 @@ public class TokenSummaryService
         var perModel = new Dictionary<string, ModelBucket>(StringComparer.OrdinalIgnoreCase);
         long totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreate = 0;
         int callCount = 0;
+        DateTime? firstRecordedAt = null;
+        DateTime? lastRecordedAt = null;
 
         foreach (var entry in entries)
         {
@@ -402,6 +418,8 @@ public class TokenSummaryService
             totalOutput += u.OutputTokens;
             totalCacheRead += u.CacheReadTokens;
             totalCacheCreate += u.CacheCreationTokens;
+            firstRecordedAt = Earlier(firstRecordedAt, entry.Ts);
+            lastRecordedAt = Later(lastRecordedAt, entry.Ts);
 
             var canonicalModel = ModelMetadataRegistry.NormalizeId(u.Model);
             var key = string.IsNullOrWhiteSpace(canonicalModel) ? "(unknown)" : canonicalModel;
@@ -424,6 +442,8 @@ public class TokenSummaryService
             if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
             if (entryCost.Status == TokenEconomy.PriceStatus.UnknownModel)
                 bucket.AnyUnknownModel = true;
+            bucket.FirstRecordedAt = Earlier(bucket.FirstRecordedAt, entry.Ts);
+            bucket.LastRecordedAt = Later(bucket.LastRecordedAt, entry.Ts);
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -442,7 +462,9 @@ public class TokenSummaryService
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
                 ModelPriced: !bucket.AnyUnpriced,
-                ModelInCatalog: !bucket.AnyUnknownModel));
+                ModelInCatalog: !bucket.AnyUnknownModel,
+                FirstRecordedAt: bucket.FirstRecordedAt,
+                LastRecordedAt: bucket.LastRecordedAt));
         }
 
         return new TokenSummary(
@@ -457,7 +479,9 @@ public class TokenSummaryService
             AllModelsPriced: allPriced,
             UnknownModelCount: byModel.Count(model => !model.ModelInCatalog),
             ByModel: byModel,
-            Disclaimer: TokenSummaryService.DefaultDisclaimer);
+            Disclaimer: TokenSummaryService.DefaultDisclaimer,
+            FirstRecordedAt: firstRecordedAt,
+            LastRecordedAt: lastRecordedAt);
     }
 
     private sealed class ModelBucket
@@ -472,6 +496,8 @@ public class TokenSummaryService
         public decimal Cost;
         public bool AnyUnpriced;
         public bool AnyUnknownModel;
+        public DateTime? FirstRecordedAt;
+        public DateTime? LastRecordedAt;
         public ModelBucket(string model) : this(model, model)
         {
         }
@@ -482,4 +508,10 @@ public class TokenSummaryService
             DisplayModel = displayModel;
         }
     }
+
+    private static DateTime? Earlier(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate < current ? candidate : current;
+
+    private static DateTime? Later(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate > current ? candidate : current;
 }

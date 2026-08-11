@@ -17,10 +17,16 @@
 
 .cum__panel-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--studio-spacing-3);
   margin-bottom: var(--studio-spacing-3);
+}
+
+.cum__panel-title-group {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
 }
 
 .cum__panel-title {
@@ -30,6 +36,14 @@
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.cum__coverage {
+  margin: 0;
+  color: var(--studio-fg-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
 
 // Plan badge — the subscription tier surfaced next to the windows head.

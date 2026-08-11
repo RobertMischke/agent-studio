@@ -45,6 +45,9 @@ export interface TokenSummaryByModel {
   modelPriced: boolean;
   /** False only when the model id is absent from the pinned price catalog. */
   modelInCatalog?: boolean;
+  /** Telemetry event bounds for this model. Null on legacy cached aggregates. */
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 export interface TokenSummaryByProject {
@@ -93,6 +96,9 @@ export interface TokenSummaryAggregate {
   byProject: TokenSummaryByProject[];
   fetchedAt: string;
   disclaimer: string;
+  /** Telemetry event bounds across all included projects. */
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 /**
@@ -119,6 +125,9 @@ export interface AdHocUsageAggregate {
   logSizeBytes: number;
   logModifiedAt: string | null;
   disclaimer: string;
+  /** Telemetry event bounds across all included ad-hoc calls. */
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 export interface AdHocUsageBySource {
@@ -150,6 +159,9 @@ export interface AdHocUsageByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  /** Telemetry event bounds for this model. Null on legacy data. */
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 /**

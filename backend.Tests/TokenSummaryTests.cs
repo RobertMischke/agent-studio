@@ -106,6 +106,30 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_DerivesRecordedRangeFromTelemetryEvents()
+    {
+        var first = new DateTime(2026, 7, 11, 7, 30, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 16, 42, 0, DateTimeKind.Utc);
+        var middle = first.AddDays(10);
+        var summary = TokenSummaryService.Summarize("Demo", [
+            Entry("gpt-5.6-sol", 100, 10) with { Ts = middle },
+            Entry("gpt-5.6-sol", 100, 10) with { Ts = first },
+            Entry("claude-opus-4-8", 100, 10) with { Ts = last },
+        ]);
+
+        Assert.Equal(first, summary.FirstRecordedAt);
+        Assert.Equal(last, summary.LastRecordedAt);
+        var gpt = summary.ByModel.Single(model => model.Model == "gpt-5.6-sol");
+        Assert.Equal(first, gpt.FirstRecordedAt);
+        Assert.Equal(middle, gpt.LastRecordedAt);
+
+        var aggregate = TokenSummaryService.AggregateSummaries([("Demo", summary)]);
+        Assert.Equal(first, aggregate.FirstRecordedAt);
+        Assert.Equal(last, aggregate.LastRecordedAt);
+        Assert.Equal(first, aggregate.ByModel.Single(model => model.Model == "gpt-5.6-sol").FirstRecordedAt);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with

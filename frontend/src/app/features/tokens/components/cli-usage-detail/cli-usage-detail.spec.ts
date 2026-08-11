@@ -73,4 +73,27 @@ describe('CliUsageDetailComponent (smoke)', () => {
     fixture.componentInstance.openProjectSettings.emit('Agent Taskboard');
     expect(emitted).toBe('Agent Taskboard');
   });
+
+  it('derives the recorded range from the model telemetry used by the usage totals', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CliUsageDetailComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CliUsageDetailComponent);
+    fixture.componentRef.setInput('tokens', {
+      byModel: [{
+        model: 'gpt-5.6-sol', calls: 2, inputTokens: 100, outputTokens: 10,
+        cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 1,
+        modelPriced: true, firstRecordedAt: '2026-07-11T07:30:00Z',
+        lastRecordedAt: '2026-08-11T16:42:00Z',
+      }],
+      byProject: [],
+    } as never);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.recordedCoverage()?.label)
+      .toContain('Since 11 Jul 2026 · as of 11 Aug 2026');
+    expect(fixture.componentInstance.modelCoverageFor('codex')?.lastRecordedAt)
+      .toBe('2026-08-11T16:42:00.000Z');
+  });
 });

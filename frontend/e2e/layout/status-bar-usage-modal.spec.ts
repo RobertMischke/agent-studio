@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
 import { setTheme } from '../helpers/theme';
 
@@ -30,6 +30,7 @@ const CLIS = ['copilot', 'claude', 'codex'] as const;
 test.describe('Status bar usage modal', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
+    await page.route('**/api/crash-recovery/pending', route => route.fulfill({ json: { pending: [] } }));
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -119,7 +120,8 @@ test.describe('Status bar usage modal', () => {
     await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   });
 
-  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page }) => {
+  test('Codex distinguishes quota windows from dated recorded usage without double-counting cache', async ({ page, devBackend }) => {
+    void devBackend;
     await page.route('**/api/cli/quota**', async route => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
@@ -145,24 +147,26 @@ test.describe('Status bar usage modal', () => {
         projects: 11,
         orchestratorEntries: 13,
         orchestratorLlmCalls: 13,
-        totalInputTokens: 50_428_112,
-        totalOutputTokens: 164_172,
+        totalInputTokens: 1_490_000_000,
+        totalOutputTokens: 11_000_000,
         totalCacheReadTokens: 48_503_936,
         totalCacheCreationTokens: 0,
-        estimatedApiCostUsd: 0,
-        allModelsPriced: false,
+        estimatedApiCostUsd: 7_442,
+        allModelsPriced: true,
         byModel: [
           {
             model: 'gpt-5.6-sol', calls: 5,
-            inputTokens: 39_646_031, outputTokens: 97_412,
+            inputTokens: 1_400_000_000, outputTokens: 10_000_000,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
-            estimatedApiCostUsd: 0, modelPriced: false,
+            estimatedApiCostUsd: 7_000, modelPriced: true,
+            firstRecordedAt: '2026-07-11T07:30:00Z', lastRecordedAt: '2026-08-10T18:00:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
-            inputTokens: 10_782_081, outputTokens: 66_760,
+            inputTokens: 90_000_000, outputTokens: 1_000_000,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
-            estimatedApiCostUsd: 0, modelPriced: false,
+            estimatedApiCostUsd: 442, modelPriced: true,
+            firstRecordedAt: '2026-07-14T10:00:00Z', lastRecordedAt: '2026-08-11T16:42:00Z',
           },
         ],
         byProject: [],
@@ -207,15 +211,17 @@ test.describe('Status bar usage modal', () => {
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByText('Telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-model-range')).toContainText('Since 11 Jul 2026 · as of 11 Aug 2026');
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
-    await expect(modal.getByText('50.6M')).toHaveCount(2);
+    await expect(modal.getByText('1501.0M')).toHaveCount(2);
+    await expect(modal.getByText('$7442.00')).toHaveCount(2);
 
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-telemetry-range-after-light--mocked.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-telemetry-range-after-dark--mocked.png` });
   });
 });

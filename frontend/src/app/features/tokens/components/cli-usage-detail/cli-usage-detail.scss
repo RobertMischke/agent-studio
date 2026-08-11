@@ -59,6 +59,13 @@
   color: var(--studio-fg-dim);
 }
 
+.cud__coverage {
+  margin-bottom: var(--studio-spacing-2) !important;
+  color: var(--studio-fg-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 .cud__sub,
 .cud__cli-head p {
   margin-top: 3px;

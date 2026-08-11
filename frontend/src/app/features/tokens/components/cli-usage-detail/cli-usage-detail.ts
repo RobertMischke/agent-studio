@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { usageCoverage } from '../usage-coverage.util';
 
 interface SparkPoint {
   label: string;
@@ -35,26 +36,14 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 /**
- * Full CLI-usage detail surface: routing headroom, token trend, per-CLI
- * quota windows / model spend / top sources, and the workspace's most
- * expensive tasks. Lives embedded inside the CLI-Management panel (the
- * "Settings-Dach"), reached from the status-bar usage modal's "Manage
- * usage caps" button. The status-bar quota strip itself opens a compact
- * per-CLI <app-cli-usage-modal> on click; this grouped surface is the
- * caps-editing roof behind it.
- *
- * Purely presentational - the shared `CliUsageStore` owns the polling
- * and feeds every input; `refreshAll` / `refreshOne` bubble back so the
- * host can re-probe.
- *
- * The "By project" rows are click-targets: each emits `openProjectSettings`
- * with the project name so the shell can route to that project's Settings
- * rail. Hover still shows the compact peek; the click is the only new
- * affordance (navigation stays shell-coordinated, never a leaf-side hash
- * write).
+ * Full CLI-usage detail surface embedded in CLI Management. The shared
+ * `CliUsageStore` owns polling; this component projects the aggregates and
+ * emits refresh or project-navigation intent to its host.
  */
 @Component({
   selector: 'app-cli-usage-detail',
@@ -101,6 +90,11 @@ export class CliUsageDetailComponent {
       }))
       .sort((a, b) => b.totalTokens - a.totalTokens);
   });
+
+  readonly recordedCoverage = computed(() => usageCoverage([
+    ...(this.tokens()?.byModel ?? []),
+    ...(this.adhoc()?.byModel ?? []),
+  ]));
 
   /** Mirror of the shell's `toProjectSlug` so testids/deep-links line up. */
   private toSlug(name: string): string {
@@ -155,6 +149,8 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        firstRecordedAt: m.firstRecordedAt,
+        lastRecordedAt: m.lastRecordedAt,
       });
     }
     for (const m of this.adhoc()?.byModel ?? []) {
@@ -169,11 +165,17 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        firstRecordedAt: m.firstRecordedAt,
+        lastRecordedAt: m.lastRecordedAt,
       });
     }
     return rows
       .sort((a, b) => this.totalTokens(b) - this.totalTokens(a))
       .slice(0, 5);
+  }
+
+  modelCoverageFor(cliType: CliType) {
+    return usageCoverage(this.modelRowsFor(cliType));
   }
 
   sourceRowsFor(cliType: CliType) {

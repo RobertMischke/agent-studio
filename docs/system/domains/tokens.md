@@ -12,7 +12,10 @@
 > current source for remote runner calls. Project summary, heatmap, and pipeline
 > cost responses include the newest successfully read usage timestamp and
 > report partial or unavailable sources instead of presenting an unexplained
-> zero. The legacy services (`TokenSummaryService`,
+> zero. Lifetime summary and ad-hoc rollups also carry the first and last
+> telemetry event timestamp globally and per model. Usage surfaces derive
+> their visible `Since ... · as of ...` range from those event bounds, never
+> from fetch, cache, configuration, or file modification timestamps. The legacy services (`TokenSummaryService`,
 > `WorkspaceTokensTimelineService`, `ProjectTokenUsageService`) retain the pure
 > fold helpers used by the canonical readers and parity fixtures. Each surface ships
 > with a Phase-5 parity test

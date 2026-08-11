@@ -64,6 +64,8 @@ public sealed class AdHocUsageService
         int totalCalls = 0;
         decimal totalCost = 0;
         bool allPriced = records.Count > 0;
+        DateTime? firstRecordedAt = null;
+        DateTime? lastRecordedAt = null;
 
         var bySource = new Dictionary<string, Bucket>(StringComparer.Ordinal);
         var byModel = new Dictionary<string, Bucket>(StringComparer.OrdinalIgnoreCase);
@@ -76,6 +78,8 @@ public sealed class AdHocUsageService
             totalOut += r.OutputTokens;
             totalCacheR += r.CacheReadTokens;
             totalCacheW += r.CacheCreationTokens;
+            firstRecordedAt = Earlier(firstRecordedAt, r.Ts);
+            lastRecordedAt = Later(lastRecordedAt, r.Ts);
 
             var cost = TokenPricing.Estimate(r.Model, r.InputTokens, r.OutputTokens, r.CacheReadTokens, r.CacheCreationTokens, r.Ts);
             totalCost += cost.Total;
@@ -129,7 +133,9 @@ public sealed class AdHocUsageService
                     CacheReadTokens: kv.Value.CacheRead,
                     CacheCreationTokens: kv.Value.CacheCreate,
                     EstimatedApiCostUsd: kv.Value.Cost,
-                    ModelPriced: priced);
+                    ModelPriced: priced,
+                    FirstRecordedAt: kv.Value.FirstRecordedAt,
+                    LastRecordedAt: kv.Value.LastRecordedAt);
             })
             .ToList();
 
@@ -147,7 +153,9 @@ public sealed class AdHocUsageService
             LogPath: logPath,
             LogSizeBytes: logSizeBytes,
             LogModifiedAt: logModifiedAt,
-            Disclaimer: DefaultDisclaimer);
+            Disclaimer: DefaultDisclaimer,
+            FirstRecordedAt: firstRecordedAt,
+            LastRecordedAt: lastRecordedAt);
     }
 
     private static void Add(Dictionary<string, Bucket> map, string key, AdHocUsageRecord r, TokenCostEstimate cost)
@@ -164,6 +172,8 @@ public sealed class AdHocUsageService
         b.CacheRead += r.CacheReadTokens;
         b.CacheCreate += r.CacheCreationTokens;
         b.Cost += cost.Total;
+        b.FirstRecordedAt = Earlier(b.FirstRecordedAt, r.Ts);
+        b.LastRecordedAt = Later(b.LastRecordedAt, r.Ts);
     }
 
     private sealed class Bucket
@@ -175,5 +185,13 @@ public sealed class AdHocUsageService
         public long CacheRead;
         public long CacheCreate;
         public decimal Cost;
+        public DateTime? FirstRecordedAt;
+        public DateTime? LastRecordedAt;
     }
+
+    private static DateTime? Earlier(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate < current ? candidate : current;
+
+    private static DateTime? Later(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate > current ? candidate : current;
 }

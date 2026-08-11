@@ -49,6 +49,10 @@
   </section>
   }
 
+  @if (recordedCoverage(); as coverage) {
+    <p class="cud__coverage" data-testid="cli-usage-detail-recorded-range">Recorded totals · {{ coverage.label }}</p>
+  }
+
   <section class="cud__trend" data-testid="cli-usage-detail-trend">
     <div class="cud__trend-head">
       <h4>Token trend</h4>
@@ -158,6 +162,9 @@
 
           <div class="cud__panel">
             <h5>Top models</h5>
+            @if (modelCoverageFor(row.cliType); as coverage) {
+              <p class="cud__coverage">{{ coverage.label }}</p>
+            }
             @if (modelRowsFor(row.cliType).length === 0) {
               <p class="cud__empty">No model usage attributed.</p>
             } @else {

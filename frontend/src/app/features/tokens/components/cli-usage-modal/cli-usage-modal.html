@@ -56,7 +56,14 @@
 
     <section class="cum__panel">
       <div class="cum__panel-head">
-        <h5 class="cum__panel-title">Recorded model usage</h5>
+        <div class="cum__panel-title-group">
+          <h5 class="cum__panel-title">Recorded model usage</h5>
+          @if (modelCoverage(); as coverage) {
+            <p class="cum__coverage" data-testid="cli-usage-modal-model-range">{{ coverage.label }}</p>
+          } @else if (modelRows().length > 0) {
+            <p class="cum__coverage" data-testid="cli-usage-modal-model-range">Recorded period unavailable</p>
+          }
+        </div>
         <div class="cum__totals">
           <span class="cum__total">
             <span class="cum__total-label">Tokens</span>
@@ -69,7 +76,7 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      <p class="cum__scope-note">Telemetry by model. Independent of the active quota windows above.</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {
