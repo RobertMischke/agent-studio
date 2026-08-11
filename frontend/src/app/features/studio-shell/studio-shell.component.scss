@@ -1489,6 +1489,10 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  // Projected Git diff content follows the orchestrator rail in the light
+  // DOM, so clip it to this grid cell before paint and hit testing. The
+  // editor body and diff renderer retain their own bounded scroll regions.
+  overflow: hidden;
   // Grid-cell descendants must shrink below intrinsic min-content,
   // otherwise the projected dashboard's intrinsic height (sum of all
   // 1000+ stacked job cards in the 3-super-column layout) propagates
