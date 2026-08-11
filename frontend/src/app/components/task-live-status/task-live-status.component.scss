@@ -16,9 +16,11 @@
 }
 
 .task-live--detail {
-  margin: 0 var(--studio-spacing-4) var(--studio-spacing-3);
-  padding: var(--studio-spacing-3) var(--studio-spacing-4);
-  border-radius: 10px;
+  // The task canvas owns a horizontal inset. Cancel it so the status zone
+  // shares the full editor grid with the tab row and pane headers.
+  // stylelint-disable-next-line scale-unlimited/declaration-strict-value -- Negates the inherited task-canvas spacing token.
+  margin: 0 calc(var(--studio-spacing-3) * -1);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
 }
 
 .task-live--active {
@@ -36,11 +38,22 @@
   background: color-mix(in srgb, var(--studio-accent-warn) 13%, var(--studio-bg-elevated));
 }
 
+.task-live.task-live--detail {
+  border-width: 1px 0;
+  border-radius: 0;
+  border-color: var(--studio-border);
+  background: transparent;
+}
+
 .task-live__current {
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
   min-width: 0;
+}
+
+.task-live__summary {
+  display: contents;
 }
 
 .task-live__label,
@@ -84,12 +97,31 @@
   font-weight: 700;
 }
 
+.task-live--detail .task-live__current,
+.task-live--detail .task-live__next {
+  display: grid;
+  grid-template-columns: 3rem 8px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--studio-spacing-2);
+}
+
+.task-live--detail .task-live__summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+}
+
 .task-live--detail .task-live__headline {
-  font-size: 14px;
+  flex: 0 1 auto;
+  font-size: 12px;
+}
+
+.task-live--detail .task-live__signal {
+  align-self: center;
 }
 
 .task-live__attempt {
-  margin-inline-start: auto;
   color: var(--studio-fg-muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -111,11 +143,31 @@
   font-size: 12px;
 }
 
+.task-live__detail--inline {
+  min-width: 0;
+}
+
 .task-live__next {
   display: flex;
   align-items: baseline;
   gap: var(--studio-spacing-2);
   color: var(--studio-fg-dim);
+}
+
+.task-live--detail .task-live__next-label {
+  grid-column: 1;
+}
+
+.task-live__next-signal {
+  grid-column: 2;
+  width: 8px;
+}
+
+.task-live--detail .task-live__next-value {
+  grid-column: 3 / 5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-live--dense .task-live__detail,
