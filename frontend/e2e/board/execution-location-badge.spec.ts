@@ -192,6 +192,9 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
         waitingTaskCount: waiting.length,
         availableSlots: waiting.length > 0 ? 8 : 0,
         thresholdMinutes: 30,
+        claimProgressWindowMinutes: 5,
+        claimProgressStalled: false,
+        lastSuccessfulClaimAt: '2026-08-08T12:59:00Z',
         observedAt: '2026-08-08T13:00:00Z',
         oldestEnteredLaneAt: waiting.length > 0 ? '2026-08-08T07:30:00Z' : null,
         items: waiting.map(item => ({
@@ -300,6 +303,7 @@ test('shows a durable remote refusal on the card and the starvation banner', asy
   const banner = page.getByTestId('remote-queue-starvation-banner');
   await expect(banner).toContainText('1 task is waiting despite free Runner capacity.');
   await expect(banner).toContainText('8 slots are available.');
+  await expect(banner).toContainText('At least one affected task has a recorded claim rejection.');
   await expectFlatFullBleedNoticeBar(banner);
   await expectNoticeCopySharesWideLine(page, banner);
 

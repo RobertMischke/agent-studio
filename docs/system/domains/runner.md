@@ -870,13 +870,20 @@ detail header render it inline. Successful dispatch clears it, and a later lane
 generation cannot inherit it. Missing repository registration is also projected
 as a failed project preflight in Execution Hosts before a Runner polls.
 
-`RemoteQueueStarvationWatchdog` independently detects remotely routed Ready
+`RemoteQueueStarvationWatchdog` independently evaluates remotely routed Ready
 cards older than `RemoteQueueStarvation:ThresholdMinutes` (30 by default) while
-a live Runner reports free slots. It publishes
+a live Runner reports free slots. A card is acute when it carries a durable
+claim rejection. Rejection-free cards become acute only when no live Runner has
+completed a successful claim within
+`RemoteQueueStarvation:ClaimProgressWindowMinutes` (5 by default). The latest
+successful claim timestamp debounces the snapshots between normal serial claim
+cycles, so an old queue that continues to drain is not starvation. When no
+successful claim has ever been recorded, the watchdog requires the same window
+of continuously observed old work and free capacity before declaring stalled
+progress. It publishes that evidence through
 `GET /api/runner/queue-starvation`, emits the rate-limited
 `remote-ready-starvation` warning event, and clears the acute signal when the
-queue or capacity condition recovers. This guard does not depend on recognizing
-the claim refusal reason.
+queue, capacity, rejection, or claim-progress condition recovers.
 
 ## Verification
 
