@@ -201,9 +201,10 @@ export class ProjectDocsService {
     });
   }
 
-  getWorkbench(projectName: string, id: string) {
+  getWorkbench(projectName: string, id: string, page: string | null = null) {
     return this.http.get<WorkbenchDocument>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(id)}`,
+      { params: page ? { page } : {} },
     );
   }
 

@@ -29,6 +29,25 @@
         "note": { "type": "string", "minLength": 1, "description": "Optional honest rationale for the transition." }
       }
     },
+    "workbenchPage": {
+      "type": "object",
+      "required": ["title", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Viewer subnavigation label. The label may evolve without changing page identity."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^pages/[A-Za-z0-9._/-]+\\.html?$",
+          "maxLength": 240,
+          "description": "Stable Dossier-relative HTML identity below pages/. Paths are unique and may not repeat entrypoint."
+        }
+      }
+    },
     "sharedProperties": {
       "type": "object",
       "required": ["pageKind", "lifecycleState", "editedBy", "editedAt", "lifecycleHistory"],
@@ -83,6 +102,12 @@
             "pattern": {
               "type": "string",
               "description": "Optional article presentation hint. Current values are ui and concept. Readers treat missing or unknown values as concept so descriptor validation remains forward-compatible."
+            },
+            "pages": {
+              "type": "array",
+              "maxItems": 24,
+              "items": { "$ref": "#/$defs/workbenchPage" },
+              "description": "Optional ordered Dossier subnavigation. index.html remains the entrypoint and is not repeated here."
             }
           }
         }
