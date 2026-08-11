@@ -81,6 +81,42 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Version_ten_adds_durable_result_finalization_state()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={first.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                DROP TABLE result_finalizations;
+                DELETE FROM schema_migrations WHERE version = 11;
+                UPDATE meta SET value = '10' WHERE key = 'schema_version';
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var upgraded = Store(temp.Path);
+        await upgraded.InitializeAsync();
+
+        await using var upgradedConnection = new SqliteConnection(
+            $"Data Source={upgraded.DatabasePath};Pooling=False");
+        await upgradedConnection.OpenAsync();
+        await using var table = upgradedConnection.CreateCommand();
+        table.CommandText = """
+            SELECT count(*) FROM sqlite_master
+             WHERE type = 'table' AND name = 'result_finalizations';
+            """;
+        Assert.Equal(1L, (long)(await table.ExecuteScalarAsync())!);
+        table.CommandText = "SELECT value FROM meta WHERE key = 'schema_version';";
+        Assert.Equal("11", (string)(await table.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
     public async Task Version_nine_seeds_default_flow_and_adds_task_version_fence()
     {
         using var temp = new TempDirectory();

@@ -35,6 +35,7 @@ builder.Services
         options.ListenUrl = bootstrap.ListenUrl;
     });
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<IResultFinalizationSummaryGenerator, ApplicationResultFinalizationSummaryGenerator>();
 builder.Services.AddSingleton<TaskServerStore>();
 builder.Services.AddSingleton<RuntimeCapacitySettingsService>();
 builder.Services.AddSingleton<HostProjectPolicyService>();

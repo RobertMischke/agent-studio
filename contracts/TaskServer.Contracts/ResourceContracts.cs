@@ -180,13 +180,46 @@ public sealed record ArtifactContentDto(
     string ContentBase64,
     long SizeBytes);
 
+/// <summary>
+/// Application-owned Result finalization state for one completed core run.
+/// <see cref="Retryable"/> keeps only the post-core summary step open;
+/// <see cref="Degraded"/> is terminal and reviewable after the bounded summary
+/// budget is exhausted.
+/// </summary>
+public enum ResultFinalizationStatus
+{
+    None,
+    Retryable,
+    Ready,
+    Degraded,
+}
+
+public sealed record ResultFinalizationRequest(
+    string RunnerId,
+    string InstanceId,
+    string LeaseId,
+    long Fence,
+    int Attempt,
+    string IdempotencyKey);
+
+public sealed record ResultFinalizationDto(
+    string RunId,
+    ResultFinalizationStatus Status,
+    int Attempt,
+    int MaxAttempts,
+    string? ArtifactId,
+    string? ArtifactSha256,
+    string? Error,
+    DateTime UpdatedAt);
+
 public sealed record TaskHistoryDto(
     TaskDto Task,
     IReadOnlyList<RunDto> Runs,
     IReadOnlyList<EventDto> Events,
     IReadOnlyList<ArtifactDto> Artifacts,
     IReadOnlyList<AuditRecordDto> Audit,
-    long LastCursor);
+    long LastCursor,
+    ResultFinalizationDto? ResultFinalization = null);
 
 public sealed record AuditRecordDto(
     long Sequence,
@@ -204,6 +237,9 @@ public static class LifecycleEventKinds
     public const string RunnerTrace = "runner.trace";
     public const string RunCompleted = "lifecycle.run-completed";
     public const string PostProcessingCompleted = "lifecycle.post-processing-completed";
+    public const string ResultFinalizationRetryable = "lifecycle.result-finalization-retryable";
+    public const string ResultFinalizationReady = "lifecycle.result-finalization-ready";
+    public const string ResultFinalizationDegraded = "lifecycle.result-finalization-degraded";
     public const string ReviewCompleted = "lifecycle.review-completed";
     public const string Reissued = "lifecycle.reissued";
     public const string TerminalHandoff = "lifecycle.terminal-handoff";
