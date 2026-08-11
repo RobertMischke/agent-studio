@@ -304,7 +304,7 @@ test.describe('task live status', () => {
       await setTheme(page, theme);
       await expect(page.getByTestId('lane-4-auto-review')).toBeVisible();
       await page.screenshot({
-        path: join(RESULTS, `task-live-status-card--${theme}.png`),
+        path: join(RESULTS, `task-live-status-card--mocked--${theme}.png`),
         fullPage: true,
       });
     }
@@ -373,7 +373,7 @@ test.describe('task live status', () => {
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
       await showcase.screenshot({
-        path: join(RESULTS, `task-live-status-detail--${theme}.png`),
+        path: join(RESULTS, `task-live-status-detail--mocked--${theme}.png`),
       });
     }
   });
