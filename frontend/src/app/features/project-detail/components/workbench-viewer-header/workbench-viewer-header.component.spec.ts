@@ -3,12 +3,17 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
+import type { TaskReferenceStatus } from '../../../../components/task-reference-microcard/task-reference-microcard';
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { TaskService } from '../../../../services/task.service';
 import type { WorkbenchDocument } from '../../../../models/project-docs.model';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { NotificationService } from '../../../../services/notification.service';
-import { WorkbenchViewerHeaderComponent } from './workbench-viewer-header.component';
+import {
+  dossierHasImplementationEntry,
+  implementationStatusFor,
+  WorkbenchViewerHeaderComponent,
+} from './workbench-viewer-header.component';
 
 const DOCUMENT: WorkbenchDocument = {
   workbench: {
@@ -22,7 +27,7 @@ const DOCUMENT: WorkbenchDocument = {
     entryPath: 'docs/operations/viewer-header/index.html',
     valid: true,
     error: null,
-    sourceTaskKeys: [],
+    sourceTaskKeys: ['AGT-10'],
     relatedTaskKeys: ['AGT-12'],
   },
   html: '<h1>Compact viewer header</h1>',
@@ -33,8 +38,74 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerHeaderComponent', () => {
+  it('recognizes implementation entries only inside the canonical append-only log', () => {
+    const start = '<!-- agent-studio:implementation-log:start -->';
+    const end = '<!-- agent-studio:implementation-log:end -->';
+
+    expect(dossierHasImplementationEntry(`${start}<li data-implementation-entry=""></li>${end}`))
+      .toBe(true);
+    expect(dossierHasImplementationEntry(`<code>data-implementation-entry</code>${start}${end}`))
+      .toBe(false);
+  });
+
+  it('derives implementation only between the first started card and all-terminal state', () => {
+    const status = (key: string, lane: string | null, exists = true): TaskReferenceStatus => ({
+      key,
+      exists,
+      taskKey: null,
+      title: null,
+      lane,
+      projectId: 'PROJ-2',
+      projectName: 'Agent Studio',
+      projectColor: null,
+      merge: null,
+      reviewGrade: null,
+    });
+
+    expect(implementationStatusFor('decision-pending', [status('AGT-1', '3-progress')]))
+      .toBe('In implementation');
+    expect(implementationStatusFor('decided', [
+      status('AGT-1', '6-completed'),
+      status('AGT-2', '7-archive'),
+    ], true)).toBeNull();
+    expect(implementationStatusFor('decided', [
+      status('AGT-ORIGIN', '6-completed'),
+      status('AGT-SLICE', '2-ready'),
+    ])).toBeNull();
+    expect(implementationStatusFor('decided', [
+      status('AGT-ORIGIN', '6-completed'),
+      status('AGT-SLICE', '2-ready'),
+    ], true)).toBe('In implementation');
+    expect(implementationStatusFor('decided', [
+      status('AGT-1', '6-completed'),
+      status('AGT-404', null, false),
+    ])).toBeNull();
+    expect(implementationStatusFor('decided', [
+      status('AGT-1', '6-completed'),
+      status('AGT-404', null, false),
+    ], true)).toBe('In implementation');
+    expect(implementationStatusFor('decided', [
+      status('AGT-1', '3-progress'),
+      status('AGT-404', null, false),
+    ])).toBe('In implementation');
+    expect(implementationStatusFor('documented', [status('AGT-1', '3-progress')]))
+      .toBeNull();
+  });
+
   it('keeps the head compact and creates a linked Dossier refresh card from its confirmation', async () => {
     const statuses = [
+      {
+        key: 'AGT-10',
+        exists: true,
+        taskKey: 'Agent Studio::source-card',
+        title: 'Source implementation card',
+        lane: '5-human-review',
+        projectId: 'PROJ-2',
+        projectName: 'Agent Studio',
+        projectColor: null,
+        merge: null,
+        reviewGrade: null,
+      },
       {
         key: 'AGT-11',
         exists: true,
@@ -137,7 +208,7 @@ describe('WorkbenchViewerHeaderComponent', () => {
     });
     fixture.detectChanges();
 
-    expect(getReferenceStatuses).toHaveBeenCalledWith(['AGT-11', 'AGT-12']);
+    expect(getReferenceStatuses).toHaveBeenCalledWith(['AGT-11', 'AGT-12', 'AGT-10']);
     const header = fixture.nativeElement.querySelector('[data-testid="workbench-viewer-header"]');
     expect(header.querySelector('[data-testid="workbench-viewer-title"]').textContent).toContain(
       'Compact viewer header',
@@ -149,7 +220,11 @@ describe('WorkbenchViewerHeaderComponent', () => {
       header
         .querySelector('[data-testid="workbench-viewer-tasks"]')
         .querySelectorAll('app-task-reference-microcard'),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
+    expect(
+      header.querySelector('[data-testid="workbench-viewer-implementation-status"]').textContent,
+    ).toContain('In implementation');
+    expect(header.querySelector('[data-testid="workbench-viewer-task-AGT-10"]')).toBeTruthy();
 
     const taskLink = header.querySelector(
       '[data-testid="workbench-viewer-task-AGT-11"] a',
@@ -222,7 +297,7 @@ describe('WorkbenchViewerHeaderComponent', () => {
     });
     fixture.detectChanges();
 
-    expect(getReferenceStatuses).toHaveBeenLastCalledWith(['AGT-11', 'AGT-14', 'AGT-12']);
+    expect(getReferenceStatuses).toHaveBeenLastCalledWith(['AGT-11', 'AGT-14', 'AGT-12', 'AGT-10']);
     expect(header.querySelector('[data-testid="workbench-viewer-task-AGT-14"]')).toBeTruthy();
     expect(TestBed.inject(NotificationService).notifications()[0]).toEqual(expect.objectContaining({
       kind: 'success',

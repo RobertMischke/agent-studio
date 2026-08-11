@@ -1,6 +1,7 @@
 :host {
   display: block;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .viewer-head {
@@ -62,6 +63,16 @@
 }
 .viewer-head__status[data-status='archived'] i {
   background: var(--studio-fg-dim);
+}
+
+.viewer-head__implementation-status {
+  flex: 0 0 auto;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+  color: var(--studio-fg);
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .viewer-head__tasks {
@@ -257,6 +268,34 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--studio-spacing-2);
+}
+
+@container (max-width: 24rem) {
+  .viewer-head {
+    gap: var(--studio-spacing-1);
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .viewer-head h1,
+  .viewer-head__status,
+  .viewer-head__decisions {
+    display: none;
+  }
+
+  .viewer-head__implementation-status {
+    padding-inline: var(--studio-spacing-1);
+    font-size: 0.64rem;
+  }
+
+  .viewer-head__tasks {
+    flex: 0 1 auto;
+    overflow: hidden;
+  }
+
+  .viewer-head__tasks app-task-reference-microcard:nth-of-type(n + 3),
+  .viewer-head__task-overflow {
+    display: none;
+  }
 }
 
 @media (max-width: 700px) {

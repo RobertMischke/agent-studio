@@ -9,6 +9,10 @@ const WORKBENCH_ID = 'compact-viewer-header';
 const WORKBENCH_KEY = 'VHE-W4';
 const WATCH_PATH = 'C:/evidence/viewer-header';
 
+// Route mocks are the complete backend for this visual contract. A production
+// build's service worker would bypass page.route after activation.
+test.use({ serviceWorkers: 'block' });
+
 const EMPTY_GROUPED = {
   backlog: [],
   preparation: [],
@@ -175,6 +179,21 @@ async function installMocks(
     referenceRequest: null,
     releaseWorkbench,
   };
+  await page.route('**/hubs/jobs/negotiate**', (route) =>
+    route.fulfill({
+      json: {
+        connectionId: 'workbench-viewer-header-e2e',
+        connectionToken: 'workbench-viewer-header-e2e',
+        negotiateVersion: 1,
+        availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+      },
+    }),
+  );
+  await page.routeWebSocket('**/hubs/jobs**', (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+    });
+  });
   await page.route('**/healthz', (route) => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', (route) => json(route, []));
   await page.route('**/api/auth/status', (route) =>
@@ -678,6 +697,9 @@ test('compact viewer head keeps live card state and details usable in both theme
   await expect(header).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('workbench-viewer-key')).toContainText(WORKBENCH_KEY);
   await expect(page.getByTestId('workbench-viewer-open-decisions')).toContainText('3 open');
+  await expect(page.getByTestId('workbench-viewer-implementation-status')).toHaveText(
+    'In implementation',
+  );
   await expect(page.getByTestId(/^workbench-viewer-task-VHE-(11|12|13)$/)).toHaveCount(3);
   await page.getByTestId('workbench-viewer-task-VHE-11').hover();
   await expect(page.getByTestId('workbench-viewer-task-VHE-11-tooltip')).toContainText(
@@ -692,15 +714,37 @@ test('compact viewer head keeps live card state and details usable in both theme
     await expect
       .poll(async () => (await header.boundingBox())?.height ?? 999)
       .toBeLessThanOrEqual(48);
-    const titleBox = await page.getByTestId('workbench-viewer-title').boundingBox();
-    const statusBox = await page.getByTestId('workbench-viewer-status').boundingBox();
-    expect(
-      Math.abs(
-        (titleBox?.y ?? 0) +
-          (titleBox?.height ?? 0) / 2 -
-          ((statusBox?.y ?? 0) + (statusBox?.height ?? 0) / 2),
-      ),
-    ).toBeLessThan(4);
+    if (viewport.label === 'wide') {
+      const titleBox = await page.getByTestId('workbench-viewer-title').boundingBox();
+      const statusBox = await page.getByTestId('workbench-viewer-status').boundingBox();
+      expect(
+        Math.abs(
+          (titleBox?.y ?? 0) +
+            (titleBox?.height ?? 0) / 2 -
+            ((statusBox?.y ?? 0) + (statusBox?.height ?? 0) / 2),
+        ),
+      ).toBeLessThan(4);
+    } else {
+      await expect(page.getByTestId('workbench-viewer-title')).toBeHidden();
+      await expect(page.getByTestId('workbench-viewer-status')).toBeHidden();
+      await expect(page.getByTestId('workbench-viewer-open-decisions')).toBeHidden();
+      const headerBox = await header.boundingBox();
+      expect(headerBox).not.toBeNull();
+      for (const testId of [
+        'workbench-viewer-key',
+        'workbench-viewer-implementation-status',
+        'workbench-viewer-tasks',
+        'workbench-viewer-refresh',
+        'workbench-viewer-details-trigger',
+      ]) {
+        const itemBox = await page.getByTestId(testId).boundingBox();
+        expect(itemBox, `${testId} must remain visible in the compact viewer head`).not.toBeNull();
+        expect(itemBox!.x).toBeGreaterThanOrEqual(headerBox!.x - 1);
+        expect(itemBox!.x + itemBox!.width).toBeLessThanOrEqual(
+          headerBox!.x + headerBox!.width + 1,
+        );
+      }
+    }
 
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);

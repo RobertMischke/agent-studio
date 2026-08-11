@@ -344,6 +344,76 @@ public sealed class RunnerSlotWiringTests : IDisposable
     }
 
     [Fact]
+    public void RenderPrompt_DossierReferencedCard_InjectsTheResolvedAppendOnlyContract()
+    {
+        var dossierDirectory = Path.Combine(_repoRoot, "docs", "context-chat");
+        Directory.CreateDirectory(dossierDirectory);
+        File.WriteAllText(Path.Combine(dossierDirectory, "index.html"), "<main></main>");
+        File.WriteAllText(Path.Combine(dossierDirectory, "workbench.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "id": "context-chat",
+              "key": "DEMO-W1",
+              "title": "Context chat",
+              "summary": "Track context-chat delivery.",
+              "entrypoint": "index.html",
+              "status": "decided",
+              "phase": "decision-ready",
+              "updatedAt": "2026-08-10T10:00:00Z",
+              "sourceTaskKeys": [],
+              "relatedTaskKeys": []
+            }
+            """);
+        var (runner, _) = BuildRunner();
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "linked-delivery");
+        Directory.CreateDirectory(jobFolder);
+        var promptPath = Path.Combine(jobFolder, "prompt.md");
+        File.WriteAllText(promptPath, "Deliver the bounded context slice.");
+        var info = new TaskInfo
+        {
+            Id = "linked-delivery",
+            Key = "AGT-42",
+            Title = "Deliver context slice",
+            State = TaskStates.Progress,
+            FolderPath = jobFolder,
+            WatchPath = _watchPath,
+            ProjectName = ProjectName,
+            Mode = TaskModes.Coding,
+            References = new TaskReferences { Workbenches = ["DEMO-W1"] },
+        };
+        var plan = new RunPlan(
+            PromptTemplate: RuntimePromptService.RunnerFreshStart,
+            PromptVariables: new Dictionary<string, string?>
+            {
+                ["prompt_path"] = promptPath,
+                ["job_folder"] = jobFolder,
+                ["user_followup"] = null,
+            },
+            PromptOverride: null,
+            SessionToResume: null,
+            ResumeFlag: false,
+            EventKind: "start",
+            EventReason: null,
+            EventInputSessionId: null,
+            MoveJobToProgress: false,
+            MarkSessionChainRecovery: false,
+            WriteCutMarker: false,
+            CutMarkerReason: null,
+            PersistSessionName: null,
+            ClearStaleSessionName: false);
+
+        var rendered = InvokeRenderPrompt(runner, plan, info, _repoRoot);
+
+        Assert.Contains("Deliver the bounded context slice.", rendered);
+        Assert.Contains("## Dossier implementation update", rendered);
+        Assert.Contains("docs/context-chat/index.html", rendered);
+        Assert.Contains("DEMO-W1", rendered);
+        Assert.Contains("data-task-key=\"AGT-42\"", rendered);
+        Assert.Contains("post-dossier-maintenance", rendered);
+    }
+
+    [Fact]
     public void RenderPrompt_ForWorktreePromptOverride_StillAddsContainmentNotice()
     {
         var (runner, _) = BuildRunner();
@@ -408,11 +478,14 @@ public sealed class RunnerSlotWiringTests : IDisposable
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
-        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
+        var projectRegistry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), projectRegistry, new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
+        var workbenches = new WorkbenchCatalogueService(scanner, projectRegistry, git);
+        var dossierMaintenance = new DossierMaintenanceService(workbenches, git);
         var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
@@ -446,7 +519,9 @@ public sealed class RunnerSlotWiringTests : IDisposable
             scanner, states, sessions, router,
             summary, prompts, transitions, chatLog, mutations,
             orchestratorLog, orchestratorRunner, orchestratorSessions,
-            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess, bus: null);
+            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess,
+            bus: null,
+            dossierMaintenance: dossierMaintenance);
 
         return (runner, settings);
     }
