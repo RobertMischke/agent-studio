@@ -60,6 +60,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.Equal(2, overview.CurrentCount);
         Assert.Equal(2, overview.HistoryCount);
         Assert.All(overview.Items, item => Assert.Equal("Project", item.ProjectName));
+        Assert.All(overview.Items, item => Assert.False(string.IsNullOrWhiteSpace(item.ProjectShortCode)));
     }
 
     [Fact]

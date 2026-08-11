@@ -193,8 +193,12 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   project-scoped `#/projects/<project>/workbenches` overview share one ordered
   projection: decision-pending items sort by open gate count, active items sort
   by latest movement, and discarded and completed history remain separate.
-  Pending overview cards expand the existing isolated viewer and inline decision
-  controls in place, while retaining a direct link to the full viewer.
+  Both scopes render Dossier entries as flat title, metadata, and excerpt rows.
+  Cross-project metadata uses the registry color and short code. A waiting
+  decision is routine neutral state, not warning state. Pending overview rows
+  expand the existing isolated viewer and inline decision controls in place,
+  while retaining a quiet direct link to the full viewer and one compact primary
+  review action.
   Explorer project children stay available as quick links. Created, updated,
   decision-recorded, and status-changed events travel over the existing jobs
   hub and converge the Explorer catalogue, both overview scopes, and an open

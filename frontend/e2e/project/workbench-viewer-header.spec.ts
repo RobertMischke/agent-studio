@@ -78,6 +78,7 @@ interface WorkbenchMockOptions {
   };
   dossier?: DossierFixture;
   deferWorkbench?: boolean;
+  overviewStyleEvidence?: boolean;
 }
 
 const DEFAULT_DOSSIER: DossierFixture = {
@@ -175,6 +176,127 @@ async function installMocks(
     referenceRequest: null,
     releaseWorkbench,
   };
+  const overviewItems = options.overviewStyleEvidence
+    ? [
+        {
+          projectName: PROJECT,
+          projectShortCode: 'VHE',
+          projectColor: '#a78bfa',
+          workbench: {
+            id: WORKBENCH_ID,
+            key: dossier.key,
+            title: dossier.title,
+            summary: dossier.summary,
+            status: 'decision-pending',
+            phase: 'decision-ready',
+            updatedAtUtc: '2026-08-09T10:00:00Z',
+            entryPath: dossier.entryPath,
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            relatedTaskKeys: ['VHE-12', 'VHE-13'],
+            openDecisionCount: 3,
+          },
+        },
+        {
+          projectName: 'Operations Console',
+          projectShortCode: 'OPS',
+          projectColor: '#89b4fa',
+          workbench: {
+            id: 'runner-placement',
+            key: 'OPS-W2',
+            title: 'Choose the remote runner placement policy',
+            summary: 'Compare the available host boundaries before recording the rollout policy.',
+            status: 'decision-pending',
+            phase: 'decision-ready',
+            updatedAtUtc: '2026-08-08T14:30:00Z',
+            entryPath: 'docs/operations/runner-placement/index.html',
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            openDecisionCount: 1,
+          },
+        },
+        {
+          projectName: PROJECT,
+          projectShortCode: 'VHE',
+          projectColor: '#a78bfa',
+          workbench: {
+            id: 'viewer-navigation',
+            key: 'VHE-W3',
+            title: 'Dossier navigation model',
+            summary: 'Keep document reading and repository navigation in one coherent workspace.',
+            status: 'active',
+            phase: 'testing',
+            updatedAtUtc: '2026-08-07T09:15:00Z',
+            entryPath: 'docs/operations/viewer-navigation/index.html',
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            openDecisionCount: 0,
+          },
+        },
+        {
+          projectName: PROJECT,
+          projectShortCode: 'VHE',
+          projectColor: '#a78bfa',
+          workbench: {
+            id: 'discarded-layout',
+            key: 'VHE-W1',
+            title: 'Floating Dossier cards',
+            summary: 'The framed card direction was discarded after the operator review.',
+            status: 'archived',
+            phase: null,
+            updatedAtUtc: '2026-08-04T11:20:00Z',
+            entryPath: 'docs/operations/discarded-layout/index.html',
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            openDecisionCount: 0,
+          },
+        },
+        {
+          projectName: 'Operations Console',
+          projectShortCode: 'OPS',
+          projectColor: '#89b4fa',
+          workbench: {
+            id: 'documented-runtime',
+            key: 'OPS-W1',
+            title: 'Runtime evidence retention',
+            summary: 'The approved retention contract is now part of the operations documentation.',
+            status: 'documented',
+            phase: null,
+            updatedAtUtc: '2026-08-03T16:45:00Z',
+            entryPath: 'docs/operations/runtime-evidence/index.html',
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            openDecisionCount: 0,
+          },
+        },
+      ]
+    : [
+        {
+          projectName: PROJECT,
+          projectShortCode: 'VHE',
+          projectColor: '#a78bfa',
+          workbench: {
+            id: WORKBENCH_ID,
+            key: dossier.key,
+            title: dossier.title,
+            summary: dossier.summary,
+            status: 'decision-pending',
+            phase: 'decision-ready',
+            updatedAtUtc: '2026-08-09T10:00:00Z',
+            entryPath: dossier.entryPath,
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            relatedTaskKeys: ['VHE-12', 'VHE-13'],
+            openDecisionCount: 3,
+          },
+        },
+      ];
   await page.route('**/healthz', (route) => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', (route) => json(route, []));
   await page.route('**/api/auth/status', (route) =>
@@ -333,34 +455,21 @@ async function installMocks(
       sections: [],
     }),
   );
-  await page.route(/\/api\/workbenches(?:\?.*)?$/, (route) =>
-    json(route, {
-      projectName: PROJECT,
-      count: 1,
-      currentCount: 1,
-      historyCount: 0,
-      items: [
-        {
-          projectName: PROJECT,
-          workbench: {
-            id: WORKBENCH_ID,
-            key: dossier.key,
-            title: dossier.title,
-            summary: dossier.summary,
-            status: 'decision-pending',
-            phase: 'decision-ready',
-            updatedAtUtc: '2026-08-09T10:00:00Z',
-            entryPath: dossier.entryPath,
-            valid: true,
-            error: null,
-            sourceTaskKeys: [],
-            relatedTaskKeys: ['VHE-12', 'VHE-13'],
-            openDecisionCount: 3,
-          },
-        },
-      ],
-    }),
-  );
+  await page.route(/\/api\/workbenches(?:\?.*)?$/, (route) => {
+    const requestedProject = new URL(route.request().url()).searchParams.get('project');
+    const items = requestedProject
+      ? overviewItems.filter(item => item.projectName === requestedProject)
+      : overviewItems;
+    return json(route, {
+      projectName: requestedProject,
+      count: items.length,
+      currentCount: items.filter(item =>
+        ['active', 'decision-pending', 'decided'].includes(item.workbench.status)).length,
+      historyCount: items.filter(item =>
+        ['archived', 'documented'].includes(item.workbench.status)).length,
+      items,
+    });
+  });
   await page.route(`**/api/projects/${encodeURIComponent(PROJECT)}/workbenches`, (route) =>
     json(route, {
       projectName: PROJECT,
@@ -610,6 +719,87 @@ test('overview entry settles without a persistent loading surface', async ({
     path: evidencePath(testInfo, 'dossier-overview-entry-settled-light--mocked.png'),
     fullPage: true,
   });
+});
+
+test('Dossier overview keeps decision and history lists calm across scopes, themes, and widths', async ({
+  page,
+}, testInfo) => {
+  const evidencePhase = process.env['DOSSIER_EVIDENCE_PHASE'] === 'before' ? 'before' : 'after';
+  await installMocks(page, { overviewStyleEvidence: true });
+  await page.addInitScript(() => {
+    localStorage.setItem('atp.studio.theme', 'light');
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
+  });
+
+  for (const scope of [
+    { label: 'central', route: '/#/workbenches', expectedItems: 5 },
+    {
+      label: 'project',
+      route: '/#/projects/viewer-header-evidence/workbenches',
+      expectedItems: 3,
+    },
+  ]) {
+    await page.goto(scope.route);
+    await page.addStyleTag({
+      content: '[data-testid="offline-banner"] { display: none !important; }',
+    });
+    const overview = page.getByTestId('workbench-overview');
+    await expect(overview).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('workbench-overview-current-count'))
+      .toContainText(`${scope.expectedItems} total`);
+    await page.getByTestId('workbench-overview-discarded-toggle').click();
+    await page.getByTestId('workbench-overview-completed-toggle').click();
+
+    if (evidencePhase === 'after') {
+      const pending = page.getByTestId(`workbench-overview-item-${PROJECT}-${WORKBENCH_ID}`);
+      await expect(pending).not.toContainText('Decision pending');
+      await expect(pending.getByTestId(`workbench-overview-project-${PROJECT}-${WORKBENCH_ID}`))
+        .toContainText('VHE');
+      await expect(pending.getByTestId(`workbench-overview-open-count-${PROJECT}-${WORKBENCH_ID}`))
+        .toContainText('3 open decisions');
+      await expect(page.getByTestId('workbench-overview-discarded-list'))
+        .toContainText('The framed card direction was discarded');
+
+      const surface = await pending.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          borderLeft: style.borderLeftWidth,
+          borderRight: style.borderRightWidth,
+          radius: style.borderRadius,
+          shadow: style.boxShadow,
+        };
+      });
+      expect(surface).toEqual({
+        borderLeft: '0px',
+        borderRight: '0px',
+        radius: '0px',
+        shadow: 'none',
+      });
+
+      const openFull = page.getByTestId(`workbench-overview-full-${PROJECT}-${WORKBENCH_ID}`);
+      const reviewHere = page.getByTestId(`workbench-overview-open-${PROJECT}-${WORKBENCH_ID}`);
+      expect(await openFull.evaluate(element => getComputedStyle(element).borderTopWidth)).toBe('0px');
+      expect(await reviewHere.evaluate(element => getComputedStyle(element).backgroundColor))
+        .not.toBe('rgba(0, 0, 0, 0)');
+    }
+
+    for (const viewport of [
+      { label: 'wide', width: 1680, height: 1100 },
+      { label: 'narrow', width: 760, height: 1100 },
+    ]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await page.screenshot({
+          path: evidencePath(
+            testInfo,
+            `dossier-overview-${evidencePhase}-${scope.label}-${theme}-${viewport.label}--mocked.png`,
+          ),
+          fullPage: true,
+        });
+      }
+    }
+  }
 });
 
 test('direct dossier route settles without a persistent loading surface', async ({

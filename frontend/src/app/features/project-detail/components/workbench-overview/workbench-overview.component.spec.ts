@@ -18,6 +18,8 @@ function item(
 ): WorkbenchOverviewItem {
   return {
     projectName: id.startsWith('other') ? 'Other' : 'Demo',
+    projectShortCode: id.startsWith('other') ? 'OTH' : 'DEM',
+    projectColor: '#a78bfa',
     workbench: {
       id,
       title: id,
@@ -76,13 +78,13 @@ describe('WorkbenchOverviewComponent', () => {
     expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain('Dossiers');
 
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-decision-pending"]')?.textContent)
-      .toContain('3 open');
+      .toContain('3 open decisions');
     expect(fixture.nativeElement.querySelector(
-      '[data-testid="workbench-overview-pattern-Demo-pending"]')?.getAttribute('data-pattern'))
-      .toBe('ui');
+      '[data-testid="workbench-overview-project-Demo-pending"]')?.textContent)
+      .toContain('DEM');
     expect(fixture.nativeElement.querySelector(
-      '[data-testid="workbench-overview-pattern-Demo-active"]')?.getAttribute('data-pattern'))
-      .toBe('concept');
+      '[data-testid="workbench-overview-item-Demo-pending"]')?.textContent)
+      .not.toContain('Decision pending');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('active');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)

@@ -11,20 +11,16 @@ import {
   untracked,
 } from '@angular/core';
 import { LoadingSurfaceComponent } from '../../../../components/async-feedback';
-import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { projectIdentity } from '../../../../services/project-identity.util';
 import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.component';
-import type {
-  ArticlePattern,
-  WorkbenchOverview,
-  WorkbenchOverviewItem,
-} from '../../../../models/project-docs.model';
+import type { WorkbenchOverview, WorkbenchOverviewItem } from '../../../../models/project-docs.model';
 
 @Component({
   selector: 'app-workbench-overview',
   standalone: true,
-  imports: [LoadingSurfaceComponent, StudioIconComponent, WorkbenchViewerComponent],
+  imports: [LoadingSurfaceComponent, WorkbenchViewerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-overview.component.html',
   styleUrl: './workbench-overview.component.scss',
@@ -103,12 +99,27 @@ export class WorkbenchOverviewComponent {
       ?? (item.workbench.status === 'decision-pending' ? 1 : 0);
   }
 
-  documentPattern(item: WorkbenchOverviewItem): ArticlePattern {
-    return item.workbench.pattern === 'ui' ? 'ui' : 'concept';
+  openDecisionLabel(item: WorkbenchOverviewItem): string {
+    const count = this.openDecisionCount(item);
+    return `${count} open ${count === 1 ? 'decision' : 'decisions'}`;
   }
 
-  patternIcon(item: WorkbenchOverviewItem): StudioIconName {
-    return this.documentPattern(item) === 'ui' ? 'grid' : 'book';
+  dossierCountLabel(count: number): string {
+    return `${count} ${count === 1 ? 'Dossier' : 'Dossiers'}`;
+  }
+
+  projectShortCode(item: WorkbenchOverviewItem): string {
+    const registryCode = item.projectShortCode?.trim();
+    if (registryCode) return registryCode.toUpperCase();
+    const words = item.projectName.trim().split(/\s+/).filter(Boolean);
+    const derived = words.length > 1
+      ? words.map(word => word[0]).join('')
+      : (words[0] ?? '').slice(0, 3);
+    return derived.toUpperCase() || projectIdentity(item.projectName).initial;
+  }
+
+  projectColor(item: WorkbenchOverviewItem): string {
+    return item.projectColor?.trim() || projectIdentity(item.projectName).color;
   }
 
   statusLabel(item: WorkbenchOverviewItem): string {

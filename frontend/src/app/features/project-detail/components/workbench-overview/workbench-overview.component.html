@@ -38,45 +38,48 @@
                 <h2>Needs a decision</h2>
                 <p>Open gates ordered by decision count, then latest movement.</p>
               </div>
-              <span>{{ decisionPending().length }}</span>
+              <span>{{ dossierCountLabel(decisionPending().length) }}</span>
             </header>
             <div class="workbench-overview__list">
               @for (item of decisionPending(); track item.projectName + ':' + item.workbench.id) {
-                <article class="workbench-overview__card workbench-overview__card--acute"
-                         [class.workbench-overview__card--expanded]="inlineDecisionExpanded(item)"
+                <article class="workbench-overview__entry workbench-overview__entry--pending"
+                         [class.workbench-overview__entry--expanded]="inlineDecisionExpanded(item)"
                          [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
-                  <div class="workbench-overview__card-main">
-                    <div class="workbench-overview__card-meta">
-                      <span class="workbench-overview__project">{{ item.projectName }}</span>
-                      <span class="workbench-overview__status" data-status="decision-pending">{{ statusLabel(item) }}</span>
-                      <span class="workbench-overview__open-count">{{ openDecisionCount(item) }} open</span>
-                    </div>
-                    <div class="workbench-overview__card-title">
-                      <span class="workbench-overview__pattern"
-                            role="img"
-                            [attr.aria-label]="documentPattern(item) + ' pattern'"
-                            [attr.data-pattern]="documentPattern(item)"
-                            [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
-                        <app-studio-icon [name]="patternIcon(item)" [size]="14" />
-                      </span>
-                      <h3>{{ item.workbench.title }}</h3>
-                    </div>
-                    <p>{{ item.workbench.summary }}</p>
-                  </div>
-                  <div class="workbench-overview__card-actions">
-                    <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
-                    <div class="workbench-overview__card-buttons">
+                  <div class="workbench-overview__entry-heading">
+                    <h3>{{ item.workbench.title }}</h3>
+                    <div class="workbench-overview__actions">
                       <button type="button"
+                              class="workbench-overview__action workbench-overview__action--link"
                               [attr.data-testid]="'workbench-overview-full-' + item.projectName + '-' + item.workbench.id"
                               (click)="open(item)">Open full view</button>
                       <button type="button"
-                            [attr.aria-expanded]="inlineDecisionExpanded(item)"
-                            [attr.data-testid]="'workbench-overview-open-' + item.projectName + '-' + item.workbench.id"
-                            (click)="toggleInlineDecision(item)">
-                        {{ inlineDecisionExpanded(item) ? 'Close decisions' : 'Review here' }}
+                              class="workbench-overview__action workbench-overview__action--primary"
+                              [attr.aria-expanded]="inlineDecisionExpanded(item)"
+                              [attr.data-testid]="'workbench-overview-open-' + item.projectName + '-' + item.workbench.id"
+                              (click)="toggleInlineDecision(item)">
+                        {{ inlineDecisionExpanded(item) ? 'Close review' : 'Review here' }}
                       </button>
                     </div>
                   </div>
+                  <div class="workbench-overview__meta">
+                    <span class="workbench-overview__project-identity"
+                          [attr.aria-label]="'Project ' + item.projectName + ', short code ' + projectShortCode(item)"
+                          [attr.title]="item.projectName"
+                          [attr.data-testid]="'workbench-overview-project-' + item.projectName + '-' + item.workbench.id">
+                      <span class="workbench-overview__project-dot"
+                            [style.background-color]="projectColor(item)"
+                            aria-hidden="true"></span>
+                      <strong>{{ projectShortCode(item) }}</strong>
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                    <span aria-hidden="true">·</span>
+                    <span class="workbench-overview__open-count"
+                          [attr.data-testid]="'workbench-overview-open-count-' + item.projectName + '-' + item.workbench.id">
+                      {{ openDecisionLabel(item) }}
+                    </span>
+                  </div>
+                  <p class="workbench-overview__excerpt">{{ item.workbench.summary }}</p>
                   @if (inlineDecisionExpanded(item)) {
                     <div class="workbench-overview__inline-viewer"
                          [attr.data-testid]="'workbench-overview-inline-' + item.projectName + '-' + item.workbench.id">
@@ -96,34 +99,36 @@
           <section class="workbench-overview__section" data-testid="workbench-overview-active">
             <header class="workbench-overview__section-head">
               <div><h2>Current</h2><p>Active work and tracked delivery, ordered by latest movement.</p></div>
-              <span>{{ active().length + tracking().length + invalid().length }}</span>
+              <span>{{ dossierCountLabel(active().length + tracking().length + invalid().length) }}</span>
             </header>
             <div class="workbench-overview__list">
               @for (item of active().concat(tracking(), invalid()); track item.projectName + ':' + item.workbench.id) {
-                <article class="workbench-overview__card"
-                         [class.workbench-overview__card--invalid]="!item.workbench.valid"
+                <article class="workbench-overview__entry"
+                         [class.workbench-overview__entry--invalid]="!item.workbench.valid"
                          [attr.data-testid]="'workbench-overview-item-' + item.projectName + '-' + item.workbench.id">
-                  <div class="workbench-overview__card-main">
-                    <div class="workbench-overview__card-meta">
-                      <span class="workbench-overview__project">{{ item.projectName }}</span>
-                      <span class="workbench-overview__status" [attr.data-status]="item.workbench.status">{{ statusLabel(item) }}</span>
-                    </div>
-                    <div class="workbench-overview__card-title">
-                      <span class="workbench-overview__pattern"
-                            role="img"
-                            [attr.aria-label]="documentPattern(item) + ' pattern'"
-                            [attr.data-pattern]="documentPattern(item)"
-                            [attr.data-testid]="'workbench-overview-pattern-' + item.projectName + '-' + item.workbench.id">
-                        <app-studio-icon [name]="patternIcon(item)" [size]="14" />
-                      </span>
-                      <h3>{{ item.workbench.title }}</h3>
-                    </div>
-                    <p>{{ item.workbench.error || item.workbench.summary }}</p>
+                  <div class="workbench-overview__entry-heading">
+                    <h3>{{ item.workbench.title }}</h3>
+                    <button type="button"
+                            class="workbench-overview__action workbench-overview__action--link"
+                            [disabled]="!item.workbench.valid"
+                            (click)="open(item)">Open</button>
                   </div>
-                  <div class="workbench-overview__card-actions">
+                  <div class="workbench-overview__meta">
+                    <span class="workbench-overview__project-identity"
+                          [attr.aria-label]="'Project ' + item.projectName + ', short code ' + projectShortCode(item)"
+                          [attr.title]="item.projectName">
+                      <span class="workbench-overview__project-dot"
+                            [style.background-color]="projectColor(item)"
+                            aria-hidden="true"></span>
+                      <strong>{{ projectShortCode(item) }}</strong>
+                    </span>
+                    <span aria-hidden="true">·</span>
                     <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
-                    <button type="button" [disabled]="!item.workbench.valid" (click)="open(item)">Open</button>
+                    <span aria-hidden="true">·</span>
+                    <span class="workbench-overview__status"
+                          [attr.data-status]="item.workbench.status">{{ statusLabel(item) }}</span>
                   </div>
+                  <p class="workbench-overview__excerpt">{{ item.workbench.error || item.workbench.summary }}</p>
                 </article>
               }
             </div>
@@ -138,21 +143,29 @@
                       data-testid="workbench-overview-discarded-toggle"
                       [attr.aria-expanded]="discardedOpen()"
                       (click)="toggleDiscarded()">
-                <span>Discarded</span><strong>{{ discarded().length }}</strong><i aria-hidden="true">›</i>
+                <span>Discarded</span>
+                <span class="workbench-overview__history-toggle-meta">
+                  <strong>{{ discarded().length }}</strong><i aria-hidden="true">›</i>
+                </span>
               </button>
               @if (discardedOpen()) {
                 <div class="workbench-overview__history-list" data-testid="workbench-overview-discarded-list">
                   @for (item of discarded(); track item.projectName + ':' + item.workbench.id) {
                     <button type="button" (click)="open(item)">
-                      <span class="workbench-overview__history-title">
-                        <span class="workbench-overview__pattern" role="img"
-                              [attr.aria-label]="documentPattern(item) + ' pattern'"
-                              [attr.data-pattern]="documentPattern(item)">
-                          <app-studio-icon [name]="patternIcon(item)" [size]="14" />
+                      <strong class="workbench-overview__history-title">{{ item.workbench.title }}</strong>
+                      <span class="workbench-overview__meta">
+                        <span class="workbench-overview__project-identity"
+                              [attr.aria-label]="'Project ' + item.projectName + ', short code ' + projectShortCode(item)"
+                              [attr.title]="item.projectName">
+                          <span class="workbench-overview__project-dot"
+                                [style.background-color]="projectColor(item)"
+                                aria-hidden="true"></span>
+                          <strong>{{ projectShortCode(item) }}</strong>
                         </span>
-                        <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                        <span aria-hidden="true">·</span>
+                        <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
                       </span>
-                      <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                      <span class="workbench-overview__history-excerpt">{{ item.workbench.summary }}</span>
                     </button>
                   } @empty { <p>No discarded items.</p> }
                 </div>
@@ -163,21 +176,29 @@
                       data-testid="workbench-overview-completed-toggle"
                       [attr.aria-expanded]="completedOpen()"
                       (click)="toggleCompleted()">
-                <span>Documented</span><strong>{{ documented().length }}</strong><i aria-hidden="true">›</i>
+                <span>Documented</span>
+                <span class="workbench-overview__history-toggle-meta">
+                  <strong>{{ documented().length }}</strong><i aria-hidden="true">›</i>
+                </span>
               </button>
               @if (completedOpen()) {
                 <div class="workbench-overview__history-list" data-testid="workbench-overview-completed-list">
                   @for (item of documented(); track item.projectName + ':' + item.workbench.id) {
                     <button type="button" (click)="open(item)">
-                      <span class="workbench-overview__history-title">
-                        <span class="workbench-overview__pattern" role="img"
-                              [attr.aria-label]="documentPattern(item) + ' pattern'"
-                              [attr.data-pattern]="documentPattern(item)">
-                          <app-studio-icon [name]="patternIcon(item)" [size]="14" />
+                      <strong class="workbench-overview__history-title">{{ item.workbench.title }}</strong>
+                      <span class="workbench-overview__meta">
+                        <span class="workbench-overview__project-identity"
+                              [attr.aria-label]="'Project ' + item.projectName + ', short code ' + projectShortCode(item)"
+                              [attr.title]="item.projectName">
+                          <span class="workbench-overview__project-dot"
+                                [style.background-color]="projectColor(item)"
+                                aria-hidden="true"></span>
+                          <strong>{{ projectShortCode(item) }}</strong>
                         </span>
-                        <span><strong>{{ item.workbench.title }}</strong><small>{{ item.projectName }}</small></span>
+                        <span aria-hidden="true">·</span>
+                        <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
                       </span>
-                      <time [attr.datetime]="item.workbench.updatedAtUtc">{{ updatedLabel(item.workbench.updatedAtUtc) }}</time>
+                      <span class="workbench-overview__history-excerpt">{{ item.workbench.summary }}</span>
                     </button>
                   } @empty { <p>No documented items.</p> }
                 </div>

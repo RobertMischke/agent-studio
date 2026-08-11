@@ -392,6 +392,8 @@ export interface WorkbenchCatalogue {
 
 export interface WorkbenchOverviewItem {
   projectName: string;
+  projectShortCode?: string | null;
+  projectColor?: string | null;
   workbench: WorkbenchListItem;
 }
 
