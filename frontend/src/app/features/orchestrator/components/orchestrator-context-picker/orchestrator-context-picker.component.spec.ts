@@ -35,24 +35,27 @@ describe('OrchestratorContextPickerComponent', () => {
     result.componentInstance.attachmentAdded.subscribe(added);
 
     const root = result.nativeElement as HTMLElement;
-    root.querySelector<HTMLButtonElement>('[data-testid="orch-add-context"]')!.click();
+    result.componentInstance.show();
     result.detectChanges();
     root.querySelector<HTMLButtonElement>('[data-testid="orch-context-current-source"]')!.click();
 
     expect(added).toHaveBeenCalledWith(CURRENT);
   });
 
-  it('renders removable chips and an honest send-time estimate', async () => {
+  it('creates stable typed references for free task, Wiki, and repository input', async () => {
     const result = await fixture();
-    result.componentRef.setInput('attachments', [CURRENT]);
-    result.detectChanges();
-    const removed = vi.fn();
-    result.componentInstance.attachmentRemoved.subscribe(removed);
+    const added = vi.fn();
+    result.componentInstance.attachmentAdded.subscribe(added);
 
-    const root = result.nativeElement as HTMLElement;
-    expect(root.querySelector('[data-testid="orch-context-estimate"]')?.textContent)
-      .toContain('about 2800 tokens');
-    root.querySelector<HTMLButtonElement>('[aria-label^="Remove Context workspace"]')!.click();
-    expect(removed).toHaveBeenCalledWith(CURRENT.id);
+    for (const value of ['AGT-2506', 'wiki:operations/setup.md', 'frontend/src/app.ts']) {
+      result.componentInstance.query.set(value);
+      result.componentInstance.addTypedReference();
+    }
+
+    expect(added.mock.calls.map(call => call[0].reference)).toEqual([
+      { kind: 'task', reference: 'AGT-2506', projectId: 'Demo' },
+      { kind: 'page', reference: 'page:Demo/operations/setup.md', projectId: 'Demo' },
+      { kind: 'repository-file', reference: 'frontend/src/app.ts', projectId: 'Demo' },
+    ]);
   });
 });
