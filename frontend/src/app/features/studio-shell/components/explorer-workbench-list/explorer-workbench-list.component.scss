@@ -1,15 +1,12 @@
 :host {
   display: contents;
-  // One more visible step than the Dossiers disclosure row. This keeps the
-  // project -> section -> entry hierarchy legible without a decorative guide.
-  --workbench-topics-indent: calc(var(--studio-spacing-7) + var(--studio-spacing-4));
 }
 
 .studio-workbench-style-guide { display: contents; }
+.studio-workbench-topic-host { display: contents; }
 
 .studio-workbench-topics {
-  padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3));
-  padding-left: var(--workbench-topics-indent);
+  min-width: 0;
 }
 
 .studio-workbench-topics__state {
@@ -21,46 +18,22 @@
 
 .studio-workbench-group-items,
 .studio-workbench-history-items {
-  padding-left: var(--studio-spacing-4);
-}
-
-.studio-workbench-topic {
-  display: flex;
-  width: calc(100% - var(--studio-spacing-4));
-  margin-left: var(--studio-spacing-4);
-  flex-direction: column;
-  align-items: flex-start;
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--studio-fg);
-  text-align: left;
-  cursor: pointer;
-}
-
-.studio-workbench-topic:hover { background: var(--studio-bg-hover); }
-.studio-workbench-topic:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: -2px; }
-.studio-workbench-topic:disabled { cursor: default; }
-.studio-workbench-topic--active { background: var(--studio-nav-active-bg); color: var(--studio-nav-active-fg); font-weight: 600; }
-.studio-workbench-topic--active:hover { background: var(--studio-nav-active-bg-hover); }
-
-.studio-workbench-topic__primary {
-  display: flex;
-  width: 100%;
   min-width: 0;
-  align-items: center;
-  gap: var(--studio-spacing-1);
+  padding-left: var(--studio-spacing-5);
 }
 
-.studio-workbench-topic__pattern { display: inline-flex; flex: none; color: var(--studio-fg-muted); }
-.studio-workbench-topic__pattern[data-pattern='ui'] { color: var(--studio-accent-3); }
-.studio-workbench-topic--active .studio-workbench-topic__pattern { color: var(--studio-nav-active-fg); }
-.studio-workbench-topic__title { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.35; }
-.studio-workbench-topic__meta { display: flex; align-items: center; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 10px; line-height: 1.3; }
-.studio-workbench-topic__meta strong { font-weight: 700; font-variant-numeric: tabular-nums; }
-.studio-workbench-topic__key { font-family: var(--font-mono); }
-.studio-workbench-topic--active .studio-workbench-topic__meta { color: var(--studio-nav-active-fg); opacity: 0.78; }
+.studio-workbench-topic__status {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  flex: none;
+}
+
+.tree-row--active .studio-workbench-topic__status {
+  color: var(--studio-nav-active-fg);
+  opacity: 0.78;
+}
 
 .studio-workbench-status-dot {
   width: 6px;
@@ -71,21 +44,3 @@
 }
 
 .studio-workbench-status-dot[data-status='invalid'] { background: var(--studio-error); }
-
-.studio-workbench-wiki {
-  margin: var(--studio-spacing-1) 0 0;
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--studio-fg-muted);
-  font: inherit;
-  font-size: 10.5px;
-  cursor: pointer;
-}
-
-.studio-workbench-wiki:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
-
-// The Studio button reset is more specific than the component classes.
-.studio .studio-workbench-topic { padding: var(--studio-spacing-1) var(--studio-spacing-2); }
-.studio .studio-workbench-wiki { padding: var(--studio-spacing-1); }

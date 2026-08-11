@@ -13,7 +13,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
-import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
+import type {
+  RegistryProjectSummary,
+  RegistryProjectUrl,
+  RegistryWorkspaceListItem,
+} from '../../../../models/task.model';
 import { ProjectUrlProbeService } from '../../../../services/project-url-probe.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
@@ -420,10 +424,18 @@ export class ExplorerWorkspaceTreeComponent {
     drop: CdkDropList<ExplorerWorkspaceGroup>,
   ): boolean => this.projectDrag.canMoveProjectToWorkspace(drag.data, drop.data.id);
 
-  rowTitle(p: ExplorerProjectNode): string {
-    return p.projectId
+  projectTooltip(p: ExplorerProjectNode): string {
+    const guidance = p.projectId
       ? 'Drag onto a workspace folder to move this project there'
       : 'Not registered. Use + on the destination workspace to onboard this project before moving it.';
+    const openTasks = p.totalJobs === 1 ? '1 open task' : `${p.totalJobs} open tasks`;
+    return [p.displayLabel, openTasks, this.autoPickupFor(p.name).tooltip, guidance].join('\n');
+  }
+
+  urlTooltip(p: ExplorerProjectNode, url: RegistryProjectUrl): string {
+    const status = this.urlProbe.statusFor(p.projectId ?? '', url.id);
+    const statusLabel = status === 'running' ? 'Running' : status === 'offline' ? 'Offline' : 'Status unknown';
+    return [url.label, url.url, statusLabel].join('\n');
   }
   onDragStart(p: ExplorerProjectNode): void {
     this.projectDrag.onDragStart({

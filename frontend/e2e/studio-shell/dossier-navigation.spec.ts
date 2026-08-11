@@ -7,6 +7,7 @@ import { setTheme } from '../helpers/theme';
 interface CatalogueItem {
   id: string;
   key?: string | null;
+  title: string;
   status: 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
   entryPath: string;
   openDecisionCount?: number;
@@ -67,7 +68,7 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
     localStorage.removeItem('atp.studio.explorerSections');
     localStorage.removeItem('atp.studio.explorer.expanded');
     localStorage.removeItem('atp.studio.panelState.v1');
-    localStorage.setItem('atp.studio.sidebarWidth', '320');
+    localStorage.setItem('atp.studio.sidebarWidth', '240');
     sessionStorage.removeItem('atp.studio.explorer.workbenches.state.v2');
   });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -83,7 +84,9 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
   await expect(dossiers).toBeVisible();
   await expect(styleGuideRow).toBeVisible({ timeout: 20_000 });
   await expect(styleGuideRow).toContainText('Style Guide');
-  await expect(styleGuideRow).toContainText(styleGuide.key ?? '');
+  if (styleGuide.key) {
+    await expect(styleGuideRow).not.toContainText(styleGuide.key);
+  }
 
   const waitingDecisions = catalogue!.items
     .filter(item => item.status === 'decision-pending')
@@ -99,10 +102,19 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
   await expect(needsDecision).toHaveAttribute('aria-expanded', 'true');
   await expect(inImplementation).toHaveAttribute('aria-expanded', 'true');
   await expect(history).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByTestId(`studio-explorer-workbench-key-${projectName}-${pending!.id}`))
-    .toContainText(pending!.key ?? '');
   await expect(page.getByTestId(`studio-explorer-workbench-status-${projectName}-${pending!.id}`))
     .toHaveAttribute('data-status', 'decision-pending');
+
+  const pendingRow = page.getByTestId(`studio-explorer-workbench-${projectName}-${pending!.id}`);
+  const pendingBox = await pendingRow.boundingBox();
+  expect(pendingBox?.height).toBe(30);
+  await pendingRow.hover();
+  const pendingTooltip = page.getByTestId(
+    `studio-explorer-workbench-tooltip-${projectName}-${pending!.id}`,
+  );
+  await expect(pendingTooltip).toContainText(pending!.title);
+  if (pending!.key) await expect(pendingTooltip).toContainText(pending!.key);
+  await expect(pendingTooltip).toContainText('Decision pending');
 
   await needsDecision.click();
   await expect(needsDecision).toHaveAttribute('aria-expanded', 'false');
@@ -117,12 +129,32 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
   expect(sidebarBox).toBeTruthy();
   expect(rowBox!.y).toBeGreaterThanOrEqual(sidebarBox!.y);
   expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(sidebarBox!.y + sidebarBox!.height);
+  expect(rowBox!.height).toBe(30);
+
+  const implementationItems = catalogue!.items
+    .filter(item => item.status === 'active' || item.status === 'decided');
+  const iconPositions: number[] = [];
+  for (const item of implementationItems) {
+    const row = page.getByTestId(`studio-explorer-workbench-${projectName}-${item.id}`);
+    if (!await row.isVisible()) continue;
+    const box = await row.boundingBox();
+    const iconBox = await page.getByTestId(
+      `studio-explorer-workbench-${projectName}-${item.id}-glyph`,
+    ).boundingBox();
+    expect(box?.height).toBe(30);
+    if (iconBox) iconPositions.push(iconBox.x);
+  }
+  expect(new Set(iconPositions.map(value => Math.round(value))).size).toBe(1);
+
+  const projectNameNode = page.getByTestId(`studio-explorer-project-${projectName}-name`);
+  const projectNameFits = await projectNameNode.evaluate(node => node.scrollWidth <= node.clientWidth);
+  expect(projectNameFits).toBe(true);
   await page.mouse.move(700, 300);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     await page.screenshot({
-      path: evidencePath(testInfo, `wiki-dossier-nav-after-${theme}--real.png`),
+      path: evidencePath(testInfo, `workspace-tree-after-narrow-${theme}--real.png`),
       fullPage: true,
     });
   }

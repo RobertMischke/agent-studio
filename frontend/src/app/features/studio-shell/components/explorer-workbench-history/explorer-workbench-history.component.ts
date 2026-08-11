@@ -8,14 +8,14 @@ import {
   output,
   viewChildren,
 } from '@angular/core';
-import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
-import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import type { ArticlePattern, WorkbenchListItem } from '../../../../models/project-docs.model';
 
 @Component({
   selector: 'app-explorer-workbench-history',
   standalone: true,
-  imports: [AppTooltipDirective, StudioIconComponent],
+  imports: [TreeRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-history.component.html',
   styleUrl: './explorer-workbench-history.component.scss',
@@ -35,14 +35,14 @@ export class ExplorerWorkbenchHistoryComponent {
       items: this.items().filter(item => item.status === 'archived'),
     },
   ]);
-  private readonly topics = viewChildren<ElementRef<HTMLButtonElement>>('workbenchTopic');
+  private readonly topics = viewChildren<ElementRef<HTMLElement>>('workbenchTopic');
 
   constructor() {
     effect(() => {
       const activeWorkbenchId = this.activeWorkbenchId();
       const activeTopic = this.topics()
-        .map(topic => topic.nativeElement)
-        .find(topic => topic.getAttribute('aria-current') === 'page');
+        .map(topic => topic.nativeElement.querySelector<HTMLButtonElement>('[aria-current="page"]'))
+        .find(topic => topic !== null);
       if (!activeWorkbenchId || !activeTopic || typeof activeTopic.scrollIntoView !== 'function') return;
       queueMicrotask(() => activeTopic.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
     });
@@ -65,8 +65,8 @@ export class ExplorerWorkbenchHistoryComponent {
   }
 
   tooltip(item: WorkbenchListItem): string {
-    return [item.key, item.title, `${this.documentPattern(item)} pattern`, this.secondaryMeta(item)]
+    return [item.title, item.key, `${this.documentPattern(item)} pattern`, this.secondaryMeta(item)]
       .filter(Boolean)
-      .join(' · ');
+      .join('\n');
   }
 }

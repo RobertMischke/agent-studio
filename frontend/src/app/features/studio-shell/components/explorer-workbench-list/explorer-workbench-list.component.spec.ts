@@ -65,7 +65,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     });
   });
 
-  it('groups the full catalogue by lifecycle, shows quiet status dots and visible keys', async () => {
+  it('groups the full catalogue into one-line tree rows with quiet trailing status', async () => {
     const { fixture, component, http } = await mount();
     component.toggle();
     http.expectOne(request => request.url === '/api/projects/Demo/workbenches'
@@ -88,8 +88,11 @@ describe('ExplorerWorkbenchListComponent', () => {
       .toContain('In implementation');
     expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-pending"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-active"]')).not.toBeNull();
-    expect(root.querySelector('[data-testid="studio-explorer-workbench-key-Demo-pending"]')?.textContent)
-      .toBe('DEM-PENDING');
+    const pending = root.querySelector<HTMLElement>('[data-testid="studio-explorer-workbench-Demo-pending"]');
+    expect(pending?.classList.contains('tree-row')).toBe(true);
+    expect(pending?.textContent).toContain('3 open');
+    expect(pending?.textContent).not.toContain('DEM-PENDING');
+    expect(pending?.querySelector('.studio-workbench-topic__meta')).toBeNull();
     expect(root.querySelector('[data-testid="studio-explorer-workbench-status-Demo-pending"]')
       ?.getAttribute('data-status')).toBe('decision-pending');
     expect(root.querySelector('[data-testid="studio-explorer-workbench-history-Demo"]')
@@ -146,7 +149,10 @@ describe('ExplorerWorkbenchListComponent', () => {
       '[data-testid="studio-explorer-project-style-guide-Demo"]') as HTMLButtonElement;
     expect(component.expanded()).toBe(false);
     expect(styleGuide.textContent).toContain('Style Guide');
-    expect(styleGuide.textContent).toContain('AGT-W20');
+    expect(styleGuide.textContent).not.toContain('AGT-W20');
+    expect(component.navTooltip(guide)).toContain(
+      'Admin Surface Design Guideline\nAGT-W20\nconcept pattern, Decision pending, updated',
+    );
     expect(styleGuide.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-admin-design-guideline"]'))
       .toBeNull();
