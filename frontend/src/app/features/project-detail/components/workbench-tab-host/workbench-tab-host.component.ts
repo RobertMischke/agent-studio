@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { LoadingSurfaceComponent } from '../../../../components/async-feedback';
-import type { WorkbenchOverviewItem } from '../../../../models/project-docs.model';
+import type { WorkbenchOverviewOpenRequest } from '../../../../models/project-docs.model';
 import { WorkbenchOverviewComponent } from '../workbench-overview/workbench-overview.component';
 import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.component';
 
@@ -21,6 +21,7 @@ export class WorkbenchTabHostComponent {
   readonly mode = input.required<'overview' | 'viewer'>();
   readonly projectName = input<string | null>(null);
   readonly workbenchId = input<string | null>(null);
-  readonly openWorkbench = output<WorkbenchOverviewItem>();
+  readonly pagePath = input<string | null>(null);
+  readonly openWorkbench = output<WorkbenchOverviewOpenRequest>();
   readonly openWiki = output<string>();
 }

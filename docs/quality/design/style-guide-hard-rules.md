@@ -104,6 +104,12 @@ identity is the shared project colour mark plus registry short code. The
 guideline also owns compact density, reading-width, theme-token, and
 self-hosted-font rules for this surface family.
 
+This guideline is a living standard, not a pending decision. Its
+[visual Dos and Don'ts](../../operations/admin-design-guideline/pages/dos-and-donts.html)
+and append-only
+[Applied surfaces](../../operations/admin-design-guideline/pages/applied-surfaces.html)
+register remain first-class references for reviews and scoped refresh work.
+
 Adoption is incremental. Apply the rule to the new or touched surface and its
 immediate component family. Record unrelated legacy drift separately instead
 of turning one UI card into a broad restyling pass.
@@ -120,5 +126,5 @@ of turning one UI card into a broad restyling pass.
 - **Product principles:** the "why" behind R2/R4/R5 lives in
   [docs/quality/design-principles.md](../design-principles.md).
 - **Admin reference:** the fully specified light/dark Activity surface,
-  violation audit, and adoption contract live in the
+  violation audit, visual comparisons, applied-surface register, and adoption contract live in the
   [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html).

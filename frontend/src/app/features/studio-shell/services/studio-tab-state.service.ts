@@ -376,6 +376,7 @@ export class StudioTabStateService {
           kind: 'workbench',
           projectName: tab.projectName,
           workbenchId: tab.workbenchId,
+          pagePath: tab.pagePath,
           title: tab.title,
           key: tab.key,
         };

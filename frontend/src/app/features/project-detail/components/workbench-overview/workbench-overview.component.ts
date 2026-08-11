@@ -19,6 +19,7 @@ import type {
   ArticlePattern,
   WorkbenchOverview,
   WorkbenchOverviewItem,
+  WorkbenchOverviewOpenRequest,
 } from '../../../../models/project-docs.model';
 
 @Component({
@@ -31,7 +32,7 @@ import type {
 })
 export class WorkbenchOverviewComponent {
   readonly projectName = input<string | null>(null);
-  readonly openWorkbench = output<WorkbenchOverviewItem>();
+  readonly openWorkbench = output<WorkbenchOverviewOpenRequest>();
 
   private readonly docs = inject(ProjectDocsService);
   private readonly hub = inject(JobsHubClient);
@@ -47,6 +48,7 @@ export class WorkbenchOverviewComponent {
   readonly expandedDecisionKey = signal<string | null>(null);
 
   readonly decisionPending = computed(() => this.itemsWithStatus('decision-pending'));
+  readonly livingStandards = computed(() => this.itemsWithStatus('living-standard'));
   readonly active = computed(() => this.itemsWithStatus('active'));
   readonly tracking = computed(() => this.itemsWithStatus('decided'));
   readonly invalid = computed(() => this.itemsWithStatus('invalid'));
@@ -77,8 +79,8 @@ export class WorkbenchOverviewComponent {
     });
   }
 
-  open(item: WorkbenchOverviewItem): void {
-    if (item.workbench.valid) this.openWorkbench.emit(item);
+  open(item: WorkbenchOverviewItem, pagePath?: string): void {
+    if (item.workbench.valid) this.openWorkbench.emit(pagePath ? { ...item, pagePath } : item);
   }
 
   toggleInlineDecision(item: WorkbenchOverviewItem): void {
@@ -116,6 +118,7 @@ export class WorkbenchOverviewComponent {
     if (!workbench.valid) return 'Needs attention';
     if (workbench.documentation?.eligible) return 'Ready to document';
     if (workbench.status === 'decision-pending') return 'Decision pending';
+    if (workbench.status === 'living-standard') return 'Living standard';
     if (workbench.status === 'active') return workbench.phase ?? 'Active';
     if (workbench.status === 'decided') return 'Tracking';
     if (workbench.status === 'archived') return 'Discarded';

@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import type {
   WorkbenchOverview,
   WorkbenchOverviewItem,
+  WorkbenchOverviewOpenRequest,
   WorkbenchStatus,
 } from '../../../../models/project-docs.model';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
@@ -39,7 +40,7 @@ function overview(items: WorkbenchOverviewItem[], projectName: string | null = n
   return {
     projectName,
     count: items.length,
-    currentCount: items.filter(entry => ['active', 'decision-pending', 'decided'].includes(entry.workbench.status)).length,
+    currentCount: items.filter(entry => ['active', 'living-standard', 'decision-pending', 'decided'].includes(entry.workbench.status)).length,
     historyCount: items.filter(entry => ['archived', 'documented'].includes(entry.workbench.status)).length,
     items,
   };
@@ -55,6 +56,10 @@ describe('WorkbenchOverviewComponent', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     const pending = item('pending', 'decision-pending', 3, 'ui');
+    pending.workbench.pages = [
+      { title: 'Overview', path: 'index.html', isEntrypoint: true },
+      { title: 'Evidence', path: 'pages/evidence.html', isEntrypoint: false },
+    ];
     const tracking = item('tracking', 'decided');
     tracking.workbench.documentation = {
       eligible: true,
@@ -87,6 +92,11 @@ describe('WorkbenchOverviewComponent', () => {
       .toContain('active');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('Ready to document');
+    const openedPages: WorkbenchOverviewOpenRequest[] = [];
+    fixture.componentInstance.openWorkbench.subscribe(value => openedPages.push(value));
+    (fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-page-Demo-pending-pages/evidence.html"]') as HTMLButtonElement).click();
+    expect(openedPages[0]?.pagePath).toBe('pages/evidence.html');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-discarded-list"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')).toBeNull();
 

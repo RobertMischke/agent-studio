@@ -69,6 +69,9 @@ docs/operations/                     # or docs/quality/, docs/system/, ...
     index.html
     workbench.json
     brief.md                         # optional, prompt-friendly context
+    pages/                           # optional validated HTML subpages
+      evidence.html
+    assets/                          # optional local visual evidence
 ```
 
 `index.html` is the presentation source. In v1 it is self-contained: inline
@@ -96,6 +99,9 @@ Example:
   "title": "Project state at a glance",
   "summary": "Compare compact Explorer signals before choosing one.",
   "entrypoint": "index.html",
+  "pages": [
+    { "title": "Evidence", "path": "pages/evidence.html" }
+  ],
   "pageKind": "workbench",
   "lifecycleState": "in-progress",
   "phase": "testing",
@@ -115,9 +121,25 @@ Example:
 }
 ```
 
+`pages` is an optional additive extension for both supported descriptor
+versions. Each item has a navigation `title` and a unique Dossier-relative HTML
+`path` under `pages/`. Discovery validates containment, existence, file type,
+size, and reparse-point safety before projecting the entrypoint plus subpages
+as one ordered navigation model. The existing Dossier id, project-scoped key,
+tab key, entrypoint route, decision anchors, and mutation fingerprint stay
+stable when the reader changes pages. The complete authoring contract and
+reference implementation live in
+[Article document authoring](../operations/article-document-authoring.md#multi-page-dossiers).
+
 The minimum required fields are `schemaVersion`, stable `id`, `title`,
 `summary`, relative `entrypoint`, and the shared lifecycle fields. The allowed
 lifecycle values are:
+
+Schema v1 also reserves `status: "living-standard"` for an approved,
+permanent reference that remains current without returning to a decision gate.
+Its evolution happens through append-only refresh or revamp cards. This is a
+compatibility status for established standards, not an additional schema v2
+lifecycle state.
 
 | Field | Values | Meaning |
 |---|---|---|

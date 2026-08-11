@@ -32,9 +32,9 @@ public sealed class WorkbenchCatalogueService
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private static readonly HashSet<string> CurrentStatuses = new(StringComparer.Ordinal)
-        { "active", "decision-pending", "decided" };
+        { "active", "living-standard", "decision-pending", "decided" };
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.Ordinal)
-        { "active", "decision-pending", "decided", "documented", "archived" };
+        { "active", "living-standard", "decision-pending", "decided", "documented", "archived" };
     private static readonly HashSet<string> AllowedPhases = new(StringComparer.Ordinal)
         { "shaping", "testing", "decision-ready" };
 
@@ -213,16 +213,30 @@ public sealed class WorkbenchCatalogueService
             Items: sorted);
     }
 
-    public WorkbenchDocument? Read(string projectName, string id)
+    public WorkbenchDocument? Read(string projectName, string id, string? pagePath = null)
     {
         if (!SafeId(id)) return null;
         var root = ResolveRoot(projectName);
         if (root == null) return null;
         var item = List(projectName, includeHistory: true)?.Items.FirstOrDefault(x => x.Id == id);
         if (item is not { Valid: true }) return null;
-        var full = ContainedPath(root, item.EntryPath);
-        if (full == null || !File.Exists(full)) return null;
-        var html = ReadHtmlWithinLimit(full);
+        var entryFull = ContainedPath(root, item.EntryPath);
+        if (entryFull == null || !File.Exists(entryFull)) return null;
+        var page = item.Pages.FirstOrDefault(candidate => candidate.IsEntrypoint);
+        if (item.Pages.Count == 0)
+            page = new WorkbenchPage(item.Title, Path.GetFileName(item.EntryPath), true);
+        if (!string.IsNullOrWhiteSpace(pagePath))
+        {
+            page = item.Pages.FirstOrDefault(candidate =>
+                string.Equals(candidate.Path, pagePath, PathComparison));
+            if (page == null) return null;
+        }
+        if (page == null) return null;
+        var dossierRoot = Path.GetDirectoryName(entryFull);
+        if (dossierRoot == null) return null;
+        var pageFull = page.IsEntrypoint ? entryFull : ContainedPath(dossierRoot, page.Path);
+        if (pageFull == null || !File.Exists(pageFull)) return null;
+        var html = ReadHtmlWithinLimit(pageFull);
         if (html == null) return null;
         var docsRoot = ContainedPath(root, "docs");
         string? descriptorPath = null;
@@ -235,7 +249,8 @@ public sealed class WorkbenchCatalogueService
                 .ToList();
             if (descriptorMatches.Count == 1) descriptorPath = descriptorMatches[0];
         }
-        var provenancePaths = new List<string> { item.EntryPath };
+        var selectedPagePath = Path.GetRelativePath(root, pageFull).Replace('\\', '/');
+        var provenancePaths = new List<string> { item.EntryPath, selectedPagePath };
         if (descriptorPath != null)
             provenancePaths.Add(Path.GetRelativePath(root, descriptorPath).Replace('\\', '/'));
         var status = _git.GetStatusForRepoRoot(root);
@@ -246,8 +261,12 @@ public sealed class WorkbenchCatalogueService
             : null;
         var fingerprint = descriptorPath == null
             ? null
-            : ComputeWorkbenchFingerprint(descriptorPath, full);
-        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified, fingerprint);
+            : ComputeWorkbenchFingerprint(descriptorPath, entryFull);
+        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified, fingerprint)
+        {
+            Page = page,
+            PagePath = selectedPagePath,
+        };
     }
 
     /// <summary>
@@ -457,6 +476,7 @@ public sealed class WorkbenchCatalogueService
                 if (full == null || !File.Exists(full)) throw new InvalidDataException("entrypoint is missing or escapes its Dossier folder.");
                 if (!IsHtmlWithinLimit(full))
                     throw new InvalidDataException($"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Dossier limit.");
+                var pages = ReadPages(obj, safeDir, title, entrypoint);
                 var repoRel = Path.GetRelativePath(root, full).Replace('\\', '/');
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
                     updated.UtcDateTime, repoRel, true, null, DescriptorTaskKeys(obj))
@@ -471,6 +491,7 @@ public sealed class WorkbenchCatalogueService
                     Decision = decision,
                     DecisionStage = DecisionStage(decision),
                     OpenDecisionCount = OpenDecisionCount(full, status),
+                    Pages = pages,
                 });
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
@@ -700,6 +721,48 @@ public sealed class WorkbenchCatalogueService
         {
             return null;
         }
+    }
+
+    private static List<WorkbenchPage> ReadPages(
+        JsonElement descriptor,
+        string dossierRoot,
+        string entryTitle,
+        string entrypoint)
+    {
+        var result = new List<WorkbenchPage>
+        {
+            new(entryTitle, entrypoint, true),
+        };
+        if (!descriptor.TryGetProperty("pages", out var pages)) return result;
+        if (pages.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("pages must be an array.");
+
+        var knownPaths = new HashSet<string>(PathComparer) { entrypoint };
+        foreach (var value in pages.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Every pages entry must be an object.");
+            var title = RequiredString(value, "title");
+            var path = RequiredString(value, "path");
+            if (path.Contains('\\')
+                || !path.StartsWith("pages/", StringComparison.Ordinal)
+                || path.Contains("//", StringComparison.Ordinal)
+                || path.Split('/').Any(segment => segment is "." or ".."))
+                throw new InvalidDataException("Every pages path must use the Dossier-relative pages/<name>.html form.");
+            var extension = Path.GetExtension(path);
+            if (!extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+                && !extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Every pages path must be HTML.");
+            if (!knownPaths.Add(path))
+                throw new InvalidDataException($"Duplicate Dossier page path '{path}'.");
+            var full = ContainedPath(dossierRoot, path);
+            if (full == null || !File.Exists(full))
+                throw new InvalidDataException($"Dossier page '{path}' is missing or escapes its Dossier folder.");
+            if (!IsHtmlWithinLimit(full))
+                throw new InvalidDataException($"Dossier page '{path}' exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB limit.");
+            result.Add(new WorkbenchPage(title, path, false));
+        }
+        return result;
     }
 
     private int OpenDecisionCount(string entrypoint, string status)
@@ -1076,7 +1139,9 @@ public record WorkbenchListItem(string Id, string Title, string Summary, string 
     /// </summary>
     public int OpenDecisionCount { get; init; }
     public WorkbenchDocumentationProjection? Documentation { get; init; }
+    public List<WorkbenchPage> Pages { get; init; } = [];
 }
+public sealed record WorkbenchPage(string Title, string Path, bool IsEntrypoint);
 public record WorkbenchTaskReferences(
     string ProjectName,
     string WorkbenchKey,
@@ -1091,7 +1156,11 @@ public sealed record WorkbenchOverview(
     int HistoryCount,
     List<WorkbenchOverviewItem> Items);
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
-    bool WorkingTreeModified, string? Fingerprint);
+    bool WorkingTreeModified, string? Fingerprint)
+{
+    public WorkbenchPage? Page { get; init; }
+    public string? PagePath { get; init; }
+}
 
 public sealed record WorkbenchDecisionProjection(
     string Outcome,

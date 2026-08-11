@@ -126,6 +126,26 @@ describe('StudioTabStateService', () => {
     expect(svc.activeKey()).toBe('task:demo|x');
   });
 
+  it('replaces Dossier page state without changing the stable tab key', () => {
+    svc.open({
+      kind: 'workbench',
+      projectName: 'Project A',
+      workbenchId: 'admin-design-guideline',
+      pagePath: 'index.html',
+    });
+    svc.open({
+      kind: 'workbench',
+      projectName: 'Project A',
+      workbenchId: 'admin-design-guideline',
+      pagePath: 'pages/applied-surfaces.html',
+    });
+
+    const dossierTabs = svc.tabs().filter(tab => tab.kind === 'workbench');
+    expect(dossierTabs).toHaveLength(1);
+    expect(studioTabKey(dossierTabs[0])).toBe('workbench:Project A:admin-design-guideline');
+    expect(dossierTabs[0]).toMatchObject({ pagePath: 'pages/applied-surfaces.html' });
+  });
+
   describe('Deck and Wiki tab identity', () => {
     it('keeps an open Overview Hub and Explorer-opened Wiki as distinct tabs', () => {
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });

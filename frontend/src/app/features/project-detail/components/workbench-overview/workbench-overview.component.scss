@@ -169,6 +169,30 @@
     gap: var(--studio-spacing-2);
   }
 
+  &__pages {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: var(--studio-spacing-3);
+    padding-top: var(--studio-spacing-2);
+    border-top: 1px solid var(--studio-border);
+    gap: var(--studio-spacing-1);
+
+    button {
+      border: 0;
+      border-radius: var(--studio-card-compact-radius);
+      background: transparent;
+      padding: var(--studio-spacing-1) var(--studio-spacing-2);
+      color: var(--studio-fg-muted);
+      font: inherit;
+      font-size: 0.72rem;
+      cursor: pointer;
+
+      &:hover { background: var(--studio-bg-hover); color: var(--studio-fg); }
+      &:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+    }
+  }
+
   &__project,
   &__status,
   &__open-count {

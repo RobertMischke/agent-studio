@@ -205,6 +205,11 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   project-specific Dossiers section, persists that section state, and scrolls
   the selected leaf into view. Settled Dossiers keep the same selection
   semantics but are revealed under the existing History disclosure. Repository
+  multi-page Dossiers project `index.html` plus descriptor-ordered `pages/`
+  entries into compact subnavigation in the overview list and viewer. The
+  backend validates each selected page against the descriptor. Page selection
+  is replaceable tab state and never changes the stable Dossier key, tab key,
+  route, entrypoint, or decision-anchor contract. Repository
   HTML runs only
   in an opaque-origin `srcdoc` iframe with the Dossier CSP. A source-checked
   message boundary maps docs-relative links to the in-app Wiki and opens absolute

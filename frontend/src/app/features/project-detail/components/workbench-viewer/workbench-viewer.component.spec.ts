@@ -235,6 +235,62 @@ describe('WorkbenchViewerComponent', () => {
     http.verify();
   });
 
+  it('navigates validated Dossier pages while keeping one viewer identity', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'boundary');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const pages = [
+      { title: 'Overview', path: 'index.html', isEntrypoint: true },
+      { title: 'Applied surfaces', path: 'pages/applied-surfaces.html', isEntrypoint: false },
+    ];
+    const entry: WorkbenchDocument = {
+      ...DOCUMENT,
+      workbench: { ...DOCUMENT.workbench, key: null, pages },
+      page: pages[0],
+      pagePath: 'docs/workbenches/boundary/index.html',
+    };
+    http.expectOne('/api/projects/Demo/workbenches/boundary').flush(entry);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const navigation = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-page-nav"]') as HTMLElement;
+    const appliedButton = navigation.querySelector(
+      '[data-testid="workbench-viewer-page-pages/applied-surfaces.html"]') as HTMLButtonElement;
+    expect(navigation).toBeTruthy();
+    expect(navigation.querySelector('[aria-current="page"]')?.textContent).toContain('Overview');
+    appliedButton.click();
+
+    const request = http.expectOne(candidate => candidate.url === '/api/projects/Demo/workbenches/boundary'
+      && candidate.params.get('page') === 'pages/applied-surfaces.html');
+    request.flush({
+      ...entry,
+      html: '<h1>Applied surfaces</h1>',
+      page: pages[1],
+      pagePath: 'docs/workbenches/boundary/pages/applied-surfaces.html',
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedPagePath()).toBe('pages/applied-surfaces.html');
+    expect(appliedButton.getAttribute('aria-current')).toBe('page');
+    expect((fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-frame"]') as HTMLIFrameElement).title)
+      .toContain('Applied surfaces');
+    http.verify();
+  });
+
   it('offers the documented transition after every referenced card is terminal', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],

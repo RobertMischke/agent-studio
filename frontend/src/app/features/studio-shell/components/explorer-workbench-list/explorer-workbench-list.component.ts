@@ -176,6 +176,7 @@ export class ExplorerWorkbenchListComponent {
     if (!item.valid) return 'Needs attention';
     if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
+    if (item.status === 'living-standard') return 'Living standard';
     if (item.status === 'active') return item.phase ?? 'Active';
     if (item.status === 'decided') return 'Tracking';
     if (item.status === 'documented') return 'Documented';

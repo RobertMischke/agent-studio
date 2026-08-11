@@ -2137,10 +2137,10 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  onWorkbenchOverviewOpen(event: { projectName: string; workbench: { id: string; title: string; key?: string | null } }): void {
-    const { projectName, workbench } = event;
+  onWorkbenchOverviewOpen(event: { projectName: string; pagePath?: string; workbench: { id: string; title: string; key?: string | null } }): void {
+    const { projectName, pagePath, workbench } = event;
     this.studioTabState.open({ kind: 'workbench', projectName, workbenchId: workbench.id,
-      title: workbench.title, key: workbench.key ?? undefined });
+      pagePath, title: workbench.title, key: workbench.key ?? undefined });
   }
 
   private pickOrchFeedProject(): string | null {

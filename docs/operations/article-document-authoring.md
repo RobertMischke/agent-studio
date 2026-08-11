@@ -52,6 +52,60 @@ Inside the Studio viewer, the descriptor value is authoritative and is applied
 as `data-document-pattern` on the isolated HTML root. For direct browser reads,
 keep the same fallback value on the template's `<html>` element.
 
+## Multi-page Dossiers
+
+Article template v2 also supports an optional multi-page Dossier. Use it only
+when one long entry page would mix distinct review jobs. The canonical folder
+shape is:
+
+This is the additive multi-page extension to the AGT-2536 template-v2
+contract; it expands the page inventory without replacing its stable keys or
+anchor rules.
+
+```text
+<dossier>/
+  index.html
+  workbench.json
+  pages/
+    dos-and-donts.html
+    applied-surfaces.html
+  assets/                         # optional local images
+```
+
+`index.html` remains the entrypoint and stable identity page. Add descriptor
+ordered subpages through the optional `pages` array:
+
+```json
+{
+  "entrypoint": "index.html",
+  "pages": [
+    { "title": "Dos and Don'ts", "path": "pages/dos-and-donts.html" },
+    { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
+  ]
+}
+```
+
+This additive field is valid on the supported `workbench.json` schema versions
+1 and 2. Every entry requires a non-empty `title` and a Dossier-relative HTML
+path under `pages/`. Paths must be unique, must exist, must stay inside the
+Dossier folder, and receive the same 20 MiB limit and reparse-point protections
+as the entrypoint. The catalogue projection prepends the entrypoint so list and
+viewer navigation share one ordered page model.
+
+The viewer selects a subpage through a validated `page` query on the existing
+Dossier endpoint. Page selection is replaceable UI state: it does not change
+the Dossier key, tab key, stable route, entrypoint, decision anchors, or
+repository folder. Keep decision-point markup and other mutation authority on
+`index.html`; subpages are evidence and reference surfaces. For direct browser
+reading, repeat a small relative page navigation in each HTML file. Each page
+keeps its template CSS inline because the isolated viewer denies external
+styles and network dependencies.
+
+The first reference implementation is the
+[Admin Surface Design Guideline](admin-design-guideline/index.html), with
+[Dos and Don'ts](admin-design-guideline/pages/dos-and-donts.html) and
+[Applied surfaces](admin-design-guideline/pages/applied-surfaces.html).
+
 ## Pattern-specific authoring
 
 For a `ui` document:

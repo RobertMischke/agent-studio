@@ -64,6 +64,8 @@ export interface WorkbenchTab {
   kind: 'workbench';
   projectName: string;
   workbenchId: string;
+  /** Replaceable subpage selection. Omitted from studioTabKey and stable routes. */
+  pagePath?: string;
   title?: string;
   /** Stable short reference shown by compact context surfaces when available. */
   key?: string;

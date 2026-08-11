@@ -211,7 +211,7 @@ export interface WikiRevisionContent {
   content: string;
 }
 
-export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
+export type WorkbenchStatus = 'active' | 'living-standard' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
 export type WorkbenchDecisionStage = 'prepared' | 'pending' | 'failed' | 'succeeded' | 'archived';
 export type ArticlePattern = 'ui' | 'concept';
 
@@ -348,6 +348,15 @@ export interface WorkbenchListItem {
   /** Dossier-level gate count until inline decision points extend it. */
   openDecisionCount?: number;
   documentation?: WorkbenchDocumentationProjection | null;
+  /** Stable, descriptor-ordered navigation. The entrypoint is always first. */
+  pages?: WorkbenchPage[];
+}
+
+export interface WorkbenchPage {
+  title: string;
+  /** Dossier-folder-relative HTML path, for example pages/evidence.html. */
+  path: string;
+  isEntrypoint: boolean;
 }
 
 export interface WorkbenchDocumentationReference {
@@ -395,6 +404,11 @@ export interface WorkbenchOverviewItem {
   workbench: WorkbenchListItem;
 }
 
+/** List navigation request. pagePath is replaceable state, not Dossier identity. */
+export interface WorkbenchOverviewOpenRequest extends WorkbenchOverviewItem {
+  pagePath?: string;
+}
+
 export interface WorkbenchOverview {
   projectName: string | null;
   count: number;
@@ -426,6 +440,9 @@ export interface WorkbenchDocument {
   revision: string | null;
   workingTreeModified: boolean;
   fingerprint: string | null;
+  page?: WorkbenchPage | null;
+  /** Repository-relative path of the currently rendered page. */
+  pagePath?: string | null;
 }
 
 export interface WorkbenchTaskReferences {

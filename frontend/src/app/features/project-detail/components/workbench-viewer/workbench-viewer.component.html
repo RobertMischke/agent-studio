@@ -45,6 +45,20 @@
       @if (documentationError(); as message) {
         <p class="workbench-viewer__documentation-error" role="alert">{{ message }}</p>
       }
+      @if ((doc.workbench.pages?.length ?? 0) > 1) {
+        <nav class="workbench-viewer__page-nav" aria-label="Dossier pages" data-testid="workbench-viewer-page-nav">
+          @for (page of doc.workbench.pages ?? []; track page.path) {
+            <button
+              type="button"
+              [attr.aria-current]="selectedPagePath() === page.path ? 'page' : null"
+              [attr.data-testid]="'workbench-viewer-page-' + page.path"
+              (click)="openPage(page.path)"
+            >
+              {{ page.title }}
+            </button>
+          }
+        </nav>
+      }
     </div>
     <div
       class="workbench-viewer__frame-shell"
@@ -56,7 +70,7 @@
         class="workbench-viewer__maximize"
         data-testid="workbench-viewer-maximize"
         [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
-        [attr.title]="maximized() ? 'Restore (Esc)' : 'Maximize'"
+        [appTooltip]="maximized() ? 'Restore (Esc)' : 'Maximize'"
         (click)="toggleMaximize()"
       >
         <app-studio-icon [name]="maximized() ? 'collapse' : 'expand'" [size]="12" />
@@ -65,7 +79,7 @@
         class="workbench-viewer__frame"
         #workbenchFrame
         data-testid="workbench-viewer-frame"
-        title="Dossier artifact: {{ doc.workbench.title }}"
+        title="Dossier artifact: {{ doc.workbench.title }}{{ doc.page && !doc.page.isEntrypoint ? ' · ' + doc.page.title : '' }}"
         sandbox="allow-scripts"
         referrerpolicy="no-referrer"
         (load)="onFrameLoaded()"

@@ -475,6 +475,7 @@
                 mode="viewer"
                 [projectName]="tab.projectName"
                 [workbenchId]="tab.workbenchId"
+                [pagePath]="tab.pagePath ?? null"
                 (openWiki)="onOpenWorkbenchWiki(tab.projectName, $event)" />
             } } }
             @case ('workspace-settings') {

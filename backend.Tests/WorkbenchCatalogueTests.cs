@@ -92,11 +92,12 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     public void List_HidesSettledItemsUnlessHistoryRequested()
     {
         WriteWorkbench("current", "Current", "active", "2026-07-12T10:00:00Z");
+        WriteWorkbench("standard", "Standard", "living-standard", "2026-07-12T09:00:00Z");
         WriteWorkbench("tracking", "Tracking", "decided", "2026-07-11T11:00:00Z");
         WriteWorkbench("documented", "Documented", "documented", "2026-07-11T10:30:00Z");
         WriteWorkbench("done", "Done", "archived", "2026-07-11T10:00:00Z");
-        Assert.Equal(new[] { "current", "tracking" }, Service().List("Project")!.Items.Select(item => item.Id));
-        Assert.Equal(4, Service().List("Project", includeHistory: true)!.Items.Count);
+        Assert.Equal(new[] { "current", "standard", "tracking" }, Service().List("Project")!.Items.Select(item => item.Id));
+        Assert.Equal(5, Service().List("Project", includeHistory: true)!.Items.Count);
     }
 
     [Fact]
@@ -392,6 +393,57 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.False(item.Valid);
         Assert.Contains("20 MiB", item.Error);
         Assert.Null(service.Read("Project", "oversized"));
+    }
+
+    [Fact]
+    public void ListAndRead_ProjectValidatedDossierPagesWithoutChangingEntrypointIdentity()
+    {
+        WriteWorkbench("multipage", "Multi-page", "living-standard", "2026-08-11T10:00:00Z", "ui");
+        var dir = Path.Combine(_root, "docs", "workbenches", "multipage");
+        Directory.CreateDirectory(Path.Combine(dir, "pages"));
+        File.WriteAllText(Path.Combine(dir, "pages", "examples.html"), "<h1>Examples</h1>");
+        File.WriteAllText(Path.Combine(dir, "pages", "applied.html"), "<h1>Applied surfaces</h1>");
+        var descriptorPath = Path.Combine(dir, "workbench.json");
+        var descriptor = JsonNode.Parse(File.ReadAllText(descriptorPath))!.AsObject();
+        descriptor["pages"] = new JsonArray(
+            new JsonObject { ["title"] = "Examples", ["path"] = "pages/examples.html" },
+            new JsonObject { ["title"] = "Applied surfaces", ["path"] = "pages/applied.html" });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+
+        var service = Service();
+        var item = Assert.Single(service.List("Project")!.Items);
+
+        Assert.Equal("living-standard", item.Status);
+        Assert.Equal(
+            new[] { "index.html", "pages/examples.html", "pages/applied.html" },
+            item.Pages.Select(page => page.Path));
+        Assert.True(item.Pages[0].IsEntrypoint);
+
+        var entry = service.Read("Project", "multipage")!;
+        var applied = service.Read("Project", "multipage", "pages/applied.html")!;
+        Assert.Equal("<h1>Multi-page</h1>", entry.Html);
+        Assert.Equal("pages/applied.html", applied.Page!.Path);
+        Assert.Equal("docs/workbenches/multipage/pages/applied.html", applied.PagePath);
+        Assert.Equal("<h1>Applied surfaces</h1>", applied.Html);
+        Assert.Null(service.Read("Project", "multipage", "pages/unknown.html"));
+    }
+
+    [Fact]
+    public void List_RejectsDossierPagesOutsideThePagesFolder()
+    {
+        WriteWorkbench("bad-pages", "Bad pages", "active", "2026-08-11T10:00:00Z");
+        var dir = Path.Combine(_root, "docs", "workbenches", "bad-pages");
+        File.WriteAllText(Path.Combine(dir, "other.html"), "<h1>Other</h1>");
+        var descriptorPath = Path.Combine(dir, "workbench.json");
+        var descriptor = JsonNode.Parse(File.ReadAllText(descriptorPath))!.AsObject();
+        descriptor["pages"] = new JsonArray(
+            new JsonObject { ["title"] = "Other", ["path"] = "pages/../other.html" });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+
+        var item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+
+        Assert.False(item.Valid);
+        Assert.Contains("pages/<name>.html", item.Error);
     }
 
     [Fact]
