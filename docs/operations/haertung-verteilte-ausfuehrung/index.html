@@ -131,6 +131,30 @@
   .building-block figure svg { min-height: 170px; }
   .building-block figcaption { margin-bottom: 0; }
   .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .term-table td:first-child { width: 180px; white-space: nowrap; }
+  .term-table td:nth-child(2) { width: 210px; }
+  .lease-explainer { display: flow-root; }
+  .sequence-wrap { overflow-x: auto; margin: 26px 0; }
+  .sequence-wrap figure { min-width: 900px; margin: 0; }
+  .sequence-wrap figure svg { min-width: 900px; }
+  .seq-head { fill: var(--surface-2); stroke: var(--line); }
+  .seq-head-control { fill: var(--accent-soft); stroke: var(--develop); }
+  .seq-head-exec { fill: var(--ok-soft); stroke: var(--ok); }
+  .seq-head-recovery { fill: var(--warn-soft); stroke: var(--warn); }
+  .seq-life { stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 5 6; }
+  .seq-control { stroke: var(--develop); stroke-width: 2; fill: none; }
+  .seq-exec { stroke: var(--ok); stroke-width: 2; fill: none; }
+  .seq-warn { stroke: var(--warn); stroke-width: 2; fill: none; }
+  .seq-reject { stroke: var(--bad); stroke-width: 2.4; fill: none; }
+  .seq-label { fill: var(--ink-1); font: 600 12px system-ui, sans-serif; }
+  .seq-meta { fill: var(--ink-2); font: 11px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .seq-chip-control { fill: var(--accent-soft); stroke: var(--develop); }
+  .seq-chip-exec { fill: var(--ok-soft); stroke: var(--ok); }
+  .seq-chip-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .seq-chip-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .seq-phase { fill: var(--surface-2); stroke: var(--line); stroke-dasharray: 4 4; }
+  .seq-time { fill: var(--ink-3); font: 10.5px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .more-link { white-space: nowrap; }
   @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -143,8 +167,8 @@
   <p class="lede">Ursachen von Arbeitsverlust und falschen Review-Scopes sowie die zugehörigen
   Maßnahmen: Result-SHA-Vertrag, Fencing und hermetische Verifikation.</p>
   <div class="meta">
-    <span><b>Stand:</b> 03.08.2026 — Nachtrag in <a href="#stand-0308">§0</a>; die Abschnitte §1–§8 tragen ihren
-    eigenen Stand 24.07.</span>
+    <span><b>Stand:</b> 11.08.2026, Lease-, Fence- und Epoch-Erklärung in <a href="#lease-fence-epoch">§9</a>;
+    <a href="#stand-0308">§0</a> trägt den Stand 03.08., die Abschnitte §1 bis §8 den Stand 24.07.</span>
     <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
     <span><b>Historie:</b> <a href="#historie">Zusammenfassung und Anker</a>; Langform mit
     identischen <code>#incident-*</code>-Ankern in <code>historie.html</code></span>
@@ -168,6 +192,7 @@
     <li><a href="#grade">§6 Grade-Step</a></li>
     <li><a href="#programm">§7 Umsetzungsprogramm</a></li>
     <li><a href="#historie">§8 Historienübersicht</a></li>
+    <li><a href="#lease-fence-epoch"><b>§9 Lease, Fence und Authority Epoch</b></a></li>
   </ul>
 </nav>
 
@@ -1383,6 +1408,363 @@ funktionieren. <code>historie.html</code> verwendet dieselben Anker für die aus
   Die Maßnahmen führen deshalb verbindliche Ergebnis- und Epochenverträge ein und behandeln
   Mehrdeutigkeit als eigenen Fehlerzustand.</p>
 </div>
+
+<!-- ============================================================ -->
+<!-- Append-only operator explainer, 11.08.2026. Existing anchors remain unchanged. -->
+<section class="lease-explainer" aria-labelledby="lease-fence-epoch">
+<h2 id="lease-fence-epoch"><span class="no">§9</span>Lease, Fence und Authority Epoch lesen</h2>
+<p class="stx stx-ok"><b>Stand 11.08.:</b> Dieser Nachtrag erklärt die technischen Timeline-Chips
+<code>Fence</code>, <code>Authority Epoch</code> und <code>Idempotency Key</code>. Er ändert weder die
+Verträge aus §4 noch die bestehenden Historienanker. Anlass war der reale Standby-Fall, in dem ein
+alter Runner nach dem Aufwachen noch schreiben kann, obwohl ein neuer Runner die Aufgabe übernommen
+hat.</p>
+
+<p><b>Die Kurzlesart:</b> Eine Lease sagt, <i>wie lange</i> ein Executor schreiben darf. Der Fence sagt,
+<i>welche von mehreren Lease-Generationen</i> die neueste ist. Die Authority Epoch sagt,
+<i>unter welcher Generation des gesamten Authority Store</i> eine Lease ausgestellt wurde. Der
+Idempotency Key sagt, <i>welche konkrete Lieferung</i> ein Retry wiederholt. Erst die Kombination bindet
+einen Schreibvorgang eindeutig an seinen Attempt und seine aktuelle Autorität.</p>
+
+<table class="term-table">
+  <thead><tr><th>Timeline-Chip</th><th>Frage, die er beantwortet</th><th>Nicht damit verwechseln</th></tr></thead>
+  <tbody>
+    <tr id="attempt-id"><td><b>Attempt ID</b></td><td>Zu welchem dauerhaften Run- oder Review-Versuch gehört der Vorgang?</td><td>Keine Lease und keine Reihenfolge. Ein Attempt kann einen Lease-Wechsel überleben.</td></tr>
+    <tr><td><b>Lease</b></td><td>Wer darf bis zu welchem Serverzeitpunkt schreiben?</td><td>Kein Todesbeweis. Nach Ablauf kann der alte Prozess weiterhin existieren.</td></tr>
+    <tr><td><b>Fence 9</b></td><td>Ist dies die aktuellste Lease-Generation dieser Aufgabe?</td><td>Nicht der neunte Schreibvorgang und nicht die Attempt-Nummer.</td></tr>
+    <tr><td><b>Authority Epoch 1</b></td><td>Aus welcher globalen Claim-Generation des Authority Store stammt diese Autorität?</td><td>Nicht pro Task. Eine Rotation erhöht nicht automatisch den Fence jeder Aufgabe.</td></tr>
+    <tr><td><b>Idempotency Key</b></td><td>Wurde genau diese Lieferung bereits verarbeitet?</td><td>Keine Berechtigung. Ein eindeutiger Key macht einen stale Writer nicht aktuell.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="lease-lifecycle">§9.1 Lease-Lebenszyklus: Claim, Renew, Release oder Expire</h3>
+<p>Eine Lease ist die zeitlich begrenzte, exklusive Schreibberechtigung eines Executors für einen
+Attempt. Der Task Server ist die einzige Instanz, die sie ausstellt und mit seiner eigenen Uhr
+bewertet. Die Runner-Uhr darf weder den Ablauf verschieben noch einen Takeover erlauben.</p>
+<ol>
+  <li><b>Claim / Acquire:</b> Der Runner sendet Task, Executor und einen <code>Idempotency Key</code>.
+      Ist die Aufgabe zulässig und keine fremde Lease mehr gültig, erzeugt der Task Server atomar
+      Lease ID, Attempt ID, Ablaufzeit, <code>Fence</code> und <code>Authority Epoch</code>.</li>
+  <li><b>Heartbeat / Renew:</b> Vor Ablauf präsentiert derselbe Executor Attempt ID, Lease ID, Fence,
+      Authority Epoch und einen neuen Idempotency Key. Nur ein vollständiger Treffer verlängert
+      <code>expiresAt</code>. Ein Transportfehler ist keine Bestätigung.</li>
+  <li><b>Release:</b> Nach Abschluss gibt der aktuelle Holder die Lease kooperativ frei. Completion und
+      Release bleiben gefencete, idempotente Lieferungen, damit ein Retry den Abschluss nicht doppelt
+      ausführt.</li>
+  <li><b>Expire:</b> Bleibt Renew aus, endet die Berechtigung nach Serverzeit. Danach darf ein Takeover
+      einen höheren Fence erhalten. Der alte Prozess gilt dadurch nicht als tot, nur als nicht mehr
+      schreibberechtigt.</li>
+</ol>
+
+<div class="sequence-wrap">
+<figure>
+<svg viewBox="0 0 1040 660" role="img" aria-labelledby="lease-seq-title lease-seq-desc">
+  <title id="lease-seq-title">Normaler Lease-Verlauf von Claim über Renew bis Release</title>
+  <desc id="lease-seq-desc">Ein Runner claimt eine Aufgabe. Der Task Server speichert die Autorität,
+  erteilt Fence 8 und Authority Epoch 1, verlängert sie nach einem Heartbeat und nimmt Completion und
+  Release idempotent an. Ohne Renew wäre stattdessen die Ablaufzeit maßgeblich.</desc>
+  <defs>
+    <marker id="seq-arrow-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="context-stroke"/></marker>
+  </defs>
+
+  <rect class="seq-head-exec" x="40" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="150" y="48" text-anchor="middle">Runner A</text>
+  <text class="s-tiny" x="150" y="66" text-anchor="middle">Executor und Prozess</text>
+  <rect class="seq-head-control" x="410" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="520" y="48" text-anchor="middle">Task Server</text>
+  <text class="s-tiny" x="520" y="66" text-anchor="middle">einzige Lease-Autorität</text>
+  <rect class="seq-head-control" x="780" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="890" y="48" text-anchor="middle">Authority Store</text>
+  <text class="s-tiny" x="890" y="66" text-anchor="middle">atomar und persistent</text>
+  <line class="seq-life" x1="150" y1="78" x2="150" y2="624"/>
+  <line class="seq-life" x1="520" y1="78" x2="520" y2="624"/>
+  <line class="seq-life" x1="890" y1="78" x2="890" y2="624"/>
+
+  <text class="seq-time" x="18" y="112">12:00:00</text>
+  <line class="seq-exec" x1="150" y1="104" x2="510" y2="104" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="330" y="96" text-anchor="middle">Claim / Acquire</text>
+  <rect class="seq-chip-exec" x="236" y="112" width="188" height="26" rx="13"/>
+  <text class="seq-meta" x="330" y="130" text-anchor="middle">Idempotency Key claim:A:01</text>
+
+  <line class="seq-control" x1="530" y1="166" x2="880" y2="166" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="705" y="157" text-anchor="middle">Compare-and-swap</text>
+  <text class="seq-meta" x="705" y="184" text-anchor="middle">Task frei · Serverzeit maßgeblich</text>
+
+  <line class="seq-control" x1="880" y1="218" x2="530" y2="218" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="705" y="210" text-anchor="middle">Autorität persistent</text>
+  <text class="seq-meta" x="705" y="236" text-anchor="middle">Attempt ID run-7c2 · Lease L-204</text>
+
+  <line class="seq-control" x1="510" y1="274" x2="160" y2="274" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="335" y="264" text-anchor="middle">Lease granted · expires 12:00:30</text>
+  <rect class="seq-chip-control" x="176" y="282" width="94" height="26" rx="13"/>
+  <text class="seq-meta" x="223" y="300" text-anchor="middle">Fence 8</text>
+  <rect class="seq-chip-control" x="280" y="282" width="154" height="26" rx="13"/>
+  <text class="seq-meta" x="357" y="300" text-anchor="middle">Authority Epoch 1</text>
+
+  <text class="seq-time" x="18" y="356">12:00:10</text>
+  <line class="seq-exec" x1="150" y1="348" x2="510" y2="348" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="330" y="338" text-anchor="middle">Heartbeat / Renew</text>
+  <text class="seq-meta" x="330" y="368" text-anchor="middle">Lease L-204 · Fence 8 · Authority Epoch 1</text>
+  <rect class="seq-chip-exec" x="232" y="378" width="196" height="26" rx="13"/>
+  <text class="seq-meta" x="330" y="396" text-anchor="middle">Idempotency Key renew:A:01</text>
+
+  <line class="seq-control" x1="530" y1="426" x2="880" y2="426" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="705" y="417" text-anchor="middle">Treffer: Ablauf verlängern</text>
+  <text class="seq-meta" x="705" y="444" text-anchor="middle">expiresAt = 12:00:40 · LastHeartbeat aktualisiert</text>
+
+  <text class="seq-time" x="18" y="504">12:00:28</text>
+  <line class="seq-exec" x1="150" y1="496" x2="510" y2="496" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="330" y="486" text-anchor="middle">Completion, danach Release</text>
+  <text class="seq-meta" x="330" y="516" text-anchor="middle">Fence 8 · Authority Epoch 1</text>
+  <rect class="seq-chip-exec" x="218" y="526" width="224" height="26" rx="13"/>
+  <text class="seq-meta" x="330" y="544" text-anchor="middle">Idempotency Key complete:A:01</text>
+
+  <line class="seq-control" x1="530" y1="572" x2="880" y2="572" marker-end="url(#seq-arrow-a)"/>
+  <text class="seq-label" x="705" y="563" text-anchor="middle">Terminalen Fakt speichern · Lease freigeben</text>
+  <text class="seq-meta" x="705" y="590" text-anchor="middle">Retry mit gleichem Key = Duplicate, kein zweiter Effekt</text>
+
+  <rect class="seq-phase" x="42" y="612" width="956" height="30" rx="7"/>
+  <text class="seq-meta" x="520" y="632" text-anchor="middle">Alternativ ohne Renew: expiresAt erreicht → Expire → nächster Claim erhält einen höheren Fence</text>
+</svg>
+<figcaption><b>Abb. 12: Normaler Lease-Verlauf.</b> Renew verlängert nur die Ablaufzeit derselben
+Autorität. Es mintet keinen neuen Fence. Release beendet sie kooperativ; Expire beendet sie durch
+Serverzeit. Derselbe Idempotency Key macht einen Retry erkennbar, ein neuer Key steht für eine neue
+Lieferung.</figcaption>
+</figure>
+</div>
+
+<h3 id="fencing-token">§9.2 Fencing-Token: der monotone Schutz gegen Zombie-Writer</h3>
+<p>Der <b>Fence</b> ist ein pro Task monoton steigender Integer. Jeder neue Lease-Grant erhöht ihn und
+der Wert wird über Task-Server-Neustarts hinweg gespeichert. Monoton bedeutet hier: Für dieselbe
+Aufgabe kann nach <code>Fence 9</code> noch <code>Fence 10</code> entstehen, aber niemals wieder eine
+neue Schreibautorität mit <code>Fence 9</code>. Jeder serververmittelte Schreibpfad prüft den aktuellen
+Attempt, Fence, Epoch und Lease-Zustand vor dem Seiteneffekt.</p>
+
+<div class="box warn">
+  <h4>Warum eine Lease allein nicht genügt</h4>
+  <p>Ein Ablaufdatum entfernt keinen Prozess. Bei Laptop-Standby frieren Runner, Heartbeat-Timer und
+  Prozess ein, während die Serveruhr weiterläuft. Nach Ablauf darf ein anderer Runner übernehmen.
+  Wacht der alte Rechner später auf, existiert sein Prozess weiterhin und kann noch Log-, Completion-
+  oder Integrationsaufrufe senden. Erst der höhere Fence macht diese verspäteten Aufrufe eindeutig
+  stale und damit wirkungslos.</p>
+</div>
+
+<div class="sequence-wrap">
+<figure>
+<svg viewBox="0 0 1040 720" role="img" aria-labelledby="zombie-seq-title zombie-seq-desc">
+  <title id="zombie-seq-title">Standby-Outage: Zombie-Writer wird durch alten Fence abgewiesen</title>
+  <desc id="zombie-seq-desc">Runner A erhält Fence 9 in Authority Epoch 1 und geht in Standby. Nach
+  Ablauf übernimmt Runner B mit Fence 10. Runner A wacht auf und versucht mit Fence 9 Heartbeat und
+  Completion. Der Task Server weist beides als stale oder superseded ab.</desc>
+  <defs>
+    <marker id="seq-arrow-b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="context-stroke"/></marker>
+  </defs>
+
+  <rect class="seq-head-exec" x="30" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="140" y="48" text-anchor="middle">Runner A · Laptop</text>
+  <text class="s-tiny" x="140" y="66" text-anchor="middle">alter Holder</text>
+  <rect class="seq-head-control" x="410" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="520" y="48" text-anchor="middle">Task Server</text>
+  <text class="s-tiny" x="520" y="66" text-anchor="middle">entscheidet nach Serverzeit</text>
+  <rect class="seq-head-exec" x="790" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="900" y="48" text-anchor="middle">Runner B</text>
+  <text class="s-tiny" x="900" y="66" text-anchor="middle">neuer Holder</text>
+  <line class="seq-life" x1="140" y1="78" x2="140" y2="684"/>
+  <line class="seq-life" x1="520" y1="78" x2="520" y2="684"/>
+  <line class="seq-life" x1="900" y1="78" x2="900" y2="684"/>
+
+  <text class="seq-time" x="18" y="116">12:00:00</text>
+  <line class="seq-control" x1="510" y1="108" x2="150" y2="108" marker-end="url(#seq-arrow-b)"/>
+  <text class="seq-label" x="330" y="98" text-anchor="middle">Lease A · expires 12:00:30</text>
+  <rect class="seq-chip-control" x="178" y="116" width="98" height="26" rx="13"/>
+  <text class="seq-meta" x="227" y="134" text-anchor="middle">Fence 9</text>
+  <rect class="seq-chip-control" x="288" y="116" width="156" height="26" rx="13"/>
+  <text class="seq-meta" x="366" y="134" text-anchor="middle">Authority Epoch 1</text>
+
+  <rect class="seq-chip-warn" x="42" y="166" width="196" height="72" rx="9"/>
+  <text class="seq-label" x="140" y="190" text-anchor="middle">Standby-Outage</text>
+  <text class="seq-meta" x="140" y="210" text-anchor="middle">Prozess und Timer pausieren</text>
+  <text class="seq-meta" x="140" y="226" text-anchor="middle">kein Heartbeat erreicht Server</text>
+  <line class="seq-warn" x1="140" y1="142" x2="140" y2="166"/>
+
+  <text class="seq-time" x="416" y="274">12:00:31</text>
+  <rect class="seq-phase" x="426" y="250" width="188" height="36" rx="7"/>
+  <text class="seq-label" x="520" y="273" text-anchor="middle">Lease A expired</text>
+
+  <line class="seq-exec" x1="900" y1="324" x2="530" y2="324" marker-end="url(#seq-arrow-b)"/>
+  <text class="seq-label" x="715" y="314" text-anchor="middle">Runner B: Claim / Takeover</text>
+  <rect class="seq-chip-exec" x="618" y="332" width="194" height="26" rx="13"/>
+  <text class="seq-meta" x="715" y="350" text-anchor="middle">Idempotency Key claim:B:01</text>
+
+  <line class="seq-control" x1="530" y1="388" x2="890" y2="388" marker-end="url(#seq-arrow-b)"/>
+  <text class="seq-label" x="710" y="378" text-anchor="middle">Lease B granted · Attempt B current</text>
+  <rect class="seq-chip-control" x="566" y="396" width="104" height="26" rx="13"/>
+  <text class="seq-meta" x="618" y="414" text-anchor="middle">Fence 10</text>
+  <rect class="seq-chip-control" x="680" y="396" width="156" height="26" rx="13"/>
+  <text class="seq-meta" x="758" y="414" text-anchor="middle">Authority Epoch 1</text>
+
+  <rect class="seq-chip-warn" x="42" y="446" width="196" height="48" rx="9"/>
+  <text class="seq-label" x="140" y="468" text-anchor="middle">Runner A wacht auf</text>
+  <text class="seq-meta" x="140" y="486" text-anchor="middle">alter Prozess lebt weiter</text>
+
+  <line class="seq-warn" x1="140" y1="526" x2="510" y2="526" marker-end="url(#seq-arrow-b)"/>
+  <text class="seq-label" x="325" y="516" text-anchor="middle">später Heartbeat</text>
+  <text class="seq-meta" x="325" y="546" text-anchor="middle">Attempt A · Fence 9 · Authority Epoch 1</text>
+  <line class="seq-reject" x1="510" y1="572" x2="150" y2="572" marker-end="url(#seq-arrow-b)"/>
+  <rect class="seq-chip-bad" x="220" y="580" width="220" height="26" rx="13"/>
+  <text class="seq-meta" x="330" y="598" text-anchor="middle">409 StaleFence / Superseded</text>
+
+  <line class="seq-warn" x1="140" y1="632" x2="510" y2="632" marker-end="url(#seq-arrow-b)"/>
+  <text class="seq-label" x="325" y="622" text-anchor="middle">verspätete Completion</text>
+  <text class="seq-meta" x="325" y="652" text-anchor="middle">Fence 9 · Idempotency Key complete:A:01</text>
+  <line class="seq-reject" x1="510" y1="676" x2="150" y2="676" marker-end="url(#seq-arrow-b)"/>
+  <text class="t-bad" x="330" y="698" text-anchor="middle">abgewiesen · keine Lane-, Log- oder Integrationswirkung</text>
+</svg>
+<figcaption><b>Abb. 13: Zombie-Writer nach Standby.</b> <code>Fence 9 / Authority Epoch 1</code>
+bedeutet: Der Vorgang stammt aus der neunten Lease-Generation dieser Aufgabe und aus Claim-Generation
+1 des Authority Store. Nachdem <code>Fence 10</code> aktuell ist, bleibt <code>Fence 9</code> dauerhaft
+stale. Auch ein neuer, bisher ungesehener Idempotency Key kann diese Autorität nicht wiederherstellen.</figcaption>
+</figure>
+</div>
+
+<p class="stx stx-open"><b>Grenze des Schutzes:</b> Der Fence schützt nur Schreibwege, die der Task
+Server validiert. Ein direkt verwendbares Git-Credential kann außerhalb dieses Vertrags pushen. Deshalb
+bleiben attempt-spezifische immutable Refs, geschützte Branches, Expected-SHA-Prüfung und
+Credential-Isolation zusätzliche Kontrollen.</p>
+
+<h3 id="authority-epoch">§9.3 Authority Epoch: Recovery-Generation über den einzelnen Fences</h3>
+<p>Die <b>Authority Epoch</b> ist ein globaler, persistierter Claim-Generationszähler des Authority
+Store. Eine Recovery oder kontrollierte Rotation kann ihn erhöhen. Danach erhalten alle <i>neu
+ausgestellten</i> Run- und Review-Leases die neue Epoch. So kann ein Write aus einer älteren
+Authority-Generation nicht als Write eines neuen Attempts ausgegeben werden.</p>
+
+<p>Die heutige Rotation ist bewusst ein <b>Soft Drain</b>, kein globaler Kill-Schalter: Eine vor der
+Rotation gültig ausgestellte Lease behält ihre eigene ältere Epoch und darf mit exakt dieser Identität
+renewen, schreiben und settle, bis sie freigegeben wird, ausläuft oder durch einen höheren Fence
+übernommen wird. Das verhindert eine Requeue-Welle bei Recovery. Die Epoch bildet also eine
+übergeordnete Supersede-Schranke für Generationen, aber sie ersetzt weder Lease-Ablauf noch Fence.</p>
+
+<div class="sequence-wrap">
+<figure>
+<svg viewBox="0 0 1040 720" role="img" aria-labelledby="epoch-seq-title epoch-seq-desc">
+  <title id="epoch-seq-title">Authority-Epoch-Rotation bei Recovery mit Soft Drain</title>
+  <desc id="epoch-seq-desc">Recovery rotiert die globale Authority Epoch von eins auf zwei. Die
+  bereits gültige Lease von Runner A mit Fence 9 und Epoch 1 darf kontrolliert auslaufen. Runner B
+  kann sie nicht verdrängen, erhält danach aber Fence 10 und Epoch 2. Ein später Write von A ist
+  superseded.</desc>
+  <defs>
+    <marker id="seq-arrow-c" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="context-stroke"/></marker>
+  </defs>
+
+  <rect class="seq-head-recovery" x="20" y="24" width="200" height="54" rx="9"/>
+  <text class="s-label" x="120" y="48" text-anchor="middle">Recovery Control</text>
+  <text class="s-tiny" x="120" y="66" text-anchor="middle">rotiert Generation</text>
+  <rect class="seq-head-control" x="280" y="24" width="220" height="54" rx="9"/>
+  <text class="s-label" x="390" y="48" text-anchor="middle">Task Server</text>
+  <text class="s-tiny" x="390" y="66" text-anchor="middle">Authority Store</text>
+  <rect class="seq-head-exec" x="560" y="24" width="200" height="54" rx="9"/>
+  <text class="s-label" x="660" y="48" text-anchor="middle">Runner A</text>
+  <text class="s-tiny" x="660" y="66" text-anchor="middle">bestehende Lease</text>
+  <rect class="seq-head-exec" x="820" y="24" width="200" height="54" rx="9"/>
+  <text class="s-label" x="920" y="48" text-anchor="middle">Runner B</text>
+  <text class="s-tiny" x="920" y="66" text-anchor="middle">neuer Claim</text>
+  <line class="seq-life" x1="120" y1="78" x2="120" y2="684"/>
+  <line class="seq-life" x1="390" y1="78" x2="390" y2="684"/>
+  <line class="seq-life" x1="660" y1="78" x2="660" y2="684"/>
+  <line class="seq-life" x1="920" y1="78" x2="920" y2="684"/>
+
+  <line class="seq-control" x1="400" y1="108" x2="650" y2="108" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-label" x="525" y="98" text-anchor="middle">bestehende Lease A</text>
+  <rect class="seq-chip-control" x="448" y="116" width="86" height="26" rx="13"/>
+  <text class="seq-meta" x="491" y="134" text-anchor="middle">Fence 9</text>
+  <rect class="seq-chip-control" x="544" y="116" width="150" height="26" rx="13"/>
+  <text class="seq-meta" x="619" y="134" text-anchor="middle">Authority Epoch 1</text>
+
+  <line class="seq-warn" x1="120" y1="184" x2="380" y2="184" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-label" x="250" y="174" text-anchor="middle">Recovery: Rotate Authority Epoch</text>
+  <rect class="seq-chip-warn" x="142" y="192" width="216" height="26" rx="13"/>
+  <text class="seq-meta" x="250" y="210" text-anchor="middle">Idempotency Key recovery:01</text>
+
+  <line class="seq-control" x1="380" y1="242" x2="130" y2="242" marker-end="url(#seq-arrow-c)"/>
+  <rect class="seq-chip-control" x="170" y="250" width="170" height="26" rx="13"/>
+  <text class="seq-meta" x="255" y="268" text-anchor="middle">Authority Epoch 2</text>
+  <text class="seq-label" x="255" y="232" text-anchor="middle">neue Claim-Generation persistent</text>
+
+  <line class="seq-exec" x1="660" y1="312" x2="400" y2="312" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-label" x="530" y="302" text-anchor="middle">Renew der bestehenden Lease A</text>
+  <text class="seq-meta" x="530" y="332" text-anchor="middle">Fence 9 · Authority Epoch 1</text>
+  <line class="seq-control" x1="400" y1="354" x2="650" y2="354" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-meta" x="525" y="374" text-anchor="middle">accepted: exakte alte Lease darf drainen</text>
+
+  <line class="seq-exec" x1="920" y1="416" x2="400" y2="416" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-label" x="660" y="406" text-anchor="middle">Runner B versucht Claim</text>
+  <line class="seq-reject" x1="400" y1="450" x2="910" y2="450" marker-end="url(#seq-arrow-c)"/>
+  <rect class="seq-chip-bad" x="578" y="458" width="164" height="26" rx="13"/>
+  <text class="seq-meta" x="660" y="476" text-anchor="middle">Held · kein Verdrängen</text>
+
+  <line class="seq-exec" x1="660" y1="516" x2="400" y2="516" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-label" x="530" y="506" text-anchor="middle">Release oder Expire</text>
+  <text class="seq-meta" x="530" y="536" text-anchor="middle">Lease A endet kontrolliert</text>
+
+  <line class="seq-exec" x1="920" y1="576" x2="400" y2="576" marker-end="url(#seq-arrow-c)"/>
+  <text class="seq-label" x="660" y="566" text-anchor="middle">Runner B claimt erneut</text>
+  <text class="seq-meta" x="660" y="596" text-anchor="middle">Idempotency Key claim:B:02</text>
+  <line class="seq-control" x1="400" y1="624" x2="910" y2="624" marker-end="url(#seq-arrow-c)"/>
+  <rect class="seq-chip-control" x="560" y="632" width="100" height="26" rx="13"/>
+  <text class="seq-meta" x="610" y="650" text-anchor="middle">Fence 10</text>
+  <rect class="seq-chip-control" x="670" y="632" width="158" height="26" rx="13"/>
+  <text class="seq-meta" x="749" y="650" text-anchor="middle">Authority Epoch 2</text>
+
+  <line class="seq-warn" x1="660" y1="680" x2="400" y2="680" marker-end="url(#seq-arrow-c)"/>
+  <text class="t-bad" x="530" y="704" text-anchor="middle">später Write aus Attempt A → 409 Superseded</text>
+</svg>
+<figcaption><b>Abb. 14: Epoch-Supersede bei Recovery.</b> Die Rotation trennt alte und neue
+Claim-Generationen. Sie lässt eine gültige alte Lease kontrolliert drainen. Erst Release, Expire oder
+Takeover beendet deren Autorität. Der danach gemintete <code>Fence 10 / Authority Epoch 2</code> ist die
+aktuelle Kombination; ein später Vorgang aus Attempt A bleibt als abgewiesene Historie sichtbar.</figcaption>
+</figure>
+</div>
+
+<h3 id="idempotency-key">§9.4 Abgrenzung: Fence, Authority Epoch und Idempotency Key</h3>
+<table>
+  <thead><tr><th>Eigenschaft</th><th>Fence</th><th>Authority Epoch</th><th>Idempotency Key</th></tr></thead>
+  <tbody>
+    <tr><td><b>Scope</b></td><td>eine Aufgabe</td><td>gesamter Authority Store</td><td>eine Operation an einem Attempt</td></tr>
+    <tr><td><b>Ändert sich bei</b></td><td>jedem neuen Lease-Grant oder Takeover</td><td>kontrollierter Claim-Generation-Rotation</td><td>jeder logisch neuen Lieferung</td></tr>
+    <tr><td><b>Bleibt gleich bei</b></td><td>Heartbeat derselben Lease</td><td>normalen Claims ohne Rotation</td><td>Retry derselben Lieferung</td></tr>
+    <tr><td><b>Schützt gegen</b></td><td>stale oder gespaltene Writer</td><td>Vermischung von Authority-Generationen</td><td>doppelte Anwendung nach Timeout oder verlorener Antwort</td></tr>
+    <tr><td><b>Kann Schreibrecht erteilen?</b></td><td>nur zusammen mit aktuellem Attempt, Lease und Epoch</td><td>nur als Teil einer ausgestellten Lease</td><td>nein</td></tr>
+  </tbody>
+</table>
+
+<p><b>Prüfreihenfolge eines Writes:</b> Ist der Attempt bekannt und aktuell? Passt die Authority Epoch
+zu genau diesem Attempt? Passt der Fence? Ist die Lease noch gültig und gehört sie diesem Executor?
+Wurde der Idempotency Key für diese Operation bereits verarbeitet? Erst danach darf der Seiteneffekt
+stattfinden. Ein doppelter Key ergibt <code>Duplicate</code>; ein alter Fence <code>StaleFence</code>;
+ein ersetzter Attempt <code>Superseded</code>; eine falsche Epoch
+<code>AuthorityEpochMismatch</code>; eine abgelaufene Lease <code>LeaseExpired</code>.</p>
+
+<h3 id="timeline-glossary-links">§9.5 Anschluss für das Timeline-Glossar</h3>
+<p>Die Ein-Satz-Texte aus AGT-2631 können diese stabilen Fragmentziele als <q>mehr dazu</q> verwenden.
+Der Zielpfad aus <code>docs/operations/timeline-redesign/</code> lautet jeweils
+<code>../haertung-verteilte-ausfuehrung/index.html#…</code>.</p>
+<ul>
+  <li><b>Lease:</b> Eine Lease ist die zeitlich befristete Schreibberechtigung genau eines Executors für
+      einen Attempt; Heartbeats verlängern sie, Release oder Ablauf beenden sie.
+      <a class="more-link" href="#lease-lifecycle">mehr dazu</a></li>
+  <li><b>Fence:</b> Fence ist der pro Task monoton steigende Ordnungswert einer Lease; nach einem
+      Takeover weist der Task Server jeden Writer mit kleinerem Fence als veraltet ab.
+      <a class="more-link" href="#fencing-token">mehr dazu</a></li>
+  <li><b>Authority Epoch:</b> Authority Epoch ist die globale Claim-Generation des Authority Store;
+      Recovery kann sie für neue Claims erhöhen, während bereits gültige Leases kontrolliert auslaufen.
+      <a class="more-link" href="#authority-epoch">mehr dazu</a></li>
+  <li><b>Idempotency Key:</b> Idempotency Key identifiziert genau eine Lieferung, damit ihr Retry
+      denselben Effekt nicht zweimal ausführt; er verleiht keine Schreibberechtigung.
+      <a class="more-link" href="#idempotency-key">mehr dazu</a></li>
+  <li><b>Attempt ID:</b> Attempt ID bezeichnet den dauerhaften Run- oder Review-Versuch, an den Lease,
+      Fence, Authority Epoch und Lieferungen gebunden sind.
+      <a class="more-link" href="#attempt-id">mehr dazu</a></li>
+</ul>
+</section>
 
 </main>
 </body>

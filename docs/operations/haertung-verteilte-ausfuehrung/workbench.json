@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "haertung-verteilte-ausfuehrung",
   "title": "Verteilte Ausf\u00FChrung",
-  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Vorf\u00E4lle vom 08.07. bis 03.08., Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie. Nachtrag 03.08. (\u00A70): Ausf\u00FChrungsschicht produktiv \u00FCber die CodingAgentRunner-Library (engine=car, R\u00FCckfall legacy, T4-Abriss geparkt), Rollen-Dreiklang Task-Server / Host-Orchestrator / Agent Studio als Zielbegriffe mit einseitig fertiger Host-Orchestrator-Strecke, Post-Processing weiterhin am lokalen Backend, lastbewusste Review-Slot-Admission integriert.",
+  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie. Nachtrag 11.08. (\u00A79): ausf\u00FChrlicher Lease-Lebenszyklus von Claim \u00FCber Heartbeat/Renew bis Release/Expire, pro Task monotoner Fence mit realem Standby-Zombie-Writer-Fall, globale Authority Epoch als Soft-Drain-Generation bei Recovery, klare Abgrenzung zum Idempotency Key sowie drei theme-f\u00E4hige Inline-SVG-Sequenzdiagramme und stabile Ziele f\u00FCr das Timeline-Glossar AGT-2631.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-03T04:00:00Z",
+  "updatedAt": "2026-08-11T17:10:40Z",
   "sourceTaskKeys": [
     "AGT-2147",
     "AGT-2148",
@@ -18,7 +18,8 @@
     "AGT-2155",
     "AGT-2222",
     "AGT-2229",
-    "AGT-2260"
+    "AGT-2260",
+    "AGT-2633"
   ],
   "relatedTaskKeys": [
     "AGT-2370",
@@ -28,7 +29,8 @@
     "AGT-2469",
     "AGT-2470",
     "AGT-2487",
-    "AGT-2488"
+    "AGT-2488",
+    "AGT-2631"
   ],
   "key": "AGT-W7"
 }
