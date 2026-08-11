@@ -574,6 +574,9 @@
       overflow-x: hidden;
       overflow-y: auto;
     }
+    .pane__body:focus-visible {
+      outline: 1px solid var(--studio-accent); outline-offset: -1px;
+    }
     /*
      * Pane splitter — visual line stays thin (1 px), but a wider
      * pointer hit-box overlays it via ::before so the operator does

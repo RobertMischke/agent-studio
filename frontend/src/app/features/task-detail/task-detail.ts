@@ -66,6 +66,7 @@ import {
   formatRateWindow, formatResetIn, formatTime, formatTokens, gitCommitCount,
   gitToggleTooltip, isCliErrorMessage, rateLimitTooltip, stateLabel,
 } from './services/task-detail-formatters';
+import { taskDetailShortcutTargetAllowed, taskNavigationOwnsFocus } from './task-detail-keyboard.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
@@ -1151,36 +1152,17 @@ export class TaskDetailComponent implements OnDestroy {
     }
   }
 
-  /** Called by the parent once a triage move/delete settles, to reset the
-   *  per-button spinner. The parent calls `clearTriageActing()` whether or
-   *  not the open job changed (auto-advance replaces the panel; same-lane
-   *  actions like Run Now leave it where it is). */
+  /** Resets the per-button spinner after a triage action settles. */
   clearTriageActing(): void {
     this.triageActingId.set(null);
   }
 
-  /**
-   * Keyboard navigation for triage mode: `j` / ↓ for next, `k` / ↑ for prev,
-   * `Enter` for the lane's primary action. Suppressed while the user is typing
-   * in an input/textarea/contenteditable so chat compose and prompt edit keep
-   * working.
-   *
-   * Escape is handled separately via `ModalStackService`: the detail view
-   * registers itself on the stack when it mounts and any modal opened on top
-   * (Add Task, error dialog, verbose-debug overlay, confirm-dialog, ...)
-   * sits above it, so Escape closes the modal first and leaves the detail
-   * open. The previous local `case 'Escape'` here is gone.
-   */
+  /** Keeps j/k global but gives arrow paging only to task navigation focus.
+   * Escape remains owned by ModalStackService. */
   @HostListener('document:keydown', ['$event'])
   onTriageKey(event: KeyboardEvent): void {
-    if (event.defaultPrevented) return;
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const target = event.target as HTMLElement | null;
-    if (target) {
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (target.isContentEditable) return;
-    }
+    if (!taskDetailShortcutTargetAllowed(event)) return;
+    const boardOwnsFocus = taskNavigationOwnsFocus(event);
     if (this.editingTitle() || this.editingPrompt()) return;
     if (this.showLogOverlay() || this.showCliConfig()) return;
 
@@ -1188,12 +1170,14 @@ export class TaskDetailComponent implements OnDestroy {
       case 'j':
       case 'ArrowDown':
       case 'ArrowRight':
+        if (!boardOwnsFocus && event.key.startsWith('Arrow')) return;
         event.preventDefault();
         this.nextInLaneRequested.emit();
         return;
       case 'k':
       case 'ArrowUp':
       case 'ArrowLeft':
+        if (!boardOwnsFocus && event.key.startsWith('Arrow')) return;
         event.preventDefault();
         this.prevInLaneRequested.emit();
         return;
@@ -1205,31 +1189,18 @@ export class TaskDetailComponent implements OnDestroy {
     }
   }
 
-  /**
-   * Forwarded from the detail-header lane dropdown. Navigation-only: the
-   * parent re-points the pager at `lane` and opens a task in it. The open
-   * task is never moved (lane moves live in the overflow context menu).
-   */
+  /** Re-points the pager without moving the open task. */
   onNavigateLane(lane: string) {
     this.navigateLaneRequested.emit(lane);
   }
 
-  /**
-   * "Do Next": jump this 2-ready task to the head of the Ready queue so the
-   * project's runner picks it up on the next tick. The backend reorder is
-   * atomic (POST /api/tasks/{id}/move-to-top → JobStateMachine.PromoteToReadyTop),
-   * which preserves any earlier-queued PendingIntent jobs and avoids the
-   * stale-grouped() race the optimistic-reorder path had.
-   */
+  /** Moves this Ready task to the queue head through the atomic backend endpoint. */
   moveToTopOfReady(): void {
     if (this.movingToTop()) return;
     const info = this.detail().info;
     if (info.state !== TaskState.Ready) return;
 
-    // Capture the lane order BEFORE the promote so undo can replay it
-    // via /api/tasks/reorder. Same-lane reorders cannot be expressed via
-    // the cross-lane move endpoint (it skips SetOrderInLane when
-    // fromState == targetState).
+    // Capture the lane order so Undo can replay it through /api/tasks/reorder.
     const prevOrder = this.captureLaneOrder(TaskState.Ready);
     this.movingToTop.set(true);
     this.jobService.beginOptimisticPersist();
@@ -1268,11 +1239,7 @@ export class TaskDetailComponent implements OnDestroy {
     }
   }
 
-  /**
-   * Snapshot the current ordered list of `{jobId, watchPath}` in the
-   * given state. Used by the undo flow to replay a pre-action order via
-   * `POST /api/tasks/reorder`.
-   */
+  /** Captures a lane order for replay through the reorder endpoint. */
   private captureLaneOrder(state: string): { jobId: string; watchPath: string }[] {
     const grouped = this.jobService.grouped();
     const out: { jobId: string; watchPath: string }[] = [];
@@ -1284,20 +1251,14 @@ export class TaskDetailComponent implements OnDestroy {
     return out;
   }
 
-  /**
-   * Forwarded from the protocol pane's pill toggle. Marks the user as having
-   * manually picked a tab so the auto-switch from "activity → protocol on
-   * summary ready" doesn't override their explicit choice.
-   */
+  /** Prevents the summary-ready auto-switch from overriding a manual tab choice. */
   onInspectorTabChange(tab: 'task' | 'activity' | 'protocol') {
     this.userTouchedInspectorTab = true;
     this.activeInspectorTab.set(tab);
     this.inspectorTabChange.emit(tab);
   }
 
-  /** Flips the setup bar between compact (default while running) and the full
-   *  selectors. Only meaningful while a run is active — when not running, the
-   *  bar is always expanded and the toggle isn't shown. */
+  /** Toggles the running setup bar between compact and full selectors. */
   toggleSetupCollapsed() {
     this.setupExpandedDuringRun.update((v) => !v);
   }
@@ -1375,7 +1336,7 @@ export class TaskDetailComponent implements OnDestroy {
     }
   }
 
-  // === 3-pane layout — facades for LayoutPanesService ====================
+  // LayoutPanesService facades.
 
   startLayoutResize(event: PointerEvent): void {
     this.layout.startLayoutResize(event);
@@ -1409,11 +1370,7 @@ export class TaskDetailComponent implements OnDestroy {
     this.layout.startPaneResize(event, left, right);
   }
 
-  // === Git view facades ==================================================
-  // State + API calls live in GitPaneService (provided locally). The
-  // GitPaneComponent in the template binds directly to the service; the
-  // wrappers here keep older same-class call sites working (e.g. the
-  // togglePane lazy-load below).
+  // GitPaneService facades retained for existing same-class call sites.
 
   refreshGit(): void {
     this.git.refresh();
@@ -1436,10 +1393,7 @@ export class TaskDetailComponent implements OnDestroy {
     this.git.commit();
   }
 
-  // === Claude live session telemetry =====================================
-  // Polling lives in ClaudeSessionPollService (provided locally on this
-  // component); the claudeSessionEffect above bridges detail() changes
-  // into it, and the session/rateLimit signals are exposed as facades.
+  // ClaudeSessionPollService formatting facades.
 
   formatTokens(n: number): string {
     return formatTokens(n);

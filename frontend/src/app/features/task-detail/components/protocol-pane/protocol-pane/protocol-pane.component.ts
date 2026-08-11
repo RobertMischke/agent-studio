@@ -70,6 +70,7 @@ import { projectStructuredActivityContent } from '../structured-activity-project
 import { TaskInspectorTabComponent } from '../task-inspector-tab/task-inspector-tab.component';
 import { DecisionSurfaceComponent } from '../../decision-surface/decision-surface.component';
 import { TaskArtifactLinksDirective } from '../../task-artifact-links/task-artifact-links.directive';
+import { DetailKeyboardSurfaceDirective } from '../../detail-keyboard-surface/detail-keyboard-surface.directive';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -132,11 +133,15 @@ interface InterimSummaryState {
     DecisionSurfaceComponent,
     ActivityEventPresentationDirective,
     TaskArtifactLinksDirective,
+    DetailKeyboardSurfaceDirective,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
 })
 export class ProtocolPaneComponent implements OnDestroy {
+  @ViewChild(DetailKeyboardSurfaceDirective)
+  private keyboardSurface?: DetailKeyboardSurfaceDirective;
+
   readonly detail = input.required<TaskDetail>();
   readonly maximized = input(false);
   readonly weight = input<number>(1);
@@ -549,7 +554,12 @@ export class ProtocolPaneComponent implements OnDestroy {
   onInspectorTabChange(id: string): void {
     if (id === 'task' || id === 'activity' || id === 'protocol') {
       this.activeInspectorTab.set(id);
+      this.focusTabSurface();
     }
+  }
+
+  focusTabSurface(): void {
+    this.keyboardSurface?.focus();
   }
 
   readonly canRegenerate = computed(() => {
