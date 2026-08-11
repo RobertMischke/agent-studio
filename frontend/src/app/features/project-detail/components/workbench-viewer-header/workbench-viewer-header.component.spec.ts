@@ -58,7 +58,15 @@ describe('WorkbenchViewerHeaderComponent', () => {
       status('AGT-2', '7-archive'),
     ])).toBeNull();
     expect(implementationStatusFor('decided', [
+      status('AGT-ORIGIN', '6-completed'),
+      status('AGT-SLICE', '2-ready'),
+    ])).toBeNull();
+    expect(implementationStatusFor('decided', [
       status('AGT-1', '6-completed'),
+      status('AGT-404', null, false),
+    ])).toBeNull();
+    expect(implementationStatusFor('decided', [
+      status('AGT-1', '3-progress'),
       status('AGT-404', null, false),
     ])).toBe('In implementation');
     expect(implementationStatusFor('documented', [status('AGT-1', '3-progress')]))
