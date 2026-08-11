@@ -10,6 +10,7 @@ public sealed class WorkbenchOverviewPolicyTests
         var items = new[]
         {
             Item("Project B", "active-new", "active", "2026-08-09T11:00:00Z"),
+            Item("Project A", "living-standard", "living-standard", "2026-08-10T11:00:00Z"),
             Item("Project A", "pending-one", "decision-pending", "2026-08-09T12:00:00Z", 1),
             Item("Project A", "archived", "archived", "2026-08-09T13:00:00Z"),
             Item("Project B", "active-old", "active", "2026-08-08T11:00:00Z"),
@@ -21,7 +22,7 @@ public sealed class WorkbenchOverviewPolicyTests
         var sorted = WorkbenchOverviewPolicy.Sort(items);
 
         Assert.Equal(
-            ["pending-four", "pending-one", "active-new", "active-old", "decided", "archived", "documented"],
+            ["pending-four", "pending-one", "living-standard", "active-new", "active-old", "decided", "archived", "documented"],
             sorted.Select(item => item.Workbench.Id));
     }
 

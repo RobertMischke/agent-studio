@@ -72,6 +72,61 @@ For a `concept` document:
 Both patterns may use full-bleed figures. A large concept diagram is a valid
 breakout, just as a UI mockup is.
 
+## Template v2 multi-page Dossiers
+
+Use a multi-page Dossier when one article would mix a durable overview with
+large recurring registers, visual catalogues, or other independently scanned
+material. The reference structure is:
+
+```text
+docs/operations/<slug>/
+  index.html
+  workbench.json
+  pages/
+    applied-surfaces.html
+    dos-and-donts.html
+```
+
+`index.html` remains the default page, the lifecycle and decision authority,
+and the target represented by the stable Dossier key. Do not repeat it in the
+subpage list. Register each subpage in display order:
+
+```json
+{
+  "entrypoint": "index.html",
+  "pages": [
+    { "title": "Dos and don'ts", "path": "pages/dos-and-donts.html" },
+    { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
+  ]
+}
+```
+
+The `path` is the stable subpage identity and must be a unique forward-slash
+HTML path below `pages/`. Change the title when copy evolves; do not rename the
+path merely to follow the title. Anchor ids remain document-local and stable.
+Together, the Dossier key, registered path, and anchor form a durable deep
+reference. Existing Dossier keys and `index.html#anchor` references do not
+change when `pages` is added.
+
+The catalogue accepts the additive `pages` field on both legacy
+`schemaVersion: 1` descriptors and lifecycle-aware `schemaVersion: 2`
+descriptors. The shared lifecycle JSON Schema specifies it for version 2;
+version 1 remains validated by the catalogue's legacy descriptor contract.
+
+Every registered page is self-contained and uses the same v2 presentation
+rules as the entrypoint. The Studio viewer renders the descriptor order as
+subnavigation and reads only registered, contained HTML pages. Relative links
+remain useful for direct Wiki or browser reading, but they are not a second
+page registry. Decisions and progressive-enhancement decision markup stay in
+`index.html` so changing pages never changes the decision authority.
+The template's inert `multipage-links` example provides the direct-reading
+navigation class; copy it into each page header and replace the example links.
+
+The
+[Admin Surface Design Guideline](admin-design-guideline/index.html) is the
+reference implementation. Its Applied surfaces page is append-only: each
+refresh or revamp card adds a dated row without rewriting earlier evidence.
+
 ## Screenshot evidence figures
 
 Use screenshots as evidence whenever a Dossier makes a claim about a visible

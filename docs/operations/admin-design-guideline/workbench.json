@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "admin-design-guideline",
   "title": "Admin Surface Design Guideline",
-  "summary": "Decision dossier for a binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. It includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, and the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, and a follow-up slice boundary.",
+  "summary": "Living admin-surface standard for flat composition, semantic color, accessible tooltips, restrained chips, compact density, and append-only adoption evidence. The multi-page Dossier includes compact visual dos and don'ts, the canonical reference, and the Applied surfaces register.",
   "entrypoint": "index.html",
-  "status": "decision-pending",
+  "status": "living-standard",
   "phase": "decision-ready",
   "updatedAt": "2026-08-11T23:19:48Z",
   "sourceTaskKeys": [
@@ -16,8 +16,25 @@
     "AGT-2568",
     "AGT-2549",
     "AGT-2579",
+    "AGT-2606",
+    "AGT-2608",
+    "AGT-2610",
+    "AGT-2613",
+    "AGT-2617",
+    "AGT-2637",
+    "AGT-2638",
     "AGT-2643"
   ],
   "implementationTasks": [],
-  "key": "AGT-W1"
+  "key": "AGT-W1",
+  "pages": [
+    {
+      "title": "Dos and don'ts",
+      "path": "pages/dos-and-donts.html"
+    },
+    {
+      "title": "Applied surfaces",
+      "path": "pages/applied-surfaces.html"
+    }
+  ]
 }

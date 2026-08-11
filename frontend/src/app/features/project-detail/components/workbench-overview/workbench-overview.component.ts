@@ -62,6 +62,7 @@ export class WorkbenchOverviewComponent {
   readonly filteredCount = computed(() => this.filteredItems().length);
   readonly decisionPending = computed(() => this.sortedItemsWithStatus('decision-pending'));
   readonly current = computed(() => this.viewState.sort([
+    ...this.filteredItemsWithStatus('living-standard'),
     ...this.filteredItemsWithStatus('active'),
     ...this.filteredItemsWithStatus('decided'),
     ...this.filteredItemsWithStatus('invalid'),
