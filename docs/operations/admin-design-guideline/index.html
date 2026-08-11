@@ -857,6 +857,20 @@
     </div>
   </section>
 
+  <section id="panel-keyboard-containment" data-concept-section="decision-log">
+    <h2><span class="section-no">09</span>Panel keyboard containment</h2>
+    <p>This append-only rule records the task-detail and CAC-22 embedding contract. It applies whenever a panel with its own scroll viewport is embedded inside a board, list, tree, or other ancestor that also owns keyboard navigation.</p>
+
+    <h3>Focused viewport ownership</h3>
+    <ul>
+      <li><strong>Move focus into opened detail content.</strong> Opening a detail panel places focus on its active content viewport. The viewport is keyboard-focusable and exposes a visible focus treatment without adding decorative panel chrome.</li>
+      <li><strong>Keep vertical viewport keys local.</strong> A focused panel handles <code>ArrowUp</code>, <code>ArrowDown</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Home</code>, and <code>End</code> against its own scroll owner. Handled events prevent their browser default and stop propagation, including at a scroll boundary.</li>
+      <li><strong>Preserve control semantics.</strong> Text inputs, editable content, menus, listboxes, trees, grids, sliders, and spin buttons keep their native arrow behavior. Their vertical arrow events still stop at the panel boundary so an ancestor cannot also navigate.</li>
+      <li><strong>Leave navigation keys with their owner.</strong> Board, list, or tree task navigation runs only while focus remains in that navigation surface. <code>Escape</code> and <code>Tab</code> keep their established dismissal and focus-order behavior.</li>
+      <li><strong>Do not rewrite pointer scrolling.</strong> Keyboard containment adds no wheel or touch interception. Pointer and touch scrolling continue to use the platform behavior.</li>
+    </ul>
+  </section>
+
   <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
 </main>
 </body>
