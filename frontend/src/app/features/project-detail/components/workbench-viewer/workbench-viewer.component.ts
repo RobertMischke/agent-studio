@@ -69,6 +69,9 @@ export class WorkbenchViewerComponent {
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
   readonly documenting = signal(false);
   readonly documentationError = signal<string | null>(null);
+  readonly lastUpdatedAtUtc = signal<string | null>(null);
+  readonly liveConnected = this.hub.connected;
+  readonly connectionStateChangedAt = this.hub.connectionStateChangedAt;
 
   readonly srcdoc = computed(() => {
     const document = this.document();
@@ -156,6 +159,10 @@ export class WorkbenchViewerComponent {
     this.loadDocument(this.projectName(), this.workbenchId(), false);
   }
 
+  refreshView(): void {
+    this.loadDocument(this.projectName(), this.workbenchId(), false);
+  }
+
   documentationReady(): boolean {
     const workbench = this.document()?.workbench;
     return workbench?.status === 'decided' && workbench.documentation?.eligible === true;
@@ -209,6 +216,7 @@ export class WorkbenchViewerComponent {
     this.docs.getWorkbench(project, id).subscribe({
       next: (document) => {
         if (generation !== this.requestGeneration) return;
+        this.lastUpdatedAtUtc.set(new Date().toISOString());
         this.document.set(document);
         const discovered = discoverWorkbenchDecisionMarkup(document.html);
         this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);

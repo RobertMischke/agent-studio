@@ -20,8 +20,12 @@
           [decisionPoints]="decisionMarkup().points"
           [responses]="decisionResponses()"
           [showWikiAction]="showWikiAction()"
+          [liveConnected]="liveConnected()"
+          [connectionStateChangedAtUtc]="connectionStateChangedAt()"
+          [lastUpdatedAtUtc]="lastUpdatedAtUtc()"
           (openWiki)="openCurrentPageInWiki()"
           (decisionChanged)="refreshDecision()"
+          (manualRefresh)="refreshView()"
         />
       }
       @if (documentationReady()) {

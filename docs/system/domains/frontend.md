@@ -198,8 +198,11 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   Explorer project children stay available as quick links. Created, updated,
   decision-recorded, and status-changed events travel over the existing jobs
   hub and converge the Explorer catalogue, both overview scopes, and an open
-  viewer without a page reload. Pulse reuses the same catalogue as a thinking
-  inbox. An active Dossier is
+  viewer without a page reload. The viewer header has no persistent refresh
+  action. Its details menu reports the jobs-hub connection transition and last
+  successful viewer update; a disconnected viewer adds an `As of` marker and
+  exposes manual refresh only as a fallback. Pulse reuses the same catalogue as
+  a thinking inbox. An active Dossier is
   the selected leaf in the Explorer rather than making its Dossiers disclosure
   parent current. Opening one expands the owning workspace, project, and
   project-specific Dossiers section, persists that section state, and scrolls

@@ -59,19 +59,17 @@
     {{ openDecisionCount() }} open
   </span>
 
-  <button
-    type="button"
-    class="viewer-head__refresh"
-    data-testid="workbench-viewer-refresh"
-    aria-label="Refresh Dossier"
-    appTooltip="Refresh Dossier"
-    [disabled]="!document().workbench.key || refreshPending()"
-    [appPendingButton]="refreshPending()"
-    pendingLabel="Creating…"
-    (click)="requestRefreshCard()"
-  >
-    <app-studio-icon name="refresh" [size]="14" />
-  </button>
+  @if (!liveConnected()) {
+    <span
+      class="viewer-head__as-of"
+      role="status"
+      data-testid="workbench-viewer-as-of"
+      [appTooltip]="connectionSinceLabel()"
+    >
+      <i aria-hidden="true"></i>
+      As of {{ lastUpdateLabel() }}
+    </span>
+  }
 
   <details #detailsDisclosure class="viewer-head__details">
     <summary
@@ -95,6 +93,39 @@
           ×
         </button>
       </header>
+
+      <section
+        class="viewer-details__live"
+        data-testid="workbench-viewer-live-status"
+        [attr.data-connected]="liveConnected()"
+      >
+        <div class="viewer-details__live-heading">
+          <i aria-hidden="true"></i>
+          <div>
+            <strong>Live updates</strong>
+            <span data-testid="workbench-viewer-connection-since">
+              {{ connectionSinceLabel() }}
+            </span>
+          </div>
+        </div>
+        <dl>
+          <div>
+            <dt>Last viewer update</dt>
+            <dd data-testid="workbench-viewer-last-update">{{ lastUpdateLabel() }}</dd>
+          </div>
+        </dl>
+        @if (!liveConnected()) {
+          <p>Live updates are unavailable. The Dossier may be stale.</p>
+          <button
+            type="button"
+            class="viewer-details__manual-refresh"
+            data-testid="workbench-viewer-manual-refresh"
+            (click)="refreshView(detailsDisclosure)"
+          >
+            Refresh now
+          </button>
+        }
+      </section>
 
       <p class="viewer-details__summary">{{ document().workbench.summary }}</p>
 

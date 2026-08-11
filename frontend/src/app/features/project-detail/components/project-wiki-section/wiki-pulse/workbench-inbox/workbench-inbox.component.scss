@@ -112,14 +112,14 @@
 
 .wbinbox li {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--studio-spacing-1);
   min-width: 0;
 }
 
 .wbinbox li > app-copyable-task-key {
   flex: 0 0 auto;
-  margin: var(--studio-spacing-2) var(--studio-spacing-2) 0 0;
+  margin-right: var(--studio-spacing-2);
 }
 
 .wbinbox li > button { min-width: 0; }
