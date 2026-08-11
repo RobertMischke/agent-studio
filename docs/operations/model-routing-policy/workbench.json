@@ -4,9 +4,11 @@
   "title": "Modell-Routing als Entscheidung von Token Economy",
   "summary": "Neue Entscheidungsschicht \u00FCber dem TaskComplexityEstimator: aus beobachtbaren Karten-Merkmalen eine begr\u00FCndete, auditierbare Wahl von Modell \u00D7 Thinking-Level, mit LLM-Schiedsrichter nur f\u00FCr die uneindeutigen F\u00E4lle. Behandelt welche Information wertvoll ist, wie Komplexit\u00E4t in B\u00E4nder (trivial/standard/demanding/critical) \u002B Konfidenz verdichtet wird, die Default-Tabelle Band\u2192Modell\u00D7Level, die modellspezifische Reasoning-Ladder (Opus 5: low\u00B7medium\u00B7high\u00B7max ohne xhigh; Sonnet 5 mit xhigh) als hartes Wissen statt Stolperfalle, Break-even f\u00FCr den optionalen LLM-Call, die Reissue-/Feststecken-Policy (Modellwechsel), das Kontingent als Budget-Signal (preferStrongWhileQuotaAbundant) und die Lernschleife mit ihren Grenzen. Vier offene Entscheidungen E1-E4 f\u00FCr den Sichtblick, danach Schnitt in TE-Karten. Verzahnt mit dem TE-Library-Konzept upfront-task-complexity.md.",
   "entrypoint": "index.html",
-  "status": "decided",
+  "status": "documented",
   "phase": "decision-ready",
-  "updatedAt": "2026-07-26T20:40:00Z",
+  "updatedAt": "2026-08-11T14:45:00Z",
+  "editedBy": "Operator bookkeeping via AGT-2621",
+  "statusReason": "The routing policy is implemented and maintained as the canonical contract; TE-19 and TE-20 are archived.",
   "sourceTaskKeys": [
     "TE-19",
     "TE-20"

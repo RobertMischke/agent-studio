@@ -5,8 +5,10 @@
   "summary": "Decided dossier for context-aware Orchestrator Chat. Operator GO was given on 10 August 2026 for Slices 1 through 5. Binding additions keep Task Activity unchanged, create managed task contexts on open, retain permanent project contexts and hidden archived-task contexts, and place transcript, receipt, lifecycle, and summary authority on the central Task Server.",
   "entrypoint": "index.html",
   "status": "decided",
-  "phase": "implementation",
-  "updatedAt": "2026-08-10T12:36:21Z",
+  "phase": "testing",
+  "updatedAt": "2026-08-11T14:45:00Z",
+  "editedBy": "Operator bookkeeping via AGT-2621",
+  "statusReason": "Slices 1 through 5 were approved on 2026-08-10; AGT-2575 and AGT-2577 remain open, so this Dossier stays decided rather than documented.",
   "sourceTaskKeys": [
     "AGT-2514",
     "AGT-2572",
