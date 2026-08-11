@@ -1,7 +1,7 @@
 <section class="workbench-overview" data-testid="workbench-overview">
   <header class="workbench-overview__header">
     <div>
-      <h1>Overview</h1>
+      <h1>Dossiers</h1>
       <p class="workbench-overview__subtitle">
         @if (projectName(); as project) {
           <span data-testid="workbench-overview-scope">{{ project }}</span>
@@ -20,14 +20,14 @@
   </header>
 
   @if (loading() && !overview()) {
-    <app-loading-surface kind="list" label="Loading overview…" />
+    <app-loading-surface kind="list" label="Loading Dossiers…" />
   } @else if (error()) {
-    <p class="workbench-overview__state" role="alert">The overview could not be loaded.</p>
+    <p class="workbench-overview__state" role="alert">Dossiers could not be loaded.</p>
   } @else if (overview(); as value) {
     @if (value.count === 0) {
       <div class="workbench-overview__empty" data-testid="workbench-overview-empty">
-        <strong>No items yet</strong>
-        <span>Repository-owned entries appear here when a descriptor is added.</span>
+        <strong>No Dossiers yet</strong>
+        <span>Repository-owned Dossiers appear here when a descriptor is added.</span>
       </div>
     } @else {
       <div class="workbench-overview__body">

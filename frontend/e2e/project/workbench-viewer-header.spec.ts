@@ -482,7 +482,7 @@ test('unreadable dossier replaces loading feedback with the backend reason', asy
   await installMocks(page, {
     workbenchError: {
       status: 404,
-      message: 'Workbench not found, invalid, or path rejected',
+      message: 'Dossier not found, invalid, or path rejected',
     },
   });
   await page.goto(
@@ -494,7 +494,7 @@ test('unreadable dossier replaces loading feedback with the backend reason', asy
 
   const error = page.getByTestId('workbench-viewer-error');
   await expect(error).toBeVisible({ timeout: 30_000 });
-  await expect(error).toContainText('Workbench not found, invalid, or path rejected');
+  await expect(error).toContainText('Dossier not found, invalid, or path rejected');
   await expect(page.getByTestId('workbench-viewer-loading')).toHaveCount(0);
   await expect(page.getByTestId('loading-surface-list')).toHaveCount(0);
 

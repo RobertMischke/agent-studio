@@ -32,7 +32,7 @@ folder, that folder must exist under `docs/`.
 `WikiContentCache` is the single process-wide source for assembled Wiki reads.
 One project snapshot contains the physical tree and its content signature, the
 full page list, metadata and saved order, folder projections, Home sections,
-Pulse filesystem projections, and the Workbench catalogue used by Pulse.
+Pulse filesystem projections, and the Dossier catalogue used by Pulse.
 `/wiki`, `/wiki/tree`, `/wiki/recent`, `/wiki/pulse`, `/wiki/folder`, and
 `/wiki/home` all acquire that same snapshot. They never validate it by walking
 `docs/` again during a request.
@@ -91,7 +91,7 @@ the file name without extension and without the optional order prefix.
 
 Every page also receives one canonical interaction type: `doc`, `concept`,
 `workbench`, `incident`, or `report`. Companion classification is the primary
-source. A registered `workbench.json` entry page is always a Workbench. Agreed
+source. A registered `workbench.json` entry page is always a Dossier. Agreed
 path families fill remaining gaps, with `doc` as the default. The tree and page
 head use the same type-to-icon mapping.
 
@@ -214,7 +214,7 @@ editor, and timestamp together.
 This frontmatter is the lifecycle source of truth for Markdown. The adjacent
 `.meta.json` companion remains authoritative for grading, consolidation
 classification, and task links and must not copy lifecycle fields. HTML cannot
-carry leading YAML, so a Workbench uses the same field names and values in its
+carry leading YAML, so a Dossier uses the same field names and values in its
 single `workbench.json` descriptor (`schemaVersion: 2`). Pulse normalizes both
 authoring shapes into one projection and groups them by the same state machine.
 

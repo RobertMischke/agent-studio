@@ -240,7 +240,7 @@ CAR's built-in descriptors and Windows helpers are also internal. T2 does not co
 
 **ADR-0067** (nächste freie Nummer): *„Studio nutzt CodingAgentRunner als einzige CLI-Ausführungsschicht"* — Entscheidung, Alternativen (eigener Fork behalten / CAR nur als Typquelle), Konsequenzen, Verweis auf Target-Architecture §4/§10/§13.6 und auf E5.
 
-**Doku:** `docs/concepts/distributed-agent-studio-target-architecture.md` (Ist = Soll), `docs/system/architecture/project-map.md`, `linux-runner-host.md`, Workbench `operations/execution-model-shift` §5 + E5 auf „erledigt".
+**Doku:** `docs/concepts/distributed-agent-studio-target-architecture.md` (Ist = Soll), `docs/system/architecture/project-map.md`, `linux-runner-host.md`, Dossier `operations/execution-model-shift` §5 + E5 auf „erledigt".
 
 ### Reihenfolge und Parallelität
 

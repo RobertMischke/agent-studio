@@ -34,7 +34,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
   'domain-map': 'Domain-Map',
   analyse: 'Analyse',
   runbook: 'Runbook',
-  workbench: 'Workbench',
+  workbench: 'Dossier',
   mockup: 'Mockup',
   proposal: 'Proposal',
   generiert: 'Generiert',

@@ -225,7 +225,7 @@ The rules:
 
 The first slice ships behind the `Frontend:VsCodeLayout` feature flag, default off; the spec and per-element migration map lived in the `mockups/vscode-layout/` family (retired 2026-07 as design history). When you add a new chrome element, check both: (a) does it survive the density rule, and (b) is there already a taxonomy entry for the destination it belongs in.
 
-## Workbench design system
+## Dossier design system
 
 The product needs its own compact workbench design system. It should learn from VS Code without becoming a clone of VS Code internals.
 
@@ -238,7 +238,7 @@ The rule:
 - Avoid broad dashboard kits as the default visual layer. Angular Material, Fluent UI Web Components, Taiga UI, PrimeNG, NG-ZORRO, or similar kits may be useful for isolated spikes, but they must not override the workbench density and component grammar.
 - Keep light theme first-class and dark theme structurally identical. A theme switch changes tokens, not layout or hierarchy.
 
-The first named system is the internal Found Next Workbench Design System, documented for the next chat surface in the `mockups/chat-window-next-gen/` family (retired 2026-07 as design history). When production components graduate from a mockup, their tokens, spacing, icon usage, keyboard behavior, and screenshot evidence should move with them.
+The first named system is the internal Found Next Dossier Design System, documented for the next chat surface in the `mockups/chat-window-next-gen/` family (retired 2026-07 as design history). When production components graduate from a mockup, their tokens, spacing, icon usage, keyboard behavior, and screenshot evidence should move with them.
 
 ## Kanban board
 

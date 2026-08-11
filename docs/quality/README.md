@@ -100,4 +100,4 @@ beside the authored prompt in the Task tab.
 
 See [Adding or changing a rule](adding-a-rule.md) before expanding the family.
 Interactive alternatives or uncertain design questions belong in a
-[Workbench](../concepts/experimentier-workbench.md), not in a mandatory guide.
+[Dossier](../concepts/experimentier-workbench.md), not in a mandatory guide.

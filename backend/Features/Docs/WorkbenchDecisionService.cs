@@ -60,9 +60,9 @@ public sealed record WorkbenchDecisionResult
 }
 
 /// <summary>
-/// The write half of the Workbench Decision gate (AGT-2375). Deliberately
+/// The write half of the Dossier Decision gate (AGT-2375). Deliberately
 /// small: <see cref="Prepare"/> validates and fingerprints without touching the
-/// disk, <see cref="Confirm"/> writes the decision straight into the Workbench's
+/// disk, <see cref="Confirm"/> writes the decision straight into the Dossier's
 /// own <c>workbench.json</c>. Visibility hangs on that descriptor - never on a
 /// <c>.meta.json</c> sidecar, which was the archive bug this card fixes.
 /// </summary>
@@ -75,13 +75,13 @@ public sealed class WorkbenchDecisionService
     };
 
     /// <summary>
-    /// One write gate per Workbench descriptor. <see cref="Confirm"/> is a
+    /// One write gate per Dossier descriptor. <see cref="Confirm"/> is a
     /// check-then-act over the descriptor's fingerprint, so two concurrent
-    /// confirmations of the same Workbench must not interleave between the
+    /// confirmations of the same Dossier must not interleave between the
     /// check and the write. The key is the descriptor's own normalized path,
     /// not the (project, id) pair, so two spellings of the same project cannot
     /// acquire two different gates. The map is bounded by the number of
-    /// Workbench descriptors that were ever confirmed in this process.
+    /// Dossier descriptors that were ever confirmed in this process.
     /// </summary>
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ConfirmGates =
         new(StringComparer.Ordinal);
@@ -168,7 +168,7 @@ public sealed class WorkbenchDecisionService
         try { full = Path.GetFullPath(descriptorPath); }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
         {
-            SilentCatch.Note(ex, "Workbench descriptor path could not be normalized for the write gate.");
+            SilentCatch.Note(ex, "Dossier descriptor path could not be normalized for the write gate.");
             full = descriptorPath;
         }
         full = full.Replace('\\', '/').TrimEnd('/');
@@ -186,7 +186,7 @@ public sealed class WorkbenchDecisionService
         var snapshot = gate.Snapshot!;
         if (snapshot.Revision == null && snapshot.Fingerprint == null)
             return Failure(id, body.OperationId, "validation",
-                "The Workbench has no readable revision or fingerprint provenance.");
+                "The Dossier has no readable revision or fingerprint provenance.");
 
         var archive = body.Outcome == "archive";
         var now = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -259,7 +259,7 @@ public sealed class WorkbenchDecisionService
         }
         else
         {
-            // schema v1 still carries most Workbenches. Its visibility hangs on
+            // schema v1 still carries most Dossiers. Its visibility hangs on
             // the flat status field; the receipt above rides along so a later
             // migration to v2 keeps the provenance.
             descriptor["status"] = archive ? "archived" : "decided";
@@ -277,12 +277,12 @@ public sealed class WorkbenchDecisionService
             || WorkbenchCatalogueService.ComputeDescriptorFingerprint(currentText)
                 != snapshot.DescriptorFingerprint)
             return Failure(id, body.OperationId, "stale-revision",
-                "The Workbench descriptor changed while the decision was being confirmed.");
+                "The Dossier descriptor changed while the decision was being confirmed.");
         if (body.ExpectedFingerprint != null
             && WorkbenchCatalogueService.ComputeWorkbenchFingerprint(
                 snapshot.DescriptorPath, snapshot.EntryPath) != body.ExpectedFingerprint)
             return Failure(id, body.OperationId, "stale-revision",
-                "The Workbench content changed while the decision was being confirmed.");
+                "The Dossier content changed while the decision was being confirmed.");
 
         var mutation = _repositoryMutations.Execute(
             projectName,
@@ -295,7 +295,7 @@ public sealed class WorkbenchDecisionService
         if (!mutation.Success)
         {
             return Failure(id, body.OperationId, "write-failed",
-                $"The Workbench decision could not be persisted: {mutation.Error}");
+                $"The Dossier decision could not be persisted: {mutation.Error}");
         }
 
         var revision = mutation.CommitSha ?? snapshot.Revision;
@@ -358,7 +358,7 @@ public sealed class WorkbenchDecisionService
                     "An archive decision cannot carry a task draft."));
             // The read side refuses a settled archive receipt that carries
             // spawned keys, so accepting them here would write a descriptor
-            // that can never be read back: the Workbench would be permanently
+            // that can never be read back: the Dossier would be permanently
             // invalid. Refuse on the way in instead.
             if (spawnedTaskKeys != null
                 && spawnedTaskKeys.Any(key => !string.IsNullOrWhiteSpace(key)))
@@ -379,7 +379,7 @@ public sealed class WorkbenchDecisionService
         var snapshot = _catalogue.ResolveCanonicalForMutation(projectName, id);
         if (snapshot == null)
             return new(Failure(id, operationId, "not-canonical",
-                "No single canonical Workbench descriptor owns this id."));
+                "No single canonical Dossier descriptor owns this id."));
 
         var stored = snapshot.Item.Decision;
         if (stored is { State: "succeeded" })
@@ -398,16 +398,16 @@ public sealed class WorkbenchDecisionService
                     Idempotent = true,
                 })
                 : new(Failure(id, operationId, "already-settled",
-                    "This Workbench already carries a settled decision."));
+                    "This Dossier already carries a settled decision."));
         if (snapshot.Item.Status is "decided" or "documented" or "archived")
             return new(Failure(id, operationId, "already-settled",
-                "This Workbench already carries a settled decision."));
+                "This Dossier already carries a settled decision."));
         if (_catalogue.OperationIdOwnedByAnotherWorkbench(projectName, operationId, id))
             return new(Failure(id, operationId, "operation-id-conflict",
-                "This operationId belongs to a different Workbench."));
+                "This operationId belongs to a different Dossier."));
         if (snapshot.Dirty)
             return new(Failure(id, operationId, "dirty-descriptor",
-                "Commit the Workbench descriptor and artifact before deciding."));
+                "Commit the Dossier descriptor and artifact before deciding."));
         var staleness = WorkbenchDecisionContracts.StalenessError(
             expectedRevision, expectedFingerprint, snapshot.Revision, snapshot.Fingerprint);
         if (staleness != null)
@@ -424,7 +424,7 @@ public sealed class WorkbenchDecisionService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SilentCatch.Note(ex, "Workbench descriptor could not be re-read before the decision write.");
+            SilentCatch.Note(ex, "Dossier descriptor could not be re-read before the decision write.");
             return null;
         }
     }

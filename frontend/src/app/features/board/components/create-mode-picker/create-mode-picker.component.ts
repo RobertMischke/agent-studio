@@ -12,7 +12,7 @@ interface ModeOption {
 /**
  * Create-dialog Mode selector plus the "Allow web access" toggle. `coding`
  * is the read-write default; `planning` and `research` are report-only, while
- * `concept` writes one bounded docs Workbench. Per
+ * `concept` writes one bounded docs Dossier. Per
  * Decision 2 of the task-modes design the web toggle has a per-mode default
  * (research = on, everything else = off) but stays a single control the user
  * can override. Choosing a mode resets the toggle to that mode's default.
@@ -39,7 +39,7 @@ export class CreateModePickerComponent {
     { value: 'coding', label: 'Coding', icon: '💻', hint: 'Default. The agent reads and writes source to implement the task.' },
     { value: 'planning', label: 'Planning', icon: '🗺️', hint: 'Read-only. The agent investigates and produces a plan without writing source.' },
     { value: 'research', label: 'Research', icon: '🔍', hint: 'Read-only with web access. The agent gathers information and reports findings.' },
-    { value: 'concept', label: 'Concept', icon: '◈', hint: 'Docs-only. The agent delivers one Workbench for human sight review, without changing product code.' },
+    { value: 'concept', label: 'Concept', icon: '◈', hint: 'One docs-only Dossier for human review; product code stays unchanged.' },
   ];
 
   /** Per-mode default for the web-access toggle (Decision 2). */

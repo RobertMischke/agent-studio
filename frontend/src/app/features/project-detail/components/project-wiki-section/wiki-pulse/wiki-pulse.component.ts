@@ -23,7 +23,7 @@ const FEED_COMPACT_COUNT = 8;
  *  - the full-width drift strip (per top-level docs folder, deterministic),
  *  - "Zuletzt geändert" (compact change feed, expandable behind a UI toggle),
  *  - "Aufmerksamkeit" (warnings + unfiled inbox; the card hides when clear),
- *  - "Workbenches" (catalogue via {@link WorkbenchInboxComponent}),
+ *  - "Dossiers" (catalogue via {@link WorkbenchInboxComponent}),
  *  - "In Arbeit" (docs-touching live runs).
  *
  * Purely presentational: the parent owns fetching and feeds the fully-composed

@@ -275,7 +275,7 @@ async function stubRouteData(page: Page): Promise<void> {
           sourceTaskKeys: [TASK_REFERENCE],
           relatedTaskKeys: [],
         },
-        html: '<h1>Route Lab</h1><p>Restored Workbench.</p>',
+        html: '<h1>Route Lab</h1><p>Restored Dossier.</p>',
         branch: 'task/route',
         revision: '1234567890abcdef',
         workingTreeModified: false,
@@ -393,7 +393,7 @@ test.describe('Studio route restoration', () => {
     await expect(page.getByTestId('error-dialog')).toHaveCount(0);
   });
 
-  test('Workbench route restores and survives reload', async ({ page }, testInfo) => {
+  test('Dossier route restores and survives reload', async ({ page }, testInfo) => {
     await page.addInitScript(() => {
       if (window.sessionStorage.getItem('workbench-reveal-test-initialized')) return;
       window.sessionStorage.setItem('workbench-reveal-test-initialized', 'true');

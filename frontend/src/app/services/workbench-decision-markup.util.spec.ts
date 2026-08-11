@@ -4,7 +4,7 @@ import {
   normalizeWorkbenchDecisionResponses,
 } from './workbench-decision-markup.util';
 
-describe('Workbench decision markup', () => {
+describe('Dossier decision markup', () => {
   it('discovers readable single, multi, and comment markup with stable ids', () => {
     const discovered = discoverWorkbenchDecisionMarkup(`
       <section data-decision-id="route" data-decision-kind="single">

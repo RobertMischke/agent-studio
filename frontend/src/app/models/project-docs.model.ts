@@ -230,7 +230,7 @@ export interface WorkbenchTaskDraft {
 
 export type WorkbenchDecisionKind = 'single' | 'multi' | 'confirm';
 
-/** One author-defined option discovered in the Workbench HTML. */
+/** One author-defined option discovered in the Dossier HTML. */
 export interface WorkbenchDecisionOption {
   id: string;
   label: string;
@@ -345,7 +345,7 @@ export interface WorkbenchListItem {
   lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
   decision?: WorkbenchDecisionProjection | null;
   decisionStage?: WorkbenchDecisionStage | null;
-  /** Workbench-level gate count until inline decision points extend it. */
+  /** Dossier-level gate count until inline decision points extend it. */
   openDecisionCount?: number;
   documentation?: WorkbenchDocumentationProjection | null;
 }

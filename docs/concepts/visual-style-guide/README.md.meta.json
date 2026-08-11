@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "schemaVersion": "wiki-document-companion/v1",
-  "title": "Visual Style Guide Workbench index",
+  "title": "Visual Style Guide Dossier index",
   "source": {
     "path": "docs/concepts/visual-style-guide/README.md",
     "type": "markdown",
@@ -26,7 +26,7 @@
   "relatedTasks": [
     {
       "key": "AGT-2274",
-      "title": "Build and maintain the visual Style Guide as a Wiki Workbench",
+      "title": "Build and maintain the visual Style Guide as a Wiki Dossier",
       "linkedAt": "2026-07-23T00:00:00.0000000Z",
       "source": "manual"
     },

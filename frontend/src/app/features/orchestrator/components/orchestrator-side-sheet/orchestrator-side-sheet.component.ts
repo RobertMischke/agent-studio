@@ -352,7 +352,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly automaticContextLabel = computed(() => {
     const project = this.effectiveProject();
     const page = this.pageContext();
-    if (page && page.projectName === project) return `${page.pageType === 'workbench' ? 'Workbench' : 'Page'} · ${page.title}`;
+    if (page && page.projectName === project) return `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.title}`;
     if (this.contextKind() === 'task') return `Task · ${this.effectiveJobKey() ?? this.effectiveJobTitle() ?? 'current'}`;
     const location = this.composerContext();
     if (location && (!location.project || location.project === project)) {
@@ -371,7 +371,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       id: `${reference.kind}:${project}:${reference.reference}`,
       category: 'current',
       label: page.title,
-      detail: `${page.pageType === 'workbench' ? 'Workbench' : 'Page'} · ${page.relPath}`,
+      detail: `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.relPath}`,
       estimateTokens: 1_200,
       reference,
     };

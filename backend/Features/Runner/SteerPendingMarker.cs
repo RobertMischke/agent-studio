@@ -161,7 +161,7 @@ public static class SteerPendingKinds
     /// </summary>
     public const string UiIterationReview = "ui-iteration-review";
     /// <summary>
-    /// A complete concept Workbench waiting for deliberate human sight review.
+    /// A complete concept Dossier waiting for deliberate human sight review.
     /// This is a successful delivery gate and is never timeout-escalated.
     /// </summary>
     public const string ConceptSightReview = "concept-sight-review";

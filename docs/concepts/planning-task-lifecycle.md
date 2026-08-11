@@ -3,7 +3,7 @@
 > Prompt-known workflow for planning-mode tasks. Read this before running a
 > planning task or accepting one in review. It exists because plan-only cards
 > kept slipping through approved without the work they proposed ever being
-> created (AGT-1915, Workbench-Plan-Phase-2). AGT-2069 makes that trap visible
+> created (AGT-1915, Dossier-Plan-Phase-2). AGT-2069 makes that trap visible
 > and gates against it.
 
 ## What a planning task is

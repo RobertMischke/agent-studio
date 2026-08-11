@@ -136,7 +136,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     http.verify();
   });
 
-  it('selects and reveals the active Workbench while keeping its disclosure parent neutral', async () => {
+  it('selects and reveals the active Dossier while keeping its disclosure parent neutral', async () => {
     await TestBed.configureTestingModule({
       imports: [ExplorerWorkbenchListComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -172,7 +172,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     http.verify();
   });
 
-  it('persists the Workbenches disclosure independently for each project', async () => {
+  it('persists the Dossiers disclosure independently for each project', async () => {
     await TestBed.configureTestingModule({
       imports: [ExplorerWorkbenchListComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
@@ -205,7 +205,7 @@ describe('ExplorerWorkbenchListComponent', () => {
     http.verify();
   });
 
-  it('opens History when a deep-linked settled Workbench is outside the current catalogue', async () => {
+  it('opens History when a deep-linked settled Dossier is outside the current catalogue', async () => {
     await TestBed.configureTestingModule({
       imports: [ExplorerWorkbenchListComponent],
       providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],

@@ -78,7 +78,7 @@ export class OrchestratorContextSourceService {
         .filter(item => `${item.key} ${item.title} ${item.summary} ${item.status}`.toLocaleLowerCase().includes(q))
         .slice(0, 8)
         .map(item => this.option(
-          'wiki', item.title, `Workbench · ${item.status}${item.phase ? ` · ${item.phase}` : ''}`,
+          'wiki', item.title, `Dossier · ${item.status}${item.phase ? ` · ${item.phase}` : ''}`,
           { kind: 'page', reference: `page:${project}/${item.entryPath}`, projectId: project }, 1_200));
       return {
         tasks,

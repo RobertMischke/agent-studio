@@ -443,7 +443,7 @@ declared paths immediately, restores them to `HEAD` on commit failure, and
 queues the exact SHA for background push. Task-run output still commits only at
 the runner lifecycle boundary, and worker CLIs and LLM supervisors still never
 own Git history. This amendment closes the discovery-scan incident where
-automatic Workbench keys dirtied the integration checkout and caused accepted
+automatic Dossier keys dirtied the integration checkout and caused accepted
 task integrations to refuse their merges.
 
 **Context.** Modern coding CLIs (Claude / Codex / Copilot / Gemini) each ship with their own opinion about whether to commit when they "finish": some will, some won't, none agree on message style, and none align with our state-machine transition. Letting the model commit splits authority over the same working tree between the CLI's own heuristics and the runner's lifecycle policy. The product needs a single author of git history per project so the run timeline, the per-run change set, and `JobInfo.Commit` all line up against the same SHA. The user's framing was explicit: "der Task Prozessor macht den Commit, der Task Prozessor pusht."

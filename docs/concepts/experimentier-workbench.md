@@ -29,7 +29,7 @@ Mockup:
 
 ## Decision in one paragraph
 
-A **Workbench** is a repository-owned, current experiment around one product
+A **Dossier** is a repository-owned, current experiment around one product
 question. It combines a self-contained HTML representation with a first-class
 Explorer entry, the existing project orchestrator chat pinned to that artifact,
 and an explicit closing decision: create a feature card through the normal task
@@ -44,7 +44,7 @@ examples, and converge before it becomes production work. Pipeline workbenches,
 mockup families, and application surveys already use this pattern, but today
 they are discoverable only if someone remembers a path.
 
-A Workbench makes the pattern visible without turning every HTML document into
+A Dossier makes the pattern visible without turning every HTML document into
 an application:
 
 - the repository owns the experiment and its Git history;
@@ -52,14 +52,14 @@ an application:
 - the canonical project orchestrator is the conversational actor;
 - a human decision, not a model utterance, crosses from exploration into work.
 
-The user-facing name is **Workbenches**. `Topics` is useful language inside a
-Workbench, but is too broad for the Explorer section because Wiki pages,
+The user-facing name is **Dossiers**. `Topics` is useful language inside a
+Dossier, but is too broad for the Explorer section because Wiki pages,
 decisions, tasks, and chats are all topics too.
 
 ## 2. Object and storage contract
 
-Each Workbench is one physical folder that sits with its own documentation
-theme below the project's docs root (a Workbench is any folder carrying a
+Each Dossier is one physical folder that sits with its own documentation
+theme below the project's docs root (a Dossier is any folder carrying a
 `workbench.json`; discovery scans `docs/**/workbench.json` recursively, skipping
 dot-directories and node_modules-like folders):
 
@@ -72,7 +72,7 @@ docs/operations/                     # or docs/quality/, docs/system/, ...
 ```
 
 `index.html` is the presentation source. In v1 it is self-contained: inline
-CSS, inline script when the Workbench sandbox is enabled, and no required
+CSS, inline script when the Dossier sandbox is enabled, and no required
 network or package dependencies. Its hypothesis and result remain readable when
 scripts are disabled, so the ordinary Wiki reader is a useful static fallback.
 A folder, rather than a loose HTML file, leaves room for future local assets
@@ -84,7 +84,7 @@ not used: YAML before the doctype makes the file invalid HTML, comments are a
 fragile query format, and the existing Wiki companion schema has a different
 purpose. Schema version 2 uses the same `pageKind`, `lifecycleState`,
 `editedBy`, `editedAt`, and `lifecycleHistory` fields as lifecycle-aware
-Markdown pages. The descriptor is the only Workbench lifecycle source and is
+Markdown pages. The descriptor is the only Dossier lifecycle source and is
 reviewed and versioned beside the experiment.
 
 Example:
@@ -129,7 +129,7 @@ lifecycle values are:
 A feature decision records `decidedAt`, the source revision, an operation id,
 mutation state, the inline `responses`, and one or more `spawnedTaskKeys`. The
 created keys are also appended to the descriptor's `relatedTaskKeys`, so every
-Workbench projection carries the durable task relationship. An archive decision
+Dossier projection carries the durable task relationship. An archive decision
 records the same provenance plus a non-empty reason. A task-created/manifest-not-updated
 failure remains `decision-pending` and can be reconciled by operation id.
 Invalid descriptors remain visible as an Explorer error row with their path and
@@ -137,7 +137,7 @@ validation problem; they are never silently omitted.
 
 Catalogue reads are containment-checked against the physical repository path.
 Any symbolic-link or reparse-point component below that root is rejected, so a
-descriptor, entrypoint, or Workbench folder cannot redirect discovery outside
+descriptor, entrypoint, or Dossier folder cannot redirect discovery outside
 the checkout. HTML is capped at 20 MiB before it is read; oversized entries are
 reported as invalid rather than loaded into the API or browser.
 
@@ -149,7 +149,7 @@ properties to one physical object, not a virtual tree.
 
 ### Inline decision markup
 
-Workbench authors put decision points where the supporting analysis reaches the
+Dossier authors put decision points where the supporting analysis reaches the
 choice. The HTML remains self-contained and readable without Studio. Studio
 adds controls and persistence as progressive enhancement; authors do not add an
 API script or a second form.
@@ -188,34 +188,34 @@ and optional comment together with the receipt's timestamp and operator. The
 feature-card preview derives its title, goal, and chosen-option summary from
 those responses. Repository revision remains provenance; stale-decision checks
 use the file-scoped SHA-256 fingerprint of `workbench.json` plus the entry HTML,
-so unrelated commits do not invalidate an unchanged Workbench.
+so unrelated commits do not invalidate an unchanged Dossier.
 
 ## 3. Lifecycle
 
 | Stage | Durable state | Product behavior |
 |---|---|---|
-| Topic appears | No Workbench yet | A user, task result, proposal, or chat identifies a question worth seeing. |
+| Topic appears | No Dossier yet | A user, task result, proposal, or chat identifies a question worth seeing. |
 | Shape | `active / shaping` | Create the folder, descriptor, and initial HTML representation. |
-| Iterate | `active / testing` | Change the files through normal Git-aware editing; use the project orchestrator with the Workbench pinned as context. |
+| Iterate | `active / testing` | Change the files through normal Git-aware editing; use the project orchestrator with the Dossier pinned as context. |
 | Decide | `active / decision-ready` | The operator answers decision points inside the document, then opens the compact feature-card preview or enters an archive reason. Nothing is created yet. |
 | Build pending | `decision-pending / feature-spawn` | Confirmation records an operation id and expected revision; failure remains visible and retryable. |
-| Build settled | `decided / feature-spawn` | The card exists and the Workbench records its task receipt. |
+| Build settled | `decided / feature-spawn` | The card exists and the Dossier records its task receipt. |
 | Stop | `archived / archive` | Explicit confirmation records why no feature follows. |
 
 The closing invariant mirrors the intent of the
 [planning-task spawn contract](planning-task-lifecycle.md) without pretending a
-Workbench is a planning task:
+Dossier is a planning task:
 
-> A Workbench leaves the active list only with a spawned task receipt or an
+> A Dossier leaves the active list only with a spawned task receipt or an
 > explicit archive reason.
 
-If a planning task owns the Workbench, its AGT-2069 gate remains authoritative.
+If a planning task owns the Dossier, its AGT-2069 gate remains authoritative.
 The spawned card must be related back to that source task **and** recorded
 through the existing
 [`SpawnedTaskLedger`](../../backend/Features/Pipeline/SpawnedTaskLedger.cs) at
 `.metadata/spawned-tasks.jsonl`, because that ledger feeds the planning spawn
 summary. A `relatedTo` edge alone is not completion evidence. Merely setting a
-Workbench to `decided` does not satisfy the planning gate.
+Dossier to `decided` does not satisfy the planning gate.
 
 Git commits are the iteration history for `index.html` and `workbench.json`.
 The chat transcript remains in the existing orchestrator store. The descriptor
@@ -228,7 +228,7 @@ refuses to overwrite a target path that was already dirty, writes and commits
 only the declared paths, and restores those paths to `HEAD` if the commit
 fails. A successful commit queues its exact SHA and checked-out branch on the
 existing background auto-push path unless project auto-push is disabled. This
-boundary owns discovery key assignment, Workbench decisions, Workbench
+boundary owns discovery key assignment, Dossier decisions, Dossier
 lifecycle transitions, Wiki grading companions, automatic Wiki task-link
 companions, and source-checkout prompt-review companions.
 
@@ -237,7 +237,7 @@ The remaining repository-write classes have explicit durability ownership:
 - Interactive Wiki CRUD, curation, order, and classification endpoints commit
   their source and content-metadata companion paths before returning success.
 - Pipeline Wiki maintenance, learnings, designated-topic sync, and Concept
-  Workbench placement run inside `ManagedProjectArtifactCommitService`, which
+  Dossier placement run inside `ManagedProjectArtifactCommitService`, which
   commits, stamps, and queues their task-attributed changes.
 - Package publishing commits the bounded version file and performs its atomic
   commit-and-tag push as the publish transaction.
@@ -249,7 +249,7 @@ The remaining repository-write classes have explicit durability ownership:
 
 ## 4. Explorer integration
 
-Under each expanded project, **Workbenches** is a first-class row immediately
+Under each expanded project, **Dossiers** is a first-class row immediately
 after **Wiki**. It is a sibling surface backed by the `workbench.json`
 descriptors distributed across the docs themes, not a special folder injected
 into the ordinary Wiki tree.
@@ -259,7 +259,7 @@ Agent Studio
   Board
   Project Hub
   Wiki
-  Workbenches                         3
+  Dossiers                         3
     Project state at a glance         testing
     Pipeline completion flow          decision-ready
     App surface measurement           shaping
@@ -273,11 +273,11 @@ A quiet history action opens decided and archived items; settled experiments do
 not keep an acute signal. Status uses text, a dot, or a background tint, never a
 colored left accent bar.
 
-The catalogue loads lazily when a project's Workbenches row expands, or through
+The catalogue loads lazily when a project's Dossiers row expands, or through
 one bounded batch for already-expanded projects. Explorer startup must not issue
-one Workbench request for every registered project.
+one Dossier request for every registered project.
 
-Selecting an item opens a Workbench tab and preserves project, path, viewed
+Selecting an item opens a Dossier tab and preserves project, path, viewed
 branch, and revision in the header. This uses the shared Branch Context Control
 from the [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md). The list
 and viewer must never imply that content from one branch represents another.
@@ -287,19 +287,19 @@ that SHA to bytes HEAD does not contain.
 
 Because the files remain below `docs/`, they also stay visible in the physical
 Wiki tree and Git/Pulse history. The ordinary Wiki view renders the entrypoint
-as an interactive but isolated artifact. The Workbenches row is a narrow
+as an interactive but isolated artifact. The Dossiers row is a narrow
 generated projection with lifecycle actions, not a second content tree.
 
-Pulse may report recently changed, invalid, or decision-ready Workbenches, but
+Pulse may report recently changed, invalid, or decision-ready Dossiers, but
 Pulse does not own their list or lifecycle. Its role remains a generated entry
 view, as defined in [Wiki Pulse](wiki-pulse-dashboard.md).
 
 ## 5. Viewer, interactive HTML, and project previews
 
-The Workbench view is host chrome around isolated content:
+The Dossier view is host chrome around isolated content:
 
 ```text
-+ Explorer +---- Workbench host ----------------------+-- Orchestrator chat --+
++ Explorer +---- Dossier host ----------------------+-- Orchestrator chat --+
 | active list | header, revision, decision action    | project session       |
 |             | sandboxed index.html or bound panel  | pinned artifact       |
 +-------------+---------------------------------------+-----------------------+
@@ -313,10 +313,10 @@ refresh, and base elements cannot move ahead of that boundary. Scripts can power
 self-contained interactions, while the deliberate omission of
 `allow-same-origin` gives the document an opaque origin and prevents it from
 inheriting Studio's origin or directly reading Studio cookies, storage, and DOM.
-The Workbench CSP denies network requests. The ordinary viewer does not promise
+The Dossier CSP denies network requests. The ordinary viewer does not promise
 same-origin integration or network-backed application behavior.
 
-The Workbench remains the distinct viewer for artifacts that need more than
+The Dossier remains the distinct viewer for artifacts that need more than
 that baseline, including controlled network-backed previews or a future
 same-origin capability. Its host must not grant same-origin implicitly. It also
 must not receive top navigation, forms, downloads, modals, popups, clipboard
@@ -345,17 +345,17 @@ The AGT-2067 Project URL preview is a precedent for tab chrome, availability,
 and external-browser fallback, not a sandbox template: configured development
 sites and repository-authored HTML have different trust profiles. In the current
 documentation, AGT-1915 names the planning task that closed without a follow-up,
-so it informs the Workbench closure invariant through AGT-2069 rather than the
+so it informs the Dossier closure invariant through AGT-2069 rather than the
 iframe policy.
 
 ## 6. Chat is the orchestrator
 
-Opening a Workbench does not create a new chatbot, model owner, or peer project
+Opening a Dossier does not create a new chatbot, model owner, or peer project
 session. The right column is the existing resizable project Orchestrator Chat
 described in [Persistent Orchestrator Chat](./orchestrator-chat.md) and
 [Orchestrator in-app](orchestrator-in-app.md).
 
-The canonical context stays `project:<PROJ-ID>`. The Workbench is a pinned
+The canonical context stays `project:<PROJ-ID>`. The Dossier is a pinned
 context attachment containing:
 
 - workbench id, title, path, branch, revision, status, and phase;
@@ -365,10 +365,10 @@ context attachment containing:
 - explicit freshness and validation failures.
 
 This preserves one project orchestrator and one durable project conversation.
-Workbench open/close and decision events can appear as compact transcript
-anchors. Every anchored turn records the Workbench id and entrypoint fingerprint
+Dossier open/close and decision events can appear as compact transcript
+anchors. Every anchored turn records the Dossier id and entrypoint fingerprint
 or Git revision it actually saw. The smaller first version deliberately shares
-the project transcript across Workbenches. A future
+the project transcript across Dossiers. A future
 `workbench:<PROJ-ID>/<WB-ID>` transcript key is a larger registry, routing,
 storage, and digest contract, not a cosmetic UI change; it still must not create
 a second canonical project brain.
@@ -384,31 +384,31 @@ preview, but it never bypasses confirmation.
 
 - target project, initial lane, coding mode, agent/model defaults, and task type;
 - editable title, goal, acceptance criteria, and evidence links;
-- Workbench path, exact source revision, chosen option, and related task keys;
+- Dossier path, exact source revision, chosen option, and related task keys;
 - the resulting relationship to a source planning task when one exists.
 
-The preview is a user-driven task draft editor in trusted Workbench host chrome.
+The preview is a user-driven task draft editor in trusted Dossier host chrome.
 The operator can revise generated or chat-prepared defaults before submission,
 including the title, goal, acceptance criteria, evidence, target project, and
 lane. Chat may prepare values and request that the editor open, but it cannot
-persist, confirm, or submit the draft. The sandboxed Workbench HTML cannot read
+persist, confirm, or submit the draft. The sandboxed Dossier HTML cannot read
 or write the editor fields. This keeps the final task authoring decision with
-the operator even though the editor is visually inside the Workbench view.
+the operator even though the editor is visually inside the Dossier view.
 
 Confirmation creates the card through `TaskMutationService.CreateJob`, the same
 bounded entry point used by the Project Hub proposal flow and the AGT-2028 task
 spawner. It does not invoke the post-task-spawner pipeline step, because this is
 an explicit operator action rather than post-run relevance automation.
 
-The trusted Workbench host now owns this action through
+The trusted Dossier host now owns this action through
 `WorkbenchDecisionPanelComponent` and `WorkbenchDecisionStore`. The panel first
-*prepares*: the backend validates the draft against the exact Workbench
+*prepares*: the backend validates the draft against the exact Dossier
 revision/fingerprint and writes nothing. A separate visible confirmation is the
-single durable write, and it lands in the Workbench's own `workbench.json`
+single durable write, and it lands in the Dossier's own `workbench.json`
 (schema v2: `lifecycleState` + a `lifecycleHistory` entry carrying the decision
 text; schema v1: `status` + `updatedAt`) together with a `decision` receipt.
 Visibility hangs on that descriptor, never on a `.meta.json` sidecar - which is
-why generic Wiki classification cannot archive a canonical Workbench.
+why generic Wiki classification cannot archive a canonical Dossier.
 
 The delivered slice deliberately stops short of creating the card: the decision
 service records the direction and hands the validated draft back, and task
@@ -419,11 +419,11 @@ them.
 WB-4 should implement a narrow **decision draft -> validated task mutation ->
 receipt** service over the existing mutation boundary instead of copying the
 Project Proposal endpoint. Generalizing Project Proposals onto that service can
-follow, but is not a hidden prerequisite for WB-4. The Workbench flow keeps the
+follow, but is not a hidden prerequisite for WB-4. The Dossier flow keeps the
 useful existing semantics:
 
 - a prepared `decision-pending` record stores one operation id and expected
-  Workbench revision before task creation;
+  Dossier revision before task creation;
 - a deterministic requested task id and operation lookup make retries
   idempotent;
 - the card carries a non-blocking `relatedTo` reference;
@@ -437,7 +437,7 @@ After success, every spawned key renders with the existing AGT-2050
 [task reference microcard](../../frontend/src/app/components/task-reference-microcard/).
 Keys from `workbench.json`, `brief.md`, and chat are batch-hydrated through
 the same reference-status contract and rendered in trusted host chrome. Bare
-keys inside the opaque Workbench iframe remain plain text or ordinary links:
+keys inside the opaque Dossier iframe remain plain text or ordinary links:
 the Angular hydrator cannot and must not mount components across that sandbox
 boundary. The HTML itself receives no task data or credentials.
 
@@ -446,34 +446,34 @@ boundary. The HTML itself receives no task data or credentials.
 | Object | Primary question | Source and lifecycle | Conversion to work |
 |---|---|---|---|
 | Wiki page | What do we know? | Repository document; knowledge and history. | Links to tasks, but has no required closing decision. |
-| Workbench | What should we see, test, and decide? | Repository HTML plus descriptor; active -> pending -> decided, or archived. | Explicit preview and confirmed feature spawn. |
+| Dossier | What should we see, test, and decide? | Repository HTML plus descriptor; active -> pending -> decided, or archived. | Explicit preview and confirmed feature spawn. |
 | Project proposal | Should this generated finding be approved? | Dated Markdown finding with severity, evidence, and proposed/approved/rejected/spawned status. | Approve creates one coding card. |
 | Planning task | What work should follow this analysis? | Application-owned task with a planning mode and completion gate. | Must spawn a follow-up or declare none. |
-| Design mockup | What could this surface look like? | Usually a standalone concept artifact with no runtime lifecycle. | May be promoted into a Workbench when ongoing iteration is useful. |
+| Design mockup | What could this surface look like? | Usually a standalone concept artifact with no runtime lifecycle. | May be promoted into a Dossier when ongoing iteration is useful. |
 
 The Project Hub proposal flow from AGT-2074 is a specialization of the same
 human-controlled conversion pattern. It remains optimized for generated
-finding -> approve/reject -> one card. A Workbench is broader and longer lived:
+finding -> approve/reject -> one card. A Dossier is broader and longer lived:
 it can start from a proposal, host several iterations, and close only after the
 operator has enough visual evidence.
 
 Existing mockups under `docs/quality/design/` and `docs/concepts/mockups/` are not
-automatically moved. A promoted Workbench should preserve the original path as a
+automatically moved. A promoted Dossier should preserve the original path as a
 source link or copy its self-contained HTML once with provenance. There must not
-be two files both claiming to be the live Workbench.
+be two files both claiming to be the live Dossier.
 
 ## 9. Invariants and non-goals
 
 - Repository files are content; application APIs own task and chat mutations.
-- Workbenches never execute with the Wiki reader's authority or origin.
-- Opening a Workbench is read-only and does not spend model quota.
+- Dossiers never execute with the Wiki reader's authority or origin.
+- Opening a Dossier is read-only and does not spend model quota.
 - Chat turns spend quota only on explicit send or existing auto-mode rules.
 - Build and archive decisions require visible human confirmation.
 - Current counts equal visible active and decision-pending rows.
 - Both themes, keyboard navigation, narrow layouts, and reduced motion are part
   of each UI slice.
 - No colored left accent bars are used.
-- Archived Workbenches stay available as quiet history and are never deleted as
+- Archived Dossiers stay available as quiet history and are never deleted as
   a side effect of archiving.
 - The first version is not a plugin runtime, workflow engine, collaborative
   canvas, arbitrary website host, or automatic prototype-to-production compiler.
@@ -488,8 +488,8 @@ The first useful read-only cut is medium.
 | Slice | Honest size | Scope | Acceptance boundary |
 |---|---|---|---|
 | **WB-1: Folder contract and current Explorer list** | M | Validate `docs/<theme>/<id>/index.html + workbench.json`, expose a bounded lazy list, and add the collapsible project row. | Current count reconciles to visible children; invalid entries are explicit; decided/archive history is reachable; no viewer or mutation. |
-| **WB-2: Workbench viewer and isolation** | L | Open a tab with branch/revision provenance, a script-capable opaque-origin sandbox, strict CSP, static Wiki fallback, and the tiny presentation event bridge. | Static and interactive fixtures work in both themes and at narrow width; malicious bridge/network/navigation fixtures fail; no chat or task creation. |
-| **WB-3: Canonical orchestrator attachment** | M/L | Reuse the project chat side sheet and attach the bounded Workbench digest plus current selection. Add compact open/close anchors. | The context inspector shows path and revision; no cross-project leakage; no new canonical session key; source editing remains out of scope. |
+| **WB-2: Dossier viewer and isolation** | L | Open a tab with branch/revision provenance, a script-capable opaque-origin sandbox, strict CSP, static Wiki fallback, and the tiny presentation event bridge. | Static and interactive fixtures work in both themes and at narrow width; malicious bridge/network/navigation fixtures fail; no chat or task creation. |
+| **WB-3: Canonical orchestrator attachment** | M/L | Reuse the project chat side sheet and attach the bounded Dossier digest plus current selection. Add compact open/close anchors. | The context inspector shows path and revision; no cross-project leakage; no new canonical session key; source editing remains out of scope. |
 | **WB-4: Host-owned task editor, decision spawn, and receipt** | L | Add the user-driven task draft editor and Build/Archive previews in trusted host chrome, including field validation, explicit confirmation, shared validated task creation, idempotent operation handling, manifest transition, planning-ledger recording, and AGT-2050 receipts. | Generated and chat-prepared values remain editable; neither chat nor iframe can confirm; retry cannot duplicate a card; failed partial completion is visible and repairable; a source planning task receives both `relatedTo` and a `SpawnedTaskLedger` record. |
 | **WB-5: Curated migration pilot** | M | Promote a small named set such as pipeline workbench, project-state exploration, and app survey; document provenance and leave other mockups untouched. | Each promoted item has one live source, valid metadata, and an explicit owner; incompatible storage/network assumptions are reported; no bulk heuristic migration. |
 
@@ -501,20 +501,20 @@ with Robert's required Pulse entry point and the first WB-5 discovery pilot:
 - `GET /api/projects/{projectName}/workbenches` validates canonical folders,
   keeps invalid descriptors visible, sorts current items newest first, and can
   include settled history through `?history=true`;
-- the Explorer loads a project's catalogue only when its Workbenches row is
+- the Explorer loads a project's catalogue only when its Dossiers row is
   expanded, and the count equals the visible rows;
 - the viewer carries project, path, branch, and revision provenance and renders
   `srcdoc` with `sandbox="allow-scripts"`, an opaque origin, and a restrictive
   CSP that denies network, frames, forms, objects, workers, and base URLs;
-- Pulse receives the same current catalogue as an "Open Workbench topics"
+- Pulse receives the same current catalogue as an "Open Dossier topics"
   thinking inbox and opens the same viewer;
 - a named migration allowlist projects the existing pipeline companion report,
-  Workbench mockup family, and application survey from their single live paths.
+  Dossier mockup family, and application survey from their single live paths.
   The exact `docs/concepts/mockups/decoupled-lifecycles.html` path joins the list
   automatically when that artifact lands. There is no general HTML heuristic.
 
 This slice deliberately exposes no chat pinning, source editing, archive/build
-action, or decision-to-task mutation. The typed Workbench tab/document boundary
+action, or decision-to-task mutation. The typed Dossier tab/document boundary
 is the host-side seam for those later features; the iframe receives none of it.
 
 WB-2, WB-3, and WB-4 are the risk-bearing slices. If the team requires strictly
@@ -525,7 +525,7 @@ Chat-driven source changes are a separate future ORCH-Hands slice and are not
 hidden inside WB-3.
 
 WB-4 remains a distinct large risk slice even though its editor shares the
-Workbench composition with WB-2 and WB-3. It crosses operator-controlled form
+Dossier composition with WB-2 and WB-3. It crosses operator-controlled form
 state, validation, task mutation, Git-aware decision state, idempotent recovery,
 and planning-ledger evidence. It must not be absorbed into the viewer or chat
 cards.
@@ -563,7 +563,7 @@ The resulting changes are part of this concept:
   Wiki sandbox;
 - feature decisions have a visible pending/failed state and deterministic retry
   path instead of assuming two stores update atomically;
-- the MVP uses the canonical project transcript and states that per-Workbench
+- the MVP uses the canonical project transcript and states that per-Dossier
   transcript continuity would be a larger context-key extension;
 - WB-2 is rated large and security-sensitive, and the complete family is an
   Epic rather than a single feature card;

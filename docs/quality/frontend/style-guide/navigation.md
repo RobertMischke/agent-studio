@@ -65,7 +65,7 @@ project rail:
 
 Workspace Settings is the reference consumer. It groups General, Global, and
 Workspace destinations without emoji or per-destination colors. The
-StyleGuide-Workbench should present this recipe as its `Settings` variant, not
+StyleGuide-Dossier should present this recipe as its `Settings` variant, not
 as a separate navigation family.
 
 Secondary rails mounted inside a panel should abut their detail pane. Remove

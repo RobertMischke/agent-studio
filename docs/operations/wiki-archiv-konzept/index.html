@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wiki-Archiv: raus aus dem aktiven Wiki, referenzierbar bleiben | Konzept-Workbench</title>
+<title>Wiki-Archiv: raus aus dem aktiven Wiki, referenzierbar bleiben | Konzept-Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -65,7 +65,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Wiki-Lebenszyklus</p>
+  <p class="kicker">Konzept-Dossier · Wiki-Lebenszyklus</p>
   <h1>Wiki-Archiv: raus aus dem aktiven Wiki — referenzierbar bleiben</h1>
   <p class="lede">Ein archiviertes Dokument ist heute nur <em>gelabelt</em>, aber weiter mittendrin. Es soll physisch in einen Archiv-Ordner wandern und aus der aktiven Sicht verschwinden — ohne dass historische Verweise brechen. Dieses Konzept löst genau diesen Zielkonflikt.</p>
   <div class="meta">
@@ -143,7 +143,7 @@
 <h2 id="drei"><span class="no">D</span>Die drei Bausteine im Detail</h2>
 
 <h3>1 · Physischer Umzug in <code>docs/_archiv/</code></h3>
-<p>Archivieren = <code>git mv docs/operations/foo/ docs/_archiv/operations/foo/</code> (Pfad gespiegelt, damit nachvollziehbar). Der Archiv-Ordner ist im Backend hart bekannt und wird aus <b>allen aktiven Discovery-Wegen</b> ausgeschlossen: Baum-Scan, Workbench-Katalog, „zuletzt geändert", Suche (Default), und — der wichtigste Punkt — dem <b>Intake/Kontext, den Agenten bekommen</b>. Ein Toggle „Archiv einblenden" macht ihn bei Bedarf sichtbar.</p>
+<p>Archivieren = <code>git mv docs/operations/foo/ docs/_archiv/operations/foo/</code> (Pfad gespiegelt, damit nachvollziehbar). Der Archiv-Ordner ist im Backend hart bekannt und wird aus <b>allen aktiven Discovery-Wegen</b> ausgeschlossen: Baum-Scan, Dossier-Katalog, „zuletzt geändert", Suche (Default), und - der wichtigste Punkt - dem <b>Intake/Kontext, den Agenten bekommen</b>. Ein Toggle „Archiv einblenden" macht ihn bei Bedarf sichtbar.</p>
 
 <h3>2 · Stabile Referenz statt roher Pfad</h3>
 <p>Damit Verweise den Umzug überleben, referenzieren Tasks eine Seite über eine <b>stabile ID</b> (bestehender Slug/Frontmatter-ID), nicht über den rohen <code>docs/</code>-Pfad. Ein Resolver bildet ID → aktueller Ort ab (aktiv oder Archiv). Klickt man einen alten Task-Link, landet man auf der Seite — egal ob sie inzwischen umgezogen ist. Fallback für schon existierende Pfad-Links: eine Umleitung Alt-Pfad → Archiv-Pfad.</p>

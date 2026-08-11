@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Board-Statusmodell: IST / SOLL | Workbench</title>
+<title>Board-Statusmodell: IST / SOLL | Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -267,7 +267,7 @@
   </nav>
 
   <header class="page">
-    <p class="kicker">Operations Workbench · AGT-2424 · As of 31.07.2026 · BP-11 update AGT-2461</p>
+    <p class="kicker">Operations Dossier · AGT-2424 · As of 31.07.2026 · BP-11 update AGT-2461</p>
     <h1>Das Board kennt Lanes, aber noch keinen verbindlichen Lieferzustand</h1>
     <p class="lede">IST-Karte der Statusübergänge von <code>0-backlog</code> bis <code>7-archive</code>, einschließlich <code>5e-escalated</code> und der additiven Zwischen-Lanes. Dazu ein aus AGT-2301 belegter SOLL-Vorschlag: Integration wird Gate vor Human Review, Accept und Archive werden fail-closed, und out-of-band-Merges heilen den Integrationsstatus aus Git-Wahrheit.</p>
     <div class="meta">
@@ -346,12 +346,12 @@
         Es definiert für <strong>Lease, Fence/FencingToken, AuthorityEpoch, Takeover, Delivery-Ref,
         ResultEnvelope, Salvage, Attribution/commits[], Integration-Backstop, Phase, Orphan,
         Backfill, Reissue und dependsOn-Gate</strong> jeweils Bedeutung, schreibenden Owner,
-        Lebensdauer und Code-Anker. Diese Workbench übernimmt alle Definitionen unverändert und
+        Lebensdauer und Code-Anker. Dieses Dossier übernimmt alle Definitionen unverändert und
         dupliziert sie deshalb nicht.</p>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Zusatzbegriff dieser Workbench</th><th>Definition</th><th>Owner und Lebensdauer</th><th>Abgrenzung / Code-Anker</th></tr></thead>
+        <thead><tr><th>Zusatzbegriff dieses Dossiers</th><th>Definition</th><th>Owner und Lebensdauer</th><th>Abgrenzung / Code-Anker</th></tr></thead>
         <tbody>
           <tr>
             <td><strong>Delivery-Epoch</strong></td>
@@ -926,7 +926,7 @@
           </tr>
           <tr>
             <td><strong>Spezial-Pipelines</strong></td>
-            <td>Standard, Read-only, Concept Workbench und UI Iteration. Concept bleibt außerhalb der vier Settings-Typen als eigener dokumentzentrierter Katalog.</td>
+            <td>Standard, Read-only, Concept Dossier und UI Iteration. Concept bleibt außerhalb der vier Settings-Typen als eigener dokumentzentrierter Katalog.</td>
             <td><span class="config project">Modus / Task</span></td>
             <td>Erfordert eine ausdrückliche Kategorie <code>integration-required</code> versus <code>not-applicable</code>, statt NoTaskBranch als Erfolg zu missdeuten.</td>
           </tr>
@@ -1433,7 +1433,7 @@
     </div>
     <div class="callout ok">
       <h4>Testsuite-Vertrag</h4>
-      <p>Der Begleitplan ordnet BP-01..BP-19 den Klassen T-SM, T-AUTH, T-EDGE, T-INT und T-FAULT zu. Diese Workbench übernimmt den Plan. Zusätzlich gilt für jede Testklasse: Der aktuelle Zustand wird ausschließlich über <code>task.json</code>, dessen Revision und deklarierte Evidence-Refs assertiert. Ein Test, der für die fachliche Antwort In-Memory-Interna oder eine Logzeile lesen muss, hat eine Task-as-Truth-Lücke gefunden. AGT-2427 bleibt die Umsetzungskarte für die fachliche State-Machine-Suite.</p>
+      <p>Der Begleitplan ordnet BP-01..BP-19 den Klassen T-SM, T-AUTH, T-EDGE, T-INT und T-FAULT zu. Dieses Dossier übernimmt den Plan. Zusätzlich gilt für jede Testklasse: Der aktuelle Zustand wird ausschließlich über <code>task.json</code>, dessen Revision und deklarierte Evidence-Refs assertiert. Ein Test, der für die fachliche Antwort In-Memory-Interna oder eine Logzeile lesen muss, hat eine Task-as-Truth-Lücke gefunden. AGT-2427 bleibt die Umsetzungskarte für die fachliche State-Machine-Suite.</p>
     </div>
   </section>
 

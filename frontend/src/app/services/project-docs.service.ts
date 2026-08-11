@@ -194,7 +194,7 @@ export class ProjectDocsService {
     );
   }
 
-  /** Shared workspace-wide/project-scoped Workbench queue projection. */
+  /** Shared workspace-wide/project-scoped Dossier queue projection. */
   getWorkbenchOverview(projectName: string | null = null) {
     return this.http.get<WorkbenchOverview>(`${this.baseUrl}/workbenches`, {
       params: projectName ? { project: projectName } : {},

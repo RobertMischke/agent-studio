@@ -53,4 +53,16 @@ describe('buildComposerLocationContext', () => {
       [task],
     )).toEqual({ project: 'Agent Studio', surface: 'URL preview', detail: 'studio-dev' });
   });
+
+  it.each([
+    [{ kind: 'workbench', projectName: 'Agent Studio', workbenchId: 'routing', title: 'Routing' } as const, 'Dossier'],
+    [{ kind: 'workbenches', projectName: 'Agent Studio' } as const, 'Dossiers'],
+  ])('uses Dossier wording for repository document tab %o', (tab, surface) => {
+    expect(buildComposerLocationContext(tab, [task]))
+      .toEqual({
+        project: 'Agent Studio',
+        surface,
+        ...(tab.kind === 'workbench' ? { detail: 'Routing' } : {}),
+      });
+  });
 });

@@ -47,5 +47,5 @@ request when a bounded immediate refresh is required; confirm the returned
 `snapshotId` changed before judging the result.
 
 If the proposed rule is still a design question, compare it in an
-[Experiment Workbench](../concepts/experimentier-workbench.md) first. Mandatory
+[Experiment Dossier](../concepts/experimentier-workbench.md) first. Mandatory
 guidance records a settled choice.

@@ -764,7 +764,7 @@ operator changes cause the step to fail before its writer runs.
 - The concept pipeline is distinct from the report-only pipeline. It runs in an
   isolated worktree, permits a diff only inside one
   `docs/<slug>/` directory, and never merges that task branch.
-  Workbench placement publishes `workbench.json` plus `index.html` through the
+  Dossier placement publishes `workbench.json` plus `index.html` through the
   managed project-artifact commit boundary. Concept review checks alternatives,
   recommendation, evidence, open decisions, implementation-card source data,
   the own-card `sourceTaskKeys` entry, `status=decision-pending`, and the dossier
@@ -773,7 +773,7 @@ operator changes cause the step to fail before its writer runs.
   may request `ui`, while readers tolerate missing or unknown values as
   `concept`. It deliberately does not run build, test, code aspects, or
   integration.
-  A complete Workbench moves to `5-human-review` with a durable
+  A complete Dossier moves to `5-human-review` with a durable
   `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as
   successful delivery at this gate. Sight-review acceptance completes the
   source card; `POST /api/tasks/{id}/promote-concept` additionally creates the
