@@ -316,6 +316,97 @@ function runTimeline() {
   };
 }
 
+function pipelineWithSixRunsAndPartialUsage() {
+  const fixture = pipeline();
+  const decision = {
+    id: 'post-orchestrator-decision', displayName: 'Final verdict', kind: 'orchestrator',
+    runMode: 'sequential', dependsOn: ['aspect-code-quality'], idempotent: true, stub: false,
+  };
+  const recordedRuns = Array.from({ length: 6 }, (_, index) => {
+    const available = index !== 2;
+    const model = {
+      model: 'gpt-5.6-sol', modelKnown: true, unpricedRuns: 0, pricingGaps: [], steps: 1,
+      inputTokens: available ? 80_000 : 0,
+      outputTokens: available ? 10_000 : 0,
+      cacheReadTokens: available ? 20_000 : 0,
+      cacheCreationTokens: available ? 5_000 : 0,
+      totalTokens: available ? 115_000 : 0,
+      costUsd: available ? 1.1 : 0,
+    };
+    return {
+      attempt: index + 1,
+      current: index === 5,
+      startedAt: `2026-08-11T${String(8 + index).padStart(2, '0')}:00:00Z`,
+      completedAt: `2026-08-11T${String(8 + index).padStart(2, '0')}:20:00Z`,
+      models: available ? [model] : [],
+      totalTokens: model.totalTokens,
+      totalCostUsd: model.costUsd,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+      tokenUsageAvailable: available,
+    };
+  });
+  return {
+    ...fixture,
+    pipeline: {
+      ...fixture.pipeline,
+      post: [...fixture.pipeline.post, decision],
+      allSteps: [...fixture.pipeline.allSteps, decision],
+    },
+    execution: {
+      ...fixture.execution,
+      steps: [
+        ...fixture.execution.steps.map(step => step.stepId === 'core-agent-run'
+          ? { ...step, model: 'gpt-5.6-sol', verdict: 'done' }
+          : step),
+        {
+          stepId: decision.id, kind: decision.kind, model: 'gpt-5.6-sol', status: 'passed',
+          startedAt: '2026-08-11T14:21:00Z', completedAt: '2026-08-11T14:21:02Z',
+          durationMs: 2_000, inputTokens: 0, outputTokens: 0,
+          cacheReadTokens: 0, cacheCreationTokens: 0,
+          tokenUsageSource: null, reason: null, verdict: 'accept',
+          verdictSummary: 'All checks passed; route the task to human review.',
+        },
+      ],
+    },
+    tokensByModel: {
+      runs: recordedRuns,
+      totalByModel: [{
+        model: 'gpt-5.6-sol', modelKnown: true, unpricedRuns: 0, pricingGaps: [], steps: 5,
+        inputTokens: 400_000, outputTokens: 50_000, cacheReadTokens: 100_000,
+        cacheCreationTokens: 25_000, totalTokens: 575_000, costUsd: 5.5,
+      }],
+      totalTokens: 575_000,
+      totalCostUsd: 5.5,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+      missingTokenRuns: 1,
+    },
+  };
+}
+
+function sixRunTimeline() {
+  const runs = Array.from({ length: 6 }, (_, index) => ({
+    index: index + 1,
+    intent: index === 0 ? 'start' : 'continue',
+    startedAt: `2026-08-11T${String(8 + index).padStart(2, '0')}:00:00Z`,
+    endedAt: `2026-08-11T${String(8 + index).padStart(2, '0')}:20:00Z`,
+    status: 'completed',
+    model: 'gpt-5.6-sol',
+    durationSeconds: 1_200,
+    resumed: index > 0,
+  }));
+  return {
+    runCount: 6,
+    firstStartedAt: runs[0].startedAt,
+    lastActivityAt: runs[5].endedAt,
+    hasActiveRun: false,
+    runs,
+  };
+}
+
 async function installFixtureRoutes(page: Page) {
   await page.route('**/api/**', route => route.fulfill(json([])));
   await page.route('**/api/auth/status', route => route.fulfill(json({
@@ -382,6 +473,33 @@ async function savePipelineShot(page: Page, name: string) {
   const target = RESULTS_DIR ? join(RESULTS_DIR, name) : join('test-results', name);
   if (RESULTS_DIR) await mkdir(RESULTS_DIR, { recursive: true });
   await page.getByTestId('overview-pipeline').screenshot({ path: target });
+}
+
+async function savePipelineAndUsageShot(page: Page, name: string) {
+  const pipeline = await page.getByTestId('overview-pipeline').boundingBox();
+  const usage = await page.getByTestId('pipeline-token-usage').boundingBox();
+  if (!pipeline || !usage) throw new Error('Pipeline evidence bounds are unavailable');
+  const padding = 8;
+  const x = Math.max(0, Math.min(pipeline.x, usage.x) - padding);
+  const y = Math.max(0, Math.min(pipeline.y, usage.y) - padding);
+  const right = Math.max(pipeline.x + pipeline.width, usage.x + usage.width) + padding;
+  const bottom = Math.max(pipeline.y + pipeline.height, usage.y + usage.height) + padding;
+  const target = RESULTS_DIR ? join(RESULTS_DIR, name) : join('test-results', name);
+  if (RESULTS_DIR) await mkdir(RESULTS_DIR, { recursive: true });
+  await page.screenshot({ path: target, clip: { x, y, width: right - x, height: bottom - y } });
+}
+
+async function expandPipelineSections(page: Page) {
+  for (let index = 0; index < 20; index++) {
+    const expanded = await page.evaluate(() => {
+      const phase = document.querySelector<HTMLButtonElement>(
+        '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+      );
+      phase?.click();
+      return phase !== null;
+    });
+    if (!expanded) break;
+  }
 }
 
 test('missing historical prices never render as zero and mixed totals stay explicit', async ({ page }) => {
@@ -457,7 +575,84 @@ test('missing historical prices never render as zero and mixed totals stay expli
   await savePipelineShot(page, 'pipeline-price-gpt56-resolved-light--mocked.png');
 });
 
-test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page }) => {
+test('six visible runs show their priced partial total and keep pipeline rows aligned', async ({ page, devBackend }) => {
+  void devBackend;
+  await page.setViewportSize({ width: 1200, height: 1200 });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    } catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route =>
+    route.fulfill(json(pipelineWithSixRunsAndPartialUsage())));
+  await page.route(new RegExp(`/api/tasks/${id}/runs(\\?|$)`), route =>
+    route.fulfill(json(sixRunTimeline())));
+
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await expandPipelineSections(page);
+
+  const totalTokens = page.getByTestId('pipeline-token-usage-grand-total-tokens');
+  const totalCost = page.getByTestId('pipeline-token-usage-grand-total-cost');
+  await expect(totalTokens).toHaveText('575.0k');
+  await expect(totalCost).toContainText('$5.50');
+  await expect(totalCost).toContainText('incomplete (1 run without usage)');
+  await expect(totalCost).not.toContainText('$0.00');
+  await expect(page.getByTestId('pipeline-token-usage-run')).toHaveCount(6);
+
+  const core = page.locator('[data-step-id="core-agent-run"]');
+  await expect(core.getByTestId('overview-pipeline-step-name')).toHaveText('Agent execution');
+  await expect(core.getByTestId('overview-pipeline-agent-runs')).toContainText('6');
+  await expect(core.getByTestId('overview-pipeline-step-verdict')).toHaveText('done');
+  await expect(core.getByTestId('overview-pipeline-step-model')).toContainText('gpt-5.6-sol');
+  expect(await core.getByTestId('overview-pipeline-step-name').evaluate(element =>
+    element.scrollWidth <= element.clientWidth)).toBe(true);
+  const metaCenters = await core.getByTestId('overview-pipeline-step-meta').evaluate(element =>
+    Array.from(element.children)
+      .map(child => child.getBoundingClientRect())
+      .filter(rect => rect.width > 0 && rect.height > 0)
+      .map(rect => rect.top + rect.height / 2));
+  expect(Math.max(...metaCenters) - Math.min(...metaCenters)).toBeLessThan(3);
+
+  const decision = page.locator('[data-step-id="post-orchestrator-decision"]');
+  const verdict = decision.getByTestId('overview-pipeline-step-final-verdict');
+  await expect(verdict).toContainText('Final verdict');
+  expect(await verdict.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await verdict.locator('.ov-pl-step__final-decision-route').evaluate(element =>
+    element.scrollWidth <= element.clientWidth)).toBe(true);
+
+  const tool = page.locator('[data-step-id="post-wiki-maintenance"]');
+  const iconCenters = await Promise.all([decision, tool].map(async row => {
+    const box = await row.locator('.ov-pl-step__kind').boundingBox();
+    if (!box) throw new Error('Pipeline kind icon is not visible');
+    return box.x + box.width / 2;
+  }));
+  expect(Math.abs(iconCenters[0] - iconCenters[1])).toBeLessThan(1);
+
+  const timingEdges = await Promise.all([core, decision, tool].map(async row => {
+    const started = await row.getByTestId('overview-pipeline-step-started').boundingBox();
+    const duration = await row.getByTestId('overview-pipeline-step-duration').boundingBox();
+    if (!started || !duration) throw new Error('Pipeline timing cells are not visible');
+    return [started.x + started.width, duration.x + duration.width];
+  }));
+  for (const edges of timingEdges.slice(1)) {
+    expect(Math.abs(edges[0] - timingEdges[0][0])).toBeLessThan(1);
+    expect(Math.abs(edges[1] - timingEdges[0][1])).toBeLessThan(1);
+  }
+
+  await page.getByTestId('pipeline-token-usage-total-toggle').click();
+  await expect(page.getByTestId('pipeline-token-usage-total-model')).toContainText('gpt-5.6-sol');
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+    await savePipelineAndUsageShot(page, `pipeline-after-${theme}.png`);
+  }
+});
+
+test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page, devBackend }) => {
+  void devBackend;
   await page.addInitScript(() => {
     try {
       localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
@@ -477,9 +672,9 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   const aspectRow = page.locator('[data-step-id="aspect-code-quality"]');
   await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toHaveText(/110(?:\.0)?k/i);
   await expect(coreRow.getByTestId('overview-pipeline-step-cost')).toContainText('$0.75');
-  await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toContainText('1.2m');
+  await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toHaveText(/1\.2(?:0)?m/i);
   await expect(aspectRow.getByTestId('overview-pipeline-step-cost')).toContainText('$2.00');
-  await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('1.3m');
+  await expect(page.getByTestId('overview-pipeline-total-tokens')).toHaveText(/1\.3(?:1)?m/i);
   await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.75');
 
   await coreRow.getByTestId('overview-pipeline-step-tokens').hover();
@@ -495,10 +690,10 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Code quality');
   await expect(dialog).toContainText('Input');
-  await expect(dialog).toContainText('960k');
+  await expect(dialog).toContainText(/960(?:\.0)?k/i);
   await expect(dialog).toContainText('Output');
-  await expect(dialog).toContainText('240k');
-  await expect(dialog).toContainText('1.2m');
+  await expect(dialog).toContainText(/240(?:\.0)?k/i);
+  await expect(dialog).toContainText(/1\.2(?:0)?m/i);
 
   await dialog.getByRole('button', { name: 'Close' }).last().click();
   await coreRow.getByTestId('overview-pipeline-step-cost').click();
@@ -516,7 +711,7 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
 });
 
-test('task totals show Unknown, never $0.00, when all recorded usage is unpriced', async ({ page, devBackend }) => {
+test('task totals show no price data, never $0.00, when all recorded usage is unpriced', async ({ page, devBackend }) => {
   void devBackend;
   await page.addInitScript(() => {
     try {
@@ -569,8 +764,8 @@ test('task totals show Unknown, never $0.00, when all recorded usage is unpriced
   await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(unpriced)));
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
 
-  await expect(page.getByTestId('overview-pipeline-total-cost')).toHaveText('Unknown');
-  await expect(page.getByTestId('pipeline-token-usage-grand-total-cost')).toHaveText('Unknown');
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('no price data');
+  await expect(page.getByTestId('pipeline-token-usage-grand-total-cost')).toContainText('no price data');
 
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
@@ -582,7 +777,8 @@ test('task totals show Unknown, never $0.00, when all recorded usage is unpriced
   }
 });
 
-test('post-step lifecycle shows backend activation, history, and the exact settings row in both themes', async ({ page }) => {
+test('post-step lifecycle shows backend activation, history, and the exact settings row in both themes', async ({ page, devBackend }) => {
+  void devBackend;
   await page.addInitScript(() => {
     try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
     catch { /* ignore */ }
@@ -651,7 +847,7 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   await expect(activationRow).toBeVisible();
   await expect(activationRow).toHaveAttribute('aria-current', 'location');
   await expect(activationRow).toHaveJSProperty('open', true);
-  await page.getByTestId('pipeline-step-enabled-post-wiki-learnings').check();
+  await page.getByTestId('pipeline-step-row-enabled-post-wiki-learnings').check();
   await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });
 
@@ -701,7 +897,7 @@ test('council reaction links the targeted follow-up round and renders in both th
   await expect(reaction).toContainText('Dark-theme colors are incorrect');
   await expect(reaction).toContainText('Upload rejection lacks focused test evidence');
   await expect(reaction).toHaveAttribute('data-disposition', 'reissue');
-  await expect(page.getByTestId('code-review-council-round-link')).toHaveAttribute('href', /task=AGT-2253/);
+  await expect(page.getByTestId('code-review-council-round-link')).toHaveAttribute('href', /\/#\/tasks\/AGT-2253/);
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
     const fileName = `council-review-reaction-${theme}.png`;

@@ -13,7 +13,7 @@
               class="ptu__head ptu__head--sum"
               data-testid="pipeline-token-usage-total-toggle"
               [attr.aria-expanded]="summaryOpen()"
-              [cacTooltip]="totalTooltip(taskTotal().totalTokens, taskTotal().costUsd, taskTotal().anyModelUnknown, 'The whole task across every model and run', taskTotal().unpricedRuns, taskTotal().pricingGaps)"
+              [cacTooltip]="totalTooltip(taskTotal().totalTokens, taskTotal().costUsd, taskTotal().anyModelUnknown, 'The whole task across every model and run', taskTotal().unpricedRuns, taskTotal().pricingGaps, taskTotal().missingTokenRuns)"
               (click)="toggleSummary()">
         <span class="ptu__disclosure" aria-hidden="true">{{ summaryOpen() ? '▾' : '▸' }}</span>
         <span class="ptu__head-label">
@@ -21,12 +21,15 @@
           <span class="ptu__scope">all models</span>
         </span>
         <span class="ptu__head-total ptu__num ptu__strong"
-              data-testid="pipeline-token-usage-grand-total-tokens">{{ tokens(taskTotal().totalTokens) }}</span>
+              data-testid="pipeline-token-usage-grand-total-tokens">{{ tokenLabel(taskTotal().totalTokens, taskTotal().missingTokenRuns < runCount()) }}</span>
         <span class="ptu__head-cost ptu__num"
               data-testid="pipeline-token-usage-grand-total-cost">
-          <span>{{ costLabel(taskTotal().costUsd, taskTotal().totalTokens, taskTotal().unpricedRuns) }}</span>
+          <span>{{ costLabel(taskTotal().costUsd, taskTotal().totalTokens, taskTotal().unpricedRuns, taskTotal().missingTokenRuns) }}</span>
           @if (isPartial(taskTotal().costUsd, taskTotal().unpricedRuns)) {
             <span class="ptu__incomplete">{{ incompleteLabel(taskTotal().unpricedRuns) }}</span>
+          }
+          @if (taskTotal().missingTokenRuns > 0) {
+            <span class="ptu__incomplete" data-testid="pipeline-token-usage-missing-runs">{{ missingUsageLabel(taskTotal().missingTokenRuns) }}</span>
           }
         </span>
       </button>
@@ -65,6 +68,11 @@
               </span>
             </div>
           }
+          @if (totalByModel().length === 0 && taskTotal().missingTokenRuns > 0) {
+            <p class="ptu__empty" data-testid="pipeline-token-usage-empty">
+              Token usage was not recorded for these runs.
+            </p>
+          }
         </div>
       }
     </div>
@@ -79,6 +87,7 @@
     </h3>
 
     @for (run of runsNewestFirst(); track run.attempt) {
+      @let runUsageAvailable = usageAvailableForRun(run);
       <div class="ptu__level ptu__level--run"
            [class.ptu__level--open]="isRunOpen(run.attempt)"
            [attr.data-attempt]="run.attempt"
@@ -88,7 +97,7 @@
                 class="ptu__head ptu__head--run"
                 data-testid="pipeline-token-usage-run-toggle"
                 [attr.aria-expanded]="isRunOpen(run.attempt)"
-                [cacTooltip]="totalTooltip(run.totalTokens, run.totalCostUsd, run.anyModelUnknown, 'Run #' + run.attempt, unpricedRunsForRun(run), run.pricingGaps ?? [])"
+                [cacTooltip]="totalTooltip(run.totalTokens, run.totalCostUsd, run.anyModelUnknown, 'Run #' + run.attempt, unpricedRunsForRun(run), run.pricingGaps ?? [], runUsageAvailable ? 0 : 1)"
                 (click)="toggleRun(run.attempt)">
           <span class="ptu__disclosure" aria-hidden="true">{{ isRunOpen(run.attempt) ? '▾' : '▸' }}</span>
           <span class="ptu__head-label">
@@ -101,12 +110,15 @@
             }
           </span>
           <span class="ptu__head-total ptu__num ptu__strong"
-                data-testid="pipeline-token-usage-run-total">{{ tokens(run.totalTokens) }}</span>
+                data-testid="pipeline-token-usage-run-total">{{ tokenLabel(run.totalTokens, runUsageAvailable) }}</span>
           <span class="ptu__head-cost ptu__num"
                 data-testid="pipeline-token-usage-run-cost">
-            <span>{{ costLabel(run.totalCostUsd, run.totalTokens, unpricedRunsForRun(run)) }}</span>
+            <span>{{ costLabel(run.totalCostUsd, run.totalTokens, unpricedRunsForRun(run), runUsageAvailable ? 0 : 1) }}</span>
             @if (isPartial(run.totalCostUsd, unpricedRunsForRun(run))) {
               <span class="ptu__incomplete">{{ incompleteLabel(unpricedRunsForRun(run)) }}</span>
+            }
+            @if (!runUsageAvailable) {
+              <span class="ptu__incomplete">usage not recorded</span>
             }
           </span>
         </button>

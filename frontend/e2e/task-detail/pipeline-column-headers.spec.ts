@@ -199,8 +199,16 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+      .catch(() => { /* a more specific route already handled the request */ });
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
+  );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
@@ -240,6 +248,13 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   );
   await page.route('**/api/cli/usage**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }),
+  );
+  await page.route('**/api/projects/*/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName: PROJECT, includesHistory: true, count: 0, items: [] }),
+    }),
   );
   await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
     route.fulfill({
@@ -293,7 +308,8 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 })
+      .catch(() => { /* the overlay may already be detached */ });
   }
 }
 
@@ -304,10 +320,15 @@ async function dismissErrorDialog(page: Page): Promise<void> {
  * button carrying `aria-expanded`; clicking a collapsed one reduces the count.
  */
 async function expandAllPipelineSections(page: Page): Promise<void> {
-  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
-    await collapsed.first().click();
+    const expanded = await page.evaluate(() => {
+      const phase = document.querySelector<HTMLButtonElement>(
+        '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+      );
+      phase?.click();
+      return phase !== null;
+    });
+    if (!expanded) break;
   }
 }
 
@@ -656,8 +677,6 @@ test.describe('Pipeline: per-step metric column headers', () => {
     await dismissErrorDialog(page);
 
     const overview = page.getByTestId('overview-tab');
-    const title = page.getByTestId('overview-title-block');
-    const status = page.getByTestId('overview-status');
     const pipeline = page.getByTestId('overview-pipeline');
     const protocol = page.getByTestId('pane-protocol');
 

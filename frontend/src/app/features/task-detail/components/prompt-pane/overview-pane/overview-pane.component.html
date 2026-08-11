@@ -383,8 +383,18 @@
                   [config]="row.config"
                   (changed)="refreshPipeline()" />
               }
-              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
             </span>
+            <span class="ov-pl-step__meta" data-testid="overview-pipeline-step-meta">
+            @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core' && !row.isFinalVerdict) {
+              <app-post-step-controls
+                [stepId]="row.id"
+                [label]="row.label"
+                [jobId]="job().id"
+                [watchPath]="job().watchPath"
+                [projectName]="job().projectName"
+                [activation]="row.config?.activation ?? null"
+                [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" />
+            }
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"
                     data-testid="overview-pipeline-step-parallel"
@@ -417,6 +427,14 @@
                 Running
               </span>
             }
+            @if (!row.isFinalVerdict && row.verdict) {
+              <span class="ov-pl-step__verdict"
+                    [class.ov-pl-step__verdict--concern]="row.concernTooltip"
+                    [attr.data-verdict]="row.verdict"
+                    [cacTooltip]="row.concernTooltip"
+                    [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
+                    data-testid="overview-pipeline-step-verdict">{{ row.verdict }}@if (row.historical) { · superseded }</span>
+            }
             @if (selectedPipelineIsCurrent() && row.kind === 'core' && agentRunCount() > 0) {
               <app-pipeline-run-history
                 class="ov-pl-step__runs"
@@ -426,14 +444,6 @@
                 [countLabel]="agentRunCountLabel()"
                 [promptMarkdown]="promptMarkdown() ?? null"
                 [tooltip]="agentRunTooltip()" />
-            }
-            @if (!row.isFinalVerdict && row.verdict) {
-              <span class="ov-pl-step__verdict"
-                    [class.ov-pl-step__verdict--concern]="row.concernTooltip"
-                    [attr.data-verdict]="row.verdict"
-                    [cacTooltip]="row.concernTooltip"
-                    [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
-                    data-testid="overview-pipeline-step-verdict">{{ row.verdict }}@if (row.historical) { · superseded }</span>
             }
             @if (row.model) {
               <span class="ov-pl-step__model"
@@ -457,6 +467,7 @@
                 [pickerTestidPrefix]="'overview-pipeline-step-agent-picker-' + row.id"
                 (commit)="onStepAgentCommit(row.id, $event)" />
             }
+            </span>
             <span class="ov-pl-step__timing"
                   data-testid="overview-pipeline-step-timing"
                   [cacTooltip]="stepTimingTooltip(row)">
