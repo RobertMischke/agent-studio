@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Promote a staged release or apply one allowlisted role configuration value.
+set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+readonly service_user="agent"
+readonly service_group="agent"
+readonly deploy_root="/var/lib/agent-runner/deploy"
+readonly incoming_root="$deploy_root/incoming"
+readonly accepted_root="$deploy_root/accepted"
+readonly product_root="/opt/agent-host"
+readonly releases_root="$product_root/releases"
+readonly current_link="$product_root/current"
+readonly compatibility_link="/opt/agent-runner"
+readonly legacy_backup="/opt/agent-runner.pre-hardening"
+readonly config_policy="/usr/local/libexec/agent-runner-config-policy"
+readonly maximum_release_bytes=$((1024 * 1024 * 1024))
+
+die() {
+  printf 'agent-runner-deploy: %s\n' "$*" >&2
+  exit 2
+}
+
+audit_config() {
+  local result="$1"
+  local detail="$2"
+
+  logger -p authpriv.notice -t agent-runner-deploy \
+    "action=config role=$config_role variable=$AGENT_RUNNER_CONFIG_VARIABLE old=$old_value new=$AGENT_RUNNER_CONFIG_VALUE unit=$AGENT_RUNNER_CONFIG_UNIT result=$result detail=$detail"
+}
+
+unit_loads_environment_file() {
+  local environment_files="$1"
+  local expected_path="$2"
+
+  awk '{ print $1 }' <<<"$environment_files" | grep -Fxq -- "$expected_path"
+}
+
+rollback_config() {
+  local reason="$1"
+
+  if [[ -n "${rollback_file:-}" && -f "$rollback_file" ]]; then
+    mv -fT -- "$rollback_file" "$config_env_file"
+    rollback_file=""
+    systemctl restart "$AGENT_RUNNER_CONFIG_UNIT" >/dev/null 2>&1 || true
+  fi
+  audit_config "rolled-back" "$reason" || true
+  die "configuration was rolled back: $reason"
+}
+
+configure_role() {
+  config_role="$1"
+  local requested_variable="$2"
+  local requested_value="$3"
+
+  [[ -f "$config_policy" && ! -L "$config_policy" ]] \
+    || die "configuration policy is missing or invalid: $config_policy"
+  [[ "$(stat -c '%U:%G:%a' "$config_policy")" == "root:root:755" ]] \
+    || die "configuration policy must be root:root mode 0755"
+  # shellcheck source=/dev/null
+  source "$config_policy"
+  agent_runner_resolve_config "$config_role" "$requested_variable" "$requested_value" \
+    || die "configuration request was rejected"
+
+  systemctl cat "$AGENT_RUNNER_CONFIG_UNIT" >/dev/null \
+    || die "role unit is not installed: $AGENT_RUNNER_CONFIG_UNIT"
+  local unit_environment_files
+  unit_environment_files="$(systemctl show --property=EnvironmentFiles --value "$AGENT_RUNNER_CONFIG_UNIT")"
+  if [[ -f "$AGENT_RUNNER_CONFIG_PRIMARY_ENV" ]] \
+      && unit_loads_environment_file "$unit_environment_files" "$AGENT_RUNNER_CONFIG_PRIMARY_ENV"; then
+    config_env_file="$AGENT_RUNNER_CONFIG_PRIMARY_ENV"
+  elif unit_loads_environment_file "$unit_environment_files" "$AGENT_RUNNER_CONFIG_FALLBACK_ENV"; then
+    config_env_file="$AGENT_RUNNER_CONFIG_FALLBACK_ENV"
+  else
+    die "role unit does not load an approved EnvironmentFile: $AGENT_RUNNER_CONFIG_UNIT"
+  fi
+
+  [[ -f "$config_env_file" && ! -L "$config_env_file" ]] \
+    || die "role EnvironmentFile is missing or invalid: $config_env_file"
+  [[ "$(stat -c '%U:%G:%a' "$config_env_file")" == "root:$service_group:640" ]] \
+    || die "role EnvironmentFile must be root:$service_group mode 0640: $config_env_file"
+
+  local config_directory
+  local candidate_file
+  local existing_count
+  config_directory="$(dirname "$config_env_file")"
+  existing_count="$(awk -F= -v key="$AGENT_RUNNER_CONFIG_VARIABLE" '$1 == key { count++ } END { print count + 0 }' "$config_env_file")"
+  ((existing_count <= 1)) \
+    || die "role EnvironmentFile contains duplicate $AGENT_RUNNER_CONFIG_VARIABLE entries"
+  old_value="$(awk -F= -v key="$AGENT_RUNNER_CONFIG_VARIABLE" '$1 == key { print substr($0, index($0, "=") + 1) }' "$config_env_file")"
+  old_value="${old_value:-unset}"
+
+  candidate_file="$(mktemp "$config_directory/.agent-runner-config.candidate.XXXXXX")"
+  rollback_file="$(mktemp "$config_directory/.agent-runner-config.rollback.XXXXXX")"
+  trap 'rm -f -- "${candidate_file:-}" "${rollback_file:-}"' EXIT
+  cp --preserve=mode,ownership,timestamps -- "$config_env_file" "$rollback_file"
+
+  awk -v key="$AGENT_RUNNER_CONFIG_VARIABLE" -v value="$AGENT_RUNNER_CONFIG_VALUE" '
+    BEGIN { replaced = 0 }
+    index($0, key "=") == 1 {
+      if (replaced == 0) {
+        print key "=" value
+        replaced = 1
+      }
+      next
+    }
+    { print }
+    END {
+      if (replaced == 0)
+        print key "=" value
+    }
+  ' "$config_env_file" >"$candidate_file"
+  chown root:"$service_group" "$candidate_file"
+  chmod 0640 "$candidate_file"
+  sync -f "$candidate_file"
+  mv -fT -- "$candidate_file" "$config_env_file"
+  candidate_file=""
+
+  if ! systemctl restart "$AGENT_RUNNER_CONFIG_UNIT"; then
+    rollback_config "unit-restart-failed"
+  fi
+  if ! systemctl is-active --quiet "$AGENT_RUNNER_CONFIG_UNIT"; then
+    rollback_config "unit-not-active"
+  fi
+
+  local main_pid
+  local process_value
+  if ! main_pid="$(systemctl show --property=MainPID --value "$AGENT_RUNNER_CONFIG_UNIT")"; then
+    rollback_config "main-pid-query-failed"
+  fi
+  [[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || rollback_config "main-pid-missing"
+  if ! process_value="$(tr '\0' '\n' <"/proc/$main_pid/environ" \
+      | awk -F= -v key="$AGENT_RUNNER_CONFIG_VARIABLE" '$1 == key { print substr($0, index($0, "=") + 1) }')"; then
+    rollback_config "process-environment-read-failed"
+  fi
+  [[ "$process_value" == "$AGENT_RUNNER_CONFIG_VALUE" ]] \
+    || rollback_config "process-environment-mismatch"
+
+  if ! audit_config "applied" "pid=$main_pid"; then
+    rollback_config "journal-write-failed"
+  fi
+  rm -f -- "$rollback_file"
+  rollback_file=""
+  trap - EXIT
+  printf 'agent-runner-deploy: configured role=%s variable=%s value=%s unit=%s pid=%s\n' \
+    "$config_role" \
+    "$AGENT_RUNNER_CONFIG_VARIABLE" \
+    "$AGENT_RUNNER_CONFIG_VALUE" \
+    "$AGENT_RUNNER_CONFIG_UNIT" \
+    "$main_pid"
+}
+
+promote_release() {
+  command -v find >/dev/null || die "find is required"
+  id "$service_user" >/dev/null 2>&1 || die "service account '$service_user' does not exist"
+  getent group "$service_group" >/dev/null || die "service group '$service_group' does not exist"
+
+  install -d -o root -g root -m 0755 "$deploy_root" "$accepted_root" "$product_root" "$releases_root"
+  [[ -d "$incoming_root" ]] || die "staged release is missing: $incoming_root"
+  [[ ! -L "$incoming_root" ]] || die "staged release root must not be a symbolic link"
+  [[ "$(stat -c '%U:%G' "$incoming_root")" == "$service_user:$service_group" ]] \
+    || die "staged release must be owned by $service_user:$service_group"
+
+  local invalid_entry
+  invalid_entry="$(find "$incoming_root" -xdev -mindepth 1 ! -type d ! -type f -print -quit)"
+  [[ -z "$invalid_entry" ]] || die "staged release contains a non-regular entry: $invalid_entry"
+
+  local release_id_file="$incoming_root/release-id"
+  local release_id
+  [[ -f "$release_id_file" && ! -L "$release_id_file" ]] || die "release-id is missing or invalid"
+  release_id="$(<"$release_id_file")"
+  [[ "$release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] \
+    || die "release-id must contain 1 to 64 safe characters"
+
+  local required_file
+  for required_file in agent-host agent-host.dll agent-host.deps.json agent-host.runtimeconfig.json; do
+    [[ -f "$incoming_root/$required_file" && ! -L "$incoming_root/$required_file" ]] \
+      || die "required release file is missing or invalid: $required_file"
+  done
+  [[ -x "$incoming_root/agent-host" ]] || die "agent-host is not executable"
+
+  local release_bytes
+  release_bytes="$(du -sb "$incoming_root" | awk '{print $1}')"
+  [[ "$release_bytes" =~ ^[0-9]+$ ]] || die "could not measure staged release"
+  ((release_bytes <= maximum_release_bytes)) || die "staged release exceeds the 1 GiB safety limit"
+
+  local release_root="$releases_root/$release_id"
+  local accepted_release="$accepted_root/$release_id"
+  [[ ! -e "$release_root" ]] || die "immutable release already exists: $release_root"
+  [[ ! -e "$accepted_release" ]] || die "accepted upload already exists: $accepted_release"
+
+  local staging_root="$releases_root/.staging.$release_id.$$"
+  trap 'rm -rf --one-file-system -- "$staging_root"' EXIT
+  install -d -o root -g root -m 0755 "$staging_root"
+  cp -R --no-preserve=all "$incoming_root/." "$staging_root/"
+  rm -- "$staging_root/release-id"
+  chown -R root:root "$staging_root"
+  find "$staging_root" -type d -exec chmod 0755 {} +
+  find "$staging_root" -type f -exec chmod 0644 {} +
+  chmod 0755 "$staging_root/agent-host"
+  mv -- "$staging_root" "$release_root"
+  trap - EXIT
+
+  ln -sfnT "$release_root" "$current_link"
+  chown -h root:root "$current_link"
+  if [[ -e "$compatibility_link" && ! -L "$compatibility_link" ]]; then
+    [[ ! -e "$legacy_backup" ]] || die "legacy compatibility backup already exists: $legacy_backup"
+    mv -- "$compatibility_link" "$legacy_backup"
+  fi
+  ln -sfnT "$current_link" "$compatibility_link"
+  chown -h root:root "$compatibility_link"
+
+  mv -- "$incoming_root" "$accepted_release"
+  chown -R root:root "$accepted_release"
+  install -d -o "$service_user" -g "$service_group" -m 0750 "$incoming_root"
+
+  logger -p authpriv.notice -t agent-runner-deploy \
+    "action=release release=$release_id source=$incoming_root target=$release_root result=promoted" || true
+  printf 'agent-runner-deploy: promoted release %s to %s\n' "$release_id" "$release_root"
+  printf 'agent-runner-deploy: restart agent-runner.service and agent-runner-review.service to activate it\n'
+}
+
+[[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"
+command -v flock >/dev/null || die "flock is required"
+command -v stat >/dev/null || die "stat is required"
+exec 9>"$deploy_root/.deploy.lock"
+flock -n 9 || die "another release promotion or configuration update is already running"
+
+case "$#:${1:-}" in
+  0:)
+    promote_release
+    ;;
+  4:config)
+    configure_role "$2" "$3" "$4"
+    ;;
+  *)
+    die "usage: agent-runner-deploy [config <coding|review> RUNNER_MAX_PARALLELISM <1-6>]"
+    ;;
+esac
