@@ -179,6 +179,21 @@ async function installMocks(
     referenceRequest: null,
     releaseWorkbench,
   };
+  await page.route('**/hubs/jobs/negotiate**', (route) =>
+    route.fulfill({
+      json: {
+        connectionId: 'workbench-viewer-header-e2e',
+        connectionToken: 'workbench-viewer-header-e2e',
+        negotiateVersion: 1,
+        availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+      },
+    }),
+  );
+  await page.routeWebSocket('**/hubs/jobs**', (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+    });
+  });
   await page.route('**/healthz', (route) => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', (route) => json(route, []));
   await page.route('**/api/auth/status', (route) =>
