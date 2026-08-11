@@ -100,8 +100,8 @@ public sealed class MergeIntoDevelopRunner
             pipelineType).GetAwaiter().GetResult();
 
     /// <summary>
-    /// Async merge entry point used by immediate Remote integration, the
-    /// accepted-integration worker, and its durable backstop. A configured
+    /// Async merge entry point used by immediate Remote integration and by the
+    /// compatibility worker/backstop for durable legacy transactions. A configured
     /// <c>main</c> target is a release mutation, so it is fail-closed behind the
     /// mandatory full-suite gate and advances only to the exact tested SHA.
     /// </summary>

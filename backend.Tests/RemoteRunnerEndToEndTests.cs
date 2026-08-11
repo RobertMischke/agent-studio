@@ -2532,7 +2532,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         string? additionalProjectName = null,
         string? additionalWatchPath = null,
         ICliOneShot? summaryOneShot = null,
-        string? repositoryPath = null) =>
+        string? repositoryPath = null,
+        string? primaryProjectName = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -2542,7 +2543,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     var values = new Dictionary<string, string?>
                     {
                         ["TaskRepository"] = _workspace,
-                        ["WatchPaths:0:Name"] = ProjectName,
+                        ["WatchPaths:0:Name"] = primaryProjectName ?? ProjectName,
                         ["WatchPaths:0:Path"] = _watchPath,
                         ["WatchPaths:0:RootPath"] = repositoryPath ?? _watchPath,
                         ["WatchPaths:0:RepositoryPath"] = repositoryPath ?? _watchPath,
@@ -3687,9 +3688,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(lease.Lease.AttemptId, handoff.Envelope.SourceRunAttemptId);
     }
 
-    [Fact]
+    [Theory]
+    [InlineData("QS")]
+    [InlineData("CAC")]
+    [InlineData("TE")]
     [Trait("Category", "MachineBound")]
-    public async Task Monolith_v1_green_remote_delivery_integrates_before_human_review()
+    public async Task Monolith_v1_green_remote_delivery_integrates_before_human_review(
+        string deliveryProject)
     {
         const string reviewRunnerId = "review-runner-immediate-integration";
         const string reviewInstance = "review-host:immediate-integration";
@@ -3713,18 +3718,20 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "Immediate Remote integration",
             "Deliver and integrate before Human Review.");
 
-        using var factory = BuildFactory(repositoryPath: repository);
+        using var factory = BuildFactory(
+            repositoryPath: repository,
+            primaryProjectName: deliveryProject);
         using var http = factory.CreateClient();
         var scanner = factory.Services.GetRequiredService<TaskScannerService>();
         var seededTask = scanner.FindJob(TaskKey, _watchPath)!;
         var canonicalTaskKey = seededTask.Key ?? seededTask.TaskKey;
         factory.Services.GetRequiredService<ProjectSettingsService>()
-            .SetIntegrationBranch(ProjectName, "develop");
+            .SetIntegrationBranch(deliveryProject, "develop");
         using var coding = new RClient(http, RunnerId);
         var ct = CancellationToken.None;
-        await coding.RegisterAsync(ProjectName, "service", ct);
+        await coding.RegisterAsync(deliveryProject, "service", ct);
         var lease = await coding.AcquireLeaseAsync(
-            new RAcquire(canonicalTaskKey, RunnerId, ProjectName, "coding-host", 4242, "codex"), ct);
+            new RAcquire(canonicalTaskKey, RunnerId, deliveryProject, "coding-host", 4242, "codex"), ct);
         Assert.True(lease.Granted);
         var immutableRef = Contract.FencedGitRefs.ImmutableResult(
             lease.Lease!.AttemptId!,
@@ -3808,6 +3815,25 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             && item.Details?.GetValueOrDefault("to") == TaskStates.HumanReview);
         Assert.True(integratedAt >= 0, "Immediate integration evidence was not recorded.");
         Assert.True(humanReviewAt > integratedAt, "Human Review was entered before integration settled.");
+
+        var developBeforeAcceptance = (await GitAsync(repository, "rev-parse", "develop")).StdOut.Trim();
+        var pipelineBeforeAcceptance = factory.Services.GetRequiredService<PipelineExecutionLog>()
+            .Read(reviewed.FolderPath)!.Steps.Single(step =>
+                step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        var accepted = await factory.Services.GetRequiredService<TaskTransitionService>()
+            .MoveAsync(canonicalTaskKey, TaskStates.Completed, _watchPath, ct);
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+        var completedTask = scanner.FindJob(canonicalTaskKey, _watchPath)!;
+        Assert.Equal(TaskStates.Completed, completedTask.State);
+        Assert.Equal(
+            developBeforeAcceptance,
+            (await GitAsync(repository, "rev-parse", "develop")).StdOut.Trim());
+        var pipelineAfterAcceptance = factory.Services.GetRequiredService<PipelineExecutionLog>()
+            .Read(completedTask.FolderPath)!.Steps.Single(step =>
+                step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.Equal(pipelineBeforeAcceptance.Status, pipelineAfterAcceptance.Status);
+        Assert.Equal(pipelineBeforeAcceptance.Verdict, pipelineAfterAcceptance.Verdict);
+        Assert.Equal(pipelineBeforeAcceptance.CompletedAt, pipelineAfterAcceptance.CompletedAt);
     }
 
     [Fact]

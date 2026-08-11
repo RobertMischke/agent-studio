@@ -1,10 +1,10 @@
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// Durable safety net for operator acceptance integration. The normal
-/// transaction keeps the card in Human Review with phase integrating while the
-/// merge runs. A backend restart before the volatile queue drains must resume
-/// that transaction and move the task to Completed only after successful
+/// Durable compatibility safety net for an acceptance integration transaction
+/// written by an older backend process. New acceptance requests never create
+/// the integrating phase. A restart before a legacy volatile queue drains may
+/// resume that transaction and move the task to Completed only after successful
 /// integration. Legacy Completed cards and remote <c>no-branch</c> outcomes
 /// remain recoverable.
 /// </summary>

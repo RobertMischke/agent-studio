@@ -3,12 +3,11 @@ using System.Diagnostics;
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// Integrates accepted deliveries outside the accept HTTP request. The runner
-/// owns merge/gate/rollback serialization and hands a released SHA to the
-/// existing <see cref="IntegrationPushWorker"/>. Successful integration moves
-/// the card from Human Review to Completed and clears the durable pending
-/// marker. Decided failures clear the integrating phase, keep the card in Human
-/// Review, and retain the marker for operator visibility and recovery.
+/// Completes legacy acceptance transactions already queued by an older backend
+/// process. New acceptance requests never enqueue work here. The runner owns
+/// merge/gate/rollback serialization and hands a released SHA to the existing
+/// <see cref="IntegrationPushWorker"/>. Successful recovery moves the card from
+/// Human Review to Completed; decided failures return it to ordinary review.
 /// </summary>
 public sealed class AcceptedIntegrationWorker : BackgroundService
 {

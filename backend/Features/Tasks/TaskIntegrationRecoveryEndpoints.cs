@@ -86,7 +86,7 @@ public static class TaskIntegrationRecoveryEndpoints
                 + $"Resume the existing delivery branch '{subject.ResultRef}' at the fenced result {subject.ResultSha}. "
                 + $"Fetch the latest '{integrationBranch}', rebase the delivery onto it, resolve every conflict without dropping the task's intended changes, "
                 + "run the relevant tests, and finish with the normal task terminal sentinel. "
-                + "Do not merge or push the integration branch yourself; publish only the updated delivery branch for a new operator acceptance.";
+                + "Do not merge or push the integration branch yourself; publish only the updated delivery branch for a new delivery gate and review round.";
 
             var intent = mutations.SavePendingIntent(
                 job.Id,

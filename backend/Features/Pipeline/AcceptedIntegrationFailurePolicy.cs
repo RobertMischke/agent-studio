@@ -9,6 +9,7 @@ namespace AgentStudio.Pipeline;
 public static class AcceptedIntegrationFailureCodes
 {
     public const string MergeConflict = "merge-conflict";
+    public const string DeliveryGateFailed = "delivery-gate-failed";
     public const string BuildGateFailed = "build-gate-failed";
     public const string SourceNeedsRebase = "source-needs-rebase";
     public const string ReviewSubjectTaskKeyUnavailable = "review-subject-task-key-unavailable";
@@ -67,6 +68,14 @@ public static class AcceptedIntegrationFailurePolicy
                     verdictSummary,
                     "The build gate rejected the merged result."),
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.DeliveryGateFailed => new(
+                code,
+                "Delivery gate failed",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "The Remote delivery gate rejected the reviewed result before integration."),
+                RebaseRecoveryAvailable: false),
             AcceptedIntegrationFailureCodes.SourceNeedsRebase => new(
                 code,
                 "Rebase required",
@@ -104,6 +113,8 @@ public static class AcceptedIntegrationFailurePolicy
             return AcceptedIntegrationFailureCodes.MergeConflict;
         if (string.Equals(verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.BuildGateFailed;
+        if (string.Equals(verdict, "delivery-gate-failed", StringComparison.OrdinalIgnoreCase))
+            return AcceptedIntegrationFailureCodes.DeliveryGateFailed;
         if (string.Equals(verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.NoTaskBranch;
 
@@ -131,6 +142,7 @@ public static class AcceptedIntegrationFailurePolicy
         return code.Trim().ToLowerInvariant() switch
         {
             AcceptedIntegrationFailureCodes.MergeConflict => AcceptedIntegrationFailureCodes.MergeConflict,
+            AcceptedIntegrationFailureCodes.DeliveryGateFailed => AcceptedIntegrationFailureCodes.DeliveryGateFailed,
             AcceptedIntegrationFailureCodes.BuildGateFailed => AcceptedIntegrationFailureCodes.BuildGateFailed,
             AcceptedIntegrationFailureCodes.SourceNeedsRebase => AcceptedIntegrationFailureCodes.SourceNeedsRebase,
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable => AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,

@@ -3,8 +3,9 @@ using System.Threading.Channels;
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// One accepted delivery whose merge, pre-develop gate, and integration push
-/// hand-off must run outside the accept HTTP request.
+/// One legacy acceptance transaction whose merge, pre-develop gate, and
+/// integration push hand-off was made durable before the current
+/// integration-before-review contract.
 /// </summary>
 public sealed record AcceptedIntegrationRequest(
     string Project,
@@ -18,9 +19,9 @@ public sealed record AcceptedIntegrationRequest(
     string? Reason = null);
 
 /// <summary>
-/// Volatile latency hand-off for transactional acceptance integration. Human
-/// Review plus the integrating phase, pending pipeline step, and
-/// <c>integrationpending</c> tag are the durable facts;
+/// Compatibility queue for transactional acceptance integration written by an
+/// older backend process. Human Review plus the integrating phase, pending
+/// pipeline step, and <c>integrationpending</c> tag are the durable facts;
 /// <see cref="AcceptedIntegrationBackstopHostedService"/> reconstructs work
 /// after a restart.
 ///
@@ -43,7 +44,7 @@ public sealed class AcceptedIntegrationQueue
 
     /// <summary>
     /// Enqueues without blocking. A false result means shutdown completed the
-    /// channel; the durable accepted-integration backstop will recover the item.
+    /// channel; the durable legacy backstop will recover the item.
     /// </summary>
     public bool Enqueue(AcceptedIntegrationRequest request) => _channel.Writer.TryWrite(request);
 }
