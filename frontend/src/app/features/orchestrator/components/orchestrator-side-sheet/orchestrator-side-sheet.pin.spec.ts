@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -15,6 +15,8 @@ import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.compon
  * clobber the manually-seeded `activeProject`.
  */
 describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
+  beforeEach(() => sessionStorage.removeItem('atp.studio.orchestratorOpen.v1'));
+
   async function makeFixture() {
     await TestBed.configureTestingModule({
       imports: [OrchestratorSideSheetComponent],

@@ -104,14 +104,15 @@ Local storage still owns workspace preferences and the open-tab collection. It
 may seed the shell only when the URL does not identify another surface. URL
 state always wins for the active surface.
 
-The Orchestrator Chat side sheet is deliberately not another route owner. Once
-a project route has resolved, the default-on local **Open project Chat on
-project entry** preference opens the existing push-layout sheet in that exact
-project context. The project route continues to identify the selected Board or
-Hub surface behind it. The preference, panel visibility, width, pin, transcript
-scroll, and composer draft are transient browser state. Task routes do not
-apply the project-entry preference. This ordering also prevents persisted tab
-state from briefly exposing a different project's transcript during cold boot.
+The Orchestrator Chat side sheet is deliberately not another route owner.
+Visibility and width are browser state and survive navigation and reload; no
+ordinary route change opens or closes the sheet. The default-on local **Open
+project Chat on project entry** preference is one narrow exception: it applies only when an
+explicit Board or Project Overview entry replaces an empty editor with no
+active tab context. Tab switches, task routes, Dossiers, Wiki pages, and passive
+restoration preserve the saved panel posture. While the
+sheet is open, its next-message context follows the active route. An in-flight
+turn keeps the context key captured at send time.
 
 ## Shell tab target identity
 
@@ -189,3 +190,7 @@ review screenshots under the managed task's `results/` directory.
 - **2026-08-10:** Made the existing Orchestrator Chat side sheet the default
   project entry after route hydration, while keeping its visibility out of the
   canonical URL and preserving task deep links.
+- **2026-08-11:** Restricted that default entry to explicit Board or Project
+  Overview entry from an empty editor. Panel posture now persists independently
+  of navigation; next-message context follows the route while in-flight turns
+  stay bound to their captured context.

@@ -12,6 +12,7 @@ import { StudioIconComponent } from '../../../../components/studio-icon/studio-i
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { TaskService } from '../../../../services/task.service';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
+import { OrchestratorChatActivityService } from '../../state/orchestrator-chat-activity.service';
 
 /**
  * Workspace-wide projection of the Task Server context store. The component
@@ -27,6 +28,7 @@ import type { OrchestratorContextSession } from '../../models/orchestrator.model
 })
 export class OrchestratorChatHistoryComponent {
   private readonly tasks = inject(TaskService);
+  readonly activity = inject(OrchestratorChatActivityService);
   readonly hub = inject(JobsHubClient);
 
   readonly contextOpened = output<string>();
@@ -40,6 +42,8 @@ export class OrchestratorChatHistoryComponent {
   readonly taskContexts = computed(() => this.contexts()
     .filter(context => context.kind === 'task')
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  readonly workingContextCount = computed(() =>
+    this.activity.workingContextKeys(this.contexts()).size);
 
   private requestVersion = 0;
 
@@ -66,6 +70,17 @@ export class OrchestratorChatHistoryComponent {
 
   contextKindLabel(context: OrchestratorContextSession): string {
     return context.kind === 'task' ? 'Task chat' : 'Project chat';
+  }
+
+  contextWorking(context: OrchestratorContextSession): boolean {
+    return this.activity.isWorking(context);
+  }
+
+  runtimeLabel(context: OrchestratorContextSession): string | null {
+    if (context.runtimeStatus === 'active') return 'Running';
+    if (context.runtimeStatus === 'queued') return `Queued ${context.queuePosition}`;
+    if (this.activity.pendingContextKeys().has(context.contextKey)) return 'Waiting for reply';
+    return null;
   }
 
   activityLabel(value: string): string {

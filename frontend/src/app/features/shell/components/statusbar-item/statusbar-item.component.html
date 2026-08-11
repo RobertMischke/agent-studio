@@ -4,6 +4,7 @@
           [attr.aria-pressed]="active()"
           [attr.data-signal-tone]="signalTone()"
           [attr.data-signal-correlation]="signalCorrelation()"
+          [attr.data-pulsing]="pulsing()"
           [cacTooltip]="tooltip()"
           [attr.data-testid]="testid()"
           (click)="activated.emit($event)">
@@ -27,6 +28,7 @@
   <span class="statusbar__item statusbar__item--ro"
         [attr.data-signal-tone]="signalTone()"
         [attr.data-signal-correlation]="signalCorrelation()"
+        [attr.data-pulsing]="pulsing()"
         [cacTooltip]="tooltip()"
         [attr.data-testid]="testid()">
     @if (bullet(); as b) {

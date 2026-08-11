@@ -40,11 +40,14 @@ interface PersistedState {
 export class StudioTabStateService {
   private readonly _tabs = signal<StudioTab[]>([]);
   private readonly _activeKey = signal<string | null>(null);
+  private readonly _emptyProjectEntryRevision = signal(0);
   /** Session-only least-recent to most-recent activation order. */
   private activationHistory: string[] = [];
 
   readonly tabs = this._tabs.asReadonly();
   readonly activeKey = this._activeKey.asReadonly();
+  /** Advances only when an explicit project surface opens from an empty editor. */
+  readonly emptyProjectEntryRevision = this._emptyProjectEntryRevision.asReadonly();
 
   readonly activeTab = computed<StudioTab | null>(() => {
     const key = this._activeKey();
@@ -81,6 +84,9 @@ export class StudioTabStateService {
    */
   open(tab: StudioTab): void {
     const normalized = this.normalizeTab(tab);
+    const emptyProjectEntry = this._tabs().length === 0
+      && ((normalized.kind === 'board' && normalized.projectName !== ALL_PROJECTS)
+        || normalized.kind === 'hub');
     const key = studioTabKey(normalized);
     this._tabs.update(list => {
       const idx = list.findIndex(t => studioTabKey(t) === key);
@@ -91,6 +97,7 @@ export class StudioTabStateService {
     });
     this.activate(key);
     this.persist();
+    if (emptyProjectEntry) this._emptyProjectEntryRevision.update(revision => revision + 1);
   }
 
   /** Focus an existing tab by key. No-op when the key is unknown. */

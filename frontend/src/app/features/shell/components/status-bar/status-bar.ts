@@ -67,6 +67,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   // "is the panel open" lives with the panel, not here.
   readonly usageOpen = input(false);
   readonly orchestratorOpen = input(false);
+  readonly orchestratorActiveChatCount = input(0);
   readonly feedOpen = input(false);
   readonly settingsOpen = input(false);
   readonly showSignOut = input(false);
@@ -116,6 +117,12 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   });
 
   readonly projectCount = computed(() => this.projectNames().length || Object.keys(this.jobService.runnerStatus().projects).length);
+  readonly orchestratorLabel = computed(() => this.orchestratorActiveChatCount() > 0
+    ? `Orchestrator · ${this.orchestratorActiveChatCount()} active`
+    : 'Orchestrator');
+  readonly orchestratorTooltip = computed(() => this.orchestratorActiveChatCount() > 0
+    ? `${this.orchestratorActiveChatCount()} orchestrator chat(s) are working. Open Orchestrator Chat.`
+    : 'Orchestrator chat');
 
   readonly activeFallback = computed(() => {
     for (const project of Object.values(this.jobService.runnerStatus().projects)) {

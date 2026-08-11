@@ -3,11 +3,13 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrchestratorContextDigest } from '../../models/orchestrator.model';
 import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
 
 describe('OrchestratorSideSheetComponent · ORCH-1 context digest', () => {
+  beforeEach(() => sessionStorage.removeItem('atp.studio.orchestratorOpen.v1'));
+
   async function makeFixture() {
     await TestBed.configureTestingModule({
       imports: [OrchestratorSideSheetComponent],
@@ -216,8 +218,9 @@ describe('OrchestratorSideSheetComponent · ORCH-1 context digest', () => {
     send.flush({ project: 'Agent Studio', reply: { id: 'reply', role: 'orchestrator', text: 'Done' } });
     const reconciliation = http.expectOne('/api/runner/task:Agent%20Studio/AGT-2149/orchestrator-chat');
     expect(reconciliation.request.method).toBe('GET');
+    const activityReconciliation = expectSessionsRequest(http);
     reconciliation.flush({ project: 'Agent Studio', turns: [] });
-    http.expectNone('/api/orchestrator/sessions');
+    activityReconciliation.flush({ sessions: [] });
 
     http.verify();
     fixture.destroy();

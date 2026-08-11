@@ -29,6 +29,12 @@
   <div class="chat-history__summary" data-testid="chat-history-counts">
     <span><strong>{{ projectContexts().length }}</strong> project {{ projectContexts().length === 1 ? 'context' : 'contexts' }}</span>
     <span><strong>{{ taskContexts().length }}</strong> task {{ taskContexts().length === 1 ? 'context' : 'contexts' }}</span>
+    @if (workingContextCount() > 0) {
+      <span class="chat-history__working-count" data-testid="chat-history-active-count">
+        <span class="chat-history__working-dot" aria-hidden="true"></span>
+        <strong>{{ workingContextCount() }}</strong> active
+      </span>
+    }
     <span class="chat-history__live" [attr.data-connected]="hub.connected()">
       <span class="chat-history__live-dot" aria-hidden="true"></span>
       {{ hub.connected() ? 'Live updates' : 'Live updates reconnecting' }}
@@ -58,13 +64,22 @@
             <li>
               <button type="button"
                       class="chat-history__row"
+                      [class.chat-history__row--working]="contextWorking(context)"
                       data-testid="chat-history-row"
                       [attr.data-context-key]="context.contextKey"
+                      [attr.data-runtime-status]="activity.pendingContextKeys().has(context.contextKey) ? 'pending' : context.runtimeStatus"
                       (click)="open(context)">
                 <span class="chat-history__identity">
                   <span class="chat-history__kind" data-kind="project">Project</span>
                   <strong>{{ contextTitle(context) }}</strong>
-                  <span>{{ contextKindLabel(context) }}</span>
+                  <span class="chat-history__scope">
+                    {{ contextKindLabel(context) }}
+                    @if (runtimeLabel(context); as status) {
+                      <span class="chat-history__runtime" data-testid="chat-history-runtime-status">
+                        <span class="chat-history__working-dot" aria-hidden="true"></span>{{ status }}
+                      </span>
+                    }
+                  </span>
                 </span>
                 <span class="chat-history__topic">
                   <span class="chat-history__topic-label">Topic</span>
@@ -98,13 +113,22 @@
               <li>
                 <button type="button"
                         class="chat-history__row"
+                        [class.chat-history__row--working]="contextWorking(context)"
                         data-testid="chat-history-row"
                         [attr.data-context-key]="context.contextKey"
+                        [attr.data-runtime-status]="activity.pendingContextKeys().has(context.contextKey) ? 'pending' : context.runtimeStatus"
                         (click)="open(context)">
                   <span class="chat-history__identity">
                     <span class="chat-history__kind" data-kind="task">Task</span>
                     <strong>{{ contextTitle(context) }}</strong>
-                    <span>{{ context.projectId }}</span>
+                    <span class="chat-history__scope">
+                      {{ context.projectId }}
+                      @if (runtimeLabel(context); as status) {
+                        <span class="chat-history__runtime" data-testid="chat-history-runtime-status">
+                          <span class="chat-history__working-dot" aria-hidden="true"></span>{{ status }}
+                        </span>
+                      }
+                    </span>
                   </span>
                   <span class="chat-history__topic">
                     <span class="chat-history__topic-label">Topic</span>
