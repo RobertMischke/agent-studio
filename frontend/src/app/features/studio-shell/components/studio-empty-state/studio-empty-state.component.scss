@@ -16,7 +16,7 @@
   &__stage {
     width: min(100%, var(--empty-canvas-width, 600px), 75vh);
     max-height: min(30vh, 240px);
-    overflow: hidden;
+    overflow: visible;
 
     &--static {
       opacity: 0.72;
@@ -40,6 +40,12 @@
     line-height: 1.4;
     color: var(--studio-fg-muted);
     text-align: center;
+  }
+}
+
+@container studio-welcome (max-width: 420px) {
+  .empty__stage {
+    display: none;
   }
 }
 
