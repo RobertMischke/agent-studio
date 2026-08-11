@@ -27,22 +27,15 @@
   &__source {
     display: inline-flex;
     align-items: center;
-    gap: var(--studio-spacing-1);
+    justify-content: center;
+    width: var(--studio-spacing-5);
+    height: var(--studio-spacing-5);
+    padding: 0;
+    border-radius: var(--studio-spacing-1);
+    font-family: var(--font-mono);
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-
-    &[data-activation-state='active'] .post-step-controls__state {
-      color: var(--severity-pass);
-    }
-
-    &[data-activation-state='inactive'] .post-step-controls__state,
-    &[data-activation-state='skipped'] .post-step-controls__state {
-      color: var(--studio-fg-muted);
-    }
-  }
-
-  &__state {
-    font-weight: 700;
   }
 
   &__run {

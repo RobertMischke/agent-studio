@@ -47,6 +47,20 @@ export class PostStepControlsComponent {
     source: 'unknown' as const,
     reason: 'Activation metadata is unavailable from the backend.',
   });
+  readonly activationScope = computed(() => {
+    const activation = this.activationView();
+    const code = activation.source === 'global'
+      ? 'G'
+      : activation.source === 'project'
+        ? 'P'
+        : activation.source === 'condition'
+          ? 'C'
+          : '?';
+    return {
+      code,
+      description: `${activation.state} from ${activation.source}: ${activation.reason}`,
+    };
+  });
   readonly stepAttempts = computed(() => this.attempts()
     .filter(attempt => attempt.stepId === this.stepId())
     .sort((left, right) => right.attempt - left.attempt));

@@ -90,6 +90,64 @@ function pipelineBody() {
   };
 }
 
+function rowAnatomyPipelineBody() {
+  const body = pipelineBody();
+  const longNames = new Map([
+    ['pre-loop-guard', 'Validate workspace boundaries before agent pickup'],
+    ['core-agent-run', 'Resolve operator input and continue the core agent execution'],
+    ['aspect-requirement-fit', 'Review every acceptance criterion and preserve complete evidence'],
+  ]);
+  return {
+    ...body,
+    pipeline: {
+      ...body.pipeline,
+      pre: body.pipeline.pre.map(item => ({ ...item, displayName: longNames.get(item.id) ?? item.displayName })),
+      core: body.pipeline.core.map(item => ({ ...item, displayName: longNames.get(item.id) ?? item.displayName })),
+      post: body.pipeline.post.map(item => ({ ...item, displayName: longNames.get(item.id) ?? item.displayName })),
+      allSteps: body.pipeline.allSteps.map(item => ({ ...item, displayName: longNames.get(item.id) ?? item.displayName })),
+    },
+    execution: {
+      ...body.execution,
+      completedAt: '2026-06-02T08:06:19Z',
+      steps: body.execution.steps.map(item => item.stepId === 'pre-loop-guard'
+        ? {
+            ...item,
+            status: 'failed',
+            verdict: 'ERROR',
+            reason: 'The workspace validation failed.',
+          }
+        : item.stepId === 'core-agent-run'
+          ? {
+              ...item,
+              status: 'failed',
+              verdict: 'needsinput',
+              reason: 'The operator must choose the primary column.',
+              completedAt: '2026-06-02T08:06:19Z',
+              durationMs: 378_000,
+            }
+          : item.stepId === 'aspect-requirement-fit'
+            ? {
+                ...item,
+                status: 'skipped',
+                verdict: 'skipped',
+                reason: 'The core run needs operator input before review can start.',
+              }
+            : item),
+    },
+    config: {
+      'aspect-requirement-fit': {
+        enabled: true,
+        canDisable: true,
+        activation: {
+          state: 'active',
+          source: 'global',
+          reason: 'Enabled by the global catalogue default.',
+        },
+      },
+    },
+  };
+}
+
 function runRecord(index: number, intent: string, startedAt: string) {
   return {
     index, intent, startedAt, endedAt: null, status: 'completed', cli: 'claude',
@@ -119,13 +177,26 @@ function multiRunTimeline() {
 
 const EMPTY_TIMELINE = { runCount: 0, firstStartedAt: null, lastActivityAt: null, hasActiveRun: false, runs: [] };
 
-async function installRoutes(page: Page, state: string, timelineBody: unknown) {
+async function installRoutes(
+  page: Page,
+  state: string,
+  timelineBody: unknown,
+  pipelineResponse: unknown = pipelineBody(),
+) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+      .catch(() => { /* a more specific route already handled the request */ });
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -187,6 +258,25 @@ async function installRoutes(page: Page, state: string, timelineBody: unknown) {
       body: JSON.stringify({ at: '2026-06-02T00:00:00Z', snapshots: [] }),
     }),
   );
+  await page.route('**/api/projects/*/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName: PROJECT, includesHistory: true, count: 0, items: [] }),
+    }),
+  );
+  await page.route('**/api/tasks/*/agent-work**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }),
+  );
+  await page.route('**/api/tasks/*/timeline**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route('**/api/tasks/*/claude-session**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }),
+  );
+  await page.route('**/api/tasks/*/screenshots**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
   await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
     route.fulfill({
       status: 200,
@@ -228,7 +318,7 @@ async function installRoutes(page: Page, state: string, timelineBody: unknown) {
     }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pipelineBody()) }),
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pipelineResponse) }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
@@ -249,7 +339,8 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 })
+      .catch(() => { /* the overlay may already be detached */ });
   }
 }
 
@@ -344,6 +435,93 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
     await expect(history.getByTestId('run-timeline-card')).toHaveCount(4);
     await expect(history).toContainText('Run #0');
     await expect(history).toContainText('recovery');
+  });
+
+  test('keeps names dominant and metadata inline in crowded pipeline rows', async ({ page }) => {
+    const allRuns = multiRunTimeline();
+    const timeline = { ...allRuns, runCount: 2, runs: allRuns.runs.slice(0, 2) };
+    await page.setViewportSize({ width: 1280, height: 560 });
+    await installRoutes(page, '3-progress', timeline, rowAnatomyPipelineBody());
+    await openDetail(page);
+
+    for (const label of ['PRE STEPS', 'CORE AGENT WORK', 'ASPECT']) {
+      const phase = page.getByTestId('overview-pipeline-phase').filter({ hasText: label });
+      if (await phase.getAttribute('aria-expanded') === 'false') await phase.click();
+    }
+
+    const preRow = page.locator('[data-step-id="pre-loop-guard"]');
+    const coreRow = page.locator('[data-step-id="core-agent-run"]');
+    const aspectRow = page.locator('[data-step-id="aspect-requirement-fit"]');
+    await expect(preRow.getByTestId('overview-pipeline-step-verdict')).toHaveCount(0);
+    await expect(preRow.getByTestId('overview-pipeline-step-status')).toHaveAttribute('aria-label', 'Failed');
+    await expect(coreRow.getByTestId('overview-pipeline-agent-runs')).toHaveText('2 runs');
+    await expect(coreRow.getByTestId('overview-pipeline-step-verdict')).toHaveText('needsinput');
+    await expect(aspectRow.getByTestId('overview-pipeline-step-verdict')).toHaveCount(0);
+    await expect(aspectRow.getByTestId('overview-post-step-source')).toHaveText('G');
+    await expect(aspectRow.getByTestId('overview-post-step-source')).toHaveAttribute(
+      'aria-label',
+      'active from global: Enabled by the global catalogue default. Open settings.',
+    );
+
+    const geometry = await coreRow.evaluate((row) => {
+      const rect = (testId: string) => {
+        const element = row.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+        if (!element) throw new Error(`Missing ${testId}`);
+        const bounds = element.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width };
+      };
+      const rowBounds = row.getBoundingClientRect();
+      const ordered = [
+        rect('overview-pipeline-step-name-cell'),
+        rect('overview-pipeline-step-verdict'),
+        rect('overview-pipeline-agent-runs'),
+        rect('overview-pipeline-step-model'),
+        rect('overview-pipeline-step-timing'),
+      ];
+      const inline = ordered.every(part =>
+        part.top >= rowBounds.top - 1 && part.bottom <= rowBounds.bottom + 1);
+      const centers = ordered.map(part => (part.top + part.bottom) / 2);
+      const noOverlap = ordered.slice(0, -1).every((part, index) => part.right <= ordered[index + 1].left);
+      const started = rect('overview-pipeline-step-started');
+      const duration = rect('overview-pipeline-step-duration');
+      return {
+        inline,
+        verticallyAligned: Math.max(...centers) - Math.min(...centers) <= 2,
+        noOverlap,
+        timingSeparated: started.right <= duration.left,
+        noHorizontalOverflow: row.scrollWidth <= row.clientWidth + 1,
+        nameWidth: ordered[0].width,
+      };
+    });
+    expect(geometry).toMatchObject({
+      inline: true,
+      verticallyAligned: true,
+      noOverlap: true,
+      timingSeparated: true,
+      noHorizontalOverflow: true,
+    });
+    expect(geometry.nameWidth).toBeGreaterThan(192);
+
+    const aspectName = 'Review every acceptance criterion and preserve complete evidence';
+    await expect(aspectRow.getByTestId('overview-pipeline-step-name')).toHaveText(aspectName);
+    const aspectOrder = await aspectRow.evaluate((row) => {
+      const name = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-name-cell"]')!.getBoundingClientRect();
+      const scope = row.querySelector<HTMLElement>('[data-testid="overview-post-step-source"]')!.getBoundingClientRect();
+      const timing = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-timing"]')!.getBoundingClientRect();
+      return { nameBeforeScope: name.right <= scope.left, scopeBeforeTiming: scope.right <= timing.left };
+    });
+    expect(aspectOrder).toEqual({ nameBeforeScope: true, scopeBeforeTiming: true });
+    await aspectRow.getByTestId('overview-pipeline-step-name').hover();
+    await expect(page.getByTestId('cac-tooltip').locator('.cac-tooltip__title')).toHaveText(aspectName);
+    await page.mouse.move(0, 0);
+    await expect(page.getByTestId('cac-tooltip')).toBeHidden();
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.getByTestId('overview-pipeline').screenshot({
+        path: path.join(RESULTS_DIR, `pipeline-step-rows-after-${theme}--mocked.png`),
+      });
+    }
   });
 
   for (const theme of ['dark', 'light'] as const) {

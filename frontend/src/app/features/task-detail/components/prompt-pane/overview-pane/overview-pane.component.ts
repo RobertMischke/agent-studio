@@ -83,6 +83,7 @@ import {
 } from './overview-pane-formatters';
 import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
 import { OverviewRunsComponent } from './overview-runs/overview-runs.component';
+import { distinctStepVerdict } from './pipeline-status-verdict.util';
 import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
 import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
 
@@ -502,6 +503,7 @@ export class OverviewPaneComponent {
   readonly stepStatusIcon = stepStatusIcon;
   readonly historicalStepStatusIcon = historicalStepStatusIcon;
   readonly stepStatusLabel = stepStatusLabel;
+  readonly visibleStepVerdict = distinctStepVerdict;
   readonly laneLabel = laneLabel;
   readonly formatTokens = formatTokens;
   readonly formatDuration = formatDuration;

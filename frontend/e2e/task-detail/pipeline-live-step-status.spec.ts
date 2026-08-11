@@ -10,8 +10,8 @@ import * as path from 'path';
  * (ProjectRunner / AspectRunnerService / DriftPostStepRunner) and the
  * Overview pipeline block polls `/api/tasks/{id}/pipeline` every 10s, so the
  * data is already live. This spec covers the visual contract: the active
- * step's row carries `data-status="running"`, a "Running" badge, and that
- * exactly one step lights up at a time. A second mocked snapshot proves the
+ * step's row carries `data-status="running"`, one accessible status icon,
+ * and exactly one step lights up at a time. A second mocked snapshot proves the
  * highlight moves to the next step when the poll refreshes (the live update).
  *
  * Fully mocked - no backend or git repository needed; the pipeline block is
@@ -175,8 +175,16 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+      .catch(() => { /* a more specific route already handled the request */ });
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -238,6 +246,25 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
       body: JSON.stringify({ at: '2026-06-02T00:00:00Z', snapshots: [] }),
     }),
   );
+  await page.route('**/api/projects/*/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName: PROJECT, includesHistory: true, count: 0, items: [] }),
+    }),
+  );
+  await page.route('**/api/tasks/*/agent-work**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }),
+  );
+  await page.route('**/api/tasks/*/timeline**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route('**/api/tasks/*/claude-session**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }),
+  );
+  await page.route('**/api/tasks/*/screenshots**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
   await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
     route.fulfill({
       status: 200,
@@ -290,7 +317,8 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 })
+      .catch(() => { /* the overlay may already be detached */ });
   }
 }
 
@@ -301,10 +329,15 @@ async function dismissErrorDialog(page: Page): Promise<void> {
  * button carrying `aria-expanded`; clicking a collapsed one reduces the count.
  */
 async function expandAllPipelineSections(page: Page): Promise<void> {
-  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
-    await collapsed.first().click();
+    const expanded = await page.evaluate(() => {
+      const phase = document.querySelector<HTMLButtonElement>(
+        '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+      );
+      phase?.click();
+      return phase !== null;
+    });
+    if (!expanded) break;
   }
 }
 
@@ -333,15 +366,17 @@ test.describe('Pipeline live step status', () => {
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
     await expandAllPipelineSections(page);
 
-    // The in-flight step carries the running status and an explicit badge.
+    // The in-flight step carries one authoritative running icon. A duplicate
+    // text chip would repeat the same state and consume name space.
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
     await expect(coreRow).toHaveAttribute('data-status', 'running');
-    await expect(coreRow.getByTestId('overview-pipeline-step-running')).toBeVisible();
-    await expect(coreRow.getByTestId('overview-pipeline-step-running')).toContainText('Running');
+    await expect(coreRow.getByTestId('overview-pipeline-step-status')).toHaveAttribute('aria-label', 'Running');
+    await expect(coreRow.getByTestId('overview-pipeline-step-status')).toBeVisible();
+    await expect(coreRow.getByTestId('overview-pipeline-step-running')).toHaveCount(0);
 
     // Exactly one step is active at a time: the not-yet-reached steps are
-    // pending and carry no running badge.
-    await expect(page.getByTestId('overview-pipeline-step-running')).toHaveCount(1);
+    // pending and the row-level state remains unique.
+    await expect(page.locator('[data-testid="overview-pipeline-step"][data-status="running"]')).toHaveCount(1);
     const lintRow = page.locator('[data-step-id="post-lint-scss"]');
     await expect(lintRow).toHaveAttribute('data-status', 'pending');
 
@@ -391,7 +426,7 @@ test.describe('Pipeline live step status', () => {
     // inspectable for the passed-status assertion below.
     await expandAllPipelineSections(page);
     await expect(coreRow).toHaveAttribute('data-status', 'passed');
-    await expect(page.getByTestId('overview-pipeline-step-running')).toHaveCount(1);
+    await expect(page.locator('[data-testid="overview-pipeline-step"][data-status="running"]')).toHaveCount(1);
   });
 
   test('the running step duration counts up live between polls', async ({ page }) => {
