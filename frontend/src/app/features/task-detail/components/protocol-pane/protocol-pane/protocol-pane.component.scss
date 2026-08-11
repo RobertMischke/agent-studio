@@ -882,18 +882,6 @@
 }
 
 /*
- * Plan toggle in the Activity toolbar. The pane-tabs `pill`
- * variant owns the chrome; this host keeps it flush with the overflow actions
- * so the toolbar reads as one row.
- */
-.activity-view-toggle {
-  display: inline-flex;
-  margin: 0;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-/*
  * Activity rows render at their real height. Keep the conversation in normal
  * flow so `.pane__body` remains the one scroll owner; the shared Follow
  * directive resolves that ancestor and leaves its scrollTop unchanged after

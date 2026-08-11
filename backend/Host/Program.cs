@@ -1296,9 +1296,10 @@ cliRouter.OnStarted += (cliType, jobId, exec) =>
     TaskEventClients(jobId).SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
 cliRouter.OnFinished += (cliType, jobId, exec) =>
     TaskEventClients(jobId).SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
-// Plan strip live push: when the agent emits a TodoWrite / update_plan frame the
-// runner persists a snapshot; tell the open detail view to re-fetch /plan. Uses
-// the same job identifier as cliOutput so the frontend correlates identically.
+// Agent-plan live push: when the agent emits a TodoWrite, update_plan, or
+// todo_list frame the runner persists a snapshot; tell the open task and
+// orchestrator surfaces to re-fetch /plan. Uses the same job identifier as
+// cliOutput so the frontend correlates identically.
 cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 {
     if (evt is CliRunEvent.PlanUpdated)

@@ -241,9 +241,9 @@ public record AgentWorkCall
 }
 
 /// <summary>
-/// The per-job task plan the plan strip renders above the activity log. Folded
+/// The per-job task plan rendered in Activity and orchestrator task context. Folded
 /// by <c>PlanReader</c> from <c>logs/plan-snapshots.jsonl</c> (the agent's own
-/// TodoWrite / update_plan frames) and <c>logs/tool-calls.jsonl</c>. Read-only
+/// TodoWrite / update_plan / todo_list frames) and <c>logs/tool-calls.jsonl</c>. Read-only
 /// observability: no model call, no edits. When the agent never emitted a plan
 /// (or the CLI has no native plan frame), <see cref="HasPlan"/> is false and the
 /// strip is hidden. See <c>docs/mockups/task-progress-tracking/</c>.
@@ -252,7 +252,7 @@ public record TaskPlanView
 {
     /// <summary>False when no plan snapshot exists; the strip renders nothing.</summary>
     public bool HasPlan { get; init; }
-    /// <summary>Frame kind that produced the latest snapshot: <c>claude/TodoWrite</c> or <c>codex/update_plan</c>.</summary>
+    /// <summary>Frame kind that produced the latest snapshot: <c>claude/TodoWrite</c>, <c>codex/update_plan</c>, or <c>codex/todo_list</c>.</summary>
     public string? Source { get; init; }
     /// <summary>Number of plan snapshots observed for this job.</summary>
     public int SnapshotCount { get; init; }

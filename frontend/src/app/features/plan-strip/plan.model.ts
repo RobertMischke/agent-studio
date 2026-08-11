@@ -1,9 +1,10 @@
 /**
- * Per-job task-plan view that drives the plan strip above the activity log.
- * Mirrors the backend `TaskPlanView` DTO: the agent's own TodoWrite /
- * update_plan items, with sub-actions derived at read time by replaying
- * `logs/plan-snapshots.jsonl` against `logs/tool-calls.jsonl`. Read-only,
- * no model call - see docs/mockups/task-progress-tracking.
+ * Per-job task-plan view that drives the plan strip inside Activity and the
+ * orchestrator task context. Mirrors the backend `TaskPlanView` DTO: the
+ * agent's own TodoWrite / update_plan / todo_list items, with sub-actions
+ * derived at read time by replaying `logs/plan-snapshots.jsonl` against
+ * `logs/tool-calls.jsonl`. Read-only, no model call. See
+ * docs/mockups/task-progress-tracking.
  */
 export interface TaskPlanView {
   hasPlan: boolean;

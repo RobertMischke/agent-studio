@@ -1469,7 +1469,7 @@ export class TaskService {
   }
 
   /**
-   * Per-job task plan that drives the plan strip above the activity log:
+   * Per-job task plan that drives the Activity and task-context checklist:
    * the agent's own TodoWrite / update_plan items with sub-actions derived
    * by replaying plan-snapshots.jsonl + tool-calls.jsonl. Read-only, no
    * model call.

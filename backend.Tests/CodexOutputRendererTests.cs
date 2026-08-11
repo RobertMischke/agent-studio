@@ -199,6 +199,21 @@ public class CodexOutputRendererTests
     }
 
     [Fact]
+    public void TodoListFrameFamily_PreservesExactFramesForTrace()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures", "cli", "codex", "todo-list-frame-family.jsonl");
+
+        foreach (var frame in File.ReadAllLines(path))
+        {
+            var rendered = Render(frame);
+            Assert.Single(rendered);
+            Assert.Equal(frame, rendered[0].Text);
+        }
+    }
+
+    [Fact]
     public void ItemCompleted_UnknownItemType_FallsBackToTypeMarker()
     {
         var lines = Render("""{"type":"item.completed","item":{"type":"mcp_tool_call","server":"x"}}""");

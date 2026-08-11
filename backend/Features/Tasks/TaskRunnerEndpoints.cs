@@ -150,8 +150,8 @@ public static class TaskRunnerEndpoints
             return Results.Ok(AgentWorkSummaryReader.ReadDetail(info));
         });
 
-        // The per-job task plan that drives the plan strip above the activity
-        // log: the agent's own TodoWrite / update_plan items with derived
+        // The per-job task plan that drives the Activity and orchestrator
+        // checklists: the agent's own TodoWrite / update_plan / todo_list items with derived
         // sub-actions and a soft-estimate band. Folded from
         // logs/plan-snapshots.jsonl + logs/tool-calls.jsonl by PlanReader -
         // read-only, no model call. Live updates ride the SignalR planUpdated

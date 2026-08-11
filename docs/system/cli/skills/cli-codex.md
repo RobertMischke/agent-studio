@@ -113,7 +113,8 @@ a Codex run reads as cleanly as a Claude run in the Activity Log.
 | `{"type":"turn.started"}` | *(suppressed)* | — |
 | `{"type":"turn.completed","usage":{…}}` | `● Turn completed (tokens: <input+output>)` | stdout |
 | `{"type":"turn.failed","error":{"message":…}}` | `● Turn failed: <reason>` | stderr |
-| `{"type":"item.started",…}` | *(suppressed — `item.completed` renders the same item)* | — |
+| `{"type":"item.started",…}` | *(suppressed; `item.completed` renders the same item)* | none |
+| `item.started` / `item.updated` / `item.completed` `todo_list` | exact JSON frame retained for Trace; typed snapshot updates one live Agent plan checklist | stdout |
 | `item.completed` `agent_message` | model text, multi-line split | stdout |
 | `item.completed` `reasoning` | *(suppressed, like Claude's `thinking`)* | — |
 | `item.completed` `command_execution` / `command_call` / `local_shell_call` | `● Run <cmd>` | stderr iff `exit_code != 0` |
@@ -121,6 +122,17 @@ a Codex run reads as cleanly as a Claude run in the Activity Log.
 | `item.completed` `web_search` | `● Search web <query>` | stdout |
 | `item.completed` `update_plan` / `todo` | `● Todo update` | stdout |
 | any other frame / item type | `● <type>` (never raw JSON) | stdout |
+
+The `todo_list` family is the deliberate raw-frame exception. Current Codex
+emits one stable item id and an `items` array whose rows carry `text` and
+`completed`. The host compatibility projection maps completed rows to `done`,
+the first incomplete row to `active`, and later incomplete rows to `pending`.
+Each lifecycle frame becomes one `PlanUpdated` snapshot with source
+`codex/todo_list`. Activity filters the three raw transport frames and renders
+the latest snapshot in place; Trace retains their exact JSON for diagnosis.
+The fixture `backend.Tests/Fixtures/cli/codex/todo-list-frame-family.jsonl`
+locks all three lifecycle shapes. CLIs without a native plan family emit no
+derived plan and retain their normal Activity output.
 
 Codex also writes a tracing diagnostic such as
 `codex_core::tools::router: error=Exit code: 1` to stderr for a non-zero shell

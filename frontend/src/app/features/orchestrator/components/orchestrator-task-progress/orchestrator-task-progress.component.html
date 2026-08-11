@@ -1,0 +1,8 @@
+@if (plan(); as currentPlan) {
+  <section data-testid="orch-task-progress" aria-label="Current agent progress">
+    <app-plan-strip
+      [plan]="currentPlan"
+      [isRunning]="runActive()"
+      variant="context" />
+  </section>
+}

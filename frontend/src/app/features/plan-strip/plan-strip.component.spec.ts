@@ -99,6 +99,40 @@ describe('PlanStripComponent', () => {
 
     expect(host.querySelector('[data-testid="plan-strip-before"]')?.textContent).toContain('Before plan: 1 action');
   });
+
+  it('briefly marks only status deltas when a newer snapshot arrives', async () => {
+    const fixture = await render(plan);
+    const updated: TaskPlanView = {
+      ...plan,
+      snapshotCount: 5,
+      activeItemId: 'verify',
+      items: plan.items.map(item => item.id === 'patch'
+        ? { ...item, status: 'done' }
+        : item.id === 'verify' ? { ...item, status: 'active' } : item),
+    };
+
+    fixture.componentRef.setInput('plan', updated);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const changed = fixture.nativeElement.querySelectorAll('.plan-item--updated');
+    expect(changed).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('[data-testid="plan-update-delta"]')?.textContent)
+      .toContain('Updated');
+    fixture.destroy();
+  });
+
+  it('uses the compact context variant without activity-only telemetry', async () => {
+    const fixture = await render(plan);
+    fixture.componentRef.setInput('variant', 'context');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="plan-strip"]')?.getAttribute('data-variant'))
+      .toBe('context');
+    expect(fixture.nativeElement.querySelector('[data-testid="plan-item-latest"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="plan-strip-before"]')).toBeNull();
+    expect(texts(fixture.nativeElement, '.plan-item__status')).toEqual(['Done', 'Active', 'Open']);
+  });
 });
 
 function texts(host: HTMLElement, selector: string): string[] {

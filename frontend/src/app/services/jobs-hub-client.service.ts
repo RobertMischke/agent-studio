@@ -36,6 +36,12 @@ export interface OrchestratorContextChangedEvent {
   updatedAt: string;
 }
 
+export interface PlanUpdatedEvent {
+  jobId: string;
+  cliType: string | null;
+  sequence: number;
+}
+
 /**
  * Owns the single browser→backend SignalR connection for board-level task
  * mutation events. Push is the primary update path; the {@link TaskService}
@@ -59,11 +65,14 @@ export class JobsHubClient {
   readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
   /** Monotonic refresh hint for the central Task Server Chat History view. */
   readonly orchestratorContextsRevision = signal(0);
+  /** Latest live plan-snapshot hint for the selected task surfaces. */
+  readonly planUpdatedEvent = signal<PlanUpdatedEvent | null>(null);
 
   private connection: HubConnection | null = null;
   private handlers: JobsHubHandlers | null = null;
   private coldRetryHandle: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+  private planSequence = 0;
 
   // Matches the task spec's auto-reconnect schedule (0s, 2s, 5s, 10s, 30s).
   private static readonly RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000, 30000];
@@ -102,6 +111,13 @@ export class JobsHubClient {
     conn.on('workbenchStatusChanged', workbenchEvent);
     conn.on('orchestratorContextChanged', () => {
       this.publishOrchestratorContextRefresh();
+    });
+    conn.on('planUpdated', (jobId: string, cliType?: string) => {
+      this.planUpdatedEvent.set({
+        jobId,
+        cliType: cliType ?? null,
+        sequence: ++this.planSequence,
+      });
     });
 
     conn.onreconnecting(() => this.connected.set(false));

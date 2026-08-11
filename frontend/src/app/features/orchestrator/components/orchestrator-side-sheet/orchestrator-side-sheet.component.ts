@@ -37,6 +37,7 @@ import {
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
+import { OrchestratorTaskProgressComponent } from '../orchestrator-task-progress/orchestrator-task-progress.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorPanelHeaderComponent } from '../orchestrator-panel-header/orchestrator-panel-header.component';
 import { OrchestratorJumpLatestComponent } from '../orchestrator-jump-latest/orchestrator-jump-latest.component';
@@ -73,6 +74,7 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
     AppTooltipDirective,
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
+    OrchestratorTaskProgressComponent,
     OrchestratorContextReceiptComponent,
     OrchestratorContextPickerComponent,
     ChatSwitcherRailComponent,

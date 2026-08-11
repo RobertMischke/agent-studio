@@ -1,0 +1,3 @@
+{"type":"item.started","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the current activity flow","completed":false},{"text":"Render one live checklist","completed":false},{"text":"Verify the integration","completed":false}]}}
+{"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the current activity flow","completed":true},{"text":"Render one live checklist","completed":false},{"text":"Verify the integration","completed":false}]}}
+{"type":"item.completed","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the current activity flow","completed":true},{"text":"Render one live checklist","completed":true},{"text":"Verify the integration","completed":true}]}}

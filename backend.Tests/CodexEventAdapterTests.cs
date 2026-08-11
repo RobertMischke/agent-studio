@@ -135,6 +135,38 @@ public class CodexEventAdapterTests
     }
 
     [Fact]
+    public void TodoListFrameFamily_ProducesOneNormalizedSnapshotPerFrame()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures", "cli", "codex", "todo-list-frame-family.jsonl");
+        var snapshots = File.ReadAllLines(path)
+            .Select(line => BuiltInCliBehaviors.MapCodexFrame(line, Jk).ToList())
+            .ToList();
+
+        Assert.Equal(3, snapshots.Count);
+        Assert.All(snapshots, events => Assert.DoesNotContain(events, evt => evt is CliRunEvent.Unknown));
+        var plans = snapshots
+            .Select(events => Assert.Single(events.OfType<CliRunEvent.PlanUpdated>()))
+            .ToList();
+        Assert.All(plans, plan => Assert.Equal("codex/todo_list", plan.Source));
+        Assert.Equal(["active", "pending", "pending"], plans[0].Items.Select(item => item.Status));
+        Assert.Equal(["done", "active", "pending"], plans[1].Items.Select(item => item.Status));
+        Assert.Equal(["done", "done", "done"], plans[2].Items.Select(item => item.Status));
+        Assert.Equal(
+            plans[0].Items.Select(item => item.Id),
+            plans[2].Items.Select(item => item.Id));
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("{\"type\":\"item.updated\",\"item\":{\"type\":\"other\"}}")]
+    public void TodoListCompatibility_NonMatchingInputDegradesToPackageAdapter(string frame)
+    {
+        Assert.Null(BuiltInCliBehaviors.TryMapCodexTodoList(frame));
+    }
+
+    [Fact]
     public void ItemCompletedReasoning_EmitsHeartbeat_NotToolCompleted()
     {
         // ASS-1671: a Codex reasoning block is a liveness ping, not a tool.

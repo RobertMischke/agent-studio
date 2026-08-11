@@ -256,6 +256,16 @@ async function stubWorkspace(
   });
 
   if (opts.withRunningTask) {
+    await page.route(
+      new RegExp(`/api/runner/task:${PROJECT}/AGT-1916/orchestrator-chat$`),
+      async (route) => {
+        await fulfillKnownGet(route, {
+          project,
+          turns: [],
+          executionContext: opts.executionContext ?? null,
+        }, unexpectedRequests);
+      },
+    );
     // The active task tab and composer context resolve from the canonical tab
     // plus the already-loaded task list. Keep the heavy task-detail request
     // pending so unrelated detail-pane subresources cannot open an error
@@ -263,6 +273,24 @@ async function stubWorkspace(
     await page.route(
       new RegExp(`/api/tasks/${RUNNING_TASK_ID}(?:\\?.*)?$`),
       async () => new Promise<void>(() => undefined),
+    );
+    await page.route(
+      new RegExp(`/api/tasks/${RUNNING_TASK_ID}/plan(?:\\?.*)?$`),
+      async (route) => {
+        await fulfillKnownGet(route, {
+          hasPlan: true,
+          source: 'codex/todo_list',
+          snapshotCount: 3,
+          activeItemId: 'wire',
+          softEstimateMedian: null,
+          items: [
+            { id: 'inspect', title: 'Inspect current context', status: 'done', subActionCount: 0, subActions: [] },
+            { id: 'wire', title: 'Wire live task progress', status: 'active', subActionCount: 0, subActions: [] },
+            { id: 'verify', title: 'Verify both themes', status: 'pending', subActionCount: 0, subActions: [] },
+          ],
+          unassignedSubActions: [],
+        }, unexpectedRequests);
+      },
     );
     await page.route(new RegExp(`/api/orchestrator/context/task:${PROJECT}/AGT-1916$`), async (route) => {
       await fulfillKnownGet(route, {
@@ -542,6 +570,32 @@ test.describe('Orchestrator context header · where am I', () => {
     expect(box?.width ?? 999).toBeLessThanOrEqual(390);
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
   });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`shows the current agent plan in task context in ${theme} theme`, async ({ page }) => {
+      const task = runningTask();
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await seedActiveTab(
+        page,
+        { kind: 'task', taskKey: task.taskKey },
+        `task:${task.taskKey}`,
+        theme,
+      );
+      const unexpectedRequests = await stubWorkspace(page, { withRunningTask: true });
+      await openSideSheet(page, false);
+
+      const progress = page.getByTestId('orch-task-progress');
+      await expect(progress).toBeVisible({ timeout: 10_000 });
+      await expect(progress.getByTestId('plan-strip-count')).toContainText('1/3 done');
+      await expect(progress.getByTestId('plan-item-status')).toHaveText(['Done', 'Active', 'Open']);
+      await expect(progress.getByTestId('plan-strip')).toHaveAttribute('data-variant', 'context');
+
+      await page.getByTestId('orch-side-sheet').screenshot({
+        path: resolve(RESULTS, `orchestrator-task-progress-${theme}--mocked.png`),
+      });
+      expect(unexpectedRequests).toEqual([]);
+    });
+  }
 
   for (const variant of [
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },

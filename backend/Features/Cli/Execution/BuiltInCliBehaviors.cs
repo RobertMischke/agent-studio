@@ -953,12 +953,77 @@ internal static class BuiltInCliBehaviors
     internal static IEnumerable<CliRunEvent> MapCodexFrame(string text, string jobKey)
     {
         var events = CodexEventAdapter.Map(text, jobKey).ToList();
+        var todoList = TryMapCodexTodoList(text);
+        if (todoList != null)
+        {
+            // CodingAgentRunner 0.7 predates the item.updated/todo_list family.
+            // Drop its Unknown projection and any future native PlanUpdated so
+            // exactly one normalized snapshot is persisted for each raw frame.
+            events.RemoveAll(evt => evt is CliRunEvent.Unknown or CliRunEvent.PlanUpdated);
+            events.Add(todoList);
+        }
+
         var command = TryExtractCommandExecution(text);
         if (command?.ExitCode is not int exitCode || exitCode == 0) return events;
 
         return events.Select(evt => evt is CliRunEvent.ToolCompleted completed
             ? new CliRunEvent.ToolCompleted(completed.ToolName, IsError: true, completed.FirstLine)
             : evt);
+    }
+
+    /// <summary>
+    /// Compatibility projection for the Codex <c>todo_list</c> item family
+    /// introduced after CodingAgentRunner 0.7. Codex reports only a completed
+    /// boolean, so the first incomplete item is the active step and subsequent
+    /// incomplete items remain pending. Non-matching and malformed frames
+    /// degrade to the package adapter without throwing.
+    /// </summary>
+    internal static CliRunEvent.PlanUpdated? TryMapCodexTodoList(string? line)
+    {
+        var text = line?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text![0] != '{') return null;
+        if (!text.Contains("todo_list", StringComparison.Ordinal)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            var frameType = root.TryGetProperty("type", out var type) ? type.GetString() : null;
+            if (frameType is not ("item.started" or "item.updated" or "item.completed")) return null;
+            if (!root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object) return null;
+            if (!item.TryGetProperty("type", out var itemType)
+                || !string.Equals(itemType.GetString(), "todo_list", StringComparison.Ordinal)) return null;
+            if (!item.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return null;
+
+            var activeAssigned = false;
+            var normalized = new List<PlanFrameItem>();
+            foreach (var candidate in items.EnumerateArray())
+            {
+                if (candidate.ValueKind != JsonValueKind.Object) continue;
+                var title = candidate.TryGetProperty("text", out var titleNode)
+                    && titleNode.ValueKind == JsonValueKind.String
+                    ? titleNode.GetString()?.Trim()
+                    : null;
+                if (string.IsNullOrWhiteSpace(title)) continue;
+
+                var completed = candidate.TryGetProperty("completed", out var completedNode)
+                    && completedNode.ValueKind is JsonValueKind.True;
+                var status = completed
+                    ? "done"
+                    : activeAssigned ? "pending" : "active";
+                if (!completed) activeAssigned = true;
+                normalized.Add(new PlanFrameItem(PlanItemId.From(title), title, status));
+            }
+
+            return normalized.Count == 0
+                ? null
+                : new CliRunEvent.PlanUpdated("codex/todo_list", normalized);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

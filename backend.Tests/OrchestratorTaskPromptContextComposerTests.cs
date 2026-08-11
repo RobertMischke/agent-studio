@@ -35,7 +35,7 @@ public sealed class OrchestratorTaskPromptContextComposerTests
 
         Assert.Equal("AGT-2517", composed.TaskKey);
         Assert.Equal(
-            ["task metadata", "prompt.md", "status.md", "last run outcome"],
+            ["task metadata", "prompt.md", "status.md", "last run outcome", "current agent plan"],
             composed.IncludedBlocks);
         Assert.Contains("=== ACTIVE TASK CONTEXT ===", composed.PromptBlock);
         Assert.Contains("Key: AGT-2517", composed.PromptBlock);
@@ -44,6 +44,43 @@ public sealed class OrchestratorTaskPromptContextComposerTests
         Assert.Contains("--- prompt.md (limit: 1800 estimated tokens; truncated: no) ---", composed.PromptBlock);
         Assert.Contains("--- status.md (limit: 1800 estimated tokens; truncated: no) ---", composed.PromptBlock);
         Assert.Contains("Terminal outcome: success", composed.PromptBlock);
+        Assert.Contains("CURRENT AGENT PLAN", composed.PromptBlock);
+        Assert.Contains("Unavailable because this CLI has not emitted", composed.PromptBlock);
+    }
+
+    [Fact]
+    public void Compose_IncludesTheCurrentNativeAgentPlanAsQueryableContext()
+    {
+        var detail = new TaskDetail
+        {
+            Info = new TaskInfo
+            {
+                Id = "AGT-2641",
+                Key = "AGT-2641",
+                Title = "Show the agent plan",
+                State = "3-progress",
+            },
+        };
+        var plan = new TaskPlanView
+        {
+            HasPlan = true,
+            Source = "codex/todo_list",
+            SnapshotCount = 2,
+            Items =
+            [
+                new TaskPlanItemView { Id = "one", Title = "Inspect frames", Status = "done" },
+                new TaskPlanItemView { Id = "two", Title = "Render progress", Status = "active" },
+                new TaskPlanItemView { Id = "three", Title = "Verify behavior", Status = "pending" },
+            ],
+        };
+
+        var composed = OrchestratorTaskPromptContextComposer.Compose(detail, plan);
+
+        Assert.Contains("Progress: 1/3 done", composed.PromptBlock);
+        Assert.Contains("Source: codex/todo_list", composed.PromptBlock);
+        Assert.Contains("- [done] Inspect frames", composed.PromptBlock);
+        Assert.Contains("- [active] Render progress", composed.PromptBlock);
+        Assert.Contains("current agent plan", composed.IncludedBlocks);
     }
 
     [Fact]

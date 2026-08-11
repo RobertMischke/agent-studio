@@ -63,9 +63,10 @@ public sealed class OrchestratorContextEndpointsTests : IDisposable
         Assert.Contains($"- {Beta}: total=1", digest, StringComparison.Ordinal);
 
         var sources = root.GetProperty("sources").EnumerateArray().ToList();
-        Assert.Equal(7, sources.Count);
+        Assert.Equal(8, sources.Count);
         Assert.Contains(sources, source => source.GetProperty("name").GetString() == "lanes");
         Assert.Contains(sources, source => source.GetProperty("name").GetString() == "health");
+        Assert.Contains(sources, source => source.GetProperty("name").GetString() == "agentPlan");
     }
 
     [Fact]

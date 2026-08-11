@@ -98,7 +98,8 @@ export type OrchestratorContextDigestSourceName =
   | 'quota'
   | 'publishTargets'
   | 'health'
-  | 'decisionJournal';
+  | 'decisionJournal'
+  | 'agentPlan';
 
 /** One source used to assemble the compact ORCH-1 read-context digest. */
 export interface OrchestratorContextDigestSource {

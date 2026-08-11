@@ -16,6 +16,7 @@ public sealed class OrchestratorTaskPromptContextComposer
     internal const int PromptTokenLimit = 1_800;
     internal const int StatusTokenLimit = 1_800;
     internal const int RunOutcomeTokenLimit = 256;
+    internal const int AgentPlanTokenLimit = 512;
     private const int EstimatedCharactersPerToken = 4;
 
     private readonly TaskScannerService _scanner;
@@ -47,7 +48,7 @@ public sealed class OrchestratorTaskPromptContextComposer
                 $"Unknown task '{identity}' in project '{projectName}'.");
         }
 
-        return Compose(detail);
+        return Compose(detail, PlanReader.Read(detail.Info));
     }
 
     internal static string? ResolveTaskIdentity(
@@ -64,7 +65,9 @@ public sealed class OrchestratorTaskPromptContextComposer
         return null;
     }
 
-    internal static OrchestratorTaskPromptContext Compose(TaskDetail detail)
+    internal static OrchestratorTaskPromptContext Compose(
+        TaskDetail detail,
+        TaskPlanView? currentPlan = null)
     {
         ArgumentNullException.ThrowIfNull(detail);
         var info = detail.Info;
@@ -97,6 +100,12 @@ public sealed class OrchestratorTaskPromptContextComposer
             "LAST RUN OUTCOME",
             RenderLastRunOutcome(info),
             RunOutcomeTokenLimit));
+
+        included.Add("current agent plan");
+        blocks.Add(RenderBoundedBlock(
+            "CURRENT AGENT PLAN",
+            RenderCurrentPlan(currentPlan),
+            AgentPlanTokenLimit));
 
         var sb = new StringBuilder();
         sb.AppendLine("=== ACTIVE TASK CONTEXT ===");
@@ -149,6 +158,21 @@ public sealed class OrchestratorTaskPromptContextComposer
             lines.Add($"Outcome issue kind: {ValueOrUnknown(info.OutcomeIssue.Kind)}");
             lines.Add($"Outcome issue: {ValueOrUnknown(info.OutcomeIssue.Summary)}");
         }
+        return string.Join("\n", lines);
+    }
+
+    private static string RenderCurrentPlan(TaskPlanView? plan)
+    {
+        if (plan is not { HasPlan: true } || plan.Items.Count == 0)
+            return "Unavailable because this CLI has not emitted a native plan frame.";
+
+        var done = plan.Items.Count(item => item.Status == "done");
+        var lines = new List<string>
+        {
+            $"Progress: {done.ToString(CultureInfo.InvariantCulture)}/{plan.Items.Count.ToString(CultureInfo.InvariantCulture)} done",
+            $"Source: {ValueOrUnknown(plan.Source)}"
+        };
+        lines.AddRange(plan.Items.Select(item => $"- [{item.Status}] {item.Title}"));
         return string.Join("\n", lines);
     }
 

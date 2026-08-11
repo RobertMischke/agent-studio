@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { NowTickService } from '../../services/now-tick.service';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { TaskPlanView, TaskPlanItemView, TaskPlanSubAction } from './plan.model';
@@ -9,16 +18,16 @@ interface TickerMark {
 }
 
 /**
- * Plan strip: a meta-level view above the activity log that surfaces the
- * CLI's own internal task plan (its TodoWrite / update_plan items). Each
- * item shows a title and a status; the active item gets a denominator-free
+ * Plan strip: a meta-level view inside the activity stream and orchestrator
+ * context that surfaces the CLI's own plan frames. Each item shows a title
+ * and a status; the active item gets a denominator-free
  * progress shape built from four telemetry-derived cues, and finished items
  * expand to reveal the sub-actions they consisted of.
  *
  * Pure presentation: every input is folded server-side by PlanReader from
  * append-only logs. No model call, no second LLM. If `plan` is null or has
  * no items the strip renders nothing, so it is safe to mount unconditionally
- * above the activity log.
+ * inside the Activity stream or the orchestrator task context.
  *
  * The four cues (see docs/mockups/task-progress-tracking):
  *  1. Live tool-call ticker - one mark per sub-action since the item activated.
@@ -35,9 +44,10 @@ interface TickerMark {
   templateUrl: './plan-strip.component.html',
   styleUrl: './plan-strip.component.scss',
 })
-export class PlanStripComponent {
-  readonly plan = input.required<TaskPlanView | null>();
+export class PlanStripComponent implements OnDestroy {
+  readonly plan = input<TaskPlanView | null>(null);
   readonly isRunning = input(false);
+  readonly variant = input<'activity' | 'context'>('activity');
 
   private readonly nowTick = inject(NowTickService).now;
 
@@ -45,6 +55,34 @@ export class PlanStripComponent {
   private static readonly HeartbeatIdleSeconds = 30;
 
   private readonly expanded = signal<ReadonlySet<string>>(new Set());
+  readonly changedItemIds = signal<ReadonlySet<string>>(new Set());
+  private previousStatuses: ReadonlyMap<string, string> | null = null;
+  private previousSnapshotCount = 0;
+  private deltaTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    effect(() => {
+      const plan = this.plan();
+      if (!plan?.hasPlan) {
+        this.previousStatuses = null;
+        this.previousSnapshotCount = 0;
+        this.changedItemIds.set(new Set());
+        return;
+      }
+
+      const current = new Map(plan.items.map(item => [item.id, item.status]));
+      if (this.previousStatuses && plan.snapshotCount > this.previousSnapshotCount) {
+        const changed = new Set(
+          plan.items
+            .filter(item => this.previousStatuses?.get(item.id) !== item.status)
+            .map(item => item.id),
+        );
+        this.flashChanges(changed);
+      }
+      this.previousStatuses = current;
+      this.previousSnapshotCount = plan.snapshotCount;
+    });
+  }
 
   readonly visible = computed<boolean>(() => {
     const p = this.plan();
@@ -94,6 +132,18 @@ export class PlanStripComponent {
       default:
         return '○';
     }
+  }
+
+  statusLabel(status: string): string {
+    switch (status) {
+      case 'done': return 'Done';
+      case 'active': return 'Active';
+      default: return 'Open';
+    }
+  }
+
+  isChanged(id: string): boolean {
+    return this.changedItemIds().has(id);
   }
 
   /**
@@ -146,5 +196,19 @@ export class PlanStripComponent {
     const when = new Date(sub.ts);
     const time = Number.isNaN(when.getTime()) ? sub.ts : when.toLocaleTimeString();
     return `${sub.label ?? sub.tool}\n${time}`;
+  }
+
+  ngOnDestroy(): void {
+    if (this.deltaTimer) clearTimeout(this.deltaTimer);
+  }
+
+  private flashChanges(ids: ReadonlySet<string>): void {
+    if (this.deltaTimer) clearTimeout(this.deltaTimer);
+    this.changedItemIds.set(ids);
+    if (ids.size === 0) return;
+    this.deltaTimer = setTimeout(() => {
+      this.changedItemIds.set(new Set());
+      this.deltaTimer = null;
+    }, 1_800);
   }
 }

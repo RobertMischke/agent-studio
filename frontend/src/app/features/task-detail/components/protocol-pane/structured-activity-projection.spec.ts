@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MessageEvent, SystemStatusEvent, ToolBurstEvent } from 'coding-agent-chat/core';
 import type { CliOutputLine } from '../../../../models/task.model';
-import { projectStructuredActivityContent } from './structured-activity-projection';
+import {
+  projectStructuredActivityContent,
+  stripCodexTodoListFrames,
+} from './structured-activity-projection';
 
 function fixture(): CliOutputLine[] {
   const at = (index: number) => `2026-07-28T10:40:${String(index).padStart(2, '0')}.000Z`;
@@ -29,6 +32,22 @@ function fixture(): CliOutputLine[] {
 }
 
 describe('projectStructuredActivityContent', () => {
+  it('keeps Codex todo-list frames only in the raw Trace input', () => {
+    const frames: CliOutputLine[] = [
+      { timestamp: '2026-08-11T09:00:00Z', stream: 'stdout', text: '{"type":"item.started","item":{"type":"todo_list","items":[]}}' },
+      { timestamp: '2026-08-11T09:00:01Z', stream: 'stdout', text: 'Agent message' },
+      { timestamp: '2026-08-11T09:00:02Z', stream: 'stdout', text: '{"type":"item.updated","item":{"type":"todo_list","items":[]}}' },
+      { timestamp: '2026-08-11T09:00:03Z', stream: 'stdout', text: '{"type":"item.completed","item":{"type":"todo_list","items":[]}}' },
+    ];
+
+    const readable = stripCodexTodoListFrames(frames);
+
+    expect(readable).toEqual([frames[1]]);
+    expect(frames).toHaveLength(4);
+    const untouched = [frames[1]];
+    expect(stripCodexTodoListFrames(untouched)).toBe(untouched);
+  });
+
   it('uses Codex record headers to project payloads as collapsible tool output', () => {
     const result = projectStructuredActivityContent(fixture(), 'AGT-2355');
     const tool = result.events.find((event): event is ToolBurstEvent => event.kind === 'toolBurst');

@@ -697,7 +697,7 @@ export class TaskDetailComponent implements OnDestroy {
   });
 
   // ...and for the per-job plan poller (5 s cadence). Drives the plan
-  // strip above the activity log; the protocol pane injects the service
+  // strip in the Activity stream; the protocol pane injects the service
   // directly for its signal.
   private readonly planPoll = inject(PlanPollService);
   private readonly planEffect = effect(() => {

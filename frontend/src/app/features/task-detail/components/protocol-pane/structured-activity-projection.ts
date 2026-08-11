@@ -51,6 +51,39 @@ export interface StructuredActivityProjection {
 }
 
 /**
+ * Remove raw Codex todo-list transport frames from readable Activity. The
+ * normalized plan snapshot owns their presentation, while the caller keeps
+ * the original array for Trace. Unknown frame families pass through unchanged.
+ */
+export function stripCodexTodoListFrames(
+  lines: readonly CliOutputLine[],
+): readonly CliOutputLine[] {
+  let changed = false;
+  const result = lines.filter((line) => {
+    if (!isCodexTodoListFrame(line.text)) return true;
+    changed = true;
+    return false;
+  });
+  return changed ? result : lines;
+}
+
+function isCodexTodoListFrame(text: string): boolean {
+  if (!text.startsWith('{') || !text.includes('todo_list')) return false;
+  try {
+    const frame = JSON.parse(text) as {
+      type?: unknown;
+      item?: { type?: unknown };
+    };
+    return (frame.type === 'item.started'
+        || frame.type === 'item.updated'
+        || frame.type === 'item.completed')
+      && frame.item?.type === 'todo_list';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Split structured records out before Markdown projection.
  *
  * The raw Trace remains untouched at the caller. This readable projection

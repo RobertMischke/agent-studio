@@ -80,6 +80,10 @@
             [runActive]="activeRun() !== null"
             [runModel]="activeRun()?.model ?? null"
             [runStartedAt]="activeRun()?.startedAt ?? null" />
+          <app-orchestrator-task-progress
+            [jobId]="effectiveJobId()"
+            [watchPath]="effectiveWatchPath()"
+            [runActive]="activeRun() !== null" />
           <nav class="sheet__scope-row" aria-label="Orchestrator scope">
             <span class="sheet__scope sheet__scope--active"
                   aria-current="true"
@@ -111,6 +115,10 @@
           </section>
         } @else if (effectiveProject()) {
           <section class="sheet__chat">
+            <app-orchestrator-task-progress
+              [jobId]="effectiveJobId()"
+              [watchPath]="effectiveWatchPath()"
+              [runActive]="activeRun() !== null" />
             <div #conversationHost class="sheet__conversation" data-testid="orchestrator-conversation">
               <cac-conversation-view
                 variant="embedded"

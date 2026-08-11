@@ -120,6 +120,11 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
     }
   }
 
+  /** Refresh immediately when a push event belongs to the selected task. */
+  protected refreshIfCurrent(jobId: string): void {
+    if (this.currentJob?.id === jobId) this.refresh();
+  }
+
   stop(): void {
     this.currentKey = '';
     this.currentJob = null;

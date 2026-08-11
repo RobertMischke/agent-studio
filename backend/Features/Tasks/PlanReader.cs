@@ -6,7 +6,7 @@ namespace AgentStudio.Tasks;
 /// Builds the per-job <see cref="TaskPlanView"/> the plan strip renders by
 /// replaying two append-only telemetry files the runtime already writes:
 /// <c>logs/plan-snapshots.jsonl</c> (one line per Claude <c>TodoWrite</c> /
-/// Codex <c>update_plan</c> frame) and <c>logs/tool-calls.jsonl</c> (one line
+/// Codex <c>update_plan</c> / <c>todo_list</c> frame) and <c>logs/tool-calls.jsonl</c> (one line
 /// per tool started / completed). No model call, no second LLM: the data is on
 /// disk and this reader folds it. Missing or torn lines are skipped, never throw.
 ///
@@ -16,7 +16,7 @@ namespace AgentStudio.Tasks;
 /// single <c>active</c> item id, and attribute each tool call to whichever item
 /// was active when it fired. Tool calls before the first plan land in the
 /// "before plan" bucket. The two plan-frame tools themselves
-/// (<c>TodoWrite</c> / <c>update_plan</c>) are never counted as sub-actions.
+/// (<c>TodoWrite</c> / <c>update_plan</c> / <c>todo_list</c>) are never counted as sub-actions.
 /// </para>
 /// <para>
 /// <b>Soft-estimate median</b> is the median sub-action count across items that
@@ -34,7 +34,7 @@ internal static class PlanReader
     };
 
     private static readonly HashSet<string> PlanFrameTools =
-        new(StringComparer.OrdinalIgnoreCase) { "TodoWrite", "update_plan" };
+        new(StringComparer.OrdinalIgnoreCase) { "TodoWrite", "update_plan", "todo_list" };
 
     public static TaskPlanView Read(TaskInfo info)
     {

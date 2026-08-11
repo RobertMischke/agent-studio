@@ -99,7 +99,14 @@ public sealed class OrchestratorContextDigestServiceTests
             },
             [new DigestPublishProject("alpha", true, null, [new PublishTarget { Label = "npm", PendingCount = 2 }])],
             new TaskWatcherHealthSnapshot(now.AddHours(-1), 1, 1, now.AddMinutes(-1), null, true),
-            decisions);
+            decisions,
+            FocusPlan: new DigestTaskPlan(
+                "codex/todo_list",
+                1,
+                [
+                    new DigestTaskPlanItem("Inspect frames", "done"),
+                    new DigestTaskPlanItem("Render progress", "active"),
+                ]));
 
         var digest = OrchestratorContextDigestService.RenderDigest(data);
 
@@ -111,6 +118,9 @@ public sealed class OrchestratorContextDigestServiceTests
         Assert.Contains("healthz=ok; watcher=healthy", digest);
         Assert.Contains("decision journal", digest);
         Assert.Contains("task focus", digest);
+        Assert.Contains("agent plan:", digest);
+        Assert.Contains("progress=1/2 done; source=codex/todo_list", digest);
+        Assert.Contains("- [active] Render progress", digest);
         Assert.Contains("ALPHA-7", digest);
         Assert.DoesNotContain("ALPHA-8:", digest);
         Assert.Contains("RUN-7", digest);
@@ -142,7 +152,7 @@ public sealed class OrchestratorContextDigestServiceTests
         Assert.Equal("ok", runs.Status);
         Assert.Null(runs.CapturedAt);
         Assert.Equal(
-            ["lanes", "transitions", "runs", "quota", "publishTargets", "health", "decisionJournal"],
+            ["lanes", "transitions", "runs", "quota", "publishTargets", "health", "decisionJournal", "agentPlan"],
             statuses.Select(source => source.Name).ToArray());
     }
 

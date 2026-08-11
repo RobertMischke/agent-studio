@@ -122,8 +122,23 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
                 yield break;
             }
             case "item.started":
+                if (IsTodoList(root))
+                {
+                    // Keep the exact structured frame for Trace. The Activity
+                    // projection filters this family and renders PlanUpdated.
+                    yield return raw;
+                    yield break;
+                }
                 // Suppress: item.completed renders the same item; emitting both
                 // would double every tool line in the Activity Log.
+                yield break;
+            case "item.updated":
+                if (IsTodoList(root))
+                {
+                    yield return raw;
+                    yield break;
+                }
+                yield return raw with { Text = "● item.updated" };
                 yield break;
             case "item.completed":
             {
@@ -209,6 +224,9 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
             case "todo":
                 yield return raw with { Text = "● Todo update" };
                 yield break;
+            case "todo_list":
+                yield return raw;
+                yield break;
             case null:
                 yield return raw with { Text = "● item" };
                 yield break;
@@ -216,6 +234,14 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
                 yield return raw with { Text = $"● {itemType}" };
                 yield break;
         }
+    }
+
+    private static bool IsTodoList(JsonElement root)
+    {
+        return root.TryGetProperty("item", out var item)
+            && item.ValueKind == JsonValueKind.Object
+            && item.TryGetProperty("type", out var itemType)
+            && string.Equals(itemType.GetString(), "todo_list", StringComparison.Ordinal);
     }
 
     /// <summary>

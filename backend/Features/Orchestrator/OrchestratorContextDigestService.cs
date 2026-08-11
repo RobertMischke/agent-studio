@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using AgentStudio.Tasks;
 
 namespace AgentStudio.Orchestrator;
 
@@ -82,6 +83,7 @@ public sealed class OrchestratorContextDigestService
         var watcher = ReadWatcherHealth();
         var decisions = ReadDecisions(projectNames);
         var ownershipMappings = ReadOwnershipMappings(projectNames);
+        var focusPlan = focusTask == null ? null : DigestTaskPlan.From(PlanReader.Read(focusTask));
 
         var data = new OrchestratorContextDigestData(
             context,
@@ -94,7 +96,8 @@ public sealed class OrchestratorContextDigestService
             publish,
             watcher,
             decisions,
-            ownershipMappings);
+            ownershipMappings,
+            focusPlan);
 
         var response = new OrchestratorContextDigestResponse(
             context.Value,
@@ -440,6 +443,17 @@ public sealed class OrchestratorContextDigestService
         {
             sb.AppendLine("task focus:");
             sb.AppendLine($"- {data.FocusTask.Project}/{data.FocusTask.TaskKey}: {Compact(data.FocusTask.Title, 120)}; lane={data.FocusTask.State}; phase={data.FocusTask.Phase ?? "default"}; lastActivity={Iso(data.FocusTask.LastActivity)}");
+            sb.AppendLine("agent plan:");
+            if (data.FocusPlan == null)
+            {
+                sb.AppendLine("- unavailable because this CLI has not emitted a native plan frame");
+            }
+            else
+            {
+                sb.AppendLine($"- progress={data.FocusPlan.Done}/{data.FocusPlan.Items.Count} done; source={data.FocusPlan.Source}");
+                foreach (var item in data.FocusPlan.Items)
+                    sb.AppendLine($"- [{item.Status}] {Compact(item.Title, 140)}");
+            }
         }
 
         sb.AppendLine($"board pulse (latest {TransitionLimit}):");
@@ -554,6 +568,10 @@ public sealed class OrchestratorContextDigestService
             Source("decisionJournal", data.Decisions.Count == 0 ? "empty" : "ok",
                 data.Decisions.Count == 0 ? null : data.Decisions.Max(row => row.At),
                 $"latest {data.Decisions.Count} row(s)"),
+            Source("agentPlan",
+                data.FocusTask == null ? "unavailable" : data.FocusPlan == null ? "empty" : "ok",
+                data.FocusPlan == null ? null : data.CapturedAt,
+                data.FocusPlan == null ? "no native plan snapshot" : $"{data.FocusPlan.Done}/{data.FocusPlan.Items.Count} done"),
         ];
     }
 
@@ -608,7 +626,25 @@ internal sealed record OrchestratorContextDigestData(
     List<DigestPublishProject> Publish,
     TaskWatcherHealthSnapshot Watcher,
     List<DigestDecision> Decisions,
-    List<DigestOwnershipMapping>? OwnershipMappings = null);
+    List<DigestOwnershipMapping>? OwnershipMappings = null,
+    DigestTaskPlan? FocusPlan = null);
+
+internal sealed record DigestTaskPlan(
+    string Source,
+    int Done,
+    IReadOnlyList<DigestTaskPlanItem> Items)
+{
+    public static DigestTaskPlan? From(TaskPlanView plan)
+    {
+        if (!plan.HasPlan || plan.Items.Count == 0) return null;
+        return new DigestTaskPlan(
+            string.IsNullOrWhiteSpace(plan.Source) ? "unknown" : plan.Source,
+            plan.Items.Count(item => item.Status == "done"),
+            plan.Items.Select(item => new DigestTaskPlanItem(item.Title, item.Status)).ToList());
+    }
+}
+
+internal sealed record DigestTaskPlanItem(string Title, string Status);
 
 internal sealed record DigestOwnershipMapping(
     string MappingId,
