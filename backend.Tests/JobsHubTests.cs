@@ -193,6 +193,31 @@ public sealed class JobsHubTests : IDisposable
         Assert.Equal(jobId, info.Id);
     }
 
+    [Fact]
+    public async Task OrchestratorContextBroadcaster_SendsRefreshHintWithStableContextKey()
+    {
+        var config = BuildConfig();
+        var proxy = new CapturingClientProxy();
+        var broadcaster = new OrchestratorContextHubBroadcaster(
+            new FakeHubContext(new FakeHubClients(proxy)),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            NullLogger<OrchestratorContextHubBroadcaster>.Instance);
+        var updatedAt = new DateTime(2026, 8, 10, 12, 15, 0, DateTimeKind.Utc);
+
+        await broadcaster.ContextChangedAsync(
+            Project,
+            $"task:{Project}/AGT-2577",
+            updatedAt,
+            CancellationToken.None);
+
+        var send = Assert.Single(proxy.Sends);
+        Assert.Equal("orchestratorContextChanged", send.Method);
+        var payload = Assert.Single(send.Args)!;
+        Assert.Equal($"task:{Project}/AGT-2577", Prop(payload, "contextKey"));
+        Assert.Equal(Project, Prop(payload, "projectName"));
+        Assert.Equal(updatedAt, Prop(payload, "updatedAt"));
+    }
+
     // --- Helpers ---------------------------------------------------------
 
     private (TaskChangeNotifier notifier, TaskScannerService scanner, TaskStateMachine machine, CapturingClientProxy hub)
