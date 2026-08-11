@@ -1,7 +1,7 @@
 <div [class]="containerClass()"
      role="tablist"
      [attr.aria-label]="ariaLabel()">
-  @for (tab of tabs(); track trackTab($index, tab)) {
+  @for (tab of inlineTabs(); track trackTab($index, tab)) {
     <button type="button"
             [ngClass]="tabClass(tab)"
             role="tab"
@@ -29,4 +29,23 @@
       }
     </button>
   }
+  @if (overflowTabs().length > 0) {
+    <button type="button"
+            class="pane-tab pane-tab--overflow"
+            data-testid="pane-tabs-overflow"
+            aria-label="More tabs"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="overflowOpen()"
+            (click)="toggleOverflow($event)">⋯</button>
+  }
 </div>
+<app-menu
+  [items]="overflowMenuItems()"
+  [open]="overflowOpen()"
+  [anchorEl]="overflowAnchor()"
+  placement="below"
+  testIdPrefix="pane-tabs-overflow"
+  ariaLabel="More tabs"
+  [minWidth]="160"
+  (itemClick)="onOverflowItemClick($event)"
+  (closeRequest)="closeOverflow()" />

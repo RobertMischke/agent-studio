@@ -95,6 +95,8 @@
 
 /* ---- Evidence tab content (mirrors .reference-layout evidence-view) ---- */
 .evidence-view {
+  width: 100%;
+  min-width: 0;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -121,6 +123,7 @@
 .ev-section {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 6px;
 }
 
