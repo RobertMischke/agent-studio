@@ -7,6 +7,7 @@
 
 .studio-welcome {
   box-sizing: border-box;
+  container: studio-welcome / inline-size;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -2030,6 +2030,8 @@
   display: flex;
   flex-direction: column;
 }
+.studio-projected-content:has(+ app-studio-welcome) { flex: 0 0 auto; min-height: auto; }
+.studio-projected-content + app-studio-welcome { margin-top: var(--studio-spacing-4); }
 
 .studio-chat-rail {
   border-left: 1px solid var(--studio-border);
