@@ -201,7 +201,12 @@ public sealed class WorkbenchCatalogueService
         {
             var catalogue = List(name, includeHistory: true);
             if (catalogue == null) continue;
-            items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)));
+            var project = ResolveProject(name);
+            items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)
+            {
+                ProjectShortCode = project?.ShortCode,
+                ProjectColor = project?.Color,
+            }));
         }
 
         var sorted = WorkbenchOverviewPolicy.Sort(items);
@@ -1083,7 +1088,11 @@ public record WorkbenchTaskReferences(
     string WorkbenchId,
     string[] LegacyTaskKeys,
     IReadOnlyList<TaskReferenceLink> Items);
-public sealed record WorkbenchOverviewItem(string ProjectName, WorkbenchListItem Workbench);
+public sealed record WorkbenchOverviewItem(string ProjectName, WorkbenchListItem Workbench)
+{
+    public string? ProjectShortCode { get; init; }
+    public string? ProjectColor { get; init; }
+}
 public sealed record WorkbenchOverview(
     string? ProjectName,
     int Count,

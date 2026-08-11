@@ -1,0 +1,98 @@
+@if (kind() === 'history') {
+  <button type="button" class="history-entry" (click)="openItem.emit(item())">
+    <strong class="history-entry__title">{{ item().workbench.title }}</strong>
+    <span class="entry__meta">
+      <span class="entry__project"
+            [attr.aria-label]="'Project ' + item().projectName + ', short code ' + projectShortCode()"
+            [attr.title]="item().projectName">
+        <span class="entry__project-dot" [style.background-color]="projectColor()" aria-hidden="true"></span>
+        <strong>{{ projectShortCode() }}</strong>
+      </span>
+      <span aria-hidden="true">·</span>
+      <time [attr.datetime]="item().workbench.updatedAtUtc">{{ updatedLabel() }}</time>
+      <span aria-hidden="true">·</span>
+      <span class="entry__status" [attr.data-status]="item().workbench.status">{{ statusLabel() }}</span>
+    </span>
+    <span class="history-entry__excerpt">{{ item().workbench.summary }}</span>
+  </button>
+} @else {
+  <article class="entry"
+           [class.entry--pending]="kind() === 'decision'"
+           [class.entry--invalid]="kind() === 'invalid'"
+           [class.entry--expanded]="expanded()"
+           [attr.data-testid]="'workbench-overview-item-' + item().projectName + '-' + item().workbench.id">
+    <div class="entry__heading">
+      <h3>{{ item().workbench.title }}</h3>
+      @if (kind() === 'decision') {
+        <div class="entry__actions">
+          <button type="button"
+                  class="entry__action entry__action--link"
+                  [attr.data-testid]="'workbench-overview-full-' + item().projectName + '-' + item().workbench.id"
+                  (click)="openItem.emit(item())">Open full view</button>
+          <button type="button"
+                  class="entry__action entry__action--primary"
+                  [attr.aria-expanded]="expanded()"
+                  [attr.data-testid]="'workbench-overview-open-' + item().projectName + '-' + item().workbench.id"
+                  (click)="toggleReview.emit(item())">
+            {{ expanded() ? 'Close review' : 'Review here' }}
+          </button>
+        </div>
+      } @else if (kind() === 'current') {
+        <button type="button" class="entry__action entry__action--link"
+                (click)="openItem.emit(item())">Open</button>
+      }
+    </div>
+    <div class="entry__meta">
+      @if (kind() !== 'invalid') {
+        <span class="entry__project"
+              [attr.aria-label]="'Project ' + item().projectName + ', short code ' + projectShortCode()"
+              [attr.title]="item().projectName"
+              [attr.data-testid]="'workbench-overview-project-' + item().projectName + '-' + item().workbench.id">
+          <span class="entry__project-dot" [style.background-color]="projectColor()" aria-hidden="true"></span>
+          <strong>{{ projectShortCode() }}</strong>
+        </span>
+        <span aria-hidden="true">·</span>
+      }
+      <time [attr.datetime]="item().workbench.updatedAtUtc">{{ updatedLabel() }}</time>
+      <span aria-hidden="true">·</span>
+      <span class="entry__status" [attr.data-status]="item().workbench.status">{{ statusLabel() }}</span>
+      @if (kind() === 'decision') {
+        <span aria-hidden="true">·</span>
+        <span class="entry__open-count"
+              [attr.data-testid]="'workbench-overview-open-count-' + item().projectName + '-' + item().workbench.id">
+          {{ openDecisionLabel() }}
+        </span>
+      }
+      @if (kind() !== 'invalid' && referenceKeys().length > 0) {
+        <span aria-hidden="true">·</span>
+        <span class="entry__tasks" role="group" aria-label="Linked cards"
+              [attr.data-testid]="'workbench-overview-tasks-' + item().projectName + '-' + item().workbench.id">
+          @if (taskStatusesLoading() && taskStatuses().length === 0) {
+            @for (key of referenceKeys(); track key) {
+              <i class="entry__task-loading"
+                 [attr.aria-label]="'Loading task ' + key"
+                 [attr.data-testid]="'workbench-overview-task-loading-' + item().projectName + '-' + item().workbench.id + '-' + key"></i>
+            }
+          } @else {
+            @for (status of taskStatuses(); track status.key) {
+              <app-task-reference-microcard
+                [status]="status"
+                variant="lane-dot"
+                [testId]="'workbench-overview-task-' + item().projectName + '-' + item().workbench.id + '-' + status.key"
+              />
+            }
+          }
+        </span>
+      }
+    </div>
+    <p class="entry__excerpt">{{ item().workbench.error || item().workbench.summary }}</p>
+    @if (kind() === 'decision' && expanded()) {
+      <div class="entry__viewer"
+           [attr.data-testid]="'workbench-overview-inline-' + item().projectName + '-' + item().workbench.id">
+        <app-workbench-viewer
+          [projectName]="item().projectName"
+          [workbenchId]="item().workbench.id" />
+      </div>
+    }
+  </article>
+}

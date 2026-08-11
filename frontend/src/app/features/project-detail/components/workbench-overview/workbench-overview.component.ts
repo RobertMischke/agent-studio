@@ -10,21 +10,19 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { catchError, of } from 'rxjs';
 import { LoadingSurfaceComponent } from '../../../../components/async-feedback';
-import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import type { TaskReferenceStatus } from '../../../../components/task-reference-microcard/task-reference-microcard';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
-import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.component';
-import type {
-  ArticlePattern,
-  WorkbenchOverview,
-  WorkbenchOverviewItem,
-} from '../../../../models/project-docs.model';
+import { TaskService } from '../../../../services/task.service';
+import { WorkbenchOverviewRowComponent } from './workbench-overview-row/workbench-overview-row.component';
+import type { WorkbenchOverview, WorkbenchOverviewItem } from '../../../../models/project-docs.model';
 
 @Component({
   selector: 'app-workbench-overview',
   standalone: true,
-  imports: [LoadingSurfaceComponent, StudioIconComponent, WorkbenchViewerComponent],
+  imports: [LoadingSurfaceComponent, WorkbenchOverviewRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-overview.component.html',
   styleUrl: './workbench-overview.component.scss',
@@ -35,6 +33,7 @@ export class WorkbenchOverviewComponent {
 
   private readonly docs = inject(ProjectDocsService);
   private readonly hub = inject(JobsHubClient);
+  private readonly tasks = inject(TaskService);
   private readonly destroyRef = inject(DestroyRef);
   private refreshHandle: ReturnType<typeof setTimeout> | null = null;
   private requestGeneration = 0;
@@ -45,6 +44,9 @@ export class WorkbenchOverviewComponent {
   readonly discardedOpen = signal(false);
   readonly completedOpen = signal(false);
   readonly expandedDecisionKey = signal<string | null>(null);
+  readonly referenceKeysByItem = signal<ReadonlyMap<string, readonly string[]>>(new Map());
+  readonly taskStatusesByItem = signal<ReadonlyMap<string, readonly TaskReferenceStatus[]>>(new Map());
+  readonly taskStatusesLoading = signal(false);
 
   readonly decisionPending = computed(() => this.itemsWithStatus('decision-pending'));
   readonly active = computed(() => this.itemsWithStatus('active'));
@@ -52,6 +54,10 @@ export class WorkbenchOverviewComponent {
   readonly invalid = computed(() => this.itemsWithStatus('invalid'));
   readonly discarded = computed(() => this.itemsWithStatus('archived'));
   readonly documented = computed(() => this.itemsWithStatus('documented'));
+  readonly currentCount = computed(() =>
+    this.decisionPending().length + this.active().length + this.tracking().length,
+  );
+  readonly historyCount = computed(() => this.discarded().length + this.documented().length);
 
   constructor() {
     effect(() => {
@@ -98,29 +104,16 @@ export class WorkbenchOverviewComponent {
     this.completedOpen.update(value => !value);
   }
 
-  openDecisionCount(item: WorkbenchOverviewItem): number {
-    return item.workbench.openDecisionCount
-      ?? (item.workbench.status === 'decision-pending' ? 1 : 0);
+  dossierCountLabel(count: number): string {
+    return `${count} ${count === 1 ? 'Dossier' : 'Dossiers'}`;
   }
 
-  documentPattern(item: WorkbenchOverviewItem): ArticlePattern {
-    return item.workbench.pattern === 'ui' ? 'ui' : 'concept';
+  referenceKeys(item: WorkbenchOverviewItem): readonly string[] {
+    return this.referenceKeysByItem().get(this.itemKey(item)) ?? [];
   }
 
-  patternIcon(item: WorkbenchOverviewItem): StudioIconName {
-    return this.documentPattern(item) === 'ui' ? 'grid' : 'book';
-  }
-
-  statusLabel(item: WorkbenchOverviewItem): string {
-    const workbench = item.workbench;
-    if (!workbench.valid) return 'Needs attention';
-    if (workbench.documentation?.eligible) return 'Ready to document';
-    if (workbench.status === 'decision-pending') return 'Decision pending';
-    if (workbench.status === 'active') return workbench.phase ?? 'Active';
-    if (workbench.status === 'decided') return 'Tracking';
-    if (workbench.status === 'archived') return 'Discarded';
-    if (workbench.status === 'documented') return 'Documented';
-    return workbench.status;
+  taskStatuses(item: WorkbenchOverviewItem): readonly TaskReferenceStatus[] {
+    return this.taskStatusesByItem().get(this.itemKey(item)) ?? [];
   }
 
   updatedLabel(value: string): string {
@@ -134,7 +127,7 @@ export class WorkbenchOverviewComponent {
     return (this.overview()?.items ?? []).filter(item => item.workbench.status === status);
   }
 
-  private itemKey(item: WorkbenchOverviewItem): string {
+  itemKey(item: WorkbenchOverviewItem): string {
     return `${item.projectName}:${item.workbench.id}`;
   }
 
@@ -156,12 +149,85 @@ export class WorkbenchOverviewComponent {
         if (generation !== this.requestGeneration) return;
         this.overview.set(overview);
         this.loading.set(false);
+        this.hydrateTaskReferences(overview, generation);
       },
       error: () => {
         if (generation !== this.requestGeneration) return;
         this.error.set(true);
         this.loading.set(false);
+        this.referenceKeysByItem.set(new Map());
+        this.taskStatusesByItem.set(new Map());
+        this.taskStatusesLoading.set(false);
       },
     });
   }
+
+  private hydrateTaskReferences(overview: WorkbenchOverview, generation: number): void {
+    const currentItems = overview.items.filter(item =>
+      ['decision-pending', 'active', 'decided'].includes(item.workbench.status),
+    );
+    const keysByItem = new Map<string, readonly string[]>();
+    const allKeys: string[] = [];
+    for (const item of currentItems) {
+      const keys = uniqueKeys([
+        ...(item.workbench.documentation?.references.map(reference => reference.key) ?? []),
+        ...(item.workbench.relatedTaskKeys ?? []),
+      ]);
+      keysByItem.set(this.itemKey(item), keys);
+      allKeys.push(...keys);
+    }
+
+    const unique = uniqueKeys(allKeys);
+    this.referenceKeysByItem.set(keysByItem);
+    this.taskStatusesByItem.set(new Map());
+    this.taskStatusesLoading.set(unique.length > 0);
+    if (unique.length === 0) return;
+
+    this.tasks.getReferenceStatuses(unique).pipe(
+      catchError(() => of([] as TaskReferenceStatus[])),
+    ).subscribe(statuses => {
+      if (generation !== this.requestGeneration) return;
+      const byKey = new Map(statuses.map(status => [normalizeKey(status.key), status]));
+      const byItem = new Map<string, readonly TaskReferenceStatus[]>();
+      for (const item of currentItems) {
+        const itemKeys = keysByItem.get(this.itemKey(item)) ?? [];
+        byItem.set(this.itemKey(item), itemKeys.map(key =>
+          byKey.get(normalizeKey(key)) ?? ghostStatus(key, item),
+        ));
+      }
+      this.taskStatusesByItem.set(byItem);
+      this.taskStatusesLoading.set(false);
+    });
+  }
+}
+
+function uniqueKeys(keys: readonly string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const key of keys) {
+    const normalized = normalizeKey(key);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(key.trim());
+  }
+  return result;
+}
+
+function normalizeKey(value: string | null | undefined): string {
+  return (value ?? '').trim().toUpperCase();
+}
+
+function ghostStatus(key: string, item: WorkbenchOverviewItem): TaskReferenceStatus {
+  return {
+    key,
+    exists: false,
+    taskKey: null,
+    title: null,
+    lane: null,
+    projectId: '',
+    projectName: item.projectName,
+    projectColor: item.projectColor ?? null,
+    merge: null,
+    reviewGrade: null,
+  };
 }

@@ -708,6 +708,38 @@
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 
+  <section id="dossier-queue-addendum" data-concept-section="living-addendum">
+    <h2><span class="section-no">08</span>Living addition: Dossier decision queues</h2>
+    <p><strong>Added 11 August 2026 from AGT-2606.</strong> The central and project-scoped Dossier overviews established the first reusable case for a calm decision queue. This addition is append-only: it preserves the original decision and adds the missing surface-specific rules below.</p>
+
+    <div class="rule-list">
+      <article class="rule">
+        <div class="rule-id">ADM-12</div>
+        <div>
+          <h4>Dossier queue anatomy</h4>
+          <p>A Dossier decision or history entry MUST be one flat, full-width row rather than a card in a responsive card grid. Its reading order is title, quiet metadata, then a short excerpt with the standard 76ch measure. Cross-project metadata uses the project color mark plus registry short code, followed by the absolute update date and subdued lifecycle facts. Row dividers and a low-contrast whole-row hover or pending tint are valid; a perimeter border, radius, resting shadow, nested panel shell, or status pill is not.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-13</div>
+        <div>
+          <h4>Waiting decisions are routine</h4>
+          <p>A waiting operator decision is a normal workflow state and MUST use neutral text or a quiet neutral surface. Warning and alarm orange remains reserved for real failures, blocked safety conditions, and acute operational alarms. Use one compact primary action for inline review and a text-link treatment for the full view; do not render two outlined buttons with equal emphasis. Settled history keeps the same title, metadata, and excerpt rhythm without acute color.</p>
+        </div>
+      </article>
+      <article class="rule">
+        <div class="rule-id">ADM-14</div>
+        <div>
+          <h4>Lifecycle and linked-card receipts</h4>
+          <p>Queue labels MUST state lifecycle truth: <code>Decision pending</code> for an open decision, <code>Accepted / In progress</code> after acceptance while implementation consequences remain open, and <code>Documented</code> in settled history. A decided Dossier MUST NOT retain a pending or vague tracking label. Current equals the visible decision-pending, active, and decided rows; History equals archived and documented rows. Linked consequence cards appear as the shared clickable lane-dot microcards in the metadata line. Resolve their unique keys in one batch for each overview response, preserve Dossier and task-key order, and retain loading and ghost states rather than shifting or hiding the row.</p>
+        </div>
+      </article>
+    </div>
+
+    <h3>Case provenance</h3>
+    <p>The operator review on 11 August described the prior orange pills, framed box-in-box cards, dense spacing, and paired outline actions as too loud and error-like. AGT-2606 applies ADM-12 through ADM-14 to both overview scopes and preserves before and after evidence in light and dark themes at wide and narrow widths.</p>
+  </section>
+
   <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
 </main>
 </body>

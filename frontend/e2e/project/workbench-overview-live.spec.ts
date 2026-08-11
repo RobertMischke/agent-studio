@@ -36,6 +36,39 @@ async function proxyApi(page: Page, backendBaseUrl: string): Promise<void> {
   });
 }
 
+async function captureOverviewEvidence(
+  page: Page,
+  testInfo: TestInfo,
+  scope: 'project' | 'central',
+  phase: 'before' | 'after',
+): Promise<void> {
+  const orchestratorSheet = page.getByTestId('orch-side-sheet');
+  if (await orchestratorSheet.isVisible()) {
+    await orchestratorSheet.getByTestId('sidesheet-close').click();
+  }
+  await page.addStyleTag({
+    content: 'app-orchestrator-side-sheet { display: none !important; }',
+  });
+  await expect(orchestratorSheet).toBeHidden();
+
+  for (const viewport of [
+    { name: 'wide', width: 1440, height: 1000 },
+    { name: 'narrow', width: 520, height: 900 },
+  ] as const) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(
+          testInfo,
+          `workbench-${scope}-overview-${phase}-${theme}-${viewport.name}--real.png`,
+        ),
+        fullPage: true,
+      });
+    }
+  }
+}
+
 test('project and central overviews receive a newly created item without reloading the Tree', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(150_000);
   const watchPathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
@@ -59,7 +92,12 @@ test('project and central overviews receive a newly created item without reloadi
   const probeDir = path.join(devBackend.workspace, 'docs', 'operations', id);
   try {
     await proxyApi(page, devBackend.baseUrl);
+    const hubSocketReady = page.waitForEvent('websocket', {
+      predicate: socket => new URL(socket.url()).pathname === '/hubs/jobs',
+      timeout: 15_000,
+    });
     await page.goto('/');
+    await hubSocketReady;
     await page.addStyleTag({ content: '[data-testid="offline-banner"] { display: none !important; }' });
 
     const projectRow = page.getByTestId(`studio-explorer-project-${projectName}`);
@@ -98,6 +136,18 @@ test('project and central overviews receive a newly created item without reloadi
       relatedTaskKeys: [],
     }, null, 2));
 
+    await expect.poll(async () => {
+      const response = await fetch(
+        `${devBackend.baseUrl}/api/projects/${encodeURIComponent(projectName!)}/workbenches?history=true`,
+      );
+      if (!response.ok) return false;
+      const body = await response.json() as { items?: { id: string }[] };
+      return body.items?.some(item => item.id === id) ?? false;
+    }, {
+      message: 'The dev backend catalogue must observe the newly created Dossier.',
+      timeout: 15_000,
+    }).toBe(true);
+
     const treeItem = page.getByTestId(`studio-explorer-workbench-${projectName}-${id}`);
     await expect(treeItem, 'SignalR created event must add the Tree child without page.reload().')
       .toBeVisible({ timeout: 15_000 });
@@ -112,25 +162,14 @@ test('project and central overviews receive a newly created item without reloadi
     await expect(inlineViewer.frameLocator('[data-testid="workbench-viewer-frame"]')
       .locator('[data-studio-decision-control]')).toHaveCount(2);
 
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await page.screenshot({
-        path: evidencePath(testInfo, `workbench-project-overview-${theme}--real.png`),
-        fullPage: true,
-      });
-    }
+    await captureOverviewEvidence(page, testInfo, 'project', 'after');
 
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.getByTestId('studio-ab-workbenches').click();
     await expect(page).toHaveURL(/#\/workbenches(?:&|$)/);
     await expect(page.getByTestId('workbench-overview-scope')).toHaveCount(0);
     await expect(page.getByTestId(`workbench-overview-item-${projectName}-${id}`)).toBeVisible();
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await page.screenshot({
-        path: evidencePath(testInfo, `workbench-central-overview-${theme}--real.png`),
-        fullPage: true,
-      });
-    }
+    await captureOverviewEvidence(page, testInfo, 'central', 'after');
   } finally {
     fs.rmSync(probeDir, { recursive: true, force: true });
   }
