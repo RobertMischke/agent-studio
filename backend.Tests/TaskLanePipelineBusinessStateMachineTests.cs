@@ -291,7 +291,8 @@ public sealed class TaskLanePipelineBusinessStateMachineTests : IDisposable
         => MoveAndAssertAsync(
             TaskStates.HumanReview,
             TaskStates.Completed,
-            includeCommit: false);
+            includeCommit: false,
+            noBranchExpected: true);
 
     [Fact]
     public Task HumanReview_OperatorReissue_TaskReturnsToReady()
@@ -440,10 +441,16 @@ public sealed class TaskLanePipelineBusinessStateMachineTests : IDisposable
         string target,
         string? sourcePhase = null,
         string? expectedPhase = null,
-        bool includeCommit = true)
+        bool includeCommit = true,
+        bool noBranchExpected = false)
     {
         const string id = "business-transition";
-        _fixture.SeedTask(source, id, sourcePhase, includeCommit: includeCommit);
+        _fixture.SeedTask(
+            source,
+            id,
+            sourcePhase,
+            includeCommit: includeCommit,
+            noBranchExpected: noBranchExpected);
 
         var outcome = await _fixture.Transitions.MoveAsync(
             id,
@@ -1152,7 +1159,8 @@ internal sealed class TaskLanePipelineFixture : IDisposable
         IReadOnlyList<TaskCommitInfo>? commits = null,
         IReadOnlyList<string>? tags = null,
         string? key = null,
-        string? integrationBranch = null)
+        string? integrationBranch = null,
+        bool noBranchExpected = false)
     {
         var folder = Path.Combine(WatchPath, state, id);
         Directory.CreateDirectory(folder);
@@ -1172,6 +1180,7 @@ internal sealed class TaskLanePipelineFixture : IDisposable
             ["enteredLaneAt"] = new DateTime(2026, 7, 29, 8, 0, 0, DateTimeKind.Utc),
             ["tags"] = tags?.ToList() ?? [ContractTag],
             ["integrationBranch"] = integrationBranch,
+            ["noBranchExpected"] = noBranchExpected,
             ["commits"] = chain,
             ["commit"] = chain.LastOrDefault(),
         };

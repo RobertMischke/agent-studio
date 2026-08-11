@@ -128,6 +128,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
     private readonly Dictionary<string, ProjectQueue> _projectQueues =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Func<RemoteDeliveryIntegrationRequest, Task<MergeIntoIntegrationResult>> _integrate;
+    private readonly Action<RemoteDeliveryIntegrationRequest, string, string, string> _recordFailure;
     private readonly ILogger<RemoteDeliveryIntegrationCoordinator> _logger;
     private long _sequence;
 
@@ -135,21 +136,45 @@ public sealed class RemoteDeliveryIntegrationCoordinator
         MergeIntoDevelopRunner runner,
         TaskScannerService scanner,
         TaskProvenanceService provenance,
+        PipelineExecutionLog pipelineLog,
         TimelineLog timeline,
         ILogger<RemoteDeliveryIntegrationCoordinator> logger)
         : this(
             request => IntegrateAndRecordAsync(request, runner, scanner, provenance, timeline),
-            logger)
+            logger,
+            (request, failureCode, summary, detail) => RecordPreReviewFailure(
+                request,
+                failureCode,
+                summary,
+                detail,
+                pipelineLog,
+                timeline))
     {
     }
 
     internal RemoteDeliveryIntegrationCoordinator(
         Func<RemoteDeliveryIntegrationRequest, Task<MergeIntoIntegrationResult>> integrate,
-        ILogger<RemoteDeliveryIntegrationCoordinator> logger)
+        ILogger<RemoteDeliveryIntegrationCoordinator> logger,
+        Action<RemoteDeliveryIntegrationRequest, string, string, string>? recordFailure = null)
     {
         _integrate = integrate;
+        _recordFailure = recordFailure ?? ((_, _, _, _) => { });
         _logger = logger;
     }
+
+    /// <summary>
+    /// Persists a Remote delivery gate rejection before the card enters Human
+    /// Review. The card therefore projects a typed failure instead of a silent
+    /// integration-pending state, and acceptance has no reason to retry it.
+    /// </summary>
+    public void RecordGateFailure(
+        RemoteDeliveryIntegrationRequest request,
+        string detail)
+        => _recordFailure(
+            request,
+            AcceptedIntegrationFailureCodes.DeliveryGateFailed,
+            "Remote delivery gate failed before integration.",
+            detail);
 
     public Task<MergeIntoIntegrationResult> EnqueueAsync(
         RemoteDeliveryIntegrationRequest request)
@@ -230,6 +255,11 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                     delivery.Request.Project,
                     delivery.Request.JobId,
                     delivery.Sequence);
+                _recordFailure(
+                    delivery.Request,
+                    AcceptedIntegrationFailureCodes.IntegrationError,
+                    "Immediate Remote delivery integration failed.",
+                    ex.Message);
                 delivery.Completion.TrySetResult(MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
                     error: ex.Message));
@@ -295,7 +325,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
             TimelineActors.System,
             success
                 ? $"Remote delivery integrated into {request.IntegrationBranch} before Human Review."
-                : $"Immediate remote delivery integration failed ({result.Outcome}); Human Review acceptance remains the retry backstop.",
+                : $"Immediate Remote delivery integration failed ({result.Outcome}); the task remains reviewable with a visible integration failure.",
             details: new Dictionary<string, string>
             {
                 ["outcome"] = result.Outcome.ToString(),
@@ -304,5 +334,40 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                 ["stage"] = "pre-human-review",
             });
         return result;
+    }
+
+    private static void RecordPreReviewFailure(
+        RemoteDeliveryIntegrationRequest request,
+        string failureCode,
+        string summary,
+        string detail,
+        PipelineExecutionLog pipelineLog,
+        TimelineLog timeline)
+    {
+        var now = DateTime.UtcNow;
+        pipelineLog.RecordStep(request.JobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = failureCode,
+            VerdictSummary = summary,
+            Reason = detail,
+            FailureCode = failureCode,
+        });
+        timeline.Append(
+            request.JobFolderPath,
+            TimelineEventKinds.IntegrationFailed,
+            TimelineActors.System,
+            $"{summary} The task remains available for review and delivery recovery.",
+            details: new Dictionary<string, string>
+            {
+                ["outcome"] = failureCode,
+                ["integrationBranch"] = request.IntegrationBranch,
+                ["detail"] = detail,
+                ["stage"] = "pre-human-review",
+            });
     }
 }

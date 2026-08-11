@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-10
+Version: 2026-08-11
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -94,7 +94,14 @@ pipeline view.
   Envelope whose Remote Review is `Pass` enters the queue when build/test is
   passed or explicitly not applicable. A frozen plan that requires build/test
   cannot omit that verdict. The report endpoint awaits the result before moving
-  Auto Review to Human Review. The common runner performs serialized merge,
+  Auto Review to Human Review. This is the canonical path for every Remote
+  coding project; it is not limited to AGT, a specific executor, or a project
+  feature flag. `RemoteExecutionEnabled` controls dispatch only and does not
+  change integration admission once a canonical Remote Review report exists.
+  A rejected Result Envelope, Review outcome, or build/test verdict records a
+  typed `delivery-gate-failed` integration step before the card enters Human
+  Review, so the card shows a visible failed integration round rather than
+  silent `pending`. The common runner performs serialized merge,
   containment checks, mechanical behind-base recovery, the pre-develop build
   gate, rollback, conflict evidence, and push hand-off. Recovery replays the
   delivery in a disposable detached worktree with `rerere` disabled and proceeds
@@ -106,34 +113,22 @@ pipeline view.
   develop merge commit, and fast-forwards `main` to the same commit. Existing
   divergence blocks before the delivery merge. A main-only repository retains
   the single-target release path.
-  Human acceptance remains a retry path for a failed
-  immediate or legacy delivery: `TaskTransitionService` keeps the card in Human
-  Review with phase `integrating`, stamps the internal `integrationpending`
-  recovery marker, and enqueues `AcceptedIntegrationQueue` for
-  `AcceptedIntegrationWorker`. `Merged`, `MergedAfterRebase`, or `AlreadyMerged` completes that
-  acceptance transaction; failures clear the phase, retain the card in Human
-  Review, and append a hard integration-failed journal event.
-  Acceptance and backstop execution resolve the target through
-  `GitService.ResolveIntegrationBranch`: an existing configured local or remote
-  branch wins, otherwise the repository's `origin/HEAD` branch is used. A card
-  whose Git-derived `integration.status` is already `integrated` moves directly
-  to Completed without another merge or gate; that non-run is recorded Skipped,
-  not Passed. Immediate acceptance failures return the typed
-  `IntegrationFailed` move outcome (HTTP 409 for the single-card API), while
-  every failure preserves the concrete reason in the merge step and
-  `integration_failed` timeline event. Worker outcomes `NoTaskBranch`, `Error`,
-  and `Conflict` also update an owned `status.md` section and the card's red
-  integration badge before ordinary Human Review resumes. A legacy Completed
-  card is moved back to Human Review. `operatorOverride: true` is the explicit,
+  Human acceptance is a quality and sight-review decision only. For a coding
+  delivery, `TaskTransitionService` validates that `review-subject.json` still
+  names the current Attempt and that Git already projects the delivery as
+  `integrated`. It then performs only the lane move. Acceptance never fetches,
+  merges, gates, resets the merge row, or enqueues `AcceptedIntegrationQueue`.
+  An unintegrated delivery returns the typed `IntegrationFailed` move outcome
+  (HTTP 409 for the single-card API) and remains in Human Review with its
+  existing gate, conflict, or integration evidence unchanged. Repeated
+  acceptance of an integrated delivery is idempotent with respect to Git and
+  pipeline history. `operatorOverride: true` is the explicit,
   target-Completed-only exception; no-branch task metadata is exempt without an
   override.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
-  from origin and fenced to `ResultSha`. Transactional acceptance first fetches
-  the configured origin integration ref and uses that refreshed remote ancestry
-  for its already-integrated decision, avoiding a redundant gate when the local
-  branch is stale. Immediately before a real merge or release gate, the
+  from origin and fenced to `ResultSha`. Immediately before a real merge or release gate, the
   configured integration ref is fetched again and fast-forwarded; a missing
   local branch is created from origin and a divergent one fails visibly. The
   outcome is recorded so the pending step
@@ -210,11 +205,12 @@ pipeline view.
   directories older than 72 hours once per hour. Active resource namespaces,
   the reusable `.baseline-cache`, reparse points, and unrelated directories are
   never deletion candidates.
-- `AcceptedIntegrationBackstopHostedService` is the acceptance safety net, not
-  the normal Remote integration path. It re-drives accepted remote and local
-  deliveries after a backend restart when the durable Human Review `integrating`
-  phase landed but the queued merge did not complete, including acceptance
-  after a failed immediate attempt. It orders recovered deliveries by project
+- `AcceptedIntegrationBackstopHostedService` is a compatibility and restart
+  recovery path, not an acceptance trigger or the normal Remote integration
+  path. It re-drives only remote and local deliveries whose durable Human Review
+  `integrating` phase was written by an older backend process before this
+  contract took effect. New acceptance requests never create that state. It
+  orders recovered deliveries by project
   and original delivery time. The channel is only a latency optimization;
   phase, pending marker, pipeline record, and timeline are the durability
   boundary. Recovery consumes the same
@@ -564,10 +560,20 @@ Engine settlement can request reissue, escalation, or Human Review handoff, and
 only the Task Server can apply the version-fenced lane mutation plus lifecycle
 evidence. Studio and its BFF are read and command surfaces, not loop owners.
 
-Integration remains a deferred operator decision. Its target Remote shape is a
-Task Server integration command plus execution on a Git-capable Agent Host. No
-automatic Post Processing verdict may bypass Human Review or mark a task
-Completed.
+Integration is a pipeline-owned delivery decision. The canonical Remote order
+is **delivery -> settled Review/build gate -> integration -> Human Review ->
+acceptance**. No automatic Post Processing verdict may mark a task Completed;
+Human Review remains the quality decision after the code is already integrated.
+
+The named deviations are narrow. Local worktree coding integrates during local
+finalization before its Auto Review gate, but still before Human Review.
+Planning, research, concept, Epic, and other no-code/no-branch deliveries do not
+integrate. Remote Review infrastructure failures remain in Auto Review while
+their retry budget is available. A failed product/build gate, merge conflict,
+lineage failure, push failure, or configured `pull-request` integration strategy
+may enter or remain in Human Review with a visible failed/non-integrated verdict;
+acceptance cannot repair it. All currently configured direct-merge Remote coding
+projects use the canonical order without a project-name exception.
 
 A post-step has four distinct lifecycle states. **Defined** means the code-owned
 catalogue knows its id, capabilities, dependencies, and default. **Enabled**
@@ -796,9 +802,10 @@ operator changes cause the step to fail before its writer runs.
   and renders "planned", while a deferred step renders "pending" until a named
   trigger runs it. For `post-merge-into-develop`, a green fenced Remote delivery
   triggers the common runner before Human Review. A failed immediate attempt
-  remains visible on the card. Human acceptance resets the row for a fresh retry,
-  and `AcceptedIntegrationWorker` runs it while the card remains in Human Review
-  with phase `integrating`. `Merged`, `MergedAfterRebase`, or `AlreadyMerged` commits the move to Completed. A
+  remains visible on the card. Human acceptance does not reset or run this row;
+  it completes only a Git-proven integrated delivery. The
+  `AcceptedIntegrationWorker` and its backstop may finish only a legacy
+  transaction that already has the durable `integrating` phase. A
   clean mechanical replay records `merged-after-rebase` and continues through
   the ordinary gate. A remaining conflict is a visible `Failed` outcome with conflicted files in the verdict
   summary; the phase clears, the card remains in Review, and the working tree is

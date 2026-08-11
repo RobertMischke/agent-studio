@@ -13,6 +13,12 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             true
         },
         {
+            "delivery-gate-failed",
+            "The Remote delivery gate rejected the reviewed result.",
+            AcceptedIntegrationFailureCodes.DeliveryGateFailed,
+            false
+        },
+        {
             "gate-failed",
             "The build gate blocked the merge.",
             AcceptedIntegrationFailureCodes.BuildGateFailed,

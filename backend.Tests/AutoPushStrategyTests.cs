@@ -66,7 +66,11 @@ public sealed class AutoPushStrategyTests : IDisposable
         var deps = BuildDeps(queue);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var outcome = await deps.Transitions.MoveAsync("slow-task", TaskStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync(
+            "slow-task",
+            TaskStates.Completed,
+            _watchPath,
+            suppressIntegrationTrigger: true);
         sw.Stop();
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
@@ -88,7 +92,11 @@ public sealed class AutoPushStrategyTests : IDisposable
         var queue = new CompletedPushQueue();
         var deps = BuildDeps(queue);
 
-        var outcome = await deps.Transitions.MoveAsync("worker-task", TaskStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync(
+            "worker-task",
+            TaskStates.Completed,
+            _watchPath,
+            suppressIntegrationTrigger: true);
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.NotEqual(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
 
@@ -196,7 +204,11 @@ public sealed class AutoPushStrategyTests : IDisposable
         WriteJob(TaskStates.HumanReview, "reviewed-task", sha);
         var deps = BuildDeps();
 
-        var outcome = await deps.Transitions.MoveAsync("reviewed-task", TaskStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync(
+            "reviewed-task",
+            TaskStates.Completed,
+            _watchPath,
+            suppressIntegrationTrigger: true);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
@@ -211,7 +223,11 @@ public sealed class AutoPushStrategyTests : IDisposable
         var deps = BuildDeps();
         deps.Settings.SetAutoPushStrategy(ProjectName, AutoPushStrategies.Never);
 
-        var outcome = await deps.Transitions.MoveAsync("manual-task", TaskStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync(
+            "manual-task",
+            TaskStates.Completed,
+            _watchPath,
+            suppressIntegrationTrigger: true);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
@@ -244,7 +260,11 @@ public sealed class AutoPushStrategyTests : IDisposable
         WriteJob(TaskStates.HumanReview, "diverged-task", localSha);
         var deps = BuildDeps();
 
-        var outcome = await deps.Transitions.MoveAsync("diverged-task", TaskStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync(
+            "diverged-task",
+            TaskStates.Completed,
+            _watchPath,
+            suppressIntegrationTrigger: true);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(remoteSha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));

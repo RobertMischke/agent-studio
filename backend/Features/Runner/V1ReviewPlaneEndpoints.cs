@@ -486,12 +486,11 @@ public static class V1ReviewPlaneEndpoints
                     settled.ReviewAttempt.Outcome?.ToString(),
                     settledReviewPlan,
                     request.Verdicts);
-                if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase)
-                    && integrationDecision.ShouldIntegrate)
+                if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
                     var projectSettings = settings.Get(task.ProjectName);
                     var subject = ReviewSubjectStore.Read(task.FolderPath);
-                    await remoteIntegration.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
+                    var integrationRequest = new RemoteDeliveryIntegrationRequest(
                         task.ProjectName,
                         task.Id,
                         task.FolderPath,
@@ -502,7 +501,17 @@ public static class V1ReviewPlaneEndpoints
                         subject?.CompletedAtUtc
                         ?? (sourceRun?.TerminalAt is { } terminalAt
                             ? new DateTimeOffset(DateTime.SpecifyKind(terminalAt, DateTimeKind.Utc))
-                            : DateTimeOffset.UtcNow))).ConfigureAwait(false);
+                            : DateTimeOffset.UtcNow));
+                    if (integrationDecision.ShouldIntegrate)
+                    {
+                        await remoteIntegration.EnqueueAsync(integrationRequest).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        remoteIntegration.RecordGateFailure(
+                            integrationRequest,
+                            integrationDecision.Reason);
+                    }
                 }
 
                 if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
