@@ -12,6 +12,7 @@
  */
 export { TaskDetailComponent } from './task-detail';
 export { DetailLoadErrorComponent } from './components/detail-load-error/detail-load-error.component';
+export { TaskDetailLoadSectionsComponent } from './components/task-detail-load-sections/task-detail-load-sections.component';
 export { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
 // AGT-2069 — exported for the planning-visibility visual harness
 // (src/mockups/planning-visibility). The panel is otherwise rendered only from

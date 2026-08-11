@@ -105,6 +105,37 @@ describe('TaskSelectionService · stable task URLs', () => {
     expect(location.search).toBe('?view=board');
   });
 
+  it('publishes the board snapshot before the detail request resolves', () => {
+    selection.openDetail(info);
+
+    expect(selection.detailPreview()).toBe(info);
+    expect(selection.selected()).toBeNull();
+    expect(selection.detailLoading()).toBe(true);
+
+    http.expectOne(req => req.url.endsWith('/api/tasks/human-readable-slug')).flush(detail);
+    expect(selection.selected()).toEqual(detail);
+    expect(selection.detailPreview()).toBeNull();
+    expect(selection.detailLoading()).toBe(false);
+  });
+
+  it('turns a stalled detail request into an honest retryable timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      selection.openDetail(info);
+      const request = http.expectOne(req => req.url.endsWith('/api/tasks/human-readable-slug'));
+
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(request.cancelled).toBe(true);
+      expect(selection.detailLoading()).toBe(false);
+      expect(selection.detailLoadError()?.message).toContain('timed out');
+      expect(selection.detailPreview()).toBe(info);
+      expect(selection.selected()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rehydrates a search tab through live task identity instead of its stale lane path', () => {
     const staleTaskKey = 'C:\\private\\project\\5e-escalated\\human-readable-slug::human-readable-slug';
     const staleInfo = { ...info, taskKey: staleTaskKey };

@@ -113,10 +113,8 @@
                       (click)="openCreate()">＋ Add task</button>
             </div>
           }
-          @if (studioTabState.activeTab()?.kind === 'task' && selectedJob(); as detail) {
+          @if (studioTabState.activeTab()?.kind === 'task' && !detailPreview() && !detailLoading() && !detailLoadError() && selectedJob(); as detail) {
             @let gitCommitCount = detail.info.commits?.length || (detail.info.commit ? 1 : 0);
-            <!-- Slim detail header inside the tab bar: pane toggles, activity,
-                 pager, and completion replace the hidden wide detail header. -->
             @if (studioRunActivityBadge(); as ra) {
               <span class="studio-tab-action__run-activity"
                     [class]="'studio-tab-action__run-activity studio-tab-action__run-activity--' + ra.tone"
@@ -205,8 +203,6 @@
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
-                <!-- Landed status stays in the git pane; this cluster only offers
-                     the acceptance action and its context-aware label. -->
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"
@@ -322,12 +318,13 @@
               </main>
               }
               }
-              }
+            }
             @case ('task') {
-              @if (detailLoading()) {
-                <app-loading-surface kind="task-detail" label="Loading task details…" />
-              } @else if (detailLoadError(); as error) {
-                <app-detail-load-error [taskLabel]="error.taskLabel" [message]="error.message" (retry)="retryDetailLoad()" />
+              @if (detailPreview(); as preview) {
+                <main class="workspace__main workspace__main--studio" data-testid="studio-task">
+                  <app-task-detail-load-sections [info]="preview"
+                    [errorMessage]="detailLoadError()?.message ?? null" (back)="closeDetail()" (retry)="retryDetailLoad()" />
+                </main>
               } @else if (selectedJob(); as detail) {
                 <main class="workspace__main workspace__main--studio" data-testid="studio-task">
                   <app-job-detail #jobDetail
@@ -353,11 +350,14 @@
                                   (detailTabChange)="onTaskDetailTabChange($event)"
                                   (inspectorTabChange)="onTaskInspectorTabChange($event)" />
                 </main>
+              } @else if (detailLoading()) {
+                <app-loading-surface kind="task-detail" label="Loading task details…" />
+              } @else if (detailLoadError(); as error) {
+                <app-detail-load-error [taskLabel]="error.taskLabel" [message]="error.message" (retry)="retryDetailLoad()" />
               } @else {
                 <div class="studio-coming-soon">
                   <h2>No task selected</h2>
-                  <p>The task tab requires a selected job. Open one from the Explorer panel
-                    or from the board.</p>
+                  <p>The task tab requires a selected job. Open one from the Explorer panel or from the board.</p>
                 </div>
               }
             }

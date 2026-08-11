@@ -660,7 +660,7 @@ export class StudioShellComponent {
     this.tabState.open({ kind: 'task', taskKey: job.taskKey });
     // Keep the legacy TaskSelectionService in sync so the embedded
     // <app-job-detail> can pick the job up by reading the selected signal.
-    this.jobSelection.openDetail(job);
+    this.jobSelection.openDetailAfterPaint(job);
   }
 
   openHub(projectName: string): void {
