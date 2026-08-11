@@ -242,7 +242,6 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `activity-log-visibility.spec.ts` | Activity log - visibility @billable |
 | `activity-plan-toggle.spec.ts` | Activity tab compact view switcher |
 | `activity-tab-no-gap.spec.ts` | Activity tab - no gap between log and compose |
-| `chat-attachment-inline-and-lightbox.spec.ts` | Project chat - inline attachment render + lightbox |
 | `chat-continue.spec.ts` | Activity tab - interactive chat continuation |
 | `chat-embedded-events.spec.ts` | Project chat next-gen semantic events |
 | `chat-markdown-collapse.spec.ts` | Project chat markdown - Slice A primitives |

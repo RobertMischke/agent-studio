@@ -394,7 +394,10 @@ async function openSideSheet(page: Page, openContextMenu = true) {
 async function showSideSheet(page: Page, openContextMenu = true) {
   const toggle = page.getByTestId('orch-side-sheet-toggle');
   await expect(toggle).toBeVisible({ timeout: 10_000 });
-  await toggle.click();
+  if (await toggle.getAttribute('aria-pressed') !== 'true') {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
   if (openContextMenu) {
     await page.getByTestId('orch-context-badge').click();
@@ -495,34 +498,34 @@ test.describe('Orchestrator context header · where am I', () => {
     expect(unexpectedRequests).toEqual([]);
   });
 
-  test('standard footer receives Board context and keeps canonical keyboard order in light theme', async ({ page }) => {
+  test('compact Board footer keeps canonical keyboard order in light theme', async ({ page }) => {
     await seedActiveTab(page, { kind: 'board', projectName: PROJECT }, `board:${PROJECT}`, 'light');
     const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
     await openSideSheet(page, false);
 
-    const sheet = page.getByTestId('orch-side-sheet');
     await expect(page.getByTestId('chat-composer-foot')).toHaveCount(1);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
-    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
     await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
 
     const input = page.getByTestId('chat-input');
     await input.fill('Keyboard order draft');
     await input.focus();
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
-    await input.focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByTestId('chat-attach')).toBeFocused();
+    await expect(page.getByTestId('chat-context-attachment-add')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('chat-send')).toBeFocused();
 
-    await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-board-context-light.png') });
+    await page.screenshot({
+      path: resolve(RESULTS, 'orchestrator-board-context--light--mocked.png'),
+      fullPage: false,
+    });
     expect(unexpectedRequests).toEqual([]);
   });
 
-  test('standard footer receives Task context at mobile width in dark theme', async ({ page }) => {
+  test('compact Task footer fits mobile width in dark theme', async ({ page }) => {
     const task = runningTask();
     await page.setViewportSize({ width: 390, height: 844 });
     await seedActiveTab(
@@ -535,12 +538,13 @@ test.describe('Orchestrator context header · where am I', () => {
     await openSideSheet(page, false);
 
     const sheet = page.getByTestId('orch-side-sheet');
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
-    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
-    await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('AGT-1916');
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
+    await expect(page.getByTestId('chat-context-attachment-add')).toBeVisible();
+    await expect(page.getByTestId('cac-model-selector-trigger')).toBeVisible();
+    await expect(page.getByTestId('chat-send')).toBeVisible();
     const box = await sheet.boundingBox();
     expect(box?.width ?? 999).toBeLessThanOrEqual(390);
-    await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
+    await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-mobile--dark--mocked.png') });
   });
 
   for (const variant of [
@@ -549,69 +553,52 @@ test.describe('Orchestrator context header · where am I', () => {
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`long Dossier context wraps cleanly in ${variant.name}`, async ({ page }) => {
+    test(`compact composer stays uncluttered in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: variant.width, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
         projectName: LONG_CONTEXT_PROJECT,
       }, `board:${LONG_CONTEXT_PROJECT}`, variant.theme);
       const unexpectedRequests = await stubLongWorkbench(page);
-      await page.goto('/');
-      await page.waitForLoadState('domcontentloaded');
-      const workbenchSection = page.getByTestId(
-        `studio-explorer-project-workbenches-${LONG_CONTEXT_PROJECT}`,
-      );
-      const workbench = page.getByTestId(
-        `studio-explorer-workbench-${LONG_CONTEXT_PROJECT}-${LONG_CONTEXT_WORKBENCH}`,
-      );
-      if (!await workbench.isVisible()) await workbenchSection.click();
-      await expect(workbench).toBeVisible();
-      await workbench.click();
-      await showSideSheet(page, false);
+      await openSideSheet(page, false);
 
       const footer = page.getByTestId('chat-composer-foot');
-      const context = page.getByTestId('chat-composer-context');
-      const detail = page.getByTestId('chat-composer-context-detail');
+      const addContext = page.getByTestId('chat-context-attachment-add');
       const model = page.getByTestId('cac-model-selector-trigger');
-      await expect(context).toContainText(LONG_CONTEXT_PROJECT);
-      await expect(context).toContainText('Dossier');
-      await expect(detail).toHaveText(LONG_CONTEXT_TITLE);
+      const send = page.getByTestId('chat-send');
+      await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
+      await expect(addContext).toBeVisible();
       await expect(model).toContainText('gpt-5.6-sol');
+      await expect(send).toBeVisible();
 
       const layout = await footer.evaluate((element) => {
-        const contextElement = element.querySelector<HTMLElement>('[data-testid="chat-composer-context"]')!;
-        const segmentElements = Array.from(contextElement.children) as HTMLElement[];
+        const addElement = element.querySelector<HTMLElement>('[data-testid="chat-context-attachment-add"]')!;
         const modelElement = element.querySelector<HTMLElement>('[data-testid="cac-model-selector-trigger"]')!;
+        const sendElement = element.querySelector<HTMLElement>('[data-testid="chat-send"]')!;
         const footerBox = element.getBoundingClientRect();
+        const addBox = addElement.getBoundingClientRect();
         const modelBox = modelElement.getBoundingClientRect();
+        const sendBox = sendElement.getBoundingClientRect();
         return {
           footerFits: element.scrollWidth <= element.clientWidth + 1,
-          contextWrap: getComputedStyle(contextElement).flexWrap,
-          rowCount: new Set(segmentElements.map(segment => Math.round(segment.getBoundingClientRect().top))).size,
-          segmentsStayWhole: segmentElements.every(segment => getComputedStyle(segment).whiteSpace === 'nowrap'),
+          actionsOrdered: addBox.left < modelBox.left && modelBox.left < sendBox.left,
           modelFits: modelBox.right <= footerBox.right + 1 && modelBox.left >= footerBox.left - 1,
+          sendFits: sendBox.right <= footerBox.right + 1,
         };
       });
       expect(layout).toMatchObject({
         footerFits: true,
-        contextWrap: 'wrap',
-        segmentsStayWhole: true,
+        actionsOrdered: true,
         modelFits: true,
+        sendFits: true,
       });
-      expect(layout.rowCount).toBeGreaterThanOrEqual(1);
-      expect(layout.rowCount).toBeLessThanOrEqual(2);
-      if (variant.width === 390) expect(layout.rowCount).toBe(2);
-      await expect(detail).toHaveCSS('text-overflow', 'ellipsis');
-      if (variant.width === 390) {
-        await expect.poll(() => detail.evaluate(element => element.scrollWidth > element.clientWidth))
-          .toBe(true);
-      }
 
-      await page.getByTestId('orch-side-sheet').screenshot({
+      await page.screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-composer-long-context--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-composer-compact--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
+        fullPage: false,
       });
       expect(unexpectedRequests).toEqual([]);
     });

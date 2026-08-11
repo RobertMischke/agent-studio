@@ -157,7 +157,7 @@ turn. Scope mismatch, cross-project references, path traversal, and out-of-root
 symlink resolution stop before model invocation.
 
 Prompt assembly is deterministic: scoped preamble, context ledger, automatic
-evidence, explicit attachments, bounded conversation continuity, then the new
+evidence, explicit references, bounded conversation continuity, then the new
 user message last. Automatic evidence has a 4,000-token soft cap and 6,000-token
 hard cap; explicit references can expand the total to 8,000 tokens. The latest
 four to eight semantic turns provide continuity on every stateless call.
@@ -167,13 +167,16 @@ stable source id, kind, revision or hash, freshness, included characters and
 estimated tokens, status, omission reason, and applied budget. It stores no
 resolved source body.
 
-The project composer shows the active tab as automatic context and keeps
-explicit additions as removable reference chips. **Add context** opens a
-project-bound picker with the current tab first, followed by Tasks, Wiki and
-Dossiers, Files, and Commits. Search results never carry repository content
-in the browser. They add only stable task keys, page refs, repository-relative
-paths, or project-qualified commit SHAs to the next envelope. Send snapshots
-those refs once, so later navigation cannot change the in-flight turn.
+The host uses the active tab as automatic context without repeating it as
+persistent composer chrome. Explicit additions appear in the library-owned
+context-attachment row as removable reference chips. **Add context** opens a project-bound picker with the current
+tab first, followed by Tasks, Wiki and Dossiers, Files, and Commits. The
+composer has no image picker, paste, or drop staging and no upper routing
+toolbar; the model selector and Send action stay in its footer. Search results
+never carry repository content in the browser. They add only stable task keys,
+page refs, repository-relative paths, or project-qualified commit SHAs to the
+next envelope. Send snapshots those refs once, so later navigation cannot
+change the in-flight turn.
 
 The latest reply renders a compact **Used context** disclosure. Its inspector
 reads the persisted context-store receipt and names included, excerpted,
@@ -308,12 +311,13 @@ The side sheet is a host of the canonical `coding-agent-chat` composer. Studio
 derives a location context from the active `StudioTabStateService` tab
 (`buildComposerLocationContext`): the large scope is the project, while the
 local scope names the active Board, Task, Dossier, Project Hub, Wiki, URL
-preview, or other tab surface. The side sheet renders that value inside CAC's
-standard composer footer — currently via the `[chat-foot-start]` projection
-slot, until the library exposes a first-class `composerContext` input — and
-CAC never re-derives navigation state. Changing tabs updates the value in
-place, so the composer stays mounted and preserves its draft. Studio does not
-project task-creation buttons or a parallel footer workflow.
+preview, or other tab surface. The host uses that value for scope resolution
+and the Add context picker's current-surface suggestion; CAC never re-derives
+navigation state. The persistent footer remains limited to Add context, model,
+and Send, so location is not repeated as a second information row. Changing
+tabs updates the host context in place, so the composer stays mounted and
+preserves its draft. Studio does not project task-creation buttons or a
+parallel footer workflow.
 
 ## Memory Model
 

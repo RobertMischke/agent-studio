@@ -280,7 +280,7 @@ test.describe('Orchestrator Chat standard project entry', () => {
     await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
     await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
     await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(ALPHA.name);
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
     await expect(page.getByTestId('chat-input')).not.toBeFocused();
     await expect.poll(() => [...requestedChatContexts]).toContain(`project:${ALPHA.name}`);
     expect(requestedChatContexts).not.toContain(`project:${BETA.name}`);
@@ -299,7 +299,7 @@ test.describe('Orchestrator Chat standard project entry', () => {
       .click();
     await page.getByTestId(`studio-project-picker-item-${BETA.name}`).click();
     await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(BETA.name);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(BETA.name);
+    await expect(page.getByTestId('chat-composer-context')).toHaveCount(0);
     await expect.poll(() => [...requestedChatContexts]).toContain(`project:${BETA.name}`);
 
     await page.setViewportSize({ width: 430, height: 844 });

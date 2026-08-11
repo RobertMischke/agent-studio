@@ -35,7 +35,6 @@ export type {
   OrchestratorContextReference,
   OrchestratorContextBudget,
   OrchestratorContextEnvelope,
-  OrchestratorChatAttachment,
   OrchestratorChatResponse,
   ChatExecutionContext,
   ChatNavigationContext,
@@ -50,6 +49,5 @@ export { buildOrchestratorContextEnvelope } from './orchestrator-context-envelop
 export { buildOrchestratorConversationEvents } from './components/orchestrator-side-sheet/orchestrator-side-sheet.util';
 export {
   buildComposerLocationContext,
-  composerLocationLabel,
   type ComposerLocationContext,
 } from './composer-location-context';

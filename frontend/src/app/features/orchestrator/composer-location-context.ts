@@ -3,30 +3,20 @@ import { projectRailLabel } from '../project-detail';
 import type { StudioTab } from '../studio-shell';
 
 /**
- * Presentational location context the host feeds into the composer's
- * standard footer: the large scope (project), the active surface, and an
- * optional identity detail (task key, URL id, commit…).
- *
- * The side sheet maps this host-owned location shape to the chat library's
- * `composerContext` input. Keeping the shell contract separate preserves
- * nullable navigation state at the application boundary.
+ * Host-owned location context used to resolve the chat scope, automatic
+ * evidence, and the Add context picker's current-surface suggestion. It is
+ * deliberately not repeated as persistent composer chrome.
  */
 export interface ComposerLocationContext {
   project: string | null;
   surface: string;
   detail?: string;
-  /** Task identity carried by the same active-tab projection the footer shows. */
+  /** Task identity carried by the active-tab projection. */
   taskKey?: string;
   taskId?: string;
   taskTitle?: string;
   taskState?: string;
   taskWatchPath?: string;
-}
-
-/** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
-export function composerLocationLabel(context: ComposerLocationContext | null): string | null {
-  if (!context) return null;
-  return context.detail ? `${context.surface} · ${context.detail}` : context.surface;
 }
 
 function taskFor(tabKey: string, tasks: readonly TaskInfo[]): TaskInfo | undefined {
@@ -49,9 +39,9 @@ function taskContext(surface: string, tabKey: string, tasks: readonly TaskInfo[]
 }
 
 /**
- * Project the canonical active Studio tab into CAC's presentational context
- * contract. The composer receives this value and does not inspect tabs or
- * re-derive navigation state itself.
+ * Project the canonical active Studio tab into host-owned chat context. The
+ * side sheet uses this value without inspecting tabs or re-deriving navigation
+ * state itself.
  */
 export function buildComposerLocationContext(
   tab: StudioTab | null,
