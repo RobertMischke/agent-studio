@@ -51,6 +51,9 @@
      [appTooltip]="contextMetaTooltip()"
      data-testid="orch-context-estimate">
     {{ compactTokenEstimate() }}
+    <span data-testid="orch-context-reference-count">
+      · {{ attachments().length }} {{ attachments().length === 1 ? 'reference' : 'references' }}
+    </span>
   </p>
 </section>
 

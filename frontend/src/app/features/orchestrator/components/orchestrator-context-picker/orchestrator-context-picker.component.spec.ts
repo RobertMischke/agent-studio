@@ -110,6 +110,8 @@ describe('OrchestratorContextPickerComponent', () => {
       .not.toContain('resolved when you send');
     expect(result.componentInstance.contextMetaTooltip())
       .toBe('2 sources · about 2,800 tokens · resolved when you send');
+    expect(root.querySelector('[data-testid="orch-context-reference-count"]')?.textContent)
+      .toContain('1 reference');
     expect(root.querySelector(`[data-testid="orch-context-chip-${CURRENT.id}"]`)?.textContent)
       .toContain('CTX-W1');
     root.querySelector<HTMLButtonElement>('[aria-label^="Remove Context workspace"]')!.click();
