@@ -71,15 +71,4 @@ export class OrchestratorFeedEntryComponent {
       : (words[0] ?? '?').slice(0, 3).toUpperCase();
   }
 
-  tokenTooltip(): string {
-    const usage = this.entry().tokenUsage;
-    if (!usage) return '';
-    return [
-      `Model: ${usage.model || '?'}`,
-      `Input: ${usage.inputTokens.toLocaleString()} tokens`,
-      `Output: ${usage.outputTokens.toLocaleString()} tokens`,
-      `Cache read: ${usage.cacheReadTokens.toLocaleString()} tokens`,
-      `Cache creation: ${usage.cacheCreationTokens.toLocaleString()} tokens`,
-    ].join('\n');
-  }
 }

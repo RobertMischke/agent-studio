@@ -81,6 +81,9 @@ registry short code, and its project chip writes the existing
 Only fresh `alert` events contribute to the icon badge. The global orchestrator
 occupies a flat, one-line status header with scope, model, boot time, and a
 copyable resume command; cumulative session details disclose below it. The
+Activity canvas and its filter, stream, and detail columns are separated as a
+flat data structure, not rendered as Deck-Panel cards, including at narrow
+widths. The
 older project-scoped modal remains a quick-access compatibility surface and
 shares the same live feed store. Alert treatment follows the AGT-2410
 acute-only status contract, and every event kind uses the same row-width grid
