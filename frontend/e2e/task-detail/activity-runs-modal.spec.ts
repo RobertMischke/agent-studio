@@ -1,5 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Activity-pane slim-down: the RUNS bar moved out of the activity log.
@@ -54,6 +56,30 @@ const RUNS = [
   makeRun({ index: 2, intent: 'continue', status: 'failed', lineStart: 41, lineEnd: 80 }),
 ];
 
+const VISUAL_RUNS = Array.from({ length: 10 }, (_, index) => makeRun({
+  index: index + 1,
+  intent: index === 0 ? 'start' : 'continue',
+  status: index % 4 === 3 ? 'failed' : 'completed',
+  lineStart: index * 40 + 1,
+  lineEnd: (index + 1) * 40,
+}));
+
+const REVIEW_EVIDENCE = Array.from({ length: 10 }, (_, index) => ({
+  id: `overflow-finding-${index + 1}`,
+  source: index % 2 === 0 ? 'task-check' : 'security-audit',
+  severity: index % 3 === 0 ? 'high' : 'info',
+  title: `Responsive evidence finding ${index + 1}`,
+  body: 'The detail column keeps this complete finding readable without introducing another scroll surface.',
+  createdAt: `2026-05-29T10:${String(index).padStart(2, '0')}:00Z`,
+  runIndex: index + 1,
+  artifacts: [],
+  fileRefs: [
+    `frontend/src/app/features/task-detail/components/very-long-responsive-fixture-${index + 1}.component.scss:142`,
+  ],
+  acknowledged: false,
+  followupJobId: null,
+}));
+
 function makeDetail(state: string) {
   return {
     info: {
@@ -80,7 +106,7 @@ function makeDetail(state: string) {
     log: [],
     promptHistory: [],
     contextUsage: null,
-    reviewEvidence: [],
+    reviewEvidence: REVIEW_EVIDENCE,
     summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null },
   };
 }
@@ -139,6 +165,13 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
   await page.route('**/api/projects**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
+  await page.route('**/api/projects/*/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
+    }),
+  );
   await page.route('**/api/git/summary**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -191,6 +224,19 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
 
   await page.route(new RegExp(`/api/tasks/${idEsc}/output(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        pipeline: { pre: [], core: [], post: [], allSteps: [] },
+        execution: null,
+        executions: [],
+        config: {},
+        cost: null,
+      }),
+    }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}/runs/\\d+/commits(\\?|$)`), (route) =>
     route.fulfill({
@@ -276,8 +322,10 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
 }
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
+const VISUAL_PHASE = process.env.TASK_DETAIL_OVERFLOW_VISUAL_PHASE ?? 'after';
 
 async function dismissErrorDialog(page: Page): Promise<void> {
+  await page.evaluate(() => document.querySelector('vite-error-overlay')?.remove());
   const overlay = page.getByTestId('error-dialog-overlay');
   if (await overlay.isVisible().catch(() => false)) {
     await page.evaluate(() => {
@@ -431,6 +479,178 @@ test.describe('Activity-pane: compact N Runs chip + modal', () => {
     // behavior that used to live inline still works in the modal.
     await page.getByTestId('run-icon-1').click();
     await expect(page.getByTestId('run-popover-1')).toBeVisible();
+  });
+
+  test('task-detail tabs and run panel visual matrix', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.addInitScript(() => {
+      const weights = localStorage.getItem('agt-2625-visual-pane-weights');
+      localStorage.setItem(
+        'taskboard.panesVisible',
+        JSON.stringify({ prompt: true, protocol: true, git: false }),
+      );
+      if (weights) localStorage.setItem('taskboard.paneWeights', weights);
+      localStorage.setItem('taskboard.activeInspectorTab', '"activity"');
+    });
+    await installRoutes(page, VISUAL_RUNS);
+
+    const layouts = [
+      { name: 'narrow', width: 900, height: 720, weights: { prompt: 3, protocol: 5, git: 4 } },
+      { name: 'wide', width: 1600, height: 900, weights: { prompt: 4, protocol: 4, git: 4 } },
+    ] as const;
+
+    for (const layout of layouts) {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await page.addInitScript((weights) => {
+        localStorage.setItem('agt-2625-visual-pane-weights', JSON.stringify(weights));
+        localStorage.setItem('taskboard.paneWeights', JSON.stringify(weights));
+      }, layout.weights);
+      await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+      await dismissErrorDialog(page);
+
+      await expect(page.getByTestId('pane-prompt-header')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('activity-runs-open')).toBeVisible();
+      await dismissErrorDialog(page);
+
+      if (VISUAL_PHASE === 'after') {
+        const promptHeader = page.getByTestId('pane-prompt-header');
+        const tabsGeometry = await promptHeader.evaluate((header) => {
+          const tabs = header.querySelector<HTMLElement>('app-pane-tabs');
+          const firstControl = header.querySelector<HTMLElement>('[data-testid="pane-header-maximize"]');
+          if (!tabs || !firstControl) throw new Error('Prompt header geometry is incomplete');
+          const tabsRect = tabs.getBoundingClientRect();
+          const controlRect = firstControl.getBoundingClientRect();
+          return {
+            headerOverflow: header.scrollWidth - header.clientWidth,
+            gap: controlRect.left - tabsRect.right,
+          };
+        });
+        expect(tabsGeometry.headerOverflow).toBeLessThanOrEqual(1);
+        expect(tabsGeometry.gap).toBeGreaterThanOrEqual(4);
+
+        const overviewLabel = promptHeader
+          .getByTestId('prompt-tab-overview')
+          .locator('.pane-tab__label');
+        await expect(overviewLabel).toHaveCSS('text-overflow', 'ellipsis');
+        if (layout.name === 'narrow') {
+          await expect(promptHeader.getByTestId('pane-tabs-overflow')).toBeVisible();
+        } else {
+          await expect(promptHeader.getByTestId('pane-tabs-overflow')).toHaveCount(0);
+          await expect(promptHeader.getByTestId('prompt-tab-evidence')).toBeVisible();
+        }
+
+        const promptBody = page.locator('[data-testid="pane-prompt"] > .pane__body');
+        const overviewOverflow = await promptBody.evaluate(body => body.scrollWidth - body.clientWidth);
+        expect(overviewOverflow).toBeLessThanOrEqual(1);
+
+        const evidenceTab = promptHeader.getByTestId('prompt-tab-evidence');
+        if (await evidenceTab.isVisible().catch(() => false)) {
+          await evidenceTab.click();
+        } else {
+          await promptHeader.getByTestId('pane-tabs-overflow').click();
+          await page.getByTestId('pane-tabs-overflow-item-evidence').click();
+        }
+        await expect(page.getByTestId('review-evidence-panel')).toBeVisible();
+        const evidenceGeometry = await promptBody.evaluate((body) => {
+          const scrollables = [body, ...Array.from(body.querySelectorAll<HTMLElement>('*'))]
+            .filter((element) => {
+              const overflowY = getComputedStyle(element).overflowY;
+              return /^(auto|scroll)$/.test(overflowY) && element.scrollHeight > element.clientHeight + 1;
+            })
+            .map(element => element.className);
+          return {
+            horizontalOverflow: body.scrollWidth - body.clientWidth,
+            scrollables,
+          };
+        });
+        expect(evidenceGeometry.horizontalOverflow).toBeLessThanOrEqual(1);
+        expect(evidenceGeometry.scrollables).toEqual(['pane__body']);
+
+        const overviewTab = promptHeader.getByTestId('prompt-tab-overview');
+        if (await overviewTab.isVisible().catch(() => false)) {
+          await overviewTab.click();
+        } else {
+          await promptHeader.getByTestId('pane-tabs-overflow').click();
+          await page.getByTestId('pane-tabs-overflow-item-overview').click();
+        }
+        await expect(page.getByTestId('overview-tab')).toBeVisible();
+      }
+
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+        if (RESULTS_DIR) {
+          mkdirSync(RESULTS_DIR, { recursive: true });
+          await page.screenshot({
+            path: path.join(
+              RESULTS_DIR,
+              `task-detail-tabs-${VISUAL_PHASE}-${layout.name}-${theme}--mocked.png`,
+            ),
+            fullPage: false,
+          });
+        }
+      }
+
+      await dismissErrorDialog(page);
+      await page
+        .getByTestId('pane-prompt-header')
+        .getByTestId('pane-header-hide')
+        .click();
+      await expect(page.getByTestId('pane-prompt-header')).toHaveCount(0);
+      await dismissErrorDialog(page);
+      await page.getByTestId('activity-runs-open').click();
+      await dismissErrorDialog(page);
+      if (await page.getByTestId('runs-modal').count() === 0) {
+        await page.getByTestId('activity-runs-open').click();
+      }
+      await expect(page.getByTestId('runs-modal')).toBeVisible();
+      await page.getByTestId('run-icon-1').click();
+      await expect(page.getByTestId('run-popover-1')).toBeVisible();
+
+      if (VISUAL_PHASE === 'after') {
+        const runsBody = page.getByTestId('runs-modal').locator('.runs-modal__body');
+        const runsGeometry = await runsBody.evaluate((body) => {
+          const scrollables = [body, ...Array.from(body.querySelectorAll<HTMLElement>('*'))]
+            .filter((element) => {
+              const overflowY = getComputedStyle(element).overflowY;
+              return /^(auto|scroll)$/.test(overflowY) && element.scrollHeight > element.clientHeight + 1;
+            })
+            .map(element => element.className);
+          const cards = Array.from(body.querySelectorAll<HTMLElement>('[data-testid^="run-popover-"]'));
+          return {
+            horizontalOverflow: body.scrollWidth - body.clientWidth,
+            maxCardOverflow: cards.reduce(
+              (maximum, card) => Math.max(maximum, card.scrollWidth - card.clientWidth),
+              0,
+            ),
+            overflowX: getComputedStyle(body).overflowX,
+            scrollables,
+          };
+        });
+        expect(runsGeometry.horizontalOverflow).toBeLessThanOrEqual(1);
+        expect(runsGeometry.maxCardOverflow).toBeLessThanOrEqual(1);
+        expect(runsGeometry.overflowX).toBe('hidden');
+        expect(runsGeometry.scrollables).toEqual(['runs-modal__body']);
+      }
+
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+        if (RESULTS_DIR) {
+          mkdirSync(RESULTS_DIR, { recursive: true });
+          await page.screenshot({
+            path: path.join(
+              RESULTS_DIR,
+              `task-detail-runs-${VISUAL_PHASE}-${layout.name}-${theme}--mocked.png`,
+            ),
+            fullPage: false,
+          });
+        }
+      }
+
+      await page.getByTestId('runs-modal-close').click();
+      await expect(page.getByTestId('runs-modal')).toHaveCount(0);
+    }
   });
 
   test('filtering the log to a run closes the modal', async ({ page }) => {

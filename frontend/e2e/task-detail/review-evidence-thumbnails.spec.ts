@@ -132,6 +132,25 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined),
   );
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
+  await page.route('**/api/projects/*/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
+    }),
+  );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
@@ -183,6 +202,26 @@ async function installRoutes(page: Page): Promise<void> {
 
   await page.route(new RegExp(`/api/tasks/${idEsc}/screenshots(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ runs: [] }),
+    }),
+  );
+  await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        pipeline: { pre: [], core: [], post: [], allSteps: [] },
+        execution: null,
+        executions: [],
+        config: {},
+        cost: null,
+      }),
+    }),
   );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(DETAIL) }),

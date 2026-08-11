@@ -6,6 +6,8 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 .evidence-panel {
   border: 1px solid var(--studio-border);
@@ -17,8 +19,12 @@
   flex-direction: column;
   // When the panel itself flexes (empty-state mode without entries) we
   // still want it to fill the pane so the empty message centres.
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 0;
+  box-sizing: border-box;
 }
 .evidence-panel:has(.evidence-panel__empty) {
   // In empty state, centre the message inside the panel — the user
@@ -27,6 +33,7 @@
   justify-content: center;
   align-items: center;
   text-align: center;
+  flex: 1 1 auto;
 }
 .evidence-panel:has(.evidence-panel__empty) .evidence-panel__header {
   display: none;
@@ -72,20 +79,16 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  // Clamp the visible height so a long evidence list scrolls inside the
-  // panel instead of pushing the rest of the protocol pane (code-review,
-  // inspector, chat compose) off-screen. The panel header + count stay
-  // visible while the user scrolls through the rows.
-  max-height: 360px;
-  overflow-y: auto;
-  // Modest inset so the scrollbar doesn't sit flush against the rows.
-  padding-right: 4px;
+  min-width: 0;
 }
 .evidence-row {
   border: 1px solid var(--studio-border);
   border-radius: 8px;
   padding: 8px 10px;
   background: var(--studio-bg-editor);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .evidence-row[data-severity="high"] { background: color-mix(in srgb, var(--severity-high) 9%, var(--studio-bg-editor)); }
 .evidence-row[data-severity="warn"] { background: color-mix(in srgb, var(--severity-warn) 9%, var(--studio-bg-editor)); }
@@ -152,6 +155,7 @@
   align-items: center;
   font-size: 0.78rem;
   color: var(--studio-fg-dim);
+  min-width: 0;
 }
 .evidence-row__ref code {
   background: var(--studio-bg-elevated);
@@ -159,6 +163,8 @@
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.78rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .evidence-row__ref-icon {
   // Keep the type glyph from stretching the row; some are text glyphs (〈〉).

@@ -1,5 +1,7 @@
 :host {
   display: block;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .review-attempts {
@@ -11,6 +13,9 @@
   border-radius: 6px;
   background: var(--studio-bg-elevated);
   color: var(--studio-fg);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .review-attempts__head,
@@ -51,7 +56,7 @@
 
 .review-attempts__list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: var(--studio-spacing-2);
   margin: 0;
   padding: 0;
@@ -88,6 +93,7 @@
 
 .review-attempts__body {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .review-attempts__cycle-head strong {

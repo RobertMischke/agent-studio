@@ -40,11 +40,19 @@
 app-pane-tabs {
   display: inline-flex;
   align-items: stretch;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
 }
 
 .pane-tabs--header {
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .pane-tabs--pill {
@@ -66,6 +74,9 @@ app-pane-tabs {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   background: transparent;
   border: 0;
   font-size: 12px;
@@ -95,6 +106,8 @@ app-pane-tabs {
  * jumps out of the strip. Hover lands a subtle wash between the two.
  */
 .pane-tabs--header .pane-tab {
+  flex: 0 1 auto;
+  min-width: 44px;
   padding: 0 12px;
   height: 100%;
   // Symmetric transparent top border balances the 2 px active underline
@@ -157,8 +170,91 @@ app-pane-tabs {
 }
 
 .pane-tab__label {
-  flex: 0 1 auto;
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-tabs__overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: var(--studio-spacing-1);
+  min-width: 28px;
+  max-width: 64px;
+  height: 100%;
+  padding: 0 var(--studio-spacing-2);
+  overflow: hidden;
+  color: var(--studio-fg-dim);
+  background: transparent;
+  border: 0;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--studio-fg-strong);
+    background: var(--studio-bg-hover);
+  }
+}
+
+.pane-tabs__overflow-glyph {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.pane-tabs__overflow-badge {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.pane-tabs__measure {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: inline-flex;
+  inline-size: max-content;
+  block-size: auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.pane-tabs__measure-tab,
+.pane-tabs__measure-overflow {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  inline-size: max-content;
+  white-space: nowrap;
+}
+
+.pane-tabs__measure-tab--header {
+  height: 32px;
+  padding: 0 12px;
+  border-block: 2px solid transparent;
+  font-size: 12px;
+}
+
+.pane-tabs__measure-tab--header.pane-tabs__measure-tab--active {
+  font-weight: 600;
+}
+
+.pane-tabs__measure-tab--pill {
+  padding: 3px 10px;
+  font-size: 0.9em;
+}
+
+.pane-tabs__measure-overflow {
+  min-width: 28px;
+  max-width: 64px;
+  height: 32px;
+  padding: 0 var(--studio-spacing-2);
+  font-size: 16px;
 }
 
 .pane-tab__spinner {
@@ -185,4 +281,15 @@ app-pane-tabs {
 @keyframes pane-tab-livedot-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.5; transform: scale(0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-tab {
+    transition-duration: 0s;
+  }
+
+  .pane-tab__spinner,
+  .pane-tab__livedot {
+    animation-duration: 0s;
+  }
 }

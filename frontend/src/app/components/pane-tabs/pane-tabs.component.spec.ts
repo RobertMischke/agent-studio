@@ -4,7 +4,37 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { PaneTabsComponent } from './pane-tabs.component';
+import { fitPaneTabIds, PaneTabsComponent } from './pane-tabs.component';
+
+describe('fitPaneTabIds', () => {
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'timeline', label: 'Timeline' },
+    { id: 'evidence', label: 'Evidence' },
+    { id: 'code-review', label: 'Code Review' },
+  ] as const;
+  const widths = tabs.map(tab => ({ id: tab.id, width: 90 }));
+
+  it('keeps every tab visible when the strip fits', () => {
+    expect(fitPaneTabIds(tabs, widths, 400, 32, 'overview')).toEqual([
+      'overview',
+      'timeline',
+      'evidence',
+      'code-review',
+    ]);
+  });
+
+  it('moves trailing tabs into overflow and always pins the active tab', () => {
+    expect(fitPaneTabIds(tabs, widths, 220, 32, 'evidence')).toEqual([
+      'overview',
+      'evidence',
+    ]);
+  });
+
+  it('leaves the active tab as the ellipsized survivor at the narrowest width', () => {
+    expect(fitPaneTabIds(tabs, widths, 80, 32, 'code-review')).toEqual(['code-review']);
+  });
+});
 
 /**
  * Smoke spec for the shared pane-tabs strip. Mirrors the Cycle 11c

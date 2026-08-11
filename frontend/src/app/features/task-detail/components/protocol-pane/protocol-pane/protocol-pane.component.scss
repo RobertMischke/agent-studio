@@ -686,6 +686,7 @@
   display: flex;
   flex-direction: column;
   width: var(--studio-modal-width-run-details);
+  min-width: 0;
   max-width: 100%;
   height: var(--studio-modal-height-run-details);
   border-radius: 8px;
@@ -728,8 +729,12 @@
 
 .runs-modal__body {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 12px 16px 16px;
 }
 

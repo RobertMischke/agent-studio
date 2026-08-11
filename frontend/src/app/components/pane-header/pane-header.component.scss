@@ -9,6 +9,7 @@
   display: flex;
   align-items: stretch;
   gap: 6px;
+  min-width: 0;
   min-height: 32px;
   padding: 0 6px 0 0;
   background: transparent;
@@ -67,10 +68,14 @@
   letter-spacing: 0;
 }
 
-.pane-header__spacer { flex: 1 1 auto; }
+.pane-header__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 .pane-header__btn {
   @include m.icon-button(24px);
+  flex: 0 0 auto;
   align-self: center;
 
   // Blockify the inline expand/close SVG so its baseline descender gap

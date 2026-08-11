@@ -1,12 +1,14 @@
 <div [class]="containerClass()"
      role="tablist"
      [attr.aria-label]="ariaLabel()">
-  @for (tab of tabs(); track trackTab($index, tab)) {
+  @for (tab of visibleTabs(); track trackTab($index, tab)) {
     <button type="button"
             [ngClass]="tabClass(tab)"
             role="tab"
             [disabled]="tab.disabled === true"
             [attr.aria-selected]="tab.id === activeTabId()"
+            [attr.aria-label]="tab.label"
+            [attr.title]="tab.label"
             [attr.data-testid]="tab.testid ?? null"
             (click)="onClick(tab)">
       @if (tab.icon) {
@@ -29,4 +31,62 @@
       }
     </button>
   }
+  @if (overflowTabs().length > 0) {
+    <button #overflowTrigger
+            type="button"
+            class="pane-tabs__overflow"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="overflowMenuOpen()"
+            [attr.aria-label]="'More tabs (' + overflowTabs().length + ')'"
+            data-testid="pane-tabs-overflow"
+            (click)="toggleOverflowMenu($event)">
+      <span class="pane-tabs__overflow-glyph" aria-hidden="true">&hellip;</span>
+      @if (overflowBadge() > 0) {
+        <app-count-badge class="pane-tabs__overflow-badge"
+                         [value]="overflowBadge()"
+                         variant="pane-tab" />
+      }
+    </button>
+  }
 </div>
+
+<div class="pane-tabs__measure" aria-hidden="true">
+  @for (tab of tabs(); track trackTab($index, tab)) {
+    <span #tabMeasure
+          class="pane-tabs__measure-tab"
+          [class.pane-tabs__measure-tab--header]="variant() === 'header'"
+          [class.pane-tabs__measure-tab--pill]="variant() === 'pill'"
+          [class.pane-tabs__measure-tab--active]="tab.id === activeTabId()">
+      @if (tab.icon) {
+        <app-studio-icon class="pane-tab__icon" [name]="tab.icon" [size]="12"></app-studio-icon>
+      } @else if (tab.emoji) {
+        <span class="pane-tab__emoji">{{ tab.emoji }}</span>
+      }
+      <span>{{ tab.label }}</span>
+      @if (tab.badge !== null && tab.badge !== undefined && tab.badge !== '' && tab.badge !== 0) {
+        <app-count-badge [value]="tab.badge" variant="pane-tab" />
+      }
+      @if (tab.indicator === 'spinner') {
+        <span class="pane-tab__spinner"></span>
+      } @else if (tab.indicator === 'live') {
+        <span class="pane-tab__livedot"></span>
+      }
+    </span>
+  }
+  <span #overflowMeasure class="pane-tabs__measure-overflow">
+    <span>&hellip;</span>
+    @if (totalNumericBadge() > 0) {
+      <app-count-badge [value]="totalNumericBadge()" variant="pane-tab" />
+    }
+  </span>
+</div>
+
+<app-menu [items]="overflowMenuItems()"
+          [open]="overflowMenuOpen()"
+          [anchorEl]="overflowMenuAnchor()"
+          placement="below"
+          testIdPrefix="pane-tabs-overflow"
+          ariaLabel="More tabs"
+          [minWidth]="180"
+          (itemClick)="onOverflowMenuItemClick($event)"
+          (closeRequest)="closeOverflowMenu()" />
