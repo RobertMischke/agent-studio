@@ -97,7 +97,7 @@ public sealed class LogIngestionRotationTests : IDisposable
         Assert.Contains("projects/*/tasks/*/*/results/", content, StringComparison.Ordinal);
         Assert.Equal(
             1,
-            content.Split('\n').Count(line => line == CliOutputLogFile.RotationIgnorePattern));
+            File.ReadLines(ignore).Count(line => line == CliOutputLogFile.RotationIgnorePattern));
     }
 
     private static void WriteOversizedLineLog(string path)

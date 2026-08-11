@@ -15,14 +15,17 @@ using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Tests;
 
+[Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class ManagementApiTests : IDisposable
 {
     private readonly string _root = CreateServerDataDirectory();
     private readonly string _backups;
+    private readonly string _logs;
 
     public ManagementApiTests()
     {
         _backups = _root + "-backups";
+        _logs = _root + "-logs";
         foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_root, state));
         Directory.CreateDirectory(Path.Combine(_root, ".metadata"));
         File.WriteAllText(Path.Combine(_root, ".metadata", "server-evidence.jsonl"), "{}\n");
@@ -199,10 +202,11 @@ public sealed class ManagementApiTests : IDisposable
         var environment = factory.Services.GetRequiredService<IWebHostEnvironment>();
         Assert.Equal(Environments.Production, environment.EnvironmentName);
         Assert.False(environment.IsDevelopment());
-        if (OperatingSystem.IsLinux())
-            Assert.StartsWith(
-                Path.Combine(Path.DirectorySeparatorChar.ToString(), "var", "tmp", "agent-studio-server-data", "AGT-2194"),
-                _root);
+        var relativeToTemp = Path.GetRelativePath(Path.GetFullPath(Path.GetTempPath()), _root);
+        Assert.False(
+            Path.IsPathRooted(relativeToTemp)
+            || relativeToTemp == ".."
+            || relativeToTemp.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
         client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
         await EnterMaintenance(client, "backup-maintenance-key");
         var response = await client.PostAsJsonAsync("/api/v1/management/commands", new
@@ -385,20 +389,22 @@ public sealed class ManagementApiTests : IDisposable
         {
             ["TaskRepository"] = _root,
             ["Management:BackupDirectory"] = _backups,
+            ["Logging:BackendFile:LogDirectory"] = _logs,
             ["WatchPaths:0:Name"] = "Management Test",
             ["WatchPaths:0:Path"] = _root,
             ["WatchPaths:0:RootPath"] = _root,
             ["Supervisor:StuckResumeWindowMinutes"] = "0",
             ["CodexModels:WarmupOnBoot"] = "false",
         }));
-        if (provisioner is not null)
+        builder.ConfigureTestServices(services =>
         {
-            builder.ConfigureTestServices(services =>
+            services.RemoveAll<IHostedService>();
+            if (provisioner is not null)
             {
                 services.RemoveAll<IProviderAuthProvisioner>();
                 services.AddSingleton(provisioner);
-            });
-        }
+            }
+        });
     });
 
     private sealed class RecordingProviderAuthProvisioner : IProviderAuthProvisioner
@@ -424,10 +430,7 @@ public sealed class ManagementApiTests : IDisposable
 
     private static string CreateServerDataDirectory()
     {
-        var baseDirectory = OperatingSystem.IsLinux()
-            ? Path.Combine(Path.DirectorySeparatorChar.ToString(), "var", "tmp")
-            : Path.GetTempPath();
-        var root = Path.Combine(baseDirectory, "agent-studio-server-data", "AGT-2194",
+        var root = Path.Combine(Path.GetTempPath(), "agent-studio-server-data", "AGT-2194",
             "server-" + Guid.NewGuid().ToString("N"));
         return Path.GetFullPath(root);
     }
@@ -446,5 +449,6 @@ public sealed class ManagementApiTests : IDisposable
     {
         try { Directory.Delete(_root, true); } catch (Exception ex) { SilentCatch.Note(ex, "ManagementApiTests root cleanup"); }
         try { Directory.Delete(_backups, true); } catch (Exception ex) { SilentCatch.Note(ex, "ManagementApiTests backup cleanup"); }
+        try { Directory.Delete(_logs, true); } catch (Exception ex) { SilentCatch.Note(ex, "ManagementApiTests log cleanup"); }
     }
 }

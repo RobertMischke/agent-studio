@@ -169,6 +169,12 @@ public interface IBuildTestGateRunner
         CancellationToken ct);
 }
 
+internal enum BuildTestMachineGateMode
+{
+    Shared,
+    BypassForHermeticTest,
+}
+
 /// <summary>
 /// Runs deterministic verification against one exact Git subject. Real command
 /// loops are serialized by one machine-wide lock without reducing coding slots.
@@ -211,6 +217,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private readonly ITestSelectionAdvisor? _testSelectionAdvisor;
     private readonly IPipelineHealthSensor? _health;
     private readonly RemoteGateActivityStore? _remoteGateActivity;
+    private readonly BuildTestMachineGateMode _machineGateMode;
 
     public BuildTestGateRunner(
         ILogger<BuildTestGateRunner> logger,
@@ -224,6 +231,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         _testSelectionAdvisor = testSelectionAdvisor;
         _health = health;
         _remoteGateActivity = remoteGateActivity;
+        _machineGateMode = BuildTestMachineGateMode.Shared;
+    }
+
+    internal BuildTestGateRunner(
+        ILogger<BuildTestGateRunner> logger,
+        BuildTestMachineGateMode machineGateMode)
+        : this(logger)
+    {
+        _machineGateMode = machineGateMode;
     }
 
     public async Task<BuildTestGateResult> RunAsync(
@@ -324,34 +340,42 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
             if (completed is null)
             {
-                var acquisition = await AcquireMachineGateAsync(
-                    queueWaitTimeout, request.OnMachineGateWaiting, ct).ConfigureAwait(false);
-                fallbackQueueWaitMs = acquisition.QueueWaitMs;
-                fallbackCollision = acquisition.CollisionDetected;
-                if (acquisition.Lease is null)
+                if (_machineGateMode == BuildTestMachineGateMode.BypassForHermeticTest)
                 {
-                    completed = InfrastructureFailure(
-                        BuildTestGateFailureKind.Timeout,
-                        acquisition.Reason,
-                        acquisition.Reason,
-                        acquisition.ViolatedBudget);
+                    request.OnMachineGateAcquired?.Invoke();
+                    acquiredAtUtc = DateTime.UtcNow;
                 }
                 else
                 {
-                    machineLease = acquisition.Lease;
-                    request.OnMachineGateAcquired?.Invoke();
-                    acquiredAtUtc = DateTime.UtcNow;
-                    _logger.LogInformation(
-                        "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
-                        gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
-                    if (HasHealthContext(request))
+                    var acquisition = await AcquireMachineGateAsync(
+                        queueWaitTimeout, request.OnMachineGateWaiting, ct).ConfigureAwait(false);
+                    fallbackQueueWaitMs = acquisition.QueueWaitMs;
+                    fallbackCollision = acquisition.CollisionDetected;
+                    if (acquisition.Lease is null)
                     {
-                        ReportGateAcquired(new PipelineGateContext(
-                            gateRunId,
-                            request.Project!,
-                            request.WatchPath!,
-                            request.JobId!,
-                            acquiredAtUtc.Value));
+                        completed = InfrastructureFailure(
+                            BuildTestGateFailureKind.Timeout,
+                            acquisition.Reason,
+                            acquisition.Reason,
+                            acquisition.ViolatedBudget);
+                    }
+                    else
+                    {
+                        machineLease = acquisition.Lease;
+                        request.OnMachineGateAcquired?.Invoke();
+                        acquiredAtUtc = DateTime.UtcNow;
+                        _logger.LogInformation(
+                            "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
+                            gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
+                        if (HasHealthContext(request))
+                        {
+                            ReportGateAcquired(new PipelineGateContext(
+                                gateRunId,
+                                request.Project!,
+                                request.WatchPath!,
+                                request.JobId!,
+                                acquiredAtUtc.Value));
+                        }
                     }
                 }
             }

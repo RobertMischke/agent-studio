@@ -16,7 +16,7 @@ public sealed class TaskCleanContextStoreTests : IDisposable
     public void ResolveRoot_UsesUserProfileOnWindowsAndXdgStateOnLinux()
     {
         Assert.Equal(
-            Path.GetFullPath(Path.Combine("C:\\Users\\runner", ".atp", "clean-context")),
+            "C:\\Users\\runner\\.atp\\clean-context",
             TaskCleanContextStore.ResolveRoot(
                 CleanContextHostPlatform.Windows,
                 "C:\\Users\\runner",
