@@ -107,4 +107,21 @@ describe('OrchestratorChatHistoryComponent', () => {
     expect(fixture.componentInstance.contexts()).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Live update arrived.');
   });
+
+  it('marks backend and locally active contexts as working', () => {
+    const { fixture } = mount([
+      context({ contextKey: 'project:Agent Studio', runtimeStatus: 'active' }),
+      context({
+        contextKey: 'task:Agent Studio/AGT-2605', kind: 'task', taskKey: 'AGT-2605',
+      }),
+    ]);
+    fixture.componentRef.setInput('activeContextKeys', new Set(['task:Agent Studio/AGT-2605']));
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(fixture.componentInstance.workingCount()).toBe(2);
+    expect(host.querySelectorAll('[data-testid="chat-history-working"]')).toHaveLength(2);
+    expect(host.querySelector('[data-testid="chat-history-active-count"]')?.textContent)
+      .toContain('2 chats are working');
+  });
 });

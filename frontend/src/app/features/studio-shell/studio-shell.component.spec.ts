@@ -173,6 +173,29 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
   });
 });
 
+describe('StudioShellComponent project entry', () => {
+  it('emits the S5 entry only when a project opens without an existing tab context', () => {
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [], activeKey: null }));
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const component = TestBed.createComponent(StudioShellComponent).componentInstance;
+    const entries: string[] = [];
+    component.projectEntry.subscribe(project => entries.push(project));
+
+    component.openBoard('Alpha');
+    component.openBoard('Beta');
+
+    expect(entries).toEqual(['Alpha']);
+  });
+});
+
 describe('StudioShellComponent global search', () => {
   it('renders the search input after the titlebar trigger is clicked', () => {
     TestBed.configureTestingModule({

@@ -104,14 +104,16 @@ Local storage still owns workspace preferences and the open-tab collection. It
 may seed the shell only when the URL does not identify another surface. URL
 state always wins for the active surface.
 
-The Orchestrator Chat side sheet is deliberately not another route owner. Once
-a project route has resolved, the default-on local **Open project Chat on
-project entry** preference opens the existing push-layout sheet in that exact
-project context. The project route continues to identify the selected Board or
-Hub surface behind it. The preference, panel visibility, width, pin, transcript
-scroll, and composer draft are transient browser state. Task routes do not
-apply the project-entry preference. This ordering also prevents persisted tab
-state from briefly exposing a different project's transcript during cold boot.
+The Orchestrator Chat side sheet is deliberately not another route owner.
+Routes and tab changes update its next-message context but never open it. The
+default-on **Open Chat from an empty project entry** preference applies only
+when the operator explicitly selects a project while the editor has no open tab
+context. After that entry, session storage preserves panel visibility and local
+storage preserves its width. The project route continues to identify the Board,
+Hub, task, Wiki, or Dossier surface behind the sheet. Pin, transcript scroll,
+and composer draft remain transient browser state. This separation also
+prevents persisted tab state from exposing another project's transcript during
+cold boot.
 
 ## Shell tab target identity
 
@@ -189,3 +191,6 @@ review screenshots under the managed task's `results/` directory.
 - **2026-08-10:** Made the existing Orchestrator Chat side sheet the default
   project entry after route hydration, while keeping its visibility out of the
   canonical URL and preserving task deep links.
+- **2026-08-11:** Restricted that default to explicit project entry from an
+  empty editor. Navigation no longer opens the sheet; open state and width now
+  retain the operator's posture while next-message context follows the route.

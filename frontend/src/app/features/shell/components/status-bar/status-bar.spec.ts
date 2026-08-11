@@ -48,4 +48,24 @@ describe('StatusBarComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('makes active orchestrator work visible on the access control', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StatusBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    fixture.componentRef.setInput('orchestratorActiveChatCount', 2);
+    fixture.detectChanges();
+
+    const access = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>('[data-testid="orch-side-sheet-toggle"]')!;
+    expect(access.textContent).toContain('Orchestrator · 2 active');
+    expect(access.querySelector('.statusbar__icon')?.classList).toContain('statusbar__icon--pulse');
+  });
 });

@@ -120,6 +120,7 @@
           [projects]="projects()"
           [tasks]="jobService.jobs()"
           [activeContextKey]="contextKey()"
+          [activeChatContextKeys]="activeChatContextKeys()"
           [unreadContextKeys]="unreadContextKeys()"
           (contextSelected)="selectChatContext($event)"
           (locationRequested)="onNavigateToContext($event)" />

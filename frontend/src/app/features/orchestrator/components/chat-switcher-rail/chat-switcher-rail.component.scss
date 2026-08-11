@@ -45,6 +45,9 @@
 
 .context-list__row:hover { background: var(--studio-bg-hover); }
 .context-list__row--active { background: var(--studio-nav-active-bg); }
+.context-list__row--working {
+  background: color-mix(in srgb, var(--studio-accent-success) 10%, var(--studio-bg-editor));
+}
 
 .context-list__name {
   display: flex;
@@ -69,7 +72,10 @@
   background: var(--studio-fg-dim);
 }
 
-.context-list__presence--live { background: var(--studio-accent-success); }
+.context-list__presence--live {
+  background: var(--studio-accent-success);
+  animation: context-working-pulse 1.4s ease-in-out infinite;
+}
 
 .context-list__label {
   min-width: 0;
@@ -107,3 +113,12 @@
 
 .context-list__navigate:hover { color: var(--studio-accent); }
 .context-list button:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
+
+@keyframes context-working-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.78); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-list__presence--live { animation-duration: 0s; }
+}

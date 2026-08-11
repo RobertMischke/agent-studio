@@ -103,6 +103,8 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
 
     for (const text of ['Why is status.md relevant?', 'What does it say now?']) {
       await c.onSubmit({ text, attachments: [] } as never);
+      expect(c.activeChatContextKeys().has('task:Quality Studio/QS-54')).toBe(true);
+      expect(c.activeChatCount()).toBe(1);
       const send = http.expectOne(route);
       expect(send.request.method).toBe('POST');
       expect(send.request.body.navigationContext).toMatchObject({
@@ -128,6 +130,7 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
       expect(send.request.body.contextEnvelope.capturedAt)
         .toBe(send.request.body.navigationContext.viewportTimestamp);
       send.flush({ project: 'Quality Studio', reply: { id: 'reply', role: 'orchestrator', text: 'ok' } });
+      expect(c.activeChatCount()).toBe(0);
 
       const read = http.expectOne(route);
       expect(read.request.method).toBe('GET');

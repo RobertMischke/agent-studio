@@ -1,9 +1,9 @@
 import { Injectable, signal } from '@angular/core';
 
 /**
- * Persists the orchestrator side-sheet panel width across reloads. Parallel
- * to {@link StudioPanelStateService} which does the same for the left
- * sidebar.
+ * Persists the orchestrator side-sheet posture. Open state is scoped to the
+ * browser tab through sessionStorage; panel width remains a durable layout
+ * preference in localStorage.
  *
  * Why a service rather than a component-local signal: the width is layout-
  * level state — the studio-shell's overall geometry has to know about it
@@ -14,6 +14,7 @@ import { Injectable, signal } from '@angular/core';
 @Injectable({ providedIn: 'root' })
 export class OrchestratorPanelStateService {
   private static readonly STORAGE_KEY = 'atp.studio.orchestratorWidth';
+  private static readonly OPEN_STORAGE_KEY = 'atp.studio.orchestratorOpen.v1';
   // Defaults match the previous static `:host(.is-open) { width: min(640px,
   // 96vw) }` cap so existing screenshots / Playwright runs continue to
   // resolve to 640 px at common viewports.
@@ -26,8 +27,27 @@ export class OrchestratorPanelStateService {
   private static readonly MAX_ABS = 1100;
 
   private readonly _width = signal<number>(this.readInitial());
+  private readonly _open = signal(this.readInitialOpen());
+  private _hasPersistedOpenState = this.readPersistedOpenState() !== null;
 
   readonly width = this._width.asReadonly();
+  readonly open = this._open.asReadonly();
+
+  /** Whether this browser tab already has an explicit operator posture. */
+  hasPersistedOpenState(): boolean {
+    return this._hasPersistedOpenState;
+  }
+
+  setOpen(open: boolean): void {
+    this._open.set(open);
+    this._hasPersistedOpenState = true;
+    try {
+      sessionStorage.setItem(OrchestratorPanelStateService.OPEN_STORAGE_KEY, open ? '1' : '0');
+    } catch {
+      // Session storage is optional. The injected singleton still preserves
+      // the posture across in-app navigation when storage is unavailable.
+    }
+  }
 
   setWidth(px: number): void {
     const clamped = this.clamp(px);
@@ -60,6 +80,19 @@ export class OrchestratorPanelStateService {
       return this.clamp(parsed);
     } catch {
       return OrchestratorPanelStateService.DEFAULT;
+    }
+  }
+
+  private readInitialOpen(): boolean {
+    return this.readPersistedOpenState() ?? false;
+  }
+
+  private readPersistedOpenState(): boolean | null {
+    try {
+      const raw = sessionStorage.getItem(OrchestratorPanelStateService.OPEN_STORAGE_KEY);
+      return raw === '1' ? true : raw === '0' ? false : null;
+    } catch {
+      return null;
     }
   }
 }

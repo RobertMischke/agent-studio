@@ -65,4 +65,14 @@ describe('ChatSwitcherRailComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="chat-switcher-row-project:Alpha"]'))
       .toHaveLength(1);
   });
+
+  it('marks a locally active chat even before the session projection catches up', () => {
+    fixture.componentRef.setInput('activeChatContextKeys', new Set(['task:Alpha/A-1']));
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]');
+    expect(row.getAttribute('data-runtime-status')).toBe('active');
+    expect(row.classList).toContain('context-list__row--working');
+    expect(row.textContent).toContain('working');
+  });
 });

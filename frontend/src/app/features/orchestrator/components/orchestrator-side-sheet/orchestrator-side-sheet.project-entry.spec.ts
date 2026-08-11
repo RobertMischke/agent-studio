@@ -10,6 +10,7 @@ import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.compon
 describe('OrchestratorSideSheetComponent project entry', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     TestBed.configureTestingModule({
       imports: [OrchestratorSideSheetComponent],
       providers: [
@@ -21,40 +22,37 @@ describe('OrchestratorSideSheetComponent project entry', () => {
     });
   });
 
-  it('waits for route hydration, then opens in the resolved project context', () => {
+  it('does not open while navigation moves between project and task contexts', () => {
     const fixture = TestBed.createComponent(OrchestratorSideSheetComponent);
-    fixture.componentRef.setInput('projects', ['Persisted project', 'Resolved project']);
-    fixture.componentRef.setInput('projectEntryReady', false);
-    fixture.componentRef.setInput('preferredProject', 'Persisted project');
-    fixture.componentRef.setInput('composerContext', { project: 'Persisted project', surface: 'Board' });
+    fixture.componentRef.setInput('projects', ['Alpha', 'Beta']);
+    fixture.componentRef.setInput('preferredProject', 'Alpha');
+    fixture.componentRef.setInput('composerContext', { project: 'Alpha', surface: 'Board' });
     fixture.detectChanges();
-
     expect(fixture.componentInstance.open()).toBe(false);
 
-    fixture.componentRef.setInput('preferredProject', 'Resolved project');
-    fixture.componentRef.setInput('composerContext', { project: 'Resolved project', surface: 'Overview' });
-    fixture.componentRef.setInput('projectEntryReady', true);
+    fixture.componentRef.setInput('preferredProject', 'Beta');
+    fixture.componentRef.setInput('composerContext', { project: 'Beta', surface: 'Dossier' });
     fixture.detectChanges();
+    expect(fixture.componentInstance.open()).toBe(false);
 
-    expect(fixture.componentInstance.open()).toBe(true);
-    expect(fixture.componentInstance.activeProject()).toBe('Resolved project');
-    expect(fixture.componentInstance.contextKey()).toBe('project:Resolved project');
-    expect(document.activeElement).not.toBe(
-      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="chat-input"]'),
-    );
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Beta', surface: 'Task', taskKey: 'BET-1', taskId: 'bet-1',
+    });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.open()).toBe(false);
+    expect(fixture.componentInstance.contextKey()).toBe('task:Beta/BET-1');
   });
 
-  it('respects the saved opt-out and leaves the status-bar toggle path available', () => {
-    TestBed.inject(UiPreferencesService).setOpenProjectChatOnEntry(false);
+  it('uses the default entry only for an explicit project entry without saved posture', () => {
     const fixture = TestBed.createComponent(OrchestratorSideSheetComponent);
-    fixture.componentRef.setInput('projects', ['Quiet project']);
-    fixture.componentRef.setInput('preferredProject', 'Quiet project');
-    fixture.componentRef.setInput('composerContext', { project: 'Quiet project', surface: 'Board' });
+    fixture.componentRef.setInput('projects', ['Entry project']);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.open()).toBe(false);
-    fixture.componentInstance.toggle();
+    fixture.componentInstance.openForProjectEntry('Entry project');
     expect(fixture.componentInstance.open()).toBe(true);
+    expect(fixture.componentInstance.contextKey()).toBe('project:Entry project');
+    expect(sessionStorage.getItem('atp.studio.orchestratorOpen.v1')).toBe('1');
   });
 
   it('does not turn a task deep link into the project side-sheet entry', () => {
@@ -72,24 +70,28 @@ describe('OrchestratorSideSheetComponent project entry', () => {
     expect(fixture.componentInstance.open()).toBe(false);
   });
 
-  it('keeps a manually closed panel closed within one project and reopens on the next project', () => {
+  it('keeps an explicitly closed posture through later project entries', () => {
+    sessionStorage.setItem('atp.studio.orchestratorOpen.v1', '0');
     const fixture = TestBed.createComponent(OrchestratorSideSheetComponent);
     fixture.componentRef.setInput('projects', ['Alpha', 'Beta']);
-    fixture.componentRef.setInput('preferredProject', 'Alpha');
-    fixture.componentRef.setInput('composerContext', { project: 'Alpha', surface: 'Board' });
     fixture.detectChanges();
-    expect(fixture.componentInstance.open()).toBe(true);
 
-    fixture.componentInstance.hide();
-    fixture.componentRef.setInput('composerContext', { project: 'Alpha', surface: 'Wiki' });
-    fixture.detectChanges();
+    fixture.componentInstance.openForProjectEntry('Alpha');
+    fixture.componentInstance.openForProjectEntry('Beta');
+
     expect(fixture.componentInstance.open()).toBe(false);
+    expect(fixture.componentInstance.contextKey()).toBe('project:Beta');
+  });
 
-    fixture.componentRef.setInput('preferredProject', 'Beta');
-    fixture.componentRef.setInput('composerContext', { project: 'Beta', surface: 'Board' });
+  it('respects the saved empty-entry opt-out while explicit toggles remain available', () => {
+    TestBed.inject(UiPreferencesService).setOpenProjectChatOnEntry(false);
+    const fixture = TestBed.createComponent(OrchestratorSideSheetComponent);
+    fixture.componentRef.setInput('projects', ['Quiet project']);
     fixture.detectChanges();
 
+    fixture.componentInstance.openForProjectEntry('Quiet project');
+    expect(fixture.componentInstance.open()).toBe(false);
+    fixture.componentInstance.toggle();
     expect(fixture.componentInstance.open()).toBe(true);
-    expect(fixture.componentInstance.contextKey()).toBe('project:Beta');
   });
 });

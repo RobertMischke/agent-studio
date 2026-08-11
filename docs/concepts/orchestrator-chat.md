@@ -20,20 +20,23 @@ The pattern is clear: the user's feeling that a session is "still open" does not
 
 ## Product Shape
 
-The app exposes **Orchestrator Chat** as the standard project-level entry. A
-project opens its existing selected surface and the resizable Chat side sheet
-together, with the permanent project context already selected. Chat remains a
-push-layout surface that can be pinned or hidden; it is not a new full-screen
-route and does not replace the Board, Project Hub, status-bar toggle, or other
-existing entries.
+The app exposes **Orchestrator Chat** as an explicit project-level entry. The
+standard entry opens the selected project surface and the resizable Chat side
+sheet together only when the operator enters a project from an editor with no
+open tab context. Ordinary route and tab navigation never opens Chat. Chat
+remains a push-layout surface that can be pinned or hidden; it is not a new
+full-screen route and does not replace the Board, Project Hub, status-bar
+toggle, or other existing entries.
 
-The per-user **Open project Chat on project entry** preference defaults to
-Open. Its saved opt-out keeps Chat closed on later project entries while all
-explicit entry points remain available. Route hydration completes before the
-sheet opens, so a persisted tab cannot briefly load another project's
-transcript. Passive restore never moves keyboard focus into the composer.
-Task routes keep their task surface and Activity tab unchanged and do not
-trigger the project-entry behavior.
+The per-user **Open Chat from an empty project entry** preference defaults to
+Open. Its saved opt-out keeps Chat closed for that entry while all explicit
+Chat controls remain available. Once the operator has opened or closed the
+sheet, session storage preserves that posture across navigation and reloads;
+its width remains persisted as a layout preference. Route hydration, project,
+task, Wiki, Dossier, and other tab changes only update the next-message
+navigation context. They do not change the panel posture or retarget an
+already-dispatched turn. Passive restore never moves keyboard focus into the
+composer.
 
 The chat has two scopes:
 

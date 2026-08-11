@@ -18,6 +18,7 @@ export class ChatSwitcherRailComponent {
   readonly projects = input<readonly string[]>([]);
   readonly tasks = input<readonly TaskInfo[]>([]);
   readonly activeContextKey = input<string | null>(null);
+  readonly activeChatContextKeys = input<ReadonlySet<string>>(new Set());
   readonly unreadContextKeys = input<ReadonlySet<string>>(new Set());
   readonly contextSelected = output<string>();
   readonly locationRequested = output<string>();

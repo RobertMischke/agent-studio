@@ -37,11 +37,11 @@
   <app-section-header title="Project entry" [divider]="true" />
   <div class="appearance__row" data-testid="settings-project-chat-entry">
     <span class="appearance__copy">
-      <span class="appearance__label" id="appearance-project-chat-entry-label">Open project Chat on project entry</span>
-      <span class="appearance__hint">Default: Open. The selected project surface stays visible beside Chat.</span>
+      <span class="appearance__label" id="appearance-project-chat-entry-label">Open Chat from an empty project entry</span>
+      <span class="appearance__hint">Default: Open. Navigation between existing tabs keeps your current panel posture.</span>
     </span>
     <app-segmented-control
-      ariaLabel="Open project Chat on project entry"
+      ariaLabel="Open Chat from an empty project entry"
       [options]="projectChatEntryOptions"
       [value]="uiPrefs.openProjectChatOnEntry() ? 'open' : 'closed'"
       (valueChange)="setProjectChatEntry($event)" />

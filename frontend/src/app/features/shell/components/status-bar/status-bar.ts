@@ -67,10 +67,21 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   // "is the panel open" lives with the panel, not here.
   readonly usageOpen = input(false);
   readonly orchestratorOpen = input(false);
+  readonly orchestratorActiveChatCount = input(0);
   readonly feedOpen = input(false);
   readonly settingsOpen = input(false);
   readonly showSignOut = input(false);
   readonly signedInLabel = input('');
+
+  readonly orchestratorLabel = computed(() => {
+    const count = this.orchestratorActiveChatCount();
+    return count > 0 ? `Orchestrator · ${count} active` : 'Orchestrator';
+  });
+  readonly orchestratorTooltip = computed(() => {
+    const count = this.orchestratorActiveChatCount();
+    if (count === 0) return 'Orchestrator chat';
+    return `${count} orchestrator ${count === 1 ? 'chat is' : 'chats are'} working. Open Orchestrator Chat.`;
+  });
 
   readonly toggleUsage = output<void>();
   readonly toggleOrchestrator = output<void>();

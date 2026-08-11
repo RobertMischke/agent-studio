@@ -128,6 +128,8 @@ export class StudioShellComponent {
 
   /** Emitted after a delete so the host re-pulls WatchPaths + refreshes. */
   readonly projectDeleted = output<void>();
+  /** S5 default entry, emitted only when a project opens from no tab context. */
+  readonly projectEntry = output<string>();
 
   private readonly featureFlags = inject(FeatureFlagsService);
   private readonly tabState = inject(StudioTabStateService);
@@ -648,7 +650,9 @@ export class StudioShellComponent {
   });
 
   openBoard(projectName: string): void {
+    const isProjectEntry = projectName !== '__all__' && this.activeTab() === null;
     this.tabState.open({ kind: 'board', projectName });
+    if (isProjectEntry) this.projectEntry.emit(projectName);
   }
 
   openFeed(): void {
