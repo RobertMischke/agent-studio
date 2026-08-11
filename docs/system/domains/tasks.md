@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-10
+Version: 2026-08-11
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -23,10 +23,24 @@ or commit attribution.
   task `results/` is optional. `workbench.json` names the source card in
   `sourceTaskKeys` and remains `status=decision-pending` until sight review.
   The published document, not `status.md`, is the promotion source.
-- New concept dossiers use the embedded Article document v2 template. It keeps
-  the house-style rules for calm noun headings, factual copy, bounded reading
-  width, theme variables, and inline SVG diagrams, and includes a bounded
-  append-only Implementation section.
+- New concept Dossiers use the embedded Article document v2 template at
+  `docs/app/templates/article-document-v2.html`. It keeps the house-style rules
+  for calm noun headings, factual copy, bounded reading width, theme variables,
+  and inline SVG diagrams, and includes a bounded append-only Implementation
+  section. The concept prompt retains
+  `docs/operations/haertung-verteilte-ausfuehrung/index.html` only as a
+  compatibility fallback when the canonical template is absent.
+- Claims about visible product surfaces require full-bleed screenshot evidence.
+  Each figure states the fact it proves, dates and labels the provenance of
+  every capture, uses no more than one accented annotation per finding, and
+  includes both themes when the finding depends on theme, contrast, status, or
+  visual hierarchy. Published operations-Dossier assets live at
+  `docs/operations/<slug>/assets/`; a new `docs/<slug>/` concept delivery uses
+  its adjacent `assets/` directory. The prompt points authors to
+  `docs/operations/setup/presentation-capture.md`,
+  `frontend/e2e/visual-evidence/presentation-capture.spec.ts`,
+  `scripts/stable-frontend-boot-probe.mjs`, and
+  `frontend/e2e/fixtures/dev-backend.ts` for the capture and readiness patterns.
 - `references.workbenches` is the canonical typed card-to-Dossier edge.
   `TaskInfo.ConceptDossier` still detects a repository-relative
   `docs/.../index.html` path from
