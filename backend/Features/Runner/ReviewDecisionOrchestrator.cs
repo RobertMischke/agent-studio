@@ -122,6 +122,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly TaskSessionLog? _sessions;
     private readonly GitService? _git;
     private readonly AttemptAuthorityService? _attemptAuthority;
+    private readonly DossierMaintenanceService? _dossierMaintenance;
 
     /// <summary>
     /// Default aspect runner ids when <c>ReviewDecisionOrchestrator:AspectRunners</c>
@@ -262,7 +263,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WikiTaskCrossReferenceService? wikiTaskCrossReferences = null,
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
         PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
-        AttemptAuthorityService? attemptAuthority = null)
+        AttemptAuthorityService? attemptAuthority = null,
+        DossierMaintenanceService? dossierMaintenance = null)
     {
         _scanner = scanner;
         _taskAccess = taskAccess;
@@ -292,6 +294,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _wikiTaskCrossReferences = wikiTaskCrossReferences;
         _agentsWikiSync = agentsWikiSync;
         _attemptAuthority = attemptAuthority;
+        _dossierMaintenance = dossierMaintenance;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -2197,6 +2200,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (gate.IsIncomplete)
         {
             await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
+            return;
+        }
+
+        var dossierReview = RunDossierMaintenancePostStep(entry, current);
+        if (dossierReview is { Required: true, IsComplete: false })
+        {
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            var dossierGate = new CompletionGate.Decision
+            {
+                Action = priorReissues >= ConfiguredMaxReissues()
+                    ? CompletionGate.CompletionGateAction.Escalate
+                    : CompletionGate.CompletionGateAction.Reissue,
+                Findings = dossierReview.Findings.ToList(),
+                Reason = "The referenced Dossier was not updated through its append-only implementation log.",
+            };
+            await HandleCompletionGateAsync(workspace, entry, pending, current, dossierGate, ct);
             return;
         }
 
@@ -4725,6 +4744,45 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Verdict = verdictToken,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
         });
+    }
+
+    /// <summary>
+    /// Validates the Dossier update promised in the CORE prompt and records the
+    /// result as a first-class pipeline timeline row. A missing required entry
+    /// gates delivery; an unreferenced card records NotApplicable.
+    /// </summary>
+    private DossierMaintenanceReview? RunDossierMaintenancePostStep(
+        WatchPathEntry entry,
+        TaskInfo current)
+    {
+        if (_dossierMaintenance == null) return null;
+        var startedAt = DateTime.UtcNow;
+        DossierMaintenanceReview review;
+        try
+        {
+            var repositoryRoot = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+                ? entry.RootPath
+                : entry.RepositoryPath;
+            review = _dossierMaintenance.Review(entry.Name, repositoryRoot, current);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Dossier maintenance review failed for {Project}/{JobId}",
+                entry.Name,
+                current.Id);
+            review = new DossierMaintenanceReview(
+                true,
+                false,
+                Array.Empty<DossierMaintenanceTarget>(),
+                new[] { "Dossier maintenance review failed: " + ex.Message });
+        }
+
+        var completedAt = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(
+            current.FolderPath,
+            DossierMaintenanceStepPolicy.ToExecution(review, startedAt, completedAt));
+        return review;
     }
 
     /// <summary>

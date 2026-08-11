@@ -64,6 +64,16 @@
   background: var(--studio-fg-dim);
 }
 
+.viewer-head__implementation-status {
+  flex: 0 0 auto;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+  color: var(--studio-fg);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 .viewer-head__tasks {
   display: inline-flex;
   flex: 0 1 auto;

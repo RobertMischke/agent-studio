@@ -28,6 +28,7 @@ public sealed partial class RuntimePromptService
     public const string ModeFramingReadOnly = "mode-framing-readonly.md";
     public const string ModeFramingResearch = "mode-framing-research.md";
     public const string ModeFramingConcept = "mode-framing-concept.md";
+    public const string ModeFramingDossierMaintenance = "mode-framing-dossier-maintenance.md";
     public const string ModeFramingWeb = "mode-framing-web.md";
     public const string ProposalFeedbackRefine = "proposal-feedback-refine.md";
     public const string ProposalDraftGenerate = "proposal-draft-generate.md";
@@ -148,6 +149,28 @@ public sealed partial class RuntimePromptService
             parts.Add(Render(ModeFramingWeb, NoValues, context).Trim());
         if (parts.Count == 0) return string.Empty;
         return string.Join("\n\n", parts) + "\n\n";
+    }
+
+    /// <summary>
+    /// Renders the mandatory, task-specific Dossier update contract. Selection
+    /// stays in the Dossier feature; the prompt boundary only fills the stable
+    /// task key and canonical target list.
+    /// </summary>
+    public string RenderDossierMaintenanceFraming(
+        string taskKey,
+        string dossierTargets,
+        PromptCallContext? context = null)
+    {
+        if (string.IsNullOrWhiteSpace(taskKey) || string.IsNullOrWhiteSpace(dossierTargets))
+            return string.Empty;
+        return Render(
+            ModeFramingDossierMaintenance,
+            new Dictionary<string, string?>
+            {
+                ["task_key"] = taskKey.Trim(),
+                ["dossier_targets"] = dossierTargets.Trim(),
+            },
+            context).Trim() + "\n\n";
     }
 
     private LoadedPrompt Load(string templateName)
