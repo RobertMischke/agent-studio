@@ -98,6 +98,30 @@ describe('TaskLiveStatusComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Requirement fit');
   });
 
+  it('keeps detail status to compact CURRENT and NEXT rows', () => {
+    fixture.componentRef.setInput('variant', 'detail');
+    fixture.componentRef.setInput('task', task({
+      state: '2-ready',
+      liveStatus: {
+        attempt: 1,
+        activeStep: null,
+        nextSteps: [{ stepId: 'pre-loop-guard', displayName: 'Loop check' }],
+        queue: { kind: 'runner', position: 3 },
+        latestEventAt: new Date().toISOString(),
+      },
+    }));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement.querySelector('[data-testid="task-live-status"]') as HTMLElement;
+    expect(root.querySelectorAll(':scope > div')).toHaveLength(2);
+    expect(root.querySelector('[data-testid="task-live-current"]')?.textContent)
+      .toContain('Waiting for runner slot · position 3');
+    expect(root.querySelector('[data-testid="task-live-detail-inline"]')?.textContent)
+      .toContain('Last activity');
+    expect(root.querySelector('[data-testid="task-live-next"]')?.textContent)
+      .toContain('Loop check');
+  });
+
   it('shows one dependency wait instead of a stale runner position, then flips to the slot after fulfillment', () => {
     const nextSteps = [{ stepId: 'core-agent-run', displayName: 'Agent execution' }];
     const open = task({

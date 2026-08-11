@@ -71,6 +71,16 @@ function makeDetail(state: string, key = 'FIXTURE-1', title = 'Agent-run metrics
       commit: null,
       commits: [],
       ownerClientId: 'local-default',
+      lastActivity: '2026-08-11T09:58:00Z',
+      ...(state === '2-ready' ? {
+        liveStatus: {
+          attempt: 1,
+          activeStep: null,
+          nextSteps: [{ stepId: 'pre-loop-guard', displayName: 'Loop check' }],
+          queue: { kind: 'runner', position: 3 },
+          latestEventAt: '2026-08-11T09:58:00Z',
+        },
+      } : {}),
     },
     promptMarkdown: 'Test prompt.',
     statusMarkdown: '',
@@ -683,6 +693,60 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
       if (RESULTS_DIR) {
         await runs.screenshot({
           path: path.join(RESULTS_DIR, `mkt-21-runs-healed-${theme}--mocked.png`),
+        });
+      }
+    }
+  });
+
+  test('captures the queued CURRENT and NEXT rows in the task header', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installRoutes(page, '2-ready');
+    await openDetail(page);
+
+    const taskSurface = page.getByTestId('studio-task');
+    const status = taskSurface.getByTestId('task-live-status');
+    await expect(status).toHaveClass(/task-live--detail/);
+    await expect(status.getByTestId('task-live-current'))
+      .toContainText('Waiting for runner slot · position 3');
+    await expect(status.getByTestId('task-live-next')).toContainText('Loop check');
+    await expect(status.getByTestId('task-live-detail-inline')).toContainText('Last activity');
+    await expect(taskSurface.getByTestId('prompt-tab-overview')).toBeVisible();
+
+    const chrome = await status.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        borderLeftWidth: style.borderLeftWidth,
+        borderRightWidth: style.borderRightWidth,
+      };
+    });
+    expect(chrome).toEqual({
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      borderRadius: '0px',
+      borderLeftWidth: '0px',
+      borderRightWidth: '0px',
+    });
+
+    const edges = await Promise.all([
+      page.getByTestId('studio-tabbar').boundingBox(),
+      status.boundingBox(),
+      taskSurface.getByTestId('pane-prompt-header').boundingBox(),
+    ]);
+    for (const edge of edges) expect(edge).not.toBeNull();
+    expect(Math.abs(edges[0]!.x - edges[1]!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(edges[1]!.x - edges[2]!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs((edges[0]!.x + edges[0]!.width) - (edges[1]!.x + edges[1]!.width)))
+      .toBeLessThanOrEqual(1);
+    expect(Math.abs((edges[1]!.x + edges[1]!.width) - (edges[2]!.x + edges[2]!.width)))
+      .toBeLessThanOrEqual(1);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      if (RESULTS_DIR) {
+        await page.screenshot({
+          path: path.join(RESULTS_DIR, `agt-2637--after--${theme}--mocked.png`),
+          fullPage: false,
         });
       }
     }

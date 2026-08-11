@@ -103,6 +103,10 @@
   }
   .toc a { color: var(--ink-2); text-decoration: none; }
   .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .dossier-pages { display: flex; flex-wrap: wrap; gap: 6px; margin: 20px 0 0; }
+  .dossier-pages a { border-radius: 5px; padding: 5px 9px; color: var(--ink-2); font-size: 12px; text-decoration: none; }
+  .dossier-pages a:hover { background: var(--surface-2); color: var(--ink-1); }
+  .dossier-pages a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
   .section-no { margin-right: 9px; color: var(--ink-3); font-weight: 600; }
   .rule-list { margin-top: 18px; }
   .rule {
@@ -278,6 +282,10 @@
       <strong>Recommendation</strong>
       <p>Approve this dossier as the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them.</p>
     </div>
+    <nav class="dossier-pages" aria-label="Dossier pages">
+      <a href="index.html" aria-current="page">Standard</a>
+      <a href="pages/dos-and-donts.html">Dos and Don'ts</a>
+    </nav>
     <nav aria-label="Dossier contents">
       <ul class="toc">
         <li><a href="#decision">01 · Decision</a></li>
@@ -579,7 +587,7 @@
 
   <section id="audit" data-concept-section="evidence">
     <h2><span class="section-no">04</span>Violation audit and card ownership</h2>
-    <p>The audit uses the operator prompts and task screenshot indices available through the Task API on 10 August 2026. “Before” captures establish the visual problem; “after” captures are delivery evidence and do not change the adoption rule.</p>
+    <p>The audit uses the operator prompts and task screenshot indices available through 11 August 2026. “Before” captures establish the visual problem; “after” captures are delivery evidence and do not change the adoption rule. Compact evidence pairs are preserved on the <a href="pages/dos-and-donts.html">Dos and Don'ts page</a>.</p>
 
     <div class="audit-wrap">
       <table>
