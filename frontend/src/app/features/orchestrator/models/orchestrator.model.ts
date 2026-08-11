@@ -68,9 +68,12 @@ export interface OrchestratorSessionResponse {
 
 export interface OrchestratorContextSession {
   contextKey: string;
-  kind: 'global' | 'project' | 'task';
+  kind: 'global' | 'project' | 'task' | 'dossier';
   projectId: string | null;
   taskKey: string | null;
+  dossierId?: string | null;
+  dossierKey?: string | null;
+  title?: string | null;
   createdAt?: string;
   updatedAt: string;
   lastUsedAt?: string;
@@ -145,6 +148,7 @@ export interface OrchestratorContextReceipt {
   scope: 'project' | 'task' | string;
   contextKey: string;
   taskKey?: string | null;
+  dossierId?: string | null;
   includedBlocks: string[];
   capturedAt: string;
   receiptId?: string | null;
@@ -173,10 +177,11 @@ export interface OrchestratorContextSourceReceipt {
 }
 
 export interface OrchestratorConversationScope {
-  kind: 'project' | 'task';
+  kind: 'project' | 'task' | 'dossier';
   contextKey: string;
   projectId: string;
   taskKey?: string | null;
+  dossierId?: string | null;
 }
 
 export interface OrchestratorActiveSurface {
@@ -267,4 +272,6 @@ export interface ChatNavigationContext {
   pageTitle?: string | null;
   pageType?: string | null;
   pageExcerpt?: string | null;
+  currentDossierId?: string | null;
+  currentDossierTitle?: string | null;
 }

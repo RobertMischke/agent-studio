@@ -10,6 +10,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { shortModelName, stateLabel } from '../../../../services/format.util';
 import { TaskState } from '../../../../models/task.model';
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 
 /**
  * "Where am I right now" header for the orchestrator side sheet.
@@ -44,6 +45,9 @@ export class OrchestratorContextHeaderComponent {
   readonly taskKey = input<string | null>(null);
   /** Canonical lane key (e.g. `3-progress`) for the task in scope. */
   readonly taskState = input<string | null>(null);
+  readonly contextKind = input<'project' | 'task' | 'dossier' | null>(null);
+  readonly dossierId = input<string | null>(null);
+  readonly dossierTitle = input<string | null>(null);
 
   /** Whether a CLI run is executing in the current scope right now. */
   readonly runActive = input(false);
@@ -65,10 +69,32 @@ export class OrchestratorContextHeaderComponent {
   private readonly nowTick = inject(NowTickService);
 
   readonly hasProject = computed<boolean>(() => !!this.project()?.trim());
-  readonly hasTask = computed<boolean>(() => !!this.taskTitle()?.trim());
+  readonly resolvedContextKind = computed<'project' | 'task' | 'dossier'>(() =>
+    this.contextKind() ?? (this.taskTitle()?.trim() ? 'task' : 'project'));
+  readonly hasTask = computed<boolean>(() => this.resolvedContextKind() === 'task');
+  readonly hasDossier = computed<boolean>(() => this.resolvedContextKind() === 'dossier');
 
-  /** "Task" when a task is open, otherwise the board is the scope. */
-  readonly scopeLabel = computed<string>(() => (this.hasTask() ? 'Task' : 'Board'));
+  readonly scopeLabel = computed<string>(() => {
+    switch (this.resolvedContextKind()) {
+      case 'task': return 'Task';
+      case 'dossier': return 'Dossier';
+      default: return 'Project';
+    }
+  });
+  readonly scopeIcon = computed<StudioIconName>(() => {
+    switch (this.resolvedContextKind()) {
+      case 'task': return 'code';
+      case 'dossier': return 'eye';
+      default: return 'folder';
+    }
+  });
+  readonly scopeIdentity = computed<string>(() => {
+    switch (this.resolvedContextKind()) {
+      case 'task': return this.taskKey()?.trim() || this.taskTitle()?.trim() || 'Current task';
+      case 'dossier': return this.dossierTitle()?.trim() || this.dossierId()?.trim() || 'Current Dossier';
+      default: return this.project()?.trim() || 'Current project';
+    }
+  });
 
   /** Human lane label for the task in scope, else null (board scope). */
   readonly laneLabel = computed<string | null>(() => {

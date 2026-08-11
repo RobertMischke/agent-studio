@@ -21,6 +21,9 @@ export interface ComposerLocationContext {
   taskTitle?: string;
   taskState?: string;
   taskWatchPath?: string;
+  /** Dossier identity carried by a repository Dossier tab. */
+  dossierId?: string;
+  dossierTitle?: string;
 }
 
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
@@ -69,7 +72,13 @@ export function buildComposerLocationContext(
     case 'task':
       return taskContext('Task', tab.taskKey, tasks);
     case 'workbench':
-      return { project: tab.projectName, surface: 'Dossier', detail: tab.title ?? tab.workbenchId };
+      return {
+        project: tab.projectName,
+        surface: 'Dossier',
+        detail: tab.title ?? tab.workbenchId,
+        dossierId: tab.workbenchId,
+        dossierTitle: tab.title ?? tab.workbenchId,
+      };
     case 'workbenches':
       return { project: tab.projectName, surface: 'Dossiers' };
     case 'activity':

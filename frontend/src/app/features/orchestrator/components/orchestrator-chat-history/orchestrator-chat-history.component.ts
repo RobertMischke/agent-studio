@@ -40,6 +40,14 @@ export class OrchestratorChatHistoryComponent {
   readonly taskContexts = computed(() => this.contexts()
     .filter(context => context.kind === 'task')
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  readonly dossierContexts = computed(() => this.contexts()
+    .filter(context => context.kind === 'dossier')
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  readonly activeContextKeys = computed<ReadonlySet<string>>(() => new Set(
+    this.contexts()
+      .filter(context => context.runtimeStatus === 'active')
+      .map(context => context.contextKey),
+  ));
 
   private requestVersion = 0;
 
@@ -61,11 +69,21 @@ export class OrchestratorChatHistoryComponent {
   contextTitle(context: OrchestratorContextSession): string {
     return context.kind === 'task'
       ? context.taskKey ?? context.contextKey
+      : context.kind === 'dossier'
+        ? context.dossierKey ?? context.title ?? context.dossierId ?? context.contextKey
       : context.projectId ?? context.contextKey;
   }
 
   contextKindLabel(context: OrchestratorContextSession): string {
-    return context.kind === 'task' ? 'Task chat' : 'Project chat';
+    return context.kind === 'task'
+      ? 'Task chat'
+      : context.kind === 'dossier'
+        ? 'Dossier chat'
+        : 'Project chat';
+  }
+
+  isWorking(context: OrchestratorContextSession): boolean {
+    return this.activeContextKeys().has(context.contextKey);
   }
 
   activityLabel(value: string): string {

@@ -19,7 +19,8 @@ public sealed record OrchestratorConversationScope(
     string Kind,
     string ContextKey,
     string ProjectId,
-    string? TaskKey = null);
+    string? TaskKey = null,
+    string? DossierId = null);
 
 public sealed record OrchestratorActiveSurface(
     string Kind,
@@ -127,6 +128,15 @@ public static class OrchestratorContextEnvelopePolicy
             throw new OrchestratorContextEnvelopeException(
                 "context-active-task-mismatch",
                 "The active task surface does not match the task conversation scope.");
+        if (surface?.Kind.Equals("workbench", StringComparison.OrdinalIgnoreCase) == true
+            && routeScope.Kind == "dossier"
+            && !string.Equals(
+                request.NavigationContext?.CurrentDossierId,
+                routeScope.DossierId,
+                StringComparison.Ordinal))
+            throw new OrchestratorContextEnvelopeException(
+                "context-active-dossier-mismatch",
+                "The active Dossier surface does not match the Dossier conversation scope.");
         return new OrchestratorContextEnvelope(
             routeScope,
             surface,
@@ -142,11 +152,21 @@ public static class OrchestratorContextEnvelopePolicy
         var taskKey = routeContext?.Kind == OrchestratorContextKey.TaskKind
             ? routeContext.TaskKey
             : null;
-        var kind = string.IsNullOrWhiteSpace(taskKey) ? "project" : "task";
-        var contextKey = kind == "task"
-            ? $"task:{projectName}/{taskKey}"
-            : $"project:{projectName}";
-        return new OrchestratorConversationScope(kind, contextKey, projectName, taskKey);
+        var dossierId = routeContext?.Kind == OrchestratorContextKey.DossierKind
+            ? routeContext.DossierId
+            : null;
+        var kind = !string.IsNullOrWhiteSpace(taskKey)
+            ? "task"
+            : !string.IsNullOrWhiteSpace(dossierId)
+                ? "dossier"
+                : "project";
+        var contextKey = kind switch
+        {
+            "task" => $"task:{projectName}/{taskKey}",
+            "dossier" => $"dossier:{projectName}/{dossierId}",
+            _ => $"project:{projectName}",
+        };
+        return new OrchestratorConversationScope(kind, contextKey, projectName, taskKey, dossierId);
     }
 
     private static void ValidateSuppliedScope(
@@ -156,6 +176,7 @@ public static class OrchestratorContextEnvelopePolicy
         if (!string.Equals(expected.Kind, supplied.Kind, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(expected.ProjectId, supplied.ProjectId, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(expected.TaskKey, supplied.TaskKey, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(expected.DossierId, supplied.DossierId, StringComparison.Ordinal)
             || !string.Equals(expected.ContextKey, supplied.ContextKey, StringComparison.OrdinalIgnoreCase))
             throw new OrchestratorContextEnvelopeException(
                 "context-scope-mismatch",

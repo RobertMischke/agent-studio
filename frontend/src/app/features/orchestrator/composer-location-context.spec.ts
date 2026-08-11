@@ -62,7 +62,9 @@ describe('buildComposerLocationContext', () => {
       .toEqual({
         project: 'Agent Studio',
         surface,
-        ...(tab.kind === 'workbench' ? { detail: 'Routing' } : {}),
+        ...(tab.kind === 'workbench'
+          ? { detail: 'Routing', dossierId: 'routing', dossierTitle: 'Routing' }
+          : {}),
       });
   });
 });

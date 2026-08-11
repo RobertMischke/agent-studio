@@ -42,6 +42,43 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
     }
 
     [Fact]
+    public void Snapshot_UsesDossierRouteAndRejectsAnotherActiveDossier()
+    {
+        Assert.True(OrchestratorContextKey.TryParse(
+            "dossier:project-a/context-model", out var route));
+        Assert.Equal("context-model", route.DossierId);
+        var capturedAt = new DateTime(2026, 8, 11, 10, 15, 0, DateTimeKind.Utc);
+        var envelope = new OrchestratorContextEnvelope(
+            new OrchestratorConversationScope(
+                "dossier", route.Value, "project-a", DossierId: "context-model"),
+            new OrchestratorActiveSurface("workbench", "context-model", "AGT-W34"),
+            [],
+            new OrchestratorContextBudget(),
+            capturedAt);
+        var request = new SendOrchestratorChatRequest(
+            "Question",
+            null,
+            new ChatNavigationContext(
+                CurrentDossierId: "context-model",
+                CurrentDossierTitle: "AGT-W34"),
+            ContextEnvelope: envelope);
+
+        var result = OrchestratorContextEnvelopePolicy.Snapshot(
+            "project-a", route, request, DateTime.UtcNow);
+        Assert.Equal("dossier", result.Scope.Kind);
+        Assert.Equal("context-model", result.Scope.DossierId);
+
+        var mismatch = request with
+        {
+            NavigationContext = new ChatNavigationContext(CurrentDossierId: "another-dossier"),
+        };
+        var error = Assert.Throws<OrchestratorContextEnvelopeException>(() =>
+            OrchestratorContextEnvelopePolicy.Snapshot(
+                "project-a", route, mismatch, DateTime.UtcNow));
+        Assert.Equal("context-active-dossier-mismatch", error.Code);
+    }
+
+    [Fact]
     public void Snapshot_RejectsCrossProjectReferenceAndMismatchedActiveTask()
     {
         Assert.True(OrchestratorContextKey.TryParse("task:project-a/A-1", out var route));

@@ -190,6 +190,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       && (job.taskKey === session.taskKey || job.displayKey === session.taskKey || job.key === session.taskKey)) ?? null;
   });
 
+  private readonly selectedDossierSession = computed(() => {
+    const session = this.selectedSession();
+    return session?.kind === 'dossier' ? session : null;
+  });
+
   /**
    * MC-2 (Concept §4): the side sheet's context follows the operator's
    * navigation — a task page yields a `task` context, the board yields a
@@ -206,6 +211,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     jobKey: string | null;
     jobState: string | null;
     watchPath: string | null;
+    dossierId: string | null;
+    dossierTitle: string | null;
   } | null>(null);
 
   /**
@@ -217,6 +224,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     if (this.pageContext()) return null;
     const context = this.composerContext();
     return context?.taskKey ? context : null;
+  });
+  private readonly composerDossierContext = computed(() => {
+    const context = this.composerContext();
+    return context?.dossierId ? context : null;
   });
 
   private readonly navigationProject = computed(() =>
@@ -243,9 +254,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.pinned()
       ? (this.pinnedSnapshot()?.watchPath ?? null)
       : (this.composerTaskContext()?.taskWatchPath ?? this.activeWatchPath()));
+  private readonly navigationDossierId = computed(() =>
+    this.pinned()
+      ? (this.pinnedSnapshot()?.dossierId ?? null)
+      : (this.composerDossierContext()?.dossierId ?? null));
+  private readonly navigationDossierTitle = computed(() =>
+    this.pinned()
+      ? (this.pinnedSnapshot()?.dossierTitle ?? null)
+      : (this.composerDossierContext()?.dossierTitle ?? null));
   private readonly navigationContextKey = computed(() => buildNavigationContextKey(
     this.navigationProject(),
     this.navigationJobKey(),
+    this.navigationDossierId(),
   ));
   private readonly contextResolution = computed(() => resolveEffectiveContextKey(
     this.navigationContextKey(),
@@ -286,6 +306,19 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       : this.effectiveSelectionKey()
         ? (this.selectedTask()?.watchPath ?? null)
         : this.navigationWatchPath());
+  readonly effectiveDossierId = computed<string | null>(() =>
+    this.parsedContext()?.kind === 'dossier' ? (this.parsedContext()?.dossierId ?? null) : null);
+  readonly effectiveDossierTitle = computed<string | null>(() => {
+    if (this.parsedContext()?.kind !== 'dossier') return null;
+    const session = this.selectedDossierSession()
+      ?? this.contextSessions().find(item => item.contextKey === this.contextKey() && item.kind === 'dossier')
+      ?? null;
+    return session?.dossierKey
+      ?? session?.title
+      ?? this.navigationDossierTitle()
+      ?? this.parsedContext()?.dossierId
+      ?? null;
+  });
 
   /**
    * Navigation-derived context kind and canonical context key. A task
@@ -296,8 +329,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * context-aware send in {@link onSubmit}), so a task page and the board no
    * longer share one history.
    */
-  readonly contextKind = computed<'task' | 'project'>(() =>
-    this.parsedContext()?.kind === 'task' ? 'task' : 'project');
+  readonly contextKind = computed<'task' | 'dossier' | 'project'>(() => {
+    const kind = this.parsedContext()?.kind;
+    return kind === 'task' || kind === 'dossier' ? kind : 'project';
+  });
   readonly contextKey = computed<string | null>(() => this.contextResolution().key);
 
   readonly turns = signal<OrchestratorChatTurn[]>([], { equal: sameOrchestratorChatTurns });
@@ -305,6 +340,16 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     [...this.turns()].reverse().find(turn => turn.role === 'orchestrator' && turn.contextReceipt)?.contextReceipt ?? null);
   readonly loading = signal(false);
   readonly sending = signal(false);
+  private readonly sendingContextKey = signal<string | null>(null);
+  readonly activeChatContextKeys = computed<ReadonlySet<string>>(() => {
+    const keys = this.contextSessions()
+      .filter(session => session.runtimeStatus === 'active')
+      .map(session => session.contextKey);
+    const local = this.sendingContextKey();
+    if (local) keys.push(local);
+    return new Set(keys);
+  });
+  readonly activeChatCount = computed(() => this.activeChatContextKeys().size);
   readonly errorMsg = signal<string | null>(null);
   readonly executionContext = signal<ChatExecutionContext | null>(null);
   readonly executionHostLabel = computed(() => {
@@ -344,7 +389,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     ].join('\n');
   });
 
-  /** Project scope may explicitly omit context once. Task scope is mandatory. */
+  /** Project scope may explicitly omit context once. Task and Dossier scopes are mandatory. */
   readonly contextDismissed = signal(false);
   readonly contextAttachments = signal<OrchestratorContextSourceOption[]>([]);
   private readonly contextPicker = viewChild<OrchestratorContextPickerComponent>('contextPicker');
@@ -354,6 +399,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const page = this.pageContext();
     if (page && page.projectName === project) return `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.title}`;
     if (this.contextKind() === 'task') return `Task · ${this.effectiveJobKey() ?? this.effectiveJobTitle() ?? 'current'}`;
+    if (this.contextKind() === 'dossier') return `Dossier · ${this.effectiveDossierTitle() ?? 'current'}`;
     const location = this.composerContext();
     if (location && (!location.project || location.project === project)) {
       return location.detail ? `${location.surface} · ${location.detail}` : location.surface;
@@ -393,7 +439,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * The `?demoEvents=1` URL flag seeds three sample events for visual
    * review and Playwright regression coverage of the rendering contract.
    */
-  readonly events = signal<ChatEvent[]>([]);
+  private readonly eventsByContext = signal<Record<string, ChatEvent[]>>({});
+  readonly events = computed<ChatEvent[]>(() => {
+    const key = this.contextKey();
+    return key ? this.eventsByContext()[key] ?? [] : [];
+  });
 
   /**
    * Composer toolbar items. The chat component is intentionally generic
@@ -418,6 +468,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   private pollTimer: VisibleIntervalHandle | null = null;
   private lastProjectEntry: string | null = null;
   private contextSessionsLoading = false;
+  private chatRequestVersion = 0;
 
   /** Canonical next-gen transcript consumed by `<cac-conversation-view>`. */
   readonly conversationEvents = computed(() => buildOrchestratorConversationEvents(
@@ -428,6 +479,17 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.contextKey() ?? this.effectiveProject() ?? 'orchestrator-chat',
   ));
 
+  readonly emptyConversationText = computed(() => {
+    switch (this.contextKind()) {
+      case 'task':
+        return 'No task conversation yet. Ask about this task to begin.';
+      case 'dossier':
+        return 'No Dossier conversation yet. Ask about this Dossier to begin.';
+      default:
+        return 'No project conversation yet. Ask about this project to begin.';
+    }
+  });
+
   readonly contextChipText = computed<string | null>(() => {
     const proj = this.effectiveProject();
     if (!proj) return null;
@@ -436,6 +498,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       ? `${page.pageType} '${page.title}'`
       : this.contextKind() === 'task'
       ? `Task '${this.effectiveJobTitle()}'`
+      : this.contextKind() === 'dossier'
+      ? `Dossier '${this.effectiveDossierTitle()}'`
       : 'Board';
     return `Context: ${proj} · ${tail}`;
   });
@@ -465,7 +529,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       untracked(() => this.contextDigestState.selectContext(key));
       this.open();
       if (this.open() && key) {
+        this.chatRequestVersion++;
+        this.turns.set([]);
         this.localTurns.set([]);
+        this.executionContext.set(null);
+        this.errorMsg.set(null);
         untracked(() => this.contextDigestState.load(key, false));
         if (proj) this.refresh(false);
       }
@@ -558,6 +626,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobKey: this.activeJobKey(),
       jobState: this.activeJobState(),
       watchPath: this.activeWatchPath(),
+      dossierId: this.navigationDossierId(),
+      dossierTitle: this.navigationDossierTitle(),
     });
     this.pinned.set(true);
   }
@@ -587,7 +657,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const params = new URLSearchParams(window.location.search);
     if (params.get('demoEvents') !== '1') return;
     void import('./orchestrator-side-sheet.lazy').then(({ buildDemoEvents }) => {
-      this.events.set(buildDemoEvents(Date.now()));
+      const key = this.contextKey();
+      if (key) this.setContextEvents(key, buildDemoEvents(Date.now()));
     });
   }
 
@@ -727,12 +798,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   toggleNextMessageContext(): void {
-    if (this.contextKind() === 'task') return;
+    if (this.contextKind() !== 'project') return;
     this.contextDismissed.update(dismissed => !dismissed);
   }
 
   setNextMessageContextIncluded(included: boolean): void {
-    if (this.contextKind() === 'task') return;
+    if (this.contextKind() !== 'project') return;
     this.contextDismissed.set(!included);
   }
 
@@ -779,12 +850,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     if (!proj) return;
     const key = this.contextKey();
     if (!key) {
-      this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
+      this.errorMsg.set('This chat context is unavailable. Return to a project, task, or Dossier, then try again.');
       return;
     }
+    const requestVersion = ++this.chatRequestVersion;
     if (!silent) this.loading.set(true);
     this.readChat(key).subscribe({
       next: (resp) => {
+        if (requestVersion !== this.chatRequestVersion || key !== this.contextKey()) return;
         this.turns.set(resp.turns ?? []);
         this.executionContext.set(resp.executionContext ?? null);
         this.errorMsg.set(null);
@@ -795,6 +868,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (!silent) this.loading.set(false);
       },
       error: (err) => {
+        if (requestVersion !== this.chatRequestVersion || key !== this.contextKey()) return;
         const message = orchestratorContextErrorMessage(err, 'Failed to load orchestrator chat');
         this.errorMsg.set(message);
         if (!silent) this.loading.set(false);
@@ -817,7 +891,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // split the send and its reconciliation read across two histories.
     const contextKey = this.contextKey();
     if (!contextKey) {
-      this.errorMsg.set('This chat context is unavailable. Return to a project or task, then try again.');
+      this.errorMsg.set('This chat context is unavailable. Return to a project, task, or Dossier, then try again.');
       return;
     }
     const capturedAt = new Date();
@@ -828,6 +902,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       taskKey: this.effectiveJobKey(),
       jobTitle: this.effectiveJobTitle(),
       jobState: this.effectiveJobState(),
+      dossierId: this.effectiveDossierId(),
+      dossierTitle: this.effectiveDossierTitle(),
       page: this.pageContext(),
     };
     const text = event.text.trim();
@@ -868,6 +944,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     };
     this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
+    this.sendingContextKey.set(contextKey);
     const lazy = await import('./orchestrator-side-sheet.lazy');
 
     // Upload each pasted/dropped image first so the chat message can
@@ -899,6 +976,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       }
     } catch (err) {
       this.sending.set(false);
+      if (this.sendingContextKey() === contextKey) this.sendingContextKey.set(null);
       const message = (err as { message?: string })?.message ?? 'Attachment upload failed';
       this.localTurns.update((curr) =>
         curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
@@ -908,8 +986,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
     // Task scope is attached to every turn. Project scope is also attached by
     // default, with one explicit one-message exclusion available in the menu.
-    const taskScope = navigationSnapshot.kind === 'task';
-    const shouldShipContext = taskScope || !this.contextDismissed();
+    const boundedScope = navigationSnapshot.kind !== 'project';
+    const shouldShipContext = boundedScope || !this.contextDismissed();
     const contextPayload = shouldShipContext
       ? buildChatNavigationContext({
           activeJobId: navigationSnapshot.jobId,
@@ -917,6 +995,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
           activeJobTitle: navigationSnapshot.jobTitle,
           activeJobState: navigationSnapshot.jobState,
           pageContext: navigationSnapshot.page,
+          dossierId: navigationSnapshot.dossierId,
+          dossierTitle: navigationSnapshot.dossierTitle,
           now: () => capturedAt,
         })
       : null;
@@ -941,10 +1021,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const send$ = this.jobService.sendOrchestratorChatByContext(contextKey, sendBody);
     send$.subscribe({
       next: (response) => {
-        if (response.executionContext) this.executionContext.set(response.executionContext);
-        if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
-        this.contextAttachments.set([]);
+        const stillCurrent = contextKey === this.contextKey();
+        if (stillCurrent && response.executionContext) this.executionContext.set(response.executionContext);
+        if (stillCurrent && !boundedScope && this.contextDismissed()) this.contextDismissed.set(false);
+        if (stillCurrent) this.contextAttachments.set([]);
         this.sending.set(false);
+        if (this.sendingContextKey() === contextKey) this.sendingContextKey.set(null);
         // Pre-decode the persisted attachment URL(s) so the upcoming swap
         // from the local blob bubble to the server turn uses byte-identical
         // pixels from the browser image cache (no fetch on swap = no
@@ -959,26 +1041,31 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // cached image and the user perceives no swap.
         this.readChat(contextKey).subscribe({
           next: async (resp) => {
-            this.turns.set(resp.turns ?? []);
-            this.errorMsg.set(null);
+            if (contextKey === this.contextKey()) {
+              this.turns.set(resp.turns ?? []);
+              this.errorMsg.set(null);
+            }
             await preloads;
-            this.localTurns.set([]);
+            if (contextKey === this.contextKey()) this.localTurns.set([]);
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           },
           error: () => {
             // Fallback: clear local turn anyway so the user is not stuck
             // looking at a pending bubble forever.
-            this.localTurns.set([]);
+            if (contextKey === this.contextKey()) this.localTurns.set([]);
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           }
         });
       },
       error: (err) => {
         this.sending.set(false);
+        if (this.sendingContextKey() === contextKey) this.sendingContextKey.set(null);
         const message = orchestratorContextErrorMessage(err, 'Failed to send');
-        this.localTurns.update((curr) =>
-          curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
-        );
+        if (contextKey === this.contextKey()) {
+          this.localTurns.update((curr) =>
+            curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
+          );
+        }
       }
     });
   }
@@ -1009,7 +1096,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   private appendBugEvent(ev: ChatEvent): void {
-    this.events.update((curr) => [...curr, ev]);
+    const key = this.contextKey();
+    if (!key) return;
+    this.setContextEvents(key, [...this.events(), ev]);
+  }
+
+  private setContextEvents(contextKey: string, events: ChatEvent[]): void {
+    this.eventsByContext.update(current => ({ ...current, [contextKey]: events }));
   }
 
   /**

@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -43,6 +44,9 @@ async function seedActiveTab(
   await page.addInitScript(({ tab, activeKey, theme }) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [tab], activeKey }));
     localStorage.setItem('atp.studio.theme', theme);
+    // This spec opens Chat explicitly after route hydration. Disable the
+    // independent project-entry preference so a toggle cannot race auto-open.
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
   }, { tab, activeKey, theme });
 }
 
@@ -282,6 +286,31 @@ async function stubLongWorkbench(page: Page): Promise<string[]> {
     project: LONG_CONTEXT_PROJECT,
   });
   const encodedProject = encodeURIComponent(LONG_CONTEXT_PROJECT);
+  const dossierContextKey = `dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`;
+  const dossierTurns: Array<Record<string, unknown>> = [];
+
+  await page.route(/\/api\/orchestrator\/sessions(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {
+      sessions: [{
+        contextKey: dossierContextKey,
+        kind: 'dossier',
+        projectId: LONG_CONTEXT_PROJECT,
+        taskKey: null,
+        dossierId: LONG_CONTEXT_WORKBENCH,
+        dossierKey: 'AOW-W1',
+        title: LONG_CONTEXT_TITLE,
+        createdAt: '2026-08-10T08:00:00Z',
+        updatedAt: '2026-08-10T08:00:00Z',
+        model: null,
+        cumulativeInputTokens: 0,
+        cumulativeOutputTokens: 0,
+        cumulativeCacheReadTokens: 0,
+        cumulativeCacheCreationTokens: 0,
+        runtimeStatus: 'idle',
+        queuePosition: 0,
+      }],
+    }, unexpectedRequests);
+  });
 
   await page.route(/\/api\/workbenches(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, {
@@ -301,6 +330,75 @@ async function stubLongWorkbench(page: Page): Promise<string[]> {
         digest: 'workbench: decision-pending | health: ok',
         sources: [],
       }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/orchestrator/context/dossier:${encodedProject}/${LONG_CONTEXT_WORKBENCH}$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: dossierContextKey,
+        capturedAt: '2026-08-10T08:00:00Z',
+        digest: 'Dossier AOW-W1 | decision pending',
+        sources: [],
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/runner/project:${encodedProject}/orchestrator-chat$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `project:${LONG_CONTEXT_PROJECT}`,
+        project: LONG_CONTEXT_PROJECT,
+        turns: [{
+          id: 'board-monitoring',
+          ts: '2026-08-10T08:00:00Z',
+          role: 'orchestrator',
+          text: 'BOARD MONITORING HISTORY - never show in a Dossier.',
+        }],
+        executionContext: null,
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/runner/dossier:${encodedProject}/${LONG_CONTEXT_WORKBENCH}/orchestrator-chat$`),
+    async (route) => {
+      const request = route.request();
+      if (request.method() === 'GET') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            contextKey: dossierContextKey,
+            project: LONG_CONTEXT_PROJECT,
+            turns: dossierTurns,
+            executionContext: null,
+          }),
+        });
+      }
+      if (request.method() === 'POST') {
+        const body = request.postDataJSON() as { text: string };
+        dossierTurns.push(
+          { id: 'dossier-user', ts: '2026-08-10T08:01:00Z', role: 'user', text: body.text },
+          {
+            id: 'dossier-reply',
+            ts: '2026-08-10T08:01:01Z',
+            role: 'orchestrator',
+            text: 'Dossier continuation retained.',
+          },
+        );
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            contextKey: dossierContextKey,
+            project: LONG_CONTEXT_PROJECT,
+            reply: dossierTurns[1],
+            executionContext: null,
+          }),
+        });
+      }
+      unexpectedRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ status: 405, body: '{}' });
     },
   );
   await page.route(/\/api\/cli\/codex\/models(?:\?.*)?$/, async (route) => {
@@ -541,6 +639,72 @@ test.describe('Orchestrator context header · where am I', () => {
     const box = await sheet.boundingBox();
     expect(box?.width ?? 999).toBeLessThanOrEqual(390);
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
+  });
+
+  test('Dossier chat starts fresh, resumes on return, and never shows project monitoring history', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await seedActiveTab(page, {
+      kind: 'board',
+      projectName: LONG_CONTEXT_PROJECT,
+    }, `board:${LONG_CONTEXT_PROJECT}`, 'light');
+    const unexpectedRequests = await stubLongWorkbench(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const workbenchSection = page.getByTestId(
+      `studio-explorer-project-workbenches-${LONG_CONTEXT_PROJECT}`,
+    );
+    const workbench = page.getByTestId(
+      `studio-explorer-workbench-${LONG_CONTEXT_PROJECT}-${LONG_CONTEXT_WORKBENCH}`,
+    );
+    if (!await workbench.isVisible()) await workbenchSection.click();
+    await workbench.click();
+    await expect(page.getByRole('heading', { name: LONG_CONTEXT_TITLE, exact: true })).toBeVisible();
+
+    const sheet = page.getByTestId('orch-side-sheet');
+    if (!await sheet.isVisible()) await showSideSheet(page, false);
+    const header = page.getByTestId('orch-context-header');
+    await expect(header).toHaveAttribute('data-scope', 'dossier');
+    await expect(page.getByTestId('orch-context-dossier')).toContainText('Dossier');
+    await expect(page.getByTestId('orch-context-dossier')).toContainText('AOW-W1');
+    await expect(sheet).not.toContainText('BOARD MONITORING HISTORY');
+    await expect(sheet).toBeVisible();
+    await sheet.screenshot({
+      path: resolve(RESULTS, 'dossier-chat-fresh-light--mocked.png'),
+    });
+
+    const persisted = await page.evaluate(async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'Keep this Dossier-specific question.' }),
+      });
+      return response.ok;
+    }, `/api/runner/dossier:${encodeURIComponent(LONG_CONTEXT_PROJECT)}/${LONG_CONTEXT_WORKBENCH}/orchestrator-chat`);
+    expect(persisted).toBe(true);
+
+    await page.getByTestId(`studio-tab-board:${LONG_CONTEXT_PROJECT}`).click();
+    await expect(header).toHaveAttribute('data-scope', 'board');
+    await expect(sheet).toContainText('BOARD MONITORING HISTORY');
+
+    await page.getByTestId(
+      `studio-tab-workbench:${LONG_CONTEXT_PROJECT}:${LONG_CONTEXT_WORKBENCH}`,
+    ).click();
+    await expect(header).toHaveAttribute('data-scope', 'dossier');
+    await expect(sheet).toContainText('Dossier continuation retained.');
+    await expect(sheet).not.toContainText('BOARD MONITORING HISTORY');
+
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toContainText('Projects');
+    await expect(page.getByTestId('orch-context-menu')).toContainText('Tasks');
+    await expect(page.getByTestId('orch-context-menu')).toContainText('Dossiers');
+    await page.getByTestId('orch-context-badge').click();
+
+    await setTheme(page, 'dark');
+    await sheet.screenshot({
+      path: resolve(RESULTS, 'dossier-chat-resumed-dark--mocked.png'),
+    });
+    expect(unexpectedRequests).toEqual([]);
   });
 
   for (const variant of [

@@ -16,6 +16,8 @@ export interface ChatNavigationContextInput {
   observedSurface?: string | null;
   affectedComponent?: string | null;
   pageContext?: PageContext | null;
+  dossierId?: string | null;
+  dossierTitle?: string | null;
   /**
    * Override for tests. Production should leave this undefined so the
    * builder stamps the real wall-clock UTC ISO string at call time.
@@ -48,8 +50,10 @@ export function buildChatNavigationContext(
   const surface = sanitize(input.observedSurface ?? null);
   const component = sanitize(input.affectedComponent ?? null);
   const page = input.pageContext ?? null;
+  const dossierId = sanitize(input.dossierId ?? null);
+  const dossierTitle = sanitize(input.dossierTitle ?? null);
 
-  out.currentPage = page ? 'repository-page' : taskKey || taskId ? 'task-detail' : 'kanban-board';
+  out.currentPage = dossierId ? 'dossier' : page ? 'repository-page' : taskKey || taskId ? 'task-detail' : 'kanban-board';
   if (!page && taskId) out.currentTaskId = taskId;
   if (!page && taskKey) out.currentTaskKey = taskKey;
   if (!page && taskTitle) out.currentTaskTitle = taskTitle;
@@ -63,6 +67,8 @@ export function buildChatNavigationContext(
     out.pageType = page.pageType;
     out.pageExcerpt = page.excerpt;
   }
+  if (dossierId) out.currentDossierId = dossierId;
+  if (dossierTitle) out.currentDossierTitle = dossierTitle;
 
   const now = (input.now ?? (() => new Date()))();
   out.viewportTimestamp = now.toISOString();

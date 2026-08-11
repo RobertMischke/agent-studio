@@ -31,6 +31,19 @@ describe('orchestrator context key resolution', () => {
     expect(parseOrchestratorContextKey('task:Agent Studio/AGT-21\u009f49')).toBeNull();
   });
 
+  it('builds and parses a route-derived Dossier context key', () => {
+    const key = buildNavigationContextKey('Agent Studio', null, 'context-model');
+
+    expect(key).toBe('dossier:Agent Studio/context-model');
+    expect(parseOrchestratorContextKey(key)).toEqual({
+      key,
+      kind: 'dossier',
+      projectId: 'Agent Studio',
+      taskKey: null,
+      dossierId: 'context-model',
+    });
+  });
+
   it('falls back to current navigation for invalid and stale selections', () => {
     const navigation = 'task:Agent Studio/AGT-2149';
     expect(resolveEffectiveContextKey(

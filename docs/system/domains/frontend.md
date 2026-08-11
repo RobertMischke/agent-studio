@@ -412,10 +412,20 @@ unseen again, and renders missing reviewed artifacts as no longer actionable.
   quota or installation detection failure. Do not replace it with a
   routing-only badge, reduced host list, or Orchestrator-only picker.
 - Chat History is the workspace-level projection of the central Task Server
-  context store. It lists permanent project contexts and non-archived task
-  contexts with the store-owned short summary and latest activity. Opening a
-  row selects that stable context in Orchestrator Chat. The view owns no second
-  transcript, summary, or visibility state and refreshes from TaskHub hints.
+  context store. It groups permanent project contexts, non-archived task
+  contexts, and current Dossier contexts with the store-owned short summary and
+  latest activity. Opening a row selects that stable context in Orchestrator
+  Chat. The active header shows the selected type icon and stable name. Active
+  and queued rows have working indicators. The view owns no second transcript,
+  summary, or visibility state and refreshes from TaskHub hints. Archived tasks
+  and archived or documented Dossiers are hidden without deleting their
+  retained contexts.
+- Orchestrator conversation identity is route-derived. Task routes select their
+  task context, Dossier tabs select their Dossier context, and every other
+  project surface selects the one project context. Switching identity clears
+  the visible transcript and per-context event projection before loading the
+  target, and stale responses are ignored. Global monitoring remains in its own
+  context and cannot appear in a document conversation.
 - Project Overview remains operator-first. Do not add watch paths, repository
   paths, working directories, CLI health, clean-context controls, or session
   administration back to the Overview; those facts belong to Project Settings.

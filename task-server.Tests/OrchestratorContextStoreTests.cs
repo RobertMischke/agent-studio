@@ -17,11 +17,69 @@ public sealed class OrchestratorContextStoreTests
     [InlineData("project", "7-archive", false)]
     [InlineData("task", "6-completed", false)]
     [InlineData("task", "7-archive", true)]
-    public void Visibility_policy_only_hides_archived_task_contexts(
+    [InlineData("dossier", "active", false)]
+    [InlineData("dossier", "documented", true)]
+    [InlineData("dossier", "archived", true)]
+    public void Visibility_policy_hides_only_terminal_task_and_Dossier_contexts(
         string kind,
         string? taskState,
         bool expected)
         => Assert.Equal(expected, OrchestratorContextVisibilityPolicy.IsHidden(kind, taskState));
+
+    [Fact]
+    public async Task Dossier_context_is_fresh_resumes_independently_and_is_retained_when_documented()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Workspace"), "test", default);
+        var project = await store.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Agent Studio", "AGT"),
+            "test",
+            default);
+        var active = new EnsureDossierOrchestratorContextRequest(
+            "AGT-W34", "Context model", "active");
+
+        await store.AppendOrchestratorContextTurnAsync(
+            project.ProjectId,
+            null,
+            new AppendOrchestratorContextTurnRequest(new OrchestratorContextTurnDto(
+                "project_turn", DateTime.UtcNow, "user", "Project history must stay separate.")),
+            "test",
+            default);
+
+        var fresh = await store.ReadDossierOrchestratorContextAsync(
+            project.ProjectId, "context-model", active, 20, "test", default);
+        Assert.Equal("dossier:Agent Studio/context-model", fresh.Context.ContextKey);
+        Assert.Equal("AGT-W34", fresh.Context.DossierKey);
+        Assert.Equal("Context model", fresh.Context.Title);
+        Assert.Empty(fresh.Turns);
+
+        await store.AppendDossierOrchestratorContextTurnAsync(
+            project.ProjectId,
+            "context-model",
+            active,
+            new AppendOrchestratorContextTurnRequest(new OrchestratorContextTurnDto(
+                "dossier_turn", DateTime.UtcNow, "user", "Continue this Dossier discussion.")),
+            "test",
+            default);
+        var resumed = await store.ReadDossierOrchestratorContextAsync(
+            project.ProjectId, "context-model", active, 20, "test", default);
+        Assert.Equal("Continue this Dossier discussion.", Assert.Single(resumed.Turns).Body);
+
+        var documented = active with { LifecycleState = "documented" };
+        await store.EnsureDossierOrchestratorContextAsync(
+            project.ProjectId, "context-model", documented, "test", default);
+        Assert.DoesNotContain(
+            await store.ListOrchestratorContextsAsync(false, default),
+            context => context.Kind == OrchestratorContextKinds.Dossier);
+        var retained = Assert.Single(
+            await store.ListOrchestratorContextsAsync(true, default),
+            context => context.Kind == OrchestratorContextKinds.Dossier);
+        Assert.NotNull(retained.HiddenAt);
+        Assert.Equal(1, retained.TurnCount);
+    }
 
     [Fact]
     public async Task Project_contexts_are_permanent_and_task_contexts_follow_archive_visibility_without_deletion()
