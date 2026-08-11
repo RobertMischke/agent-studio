@@ -128,4 +128,32 @@ public class TimelineLogTests : IDisposable
         Assert.Equal("2", evt.Details?["changedFiles"]);
         Assert.Equal("src/a.cs, src/b.cs", evt.Details?["files"]);
     }
+
+    [Fact]
+    public void Append_AfterDurableWrite_RaisesOneAppendNotification()
+    {
+        string? notifiedFolder = null;
+        TimelineEvent? notifiedEvent = null;
+        var notifications = 0;
+        _log.EventAppended += (folder, evt) =>
+        {
+            notifications++;
+            notifiedFolder = folder;
+            notifiedEvent = evt;
+        };
+
+        var written = new TimelineEvent
+        {
+            Ts = DateTime.UtcNow,
+            Kind = TimelineEventKinds.AgentRunFinished,
+            Actor = TimelineActors.Agent,
+            Summary = "Run completed.",
+        };
+
+        Assert.True(_log.Append(_jobFolder, written));
+        Assert.Equal(1, notifications);
+        Assert.Equal(_jobFolder, notifiedFolder);
+        Assert.Same(written, notifiedEvent);
+        Assert.Single(_log.ReadAll(_jobFolder));
+    }
 }

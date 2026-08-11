@@ -1133,6 +1133,20 @@ var jobStatsMetadataCache = app.Services.GetRequiredService<JobStatsMetadataCach
 var taskScanner = app.Services.GetRequiredService<TaskScannerService>();
 taskScanner.SetIndexCache(jobIndexCache);
 taskScanner.SetStatsMetadataCache(jobStatsMetadataCache);
+var timelineLogForPush = app.Services.GetRequiredService<TimelineLog>();
+timelineLogForPush.EventAppended += (jobFolderPath, timelineEvent) =>
+{
+    var jobId = Path.GetFileName(
+        jobFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    var task = taskScanner.FindJob(jobId);
+    if (task is null) return;
+    _ = ProjectEventClients(task.ProjectName).SendAsync("timelineEventAppended", new
+    {
+        JobId = task.Id,
+        task.WatchPath,
+        TimelineEvent = timelineEvent,
+    });
+};
 watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
 watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
 

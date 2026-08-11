@@ -1,35 +1,36 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import {
   AspectFindingsListComponent,
   resolveAspectFindings,
   type AspectFinding,
 } from '../../../../components/aspect-findings';
+import { SteeringDetailComponent } from '../../../../components/steering-detail/steering-detail.component';
 import {
-  SteeringDetailComponent,
   isSteeringKind,
   steeringInfoFromEvent,
   type SteeringInfo,
-} from '../../../../components/steering-detail';
+} from '../../../../components/steering-detail/steering-detail.model';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import { RunTimelinePollService } from '../../../polling/services/run-timeline-poll.service';
 import type { RunRecord } from '../../../run-timeline';
 import {
   TIMELINE_KIND,
+  timelineEventIdentity,
   verdictLabel,
   verdictTone,
   type CompletionLoopVerdict,
   type TaskTimelineEvent,
 } from '../../models/task-timeline.model';
 import {
-  executionContextDisclosure,
   timelineDetailEntries,
   timelineEventReason,
   timelineEventSummary,
   timelineEventTitle,
   timelineKindLabel,
-  type TimelineSourceDisclosure,
 } from '../task-timeline-presentation';
+import { ProgressiveTimelineWindow } from './progressive-timeline-window';
+import { timelineExecutionPresentation } from './task-timeline-execution-presentation';
 
 /**
  * Timeline tab of the task-detail prompt pane (ADR-0049 / ASS-566).
@@ -56,6 +57,14 @@ import {
 export class TaskTimelinePaneComponent {
   private readonly poll = inject(TaskTimelinePollService);
   private readonly runPoll = inject(RunTimelinePollService, { optional: true });
+  private readonly eventWindow = new ProgressiveTimelineWindow<TaskTimelineEvent>(timelineEventIdentity);
+  private readonly executionPresentationCache = new WeakMap<
+    TaskTimelineEvent,
+    {
+      runs: readonly RunRecord[];
+      value: ReturnType<typeof timelineExecutionPresentation>;
+    }
+  >();
 
   /** Raw ledger rows, oldest first (the story reads forward). */
   readonly events = this.poll.events;
@@ -78,34 +87,23 @@ export class TaskTimelinePaneComponent {
     return [...events, ...synthesized].sort((a, b) => this.compareIso(a.ts, b.ts));
   });
 
+  /**
+   * Variable-height timeline rows cannot use fixed-size virtual scroll safely.
+   * Keep the newest page mounted and progressively prepend older pages on
+   * demand. This bounds DOM and change-detection work without clipping large,
+   * expanded markdown or payload rows.
+   */
+  readonly visibleEvents = computed(() => this.eventWindow.visible(this.displayEvents()));
+  readonly olderEventCount = computed(() => this.eventWindow.olderCount(this.displayEvents().length));
+  readonly olderPageSize = computed(() => this.eventWindow.nextPageSize(this.displayEvents().length));
+  private readonly expandedDisclosures = signal<ReadonlySet<string>>(new Set());
+
+  constructor() {
+    effect(() => this.eventWindow.sync(this.displayEvents()));
+  }
+
   readonly hasEvents = computed(() => this.displayEvents().length > 0);
   readonly hasLoop = computed(() => this.completionLoop().hasActivity);
-  private readonly executionPresentations = computed(() => {
-    const presentations = new WeakMap<TaskTimelineEvent, {
-      facts: { label: string; value: string }[];
-      sources: TimelineSourceDisclosure | null;
-    }>();
-    for (const event of this.displayEvents()) {
-      if (event.kind !== TIMELINE_KIND.executionContext) continue;
-      const run = this.runForEvent(event);
-      const model = event.details?.['model']?.trim()
-        || run?.executionContext?.model?.trim()
-        || event.summary.match(/\bmodel\s+([^,\s]+)/i)?.[1]
-        || null;
-      const thinking = event.details?.['thinkingLevel']?.trim()
-        || run?.executionContext?.thinkingLevel?.trim()
-        || null;
-      presentations.set(event, {
-        facts: [
-          ...(model ? [{ label: 'Model', value: model }] : []),
-          ...(thinking ? [{ label: 'Thinking', value: thinking }] : []),
-        ],
-        sources: executionContextDisclosure(event, run?.executionContext?.sources ?? []),
-      });
-    }
-    return presentations;
-  });
-
   /** "N / M" attempt counter for the banner, or "N" when budget is unknown. */
   readonly attemptLabel = computed<string | null>(() => {
     const loop = this.completionLoop();
@@ -219,14 +217,7 @@ export class TaskTimelinePaneComponent {
   }
 
   eventIdentity(event: TaskTimelineEvent): string {
-    return [
-      event.ts,
-      event.kind,
-      event.actor,
-      event.runId ?? '',
-      event.payloadRef ?? '',
-      event.summary,
-    ].join(':');
+    return timelineEventIdentity(event);
   }
 
   /** Detail rows to render under an event, minus the ones already surfaced. */
@@ -235,11 +226,29 @@ export class TaskTimelinePaneComponent {
   }
 
   executionFacts(event: TaskTimelineEvent): { label: string; value: string }[] {
-    return this.executionPresentations().get(event)?.facts ?? [];
+    return this.executionPresentation(event).facts;
   }
 
-  executionSources(event: TaskTimelineEvent): TimelineSourceDisclosure | null {
-    return this.executionPresentations().get(event)?.sources ?? null;
+  executionSources(event: TaskTimelineEvent) {
+    return this.executionPresentation(event).sources;
+  }
+
+  loadOlder(): void {
+    this.eventWindow.loadOlder(this.displayEvents().length);
+  }
+
+  isDisclosureExpanded(event: TaskTimelineEvent, disclosure: 'details' | 'sources'): boolean {
+    return this.expandedDisclosures().has(this.disclosureKey(event, disclosure));
+  }
+
+  toggleDisclosure(event: TaskTimelineEvent, disclosure: 'details' | 'sources'): void {
+    const key = this.disclosureKey(event, disclosure);
+    this.expandedDisclosures.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   /**
@@ -313,25 +322,6 @@ export class TaskTimelinePaneComponent {
     };
   }
 
-  private runForEvent(event: TaskTimelineEvent): RunRecord | null {
-    const candidates = this.runs().filter(run => !!run.executionContext);
-    if (candidates.length === 0) return null;
-    if (event.runId) {
-      const exact = candidates.find(run =>
-        run.inputSessionId === event.runId || run.capturedSessionId === event.runId);
-      if (exact) return exact;
-    }
-    const eventTime = new Date(event.ts).getTime();
-    if (Number.isNaN(eventTime)) return candidates.at(-1) ?? null;
-    return [...candidates].sort((left, right) =>
-      this.distanceFrom(left, eventTime) - this.distanceFrom(right, eventTime))[0] ?? null;
-  }
-
-  private distanceFrom(run: RunRecord, eventTime: number): number {
-    const runTime = new Date(run.endedAt ?? run.startedAt).getTime();
-    return Number.isNaN(runTime) ? Number.MAX_SAFE_INTEGER : Math.abs(eventTime - runTime);
-  }
-
   private runStatusLabel(status: string): string {
     switch (status) {
       case 'completed': return 'completed';
@@ -350,5 +340,18 @@ export class TaskTimelinePaneComponent {
     if (Number.isNaN(ta)) return 1;
     if (Number.isNaN(tb)) return -1;
     return ta - tb;
+  }
+
+  private disclosureKey(event: TaskTimelineEvent, disclosure: 'details' | 'sources'): string {
+    return `${timelineEventIdentity(event)}:${disclosure}`;
+  }
+
+  private executionPresentation(event: TaskTimelineEvent) {
+    const runs = this.runs();
+    const cached = this.executionPresentationCache.get(event);
+    if (cached?.runs === runs) return cached.value;
+    const presentation = timelineExecutionPresentation(event, runs);
+    this.executionPresentationCache.set(event, { runs, value: presentation });
+    return presentation;
   }
 }

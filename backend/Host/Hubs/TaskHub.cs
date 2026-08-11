@@ -44,6 +44,7 @@ public class TaskHub : Hub
     // - runnerStatusChanged(projectName, mode, activeJobId)  → runner mode/status change
     // - busMessageAdded(AgentMessage)                        → new bus event appended
     // - orchestratorContextChanged(payload)                 → central Chat History refresh
+    // - timelineEventAppended(payload)                      → append one task timeline row
     // - workbenchCreated/Updated/DecisionRecorded/StatusChanged(WorkbenchHubEvent)
     // F22:
     // - conversationEventsAppended(jobId, ProjectedEvent[])  → live append from a source change

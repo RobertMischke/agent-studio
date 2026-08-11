@@ -144,6 +144,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   Timeline and steering text is ANSI-sanitised before rendering. Timeline rows
   project each fact once across title, summary, and badges, omit permanent
   defaults and zero counts, and disclose the exact members behind source counts.
+  The Timeline mounts the newest 50 variable-height rows and prepends older
+  pages on request. Closed detail, source, prompt, and context disclosures keep
+  their values out of the DOM. A `timelineEventAppended` jobs-hub event patches
+  one new ledger row; the HTTP snapshot remains the convergence fallback and
+  preserves object identity for an unchanged prefix. AGT-2631 presentation work
+  reuses this window and disclosure contract instead of introducing a parallel
+  virtualisation layer.
   Execution-context rows keep model and thinking level visible without repeating
   the implied CLI. Code Review keeps the last available grade visible with its
   date when it belongs to an older delivery. The task-detail Docs tab presents

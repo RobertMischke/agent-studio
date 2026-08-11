@@ -231,6 +231,18 @@ async function stubApp(page: Page, activeEvent: () => (typeof EVENTS)[number]): 
       });
     }
     if (pathname === '/api/runner/global') return json(route, { mode: 'paused', activeProjects: [] });
+    if (pathname === '/api/runner/queue-starvation') {
+      return json(route, {
+        active: false, waitingTaskCount: 0, availableSlots: 0, thresholdMinutes: 30,
+        oldestEnteredLaneAt: null, observedAt: '2026-07-28T09:00:00Z', items: [],
+      });
+    }
+    if (pathname === '/api/pipeline/accepted-integration-alert') {
+      return json(route, {
+        active: false, stalledTaskCount: 0, thresholdMinutes: 30,
+        oldestAcceptedAt: null, observedAt: '2026-07-28T09:00:00Z', items: [],
+      });
+    }
     if (pathname === '/api/crash-recovery/pending') return json(route, { pending: [] });
     if (pathname === '/api/cli/quota') return json(route, { snapshots: [], ttlSeconds: 600 });
     if (pathname === '/api/cli/usage') return json(route, { items: [] });
@@ -244,6 +256,7 @@ async function stubApp(page: Page, activeEvent: () => (typeof EVENTS)[number]): 
       return json(route, []);
     }
     if (pathname === '/api/tasks' || pathname === '/api/projects') return json(route, []);
+    if (pathname === '/api/v1/management/remote-hosts') return json(route, []);
     if (pathname === '/api/tags' || pathname === '/api/clients'
       || pathname === '/api/clients/' || pathname === '/api/agent-rules'
       || pathname === '/api/epics' || pathname === '/api/git/summary') {
@@ -354,10 +367,8 @@ for (const eventFixture of fixtures) {
       await expect(row).toContainText('3 sources');
       await expect(row).toContainText('Codex config conventions');
       const sources = row.getByTestId('timeline-event-sources');
-      await sources.evaluate(element => {
-        (element as HTMLDetailsElement).open = true;
-      });
-      await expect(sources).toHaveAttribute('open', '');
+      await sources.click();
+      await expect(sources).toHaveAttribute('aria-expanded', 'true');
       await expect(row).toContainText('Project instructions');
       await expect(row).toContainText('Frontend instructions');
       await expect(row).toContainText('Codex config');

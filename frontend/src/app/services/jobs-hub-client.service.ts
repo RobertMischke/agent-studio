@@ -6,6 +6,7 @@ import {
 } from '@microsoft/signalr';
 import type { TaskInfo } from '../models/task.model';
 import type { WorkbenchHubEvent } from '../models/project-docs.model';
+import type { TaskTimelineEvent } from '../features/task-timeline';
 
 /**
  * Callbacks the {@link TaskService} registers for the fine-grained task
@@ -36,6 +37,12 @@ export interface OrchestratorContextChangedEvent {
   updatedAt: string;
 }
 
+export interface TimelineEventAppendedEvent {
+  jobId: string;
+  watchPath: string;
+  timelineEvent: TaskTimelineEvent;
+}
+
 /**
  * Owns the single browser→backend SignalR connection for board-level task
  * mutation events. Push is the primary update path; the {@link TaskService}
@@ -59,6 +66,8 @@ export class JobsHubClient {
   readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
   /** Monotonic refresh hint for the central Task Server Chat History view. */
   readonly orchestratorContextsRevision = signal(0);
+  /** Latest append-only task timeline event, scoped by task identity. */
+  readonly timelineEventAppended = signal<TimelineEventAppendedEvent | null>(null);
 
   private connection: HubConnection | null = null;
   private handlers: JobsHubHandlers | null = null;
@@ -102,6 +111,9 @@ export class JobsHubClient {
     conn.on('workbenchStatusChanged', workbenchEvent);
     conn.on('orchestratorContextChanged', () => {
       this.publishOrchestratorContextRefresh();
+    });
+    conn.on('timelineEventAppended', (event: TimelineEventAppendedEvent) => {
+      this.timelineEventAppended.set(event);
     });
 
     conn.onreconnecting(() => this.connected.set(false));

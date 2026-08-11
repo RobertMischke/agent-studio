@@ -18,9 +18,10 @@
   }
 
   @if (hasBody()) {
-    <details class="steer__body" data-testid="steering-detail-body">
+    <details class="steer__body" data-testid="steering-detail-body" (toggle)="onBodyToggle($event)">
       <summary class="steer__summary">Steer prompt + context</summary>
-      <div class="steer__content">
+      @if (!lazyBody() || bodyExpanded()) {
+        <div class="steer__content">
         @if (i.openItems.length > 0) {
           <app-aspect-findings-list class="steer__open-items"
                                     [findings]="i.openItems"
@@ -59,7 +60,8 @@
             </ul>
           </div>
         }
-      </div>
+        </div>
+      }
     </details>
   }
 </div>

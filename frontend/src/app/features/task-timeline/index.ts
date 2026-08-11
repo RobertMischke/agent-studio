@@ -14,6 +14,7 @@ export type {
 export {
   TIMELINE_KIND,
   deriveCompletionLoop,
+  timelineEventIdentity,
   verdictLabel,
   verdictGlyph,
   verdictTone,

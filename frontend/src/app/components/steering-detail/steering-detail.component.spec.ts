@@ -76,6 +76,27 @@ describe('SteeringDetailComponent', () => {
       .toContain('a1b2c3 feat: x');
   });
 
+  it('keeps a lazy body out of the DOM until expanded and removes it on close', async () => {
+    const fixture = await mount(FULL, true);
+    fixture.componentRef.setInput('lazyBody', true);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const body = element.querySelector<HTMLDetailsElement>('[data-testid="steering-detail-body"]');
+    expect(body).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="steering-detail-prompt"]')).toBeNull();
+
+    body!.open = true;
+    body!.dispatchEvent(new Event('toggle'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="steering-detail-prompt"]')?.textContent)
+      .toContain('STEER THE DIFF, DO NOT RESTART');
+
+    body!.open = false;
+    body!.dispatchEvent(new Event('toggle'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="steering-detail-prompt"]')).toBeNull();
+  });
+
   it('renders no collapsible body when there is nothing to expand', async () => {
     const fixture = await mount({
       verdict: 'accept',

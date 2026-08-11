@@ -163,6 +163,9 @@ describe('TaskTimelinePaneComponent', () => {
     expect(row?.getAttribute('data-kind')).toBe(TIMELINE_KIND.steerTimeoutResolved);
     expect(row?.classList.contains('tl-item--neutral')).toBe(true);
     expect(row?.querySelector('[data-testid="timeline-event-kind"]')?.textContent).toContain('Steer timeout resolved');
+    expect(row?.textContent).not.toContain('Yes. The iframe implementation is present on the task branch.');
+    row?.querySelector<HTMLButtonElement>('[data-testid="timeline-event-payload"]')?.click();
+    fixture.detectChanges();
     expect(row?.textContent).toContain('Yes. The iframe implementation is present on the task branch.');
   });
 
@@ -215,6 +218,8 @@ describe('TaskTimelinePaneComponent', () => {
     const html = fixture.nativeElement as HTMLElement;
     expect(html.querySelectorAll('[data-testid="timeline-event"]').length).toBe(2);
     expect(html.textContent).toContain('Run finished · 600s');
+    html.querySelector<HTMLButtonElement>('[data-testid="timeline-event-payload"]')?.click();
+    fixture.detectChanges();
     expect(html.textContent).toContain('#2');
   });
 
@@ -303,10 +308,39 @@ describe('TaskTimelinePaneComponent', () => {
     expect(row?.textContent).toContain('medium');
     expect(row?.textContent).not.toContain('YOLO');
     expect(row?.textContent).not.toContain('mcp 0');
-    const disclosure = row?.querySelector<HTMLDetailsElement>('[data-testid="timeline-event-sources"]');
+    const disclosure = row?.querySelector<HTMLButtonElement>('[data-testid="timeline-event-sources"]');
     expect(disclosure?.textContent).toContain('2 sources');
     expect(disclosure?.textContent).toContain('Codex config conventions');
-    expect(disclosure?.textContent).toContain('AGENTS.md');
-    expect(disclosure?.textContent).toContain('Codex config');
+    expect(disclosure?.textContent).not.toContain('AGENTS.md');
+    disclosure?.click();
+    fixture.detectChanges();
+    expect(row?.textContent).toContain('AGENTS.md');
+    expect(row?.textContent).toContain('Codex config');
+  });
+
+  it('bounds a 1,000-row stream and keeps payload values out of the DOM until expanded', async () => {
+    const events = Array.from({ length: 1_000 }, (_, index): TaskTimelineEvent => ({
+      ts: new Date(Date.UTC(2026, 7, 11, 10, 0, 0, index)).toISOString(),
+      kind: TIMELINE_KIND.integrationRecoveryQueued,
+      actor: 'system',
+      runId: `run-${index}`,
+      summary: `Recovery ${index}`,
+      details: { diagnostic: index === 999 ? 'LARGE-PAYLOAD-MARKER' : `detail-${index}` },
+    }));
+    const fixture = await build(events);
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelectorAll('[data-testid="timeline-event"]')).toHaveLength(50);
+    expect(html.textContent).not.toContain('LARGE-PAYLOAD-MARKER');
+    expect(html.querySelector('[data-testid="timeline-load-older"]')?.textContent).toContain('950 older events');
+
+    const payloads = html.querySelectorAll<HTMLButtonElement>('[data-testid="timeline-event-payload"]');
+    payloads[payloads.length - 1].click();
+    fixture.detectChanges();
+    expect(html.textContent).toContain('LARGE-PAYLOAD-MARKER');
+
+    html.querySelector<HTMLButtonElement>('[data-testid="timeline-load-older"]')?.click();
+    fixture.detectChanges();
+    expect(html.querySelectorAll('[data-testid="timeline-event"]')).toHaveLength(100);
   });
 });

@@ -118,6 +118,53 @@ These are non-negotiable. If a PR violates one, push back without ceremony.
   invalidate every change-detection cycle; route it through the
   `NowTickService.now()` signal instead.
 
+### Task timeline budget addendum
+
+The Task Timeline has a dedicated 1,000-event browser budget. The performance
+fixture scales the unchanged event and payload distributions from real tasks
+AGT-2577 and QS-72, then measures each scenario independently:
+
+| Metric at 1,000 ledger events | Budget |
+|---|---:|
+| Timeline response to painted rows | <= 1,000 ms |
+| Host-normalised animated scroll over the mounted window | >= 55 FPS |
+| Mounted timeline rows on first render | <= 50 |
+| Timeline DOM nodes on first render | <= 3,000 |
+| Collapsed payload values in the DOM | 0 |
+
+Run the budget probe against the current frontend with:
+
+```sh
+RUN_TIMELINE_PERF=1 \
+TIMELINE_PERF_EXPECT_WINDOWED=1 \
+TIMELINE_PERF_PHASE=after \
+npx playwright test e2e/perf/task-timeline-performance.spec.ts --project=chromium --workers=1
+```
+
+Timeline rows have variable height because payloads, findings, and markdown can
+expand. Use the progressive timeline window as the virtualisation strategy:
+mount the newest 50 rows, prepend older rows in pages of 50 on request, and
+track every row by the stable ledger identity. Closed payload disclosures must
+mount only their summary control. Their values, source lists, prompts, and
+context enter the DOM when opened and leave it again when closed.
+
+Live ledger updates use `timelineEventAppended` to append one sanitised row.
+The slower HTTP snapshot remains the convergence path and must reconcile an
+unchanged prefix without replacing its object identities. This limits an event
+to the affected window edge instead of rebuilding the full stream.
+
+AGT-2631 owns the Timeline information redesign. Its categories, popovers, and
+newest-first presentation must consume this windowing, disclosure, and append
+infrastructure as their technical base. It must not add a second virtualiser or
+restore eager payload DOM.
+
+The browser probe records raw scroll FPS and the idle animation-frame rate in
+alternating adjacent frames over the same four-second sample. The enforced
+scroll value is normalised to a 60 Hz frame source. This paired sampling keeps
+shared-runner CPU contention visible in the raw evidence while making the
+budget express the Timeline's incremental scroll cost rather than a load change
+between two separate samples.
+
 ### Network discipline
 
 - Polled endpoints return JSON shaped for the consumer. The board

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { AspectFindingsListComponent } from '../aspect-findings';
 import type { SteeringInfo } from './steering-detail.model';
 
@@ -38,6 +38,10 @@ export class SteeringDetailComponent {
    */
   readonly showVerdictChip = input<boolean>(true);
 
+  /** Omit large prompt/context bodies from the DOM until the disclosure opens. */
+  readonly lazyBody = input<boolean>(false);
+  readonly bodyExpanded = signal(false);
+
   /** Whether the collapsible body has anything worth expanding. */
   readonly hasBody = computed<boolean>(() => {
     const i = this.info();
@@ -48,4 +52,8 @@ export class SteeringDetailComponent {
       i.commits.length > 0
     );
   });
+
+  onBodyToggle(event: Event): void {
+    this.bodyExpanded.set((event.currentTarget as HTMLDetailsElement).open);
+  }
 }

@@ -41,6 +41,13 @@ public sealed class TimelineLog
 
     private readonly ILogger<TimelineLog> _logger;
 
+    /// <summary>
+    /// Raised after an event has been durably appended. Consumers use this
+    /// append-only notification for live UI updates; persistence remains the
+    /// source of truth and the HTTP snapshot remains the convergence path.
+    /// </summary>
+    public event Action<string, TimelineEvent>? EventAppended;
+
     public TimelineLog(ILogger<TimelineLog> logger)
     {
         _logger = logger;
@@ -80,6 +87,18 @@ public sealed class TimelineLog
             var path = TaskPaths.TimelineLog(jobFolderPath);
             var line = JsonSerializer.Serialize(evt, WriteOpts) + Environment.NewLine;
             File.AppendAllText(path, line, Encoding.UTF8);
+            try
+            {
+                EventAppended?.Invoke(jobFolderPath, evt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "TimelineLog: append notification failed for {Kind} in {Folder}",
+                    evt.Kind,
+                    jobFolderPath);
+            }
             return true;
         }
         catch (Exception ex)

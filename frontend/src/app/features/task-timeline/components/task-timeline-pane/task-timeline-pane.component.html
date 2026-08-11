@@ -32,8 +32,16 @@
   }
 
   @if (hasEvents()) {
+    @if (olderEventCount() > 0) {
+      <button class="tl-load-older"
+              type="button"
+              data-testid="timeline-load-older"
+              (click)="loadOlder()">
+        Load {{ olderPageSize() }} older events ({{ olderEventCount() }} older events hidden)
+      </button>
+    }
     <ol class="tl-list" data-testid="timeline-list">
-      @for (event of displayEvents(); track eventIdentity(event)) {
+      @for (event of visibleEvents(); track eventIdentity(event)) {
         <li class="tl-item"
             [class]="'tl-item--' + rowTone(event)"
             [class.tl-item--verdict]="isVerdictKind(event.kind)"
@@ -61,13 +69,15 @@
                 <app-steering-detail class="tl-item__steering"
                                      [info]="steer"
                                      [showVerdictChip]="false"
+                                     [lazyBody]="true"
                                      data-testid="timeline-event-steering" />
               }
             } @else {
               @if (isExecutionContext(event.kind)) {
-                @if (executionFacts(event).length > 0) {
+                @let facts = executionFacts(event);
+                @if (facts.length > 0) {
                   <div class="tl-item__details tl-item__details--execution" data-testid="timeline-execution-facts">
-                    @for (fact of executionFacts(event); track fact.label) {
+                    @for (fact of facts; track fact.label) {
                       <span class="tl-item__detail">
                         <span class="tl-item__detail-key">{{ fact.label }}</span>
                         <span class="tl-item__detail-val">{{ fact.value }}</span>
@@ -76,28 +86,34 @@
                   </div>
                 }
                 @if (executionSources(event); as disclosure) {
-                  <details class="tl-sources" data-testid="timeline-event-sources">
-                    <summary class="tl-sources__summary">
+                  <div class="tl-sources">
+                    <button class="tl-sources__summary"
+                            type="button"
+                            data-testid="timeline-event-sources"
+                            [attr.aria-expanded]="isDisclosureExpanded(event, 'sources')"
+                            (click)="toggleDisclosure(event, 'sources')">
                       <span>{{ disclosure.label }}</span>
                       @if (disclosure.origin) {
                         <span class="tl-sources__origin">{{ disclosure.origin }}</span>
                       }
-                    </summary>
-                    <ul class="tl-sources__list">
-                      @for (source of disclosure.sources; track source.kind + ':' + source.label + ':' + source.path) {
-                        <li class="tl-sources__item">
-                          <span class="tl-sources__name">{{ source.label }}</span>
-                          <span class="tl-sources__kind">{{ source.kind }}</span>
-                          @if (source.path) {
-                            <code class="tl-sources__path" [cacTooltip]="source.path">{{ source.path }}</code>
-                          }
-                          @if (source.detail) {
-                            <span class="tl-sources__detail">{{ source.detail }}</span>
-                          }
-                        </li>
-                      }
-                    </ul>
-                  </details>
+                    </button>
+                    @if (isDisclosureExpanded(event, 'sources')) {
+                      <ul class="tl-sources__list" data-testid="timeline-event-sources-content">
+                        @for (source of disclosure.sources; track source.kind + ':' + source.label + ':' + source.path) {
+                          <li class="tl-sources__item">
+                            <span class="tl-sources__name">{{ source.label }}</span>
+                            <span class="tl-sources__kind">{{ source.kind }}</span>
+                            @if (source.path) {
+                              <code class="tl-sources__path" [cacTooltip]="source.path">{{ source.path }}</code>
+                            }
+                            @if (source.detail) {
+                              <span class="tl-sources__detail">{{ source.detail }}</span>
+                            }
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
                 }
               } @else {
                 @let gapFindings = aspectFindings(event, 'gap');
@@ -123,13 +139,25 @@
                   </p>
                 }
               }
-              @if (detailEntries(event).length > 0) {
-                <div class="tl-item__details">
-                  @for (d of detailEntries(event); track d.key) {
-                    <span class="tl-item__detail">
-                      <span class="tl-item__detail-key">{{ d.label }}</span>
-                      <span class="tl-item__detail-val">{{ d.value }}</span>
-                    </span>
+              @let details = detailEntries(event);
+              @if (details.length > 0) {
+                <div class="tl-payload">
+                  <button class="tl-payload__summary"
+                          type="button"
+                          data-testid="timeline-event-payload"
+                          [attr.aria-expanded]="isDisclosureExpanded(event, 'details')"
+                          (click)="toggleDisclosure(event, 'details')">
+                    {{ details.length }} {{ details.length === 1 ? 'detail' : 'details' }}
+                  </button>
+                  @if (isDisclosureExpanded(event, 'details')) {
+                    <div class="tl-item__details" data-testid="timeline-event-payload-content">
+                      @for (d of details; track d.key) {
+                        <span class="tl-item__detail">
+                          <span class="tl-item__detail-key">{{ d.label }}</span>
+                          <span class="tl-item__detail-val">{{ d.value }}</span>
+                        </span>
+                      }
+                    </div>
                   }
                 </div>
               }

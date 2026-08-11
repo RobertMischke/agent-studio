@@ -23,6 +23,18 @@ export interface TaskTimelineEvent {
   details?: Record<string, string> | null;
 }
 
+/** Stable append-ledger identity shared by row tracking and poll reconciliation. */
+export function timelineEventIdentity(event: TaskTimelineEvent): string {
+  return [
+    event.ts,
+    event.kind,
+    event.actor,
+    event.runId ?? '',
+    event.payloadRef ?? '',
+    event.summary,
+  ].join(':');
+}
+
 /**
  * The closed set of timeline event kinds. Mirrors
  * `TimelineEventKinds` on the backend. Used so the FE matches on the
