@@ -214,6 +214,10 @@ export class RemoteHostsService {
             const next: RemoteHost = {
               ...current,
               name: snapshot.name,
+              runnerVersion: snapshot.runnerVersion,
+              runnerInstanceId: snapshot.instanceId,
+              protocolVersion: snapshot.protocolVersion,
+              runnerRegisteredAt: snapshot.registeredAt,
               status,
               lastHeartbeatAt: snapshot.lastSeenAt,
               capabilityHealth: snapshot.capabilities,
@@ -493,7 +497,11 @@ export class RemoteHostsService {
     this.patch(id, (host) => ({ ...host, busyAction: kind }));
 
     this.http.post<ClientSummary>(url, {}).subscribe({
-      next: () => { this.log('action-applied', { kind, hostId: id }); this.reload(); },
+      next: () => {
+        this.patch(id, host => ({ ...host, busyAction: null }));
+        this.log('action-applied', { kind, hostId: id });
+        this.reload();
+      },
       error: error => this.actionFailed(id, error),
     });
   }

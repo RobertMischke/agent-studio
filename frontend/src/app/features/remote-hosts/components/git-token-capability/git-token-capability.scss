@@ -11,8 +11,8 @@
   letter-spacing: 0.04em;
 }
 .git-badge[data-tone='ok'] {
-  background: var(--notify-success-tint);
-  color: var(--notify-success-icon-fg);
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-dim);
 }
 .git-badge[data-tone='warn'] {
   background: var(--notify-warning-icon-bg);
@@ -26,8 +26,6 @@
 .token-warning {
   margin: var(--studio-spacing-3) 0 0;
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
-  border: 1px solid var(--notify-warning-border);
-  border-radius: 8px;
   background: var(--notify-warning-tint);
   color: var(--studio-fg);
   font-size: 12px;

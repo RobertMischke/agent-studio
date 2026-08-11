@@ -43,16 +43,17 @@ interface Meter {
 }
 
 /**
- * One execution location in the Remote-Hosts list (AGT-1921): heartbeat status,
- * role, capabilities, system vitals (RAM / CPU / Disk meters), per-CLI quota
- * chips, and the Re-Probe / Drain / Retire actions.
+ * One execution location in the Execution Hosts table: one compact summary row
+ * followed by an optional flat detail row.
  *
  * Status is encoded with a dot + a badge, and acute states (degraded / offline)
- * additionally wash the whole card with a warn / error tint - never a left
+ * additionally wash the whole row with a warn / error tint, never a left
  * accent bar (style-guide R1). History (retired / draining) renders calm (R4).
  */
 @Component({
-  selector: 'app-remote-host-card',
+  // Attribute form preserves valid table row-group semantics for the summary and detail rows.
+  // eslint-disable-next-line @angular-eslint/component-selector
+  selector: 'tbody[app-remote-host-card]',
   standalone: true,
   imports: [
     DatePipe,
@@ -65,11 +66,16 @@ interface Meter {
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
-  host: { '[attr.data-tone]': 'tone()', '[attr.data-host]': 'host().id' },
+  host: {
+    '[attr.data-tone]': 'tone()',
+    '[attr.data-host]': 'host().id',
+    'data-testid': 'remote-host-card',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RemoteHostCardComponent {
   readonly host = input.required<RemoteHost>();
+  readonly expanded = input(false);
   /** Board-local process runs or remote leased runs attributed to this host. */
   readonly boardActiveSlots = input(0);
   /**
@@ -78,35 +84,101 @@ export class RemoteHostCardComponent {
    * the active-slot total always reconcile.
    */
   readonly projectSlots = input<readonly HostProjectSlots[]>([]);
-  /** Injected clock so the relative heartbeat label ticks without a per-card timer. */
+  /** Injected clock so the relative heartbeat label ticks without a per-row timer. */
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();
   readonly capacityChange = output<RuntimeCapacityChange>();
   readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly setup = output<RemoteHost>();
+  readonly toggleRequested = output<string>();
 
   readonly liveLoading = computed(() => this.host().liveDataState === 'loading');
   readonly liveError = computed(() => this.host().liveDataState === 'error');
-  readonly tone = computed(() => this.liveLoading() ? 'idle' : hostStatusTone(this.host().status));
+  readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
+  readonly routeStatus = computed(() => taskServerRouteStatus(this.host()));
+  readonly acuteIssueLabel = computed(() => {
+    const issues: string[] = [];
+    if (this.providerAuthBadges().some(auth => auth.state === 'unavailable')) issues.push('Auth failed');
+    if (this.routeStatus() === 'unreachable') issues.push('Tunnel down');
+    else if (this.routeStatus() === 'degraded') issues.push('Tunnel degraded');
+    if (this.host().gitPushStatus === 'read-only') issues.push('Write access failed');
+    else if (this.host().gitPushStatus === 'ready-no-workflow-scope') issues.push('Workflow access failed');
+    if ((this.host().projectPreflights ?? []).some(preflight => preflight.status === 'failed')) {
+      issues.push('Delivery blocked');
+    }
+    return issues.join(' · ');
+  });
+  readonly tone = computed(() => {
+    if (this.liveLoading()) return 'idle';
+    if (this.acuteIssueLabel().includes('Auth failed')
+        || this.acuteIssueLabel().includes('Tunnel down')
+        || this.acuteIssueLabel().includes('Write access failed')) {
+      return 'error';
+    }
+    return hostStatusTone(this.host().status);
+  });
   readonly statusLabel = computed(() => this.liveLoading() ? 'Loading live status' : hostStatusLabel(this.host().status));
   readonly roleLabel = computed(() => hostRoleLabel(this.host().role));
   readonly heartbeatLabel = computed(() => this.liveLoading()
     ? 'loading…'
     : relativeHeartbeat(this.host().lastHeartbeatAt, this.now()));
   readonly retired = computed(() => this.host().status === 'retired');
+  readonly detailsId = computed(() => `remote-host-details-${safeId(this.host().id)}`);
   readonly stale = computed(() => !this.liveLoading() && hostIsStale(this.host().lastHeartbeatAt, this.now()));
   readonly latestTelemetry = computed(() => latestHostTelemetry(this.host()));
   readonly liveTelemetry = computed(() => freshHostTelemetry(this.host(), this.now()));
   readonly telemetryStale = computed(() =>
     this.latestTelemetry() !== null && this.liveTelemetry() === null);
   readonly taskServerRouteLabel = computed(() => {
-    switch (taskServerRouteStatus(this.host())) {
+    switch (this.routeStatus()) {
       case 'reachable': return 'reachable';
       case 'degraded': return 'degraded';
       case 'unreachable': return 'unreachable';
       case 'unknown': return 'not reported';
     }
   });
+  readonly activeSlots = computed(() => {
+    if (this.liveLoading()) return null;
+    return this.liveTelemetry()?.activeSlots
+      ?? this.latestTelemetry()?.activeSlots
+      ?? this.host().activeTaskCount
+      ?? this.boardActiveSlots();
+  });
+  readonly slotCapacity = computed(() => {
+    const host = this.host();
+    const configured = host.runtimeCapacity?.maxParallelism ?? host.effectiveMaxParallelism;
+    if (configured !== null && configured !== undefined) return configured;
+    const active = this.activeSlots() ?? host.activeTaskCount ?? 0;
+    return active + (host.availableSlots ?? 0) || null;
+  });
+  readonly slotsLabel = computed(() => {
+    const active = this.activeSlots();
+    const capacity = this.slotCapacity();
+    if (active === null) return 'Loading';
+    return capacity === null ? `${active} / unknown` : `${active} / ${capacity}`;
+  });
+  readonly loadLabel = computed(() => {
+    if (this.liveLoading()) return 'Loading';
+    if (this.stale() || !this.host().stats) return 'Not reported';
+    return `${Math.round(clampPct(this.host().stats?.cpuLoadPct))}%`;
+  });
+  readonly activityTimestamp = computed(() => latestTimestamp(
+    this.host().lastHeartbeatAt,
+    this.host().lastClaimAt,
+  ));
+  readonly activityLabel = computed(() => {
+    if (this.liveLoading()) return 'Loading';
+    const timestamp = this.activityTimestamp();
+    return timestamp ? relativeHeartbeat(timestamp, this.now()) : 'Never';
+  });
+  readonly releaseLabel = computed(() => this.host().runnerVersion?.trim() || 'Not reported');
+  readonly modelCapabilities = computed(() =>
+    (this.host().capabilityHealth ?? []).filter(capability =>
+      capability.category === 'model' || capability.key.startsWith('model:')),
+  );
+  readonly modelCapabilityLabel = computed(() =>
+    this.modelCapabilities().map(capability => capability.key).join(', '),
+  );
 
   readonly meters = computed<Meter[]>(() => {
     const h = this.host();
@@ -184,8 +256,6 @@ export class RemoteHostCardComponent {
   readonly failedProjectPreflights = computed(() =>
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
-  readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
-
   latestAuthTransition(badge: ProviderAuthBadge) {
     return badge.history.at(-1) ?? null;
   }
@@ -199,10 +269,24 @@ export class RemoteHostCardComponent {
     this.action.emit({ kind, id: this.host().id });
   }
 
+  toggle(): void {
+    this.toggleRequested.emit(this.host().id);
+  }
+
   requestSetup(): void {
     const host = this.host();
     if (host.role !== 'remote' || host.status === 'retired' || host.busyAction) return;
     this.setup.emit(host);
   }
 
+}
+
+function latestTimestamp(...values: readonly (string | null | undefined)[]): string | null {
+  return values
+    .filter((value): value is string => !!value && Number.isFinite(Date.parse(value)))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+}
+
+function safeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '-');
 }

@@ -286,6 +286,8 @@
         <li><a href="#audit">04 · Violation audit</a></li>
         <li><a href="#adoption">05 · Adoption contract</a></li>
         <li><a href="#open-decisions">06 · Open decision</a></li>
+        <li><a href="#details-panel-addendum">07 · Details panel</a></li>
+        <li><a href="#applied-surfaces">08 · Applied surfaces</a></li>
       </ul>
     </nav>
   </header>
@@ -708,7 +710,28 @@
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <section id="applied-surfaces" data-concept-section="evidence">
+    <h2><span class="section-no">08</span>Applied surfaces</h2>
+    <p>This register records reviewed applications of the admin grammar. It is evidence of incremental adoption, not authorization for a broad restyling pass.</p>
+
+    <div class="audit-wrap">
+      <table>
+        <thead>
+          <tr><th>Surface</th><th>Delivery</th><th>Applied pattern</th><th>Evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Workspace Settings: Execution Hosts</strong></td>
+            <td>AGT-2629<br>11 August 2026</td>
+            <td>One sortable table row per host. The scan line owns name, status, slots, utilization, last activity, release, and lifecycle actions. Identity, capabilities and authentication, connection, capacity, lease, and deployment internals use a persistent row disclosure. Only acute host failures receive warning semantics.</td>
+            <td><code>execution-hosts-before-light--mocked.png</code>, dark variant, <code>execution-hosts-after-light--mocked.png</code>, dark variant, and expanded light/dark captures.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2629.</footer>
 </main>
 </body>
 </html>

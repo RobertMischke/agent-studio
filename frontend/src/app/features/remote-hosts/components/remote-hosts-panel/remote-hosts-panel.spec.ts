@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -8,12 +8,13 @@ import { RemoteHostsPanelComponent } from './remote-hosts-panel';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 
 /**
- * Render-path test: the panel seeds its registry on init and renders one card
- * per host with a summary line whose counts reconcile to the visible rows
- * (R3 sum invariant).
+ * Render-path test: the panel seeds its registry and renders one sortable table
+ * row per host with persistent detail disclosure.
  */
 describe('RemoteHostsPanelComponent', () => {
-  it('mounts, seeds the registry, and renders a card per host', async () => {
+  beforeEach(() => localStorage.removeItem('atp.executionHosts.table.v1'));
+
+  it('mounts, seeds the registry, and renders a compact row per host', async () => {
     await TestBed.configureTestingModule({
       imports: [RemoteHostsPanelComponent],
       providers: [
@@ -30,16 +31,21 @@ describe('RemoteHostsPanelComponent', () => {
 
     expect(el.querySelector('[data-testid="remote-hosts-panel"]')).toBeTruthy();
     expect(el.querySelector('h2')?.textContent).toContain('Execution Hosts');
-    const cards = el.querySelectorAll('[data-testid="remote-host-card"]');
-    expect(cards.length).toBe(fixture.componentInstance.total());
-    expect(cards.length).toBeGreaterThanOrEqual(2);
-    expect(cards.item(0).querySelector('[data-role="local"]')?.textContent).toContain('Local');
-    expect(cards.item(0).querySelector('[data-testid="remote-host-name"]')?.textContent)
+    const rows = [...el.querySelectorAll('[data-testid="remote-host-card"]')];
+    expect(rows.length).toBe(fixture.componentInstance.total());
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    const localRow = rows.find(row => row.querySelector('[data-role="local"]'));
+    expect(localRow?.querySelector('[data-role="local"]')?.textContent).toContain('Local');
+    expect(localRow?.querySelector('[data-testid="remote-host-name"]')?.textContent)
       .toContain('Local machine');
+    expect(el.querySelector('[data-testid="remote-hosts-table"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="remote-host-details"]')).toBeNull();
 
-    // Summary total equals the number of rendered cards (R3).
-    const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
-    expect(summary).toContain(String(cards.length));
+    const remoteRow = rows.find(row => row.querySelector('[data-role="remote"]')) as HTMLElement;
+    (remoteRow.querySelector('[data-testid="remote-host-disclosure"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="remote-host-details"]')).toBeTruthy();
+    expect(localStorage.getItem('atp.executionHosts.table.v1')).toContain('agent-runner-01');
 
     const setupButton = el.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
     setupButton.click();
@@ -55,6 +61,31 @@ describe('RemoteHostsPanelComponent', () => {
     expect(el.querySelector('[data-testid="add-host-wizard"]')).toBeTruthy();
     expect(el.querySelector('#add-host-title')?.textContent).toContain('Add an execution host');
 
+    fixture.destroy();
+  });
+
+  it('sorts by a selected column and persists the direction', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteHostsPanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RemoteHostsPanelComponent);
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('[data-testid="remote-host-sort-name"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const names = [...(fixture.nativeElement as HTMLElement)
+      .querySelectorAll('[data-testid="remote-host-name"]')]
+      .map(element => element.textContent?.trim());
+    expect(names[0]).toBe('Local machine');
+    expect(fixture.componentInstance.sortAria('name')).toBe('descending');
+    expect(localStorage.getItem('atp.executionHosts.table.v1')).toContain('"direction":"desc"');
     fixture.destroy();
   });
 

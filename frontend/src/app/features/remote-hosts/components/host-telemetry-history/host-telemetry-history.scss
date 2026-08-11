@@ -1,11 +1,9 @@
 :host { display: block; }
 
 .telemetry {
-  margin-top: var(--studio-spacing-4);
-  padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-bg-elevated);
+  margin-top: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-border);
+  padding-top: var(--studio-spacing-3);
 }
 
 .telemetry__head {

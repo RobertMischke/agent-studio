@@ -62,8 +62,8 @@ RUNNER_GIT_REMOTE=https://github.com/ORG/REPO.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:ORG/REPO.git
 ```
 
-The host card shows the fallback-repository probe separately from project
-delivery. A failed fallback probe does not classify every project as read-only
+The host detail disclosure shows the fallback-repository probe separately from
+project delivery. A failed fallback probe does not classify every project as read-only
 and does not suppress claims whose own repository preflight succeeds.
 
 AGT-2141 added per-project repository URLs and isolated shared clones. Configure
@@ -79,7 +79,7 @@ URLs to match the registered repository URL, fetches, verifies the exact
 integration branch, then creates and removes a temporary runner ref. This real
 write exercises server-side hooks and permissions that a dry-run can miss. A
 failure or missing repository URL keeps only that project's card Ready and
-appears with its target branch and reason on both the host card and the
+appears with its target branch and reason in both the host detail disclosure and the
 project's Execution card. Other projects on the host continue independently.
 
 ## Connect the daemon
@@ -117,18 +117,21 @@ sudo journalctl -u agent-host -n 100 --no-pager
 curl -sS https://tasks.example.com/api/clients/agent-runner-01
 ```
 
-The host card reports daemon state (`running`, `read-only`, or `stopped`), last
-claim, active slots, task inflow, last contact, and push status. Active slots
+Execution Hosts uses one sortable table row per host. The scan line reports
+name, status, occupied and total slots, current utilization, last activity,
+runner release, and lifecycle actions. Expand the row for daemon state
+(`running`, `read-only`, or `stopped`), last claim, task inflow, push status,
+identity, capabilities, connection, capacity, lease, and deployment internals. Active slots
 come from the daemon's latest telemetry sample. If that sample or the host
 heartbeat is older than five minutes, the last slot value is explicitly marked
 stale and rendered quietly instead of being presented as live.
 
-The same card shows the server-owned **Runtime capacity** policy. Change the
+The same detail disclosure shows the server-owned **Runtime capacity** policy. Change the
 slot ceiling, target load, or ramp strategy there and choose **Apply**. The
 Task Server versions the update, enforces the ceiling across Coding RUN leases
 on the host, and returns it on the next claim poll. The Coding daemon adopts it
 without a restart. Existing work continues when the ceiling is lowered; only
-new admission stops. The card distinguishes the central ceiling from the last
+new admission stops. The detail disclosure distinguishes the central ceiling from the last
 version explicitly confirmed by the daemon. A matching value alone is not an
 acknowledgement. The Task Server records `runtime-capacity.updated` and the
 first matching runner poll records `runtime-capacity.applied`, both with actor
@@ -161,7 +164,7 @@ running work continues only inside its existing lease safety window, using the
 in-memory or cached last-known-good capacity until normal fenced reconciliation
 resumes.
 
-The same host card owns **Project access**. Select all projects or enter the
+The same host detail disclosure owns **Project access**. Select all projects or enter the
 stable Task Server project ids that this host may claim. The Task Server stores
 the allowlist as a separate versioned host policy and applies it to both direct
 claims and host-orchestrator work permits. The daemon does not resolve or cache
@@ -189,7 +192,7 @@ and canary admission remain the single capability mechanism.
 The workspace status bar defines `running` from the Board's `3-progress`
 snapshot: a local run needs a running process execution and a remote run needs
 an active fenced lease. Its tooltip shows the total as local plus remote. The
-Remote Hosts view independently shows telemetry `activeSlots`; when fresh
+Execution Hosts independently shows telemetry `activeSlots`; when fresh
 telemetry and Board leases disagree, both surfaces show a warning icon and keep
 the two values visible instead of silently choosing one.
 

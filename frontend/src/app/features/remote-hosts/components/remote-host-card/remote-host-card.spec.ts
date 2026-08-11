@@ -52,6 +52,10 @@ const HOST: RemoteHost = {
       activeSlots: 1,
     }],
   },
+  runnerVersion: '1.4.0+sha.abc123',
+  runnerInstanceId: 'coding-01',
+  protocolVersion: 3,
+  runnerRegisteredAt: '2026-07-10T11:50:00Z',
 };
 
 function mount(host: RemoteHost) {
@@ -63,22 +67,38 @@ function mount(host: RemoteHost) {
   const fixture = TestBed.createComponent(RemoteHostCardComponent);
   fixture.componentRef.setInput('host', host);
   fixture.componentRef.setInput('now', Date.parse('2026-07-10T12:00:00Z'));
+  fixture.componentRef.setInput('expanded', true);
   fixture.detectChanges();
   return fixture;
 }
 
 describe('RemoteHostCardComponent', () => {
-  it('renders name, status badge, role, and the three vitals meters', () => {
+  it('renders the compact summary row and the disclosed details', () => {
     const el: HTMLElement = mount(HOST).nativeElement;
     expect(el.querySelector('[data-testid="remote-host-name"]')?.textContent).toContain('agent-runner');
     expect(el.querySelector('[data-testid="remote-host-status"]')?.textContent).toContain('Online');
-    expect(el.querySelector('.host__role')?.textContent).toContain('Remote');
+    expect(el.querySelector('[data-role="remote"]')?.textContent).toContain('Remote');
+    expect(el.querySelector('[data-testid="remote-host-slots-summary"]')?.textContent).toContain('1 / 20');
+    expect(el.querySelector('[data-testid="remote-host-load-summary"]')?.textContent).toContain('54%');
+    expect(el.querySelector('[data-testid="remote-host-release"]')?.textContent).toContain('1.4.0+sha.abc123');
     expect(el.querySelectorAll('.meter').length).toBe(3);
     // RAM 24/62 GB used => 39%
     expect(el.querySelector('[data-meter="ram"] .meter__pct')?.textContent).toContain('39%');
     expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active');
     expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 4');
     expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
+  });
+
+  it('keeps details collapsed until requested and emits the stable host id', () => {
+    const fixture = mount(HOST);
+    fixture.componentRef.setInput('expanded', false);
+    fixture.detectChanges();
+    let hostId = '';
+    fixture.componentInstance.toggleRequested.subscribe(id => { hostId = id; });
+
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-details"]')).toBeNull();
+    (fixture.nativeElement.querySelector('[data-testid="remote-host-disclosure"]') as HTMLButtonElement).click();
+    expect(hostId).toBe('hetzner');
   });
 
   it('shows a neutral live-loading state instead of cached stopped data', () => {
@@ -222,7 +242,7 @@ describe('RemoteHostCardComponent', () => {
 
   it('hides stale metrics instead of presenting the last CPU value as live', () => {
     const el: HTMLElement = mount({ ...HOST, lastHeartbeatAt: '2026-07-08T12:00:00Z' }).nativeElement;
-    expect(el.querySelector('[data-testid="remote-host-stale"]')?.textContent).toContain('last seen 2d ago');
+    expect(el.querySelector('[data-testid="remote-host-stale"]')?.textContent).toContain('Last seen 2d ago');
     expect(el.querySelectorAll('.meter').length).toBe(0);
     expect(el.textContent).not.toContain('54%');
   });

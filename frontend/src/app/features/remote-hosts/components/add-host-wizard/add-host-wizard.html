@@ -37,7 +37,7 @@
           }
           @case (2) {
             <div class="command"><span>Host write identity</span><code>ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -N ''<br />Register .pub as write-enabled repository deploy key<br />Set RUNNER_GIT_PUSH_REMOTE to the SSH repository URL</code></div>
-            <label class="check-card"><input type="checkbox" data-testid="add-host-deploy-key-check" [ngModel]="deployKeyReady()" (ngModelChange)="deployKeyReady.set($event)" /><span><strong>Push probe passed</strong><small>Host and repository key is write-enabled; probe date will appear on the host card</small></span></label>
+            <label class="check-card"><input type="checkbox" data-testid="add-host-deploy-key-check" [ngModel]="deployKeyReady()" (ngModelChange)="deployKeyReady.set($event)" /><span><strong>Push probe passed</strong><small>Host and repository key is write-enabled; probe date will appear in host details</small></span></label>
           }
           @case (3) {
             <div class="auth-grid">

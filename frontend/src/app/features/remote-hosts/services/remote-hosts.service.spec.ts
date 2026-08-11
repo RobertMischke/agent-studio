@@ -331,6 +331,10 @@ describe('RemoteHostsService client registry hydration', () => {
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       gitPushStatus: 'ready-no-workflow-scope',
       gitPushDetail: 'workflow scope missing',
+      runnerVersion: '1.0.0',
+      runnerInstanceId: 'runner-host:42',
+      protocolVersion: 2,
+      runnerRegisteredAt: now,
     });
     http.verify();
   });
@@ -350,6 +354,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({ clientId: 'agent-runner-01', window: '14d', points: [], findings: [] });
     http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('draining');
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBeNull();
     http.verify();
   });
 

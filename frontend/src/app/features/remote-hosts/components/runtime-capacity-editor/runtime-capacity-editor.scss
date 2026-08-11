@@ -4,12 +4,10 @@
   display: flex;
   align-items: end;
   gap: var(--studio-spacing-4);
-  margin-top: var(--studio-spacing-3);
-  padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-border);
-  border-radius: 8px;
-  background: var(--studio-bg);
+  padding: var(--studio-spacing-2) 0;
 }
+
+.capacity + .capacity { border-top: 1px solid var(--studio-border); }
 
 .capacity__copy {
   display: flex;

@@ -1,197 +1,258 @@
 @let h = host();
 
-<article class="host" data-testid="remote-host-card">
-  <header class="host__head">
-    <span class="host__dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
-    <span class="host__name" data-testid="remote-host-name">{{ h.name }}</span>
-    <span class="host__role" [attr.data-role]="h.role">{{ roleLabel() }}</span>
-    <span class="host__badge" [attr.data-tone]="tone()" data-testid="remote-host-status">{{ statusLabel() }}</span>
-    @if (h.role === 'remote') {
-      <app-git-token-capability mode="badges" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
+<tr class="host__row"
+    [attr.data-tone]="tone()"
+    [attr.data-expanded]="expanded()">
+  <td class="host__name-cell">
+    <button class="host__disclosure"
+            type="button"
+            data-testid="remote-host-disclosure"
+            [attr.aria-expanded]="expanded()"
+            [attr.aria-controls]="detailsId()"
+            [attr.aria-label]="(expanded() ? 'Collapse details for ' : 'Expand details for ') + h.name"
+            (click)="toggle()">
+      <span class="host__chevron" aria-hidden="true">›</span>
+      <span class="host__identity">
+        <strong data-testid="remote-host-name">{{ h.name }}</strong>
+        <small [attr.data-role]="h.role">{{ roleLabel() }}</small>
+      </span>
+    </button>
+  </td>
+  <td>
+    <span class="host__status" data-testid="remote-host-status">
+      <span class="host__dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
+      <span>{{ statusLabel() }}</span>
+    </span>
+    @if (acuteIssueLabel()) {
+      <span class="host__issue" data-testid="remote-host-acute-issue">{{ acuteIssueLabel() }}</span>
     }
-    <span class="host__spacer"></span>
-    @if (h.address) {
-      <span class="host__addr" [appTooltip]="h.address">{{ h.address }}</span>
-    }
-  </header>
-
-  <div class="host__meta">
-    <span class="host__meta-item">{{ h.os }}</span>
-    <span class="host__meta-sep" aria-hidden="true">·</span>
-    <span class="host__meta-item" data-testid="remote-host-heartbeat">heartbeat {{ heartbeatLabel() }}</span>
-    @if (h.uptimeLabel) {
-      <span class="host__meta-sep" aria-hidden="true">·</span>
-      <span class="host__meta-item">up {{ h.uptimeLabel }}</span>
-    }
-  </div>
-
-  <app-git-token-capability mode="warning" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
-
-  @if (providerAuthBadges().length) {
-    <section class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
-      <div class="provider-auth__head">
-        <strong>Provider authentication</strong>
-        <span>Runner probe · process environment</span>
-      </div>
-      <div class="provider-auth__badges">
-        @for (auth of providerAuthBadges(); track auth.id) {
-          <span class="provider-auth__badge"
-                [attr.data-state]="auth.state"
-                [attr.data-testid]="'remote-host-provider-auth-' + auth.provider"
-                [appTooltip]="auth.detail">
-            <span class="provider-auth__dot" aria-hidden="true"></span>
-            <strong>{{ auth.providerLabel }}</strong>
-            <span>{{ auth.state }}</span>
-          </span>
-          @if (auth.expiresSoon && auth.expiryLabel) {
-            <span class="provider-auth__expiry"
-                  [attr.data-testid]="'remote-host-provider-auth-expiry-' + auth.provider">
-              {{ auth.expiryLabel }}
-            </span>
-          }
-        }
-      </div>
-      @for (auth of providerAuthBadges(); track auth.id) {
-        @if (latestAuthTransition(auth); as transition) {
-          <p class="provider-auth__history" [attr.data-testid]="'remote-host-provider-auth-history-' + auth.provider">
-            Last change {{ transition.occurredAt | date:'short' }} · {{ transition.fromState }} → {{ transition.toState }}
-          </p>
-        }
-      }
-    </section>
-  }
-
-  <section class="activity" data-testid="remote-host-activity" [class.activity--stale]="stale()">
-    <div><span>Task inflow</span><strong>{{ taskInflowLabel() }}</strong></div>
-    <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>
-    <div><span>Daemon</span><strong>{{ daemonLabel() }}</strong></div>
-    <div data-testid="remote-host-task-server-route"><span>Task Server route</span><strong>{{ taskServerRouteLabel() }}</strong></div>
-    <div><span>Last claim</span><strong>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'none' }}</strong></div>
-    <div><span>Fallback probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
-  </section>
-
-  @if (h.role === 'remote' && !retired()) {
-    <app-runtime-capacity-editor
-      [host]="h"
-      [boardActiveSlots]="boardActiveSlots()"
-      [projectSlots]="projectSlots()"
-      (capacityChange)="capacityChange.emit($event)"
-      (projectPolicyChange)="projectPolicyChange.emit($event)" />
-  }
-
-  <app-host-workload-summary
-    [runSlots]="runSlotsLabel()"
-    [runSlotsStale]="telemetryStale() || stale() || liveError()"
-    [runSlotsDiverge]="runSlotsDiverge()"
-    [runSlotsTooltip]="runSlotsTooltip()"
-    [gateWork]="gateWorkLabel()" />
-
-  @if (stale() && !retired()) {
-    <p class="host__stale" data-testid="remote-host-stale">
-      Stale: last seen {{ heartbeatLabel() }}. Live system metrics are hidden; the last slot sample is marked stale.
-    </p>
-  }
-
-  <app-capability-health [host]="h" />
-
-  @if (failedProjectPreflights().length) {
-    <section class="host__delivery-failures" data-testid="remote-host-project-preflight-failures" aria-label="Blocked project delivery paths">
-      <strong>Project delivery blocked</strong>
-      @for (preflight of failedProjectPreflights(); track preflight.projectId) {
-        <p>
-          <span>{{ preflight.projectName }}{{ preflight.targetBranch ? ' · ' + preflight.targetBranch : '' }}</span>
-          {{ preflight.detail }}
-        </p>
-      }
-    </section>
-  }
-
-  @if (h.capabilities.length) {
-    <ul class="chips" aria-label="Capabilities">
-      @for (cap of h.capabilities; track cap) {
-        <li class="chip chip--cap">{{ cap }}</li>
-      }
-    </ul>
-  }
-
-  @if (h.telemetryLoading) {
-    <p class="host__no-stats" data-testid="remote-host-telemetry-loading">Loading live system telemetry…</p>
-  } @else if (meters().length) {
-    <div class="meters" data-testid="remote-host-vitals">
-      @for (m of meters(); track m.key) {
-        <div class="meter" [attr.data-meter]="m.key">
-          <div class="meter__top">
-            <span class="meter__label">{{ m.label }}</span>
-            <span class="meter__detail">{{ m.detail }}</span>
-            <span class="meter__pct" [attr.data-tone]="m.tone">{{ m.pct }}%</span>
-          </div>
-          <div class="meter__track">
-            <span class="meter__fill" [attr.data-tone]="m.tone" [style.width.%]="m.pct"></span>
-          </div>
-        </div>
+  </td>
+  <td class="host__metric" data-testid="remote-host-slots-summary">{{ slotsLabel() }}</td>
+  <td class="host__metric" data-testid="remote-host-load-summary">{{ loadLabel() }}</td>
+  <td>
+    <time class="host__activity"
+          data-testid="remote-host-heartbeat"
+          [attr.datetime]="activityTimestamp()"
+          [title]="activityTimestamp() ? (activityTimestamp() | date:'medium') : ''">
+      {{ activityLabel() }}
+    </time>
+  </td>
+  <td>
+    <code class="host__release" data-testid="remote-host-release" [title]="releaseLabel()">
+      {{ releaseLabel() }}
+    </code>
+  </td>
+  <td>
+    <div class="host__actions">
+      @if (retired()) {
+        <button class="host__btn host__btn--primary"
+                type="button"
+                data-testid="remote-host-action-revive"
+                [disabled]="!!h.busyAction"
+                (click)="emit('revive')">
+          {{ h.busyAction === 'revive' ? 'Reviving…' : 'Revive' }}
+        </button>
+      } @else if (h.role === 'remote') {
+        <button class="host__btn"
+                type="button"
+                data-testid="remote-host-action-drain"
+                title="Stop new leases while running work finishes."
+                [disabled]="!!h.busyAction || h.status === 'draining'"
+                (click)="emit('drain')">
+          {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain' }}
+        </button>
+        <button class="host__btn host__btn--danger"
+                type="button"
+                data-testid="remote-host-action-retire"
+                [disabled]="!!h.busyAction"
+                (click)="emit('retire')">
+          {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
+        </button>
+      } @else {
+        <span class="host__local-action">Local</span>
       }
     </div>
-  } @else {
-    <p class="host__no-stats" data-testid="remote-host-no-stats">No live system stats reported.</p>
-  }
+  </td>
+</tr>
 
-  @if (!stale() && h.telemetry && h.telemetry.points.length) {
-    <app-host-telemetry-history [host]="h" [now]="now()" />
-  }
-
-  @if (h.cliQuotas.length) {
-    <ul class="chips chips--quota" aria-label="Per-CLI quota" data-testid="remote-host-quotas">
-      @for (q of h.cliQuotas; track q.cliType + '|' + q.windowLabel) {
-        <li class="chip chip--quota" [attr.data-tone]="quotaTone(q.usedPct)"
-            [appTooltip]="q.resetLabel ? 'resets ' + q.resetLabel : null">
-          <span class="chip__icon" aria-hidden="true">{{ cliIcon(q.cliType) }}</span>
-          <span class="chip__cli">{{ cliLabel(q.cliType) }}</span>
-          <span class="chip__win">{{ q.windowLabel }}</span>
-          @if (q.usedPct !== null) {
-            <span class="chip__pct">{{ q.usedPct }}%</span>
+@if (expanded()) {
+  <tr class="host__detail-row" [id]="detailsId()" data-testid="remote-host-details">
+    <td colspan="7">
+      <div class="host__details">
+        <div class="host__detail-actions" aria-label="Host maintenance actions">
+          @if (h.role === 'remote' && !retired()) {
+            <button class="host__btn host__btn--primary"
+                    type="button"
+                    data-testid="remote-host-action-setup"
+                    [disabled]="!!h.busyAction"
+                    (click)="requestSetup()">
+              Set up agent host
+            </button>
           }
-        </li>
-      }
-    </ul>
-  }
+          <button class="host__btn"
+                  type="button"
+                  data-testid="remote-host-action-reprobe"
+                  [disabled]="!!h.busyAction"
+                  (click)="emit('reprobe')">
+            {{ h.busyAction === 'reprobe' ? 'Re-probing…' : 'Re-probe' }}
+          </button>
+          @if (retired()) {
+            <button class="host__btn host__btn--danger"
+                    type="button"
+                    data-testid="remote-host-action-delete"
+                    [disabled]="!!h.busyAction"
+                    (click)="emit('delete')">
+              {{ h.busyAction === 'delete' ? 'Deleting…' : 'Delete permanently' }}
+            </button>
+          }
+        </div>
 
-  <footer class="host__actions">
-    @if (h.role === 'remote') {
-      <button class="host__btn host__btn--primary" type="button"
-              data-testid="remote-host-action-setup"
-              [disabled]="!!h.busyAction || retired()"
-              (click)="requestSetup()">
-        Set up agent host
-      </button>
-    }
-    <button class="host__btn" type="button"
-            data-testid="remote-host-action-reprobe"
-            [disabled]="!!h.busyAction"
-            (click)="emit('reprobe')">
-      {{ h.busyAction === 'reprobe' ? 'Re-probing…' : 'Re-Probe' }}
-    </button>
-    <button class="host__btn" type="button"
-            data-testid="remote-host-action-drain"
-            title="Stop new leases. Running work continues until it finishes; the host then remains drained."
-            [disabled]="!!h.busyAction || retired() || h.status === 'draining'"
-            (click)="emit('drain')">
-      {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain ⓘ' }}
-    </button>
-    <button class="host__btn host__btn--danger" type="button"
-            data-testid="remote-host-action-retire"
-            [disabled]="!!h.busyAction || retired()"
-            (click)="emit('retire')">
-      {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
-    </button>
-    @if (retired()) {
-      <button class="host__btn host__btn--primary" type="button" data-testid="remote-host-action-revive"
-              [disabled]="!!h.busyAction" (click)="emit('revive')">
-        {{ h.busyAction === 'revive' ? 'Reviving…' : 'Revive' }}
-      </button>
-      <button class="host__btn host__btn--danger" type="button" data-testid="remote-host-action-delete"
-              [disabled]="!!h.busyAction" (click)="emit('delete')">
-        {{ h.busyAction === 'delete' ? 'Deleting…' : 'Delete permanently' }}
-      </button>
-    }
-  </footer>
-</article>
+        <section class="host__section" aria-labelledby="identity-title-{{ detailsId() }}">
+          <h3 id="identity-title-{{ detailsId() }}">Identity</h3>
+          <dl class="host__facts">
+            <div><dt>Client ID</dt><dd><code>{{ h.clientId }}</code></dd></div>
+            <div><dt>Runner ID</dt><dd><code>{{ h.id }}</code></dd></div>
+            <div><dt>Host ID</dt><dd><code>{{ h.capacityHostId || 'Not reported' }}</code></dd></div>
+            <div><dt>Instance ID</dt><dd><code>{{ h.runnerInstanceId || 'Not reported' }}</code></dd></div>
+            <div><dt>Address</dt><dd><code>{{ h.address || 'Local process' }}</code></dd></div>
+            <div><dt>Platform</dt><dd>{{ h.os }}{{ h.uptimeLabel ? ' · up ' + h.uptimeLabel : '' }}</dd></div>
+          </dl>
+        </section>
+
+        <section class="host__section" aria-labelledby="capabilities-title-{{ detailsId() }}">
+          <h3 id="capabilities-title-{{ detailsId() }}">Capabilities and authentication</h3>
+          @if (providerAuthBadges().length) {
+            <div class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
+              @for (auth of providerAuthBadges(); track auth.id) {
+                <span class="provider-auth__badge"
+                      [attr.data-state]="auth.state"
+                      [attr.data-testid]="'remote-host-provider-auth-' + auth.provider"
+                      [appTooltip]="auth.detail">
+                  <span class="provider-auth__dot" aria-hidden="true"></span>
+                  <strong>{{ auth.providerLabel }}</strong>
+                  <span>{{ auth.state }}</span>
+                </span>
+                @if (auth.expiresSoon && auth.expiryLabel) {
+                  <span class="provider-auth__expiry"
+                        [attr.data-testid]="'remote-host-provider-auth-expiry-' + auth.provider">
+                    {{ auth.expiryLabel }}
+                  </span>
+                }
+                @if (latestAuthTransition(auth); as transition) {
+                  <span class="provider-auth__history"
+                        [attr.data-testid]="'remote-host-provider-auth-history-' + auth.provider">
+                    Last change {{ transition.occurredAt | date:'short' }} · {{ transition.fromState }} → {{ transition.toState }}
+                  </span>
+                }
+              }
+            </div>
+          }
+          @if (h.capabilities.length) {
+            <ul class="chips" aria-label="Host capabilities">
+              @for (cap of h.capabilities; track cap) {
+                <li class="chip">{{ cap }}</li>
+              }
+            </ul>
+          }
+          <p class="host__models" data-testid="remote-host-models">
+            <strong>Models</strong>
+            @if (modelCapabilities().length) {
+              {{ modelCapabilityLabel() }}
+            } @else {
+              Follow task routing; no host-specific model catalogue reported.
+            }
+          </p>
+          <app-capability-health [host]="h" />
+        </section>
+
+        <section class="host__section" aria-labelledby="connection-title-{{ detailsId() }}">
+          <h3 id="connection-title-{{ detailsId() }}">Connection and delivery</h3>
+          <div class="host__git-status">
+            <app-git-token-capability mode="badges" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
+          </div>
+          <app-git-token-capability mode="warning" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
+          <dl class="host__facts host__facts--connection" data-testid="remote-host-activity">
+            <div><dt>Task inflow</dt><dd>{{ taskInflowLabel() }}</dd></div>
+            <div><dt>Last contact</dt><dd>{{ heartbeatLabel() }}</dd></div>
+            <div><dt>Daemon</dt><dd>{{ daemonLabel() }}</dd></div>
+            <div data-testid="remote-host-task-server-route"><dt>Task Server route</dt><dd>{{ taskServerRouteLabel() }}</dd></div>
+            <div><dt>Last claim</dt><dd>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'None' }}</dd></div>
+            <div><dt>Fallback probe</dt><dd>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'Never' }}</dd></div>
+          </dl>
+          @if (failedProjectPreflights().length) {
+            <div class="host__delivery-failures" data-testid="remote-host-project-preflight-failures">
+              <strong>Project delivery blocked</strong>
+              @for (preflight of failedProjectPreflights(); track preflight.projectId) {
+                <p><b>{{ preflight.projectName }}{{ preflight.targetBranch ? ' · ' + preflight.targetBranch : '' }}</b> {{ preflight.detail }}</p>
+              }
+            </div>
+          }
+        </section>
+
+        <section class="host__section" aria-labelledby="capacity-title-{{ detailsId() }}">
+          <h3 id="capacity-title-{{ detailsId() }}">Capacity and lease internals</h3>
+          @if (h.role === 'remote' && !retired()) {
+            <app-runtime-capacity-editor
+              [host]="h"
+              [boardActiveSlots]="boardActiveSlots()"
+              [projectSlots]="projectSlots()"
+              (capacityChange)="capacityChange.emit($event)"
+              (projectPolicyChange)="projectPolicyChange.emit($event)" />
+          }
+          <app-host-workload-summary
+            [runSlots]="runSlotsLabel()"
+            [runSlotsStale]="telemetryStale() || stale() || liveError()"
+            [runSlotsDiverge]="runSlotsDiverge()"
+            [runSlotsTooltip]="runSlotsTooltip()"
+            [gateWork]="gateWorkLabel()" />
+          @if (stale() && !retired()) {
+            <p class="host__stale" data-testid="remote-host-stale">Last seen {{ heartbeatLabel() }}. Live metrics are hidden.</p>
+          }
+          @if (h.telemetryLoading) {
+            <p class="host__no-stats" data-testid="remote-host-telemetry-loading">Loading live system telemetry…</p>
+          } @else if (meters().length) {
+            <div class="meters" data-testid="remote-host-vitals">
+              @for (meter of meters(); track meter.key) {
+                <div class="meter" [attr.data-meter]="meter.key">
+                  <div class="meter__top">
+                    <span class="meter__label">{{ meter.label }}</span>
+                    <span class="meter__detail">{{ meter.detail }}</span>
+                    <span class="meter__pct" [attr.data-tone]="meter.tone">{{ meter.pct }}%</span>
+                  </div>
+                  <div class="meter__track"><span class="meter__fill" [attr.data-tone]="meter.tone" [style.width.%]="meter.pct"></span></div>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="host__no-stats" data-testid="remote-host-no-stats">No live system stats reported.</p>
+          }
+          @if (!stale() && h.telemetry && h.telemetry.points.length) {
+            <app-host-telemetry-history [host]="h" [now]="now()" />
+          }
+          @if (h.cliQuotas.length) {
+            <ul class="chips" aria-label="Per-CLI quota" data-testid="remote-host-quotas">
+              @for (quota of h.cliQuotas; track quota.cliType + '|' + quota.windowLabel) {
+                <li class="chip" [attr.data-tone]="quotaTone(quota.usedPct)"
+                    [appTooltip]="quota.resetLabel ? 'resets ' + quota.resetLabel : null">
+                  <span aria-hidden="true">{{ cliIcon(quota.cliType) }}</span>
+                  <strong>{{ cliLabel(quota.cliType) }}</strong>
+                  <span>{{ quota.windowLabel }}</span>
+                  @if (quota.usedPct !== null) { <span class="chip__pct">{{ quota.usedPct }}%</span> }
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="host__section" aria-labelledby="deployment-title-{{ detailsId() }}">
+          <h3 id="deployment-title-{{ detailsId() }}">Deployment</h3>
+          <dl class="host__facts">
+            <div><dt>Release ID</dt><dd><code>{{ releaseLabel() }}</code></dd></div>
+            <div><dt>Protocol</dt><dd>{{ h.protocolVersion ?? 'Not reported' }}</dd></div>
+            <div><dt>Registered</dt><dd>{{ h.runnerRegisteredAt ? (h.runnerRegisteredAt | date:'medium') : 'Not reported' }}</dd></div>
+          </dl>
+        </section>
+      </div>
+    </td>
+  </tr>
+}
