@@ -37,7 +37,7 @@ public sealed class WorkbenchCatalogueService
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.Ordinal)
         { "active", "decision-pending", "decided", "documented", "archived" };
     private static readonly HashSet<string> AllowedPhases = new(StringComparer.Ordinal)
-        { "shaping", "testing", "decision-ready" };
+        { "informational", "shaping", "testing", "decision-ready" };
 
     private sealed record LegacyWorkbench(
         string Id, string Title, string Summary, string RepoRelPath, string Phase,

@@ -59,6 +59,12 @@ async function mockWiki(page: Page, projectName: string, options: WikiMockOption
   await page.route('**/api/cli/usage**', route => json(route, {
     at: '2026-08-10T00:00:00Z', sessions: [],
   }));
+  await page.route(`**/api/projects/${project}/workbenches**`, route => json(route, {
+    projectName,
+    includesHistory: true,
+    count: 0,
+    items: [],
+  }));
   await page.route('**/api/watch-paths**', route => json(route, [{
     name: projectName,
     path: REPOSITORY_PATH,
@@ -316,7 +322,8 @@ test('Lagebild opens from navigation and a missing source page shows its reason'
   await expect(page.getByTestId('project-wiki-html-frame').contentFrame().locator('h1'))
     .toContainText('Wo wir stehen');
 
-  await page.getByTestId(`project-wiki-file-${SECOND_PAGE}`).click();
+  await page.goto(`/#/projects/${PROJECT_ID}/wiki?page=${encodeURIComponent(SECOND_PAGE)}`);
+  await expect(page.getByTestId('project-wiki-viewer-path')).toContainText(SECOND_PAGE);
   const error = page.getByTestId('project-wiki-load-error');
   await expect(error).toHaveAttribute('role', 'alert');
   await expect(error).toContainText(
