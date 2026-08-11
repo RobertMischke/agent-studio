@@ -225,6 +225,9 @@ without making the descriptor invalid. Existing active documents adopt the
 field and the canonical v2 article template only when they are otherwise
 changed. The authoring contract and copyable source live in
 [`article-document-authoring.md`](../../operations/article-document-authoring.md).
+That contract also owns the full-bleed screenshot evidence figure, per-image
+capture dating, provenance, sparse annotation, theme coverage, and the
+`docs/operations/<slug>/assets/` publication convention.
 
 ## API endpoints
 
