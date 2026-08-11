@@ -8,11 +8,11 @@ test.describe('orchestrator project chat', () => {
       () => chat.evaluate((el) => (el as HTMLElement).offsetWidth),
       { message: 'orchestrator side sheet width' }
     ).toBeGreaterThan(300);
-    await expect(chat.getByRole('heading', { name: 'Orchestrator' })).toBeVisible();
+    await expect(chat.getByRole('heading', { name: 'Chat' })).toBeVisible();
     await expect(chat.getByText('Runbook · canonical session')).toBeVisible();
     await expect(chat.getByRole('button', { name: /Project/ })).toBeVisible();
     await expect(chat.getByTestId('orch-side-sheet-project-combo')).toBeVisible();
-    await expect(chat.getByPlaceholder(/Ask the orchestrator/i)).toBeVisible();
+    await expect(chat.getByPlaceholder(/Ask a question/i)).toBeVisible();
 
     await expect(chat.getByRole('button', { name: /Search/i })).toHaveCount(0);
     await expect(chat.getByTestId('pchat-search-input')).toHaveCount(0);

@@ -157,15 +157,15 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
         // partial-commit semantics that take the working-tree content of tracked
         // paths regardless of what was unstaged.
         var orchDir = Path.Combine(_watchPath, ".orchestrator");
-        Directory.CreateDirectory(Path.Combine(orchDir, "chat-attachments"));
+        Directory.CreateDirectory(Path.Combine(orchDir, "context-chats"));
         File.WriteAllText(Path.Combine(orchDir, "orchestrator.jsonl"), "orig\n");
-        File.WriteAllText(Path.Combine(orchDir, "chat-attachments", "a.png"), "imgorig\n");
+        File.WriteAllText(Path.Combine(orchDir, "context-chats", "task.jsonl"), "original\n");
         RunGit(_root, "add", "-A");
         RunGit(_root, "commit", "-q", "-m", "seed orchestrator runtime");
 
         // Churn the tracked runtime AND write real evidence.
         File.WriteAllText(Path.Combine(orchDir, "orchestrator.jsonl"), "BIG-CHURN\n");
-        File.WriteAllText(Path.Combine(orchDir, "chat-attachments", "a.png"), "imgnew\n");
+        File.WriteAllText(Path.Combine(orchDir, "context-chats", "task.jsonl"), "changed\n");
         WriteEvidence("ASS-9", "code-review.md", "review\n");
 
         batcher.Ingest(Request("ASS-9", TaskStates.Ready, TaskStates.Progress));
@@ -180,7 +180,7 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
         // modified in the working tree.
         var status = RunGitCapture(_root, "status", "--porcelain=v1").Replace('\\', '/');
         Assert.Contains(".orchestrator/orchestrator.jsonl", status);
-        Assert.Contains(".orchestrator/chat-attachments/a.png", status);
+        Assert.Contains(".orchestrator/context-chats/task.jsonl", status);
     }
 
     [Fact]

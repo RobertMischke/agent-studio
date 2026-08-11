@@ -8,7 +8,7 @@
        (mousedown)="startResize($event)"></div>
 }
 
-<app-sidesheet title="Orchestrator"
+<app-sidesheet title="Chat"
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
@@ -132,7 +132,7 @@
 
         @if (selectedContextKey() === 'global') {
           <section class="sheet__no-project" data-testid="orchestrator-global-chat-empty">
-            Global orchestrator selected. This workspace has no global transcript yet.
+            Global chat selected. This workspace has no global transcript yet.
           </section>
         } @else if (effectiveProject()) {
           <section class="sheet__chat">
@@ -160,19 +160,14 @@
               }
             }
 
-            @if (contextKind() === 'project') {
-              <app-orchestrator-context-picker
-                #contextPicker
-                [project]="effectiveProject()!"
-                [automaticLabel]="automaticContextLabel()"
-                [automaticIncluded]="!contextDismissed()"
-                [currentSource]="currentTabSource()"
-                [attachments]="contextAttachments()"
-                [disabled]="sending()"
-                (automaticIncludedChange)="setNextMessageContextIncluded($event)"
-                (attachmentAdded)="addContextAttachment($event)"
-                (attachmentRemoved)="removeContextAttachment($event)" />
-            }
+            <app-orchestrator-context-picker
+              #contextPicker
+              [project]="effectiveProject()!"
+              [automaticLabel]="automaticContextLabel()"
+              [currentSource]="currentTabSource()"
+              [selectedIds]="selectedContextAttachmentIds()"
+              [disabled]="sending()"
+              (attachmentAdded)="addContextAttachment($event)" />
 
             <!-- `cac-chat` is deliberately composer-only here. With no
                  messages/events and an empty state, the library suppresses
@@ -183,12 +178,13 @@
               emptyState=""
               [pending]="sending()"
               [disabled]="sending()"
-              [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
-              [toolbarStart]="composerToolbarStart"
-              [routingLabel]="composerRoutingLabel()"
+              [allowAttachments]="false"
+              [contextAttachments]="cacContextAttachments()"
+              [placeholder]="'Ask a question... try /bug &lt;description&gt; to file a bug'"
               [modelControl]="composerModel.control()"
               [composerContext]="cacComposerContext()"
-              (toolbarAction)="onComposerToolbarAction($event)"
+              (contextAttachmentRemoved)="removeContextAttachment($event)"
+              (contextAttachmentAddRequested)="requestContextAttachment()"
               (submitMessage)="onSubmit($event)"
               (modelCommit)="onModelCommit($event)"
               (modelCatalogRequested)="composerModel.requestCatalog()"
