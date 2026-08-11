@@ -114,4 +114,6 @@ public sealed record AdHocUsageByModel(
     long CacheReadTokens,
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
-    bool ModelPriced);
+    bool ModelPriced,
+    DateTime? FirstRecordedAt = null,
+    DateTime? LastRecordedAt = null);

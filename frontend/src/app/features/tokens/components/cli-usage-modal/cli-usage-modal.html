@@ -69,7 +69,20 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      @if (modelUsagePeriod(); as period) {
+        <p class="cum__scope-note" data-testid="cli-usage-modal-recording-period">
+          Recorded telemetry since
+          <time [attr.datetime]="period.firstRecordedAt">{{ period.firstLabel }}</time>
+          · as of
+          <time [attr.datetime]="period.lastRecordedAt">{{ period.lastLabel }} UTC</time>.
+          Independent of the active quota windows above.
+        </p>
+      } @else {
+        <p class="cum__scope-note" data-testid="cli-usage-modal-recording-period">
+          Recording period unavailable from the contributing telemetry entries.
+          Independent of the active quota windows above.
+        </p>
+      }
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

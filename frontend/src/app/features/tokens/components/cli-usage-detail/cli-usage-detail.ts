@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { usageRecordingPeriod } from '../usage-recording-period.util';
 
 interface SparkPoint {
   label: string;
@@ -35,6 +36,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 /**
@@ -81,6 +84,8 @@ export class CliUsageDetailComponent {
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
   /** Project name whose Settings rail the shell should open on a row click. */
   readonly openProjectSettings = output<string>();
+
+  readonly workspaceUsagePeriod = computed(() => usageRecordingPeriod(this.tokens()?.byModel ?? []));
 
   /**
    * Per-project orchestrator spend, busiest first. Each row is the
@@ -155,6 +160,8 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        firstRecordedAt: m.firstRecordedAt,
+        lastRecordedAt: m.lastRecordedAt,
       });
     }
     for (const m of this.adhoc()?.byModel ?? []) {
@@ -169,11 +176,17 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        firstRecordedAt: m.firstRecordedAt,
+        lastRecordedAt: m.lastRecordedAt,
       });
     }
     return rows
       .sort((a, b) => this.totalTokens(b) - this.totalTokens(a))
       .slice(0, 5);
+  }
+
+  modelUsagePeriod(cliType: CliType) {
+    return usageRecordingPeriod(this.modelRowsFor(cliType));
   }
 
   sourceRowsFor(cliType: CliType) {

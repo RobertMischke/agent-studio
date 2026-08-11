@@ -3,8 +3,8 @@ id: token-aggregation-concept
 title: "Token aggregators use canonical hybrid projections (concept + living knowledge)"
 status: active
 category: concept
-updatedAt: 2026-08-09
-last-updated: 2026-08-09
+updatedAt: 2026-08-11
+last-updated: 2026-08-11
 reason: "Document the hybrid history plus durable-receipt repair after the remote-runner telemetry gap"
 taskKey: AGT-2542
 tags: [token-aggregation, hybrid-projection, task-receipt, drift-rule, observability, cost]
@@ -241,6 +241,11 @@ For an operator or an LLM instance working in this area, the rules of the road:
 Append new findings about the token-aggregation area here, newest on top. Keep
 each entry short: date, what was learned, and a pointer to the code/commit/task.
 
+- **2026-08-11 (AGT-2604).** A fetch timestamp cannot explain the coverage of
+  a lifetime token total. Per-model workspace and ad-hoc aggregates now retain
+  the oldest and newest contributing entry timestamps. CLI usage surfaces fold
+  those model bounds into visible `since` and `as of` context, while quota
+  windows continue to use provider-reported window labels and reset times.
 - **2026-08-09 (AGT-2542).** Remote task execution became primary around July
   11 but did not traverse `ProjectRunner.EmitTokenUsageRichAsync`; its
   completion envelope contains outcome and evidence rather than token usage.

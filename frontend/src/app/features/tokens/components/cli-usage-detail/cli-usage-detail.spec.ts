@@ -73,4 +73,34 @@ describe('CliUsageDetailComponent (smoke)', () => {
     fixture.componentInstance.openProjectSettings.emit('Agent Taskboard');
     expect(emitted).toBe('Agent Taskboard');
   });
+
+  it('shows telemetry-derived recording bounds beside a CLI model table', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CliUsageDetailComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CliUsageDetailComponent);
+    fixture.componentRef.setInput('quotaRows', [{
+      cliType: 'codex', icon: '', label: 'Codex', plan: 'Pro', fetchedAt: '', freshness: 'now',
+      stale: false, source: '/status', error: null, windows: [], primary: null,
+      primaryPct: 10, primaryTone: 'ok',
+    }]);
+    fixture.componentRef.setInput('tokens', {
+      byModel: [{
+        model: 'gpt-5-codex', calls: 2, inputTokens: 100, outputTokens: 20,
+        cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0,
+        modelPriced: false, firstRecordedAt: '2026-07-11T08:15:00Z',
+        lastRecordedAt: '2026-08-11T09:05:00Z',
+      }],
+      byProject: [],
+    } as never);
+    fixture.detectChanges();
+
+    const period = fixture.nativeElement.querySelector(
+      '[data-testid="cli-usage-detail-recording-period-codex"]',
+    );
+    expect(period?.textContent).toContain('Since 11 Jul 2026 · as of 11 Aug 2026, 09:05 UTC');
+    expect(fixture.nativeElement.querySelector('[data-testid="cli-usage-detail-workspace-period"]')?.textContent)
+      .toContain('since 11 Jul 2026 · as of 11 Aug 2026, 09:05 UTC');
+  });
 });

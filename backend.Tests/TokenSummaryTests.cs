@@ -106,6 +106,40 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_TracksOldestAndNewestContributingEntryPerModel()
+    {
+        var first = new DateTime(2026, 7, 11, 8, 15, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 9, 5, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("gpt-5-codex", 100, 10, last),
+            JobEntry("gpt-5-codex", 200, 20, first),
+        };
+
+        var model = Assert.Single(TokenSummaryService.Summarize("Demo", entries).ByModel);
+
+        Assert.Equal(first, model.FirstRecordedAt);
+        Assert.Equal(last, model.LastRecordedAt);
+    }
+
+    [Fact]
+    public void AggregateSummaries_PreservesWorkspaceRecordingBoundsPerModel()
+    {
+        var first = new DateTime(2026, 7, 11, 8, 15, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 9, 5, 0, DateTimeKind.Utc);
+        var summaries = new[]
+        {
+            ("Older", TokenSummaryService.Summarize("Older", [JobEntry("gpt-5-codex", 100, 10, first)])),
+            ("Newer", TokenSummaryService.Summarize("Newer", [JobEntry("gpt-5-codex", 200, 20, last)])),
+        };
+
+        var model = Assert.Single(TokenSummaryService.AggregateSummaries(summaries).ByModel);
+
+        Assert.Equal(first, model.FirstRecordedAt);
+        Assert.Equal(last, model.LastRecordedAt);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with
