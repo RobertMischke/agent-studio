@@ -544,13 +544,11 @@ test.describe('Orchestrator context header · where am I', () => {
   });
 
   for (const variant of [
-    { name: 'wide light', width: 1280, height: 900, theme: 'light' as const },
-    { name: 'wide dark', width: 1280, height: 900, theme: 'dark' as const },
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`long Dossier context wraps cleanly in ${variant.name}`, async ({ page }) => {
-      await page.setViewportSize({ width: variant.width, height: variant.height });
+    test(`keeps the Dossier context chip row compact in ${variant.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
         projectName: LONG_CONTEXT_PROJECT,
@@ -564,55 +562,77 @@ test.describe('Orchestrator context header · where am I', () => {
       const workbench = page.getByTestId(
         `studio-explorer-workbench-${LONG_CONTEXT_PROJECT}-${LONG_CONTEXT_WORKBENCH}`,
       );
+      if (await page.locator('app-orchestrator-side-sheet.is-open').count()) {
+        await page.getByTestId('orch-side-sheet-toggle').click();
+      }
       if (!await workbench.isVisible()) await workbenchSection.click();
       await expect(workbench).toBeVisible();
       await workbench.click();
-      await showSideSheet(page, false);
-
-      const footer = page.getByTestId('chat-composer-foot');
-      const context = page.getByTestId('chat-composer-context');
-      const detail = page.getByTestId('chat-composer-context-detail');
-      const model = page.getByTestId('cac-model-selector-trigger');
-      await expect(context).toContainText(LONG_CONTEXT_PROJECT);
-      await expect(context).toContainText('Dossier');
-      await expect(detail).toHaveText(LONG_CONTEXT_TITLE);
-      await expect(model).toContainText('gpt-5.6-sol');
-
-      const layout = await footer.evaluate((element) => {
-        const contextElement = element.querySelector<HTMLElement>('[data-testid="chat-composer-context"]')!;
-        const segmentElements = Array.from(contextElement.children) as HTMLElement[];
-        const modelElement = element.querySelector<HTMLElement>('[data-testid="cac-model-selector-trigger"]')!;
-        const footerBox = element.getBoundingClientRect();
-        const modelBox = modelElement.getBoundingClientRect();
-        return {
-          footerFits: element.scrollWidth <= element.clientWidth + 1,
-          contextWrap: getComputedStyle(contextElement).flexWrap,
-          rowCount: new Set(segmentElements.map(segment => Math.round(segment.getBoundingClientRect().top))).size,
-          segmentsStayWhole: segmentElements.every(segment => getComputedStyle(segment).whiteSpace === 'nowrap'),
-          modelFits: modelBox.right <= footerBox.right + 1 && modelBox.left >= footerBox.left - 1,
-        };
-      });
-      expect(layout).toMatchObject({
-        footerFits: true,
-        contextWrap: 'wrap',
-        segmentsStayWhole: true,
-        modelFits: true,
-      });
-      expect(layout.rowCount).toBeGreaterThanOrEqual(1);
-      expect(layout.rowCount).toBeLessThanOrEqual(2);
-      if (variant.width === 390) expect(layout.rowCount).toBe(2);
-      await expect(detail).toHaveCSS('text-overflow', 'ellipsis');
-      if (variant.width === 390) {
-        await expect.poll(() => detail.evaluate(element => element.scrollWidth > element.clientWidth))
-          .toBe(true);
+      await page.setViewportSize({ width: variant.width, height: variant.height });
+      if (!await page.locator('app-orchestrator-side-sheet.is-open').count()) {
+        await showSideSheet(page, false);
       }
 
+      const draft = page.getByTestId('orch-context-draft');
+      const chip = page.getByTestId('orch-current-tab-chip');
+      const chipLabel = page.getByTestId('orch-current-tab-label');
+      const estimate = page.getByTestId('orch-context-estimate');
+      await expect(draft).toBeVisible();
+      await expect(chip).toHaveAttribute('data-context-type', 'Dossier');
+      await expect(page.getByTestId('orch-current-tab-type-icon')).toBeVisible();
+      await expect(chipLabel).toHaveText('AOW-W1');
+      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
+      await expect(estimate).toHaveText('~1.6k');
+      await expect(estimate).not.toContainText('resolved when you send');
+
+      const layout = await draft.evaluate((element) => {
+        const rowItems = [
+          element.querySelector<HTMLElement>('[data-testid="orch-current-tab-chip"]')!,
+          element.querySelector<HTMLElement>('[data-testid="orch-add-context"]')!,
+          element.querySelector<HTMLElement>('[data-testid="orch-context-estimate"]')!,
+        ];
+        const label = element.querySelector<HTMLElement>('[data-testid="orch-current-tab-label"]')!;
+        return {
+          fits: element.scrollWidth <= element.clientWidth + 1,
+          rowCount: new Set(rowItems.map(item => {
+            const box = item.getBoundingClientRect();
+            return Math.round(box.top + box.height / 2);
+          })).size,
+          chipWhiteSpace: getComputedStyle(rowItems[0]).whiteSpace,
+          labelOverflow: getComputedStyle(label).textOverflow,
+        };
+      });
+      expect(layout).toEqual({
+        fits: true,
+        rowCount: 1,
+        chipWhiteSpace: 'nowrap',
+        labelOverflow: 'ellipsis',
+      });
+
+      await page.mouse.move(1, 1);
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-composer-long-context--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-context-chip--after--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
+
+      await chip.hover();
+      await expect(page.locator('.app-tooltip-overlay')).toContainText(LONG_CONTEXT_TITLE);
+      await expect(page.locator('.app-tooltip-overlay')).toContainText('Current tab · Dossier');
+
+      await page.mouse.move(1, 1);
+      await expect(page.locator('.app-tooltip-overlay')).toHaveCount(0);
+      await estimate.hover();
+      await expect(page.locator('.app-tooltip-overlay'))
+        .toHaveText('1 source · about 1,600 tokens · resolved when you send');
+      await page.getByTestId('orch-side-sheet').screenshot({
+        path: resolve(
+          RESULTS,
+          `orchestrator-context-chip-meta-tooltip--after--${variant.name.replace(' ', '-')}--mocked.png`,
+        ),
+      });
+
       expect(unexpectedRequests).toEqual([]);
     });
   }

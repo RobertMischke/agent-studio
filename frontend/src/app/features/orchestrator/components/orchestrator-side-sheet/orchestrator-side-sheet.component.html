@@ -164,7 +164,10 @@
               <app-orchestrator-context-picker
                 #contextPicker
                 [project]="effectiveProject()!"
-                [automaticLabel]="automaticContextLabel()"
+                [automaticLabel]="automaticContextPresentation().label"
+                [automaticKey]="automaticContextPresentation().key"
+                [automaticTypeLabel]="automaticContextPresentation().typeLabel"
+                [automaticIcon]="automaticContextPresentation().icon"
                 [automaticIncluded]="!contextDismissed()"
                 [currentSource]="currentTabSource()"
                 [attachments]="contextAttachments()"

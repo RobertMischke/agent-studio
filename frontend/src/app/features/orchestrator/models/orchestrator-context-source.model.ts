@@ -11,6 +11,8 @@ export type OrchestratorContextSourceCategory =
 export interface OrchestratorContextSourceOption {
   id: string;
   category: OrchestratorContextSourceCategory;
+  /** Stable short reference shown instead of a long title when available. */
+  key?: string;
   label: string;
   detail: string;
   estimateTokens: number;

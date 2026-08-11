@@ -60,7 +60,8 @@ export class OrchestratorContextSourceService {
       const sameProject = (item: KnownSourceItem) => item.projectName === project;
       const tasks = known.tasks.filter(sameProject).map(item => this.option(
         'tasks', item.title, `${item.taskKey ?? item.subtitle} · ${item.lane ?? 'Task'}`,
-        { kind: 'task', reference: item.taskKey ?? item.subtitle, projectId: project }, 900));
+        { kind: 'task', reference: item.taskKey ?? item.subtitle, projectId: project }, 900,
+        item.taskKey));
       const files = known.files.filter(sameProject).map(item => this.option(
         item.isWiki ? 'wiki' : 'files', item.title, item.path ?? item.subtitle,
         item.isWiki
@@ -79,7 +80,8 @@ export class OrchestratorContextSourceService {
         .slice(0, 8)
         .map(item => this.option(
           'wiki', item.title, `Dossier · ${item.status}${item.phase ? ` · ${item.phase}` : ''}`,
-          { kind: 'page', reference: `page:${project}/${item.entryPath}`, projectId: project }, 1_200));
+          { kind: 'page', reference: `page:${project}/${item.entryPath}`, projectId: project }, 1_200,
+          item.key ?? undefined));
       return {
         tasks,
         wiki: this.unique([...benches, ...wikiPages, ...files.filter(item => item.category === 'wiki')]),
@@ -96,8 +98,17 @@ export class OrchestratorContextSourceService {
     detail: string,
     reference: OrchestratorContextReference,
     estimateTokens: number,
+    key?: string,
   ): OrchestratorContextSourceOption {
-    return { id: contextSourceId(reference), category, label, detail, reference, estimateTokens };
+    return {
+      id: contextSourceId(reference),
+      category,
+      ...(key ? { key } : {}),
+      label,
+      detail,
+      reference,
+      estimateTokens,
+    };
   }
 
   private unique(items: OrchestratorContextSourceOption[]): OrchestratorContextSourceOption[] {

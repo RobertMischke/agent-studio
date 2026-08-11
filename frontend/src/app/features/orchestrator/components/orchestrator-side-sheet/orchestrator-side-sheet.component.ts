@@ -55,6 +55,7 @@ import {
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
+import { buildContextChipPresentation } from '../../composer-location-context';
 import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
@@ -349,17 +350,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly contextAttachments = signal<OrchestratorContextSourceOption[]>([]);
   private readonly contextPicker = viewChild<OrchestratorContextPickerComponent>('contextPicker');
 
-  readonly automaticContextLabel = computed(() => {
-    const project = this.effectiveProject();
-    const page = this.pageContext();
-    if (page && page.projectName === project) return `${page.pageType === 'workbench' ? 'Dossier' : 'Page'} · ${page.title}`;
-    if (this.contextKind() === 'task') return `Task · ${this.effectiveJobKey() ?? this.effectiveJobTitle() ?? 'current'}`;
-    const location = this.composerContext();
-    if (location && (!location.project || location.project === project)) {
-      return location.detail ? `${location.surface} · ${location.detail}` : location.surface;
-    }
-    return 'Project overview';
-  });
+  readonly automaticContextPresentation = computed(() => buildContextChipPresentation({
+    project: this.effectiveProject(),
+    page: this.pageContext(),
+    contextKind: this.contextKind(),
+    taskKey: this.effectiveJobKey(),
+    taskTitle: this.effectiveJobTitle(),
+    location: this.composerContext(),
+  }));
 
   readonly currentTabSource = computed<OrchestratorContextSourceOption | null>(() => {
     if (this.contextKind() !== 'project') return null;

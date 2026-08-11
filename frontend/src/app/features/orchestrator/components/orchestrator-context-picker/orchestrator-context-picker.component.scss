@@ -10,6 +10,7 @@
   align-items: center;
   gap: var(--studio-spacing-2);
   min-width: 0;
+  overflow: hidden;
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
   border: 1px solid var(--studio-border);
   border-radius: 8px;
@@ -19,10 +20,11 @@
 .context-draft__chips {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--studio-spacing-1);
   min-width: 0;
+  overflow: hidden;
 }
 
 .context-chip,
@@ -38,6 +40,7 @@
   color: var(--studio-fg);
   font: inherit;
   font-size: 10px;
+  white-space: nowrap;
 }
 
 button.context-chip,
@@ -46,6 +49,8 @@ button.context-chip,
 }
 
 .context-chip--automatic {
+  min-width: 0;
+  flex: 0 1 auto;
   border-color: color-mix(in srgb, var(--studio-accent-3) 42%, var(--studio-border));
   background: color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-bg-editor));
 }
@@ -56,21 +61,11 @@ button.context-chip,
   background: var(--studio-bg-editor);
 }
 
-.context-chip__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--studio-accent-3-strong);
-}
-
-.context-chip--excluded .context-chip__dot { background: var(--studio-fg-muted); }
-
-.context-chip__kind {
-  color: var(--studio-fg-muted);
-  text-transform: capitalize;
-}
+.context-chip__icon { flex: 0 0 auto; color: var(--studio-accent-3-strong); }
+.context-chip--excluded .context-chip__icon { color: var(--studio-fg-muted); }
 
 .context-chip__label {
+  min-width: 0;
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -90,6 +85,7 @@ button.context-chip,
 }
 
 .context-draft__add {
+  flex: 0 0 auto;
   border-style: dashed;
   color: var(--studio-accent-3-strong);
   background: transparent;
@@ -102,6 +98,12 @@ button.context-chip,
   font-size: 9px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.context-draft__estimate:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--studio-accent-3-strong);
+  outline-offset: 2px;
 }
 
 .source-picker {
@@ -224,11 +226,6 @@ button:focus-visible,
 input:focus-visible {
   outline: 2px solid var(--studio-accent-3-strong);
   outline-offset: 2px;
-}
-
-@media (max-width: 720px) {
-  .context-draft { align-items: flex-start; flex-direction: column; }
-  .context-draft__estimate { white-space: normal; }
 }
 
 @media (prefers-reduced-motion: reduce) {

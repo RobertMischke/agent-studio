@@ -372,7 +372,13 @@ export class StudioTabStateService {
       case 'workbenches':
         return { kind: 'workbenches', projectName: tab.projectName };
       case 'workbench':
-        return { kind: 'workbench', projectName: tab.projectName, workbenchId: tab.workbenchId, title: tab.title };
+        return {
+          kind: 'workbench',
+          projectName: tab.projectName,
+          workbenchId: tab.workbenchId,
+          title: tab.title,
+          key: tab.key,
+        };
       case 'diff':
         return { kind: 'diff', commitSha: tab.commitSha };
       case 'activity':
