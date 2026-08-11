@@ -8,8 +8,8 @@ namespace AgentStudio.Tasks;
 /// work actually folded into the integration branch (develop)? The result is attached to
 /// <see cref="TaskInfo.Integration"/> so the board renders a single, unambiguous
 /// "integrated / not integrated / conflict / no branch" badge on every delivered
-/// card, and so the accept flow can flag an accept-without-merge the moment it
-/// happens.
+/// card, and so acceptance can refuse a delivery that has not passed the
+/// integration boundary.
 ///
 /// <para>
 /// The verdict's anchor is the current immutable review result when one exists,

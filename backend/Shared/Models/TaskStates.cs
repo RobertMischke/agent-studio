@@ -57,9 +57,9 @@ public static class LifecyclePhases
     public const string PostProcessingBlocked = "post-processing-blocked";
     public const string AwaitingReview = "awaiting-review";
     /// <summary>
-    /// A human accepted the reviewed delivery and the platform is integrating
-    /// it. The card remains in Human Review until the merge reaches a successful
-    /// terminal outcome.
+    /// Compatibility marker for an integration transaction written by an older
+    /// backend process. New acceptance requests never create this phase; the
+    /// recovery worker may finish it after restart.
     /// </summary>
     public const string Integrating = "integrating";
 
