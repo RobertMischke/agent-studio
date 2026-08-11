@@ -205,7 +205,10 @@ excludes that rotation path, including when a legacy rotation was once tracked.
   `integrated-verified`, `integrated-historical`, `no-code-expected`,
   `content-on-fence`, or `genuinely-missing`, the integration branch, and the
   Git or artifact evidence used. Agents and ordinary task mutations never
-  author or replace these rows.
+  replace these rows. The historical startup sweep and the guarded
+  `POST /api/tasks/{id}/integration-records` operator-verification endpoint are
+  the only writers; the endpoint rejects in-flight lanes and is idempotent by
+  record id.
 
 The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`, whose visible label is Post Processing; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (forward to `5e-escalated` with a `[supervisor]` chat-note and an escalation verdict). The user always confirms accepted work before it moves from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 
