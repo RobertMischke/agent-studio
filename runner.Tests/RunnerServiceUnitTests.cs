@@ -145,6 +145,86 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("RUNNER_STATE_DIR=%s/state", content);
     }
 
+    [Fact]
+    public void Agent_runner_sudoers_enumerates_the_complete_bounded_config_allowlist()
+    {
+        var content = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "sudoers.d", "agent-runner"));
+
+        Assert.DoesNotContain("NOPASSWD:ALL", content);
+        Assert.DoesNotContain("NOPASSWD: ALL", content);
+        Assert.DoesNotContain("*", content);
+        Assert.Contains("/usr/local/sbin/agent-runner-deploy \"\"", content);
+        Assert.Equal(
+            12,
+            CountOccurrences(
+                content,
+                "/usr/local/sbin/agent-runner-deploy config "));
+        Assert.DoesNotContain("RUNNER_MAX_PARALLELISM 0", content);
+        Assert.DoesNotContain("RUNNER_MAX_PARALLELISM 7", content);
+    }
+
+    [Fact]
+    public void Agent_runner_config_helper_owns_atomic_update_restart_audit_and_process_proof()
+    {
+        var helper = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-deploy"));
+        var migration = File.ReadAllText(
+            Path.Combine(RepoRoot(), "scripts", "harden-agent-runner-host.sh"));
+
+        Assert.Contains("source \"$config_policy\"", helper);
+        Assert.Contains("mv -fT -- \"$candidate_file\" \"$config_env_file\"", helper);
+        Assert.Contains("systemctl restart \"$AGENT_RUNNER_CONFIG_UNIT\"", helper);
+        Assert.Contains("/proc/$main_pid/environ", helper);
+        Assert.Contains("result=$result", helper);
+        Assert.Contains("rollback_config", helper);
+        Assert.Contains("EnvironmentFiles", helper);
+        Assert.Contains("installed_policy", migration);
+        Assert.Contains("visudo -c", migration);
+        Assert.Contains("for privileged_group in sudo docker", migration);
+    }
+
+    [SkippableTheory]
+    [InlineData("coding", "1", "agent-runner.service", "/etc/agent-runner/runner-coding.env")]
+    [InlineData("coding", "6", "agent-runner.service", "/etc/agent-runner/runner-coding.env")]
+    [InlineData("review", "1", "agent-runner-review.service", "/etc/agent-runner/runner-review.env")]
+    [InlineData("review", "6", "agent-runner-review.service", "/etc/agent-runner/runner-review.env")]
+    public void Agent_runner_config_policy_accepts_only_each_role_boundary(
+        string role,
+        string value,
+        string expectedUnit,
+        string expectedPrimaryEnvironment)
+    {
+        PlatformGate.RequiresPosixShell();
+
+        var result = RunConfigPolicy(role, "RUNNER_MAX_PARALLELISM", value);
+
+        Assert.True(result.ExitCode == 0, result.StandardError);
+        Assert.Contains($"unit={expectedUnit}", result.StandardOutput);
+        Assert.Contains($"primary_env={expectedPrimaryEnvironment}", result.StandardOutput);
+        Assert.Contains($"value={value}", result.StandardOutput);
+    }
+
+    [SkippableTheory]
+    [InlineData("review", "RUNNER_MAX_PARALLELISM", "0", "must be an integer from 1 through 6")]
+    [InlineData("review", "RUNNER_MAX_PARALLELISM", "7", "must be an integer from 1 through 6")]
+    [InlineData("review", "RUNNER_MAX_PARALLELISM", "4x", "must be an integer from 1 through 6")]
+    [InlineData("review", "RUNNER_POLL_SECONDS", "4", "variable is not allowlisted")]
+    [InlineData("gate", "RUNNER_MAX_PARALLELISM", "4", "role must be")]
+    public void Agent_runner_config_policy_rejects_outside_the_allowlist(
+        string role,
+        string variable,
+        string value,
+        string expectedError)
+    {
+        PlatformGate.RequiresPosixShell();
+
+        var result = RunConfigPolicy(role, variable, value);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(expectedError, result.StandardError);
+    }
+
     [SkippableTheory]
     [InlineData("coding", "12", "CPUQuota=1200%\nCPUWeight=100\nIOWeight=100\n")]
     [InlineData("review", "12", "CPUQuota=400%\nCPUWeight=30\nIOWeight=30\n")]
@@ -300,6 +380,30 @@ public sealed class RunnerServiceUnitTests
         return (process.ExitCode, standardOutput, standardError);
     }
 
+    private static (int ExitCode, string StandardOutput, string StandardError) RunConfigPolicy(
+        params string[] arguments)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = PosixShell.RequirePath(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add(
+            PosixShell.ToShellPath(
+                Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-config-policy")));
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
+
+        using var process = Process.Start(start)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, standardOutput, standardError);
+    }
+
     /// <summary>
     /// A bare exit-code assertion hides the script's own diagnosis; the script
     /// reports every rejection on stderr, so surface it in the failure message.
@@ -315,6 +419,19 @@ public sealed class RunnerServiceUnitTests
         var path = Path.Combine(Path.GetTempPath(), $"agent-host-resource-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static int CountOccurrences(string content, string value)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = content.IndexOf(value, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += value.Length;
+        }
+
+        return count;
     }
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "")
