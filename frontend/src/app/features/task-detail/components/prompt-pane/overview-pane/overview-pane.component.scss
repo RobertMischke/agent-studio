@@ -18,20 +18,12 @@
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 26px;
-  // Keep the metric columns visually attached to the step row on wide panes.
-  // The surrounding `.studio-measure--tabular-compact` still owns the section
-  // cap; this track stops the step name from absorbing all spare width inside
-  // that cap and pushing time / tokens / cost to the far edge.
-  --ov-pipeline-name-col: fit-content(360px);
+  // The name is the row's primary information and owns all available space.
+  // Metadata remains fixed-width and truncation starts only after those cells
+  // have reached their intrinsic size.
+  --ov-pipeline-name-col: minmax(12rem, 1fr);
   --ov-pipeline-meta-col: minmax(0, max-content);
-  // Slack-absorbing track between the step metadata and the right-pinned
-  // metric block. Every step is its own grid; without one flexible track the
-  // grid left-packs and the leftover space lands AFTER cost, so the
-  // Time / Duration / Tokens / Cost block sits at a different x on each row
-  // (the "krumm und schief" misalignment). A single `1fr` here eats the
-  // remainder identically on every row, anchoring the metric columns to one
-  // shared right edge across all phase groups.
-  --ov-pipeline-flex-col: minmax(0, 1fr);
+  --ov-pipeline-flex-col: 0;
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
   --ov-pipeline-cost-col: 11rem;
@@ -759,6 +751,13 @@
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
   font-size: 12px;
 
+  // Explicitly keep every cell in the same grid row. Without this, a later
+  // status cell whose column precedes the run-count cell creates an implicit
+  // second row even though the columns do not overlap.
+  > * {
+    grid-row: 1;
+  }
+
   &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
   &[data-phase='aspect'] { --ov-pl-phase-accent: var(--severity-pass); }
   &[data-phase='tool'] { --ov-pl-phase-accent: var(--severity-pending); }
@@ -997,14 +996,14 @@
     align-items: center;
   }
 
-  &__parallel-note { grid-column: 4; }
-  &__running-badge { grid-column: 6; }
-  &__runs { grid-column: 7; }
-  &__verdict { grid-column: 5; }
+  &__parallel-note { grid-column: 5; }
+  &__running-badge { grid-column: 4; }
+  &__runs { grid-column: 5; }
+  &__verdict { grid-column: 4; }
   &__final-decision { grid-column: 4 / 6; }
-  &__result { grid-column: 6; }
-  &__model { grid-column: 7; }
-  &__model-select { grid-column: 6; }
+  &__result { grid-column: 4; }
+  &__model { grid-column: 6; }
+  &__agent-select { grid-column: 6; }
   &__timing { grid-column: 8; }
   &__tokens { grid-column: 9; }
   &__cost { grid-column: 10; }

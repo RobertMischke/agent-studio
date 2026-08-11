@@ -614,7 +614,7 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   const learnings = page.locator('[data-step-id="post-wiki-learnings"]');
   const agentsSync = page.locator('[data-step-id="post-agents-wiki-sync"]');
   const aspect = page.locator('[data-step-id="aspect-code-quality"]');
-  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('active·condition');
+  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('C');
   await expect(maintenance.getByTestId('overview-post-step-source')).toHaveAttribute(
     'aria-label',
     'active from condition: Enabled by the global catalogue default; condition "task has tag \'wiki\'" matched this run. Open settings.',
@@ -625,14 +625,14 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   await expect(maintenance.getByTestId('overview-post-step-attempt-row')).toHaveCount(2);
   await expect(maintenance.getByTestId('overview-post-step-attempt-row').first()).toContainText('#2');
   await expect(maintenance.getByTestId('overview-post-step-artifact').first()).toContainText('attempt-002.md');
-  await expect(learnings.getByTestId('overview-post-step-source')).toHaveText('inactive·project');
+  await expect(learnings.getByTestId('overview-post-step-source')).toHaveText('P');
   await expect(learnings.getByTestId('overview-post-step-run')).toHaveText('Add + run');
-  await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveText('skipped·condition');
+  await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveText('C');
   await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveAttribute(
     'aria-label',
     'skipped from condition: Condition "an aspect failed" did not match this run. Open settings.',
   );
-  await expect(aspect.getByTestId('overview-post-step-source')).toHaveText('active·global');
+  await expect(aspect.getByTestId('overview-post-step-source')).toHaveText('G');
   await expect(aspect.getByTestId('overview-post-step-run')).toHaveCount(0);
 
   for (const theme of ['light', 'dark'] as const) {
@@ -651,7 +651,7 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   await expect(activationRow).toBeVisible();
   await expect(activationRow).toHaveAttribute('aria-current', 'location');
   await expect(activationRow).toHaveJSProperty('open', true);
-  await page.getByTestId('pipeline-step-enabled-post-wiki-learnings').check();
+  await page.getByTestId('pipeline-step-row-enabled-post-wiki-learnings').check();
   await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });
 
