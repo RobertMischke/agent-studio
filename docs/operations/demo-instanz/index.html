@@ -606,6 +606,364 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 
 <p class="dim">Evidence basis: ADR-0056; the pinned screenshot-system decision; the integrated AGT-2530 seed and repeatability artifacts; AGT-2558 human-review state; WEB-17 ready state; networked security profile; and the dedicated Task Server VM separation rationale. This dossier changes no runtime, seed, card, hosting, or security configuration.</p>
 
+<hr style="border:none;border-top:1px solid var(--line);margin:64px 0 0">
+
+<section class="box accent" style="margin-top:40px" aria-labelledby="scenario-extension-title">
+  <h4 id="scenario-extension-title">Append-only extension · 11 August 2026 · AGT-2616</h4>
+  <p><b>Extend the launch package with a scenario pool and a controlled benchmark program.</b> The public demo should not present generic fixture projects as if they were the product proof. It should present a frozen snapshot of a scenario that was actually run, reviewed, deployed, and measured. The preserved opening Dossier explains the intent; cards and scripted context-chat turns show how the work was formed; the deployed application is the result; and an immutable Result Dossier reports quality, token use, cost provenance, attempts, and limitations.</p>
+  <p>This extension adds product-content and benchmark recommendations. It does not change the execution-denial, hosting, reset, security, or launch decisions in §1 through §9.</p>
+</section>
+
+<nav class="box" aria-label="Scenario and benchmark extension contents">
+  <h4>Extension contents</h4>
+  <ul class="toc">
+    <li><a href="#scenario-pool">§10 Scenario principle and candidate pool</a></li>
+    <li><a href="#benchmark-framework">§11 Benchmark framework and Result Dossier</a></li>
+    <li><a href="#cost-model">§12 Cost model and hard caps</a></li>
+    <li><a href="#overlaps">§13 Product and marketing overlaps</a></li>
+  </ul>
+</nav>
+
+<h2 id="scenario-pool"><span class="no">§10</span>Scenario principle and candidate pool</h2>
+
+<h3>The demo is a completed, deployed snapshot</h3>
+<p>A scenario is a versioned input package that has crossed the complete Agent Studio path. It begins with a Dossier, is decomposed into cards through the built-in Orchestrator and its context chats, receives bounded scripted steering, runs through coding and review, deploys a real application, and closes with a Result Dossier. The public demo receives a scrubbed, pinned projection only after those facts exist.</p>
+
+<div class="box ok">
+  <h4>Truth rule</h4>
+  <p>A scenario is publishable only when the deployed output, immutable release digest, deployment check, evidence inventory, and complete token ledger are present. A repository diff, a replay animation, or prose that says the app was built is not a result. If deployment is missing or unavailable at capture time, the Result Dossier status is <code>incomplete</code> and the scenario is not promoted into the public demo.</p>
+</div>
+
+<figure>
+  <svg viewBox="0 0 1000 440" role="img" aria-labelledby="scenario-flow-title scenario-flow-desc">
+    <title id="scenario-flow-title">Scenario run from opening Dossier to deployed proof</title>
+    <desc id="scenario-flow-desc">A preserved opening Dossier and a scripted context chat feed Orchestrator-created cards. Coding and review produce a deployed result and Result Dossier. The frozen release then feeds the public demo, the benchmark website, and independent output sites.</desc>
+    <defs>
+      <marker id="scenario-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="var(--ink-3)"/>
+      </marker>
+      <marker id="scenario-blue-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="var(--control)"/>
+      </marker>
+      <marker id="scenario-green-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="var(--replay)"/>
+      </marker>
+    </defs>
+
+    <rect x="24" y="38" width="168" height="86" rx="9" class="s-control"/>
+    <text x="108" y="72" text-anchor="middle" class="s-label">Opening Dossier</text>
+    <text x="108" y="94" text-anchor="middle" class="s-sub">case vN · preserved</text>
+
+    <rect x="224" y="38" width="168" height="86" rx="9" class="s-node"/>
+    <text x="308" y="70" text-anchor="middle" class="s-label">Context-chat script</text>
+    <text x="308" y="92" text-anchor="middle" class="s-sub">fake steering · fixed</text>
+
+    <rect x="424" y="38" width="168" height="86" rx="9" class="s-control"/>
+    <text x="508" y="70" text-anchor="middle" class="s-label">Orchestrator cards</text>
+    <text x="508" y="92" text-anchor="middle" class="s-sub">created in product</text>
+
+    <rect x="624" y="38" width="168" height="86" rx="9" class="s-replay"/>
+    <text x="708" y="70" text-anchor="middle" class="s-label">Build + review</text>
+    <text x="708" y="92" text-anchor="middle" class="s-sub">measured attempts</text>
+
+    <rect x="824" y="38" width="152" height="86" rx="9" class="s-replay"/>
+    <text x="900" y="70" text-anchor="middle" class="s-label">Deployment</text>
+    <text x="900" y="92" text-anchor="middle" class="s-sub">URL + digest</text>
+
+    <path d="M192 81 H216" class="s-flow" marker-end="url(#scenario-arrow)"/>
+    <path d="M392 81 H416" class="s-control-flow" marker-end="url(#scenario-blue-arrow)"/>
+    <path d="M592 81 H616" class="s-control-flow" marker-end="url(#scenario-blue-arrow)"/>
+    <path d="M792 81 H816" class="s-replay-flow" marker-end="url(#scenario-green-arrow)"/>
+
+    <rect x="356" y="176" width="288" height="86" rx="9" class="s-control"/>
+    <text x="500" y="208" text-anchor="middle" class="s-label">Result Dossier</text>
+    <text x="500" y="230" text-anchor="middle" class="s-sub">quality · tokens · history · limits</text>
+    <path d="M900 124 V148 C900 166 878 176 850 176 H652" class="s-control-flow" marker-end="url(#scenario-blue-arrow)"/>
+
+    <rect x="58" y="326" width="240" height="74" rx="9" class="s-node"/>
+    <text x="178" y="356" text-anchor="middle" class="s-label">Public demo snapshot</text>
+    <text x="178" y="377" text-anchor="middle" class="s-sub">read-only replay</text>
+
+    <rect x="380" y="326" width="240" height="74" rx="9" class="s-node"/>
+    <text x="500" y="356" text-anchor="middle" class="s-label">Token Economy site</text>
+    <text x="500" y="377" text-anchor="middle" class="s-sub">complete comparison history</text>
+
+    <rect x="702" y="326" width="240" height="74" rx="9" class="s-node"/>
+    <text x="822" y="356" text-anchor="middle" class="s-label">Independent output sites</text>
+    <text x="822" y="377" text-anchor="middle" class="s-sub">Pelican · Deep Blue</text>
+
+    <path d="M500 262 V288 H178 V318" class="s-flow" marker-end="url(#scenario-arrow)"/>
+    <path d="M500 262 V318" class="s-flow" marker-end="url(#scenario-arrow)"/>
+    <path d="M500 262 V288 H822 V318" class="s-flow" marker-end="url(#scenario-arrow)"/>
+  </svg>
+  <figcaption><b>Scenario publication line.</b> The benchmark run happens in an execution-capable, isolated build environment. Only its scrubbed release and evidence are imported into the startup-locked public demo. Scripted interaction is an input to the run and remains visibly synthetic in the replay.</figcaption>
+</figure>
+
+<h3>Versioned scenario package</h3>
+<table>
+  <thead><tr><th>Input</th><th>Required content</th><th>Comparability rule</th></tr></thead>
+  <tbody>
+    <tr><td><b>Opening Dossier</b></td><td>Problem, user story, non-goals, constraints, acceptance rubric, deployment target, and assets or synthetic fixtures.</td><td>Immutable within a case version. Its content digest is recorded on every run.</td></tr>
+    <tr><td><b>Context-chat script</b></td><td>Opening operator turns, permitted clarifications, fixed answers, steering checkpoints, and one fallback answer for an unexpected question.</td><td>Turn order and answer text are identical within a comparison cohort. Every scripted turn is labeled <code>synthetic</code>.</td></tr>
+    <tr><td><b>Card policy</b></td><td>The Orchestrator must create the work cards through the product API. The package declares only card constraints and acceptance, not a hidden pre-built card list.</td><td>Card count, decomposition, and rework are measured outputs. Direct fixture insertion invalidates the benchmark run.</td></tr>
+    <tr><td><b>Runtime fixture</b></td><td>Repository baseline, deterministic data, browser and tool versions, environment limits, and deploy adapter.</td><td>Exact commit and image digests are frozen. Network access is either denied or served from pinned fixtures.</td></tr>
+    <tr><td><b>Evaluation pack</b></td><td>Deterministic tests, browser probes, screenshots, case rubric, critical-failure rules, and blind-review form.</td><td>Never generated or edited by the model under test. A rubric change creates a new case version.</td></tr>
+  </tbody>
+</table>
+
+<h3>Candidate 1: SVG Pelican Benchmark</h3>
+<p>A compact visual benchmark inspired by the familiar pelican-on-a-bicycle SVG challenge. The opening Dossier asks for one asset-free, responsive web page whose central illustration is a hand-authored SVG pelican riding a bicycle. The scene must remain recognizable at desktop, mobile, and thumbnail sizes; expose its SVG source; include an accessible description; and use no raster fallback, generated image, external font, or remote asset.</p>
+<p>The deployed result is a small comparison gallery: rendered scene, source view, three viewport captures, automated SVG checks, and a blind rubric card. It tests spatial reasoning, vector structure, frontend execution, visual polish, responsive behavior, and the ability to turn an unusual brief into a finished public artifact. Its small scope makes it the calibration case for the harness and cost controls.</p>
+
+<h3>Candidate 2: The Deep Blue</h3>
+<p>A short browser game about how a programmer feels when the task named “Programming” disappears from the board. The player starts at a familiar desk, watches the task dissolve into a blue interface, and dives through layers made from fragments of specifications, tests, commits, and conversations. Mechanics stay simple: move, dive, surface, collect four fragments, and choose what remains valuable when routine implementation is automated. The story is reflective, not a claim that the profession has ended.</p>
+<p>The deployed result must be independently playable in six to ten minutes, work with keyboard and touch, retain progress locally, offer reduced-motion and mute controls, and reach a real ending. All art and sound are local and license-recorded; sound is optional. The benchmark tests narrative synthesis, game-state logic, interaction design, visual identity, performance, accessibility, tests, and deployment. This is the strongest standalone marketing artifact and the most expensive recommended case.</p>
+
+<h3>Candidate 3: Shift Ledger, a ToDo with an operational handoff</h3>
+<p>The LOB candidate turns an ordinary ToDo list into a shift-handoff ledger for a small service desk. A work item is not complete when a checkbox is clicked. It moves through <code>Draft → Owned → Ready for handoff → Accepted</code>, carries an owner and due-by time, requires a short outcome receipt, and can be rejected back to the prior shift with a reason. A compact audit timeline answers who promised what, what changed, and what evidence crossed the handoff.</p>
+<p>The deployed application ships with synthetic morning and evening shifts, saved filters for “mine”, “at risk”, and “awaiting acceptance”, an overdue view, keyboard-friendly forms, and a deterministic data reset. The twist is legible to anyone who has handed work to a colleague, while state transitions, validation, persistence, audit history, filters, and role boundaries create a credible LOB benchmark rather than generic CRUD.</p>
+
+<h3>Additional candidate: Receipt Rescue</h3>
+<p>A familiar expense-inbox application that groups synthetic receipts into a trip, highlights duplicate or policy-suspicious items, asks for missing context, and produces a review packet. It tests document-like fixtures, exception workflows, confidence disclosure, and auditability without requiring private data or a live OCR service. Its main weakness is benchmark leakage: the task can become a conventional form-and-table build unless the fixture and exception logic remain demanding.</p>
+
+<h3>Additional candidate: Last Stop</h3>
+<p>A transit disruption explainer for one fictional route. The visitor selects a station and time; the application explains the changed route, replacement leg, accessibility constraint, and expected arrival with a clear timeline. It tests temporal state, map-like visualization, and plain-language explanation against a deterministic timetable. It is recognizable and useful, but its marketing identity is weaker than The Deep Blue and its domain rules need careful fixture design.</p>
+
+<h3>Additional candidate: The Tiny Museum</h3>
+<p>A curator workbench for assembling a five-object digital exhibition from a pinned catalog, writing a room label, and publishing a shareable mini-gallery. It combines selection, sequencing, responsive presentation, and editorial constraints. It is visually attractive and inexpensive, but subjective curation makes cross-model quality scoring less stable, so it belongs after the first benchmark wave.</p>
+
+<h3>Pool evaluation</h3>
+<p>Scores use a five-point scale. For <b>Cost</b>, five means the lowest expected token demand. Weighted total is Understandability 25%, Cost 20%, Marketing value 25%, and Benchmark fitness 30%. Token caps are planning ceilings for one complete scenario run, including its Result Dossier.</p>
+
+<table>
+  <thead><tr><th>Scenario</th><th>Understandability</th><th>Cost</th><th>Marketing</th><th>Benchmark</th><th>Proposed cap</th><th>Weighted result</th></tr></thead>
+  <tbody>
+    <tr><td><b>SVG Pelican Benchmark</b><br><span class="pill ok">Wave 1 · first</span></td><td>5 / 5</td><td>5 / 5</td><td>4 / 5</td><td>5 / 5</td><td class="mono">160k</td><td><b>95 / 100</b></td></tr>
+    <tr><td><b>Shift Ledger</b><br><span class="pill ok">Wave 1 · second</span></td><td>5 / 5</td><td>3 / 5</td><td>4 / 5</td><td>5 / 5</td><td class="mono">320k</td><td><b>87 / 100</b></td></tr>
+    <tr><td><b>The Deep Blue</b><br><span class="pill ok">Wave 1 · third</span></td><td>4 / 5</td><td>2 / 5</td><td>5 / 5</td><td>4 / 5</td><td class="mono">400k</td><td><b>77 / 100</b></td></tr>
+    <tr><td><b>Receipt Rescue</b></td><td>5 / 5</td><td>3 / 5</td><td>3 / 5</td><td>4 / 5</td><td class="mono">300k</td><td>76 / 100</td></tr>
+    <tr><td><b>Last Stop</b></td><td>4 / 5</td><td>3 / 5</td><td>4 / 5</td><td>3 / 5</td><td class="mono">300k</td><td>70 / 100</td></tr>
+    <tr><td><b>The Tiny Museum</b></td><td>4 / 5</td><td>4 / 5</td><td>4 / 5</td><td>2 / 5</td><td class="mono">180k</td><td>68 / 100</td></tr>
+  </tbody>
+</table>
+
+<div class="box ok">
+  <h4>Recommendation for the first three cases</h4>
+  <ol>
+    <li><b>Run Pelican first</b> to validate capture, scoring, deployment proof, token attribution, and deterministic Dossier finalization at the smallest cap.</li>
+    <li><b>Run Shift Ledger second</b> to establish the durable LOB case: state transitions, evidence, persistence, reviewable business rules, and a broadly familiar interaction model.</li>
+    <li><b>Run The Deep Blue third</b> only after the first two prove the harness. It adds the narrative, game-loop, and standalone publishing demands that make the demo memorable.</li>
+  </ol>
+  <p>The three cases are deliberately different. Together they cover visual generation, application-state correctness, and narrative interaction. A single aggregate winner is not enough; model results stay visible per case so strength in one mode cannot hide failure in another.</p>
+</div>
+
+<h3>Operating model: real run, scripted interaction, replayed visitor experience</h3>
+<table>
+  <thead><tr><th>Stage</th><th>What is real</th><th>What may be scripted</th><th>Boundary</th></tr></thead>
+  <tbody>
+    <tr><td><b>Scenario build</b></td><td>An isolated execution-capable Agent Studio environment, built-in Orchestrator, context-chat transcript, API-created cards, model calls, reviews, repository changes, tests, and deployment.</td><td>Operator messages, clarification answers, steering turns, acceptance choices, and timing between turns.</td><td>Scripts never write task storage directly. They drive the same chat and Task APIs as an operator.</td></tr>
+    <tr><td><b>Benchmark archive</b></td><td>Raw usage receipts, prompts, route choices, attempts, evaluation, Git and deployment digests, and Result Dossier.</td><td>Nothing after the run. Deterministic rendering may inject the settled ledger into the Dossier.</td><td>History is immutable and complete, including capped and failed runs.</td></tr>
+    <tr><td><b>Public demo</b></td><td>The real deployed result and a scrubbed snapshot of the completed scenario.</td><td>Card motion, chat typing, user steering, progress timing, and SignalR events are replayed from the recorded script and labeled Simulated.</td><td>The §1 through §9 execution lock remains unchanged. Replay has no task-creation or execution authority.</td></tr>
+  </tbody>
+</table>
+
+<p>The first rehearsal should use versioned clones derived from the existing <code>Demo App</code> and <code>Demo Platform</code> seed rather than inventing another public workspace. <code>Demo App</code> carries the opening Dossier, scenario cards, run timeline, evidence, and Result Dossier. <code>Demo Platform</code> carries the synthetic deployment and operations story. The original committed seed remains reproducible; benchmark outputs become a new seed version only after scrub and acceptance.</p>
+
+<p>Opening Dossiers and every Result Dossier are retained between runs. A fresh comparison run can reference the opening Dossier but must not receive earlier model outputs, review findings, or result prose as automatic context. The harness records an exclusion receipt so preservation does not become benchmark contamination.</p>
+
+<h2 id="benchmark-framework"><span class="no">§11</span>Benchmark framework and Result Dossier</h2>
+
+<h3>The question and the unit of comparison</h3>
+<p>The primary question is: <b>“With how many tokens can I solve which problems?”</b> The unit of comparison is one <code>caseVersion × route × replicate</code> run that begins from the same opening Dossier and baseline commit and ends in one of five terminal benchmark states: <code>passed</code>, <code>failed</code>, <code>capped</code>, <code>infra-invalid</code>, or <code>incomplete</code>. Only a passed run has a deployed, verified output. Capped, failed, and incomplete runs remain first-class evidence; infrastructure-invalid runs remain cost evidence but are excluded from quality ranking.</p>
+
+<h3>Two experiment modes must not be mixed</h3>
+<table>
+  <thead><tr><th>Mode</th><th>Variable</th><th>Fixed controls</th><th>Question answered</th></tr></thead>
+  <tbody>
+    <tr><td><b>Core-model comparison</b><br><span class="pill ok">Primary</span></td><td>Coding model and thinking level.</td><td>Opening Dossier, script, repository, toolchain, support-model route, review route, Dossier route, budget, evaluator, and deployment target.</td><td>How efficiently does the coding route deliver an accepted result?</td></tr>
+    <tr><td><b>Whole-stack comparison</b></td><td>The declared routing bundle across coding, review, orchestration, and documentation.</td><td>Scenario, script, runtime, cap, evaluator, and deployment target.</td><td>What does a realistic end-to-end project run cost and deliver?</td></tr>
+  </tbody>
+</table>
+
+<p>The first controlled matrix compares the eligible core routes in the canonical <a href="../../system/domains/model-routing-policy.md">Model Routing Policy</a>: Luna/medium, Terra/medium, and Sol/medium. Sol/xhigh is not added merely to make a larger chart; it is included only for a case whose risk score or hard floor requires it, or as a separately approved research arm. Mini/high remains eligible for bounded supporting decisions and is never treated as a coding contender. Explicit benchmark routing is recorded as such, and quota or price never lowers a correctness floor.</p>
+
+<h3>Controlled run protocol</h3>
+<ol>
+  <li><b>Freeze:</b> publish the case version, opening Dossier digest, script digest, evaluator digest, repository baseline, runtime image, deployment adapter, route bundle, and token caps before the first run.</li>
+  <li><b>Randomize:</b> randomize route order within each case to reduce time, host-load, and warm-cache bias. Run each route on the same host class with a clean worktree and isolated deployment namespace.</li>
+  <li><b>Start in product:</b> open the preserved Dossier in Orchestrator Chat and play the fixed operator script. Cards must be created through the Orchestrator and Task API.</li>
+  <li><b>Execute:</b> capture every model call, card transition, prompt hash, context receipt, attempt, steer, review finding, test result, commit, and deployment event under one correlation id.</li>
+  <li><b>Enforce caps:</b> apply category and total budgets at safe call boundaries. Permit at most one semantic reissue. Never erase a costly failed attempt and restart it under the same run id.</li>
+  <li><b>Deploy:</b> publish into an isolated immutable release slot. Record URL, digest, timestamp, and availability probe. A passing local build without this proof cannot pass the case.</li>
+  <li><b>Evaluate blind:</b> run deterministic checks first, then have reviewers score screenshots and behavior without model or token labels. Critical failures override the numeric score.</li>
+  <li><b>Close the Dossier:</b> generate the narrative portion, capture its documentation tokens, then use a deterministic renderer to inject the final ledger and content digests. This avoids an unmeasured self-referential final edit.</li>
+  <li><b>Replicate:</b> after a single-run calibration block passes harness checks, collect three replicates per route. Publish median, range, pass-at-cap, and every individual Result Dossier.</li>
+</ol>
+
+<h3>Per-case quality rubrics</h3>
+<table>
+  <thead><tr><th>Case</th><th>100-point rubric</th><th>Critical failures</th></tr></thead>
+  <tbody>
+    <tr><td><b>Pelican</b></td><td>Pelican recognizability 25; bicycle geometry and rider contact 20; composition and interaction 15; SVG structure 15; responsive and accessible behavior 10; tests and deployment proof 15.</td><td>Raster or remote fallback, unrecognizable subject, broken target viewport, unsafe embed, or missing deployment.</td></tr>
+    <tr><td><b>Shift Ledger</b></td><td>Workflow and transition correctness 30; audit and evidence integrity 20; task usability 20; persistence and deterministic tests 15; deployment proof 15.</td><td>Invalid transition accepted, lost audit event, cross-role authority leak, destructive reset failure, or missing deployment.</td></tr>
+    <tr><td><b>The Deep Blue</b></td><td>Playable loop and completion 30; narrative coherence 25; art and interaction identity 15; accessibility and performance 15; tests and deployment proof 15.</td><td>No reachable ending, progress loss on ordinary reload, keyboard or touch path unusable, unlicensed remote asset, or missing deployment.</td></tr>
+  </tbody>
+</table>
+
+<p>A run passes at 75 points or more with no critical failure and complete evidence. Report <code>quality points per 100k tokens</code>, but never collapse the rubric to that ratio alone. Also publish pass-at-cap, total tokens to first verified deployment, reissue-token share, and score dispersion across replicates.</p>
+
+<h3>TokenEconomy benchmark taxonomy</h3>
+<p>Each model call receives exactly one benchmark category in addition to its existing participant and pipeline-step identity. The categories are an analysis projection, not a replacement for the canonical token receipt. Unclassified calls make the Dossier incomplete until mapped; categories must reconcile exactly to the run total.</p>
+
+<table>
+  <thead><tr><th>Category</th><th>Includes</th><th>Excludes and attribution rule</th></tr></thead>
+  <tbody>
+    <tr><td><b>Coding</b><br><code>coding</code></td><td>Core agent turns that inspect, design, edit, test, debug, and prepare the deployable repository output, including in-session steering.</td><td>Classify by core run and call purpose. A documentation file written incidentally in the core run remains Coding unless the call was explicitly invoked for the Result Dossier.</td></tr>
+    <tr><td><b>Review</b><br><code>review</code></td><td>Requirement, code-quality, test-evidence, security, visual, accessibility, grade, and post-abort review calls.</td><td>The final accept, reissue, or escalate decision belongs to Orchestration. Reviewing Result Dossier prose is Review, not Documentation.</td></tr>
+    <tr><td><b>Orchestration</b><br><code>orchestration</code></td><td>Context-chat turns that shape work, task decomposition and card creation, route decisions, verdict synthesis, reissue prompts, and scripted steering decisions.</td><td>Deterministic API calls have zero tokens but remain events. A coding-model response to an injected steer remains Coding.</td></tr>
+    <tr><td><b>Documentation</b><br><code>documentation</code></td><td>Result Dossier narrative, release summary, benchmark interpretation, and required public artifact descriptions generated after evaluation.</td><td>Deterministic ledger injection and HTML rendering consume zero model tokens. Product UI copy authored during implementation remains Coding.</td></tr>
+  </tbody>
+</table>
+
+<p>For every category and call, store input, output, cache-read, and cache-write tokens separately. The primary cap and repository-visible total use the current Studio convention: <code>input + output + cacheRead + cacheWrite</code>. Also store model id, thinking level, timestamp, participant, step id, attempt, call purpose, pricing status, and the historical API-equivalent estimate returned by <a href="../../system/domains/token-pricing.md">TokenEconomy-backed token pricing</a>. An unknown price is explicit and never rendered as zero cost.</p>
+
+<h3>Result Dossier schema</h3>
+<p>Each case emits a human-readable <code>result-dossier/index.html</code> and a machine-readable <code>result-dossier/result.json</code>. Both are generated from the same settled record. The minimum JSON shape is:</p>
+
+<pre><code>{
+  "schemaVersion": 1,
+  "identity": {
+    "runId": "...", "caseId": "pelican", "caseVersion": "1.0.0",
+    "replicate": 1, "startedAt": "...", "completedAt": "..."
+  },
+  "inputs": {
+    "openingDossierSha256": "...", "scriptSha256": "...",
+    "baselineCommit": "...", "runtimeImageDigest": "..."
+  },
+  "routes": {
+    "experimentMode": "core-model", "policyVersion": "2026-07-24",
+    "coding": { "model": "...", "thinking": "..." },
+    "review": { "model": "...", "thinking": "..." },
+    "orchestration": { "model": "...", "thinking": "..." },
+    "documentation": { "model": "...", "thinking": "..." }
+  },
+  "result": {
+    "status": "passed|failed|capped|infra-invalid|incomplete",
+    "score": 0, "criticalFailures": [],
+    "deployment": { "url": "...", "releaseDigest": "...", "probe": "passed" }
+  },
+  "tokens": {
+    "taxonomyVersion": "demo-benchmark-v1",
+    "categories": { "coding": {}, "review": {}, "orchestration": {}, "documentation": {} },
+    "total": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "all": 0 },
+    "cap": 0, "pricingStatus": "resolved|partial|unavailable", "estimatedApiCostUsd": null
+  },
+  "execution": {
+    "cards": [], "attempts": [], "steers": [], "reviews": [], "tests": []
+  },
+  "provenance": {
+    "promptManifestSha256": "...", "evaluationSha256": "...",
+    "replayTraceSha256": "...", "archiveManifestSha256": "..."
+  },
+  "limitations": []
+}</code></pre>
+
+<p>The HTML Dossier must surface, in this order: case and route identity; opening question and acceptance; a link to the deployed result; screenshots and behavior proof; rubric with critical findings; token ledger by category and attempt; first-run versus reissue split; card and context-chat chronology; deployment and archive provenance; and limitations. It must state whether operator interaction was scripted and which prior-run context was excluded.</p>
+
+<h3>Complete historical archive</h3>
+<p>Every terminal run writes a content-addressed archive manifest. The logical layout is <code>cases/&lt;caseVersion&gt;/runs/&lt;runId&gt;/</code> with the opening Dossier reference, script, context receipts, rendered prompt manifest or approved prompt bodies, task/card snapshots, token receipts, pipeline and session events, review evidence, test logs, screenshots, release manifest, availability probe, Result Dossier, and checksums. Secret-bearing provider internals are never archived; required redactions are declared in the manifest.</p>
+
+<ul>
+  <li>Runs are append-only. A retry is another attempt inside the same run; a clean replacement after infrastructure invalidation receives a new run id.</li>
+  <li>Failed, capped, incomplete, and infrastructure-invalid runs remain visible. A website filter may focus on passed runs, but the default cohort summary reports every terminal status.</li>
+  <li>Comparison is permitted only across the same case, case version, experiment mode, evaluator version, and budget. Any runtime or script drift is a new cohort.</li>
+  <li>Three replicates are the minimum for a comparative claim. One run is a demonstrator, not a model qualification result.</li>
+</ul>
+
+<h2 id="cost-model"><span class="no">§12</span>Cost model and hard caps</h2>
+
+<h3>What the existing evidence says</h3>
+<p>The <a href="../../quality/pipeline-time-economy/">Async Validation evidence basis</a> measured 2,396 attempts across 847 tasks. Retry compute was 66.7% of total compute, a conservative floor because attempt history is capped. The core coding step was 66.8% of compute and 98.1% of recorded input-plus-output tokens. Review aspects carried about 1.9% of those tokens, while deterministic tests carried none. This leads to two budget rules: cap and reserve the coding category explicitly, and do not spend model tokens to optimize deterministic test CPU.</p>
+
+<p>The proposed budgets are experiment guardrails, not forecasts or targets. They deliberately reserve space for orchestration and for a measured Result Dossier that historical pipelines did not produce as part of each benchmark. Unused category budget cannot be transferred into Coding.</p>
+
+<table>
+  <thead><tr><th>Case</th><th>Coding</th><th>Review</th><th>Orchestration</th><th>Documentation</th><th>Hard total</th><th>Why this size</th></tr></thead>
+  <tbody>
+    <tr><td><b>SVG Pelican</b></td><td class="mono">112k</td><td class="mono">16k</td><td class="mono">8k</td><td class="mono">24k</td><td><b>160k</b></td><td>One page, one principal SVG, narrow tests, and a short Dossier. Enough for one correction without rewarding a sprawling implementation.</td></tr>
+    <tr><td><b>Shift Ledger</b></td><td class="mono">224k</td><td class="mono">32k</td><td class="mono">16k</td><td class="mono">48k</td><td><b>320k</b></td><td>Several state transitions, persistence, seeded data, role-aware views, audit history, tests, deploy, and a substantive Dossier.</td></tr>
+    <tr><td><b>The Deep Blue</b></td><td class="mono">280k</td><td class="mono">40k</td><td class="mono">20k</td><td class="mono">60k</td><td><b>400k</b></td><td>Game state, input modes, narrative, local assets, accessibility, performance, tests, deployment, and the richest visual evidence.</td></tr>
+    <tr><td><b>One three-case project run</b></td><td class="mono">616k</td><td class="mono">88k</td><td class="mono">44k</td><td class="mono">132k</td><td><b>880k</b></td><td>A single operator-approved ceiling for one route across all three cases.</td></tr>
+  </tbody>
+</table>
+
+<h3>Budget behavior</h3>
+<ol>
+  <li><b>Measure all four dimensions.</b> Input, output, cache-read, and cache-write tokens count toward category and total caps using the Studio aggregation convention. Cache is cheaper on many routes, but it still consumes context and remains part of the core question.</li>
+  <li><b>Warn at 60%.</b> At 60% of a category or total cap, the run records a budget-warning event and the next Orchestrator decision must choose among finish, one bounded reissue, or close as failed. The warning does not silently change the model.</li>
+  <li><b>Protect one retry reserve.</b> The first coding attempt should target no more than 65% of the Coding cap, leaving 35% for at most one semantic reissue. If the first attempt consumes that reserve, no semantic reissue is admitted. This is the direct control on the historical retry tax.</li>
+  <li><b>Keep support ring-fenced.</b> Review, Orchestration, and Documentation each stop at their own cap. A large Coding run cannot consume the tokens needed to evaluate and report itself, and an overactive reviewer cannot reopen Coding indefinitely.</li>
+  <li><b>Stop at a safe boundary.</b> At 100%, do not dispatch another model call. Finish deterministic receipt collection, mark the run <code>capped</code>, and publish whatever evidence exists. Do not kill a filesystem write or deployment transaction mid-operation.</li>
+  <li><b>Count invalid spend.</b> Infrastructure-invalid calls stay in the batch spend ledger even though they do not enter quality ranking. A replacement starts from a clean namespace with a new run id and needs new budget approval.</li>
+</ol>
+
+<div class="box warn">
+  <h4>Batch ceiling and staged approval</h4>
+  <p>One route across all three cases is capped at <b>880k tokens</b>. A one-replicate comparison block across Luna/medium, Terra/medium, and Sol/medium is therefore capped at <b>2.64M tokens</b>. The full three-replicate block is capped at <b>7.92M tokens</b> and must not be scheduled until the one-replicate calibration shows complete attribution, stable evaluators, working deployment, and no systemic cap failure. Each additional route adds another 880k per replicate and requires an explicit operator decision.</p>
+</div>
+
+<p>Tokens are the stable admission currency. Before scheduling, TokenEconomy calculates the API-equivalent dollar ceiling for the exact route and timestamp, with separate input, output, cache-read, and cache-write assumptions. The operator sees both numbers and approves the lower of the token cap and any workspace spending ceiling. Subscription quota is shown separately and is never presented as an API invoice. A missing model price blocks a dollar comparison but does not erase token evidence.</p>
+
+<h3>Calibration and cap revision</h3>
+<p>Keep the proposed caps for benchmark version 1. After three valid replicates per route, compare median consumption and tail behavior. A future case version may lower a cap when at least 80% of valid runs pass below 75% of it, or raise it when more than one otherwise-promising route caps at the same declared acceptance step. Never change a cap inside a cohort, and never interpret “used the full budget” as evidence of quality.</p>
+
+<h2 id="overlaps"><span class="no">§13</span>Product and marketing overlaps</h2>
+
+<p>The program creates four related products. Their roles must be explicit so the public demo does not become a second benchmark database and the website does not become a curated substitute for evidence.</p>
+
+<table>
+  <thead><tr><th>Project</th><th>Owns</th><th>Consumes</th><th>Must not own</th></tr></thead>
+  <tbody>
+    <tr><td><b>Public Agent Studio demo</b></td><td>The read-only scenario replay, product navigation, Dossier-to-card story, evidence presentation, and links to deployed outputs.</td><td>One accepted, scrubbed scenario release and its replay trace.</td><td>Benchmark truth, mutable historical runs, model ranking logic, or productive execution.</td></tr>
+    <tr><td><b>Token Economy</b></td><td>Benchmark schema, token taxonomy, price-at-time calculation, cohort validity, historical run store, comparison API, and benchmark website.</td><td>Scenario packages, run receipts, evaluations, Result Dossiers, and deployment manifests.</td><td>Agent Studio product tours or hand-picked marketing claims.</td></tr>
+    <tr><td><b>Agent Studio website</b></td><td>Product-proof narrative: “this scenario was planned, run, reviewed, deployed, and measured in Agent Studio,” with direct links to the public demo and full evidence.</td><td>Pinned captures, accepted release digests, aggregate benchmark facts, and availability status.</td><td>A separate demo fixture, an edited leaderboard, or an output that has no live deployment proof.</td></tr>
+    <tr><td><b>Output projects</b></td><td>Independent source, deployment, issue history, release notes, accessibility, and availability for Pelican and The Deep Blue.</td><td>The accepted build artifact and its case-level provenance.</td><td>Agent Studio task history or the canonical benchmark ledger.</td></tr>
+  </tbody>
+</table>
+
+<h3>Pelican and The Deep Blue as standalone marketing projects</h3>
+<div class="cards">
+  <article class="card">
+    <h4>Pelican Benchmark site</h4>
+    <p>Publish a permanent gallery where each valid route has the same prompt, rendered SVG, viewport captures, rubric, token total, and Result Dossier link. Keep failures and capped runs discoverable. The site can grow into a recognizable small visual benchmark without requiring visitors to understand Agent Studio first.</p>
+  </article>
+  <article class="card">
+    <h4>The Deep Blue game</h4>
+    <p>Publish the accepted game under its own identity and release lifecycle. Its credits page links back to the scenario Dossier and explains the measured production process factually. Agent Studio may feature it, but the game remains playable and understandable as an independent work.</p>
+  </article>
+</div>
+
+<h3>Publication rules</h3>
+<ul>
+  <li>The Agent Studio website may feature a representative result, but every quantitative claim links to the Token Economy cohort with all terminal runs and coverage notes.</li>
+  <li>The public demo pins an exact output release digest. Output projects can continue independently; the demo changes only through a reviewed seed-version update.</li>
+  <li>Marketing screenshots use the real accepted deployment or the committed deterministic workspace and retain the required <code>--real</code> or <code>--pinned</code> provenance.</li>
+  <li>No model is called “best” from a single replicate or an aggregate that hides a critical case failure. Publish route, thinking level, case version, cap, score, dispersion, and missing-price state together.</li>
+</ul>
+
+<section class="box ok" aria-labelledby="next-round-title">
+  <h4 id="next-round-title">Decision package for the next operator round</h4>
+  <ol>
+    <li>Approve the completed-scenario snapshot as the content principle: preserved opening Dossier, Orchestrator-created cards, scripted context-chat steering, real deployed output, and immutable Result Dossier.</li>
+    <li>Approve the first wave and order: SVG Pelican, Shift Ledger, then The Deep Blue.</li>
+    <li>Approve the v1 case caps of 160k, 320k, and 400k tokens, the 880k three-case project cap, and at most one semantic reissue per case.</li>
+    <li>Approve core-model comparison as the primary experiment, with one calibration replicate before any three-replicate block and whole-stack comparison reported separately.</li>
+    <li>Approve Token Economy as benchmark and history owner, the Agent Studio website as product-proof consumer, and Pelican and The Deep Blue as independently deployable marketing projects.</li>
+  </ol>
+</section>
+
+<p class="dim" style="font-size:12.5px;margin-top:36px">Extension evidence basis: the canonical Model Routing Policy; Token Aggregation and Token Pricing contracts; Context-aware Orchestrator Chats; Pipeline Time Economy and its Async Validation proposal; and the §1 through §9 public-demo security and replay decisions. Proposed caps and scenario scores are decision inputs, not measured outcomes. No scenario was executed and no benchmark result is claimed by this planning extension.</p>
+
 </main>
 </body>
 </html>
