@@ -2,12 +2,14 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import type { TaskReferenceStatus } from '../../../../components/task-reference-microcard/task-reference-microcard';
 import type {
   WorkbenchOverview,
   WorkbenchOverviewItem,
   WorkbenchStatus,
 } from '../../../../models/project-docs.model';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { WorkbenchOverviewComponent } from './workbench-overview.component';
 
 function item(
@@ -35,6 +37,21 @@ function item(
   };
 }
 
+function taskStatus(key: string, lane: string, taskKey = `Demo::${key}`): TaskReferenceStatus {
+  return {
+    key,
+    exists: true,
+    taskKey,
+    title: `${key} implementation`,
+    lane,
+    projectId: 'PROJ-001',
+    projectName: 'Demo',
+    projectColor: null,
+    merge: null,
+    reviewGrade: null,
+  };
+}
+
 function overview(items: WorkbenchOverviewItem[], projectName: string | null = null): WorkbenchOverview {
   return {
     projectName,
@@ -51,36 +68,85 @@ describe('WorkbenchOverviewComponent', () => {
     history.replaceState(null, '', '/#/workbenches');
   });
 
-  it('renders tracking items in the current queue and keeps discarded and documented history separate', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    document.querySelectorAll('.app-tooltip-overlay').forEach(element => element.remove());
+  });
+
+  it('renders calm lifecycle rows and hydrates every current Dossier reference in one stable batch', async () => {
+    vi.useFakeTimers();
+    const openTaskKey = vi.fn(() => true);
     await TestBed.configureTestingModule({
       imports: [WorkbenchOverviewComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskReferenceNavigationService, useValue: { openTaskKey } },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(WorkbenchOverviewComponent);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     const pending = item('pending', 'decision-pending', 3, 'ui');
+    pending.workbench.documentation = {
+      eligible: false,
+      totalCount: 3,
+      terminalCount: 0,
+      openCount: 3,
+      missingCount: 1,
+      references: [
+        { key: 'AGT-2', exists: true, terminal: false, lane: '2-ready' },
+        { key: 'AGT-1', exists: true, terminal: false, lane: '3-progress' },
+        { key: 'AGT-404', exists: false, terminal: false, lane: null },
+      ],
+    };
+    const active = item('active', 'active');
+    active.workbench.relatedTaskKeys = ['AGT-1'];
     const tracking = item('tracking', 'decided');
+    tracking.workbench.relatedTaskKeys = ['AGT-3'];
     tracking.workbench.documentation = {
-      eligible: true,
+      eligible: false,
       totalCount: 1,
-      terminalCount: 1,
-      openCount: 0,
+      terminalCount: 0,
+      openCount: 1,
       missingCount: 0,
-      references: [{ key: 'AGT-1', exists: true, terminal: true, lane: '6-completed' }],
+      references: [{ key: 'AGT-3', exists: true, terminal: false, lane: '4-auto-review' }],
     };
     http.expectOne('/api/workbenches').flush(overview([
       pending,
-      item('active', 'active'),
       tracking,
+      active,
       item('discarded', 'archived'),
       item('documented', 'documented'),
     ]));
     fixture.detectChanges();
 
+    const referenceRequest = http.expectOne('/api/tasks/reference-status');
+    expect(referenceRequest.request.body).toEqual({ keys: ['AGT-2', 'AGT-1', 'AGT-404', 'AGT-3'] });
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-task-Demo-pending-AGT-1"] a',
+    )).toBeNull();
+    referenceRequest.flush({ items: [
+      taskStatus('AGT-1', '3-progress', 'Demo::active-card'),
+      taskStatus('AGT-2', '2-ready', 'Demo::ready-card'),
+      taskStatus('AGT-3', '4-auto-review', 'Demo::review-card'),
+    ] });
+    fixture.detectChanges();
+
     expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain('Dossiers');
     expect(fixture.nativeElement.querySelectorAll('[data-testid^="workbench-overview-sort-"]').length).toBe(5);
-
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-current-count"]')?.textContent)
+      .toContain('3 current');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-history-count"]')?.textContent)
+      .toContain('2 history');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active-count"]')?.textContent)
+      .toContain('2');
+    expect([...fixture.nativeElement.querySelectorAll('[data-testid="workbench-overview-active-list"] > article')]
+      .map((row: Element) => row.getAttribute('data-testid')))
+      .toEqual(['workbench-overview-item-Demo-active', 'workbench-overview-item-Demo-tracking']);
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-history-section-count"]')?.textContent)
+      .toContain('2');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-decision-pending"]')?.textContent)
       .toContain('3 open');
     expect(fixture.nativeElement.querySelector(
@@ -89,10 +155,36 @@ describe('WorkbenchOverviewComponent', () => {
     expect(fixture.nativeElement.querySelector(
       '[data-testid="workbench-overview-pattern-Demo-active"]')?.getAttribute('data-pattern'))
       .toBe('concept');
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
-      .toContain('active');
-    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
-      .toContain('Ready to document');
+    const decidedRow = fixture.nativeElement.querySelector('[data-testid="workbench-overview-item-Demo-tracking"]');
+    expect(decidedRow?.textContent).toContain('Accepted / In progress');
+    expect(decidedRow?.textContent).not.toContain('Decision pending');
+    expect(decidedRow?.textContent).not.toContain('Tracking');
+
+    const pendingCards = fixture.nativeElement.querySelectorAll(
+      '[data-testid="workbench-overview-item-Demo-pending"] app-task-reference-microcard',
+    );
+    expect([...pendingCards].map((card: Element) => card.querySelector('[data-testid]')?.getAttribute('data-testid')))
+      .toEqual([
+        'workbench-overview-task-Demo-pending-AGT-2',
+        'workbench-overview-task-Demo-pending-AGT-1',
+        'workbench-overview-task-Demo-pending-AGT-404',
+      ]);
+    const activeCard = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-task-Demo-pending-AGT-1"]',
+    );
+    expect(activeCard.querySelector('.task-ref__lane-dot')?.getAttribute('data-tone')).toBe('active');
+    const activeCardLink = activeCard.querySelector('a') as HTMLAnchorElement;
+    expect(activeCardLink.getAttribute('href')).toBe('#task:AGT-1');
+    activeCardLink.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    vi.advanceTimersByTime(300);
+    expect(document.querySelector(
+      '[data-testid="workbench-overview-task-Demo-pending-AGT-1-tooltip"]',
+    )?.textContent).toContain('In progress');
+    activeCardLink.click();
+    expect(openTaskKey).toHaveBeenCalledWith('Demo::active-card');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-task-Demo-pending-AGT-404"] a',
+    )).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-discarded-list"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')).toBeNull();
 
@@ -103,6 +195,8 @@ describe('WorkbenchOverviewComponent', () => {
       .toContain('discarded');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')?.textContent)
       .toContain('documented');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')?.textContent)
+      .toContain('Documented');
 
     let opened: WorkbenchOverviewItem | null = null;
     fixture.componentInstance.openWorkbench.subscribe(value => opened = value);
