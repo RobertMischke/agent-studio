@@ -14,33 +14,32 @@
            (click)="select()"
            (keydown.enter)="select()"
            (keydown.space)="select(); $event.preventDefault()">
-    <div class="feed-entry__top">
-      <span class="feed-entry__kind">{{ kindLabel(item.kind) }}</span>
-      <span class="feed-entry__topic">{{ item.topic }}</span>
-      <button type="button"
-              class="feed-entry__project"
-              data-testid="orchestrator-entry-project"
-              [attr.aria-label]="'Filter activity to ' + (item.project || projectFallback())"
-              [cacTooltip]="item.project || projectFallback()"
-              (click)="filterProject($event, item.project || projectFallback())">
-        <i [style.background]="projectColor(item.project || projectFallback())" aria-hidden="true"></i>
-        <span>{{ projectCode(item.project || projectFallback()) }}</span>
-      </button>
-      <time class="feed-entry__time" [attr.datetime]="item.ts" [cacTooltip]="formatTime(item.ts)">{{ formatClock(item.ts) }}</time>
-    </div>
+    <time class="feed-entry__time"
+          data-testid="orchestrator-entry-time"
+          [attr.datetime]="item.ts"
+          [cacTooltip]="formatTime(item.ts)">{{ formatClock(item.ts) }}</time>
+    <button type="button"
+            class="feed-entry__project"
+            data-testid="orchestrator-entry-project"
+            [attr.aria-label]="'Filter activity to ' + (item.project || projectFallback())"
+            [cacTooltip]="item.project || projectFallback()"
+            (click)="filterProject($event, item.project || projectFallback())">
+      <i [style.background]="projectColor(item.project || projectFallback())" aria-hidden="true"></i>
+      <span>{{ projectCode(item.project || projectFallback()) }}</span>
+    </button>
+    <span class="feed-entry__kind" data-testid="orchestrator-entry-kind">{{ kindLabel(item.kind) }}</span>
     <span class="feed-entry__summary" data-testid="orchestrator-entry-summary">{{ item.summary }}</span>
-    @if (item.jobId && item.watchPath) {
-      <span class="feed-entry__task-row">
-        <span>Task</span>
+    <span class="feed-entry__context" data-testid="orchestrator-entry-context" [cacTooltip]="item.topic">
+      @if (item.jobId && item.watchPath) {
         <button type="button"
                 class="feed-entry__task-link"
                 (click)="openTask($event)"
                 [attr.aria-label]="'Open task ' + item.jobId"
                 data-testid="orchestrator-entry-task">{{ item.jobId }}</button>
-      </span>
-    }
-    @if (item.tokenUsage; as usage) {
-      <span class="feed-entry__tokens" [cacTooltip]="tokenTooltip()">{{ usage.model || '?' }} · ↑{{ usage.inputTokens }} ↓{{ usage.outputTokens }}</span>
-    }
+      } @else {
+        <span>{{ item.topic }}</span>
+      }
+    </span>
+    <span class="feed-entry__disclosure" data-testid="orchestrator-entry-disclosure" aria-hidden="true">›</span>
   </article>
 }

@@ -276,6 +276,27 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   for (const box of eventBoxes.slice(1)) {
     expect(Math.abs(box!.x - entryLeft)).toBeLessThanOrEqual(1);
     expect(Math.abs((box!.x + box!.width) - entryRight)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box!.height - eventBoxes[0]!.height)).toBeLessThanOrEqual(1);
+  }
+  for (const testId of [
+    'orchestrator-entry-time',
+    'orchestrator-entry-project',
+    'orchestrator-entry-kind',
+    'orchestrator-entry-summary',
+    'orchestrator-entry-context',
+    'orchestrator-entry-disclosure',
+  ]) {
+    const boxes = await Promise.all(eventKinds.map(kind =>
+      page.locator(`[data-testid="orchestrator-feed-entry"][data-entry-kind="${kind}"]`)
+        .first()
+        .getByTestId(testId)
+        .boundingBox(),
+    ));
+    expect(boxes.every(Boolean)).toBe(true);
+    for (const box of boxes.slice(1)) {
+      expect(Math.abs(box!.x - boxes[0]!.x), `${testId} left edge`).toBeLessThanOrEqual(1);
+      expect(Math.abs(box!.width - boxes[0]!.width), `${testId} width`).toBeLessThanOrEqual(1);
+    }
   }
 
   const globalStatus = page.getByTestId('global-orchestrator-status');
@@ -291,6 +312,25 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   await page.getByTestId('global-orchestrator-toggle').click();
   await expect(page.getByTestId('global-orchestrator-details')).toContainText('120,000 / 18,000');
   await page.getByTestId('global-orchestrator-toggle').click();
+
+  for (const surface of [
+    page.getByTestId('global-orchestrator-card'),
+    page.getByTestId('orchestrator-feed-filters'),
+    page.getByTestId('orchestrator-feed-stream'),
+    page.getByTestId('orchestrator-feed-detail'),
+  ]) {
+    const chrome = await surface.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {
+        borderRadius: style.borderRadius,
+        borderTopWidth: style.borderTopWidth,
+        boxShadow: style.boxShadow,
+      };
+    });
+    expect(chrome.borderRadius).toBe('0px');
+    expect(chrome.borderTopWidth).toBe('0px');
+    expect(chrome.boxShadow).toBe('none');
+  }
 
   await page.getByTestId('orchestrator-entry-project').first().click();
   await expect(renderedEntries).toHaveCount(100);

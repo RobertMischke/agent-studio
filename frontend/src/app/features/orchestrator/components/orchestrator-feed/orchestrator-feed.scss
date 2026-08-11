@@ -1,5 +1,3 @@
-@use '../../../../../styles/mixins' as m;
-
 // Token-only surfaces keep the shared feed legible in both themes.
 :host { display: block; min-height: 0; height: 100%; }
 
@@ -106,21 +104,20 @@
 
 .orch-feed__global {
   flex: 0 0 auto;
-  padding-inline: var(--studio-spacing-2);
+  padding-inline: var(--studio-spacing-3);
+  background: color-mix(in srgb, var(--severity-pending) 6%, transparent);
 }
 
 .orch-feed__grid {
   display: grid;
   grid-template-columns: minmax(200px, 230px) minmax(0, 1fr) minmax(280px, 340px);
-  gap: var(--studio-spacing-3);
+  gap: 0;
   flex: 1 1 auto;
   min-height: 0;
 }
 .orch-feed__filters,
 .orch-feed__stream,
 .orch-feed__detail {
-  @include m.deck-panel;
-
   min-height: 0;
   overflow: auto;
 }
@@ -129,6 +126,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
+  border-inline-end: 1px solid var(--studio-border);
 }
 .orch-feed__filter-group h3 {
   margin: var(--studio-spacing-2) 0 var(--studio-spacing-1);
@@ -184,15 +182,16 @@
 }
 
 .orch-feed__list {
-  padding: var(--studio-spacing-2);
+  padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-3);
+  gap: 0;
 }
 
 .orch-feed__stream {
   padding: 0;
+  border-inline-end: 1px solid var(--studio-border);
 }
 .orch-feed__group {
   display: flex;
@@ -201,7 +200,7 @@
 }
 .orch-feed__group-head {
   position: sticky;
-  top: calc(var(--studio-spacing-2) * -1);
+  top: 0;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -383,6 +382,12 @@
   .orch-feed__filters,
   .orch-feed__detail {
     overflow: visible;
+  }
+
+  .orch-feed__filters,
+  .orch-feed__stream {
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--studio-border);
   }
 
   .orch-feed__stream {
