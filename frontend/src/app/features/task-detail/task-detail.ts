@@ -60,6 +60,7 @@ import { TaskLiveStatusComponent } from '../../components/task-live-status/task-
 import { freshestRunInfo, isTaskRunActive } from '../../services/run-activity.util';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
+import { taskDetailShortcutTargetAllowed, taskNavigationOwnsFocus } from './task-detail-keyboard.util';
 import { UndoController } from '../../services/undo.service';
 import {
   claudeSessionTooltip, cliTypeLabel, formatDate, formatDateTime, formatMultiplier,
@@ -1160,10 +1161,9 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   /**
-   * Keyboard navigation for triage mode: `j` / ↓ for next, `k` / ↑ for prev,
-   * `Enter` for the lane's primary action. Suppressed while the user is typing
-   * in an input/textarea/contenteditable so chat compose and prompt edit keep
-   * working.
+   * Keyboard navigation for triage mode: `j` / `k` stay global, while arrow
+   * paging requires task-navigation focus. Enter triggers the primary action.
+   * Typing and editing surfaces remain excluded.
    *
    * Escape is handled separately via `ModalStackService`: the detail view
    * registers itself on the stack when it mounts and any modal opened on top
@@ -1173,14 +1173,8 @@ export class TaskDetailComponent implements OnDestroy {
    */
   @HostListener('document:keydown', ['$event'])
   onTriageKey(event: KeyboardEvent): void {
-    if (event.defaultPrevented) return;
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const target = event.target as HTMLElement | null;
-    if (target) {
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (target.isContentEditable) return;
-    }
+    if (!taskDetailShortcutTargetAllowed(event)) return;
+    const boardOwnsFocus = taskNavigationOwnsFocus(event);
     if (this.editingTitle() || this.editingPrompt()) return;
     if (this.showLogOverlay() || this.showCliConfig()) return;
 
@@ -1188,12 +1182,14 @@ export class TaskDetailComponent implements OnDestroy {
       case 'j':
       case 'ArrowDown':
       case 'ArrowRight':
+        if (!boardOwnsFocus && event.key.startsWith('Arrow')) return;
         event.preventDefault();
         this.nextInLaneRequested.emit();
         return;
       case 'k':
       case 'ArrowUp':
       case 'ArrowLeft':
+        if (!boardOwnsFocus && event.key.startsWith('Arrow')) return;
         event.preventDefault();
         this.prevInLaneRequested.emit();
         return;

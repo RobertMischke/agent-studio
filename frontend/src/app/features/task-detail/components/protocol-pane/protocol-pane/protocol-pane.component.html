@@ -85,7 +85,10 @@
       }
     </ng-container>
   </app-pane-header>
-  <div class="pane__body">
+  <div class="pane__body"
+       appPanelKeyboardContainment
+       data-panel-keyboard-autofocus
+       data-testid="inspector-tab-surface">
     @if (activeInspectorTab() !== 'task'
          && activeInspectorTab() !== 'chat'
          && (activeInspectorTab() !== 'protocol' || !detail().statusMarkdown)

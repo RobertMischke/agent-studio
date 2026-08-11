@@ -16,6 +16,7 @@ import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
 import { TaskTimelinePaneComponent } from '../../../task-timeline/components/task-timeline-pane/task-timeline-pane.component';
 import type { ProtocolVerdict } from '../protocol-pane/protocol-verdict';
 import { TaskArtifactLinksDirective } from '../task-artifact-links/task-artifact-links.directive';
+import { PanelKeyboardContainmentDirective } from '../../../../directives/panel-keyboard-containment.directive';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -90,7 +91,7 @@ export function buildPromptTabs(filesCount: number, visualEvidenceCount: number)
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent, TaskArtifactLinksDirective],
+  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent, TaskArtifactLinksDirective, PanelKeyboardContainmentDirective],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })

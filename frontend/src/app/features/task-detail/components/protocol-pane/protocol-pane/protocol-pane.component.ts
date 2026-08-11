@@ -73,6 +73,7 @@ import { DecisionSurfaceComponent } from '../../decision-surface/decision-surfac
 import { TaskArtifactLinksDirective } from '../../task-artifact-links/task-artifact-links.directive';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { PanelKeyboardContainmentDirective } from '../../../../../directives/panel-keyboard-containment.directive';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
@@ -127,6 +128,7 @@ interface InterimSummaryState {
     SourceViewerComponent,
     MenuComponent,
     TooltipDirective,
+    PanelKeyboardContainmentDirective,
     ProtocolVerdictBannerComponent,
     PaneHeaderComponent,
     PaneTabsComponent,

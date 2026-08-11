@@ -108,6 +108,19 @@ Adoption is incremental. Apply the rule to the new or touched surface and its
 immediate component family. Record unrelated legacy drift separately instead
 of turning one UI card into a broad restyling pass.
 
+### R8 - Panels contain vertical scroll keys
+
+A panel that owns scrolling also owns its vertical scroll keys while focus is
+inside the panel content surface. Make that surface focusable and stop event
+propagation for `ArrowUp`, `ArrowDown`, `PageUp`, `PageDown`, `Home`, and `End`
+without preventing the browser's native scroll behavior. Parent board or
+workspace navigation must not consume those keys from inside the panel.
+
+Move focus into the primary scroll surface when a panel opens. Parent keyboard
+navigation remains available when its own surface has focus. Do not contain
+`Tab` or `Escape`; focus traversal and the shared overlay or panel-close stack
+keep their existing behavior.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and

@@ -15,7 +15,9 @@
                      (tabChange)="onPromptTabChange($event)" />
     </ng-container>
   </app-pane-header>
-  <div class="pane__body">
+  <div class="pane__body"
+       appPanelKeyboardContainment
+       data-testid="prompt-tab-surface">
     @switch (activeTab()) {
       @case ('overview') {
         @defer (on immediate) {
