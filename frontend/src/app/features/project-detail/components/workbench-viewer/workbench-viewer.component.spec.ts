@@ -217,6 +217,9 @@ describe('WorkbenchViewerComponent', () => {
       occurredAtUtc: new Date().toISOString(),
     });
     fixture.detectChanges();
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-frame"]'))
+      .not.toBeNull();
     http.expectOne('/api/projects/Demo/workbenches/boundary').flush({
       ...DOCUMENT,
       workbench: { ...DOCUMENT.workbench, summary: 'Updated through the live viewer path.' },

@@ -7,8 +7,6 @@ import type { TaskReferenceStatus } from '../../../../components/task-reference-
 import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import { TaskService } from '../../../../services/task.service';
 import type { WorkbenchDocument } from '../../../../models/project-docs.model';
-import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
-import { NotificationService } from '../../../../services/notification.service';
 import {
   implementationStatusFor,
   WorkbenchViewerHeaderComponent,
@@ -65,7 +63,7 @@ describe('WorkbenchViewerHeaderComponent', () => {
       .toBeNull();
   });
 
-  it('keeps the head compact and creates a linked Dossier refresh card from its confirmation', async () => {
+  it('shows live update truth and offers manual refresh only while disconnected', async () => {
     const statuses = [
       {
         key: 'AGT-10',
@@ -103,35 +101,8 @@ describe('WorkbenchViewerHeaderComponent', () => {
         merge: null,
         reviewGrade: null,
       },
-      {
-        key: 'AGT-14',
-        exists: true,
-        taskKey: 'Agent Studio::refresh-viewer-header',
-        title: 'Refresh: Compact viewer header with a deliberately long title',
-        lane: '1-preparation',
-        projectId: 'PROJ-2',
-        projectName: 'Agent Studio',
-        projectColor: null,
-        merge: null,
-        reviewGrade: null,
-      },
     ];
     const getReferenceStatuses = vi.fn(() => of(statuses));
-    const getWatchPaths = vi.fn(() => of([
-      { name: 'Agent Studio', path: '/projects/agent-studio' },
-    ]));
-    const createJob = vi.fn(() => of({ id: 'refresh-viewer-header' }));
-    const setTaskReferences = vi.fn(() => of({
-      references: {
-        dependsOn: [],
-        relatedTo: [],
-        blockedBy: [],
-        supersedes: [],
-        workbenches: ['AGT-W4'],
-      },
-      warnings: [],
-    }));
-    const refresh = vi.fn();
     const openTaskKey = vi.fn(() => true);
 
     await TestBed.configureTestingModule({
@@ -139,22 +110,16 @@ describe('WorkbenchViewerHeaderComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        {
-          provide: TaskService,
-          useValue: {
-            createJob,
-            getReferenceStatuses,
-            getWatchPaths,
-            refresh,
-            setTaskReferences,
-          },
-        },
+        { provide: TaskService, useValue: { getReferenceStatuses } },
         { provide: TaskReferenceNavigationService, useValue: { openTaskKey } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(WorkbenchViewerHeaderComponent);
     fixture.componentRef.setInput('projectName', 'Agent Studio');
     fixture.componentRef.setInput('document', DOCUMENT);
+    fixture.componentRef.setInput('liveConnected', true);
+    fixture.componentRef.setInput('connectionStateChangedAtUtc', '2026-08-11T10:00:00Z');
+    fixture.componentRef.setInput('lastUpdatedAtUtc', '2026-08-11T10:01:00Z');
     fixture.componentRef.setInput('decisionPoints', [
       { id: 'route', kind: 'single', label: 'Route', options: [], commentLabel: null },
       { id: 'density', kind: 'single', label: 'Density', options: [], commentLabel: null },
@@ -168,36 +133,27 @@ describe('WorkbenchViewerHeaderComponent', () => {
       workbenchKey: 'AGT-W4',
       workbenchId: 'viewer-header',
       legacyTaskKeys: ['AGT-12'],
-      items: [
-        {
-          sourceKey: 'AGT-11',
-          sourceJobId: 'linked-card',
-          sourceTitle: 'Linked implementation card',
-          sourceState: '3-progress',
-          sourceWatchPath: '/projects/agent-studio',
-          kind: 'workbenches',
-        },
-      ],
+      items: [{ sourceKey: 'AGT-11' }],
     });
     fixture.detectChanges();
 
     expect(getReferenceStatuses).toHaveBeenCalledWith(['AGT-11', 'AGT-12', 'AGT-10']);
-    const header = fixture.nativeElement.querySelector('[data-testid="workbench-viewer-header"]');
-    expect(header.querySelector('[data-testid="workbench-viewer-title"]').textContent).toContain(
-      'Compact viewer header',
-    );
+    const header = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-header"]',
+    ) as HTMLElement;
+    expect(header.querySelector('[data-testid="workbench-viewer-title"]')?.textContent)
+      .toContain('Compact viewer header');
+    expect(header.querySelector('[data-testid="workbench-viewer-open-decisions"]')?.textContent)
+      .toContain('3 open');
     expect(
-      header.querySelector('[data-testid="workbench-viewer-open-decisions"]').textContent,
-    ).toContain('3 open');
-    expect(
-      header
-        .querySelector('[data-testid="workbench-viewer-tasks"]')
-        .querySelectorAll('app-task-reference-microcard'),
+      header.querySelector('[data-testid="workbench-viewer-tasks"]')
+        ?.querySelectorAll('app-task-reference-microcard'),
     ).toHaveLength(3);
-    expect(
-      header.querySelector('[data-testid="workbench-viewer-implementation-status"]').textContent,
-    ).toContain('In implementation');
+    expect(header.querySelector('[data-testid="workbench-viewer-implementation-status"]')?.textContent)
+      .toContain('In implementation');
     expect(header.querySelector('[data-testid="workbench-viewer-task-AGT-10"]')).toBeTruthy();
+    expect(header.querySelector('[data-testid="workbench-viewer-refresh"]')).toBeNull();
+    expect(header.querySelector('[data-testid="workbench-viewer-as-of"]')).toBeNull();
 
     const taskLink = header.querySelector(
       '[data-testid="workbench-viewer-task-AGT-11"] a',
@@ -205,77 +161,42 @@ describe('WorkbenchViewerHeaderComponent', () => {
     taskLink.click();
     expect(openTaskKey).toHaveBeenCalledWith('Agent Studio::linked-card');
 
-    const popover = document.querySelector(
+    const disclosure = header.querySelector('.viewer-head__details') as HTMLDetailsElement;
+    (header.querySelector('[data-testid="workbench-viewer-details-trigger"]') as HTMLElement)
+      .click();
+    fixture.detectChanges();
+    const liveStatus = header.querySelector(
+      '[data-testid="workbench-viewer-live-status"]',
+    ) as HTMLElement;
+    const popover = header.querySelector(
       '[data-testid="workbench-viewer-details-popover"]',
     ) as HTMLElement;
-    const disclosure = header.querySelector('.viewer-head__details') as HTMLDetailsElement;
-    expect(disclosure.open).toBe(false);
-    (
-      header.querySelector('[data-testid="workbench-viewer-details-trigger"]') as HTMLElement
-    ).click();
-    fixture.detectChanges();
-    expect(disclosure.open).toBe(true);
+    expect(liveStatus.dataset['connected']).toBe('true');
+    expect(liveStatus.textContent).toContain('Connected since');
+    expect(liveStatus.querySelector('[data-testid="workbench-viewer-manual-refresh"]'))
+      .toBeNull();
     expect(popover.textContent).toContain(DOCUMENT.workbench.summary);
     expect(popover.textContent).toContain('docs/operations/viewer-header/index.html');
     expect(popover.querySelector('[data-testid="workbench-decision-panel"]')).toBeTruthy();
 
-    (
-      header.querySelector('[data-testid="workbench-viewer-refresh"]') as HTMLButtonElement
-    ).click();
-    fixture.detectChanges();
-    const confirm = TestBed.inject(ConfirmDialogService);
-    expect(confirm.active()).toEqual(expect.objectContaining({
-      title: 'Create Dossier refresh card?',
-      detail: expect.stringContaining('Refresh: Compact viewer header'),
-      confirmLabel: 'Create card',
-      kind: 'primary',
-    }));
-
-    confirm.accept();
-    await fixture.whenStable();
+    fixture.componentRef.setInput('liveConnected', false);
+    fixture.componentRef.setInput('connectionStateChangedAtUtc', '2026-08-11T10:02:00Z');
     fixture.detectChanges();
 
-    expect(createJob).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Refresh: Compact viewer header with a deliberately long title',
-      watchPath: '/projects/agent-studio',
-      targetState: '1-preparation',
-      taskType: 'chore',
-      mode: 'coding',
-      promptMarkdown: expect.stringMatching(
-        /Dossier path: `docs\/operations\/viewer-header\/index\.html`[\s\S]*Dossier key: `AGT-W4`[\s\S]*Update the document against reality[\s\S]*Do not add automatic document self-modification/,
-      ),
-    }));
-    expect(setTaskReferences).toHaveBeenCalledWith(
-      'refresh-viewer-header',
-      {
-        dependsOn: [],
-        relatedTo: [],
-        blockedBy: [],
-        supersedes: [],
-        workbenches: ['AGT-W4'],
-      },
-      '/projects/agent-studio',
-    );
-    expect(refresh).toHaveBeenCalled();
+    expect(header.querySelector('[data-testid="workbench-viewer-as-of"]')?.textContent)
+      .toContain('As of');
+    expect(liveStatus.dataset['connected']).toBe('false');
+    expect(liveStatus.textContent).toContain('Disconnected since');
+    const manualRefresh = liveStatus.querySelector(
+      '[data-testid="workbench-viewer-manual-refresh"]',
+    ) as HTMLButtonElement;
+    expect(manualRefresh).toBeTruthy();
 
-    http.expectOne('/api/projects/Agent%20Studio/workbenches/AGT-W4/references').flush({
-      projectName: 'Agent Studio',
-      workbenchKey: 'AGT-W4',
-      workbenchId: 'viewer-header',
-      legacyTaskKeys: ['AGT-12'],
-      items: [
-        { sourceKey: 'AGT-11' },
-        { sourceKey: 'AGT-14' },
-      ],
-    });
-    fixture.detectChanges();
-
-    expect(getReferenceStatuses).toHaveBeenLastCalledWith(['AGT-11', 'AGT-14', 'AGT-12', 'AGT-10']);
-    expect(header.querySelector('[data-testid="workbench-viewer-task-AGT-14"]')).toBeTruthy();
-    expect(TestBed.inject(NotificationService).notifications()[0]).toEqual(expect.objectContaining({
-      kind: 'success',
-      title: 'Refresh card created',
-    }));
+    const refresh = vi.fn();
+    fixture.componentInstance.manualRefresh.subscribe(refresh);
+    manualRefresh.click();
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(disclosure.open).toBe(false);
 
     fixture.destroy();
     http.verify();

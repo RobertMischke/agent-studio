@@ -51,16 +51,16 @@ test('Wiki task keys become compact reference controls in one batch', async ({ p
   // Link semantics (a11y): the live reference is a real link into the task tab.
   await expect(page.getByRole('link', { name: /Open task AGT-2050/ })).toBeVisible();
 
-  // §3 hover popover: hidden at rest, revealed on hover, carrying the expected
-  // title / lane / merge / review-grade infos. This interaction is exactly what
-  // the prior run failed to prove, so assert it explicitly before the shot.
-  const popover = page.locator('.task-ref__popover').first();
-  await expect(popover).toContainText('Review grade A');
+  // The canonical body-portaled tooltip is absent at rest, then reveals the
+  // complete title, lane, merge, and review facts without ancestor clipping.
   await page.mouse.move(2, 2);
-  await expect(popover).toBeHidden();
+  await expect(page.getByTestId('task-reference-microcard-tooltip')).toHaveCount(0);
   await cards.first().hover();
-  await expect(popover).toBeVisible();
-  await expect(popover).toContainText('Living task reference microcards');
+  const tooltip = page.getByTestId('task-reference-microcard-tooltip');
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('Living task reference microcards');
+  await expect(tooltip).toContainText('develop: merged · main: open');
+  await expect(tooltip).toContainText('Review grade A');
   await page.screenshot({ path: path.join(results, 'wiki-task-reference-microcards--mocked.png'), fullPage: true });
 });
 
@@ -82,13 +82,12 @@ test('Chat uses the same host-provided reference control', async ({ page }) => {
   const cards = page.getByTestId('task-reference-microcard');
   await expect(cards).toHaveCount(2);
 
-  // Same host-provided control in the chat context: the hover popover reveals
-  // the reused merge semantics (develop/main) just like in the wiki.
-  const popover = page.locator('.task-ref__popover').first();
-  await expect(popover).toContainText('develop: merged');
+  // Same host-provided control in chat uses the same body-portaled tooltip.
   await page.mouse.move(2, 2);
-  await expect(popover).toBeHidden();
+  await expect(page.getByTestId('task-reference-microcard-tooltip')).toHaveCount(0);
   await cards.first().hover();
-  await expect(popover).toBeVisible();
+  const tooltip = page.getByTestId('task-reference-microcard-tooltip');
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('develop: merged · main: open');
   await page.screenshot({ path: path.join(results, 'chat-task-reference-microcard--mocked.png'), fullPage: true });
 });

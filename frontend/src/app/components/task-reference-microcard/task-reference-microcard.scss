@@ -115,36 +115,3 @@ a.task-ref__link:focus-visible {
   opacity: 0.62;
   filter: grayscale(0.65);
 }
-
-.task-ref__popover {
-  position: absolute;
-  z-index: 80;
-  left: 0;
-  top: calc(100% + var(--studio-spacing-2));
-  display: none;
-  min-width: 15rem;
-  max-width: 22rem;
-  padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-tooltip-border);
-  border-radius: 8px;
-  background: var(--studio-tooltip-bg);
-  backdrop-filter: blur(6px) saturate(120%);
-  -webkit-backdrop-filter: blur(6px) saturate(120%);
-  color: var(--studio-tooltip-fg);
-  box-shadow: var(--elevation-tooltip);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  white-space: normal;
-}
-.task-ref__popover strong {
-  color: var(--studio-tooltip-fg-strong);
-}
-.task-ref__popover span {
-  display: block;
-  margin-top: var(--studio-spacing-1);
-  color: var(--studio-tooltip-fg-dim);
-}
-.task-ref:hover .task-ref__popover,
-.task-ref:focus-within .task-ref__popover {
-  display: block;
-}

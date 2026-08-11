@@ -16,6 +16,7 @@ let nextTooltipId = 0;
 })
 export class AppTooltipDirective implements OnDestroy {
   readonly appTooltip = input<string | null>(null);
+  readonly appTooltipTestId = input<string | null>(null);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly document = inject(DOCUMENT);
@@ -57,6 +58,8 @@ export class AppTooltipDirective implements OnDestroy {
     overlay.id = this.tooltipId;
     overlay.className = 'app-tooltip-overlay';
     overlay.setAttribute('role', 'tooltip');
+    const testId = this.appTooltipTestId()?.trim();
+    if (testId) overlay.dataset['testid'] = testId;
     overlay.textContent = content;
     this.document.body.append(overlay);
     this.overlay = overlay;
@@ -77,7 +80,11 @@ export class AppTooltipDirective implements OnDestroy {
     const gap = 8;
     const preferredTop = hostRect.top - overlayRect.height - gap;
     const placeBelow = preferredTop < edge && hostRect.bottom + gap + overlayRect.height <= viewportHeight - edge;
-    const top = placeBelow ? hostRect.bottom + gap : Math.max(edge, preferredTop);
+    const preferredPosition = placeBelow ? hostRect.bottom + gap : preferredTop;
+    const top = Math.min(
+      Math.max(edge, preferredPosition),
+      Math.max(edge, viewportHeight - overlayRect.height - edge),
+    );
     const centeredLeft = hostRect.left + (hostRect.width - overlayRect.width) / 2;
     const left = Math.min(Math.max(edge, centeredLeft), Math.max(edge, viewportWidth - overlayRect.width - edge));
 

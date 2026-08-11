@@ -387,6 +387,13 @@
           <p>Inter and JetBrains Mono MUST be served as versioned local font assets with their license files and <code>font-display: swap</code>. Production surfaces MUST NOT fetch fonts from Google Fonts, another CDN, or a runtime network dependency. System fallbacks remain mandatory. This dossier itself makes no font request.</p>
         </div>
       </article>
+      <article class="rule">
+        <div class="rule-id">ADM-11</div>
+        <div>
+          <h4>Tooltips preserve complete operational context</h4>
+          <p>Chip, dot, and compact status tooltips MUST use the shared body-portaled tooltip primitive. Titles and status lines wrap inside a readable maximum width, remain fully inside the viewport, and MUST NOT be clipped by a header, list, dialog, or scroll container. A tooltip MUST preserve the complete title and each status fact instead of truncating the same detail it exists to disclose.</p>
+        </div>
+      </article>
     </div>
 
     <h3>Decision provenance</h3>
@@ -402,6 +409,7 @@
           <tr><td>ADM-08</td><td>Use compact system density while letting Markdown occupy the panel up to a useful reading measure.</td><td>AGT-2549, density tokens, and product design principles.</td></tr>
           <tr><td>ADM-09</td><td>Light and dark change semantic tokens, not structure or behavior.</td><td>Style-guide hard rule R5.</td></tr>
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
+          <tr><td>ADM-11</td><td>Compact Dossier references disclose their full title and status through one viewport-safe tooltip primitive.</td><td>AGT-2608 operator evidence and the canonical tooltip standard.</td></tr>
         </tbody>
       </table>
     </div>
@@ -643,7 +651,7 @@
 
     <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
       <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
-      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-10 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-11 to the new or changed surface and its immediate family.</p></div>
       <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
       <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
     </div>
@@ -657,6 +665,7 @@
       <li>No decorative card, frame, left status stripe, or floating notice is introduced.</li>
       <li>Repeated facts and narrative chrome are removed within the touched scope.</li>
       <li>Rows track stable identity and use the same grid for comparable entries.</li>
+      <li>Compact chip and dot tooltips wrap complete content and stay inside the viewport through the shared tooltip primitive.</li>
       <li>Both themes and relevant widths are covered by Playwright and preserved screenshots.</li>
       <li>Any intentional exception names the user need, scope, and review evidence. Existing drift is not precedent.</li>
     </ol>
@@ -699,7 +708,7 @@
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <footer>Prepared 10 August 2026; tooltip contract updated 11 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2608.</footer>
 </main>
 </body>
 </html>

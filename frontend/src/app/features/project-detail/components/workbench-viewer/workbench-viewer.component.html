@@ -20,7 +20,11 @@
           [decisionPoints]="decisionMarkup().points"
           [responses]="decisionResponses()"
           (draftDiscarded)="discardDecisionDraft()"
+          [liveConnected]="liveConnected()"
+          [connectionStateChangedAtUtc]="connectionStateChangedAt()"
+          [lastUpdatedAtUtc]="lastUpdatedAtUtc()"
           (decisionChanged)="refreshDecision()"
+          (manualRefresh)="refreshView()"
         />
       }
       @if (documentationReady()) {

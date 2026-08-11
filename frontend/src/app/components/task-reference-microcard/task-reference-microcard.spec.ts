@@ -34,7 +34,13 @@ describe('TaskReferenceMicrocardComponent', () => {
 
     const link = fixture.nativeElement.querySelector('a') as HTMLAnchorElement;
     expect(link.getAttribute('aria-label')).toContain('Open task AGT-2050');
-    expect(fixture.nativeElement.textContent).toContain('Review grade A');
+    expect(fixture.componentInstance.tooltip()).toBe([
+      'Living references',
+      'In progress · Agent Studio',
+      'develop: merged · main: open',
+      'Review grade A',
+    ].join('\n'));
+    expect(fixture.nativeElement.querySelector('.task-ref__popover')).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('.task-ref__merge-on')).toHaveLength(1);
     link.click();
     expect(openTaskKey).toHaveBeenCalledWith('PROJ-001::task');
@@ -88,7 +94,7 @@ describe('TaskReferenceMicrocardComponent', () => {
     const host = fixture.nativeElement.querySelector('[data-testid="linked-task-AGT-2050"]');
     const link = host.querySelector('a') as HTMLAnchorElement;
     expect(host.querySelector('.task-ref__lane-dot')).toBeTruthy();
-    expect(host.textContent).toContain('Living references');
+    expect(fixture.componentInstance.tooltip()).toContain('Living references');
     expect(host.textContent).not.toContain('AGT-2050●');
     link.click();
     expect(openTaskKey).toHaveBeenCalledWith('PROJ-001::task');

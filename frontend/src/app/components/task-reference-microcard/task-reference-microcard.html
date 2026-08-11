@@ -4,6 +4,8 @@
   [class.task-ref--lane-dot]="variant() === 'lane-dot'"
   [style.--task-ref-project]="color()"
   [attr.data-testid]="testId()"
+  [appTooltip]="tooltip()"
+  [appTooltipTestId]="testId() + '-tooltip'"
 >
   @if (status().exists) {
     <a
@@ -47,14 +49,4 @@
       }
     </span>
   }
-  <span class="task-ref__popover" role="tooltip" [attr.data-testid]="testId() + '-tooltip'">
-    <strong>{{ status().title || 'Unknown or deleted task' }}</strong>
-    <span>{{ laneLabel() }} · {{ status().projectName }}</span>
-    @if (status().merge) {
-      <span>{{ mergePopoverLabel() }}</span>
-    }
-    @if (status().reviewGrade) {
-      <span>Review grade {{ status().reviewGrade }}</span>
-    }
-  </span>
 </span>

@@ -55,6 +55,8 @@ export interface OrchestratorContextChangedEvent {
 export class JobsHubClient {
   /** True while the hub socket is up. The poll cadence does not depend on this — it is exposed for diagnostics / tests. */
   readonly connected = signal(false);
+  /** Timestamp of the latest connected/disconnected transition. */
+  readonly connectionStateChangedAt = signal(new Date().toISOString());
   /** Latest Dossier change on the same shared hub connection. */
   readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
   /** Monotonic refresh hint for the central Task Server Chat History view. */
@@ -104,16 +106,16 @@ export class JobsHubClient {
       this.publishOrchestratorContextRefresh();
     });
 
-    conn.onreconnecting(() => this.connected.set(false));
+    conn.onreconnecting(() => this.setConnected(false));
     conn.onreconnected(() => {
-      this.connected.set(true);
+      this.setConnected(true);
       this.publishWorkbenchReconnect();
       this.handlers?.reconnected?.();
     });
     // Final close (initial-connect failure or back-off exhausted): keep trying
     // cold so a long backend outage still self-heals once it returns.
     conn.onclose(() => {
-      this.connected.set(false);
+      this.setConnected(false);
       this.scheduleColdRetry();
     });
 
@@ -130,7 +132,7 @@ export class JobsHubClient {
     }
     const conn = this.connection;
     this.connection = null;
-    this.connected.set(false);
+    this.setConnected(false);
     if (conn) conn.stop().catch(() => undefined);
   }
 
@@ -140,7 +142,7 @@ export class JobsHubClient {
     conn
       .start()
       .then(() => {
-        this.connected.set(true);
+        this.setConnected(true);
         this.publishWorkbenchReconnect();
         // Initial convergence pull: the board may have changed between the
         // last poll and the socket coming up.
@@ -149,9 +151,15 @@ export class JobsHubClient {
       .catch(() => {
         // Backend not reachable yet. withAutomaticReconnect does not cover the
         // initial connect, so retry cold. Poll fallback covers the board.
-        this.connected.set(false);
+        this.setConnected(false);
         this.scheduleColdRetry();
       });
+  }
+
+  private setConnected(connected: boolean): void {
+    if (this.connected() === connected) return;
+    this.connected.set(connected);
+    this.connectionStateChangedAt.set(new Date().toISOString());
   }
 
   private publishWorkbenchReconnect(): void {

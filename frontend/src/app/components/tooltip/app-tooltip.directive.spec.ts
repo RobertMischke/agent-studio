@@ -11,7 +11,7 @@ import { AppTooltipDirective } from './app-tooltip.directive';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class TestHostComponent {
-  text = '<img src=x onerror=alert(1)> Safe text';
+  text = '<img src=x onerror=alert(1)> Safe text\nSecond line';
 }
 
 describe('AppTooltipDirective', () => {
@@ -38,8 +38,9 @@ describe('AppTooltipDirective', () => {
 
     vi.advanceTimersByTime(1);
     const overlay = document.querySelector<HTMLElement>('[role="tooltip"]');
-    expect(overlay?.textContent).toBe('<img src=x onerror=alert(1)> Safe text');
+    expect(overlay?.textContent).toBe('<img src=x onerror=alert(1)> Safe text\nSecond line');
     expect(overlay?.querySelector('img')).toBeNull();
+    expect(overlay?.dataset['testid']).toBe('shared-tooltip-proof');
     expect(target.getAttribute('aria-describedby')).toBe(overlay?.id);
   });
 
