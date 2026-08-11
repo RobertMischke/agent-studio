@@ -19,7 +19,7 @@ test('adds current diff and known Git sources, sends typed references, and inspe
   await page.goto('/');
   await expect(page.getByTestId('studio-diff-view')).toBeVisible();
   await expect(page.getByTestId('studio-diff-render-shell')).toBeVisible();
-  await page.getByTestId('orch-side-sheet-toggle').click();
+  await ensureChatOpen(page);
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
 
   await page.getByTestId('orch-add-context').click();
@@ -76,7 +76,7 @@ test('adds current diff and known Git sources, sends typed references, and inspe
 
   await page.evaluate(() => localStorage.setItem('atp.studio.theme', 'light'));
   await page.reload();
-  await page.getByTestId('orch-side-sheet-toggle').click();
+  await ensureChatOpen(page);
   const reloadedReceipt = page.getByTestId('orch-answer-context-receipt');
   await expect(reloadedReceipt).toBeVisible();
   await page.getByTestId('orch-context-inspect-toggle').click();
@@ -86,6 +86,12 @@ test('adds current diff and known Git sources, sends typed references, and inspe
     fullPage: false,
   });
 });
+
+async function ensureChatOpen(page: Page): Promise<void> {
+  const toggle = page.getByTestId('orch-side-sheet-toggle');
+  if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+}
 
 async function seedDiffTab(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await page.addInitScript(({ project, sha, theme }) => {
@@ -108,7 +114,7 @@ async function stubWorkspace(page: Page, posted: unknown[]): Promise<void> {
     contextReceipt: {
       scope: 'project', contextKey: `project:${PROJECT}`, includedBlocks: ['repository-file', 'commit', 'diff'],
       capturedAt: '2026-08-10T12:00:00Z', receiptId: 'receipt-git-1', userTurnId: 'user-1',
-      budget: { automaticSoftCapTokens: 4000, automaticHardCapTokens: 6000, totalHardCapTokens: 8000, estimatedIncludedTokens: 410 },
+      budget: { automaticSoftCapTokens: 4000, automaticHardCapTokens: 6000, totalHardCapTokens: 8000, estimatedIncludedTokens: 430 },
       sources: [
         source(`diff:${PROJECT}/${SHA}:${FILE}#L4-L7`, 'diff', 520, 'excerpted'),
         source(`file:${PROJECT}/${FILE}`, 'repository-file', 240, 'included'),

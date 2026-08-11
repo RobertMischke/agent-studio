@@ -111,14 +111,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const reference = this.composerContext()?.contextReference ?? null;
     if (reference?.kind !== 'diff') return reference;
     const selection = this.surfaceContext.diffSelection();
-    if (!selection
-      || selection.projectName !== reference.projectId
-      || selection.commitSha !== reference.reference) return reference;
+    if (!selection || selection.projectName !== reference.projectId || selection.commitSha !== reference.reference) return reference;
     return { ...reference, path: selection.path, lineRanges: selection.lineRanges };
   });
   /** Active repository page carried inside the existing project chat. */
   readonly pageContext = input<PageContext | null>(null);
-
   /**
    * Phase 6 inputs: when a task detail is open, the host passes the
    * job id, title, and watch path so the side sheet can offer an
@@ -129,7 +126,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly activeJobId = input<string | null>(null);
   readonly activeJobTitle = input<string | null>(null);
   readonly activeWatchPath = input<string | null>(null);
-
   /**
    * "Where am I" context-header inputs. The host resolves the lane/state
    * and the live run for the scope in view (the open task, or — on the
@@ -142,7 +138,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly activeJobKey = input<string | null>(null);
   readonly activeJobState = input<string | null>(null);
   readonly activeRun = input<{ model: string | null; startedAt: string | null } | null>(null);
-
   /**
    * Phase: Verbose Debug. Emitted when the user clicks the bug icon in the
    * sheet header while a task tab is in scope. The host (app shell) opens
