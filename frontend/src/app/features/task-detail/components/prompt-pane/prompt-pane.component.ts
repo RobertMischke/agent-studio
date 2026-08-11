@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
 import { LayoutPanesService } from '../../services/layout-panes.service';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { TaskArtifact, TaskArtifactKind, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
@@ -16,6 +16,7 @@ import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
 import { TaskTimelinePaneComponent } from '../../../task-timeline/components/task-timeline-pane/task-timeline-pane.component';
 import type { ProtocolVerdict } from '../protocol-pane/protocol-verdict';
 import { TaskArtifactLinksDirective } from '../task-artifact-links/task-artifact-links.directive';
+import { DetailKeyboardSurfaceDirective } from '../detail-keyboard-surface/detail-keyboard-surface.directive';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -90,11 +91,14 @@ export function buildPromptTabs(filesCount: number, visualEvidenceCount: number)
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent, TaskArtifactLinksDirective],
+  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent, TaskArtifactLinksDirective, DetailKeyboardSurfaceDirective],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
 export class PromptPaneComponent {
+  @ViewChild(DetailKeyboardSurfaceDirective)
+  private keyboardSurface?: DetailKeyboardSurfaceDirective;
+
   readonly markdown = input<string>('');
   readonly history = input<TaskPromptHistoryEntry[]>([]);
   readonly titleHistory = input<TaskTitleHistoryEntry[]>([]);
@@ -197,7 +201,12 @@ export class PromptPaneComponent {
   onPromptTabChange(id: string): void {
     if (id === 'overview' || id === 'description' || id === 'timeline' || id === 'evidence' || id === 'code-review') {
       this.setTab(id);
+      this.focusTabSurface();
     }
+  }
+
+  focusTabSurface(): void {
+    this.keyboardSurface?.focus();
   }
 
   /** Total visual-evidence count for the Evidence-tab badge. */

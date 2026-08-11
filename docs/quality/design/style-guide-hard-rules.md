@@ -108,6 +108,22 @@ Adoption is incremental. Apply the rule to the new or touched surface and its
 immediate component family. Record unrelated legacy drift separately instead
 of turning one UI card into a broad restyling pass.
 
+### R8 - Panels contain vertical scroll keys
+
+A panel that owns scrolling also owns its vertical viewport keys while focus is
+inside its content surface. Make that surface focusable and handle
+`ArrowUp`, `ArrowDown`, `PageUp`, `PageDown`, `Home`, and `End` against its own
+scroll owner. Prevent the handled browser default and stop propagation,
+including at a scroll boundary, so parent board or workspace navigation cannot
+consume the same key.
+
+Move focus into the active content surface when a panel opens. Parent keyboard
+navigation remains available only while its own board, list, or tree surface
+has focus. Preserve the native semantics of editable and composite controls,
+and do not contain `Tab` or `Escape`. The detailed embedding contract and its
+CAC-22 precedent are recorded in the
+[Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html#panel-keyboard-containment).
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and

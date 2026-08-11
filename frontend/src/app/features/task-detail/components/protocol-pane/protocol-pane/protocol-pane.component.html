@@ -23,6 +23,7 @@
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
                      [overflowAfter]="maximized() ? null : 2"
+                     (click)="focusTabSurface()"
                      (tabChange)="onInspectorTabChange($event)" />
     </ng-container>
     <ng-container trailing>
@@ -86,7 +87,13 @@
       }
     </ng-container>
   </app-pane-header>
-  <div class="pane__body">
+  <div class="pane__body"
+       appDetailKeyboardSurface
+       [detailKeyboardInitialFocus]="true"
+       detailKeyboardScrollTarget="[data-detail-tab-scroll-owner]"
+       data-testid="pane-protocol-body"
+       [attr.data-active-tab]="activeInspectorTab()"
+       [attr.aria-label]="activeInspectorTab() + ' task detail tab'">
     @if (activeInspectorTab() !== 'task'
          && (activeInspectorTab() !== 'protocol' || !detail().statusMarkdown)
          && protocolVerdict(); as v) {
@@ -244,9 +251,11 @@
                 (closeRequest)="closeProtocolMenu()" />
               @if (protocolViewMode() === 'raw') {
                 <pre class="notes-panel__body notes-panel__body--raw"
+                     data-detail-tab-scroll-owner
                      data-testid="protocol-raw-markdown">{{ statusMarkdownBody() }}</pre>
               } @else if (protocolViewMode() === 'history') {
                 <app-file-source-history class="notes-panel__body"
+                                         data-detail-tab-scroll-owner
                                          data-testid="protocol-file-history"
                                          path="status.md"
                                          initialMode="history"
@@ -256,6 +265,7 @@
                                          [contentTransform]="statusHistoryTransform" />
               } @else {
                 <app-result-view class="notes-panel__body"
+                                 data-detail-tab-scroll-owner
                                  data-testid="protocol-beautiful-results"
                                  [detail]="detail()"
                                  [verdict]="protocolVerdict()"
