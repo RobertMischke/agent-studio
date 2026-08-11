@@ -27,16 +27,18 @@ public static class LogIngestionEndpoints
             ITaskScanner scanner,
             RunLeaseService leases,
             AttemptAuthorityService authority,
-            AgentStudio.Docs.WikiAgentReadService wikiReads) =>
+            AgentStudio.Docs.WikiAgentReadService wikiReads,
+            AgentStudio.Tokens.RemoteTaskTokenReceiptService tokenReceipts) =>
         {
             if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
                 return Results.Conflict(new LogIngestResponse(req.TaskKey, 0, "The authenticated Runner does not hold the current fenced lease."));
             if (req.Lines is null || req.Lines.Count == 0)
                 return Results.Ok(new LogIngestResponse(req.TaskKey, 0, "no lines"));
 
-            var folder = ResolveFolder(scanner, req.TaskKey);
-            if (folder is null)
+            var task = ResolveTask(scanner, req.TaskKey);
+            if (task is null)
                 return Results.NotFound(new LogIngestResponse(req.TaskKey, 0, $"No task '{req.TaskKey}'."));
+            var folder = task.FolderPath;
 
             var logsDir = Path.Combine(folder, "logs");
             var logPath = Path.Combine(logsDir, "cli-output.log");
@@ -95,6 +97,19 @@ public static class LogIngestionEndpoints
                 SilentCatch.Note(ex, "WikiAgentReadService: remote log attribution failed.");
             }
 
+            // The remote process cannot emit into this host's project bus. The
+            // accepted durable log batch is therefore also the producer input
+            // for task.json.tokenSummary. Completion replays the full log as a
+            // safety net, and the merge is idempotent for delivery retries.
+            try
+            {
+                tokenReceipts.Record(task, req.Lines);
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "Remote task token receipt production failed after log ingestion.");
+            }
+
             return Results.Ok(new LogIngestResponse(req.TaskKey, req.Lines.Count));
         });
     }
@@ -150,13 +165,12 @@ public static class LogIngestionEndpoints
             markerTimestamp,
             deliveryReceipt);
 
-    private static string? ResolveFolder(ITaskScanner scanner, string taskKey)
+    private static TaskInfo? ResolveTask(ITaskScanner scanner, string taskKey)
     {
         if (string.IsNullOrWhiteSpace(taskKey)) return null;
-        var task = scanner.ScanAllJobs().FirstOrDefault(t =>
+        return scanner.ScanAllJobs().FirstOrDefault(t =>
             string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase));
-        return string.IsNullOrWhiteSpace(task?.FolderPath) ? null : task!.FolderPath;
     }
 }

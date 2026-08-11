@@ -152,7 +152,7 @@ public sealed class RemoteCommitAttributionGuardTests
     }
 
     [Fact]
-    public void InspectRemoteDeliveryCommitRange_FetchesExactMergeBaseToPushedTip()
+    public void InspectRemoteDeliveryCommitRange_UsesFencedBaseAfterTargetAlreadyContainsResult()
     {
         var root = Path.Combine(
             Path.GetTempPath(),
@@ -184,6 +184,10 @@ public sealed class RemoteCommitAttributionGuardTests
             RunGit(repo, "commit -q -m \"test(AGT-2389): second\"");
             var tip = RunGit(repo, "rev-parse HEAD");
             RunGit(repo, "push -q origin runner/agent-runner-01/AGT-2389");
+            // TE-41 release shape: the task result is already on main before
+            // the task server performs attribution. main..result is empty, but
+            // the immutable ResultEnvelope base..result range is still exact.
+            RunGit(repo, "push -q origin HEAD:main");
 
             var config = new ConfigurationBuilder().AddInMemoryCollection(
                 new Dictionary<string, string?>
@@ -206,7 +210,8 @@ public sealed class RemoteCommitAttributionGuardTests
                 repo,
                 "runner/agent-runner-01/AGT-2389",
                 tip,
-                "refs/heads/main");
+                "refs/heads/main",
+                baseSha);
 
             Assert.True(range.Success, range.Warning);
             Assert.Equal("refs/heads/main", range.IntegrationBranch);

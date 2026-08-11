@@ -982,6 +982,7 @@ public static class LeaseEndpoints
             AgentStudio.Projects.ProjectSettingsService projectSettings,
             TaskMutationService mutations,
             GitService git,
+            AgentStudio.Tokens.RemoteTaskTokenReceiptService tokenReceipts,
             TaskStateMachine states,
             OrchestratorChatLog chatLog,
             HumanReviewEscalation humanReviewEscalation,
@@ -1157,6 +1158,7 @@ public static class LeaseEndpoints
                     : Results.Conflict(response);
             }
             var settledRun = settled.RunAttempt ?? authority.GetRun(attemptId);
+            var attributionBaseSha = settledRun?.ResultEnvelope?.BaseSha;
             var terminalAt = settledRun?.TerminalAt ?? DateTime.UtcNow;
             var terminalResult = settledRun?.TerminalOutcome ?? outcome;
             if (!sessions.CloseSessionEvent(task.Id, new RunSessionCloseout
@@ -1170,6 +1172,18 @@ public static class LeaseEndpoints
             {
                 loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
                     "remote-run-closeout-missing task={TaskKey} attempt={AttemptId}",
+                    req.TaskKey,
+                    attemptId);
+            }
+            try
+            {
+                tokenReceipts.RecordFromTaskLog(task);
+            }
+            catch (Exception ex)
+            {
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                    ex,
+                    "remote-token-receipt-failed task={TaskKey} attempt={AttemptId}",
                     req.TaskKey,
                     attemptId);
             }
@@ -1254,6 +1268,7 @@ public static class LeaseEndpoints
                         deliveryBranch,
                         resultSha,
                         req.IntegrationBranch,
+                        attributionBaseSha,
                         ct);
                     // AGT-2494: the top-ranked claim is contradicted by the
                     // repository, so let the repository name the ref instead of
@@ -1281,6 +1296,7 @@ public static class LeaseEndpoints
                                 deliveryBranch,
                                 resultSha,
                                 req.IntegrationBranch,
+                                attributionBaseSha,
                                 ct);
                         }
                     }
