@@ -4,9 +4,11 @@
   "title": "Remote Run Infrastructure Test Report",
   "summary": "Clickable offline acceptance matrix, phase timelines, injected incidents, recovery outcomes, exact revisions, and raw evidence from deterministic validated run-result fixtures.",
   "entrypoint": "index.html",
-  "status": "active",
-  "phase": "validated",
-  "updatedAt": "2026-07-29T08:00:00Z",
+  "status": "documented",
+  "phase": "testing",
+  "updatedAt": "2026-08-11T14:45:00Z",
+  "editedBy": "Operator bookkeeping via AGT-2621",
+  "statusReason": "The 2026-07-29 remote-run acceptance report is validated and complete; AGT-2200 and AGT-2398 are archived.",
   "sourceTaskKeys": [
     "AGT-2200",
     "AGT-2398"
