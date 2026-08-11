@@ -33,6 +33,7 @@ export type {
   OrchestratorConversationScope,
   OrchestratorActiveSurface,
   OrchestratorContextReference,
+  OrchestratorContextLineRange,
   OrchestratorContextBudget,
   OrchestratorContextEnvelope,
   OrchestratorChatAttachment,

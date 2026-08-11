@@ -136,6 +136,7 @@ export class TaskChatComponent {
           contextKey,
           navigationContext,
           [],
+          null,
           () => capturedAt,
         ),
       }));
