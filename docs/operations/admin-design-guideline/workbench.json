@@ -2,21 +2,37 @@
   "schemaVersion": 1,
   "id": "admin-design-guideline",
   "title": "Admin Surface Design Guideline",
-  "summary": "Decision dossier for a binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. It includes a fully specified Activity across projects reference in light and dark themes, a screenshot-backed violation audit, and an incremental adoption contract.",
+  "summary": "Living standard for flat, full-width, disclosure-first admin surfaces. The multi-page Dossier includes compact screenshot-derived Dos and Don'ts, an append-only register of applied surfaces, and the canonical incremental adoption contract.",
   "entrypoint": "index.html",
-  "status": "decision-pending",
-  "phase": "decision-ready",
-  "updatedAt": "2026-08-10T01:31:52Z",
+  "status": "living-standard",
+  "phase": "maintenance",
+  "pattern": "ui",
+  "updatedAt": "2026-08-11T13:00:00Z",
   "sourceTaskKeys": [
-    "AGT-2583"
+    "AGT-2583",
+    "AGT-2617"
   ],
   "relatedTaskKeys": [
     "AGT-2565",
     "AGT-2567",
     "AGT-2568",
     "AGT-2549",
-    "AGT-2579"
+    "AGT-2579",
+    "AGT-2606",
+    "AGT-2608",
+    "AGT-2610",
+    "AGT-2613"
   ],
   "implementationTasks": [],
+  "pages": [
+    {
+      "title": "Dos and Don'ts",
+      "path": "pages/dos-and-donts.html"
+    },
+    {
+      "title": "Applied surfaces",
+      "path": "pages/applied-surfaces.html"
+    }
+  ],
   "key": "AGT-W1"
 }

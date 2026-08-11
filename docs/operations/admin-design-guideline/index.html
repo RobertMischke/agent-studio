@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin Surface Design Guideline | Decision Dossier</title>
+<title>Admin Surface Design Guideline | Living Standard</title>
 <style>
   :root {
     color-scheme: light;
@@ -93,6 +93,25 @@
   }
   .decision-strip strong { display: block; margin-bottom: 2px; }
   .decision-strip p { margin: 0; color: var(--ink-2); }
+  .dossier-pages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 22px 0 0;
+  }
+  .dossier-pages a {
+    border-bottom: 2px solid transparent;
+    background: var(--surface-2);
+    padding: 7px 11px;
+    color: var(--ink-2);
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .dossier-pages a[aria-current="page"] {
+    border-bottom-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
   .toc {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -265,19 +284,24 @@
 <body>
 <main>
   <header class="page">
-    <p class="kicker">Decision dossier · Agent Studio · AGT-2583</p>
+    <p class="kicker">Living standard · Agent Studio · AGT-W1</p>
     <h1>Admin Surface Design Guideline</h1>
     <p class="lede">A binding visual and copy standard for dense operator surfaces. Admin pages stay flat, use the available width, expose detail on demand, and present one calm statement for each fact.</p>
     <div class="meta">
-      <span><b>Status:</b> decision pending</span>
-      <span><b>Phase:</b> decision ready</span>
-      <span><b>Evidence:</b> operator captures from 9 and 10 August 2026</span>
+      <span><b>Status:</b> living standard</span>
+      <span><b>Maintained:</b> append-only refresh and revamp cards</span>
+      <span><b>Evidence:</b> operator captures from 9 to 11 August 2026</span>
       <span><b>Scope:</b> guideline and reference, no broad restyling</span>
     </div>
     <div class="decision-strip">
-      <strong>Recommendation</strong>
-      <p>Approve this dossier as the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them.</p>
+      <strong>Standing contract</strong>
+      <p>This dossier is the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them.</p>
     </div>
+    <nav class="dossier-pages" aria-label="Dossier pages">
+      <a href="index.html" aria-current="page">Overview</a>
+      <a href="pages/dos-and-donts.html">Dos and Don'ts</a>
+      <a href="pages/applied-surfaces.html">Applied surfaces</a>
+    </nav>
     <nav aria-label="Dossier contents">
       <ul class="toc">
         <li><a href="#decision">01 · Decision</a></li>
@@ -285,13 +309,13 @@
         <li><a href="#reference">03 · Reference surface</a></li>
         <li><a href="#audit">04 · Violation audit</a></li>
         <li><a href="#adoption">05 · Adoption contract</a></li>
-        <li><a href="#open-decisions">06 · Open decision</a></li>
+        <li><a href="#evolution">06 · Evolution</a></li>
       </ul>
     </nav>
   </header>
 
   <section id="decision" data-concept-section="alternatives">
-    <h2><span class="section-no">01</span>Decision and rejected alternatives</h2>
+    <h2><span class="section-no">01</span>Standing standard and rejected alternatives</h2>
     <p>The standard applies to operational views such as Activity, pipeline and planning status, settings, workbench viewers, notices, diagnostics, and other administrative control surfaces. It does not turn content documents into dashboards.</p>
 
     <h3>Selected direction: one flat admin grammar</h3>
@@ -571,7 +595,7 @@
 
   <section id="audit" data-concept-section="evidence">
     <h2><span class="section-no">04</span>Violation audit and card ownership</h2>
-    <p>The audit uses the operator prompts and task screenshot indices available through the Task API on 10 August 2026. “Before” captures establish the visual problem; “after” captures are delivery evidence and do not change the adoption rule.</p>
+    <p>The audit uses operator prompts and task screenshot indices available through 11 August 2026. “Before” captures establish the visual problem; “after” captures are delivery evidence and do not change the adoption rule. The compact visual comparison page traces its Don't renderings directly from this evidence.</p>
 
     <div class="audit-wrap">
       <table>
@@ -651,6 +675,9 @@
     <h3>Prompt-known path</h3>
     <p>Repository and frontend agent instructions link this dossier directly at <code>docs/operations/admin-design-guideline/index.html</code>. The short mandatory baseline remains <code>docs/quality/design/style-guide-hard-rules.md</code>. Agents cite ADM rule IDs in review notes and use Activity across projects as the reference when a local admin pattern is unclear.</p>
 
+    <h3>Append-only maintenance</h3>
+    <p>Refresh and revamp cards update the relevant rule or example and append one dated row to <a href="pages/applied-surfaces.html">Applied surfaces</a>. Existing adoption entries are corrected only when their evidence link or factual metadata is wrong; later changes add a new row so the evolution remains visible.</p>
+
     <h3>Definition of done for a touched admin surface</h3>
     <ol>
       <li>The view remains full-bleed; prose alone receives a reading-width cap.</li>
@@ -662,16 +689,18 @@
     </ol>
   </section>
 
-  <section id="open-decisions" data-concept-section="open-decisions">
-    <h2><span class="section-no">06</span>Open decision</h2>
-    <p>This dossier is decision-ready. One operator decision remains to change its lifecycle status:</p>
+  <section id="evolution">
+    <h2><span class="section-no">06</span>Living-standard evolution</h2>
+    <p>The operator approved this standard on 11 August 2026. It no longer carries an open decision gate. The stable rule IDs, Dossier key <code>AGT-W1</code>, entrypoint, and section anchors remain durable references.</p>
     <ul class="decision-list">
-      <li><strong>Approve the recommended standard</strong> as binding for new and touched admin surfaces, keep incremental adoption, and create separate cards only for the two unowned gaps when they become delivery priorities.</li>
+      <li><strong>Refresh cards</strong> reconcile wording, examples, and evidence with current product reality.</li>
+      <li><strong>Revamp cards</strong> apply the standard to one bounded surface and append its result to the applied-surface register.</li>
+      <li><strong>Rule changes</strong> preserve existing IDs and add dated rationale instead of silently rewriting historical intent.</li>
     </ul>
-    <p>The recommendation is approval. No product implementation, migration wave, or bulk task creation is part of this dossier.</p>
+    <p>This is an append-only maintenance contract, not authorization for an automatic migration wave or broad restyling pass.</p>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <footer>Approved as a living standard on 11 August 2026. Source cards AGT-2583 and AGT-2617. Stable Dossier key AGT-W1.</footer>
 </main>
 </body>
 </html>

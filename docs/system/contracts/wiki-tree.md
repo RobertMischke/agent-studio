@@ -226,6 +226,18 @@ field and the canonical v2 article template only when they are otherwise
 changed. The authoring contract and copyable source live in
 [`article-document-authoring.md`](../../operations/article-document-authoring.md).
 
+A Dossier may carry an ordered `pages` array of `{ title, path }` records. The
+entrypoint remains `index.html`; every declared path is a unique HTML file below
+the Dossier's `pages/` directory. The catalogue validates containment,
+existence, count, and combined size, and the isolated viewer projects the list
+as subnavigation. The exact additive schema and template-v2 authoring rules are
+defined in
+[`article-document-authoring.md#multi-page-dossier-extension`](../../operations/article-document-authoring.md#multi-page-dossier-extension).
+
+Schema-v1 Dossiers may use `status: living-standard` for a current maintained
+reference with no open decision gate. Pulse normalizes it to the current
+`in-progress` lifecycle group; it is not a settled history state.
+
 ## API endpoints
 
 All paths are rooted at `/api/projects/{projectName}/wiki`. `{projectName}` is a

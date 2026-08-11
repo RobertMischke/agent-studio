@@ -112,6 +112,25 @@
     .lede { margin: 0; color: var(--article-muted); font-size: 1.18rem; line-height: 1.6; }
     .meta { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 20px; color: var(--article-faint); font-size: 0.78rem; }
     .meta b { color: var(--article-muted); font-weight: 650; }
+    .dossier-page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 22px 0 0;
+    }
+    .dossier-page-nav a {
+      border-bottom: 2px solid transparent;
+      background: var(--article-surface);
+      padding: 7px 11px;
+      color: var(--article-muted);
+      font-size: 0.76rem;
+      text-decoration: none;
+    }
+    .dossier-page-nav a[aria-current="page"] {
+      border-bottom-color: var(--article-link);
+      background: var(--article-link-soft);
+      color: var(--article-link);
+    }
     a { color: var(--article-link); text-underline-offset: 0.16em; }
     a:focus-visible { outline: 2px solid var(--article-link); outline-offset: 3px; border-radius: 2px; }
     code {
@@ -252,6 +271,7 @@
     <h1>{{title}}</h1>
     <p class="lede">{{summary}}</p>
     <div class="meta"><span><b>Pattern</b> {{pattern}}</span><span><b>Status</b> {{status}}</span><span><b>Phase</b> {{phase}}</span></div>
+    <!-- Multi-page Dossiers add .dossier-page-nav here; see article-document-authoring.md. -->
   </header>
 
   <section data-document-section="alternatives">

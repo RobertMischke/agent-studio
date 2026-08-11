@@ -40,8 +40,9 @@ import {
  * opaque origin (`allow-scripts` without `allow-same-origin`) and a deny-by-
  * default CSP. No credential, API, form, direct navigation, download, popup,
  * modal, or clipboard capability is bridged into the frame. Link clicks cross
- * one typed host boundary: docs-relative targets open in the Wiki and absolute
- * HTTP(S) targets open in a separate browser tab.
+ * one typed host boundary: registered Dossier targets stay in the viewer,
+ * other docs-relative targets open in the Wiki, and absolute HTTP(S) targets
+ * open in a separate browser tab.
  */
 @Component({
   selector: 'app-workbench-viewer',
@@ -54,6 +55,7 @@ import {
 export class WorkbenchViewerComponent {
   readonly projectName = input.required<string>();
   readonly workbenchId = input.required<string>();
+  readonly pagePath = input<string | null>(null);
   readonly showWikiAction = input(true);
   readonly openWiki = output<string>();
   private readonly docs = inject(ProjectDocsService);
@@ -69,10 +71,31 @@ export class WorkbenchViewerComponent {
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
   readonly documenting = signal(false);
   readonly documentationError = signal<string | null>(null);
+  readonly activePagePath = signal<string | null>(null);
+
+  readonly pageNavigation = computed(() => {
+    const document = this.document();
+    if (!document) return [];
+    return [
+      { title: 'Overview', path: null as string | null },
+      ...(document.pages ?? []).map(page => ({ title: page.title, path: page.path })),
+    ];
+  });
+  readonly activePageTitle = computed(() =>
+    this.pageNavigation().find(page => page.path === this.activePagePath())?.title ?? 'Overview',
+  );
+  readonly currentHtml = computed(() => {
+    const document = this.document();
+    if (!document) return '';
+    const path = this.activePagePath();
+    return path === null
+      ? document.html
+      : document.pages?.find(page => page.path === path)?.html ?? document.html;
+  });
 
   readonly srcdoc = computed(() => {
     const document = this.document();
-    return buildIsolatedHtmlSrcdoc(document?.html ?? '', {
+    return buildIsolatedHtmlSrcdoc(this.currentHtml(), {
       workbenchDecisions: true,
       documentPattern: document?.workbench.pattern === 'ui' ? 'ui' : 'concept',
     });
@@ -92,7 +115,14 @@ export class WorkbenchViewerComponent {
       const project = this.projectName();
       const id = this.workbenchId();
       this.maximized.set(false);
+      this.activePagePath.set(null);
       this.loadDocument(project, id);
+    });
+    effect(() => {
+      this.projectName();
+      this.workbenchId();
+      const pagePath = this.pagePath();
+      this.activePagePath.set(pagePath ?? null);
     });
     effect(() => {
       const event = this.hub.workbenchEvent();
@@ -106,8 +136,13 @@ export class WorkbenchViewerComponent {
   }
 
   openCurrentPageInWiki(): void {
-    const path = this.document()?.workbench.entryPath.replace(/^docs\//i, '');
+    const path = this.currentRepositoryPath()?.replace(/^docs\//i, '');
     if (path) this.openWiki.emit(path);
+  }
+
+  selectPage(path: string | null): void {
+    if (!this.pageNavigation().some(page => page.path === path)) return;
+    this.activePagePath.set(path);
   }
 
   @HostListener('window:message', ['$event'])
@@ -133,10 +168,15 @@ export class WorkbenchViewerComponent {
       return;
     }
     if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
-    const entryPath = this.document()?.workbench.entryPath;
+    const entryPath = this.currentRepositoryPath();
     if (!entryPath) return;
     const navigation = resolveIsolatedHtmlNavigation(entryPath, message.href);
     if (navigation?.kind === 'wiki') {
+      const registeredPage = this.registeredPagePath(navigation.relPath);
+      if (registeredPage.matched) {
+        this.activePagePath.set(registeredPage.path);
+        return;
+      }
       this.openWiki.emit(navigation.relPath);
     } else if (navigation?.kind === 'external') {
       window.open(navigation.url, '_blank', 'noopener,noreferrer');
@@ -210,6 +250,8 @@ export class WorkbenchViewerComponent {
       next: (document) => {
         if (generation !== this.requestGeneration) return;
         this.document.set(document);
+        if (!this.pageNavigation().some(page => page.path === this.activePagePath()))
+          this.activePagePath.set(null);
         const discovered = discoverWorkbenchDecisionMarkup(document.html);
         this.decisionResponses.set(document.workbench.decision?.responses ?? discovered.responses);
         this.loading.set(false);
@@ -220,6 +262,29 @@ export class WorkbenchViewerComponent {
         this.loading.set(false);
       },
     });
+  }
+
+  private currentRepositoryPath(): string | null {
+    const entryPath = this.document()?.workbench.entryPath;
+    if (!entryPath) return null;
+    const pagePath = this.activePagePath();
+    if (!pagePath) return entryPath;
+    const separator = entryPath.lastIndexOf('/');
+    return `${separator < 0 ? '' : entryPath.slice(0, separator + 1)}${pagePath}`;
+  }
+
+  private registeredPagePath(relPath: string): { matched: boolean; path: string | null } {
+    const document = this.document();
+    const entryPath = document?.workbench.entryPath;
+    if (!document || !entryPath) return { matched: false, path: null };
+    const repositoryPath = `docs/${relPath}`;
+    if (repositoryPath === entryPath) return { matched: true, path: null };
+    const separator = entryPath.lastIndexOf('/');
+    const dossierRoot = separator < 0 ? '' : entryPath.slice(0, separator + 1);
+    const page = document.pages?.find(candidate => `${dossierRoot}${candidate.path}` === repositoryPath);
+    return page
+      ? { matched: true, path: page.path }
+      : { matched: false, path: null };
   }
 }
 

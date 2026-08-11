@@ -30,6 +30,11 @@ const DOCUMENT: WorkbenchDocument = {
     pattern: 'ui',
   },
   html: '<script id="early">document.body.dataset.ran="true"</script><html><head><base href="https://example.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body class="artifact"><meta http-equiv="refresh" content="0;url=https://example.invalid/"><h1>Probe</h1><section data-decision-id="route" data-decision-kind="single"><strong>Choose route</strong><span data-option-id="direct">Direct</span><span data-option-id="queue">Queue</span><span data-comment="Optional note"></span></section></body></html>',
+  pages: [{
+    title: 'Evidence',
+    path: 'pages/evidence.html',
+    html: '<html><body><h1>Evidence page</h1><a href="./detail.html">Detail</a></body></html>',
+  }],
   branch: 'develop',
   revision: null,
   workingTreeModified: true,
@@ -123,7 +128,7 @@ describe('WorkbenchViewerComponent', () => {
       '[data-testid="workbench-viewer-frame"]',
     ) as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
-    expect(frame.getAttribute('title')).toBe('Dossier artifact: Boundary probe');
+    expect(frame.getAttribute('title')).toBe('Dossier artifact: Boundary probe · Overview');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
     expect(srcdoc).toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);
@@ -189,6 +194,13 @@ describe('WorkbenchViewerComponent', () => {
       'workbenches/target/index.html',
     ]);
 
+    fixture.componentInstance.onFrameMessage({
+      source: frame.contentWindow,
+      data: { type: ISOLATED_HTML_LINK_MESSAGE, href: './pages/evidence.html' },
+    } as MessageEvent);
+    expect(fixture.componentInstance.activePagePath()).toBe('pages/evidence.html');
+    expect(wikiTargets).toHaveLength(2);
+
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     fixture.componentInstance.onFrameMessage({
       source: frame.contentWindow,
@@ -200,6 +212,35 @@ describe('WorkbenchViewerComponent', () => {
       'noopener,noreferrer',
     );
     openSpy.mockRestore();
+
+    const pageNavigation = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-page-navigation"]',
+    ) as HTMLElement;
+    expect(pageNavigation.textContent).toContain('Overview');
+    expect(pageNavigation.textContent).toContain('Evidence');
+    fixture.componentRef.setInput('pagePath', 'pages/evidence.html');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.activePagePath()).toBe('pages/evidence.html');
+    fixture.componentRef.setInput('pagePath', null);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.activePagePath()).toBeNull();
+    fixture.componentInstance.selectPage('pages/evidence.html');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.srcdoc()).toContain('Evidence page');
+    expect(frame.getAttribute('title')).toBe('Dossier artifact: Boundary probe · Evidence');
+    fixture.componentInstance.openCurrentPageInWiki();
+    expect(wikiTargets.at(-1)).toBe('workbenches/boundary/pages/evidence.html');
+    fixture.componentInstance.onFrameMessage({
+      source: frame.contentWindow,
+      data: { type: ISOLATED_HTML_LINK_MESSAGE, href: './detail.html' },
+    } as MessageEvent);
+    expect(wikiTargets.at(-1)).toBe('workbenches/boundary/pages/detail.html');
+    fixture.componentInstance.onFrameMessage({
+      source: frame.contentWindow,
+      data: { type: ISOLATED_HTML_LINK_MESSAGE, href: '../index.html' },
+    } as MessageEvent);
+    expect(fixture.componentInstance.activePagePath()).toBeNull();
+    expect(wikiTargets.at(-1)).toBe('workbenches/boundary/pages/detail.html');
 
     const maximize = fixture.nativeElement.querySelector(
       '[data-testid="workbench-viewer-maximize"]',

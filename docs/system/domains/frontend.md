@@ -207,10 +207,17 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   semantics but are revealed under the existing History disclosure. Repository
   HTML runs only
   in an opaque-origin `srcdoc` iframe with the Dossier CSP. A source-checked
-  message boundary maps docs-relative links to the in-app Wiki and opens absolute
-  HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
+  message boundary keeps registered Dossier links in the current viewer, maps
+  other docs-relative links to the in-app Wiki, and opens absolute HTTP(S) links
+  in a new tab without exposing host APIs or credentials. An inert
   DOM parse moves artifact nodes into a fixed policy-first wrapper. Dossier
-  pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
+  descriptors may add an ordered `pages` array of title/path pairs below the
+  Dossier's `pages/` directory. The catalogue validates and fingerprints every
+  declared HTML file. The viewer renders Overview plus those pages as flat host
+  subnavigation, keeps each page inside the same opaque-origin frame, and uses
+  the active page as the base for relative Wiki links and `Open in Wiki`.
+  Single-page descriptors remain unchanged. Dossier pages expose Maximize and
+  `Open in Wiki` actions, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
   revision. Canonical entries expose their stable project reference key as a
   compact copyable mono chip in the viewer header and lifecycle lists; Explorer

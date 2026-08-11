@@ -48,6 +48,7 @@ const DOCUMENT: WorkbenchDocument = {
     decisionStage: null,
   },
   html: '<h1>Routing policy</h1>',
+  pages: [],
   branch: 'develop',
   revision: 'a'.repeat(40),
   workingTreeModified: false,

@@ -71,6 +71,73 @@ For a `concept` document:
 Both patterns may use full-bleed figures. A large concept diagram is a valid
 breakout, just as a UI mockup is.
 
+## Multi-page Dossier extension
+
+Template v2 supports a bounded Dossier family when one HTML entrypoint would
+make distinct reference material difficult to scan. The folder contract is:
+
+```text
+<dossier>/
+  index.html
+  workbench.json
+  pages/
+    <stable-page-slug>.html
+```
+
+`index.html` remains the entrypoint and stable external reference. Each file in
+`pages/` is a complete, self-contained HTML document with the same theme,
+responsive, reduced-motion, and network-isolation rules as the entrypoint. Do
+not use subpages to split one short article or to evade useful reading order.
+
+### `workbench.json` pages schema
+
+Declare ordered subpage navigation with the optional `pages` array:
+
+```json
+{
+  "entrypoint": "index.html",
+  "pages": [
+    { "title": "Dos and Don'ts", "path": "pages/dos-and-donts.html" },
+    { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
+  ]
+}
+```
+
+The extension is additive for schema-v1 and schema-v2 descriptors. A missing
+`pages` property continues to mean a single-page Dossier. The catalogue applies
+these invariants:
+
+- `pages` is an ordered array with no more than 12 entries;
+- every entry contains a human-facing `title` and a stable Dossier-relative
+  `path` below `pages/`;
+- page titles are at most 120 characters;
+- paths are unique, resolve inside the Dossier folder, exist, and end in
+  `.html` or `.htm`;
+- the entrypoint and all declared pages together stay within the 20 MiB Dossier
+  HTML limit;
+- all declared page files participate in dirty-state provenance and the
+  Dossier fingerprint.
+
+The Studio viewer renders Overview plus the declared order as flat host chrome
+and swaps the isolated `srcdoc` without opening another editor tab. Its current
+page drives relative Wiki-link resolution and the Open in Wiki target. Direct
+browser readers need equivalent links in each file; template v2 provides the
+`.dossier-page-nav` class for that small navigation block.
+
+Page anchors remain page-local. Existing section anchor names, the entrypoint,
+and the Dossier key must not change when a page is added. This keeps citations,
+task references, and refresh-card prompts stable while the document grows.
+
+A maintained reference may use `status: living-standard` with
+`phase: maintenance`. It remains in current lists without an open decision gate;
+this is the durable state used by standards that evolve through explicit
+refresh and revamp cards.
+
+The reference implementation is
+[`admin-design-guideline`](admin-design-guideline/index.html), with
+[`Dos and Don'ts`](admin-design-guideline/pages/dos-and-donts.html) and
+[`Applied surfaces`](admin-design-guideline/pages/applied-surfaces.html).
+
 ## Migration policy and references
 
 Do not rewrite active documents in bulk. Adopt the template and add `pattern`

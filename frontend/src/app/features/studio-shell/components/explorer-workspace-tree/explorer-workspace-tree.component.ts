@@ -34,7 +34,7 @@ import {
   type ProjectAutoPickupIndicator,
 } from '../../studio-shell.auto-pickup';
 import { ExplorerAutoPickupIndicatorComponent } from '../explorer-auto-pickup-indicator/explorer-auto-pickup-indicator.component';
-import type { WorkbenchListItem } from '../../../../models/project-docs.model';
+import type { WorkbenchListOpenRequest } from '../../../../models/project-docs.model';
 import { ExplorerWorkbenchListComponent } from '../explorer-workbench-list/explorer-workbench-list.component';
 import {
   buildExplorerWorkspaceGroups,
@@ -98,7 +98,7 @@ export class ExplorerWorkspaceTreeComponent {
   /** AGT-2067 — open a URL row's embedded preview tab (project + url id). */
   readonly openUrlPreviewRequest = output<{ projectName: string; urlId: string }>();
   readonly openWikiRequest = output<string>();
-  readonly openWorkbenchRequest = output<{ projectName: string; workbench: WorkbenchListItem }>();
+  readonly openWorkbenchRequest = output<{ projectName: string; workbench: WorkbenchListOpenRequest }>();
   readonly openWorkbenchesRequest = output<string>();
   readonly openEpicsRequest = output<string>();
   readonly onboardProjectRequest = output<string>();

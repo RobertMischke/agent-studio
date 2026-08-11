@@ -39,7 +39,7 @@ function overview(items: WorkbenchOverviewItem[], projectName: string | null = n
   return {
     projectName,
     count: items.length,
-    currentCount: items.filter(entry => ['active', 'decision-pending', 'decided'].includes(entry.workbench.status)).length,
+    currentCount: items.filter(entry => ['active', 'living-standard', 'decision-pending', 'decided'].includes(entry.workbench.status)).length,
     historyCount: items.filter(entry => ['archived', 'documented'].includes(entry.workbench.status)).length,
     items,
   };
@@ -55,6 +55,7 @@ describe('WorkbenchOverviewComponent', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     const pending = item('pending', 'decision-pending', 3, 'ui');
+    pending.workbench.pages = [{ title: 'Evidence', path: 'pages/evidence.html' }];
     const tracking = item('tracking', 'decided');
     tracking.workbench.documentation = {
       eligible: true,
@@ -66,6 +67,7 @@ describe('WorkbenchOverviewComponent', () => {
     };
     http.expectOne('/api/workbenches').flush(overview([
       pending,
+      item('standard', 'living-standard'),
       item('active', 'active'),
       tracking,
       item('discarded', 'archived'),
@@ -86,6 +88,8 @@ describe('WorkbenchOverviewComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('active');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
+      .toContain('Living standard');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('Ready to document');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-discarded-list"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-completed-list"]')).toBeNull();
@@ -102,6 +106,11 @@ describe('WorkbenchOverviewComponent', () => {
     fixture.componentInstance.openWorkbench.subscribe(value => opened = value);
     (fixture.nativeElement.querySelector('[data-testid="workbench-overview-full-Demo-pending"]') as HTMLButtonElement).click();
     expect(opened).toEqual(pending);
+
+    (fixture.nativeElement.querySelector(
+      '[data-testid="workbench-overview-page-Demo-pending-pages/evidence.html"]',
+    ) as HTMLButtonElement).click();
+    expect(opened).toEqual({ ...pending, pagePath: 'pages/evidence.html' });
 
     (fixture.nativeElement.querySelector('[data-testid="workbench-overview-open-Demo-pending"]') as HTMLButtonElement).click();
     fixture.detectChanges();

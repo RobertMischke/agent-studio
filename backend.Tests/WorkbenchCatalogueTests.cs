@@ -117,6 +117,90 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     [Fact]
+    public void ListAndRead_ProjectLivingStandardSubpagesAndFingerprintTheirHtml()
+    {
+        var dir = Path.Combine(_root, "docs", "operations", "admin-standard");
+        var pagesDir = Path.Combine(dir, "pages");
+        Directory.CreateDirectory(pagesDir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Admin standard</h1>");
+        File.WriteAllText(Path.Combine(pagesDir, "dos-and-donts.html"), "<h1>Dos and don'ts</h1>");
+        File.WriteAllText(Path.Combine(pagesDir, "applied-surfaces.html"), "<h1>Applied surfaces</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {
+            "schemaVersion": 1,
+            "id": "admin-standard",
+            "title": "Admin standard",
+            "summary": "A maintained reference",
+            "entrypoint": "index.html",
+            "status": "living-standard",
+            "updatedAt": "2026-08-11T10:00:00Z",
+            "pages": [
+              { "title": "Dos and don'ts", "path": "pages/dos-and-donts.html" },
+              { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
+            ]
+          }
+          """);
+        var service = Service();
+
+        var item = Assert.Single(service.List("Project")!.Items);
+        Assert.True(item.Valid, item.Error);
+        Assert.Equal("living-standard", item.Status);
+        Assert.Equal(
+            ["pages/dos-and-donts.html", "pages/applied-surfaces.html"],
+            item.Pages.Select(page => page.Path));
+
+        var before = service.Read("Project", "admin-standard")!;
+        Assert.Equal(2, before.Pages.Count);
+        Assert.Contains("Dos and don'ts", before.Pages[0].Html);
+        Assert.Contains("Applied surfaces", before.Pages[1].Html);
+
+        File.WriteAllText(
+            Path.Combine(pagesDir, "dos-and-donts.html"),
+            "<h1>Dos and don'ts</h1><p>Updated</p>");
+        var after = service.Read("Project", "admin-standard")!;
+        Assert.NotEqual(before.Fingerprint, after.Fingerprint);
+    }
+
+    [Fact]
+    public void List_RejectsMissingEscapingAndDuplicateSubpages()
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", "invalid-pages");
+        Directory.CreateDirectory(Path.Combine(dir, "pages"));
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Invalid pages</h1>");
+        File.WriteAllText(Path.Combine(dir, "pages", "one.html"), "<h1>One</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {
+            "schemaVersion": 1,
+            "id": "invalid-pages",
+            "title": "Invalid pages",
+            "summary": "Invalid navigation",
+            "entrypoint": "index.html",
+            "status": "active",
+            "updatedAt": "2026-08-11T10:00:00Z",
+            "pages": [
+              { "title": "One", "path": "pages/one.html" },
+              { "title": "Duplicate", "path": "pages/one.html" }
+            ]
+          }
+          """);
+
+        var duplicate = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+        Assert.False(duplicate.Valid);
+        Assert.Contains("unique", duplicate.Error, StringComparison.OrdinalIgnoreCase);
+
+        var descriptor = JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "workbench.json")))!.AsObject();
+        descriptor["pages"] = new JsonArray(new JsonObject
+        {
+            ["title"] = "Escape",
+            ["path"] = "pages/../index.html",
+        });
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), descriptor.ToJsonString());
+        var escaping = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+        Assert.False(escaping.Valid);
+        Assert.Contains("below pages/", escaping.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void List_SchemaTwoUsesSharedLifecycleAsItsOnlyStoredState()
     {
         var dir = Path.Combine(_root, "docs", "workbenches", "shared-lifecycle");

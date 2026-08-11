@@ -2137,12 +2137,12 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  onWorkbenchOverviewOpen(event: { projectName: string; workbench: { id: string; title: string } }): void {
+  onWorkbenchOverviewOpen(event: { projectName: string; workbench: { id: string; title: string }; pagePath?: string | null }): void {
     this.studioTabState.open({
       kind: 'workbench',
       projectName: event.projectName,
       workbenchId: event.workbench.id,
-      title: event.workbench.title,
+      title: event.workbench.title, pagePath: event.pagePath ?? undefined,
     });
   }
 

@@ -3,7 +3,11 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, vi } from 'vitest';
-import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
+import type {
+  WorkbenchCatalogue,
+  WorkbenchListItem,
+  WorkbenchListOpenRequest,
+} from '../../../../models/project-docs.model';
 import { ExplorerWorkbenchListComponent } from './explorer-workbench-list.component';
 
 function item(
@@ -54,9 +58,12 @@ describe('ExplorerWorkbenchListComponent', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
 
+    const visual = item('visual', 'active', 'ui');
+    visual.pages = [{ title: 'Evidence', path: 'pages/evidence.html' }];
+
     fixture.componentInstance.toggle();
     http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([
-      item('visual', 'active', 'ui'),
+      visual,
       item('reasoning', 'active'),
       item('explicit-concept', 'active', 'concept'),
     ], false));
@@ -72,6 +79,12 @@ describe('ExplorerWorkbenchListComponent', () => {
       `[data-testid="studio-explorer-workbench-Demo-${id}"] svg`)?.innerHTML;
     expect(iconMarkup('visual')).not.toBe(iconMarkup('reasoning'));
     expect(iconMarkup('reasoning')).toBe(iconMarkup('explicit-concept'));
+    let opened: WorkbenchListOpenRequest | null = null;
+    fixture.componentInstance.openWorkbench.subscribe(value => opened = value);
+    (fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-page-Demo-visual-pages/evidence.html"]',
+    ) as HTMLButtonElement).click();
+    expect(opened).toEqual({ ...visual, pagePath: 'pages/evidence.html' });
     http.verify();
   });
 

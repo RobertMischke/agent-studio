@@ -711,8 +711,17 @@ export class StudioShellComponent {
     this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
   }
 
-  openWorkbench(event: { projectName: string; workbench: { id: string; title: string } }): void {
-    this.tabState.open({ kind: 'workbench', projectName: event.projectName, workbenchId: event.workbench.id, title: event.workbench.title });
+  openWorkbench(event: {
+    projectName: string;
+    workbench: { id: string; title: string; pagePath?: string | null };
+  }): void {
+    this.tabState.open({
+      kind: 'workbench',
+      projectName: event.projectName,
+      workbenchId: event.workbench.id,
+      title: event.workbench.title,
+      pagePath: event.workbench.pagePath ?? undefined,
+    });
   }
 
   openWorkbenches(projectName: string | null): void {

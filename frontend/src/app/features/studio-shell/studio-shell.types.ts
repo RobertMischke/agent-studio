@@ -60,7 +60,13 @@ export interface HubTab {
 export interface WorkbenchesTab { kind: 'workbenches'; projectName: string | null; }
 
 /** Isolated read-only Dossier viewer, one tab per project + Dossier id. */
-export interface WorkbenchTab { kind: 'workbench'; projectName: string; workbenchId: string; title?: string; }
+export interface WorkbenchTab {
+  kind: 'workbench';
+  projectName: string;
+  workbenchId: string;
+  title?: string;
+  pagePath?: string;
+}
 
 /** Full-screen diff tab; key `diff:<commitSha>`. */
 export interface DiffTab { kind: 'diff'; commitSha: string; }

@@ -1,4 +1,8 @@
-<section class="workbench-viewer" data-testid="workbench-viewer">
+<section
+  class="workbench-viewer"
+  [class.workbench-viewer--paged]="pageNavigation().length > 1"
+  data-testid="workbench-viewer"
+>
   @if (loading()) {
     <div class="workbench-viewer__state" data-testid="workbench-viewer-loading">
       Loading Dossier…
@@ -47,6 +51,21 @@
         <p class="workbench-viewer__documentation-error" role="alert">{{ message }}</p>
       }
     </div>
+    @if (pageNavigation().length > 1) {
+      <nav class="workbench-viewer__pages" aria-label="Dossier pages" data-testid="workbench-page-navigation">
+        @for (page of pageNavigation(); track page.path ?? 'overview') {
+          <button
+            type="button"
+            [class.workbench-viewer__page--active]="activePagePath() === page.path"
+            [attr.aria-current]="activePagePath() === page.path ? 'page' : null"
+            [attr.data-testid]="'workbench-page-' + (page.path ?? 'overview')"
+            (click)="selectPage(page.path)"
+          >
+            {{ page.title }}
+          </button>
+        }
+      </nav>
+    }
     <div
       class="workbench-viewer__frame-shell"
       [class.workbench-viewer__frame-shell--maximized]="maximized()"
@@ -66,7 +85,7 @@
         class="workbench-viewer__frame"
         #workbenchFrame
         data-testid="workbench-viewer-frame"
-        title="Dossier artifact: {{ doc.workbench.title }}"
+        title="Dossier artifact: {{ doc.workbench.title }} · {{ activePageTitle() }}"
         sandbox="allow-scripts"
         referrerpolicy="no-referrer"
         (load)="onFrameLoaded()"

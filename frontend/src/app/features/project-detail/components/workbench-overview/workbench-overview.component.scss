@@ -154,6 +154,27 @@
     gap: var(--studio-spacing-2);
   }
 
+  &__pages {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: var(--studio-spacing-2);
+    gap: var(--studio-spacing-1);
+
+    button {
+      border: 0;
+      border-bottom: 1px solid transparent;
+      background: transparent;
+      padding: var(--studio-spacing-1) var(--studio-spacing-2);
+      color: var(--studio-fg-muted);
+      font: inherit;
+      font-size: 0.72rem;
+      cursor: pointer;
+
+      &:hover { border-bottom-color: var(--studio-accent); color: var(--studio-accent); }
+      &:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: 1px; }
+    }
+  }
+
   &__pattern {
     display: inline-flex;
     flex: none;

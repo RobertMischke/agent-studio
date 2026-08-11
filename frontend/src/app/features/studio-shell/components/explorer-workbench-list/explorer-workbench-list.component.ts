@@ -15,7 +15,12 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
-import type { ArticlePattern, WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
+import type {
+  ArticlePattern,
+  WorkbenchCatalogue,
+  WorkbenchListItem,
+  WorkbenchListOpenRequest,
+} from '../../../../models/project-docs.model';
 import { ExplorerWorkbenchHistoryComponent } from '../explorer-workbench-history/explorer-workbench-history.component';
 
 const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expanded.v1';
@@ -32,7 +37,7 @@ export class ExplorerWorkbenchListComponent {
   readonly projectName = input.required<string>();
   readonly activeWorkbenchId = input<string | null>(null);
   readonly overviewActive = input(false);
-  readonly openWorkbench = output<WorkbenchListItem>();
+  readonly openWorkbench = output<WorkbenchListOpenRequest>();
   readonly openOverview = output<void>();
   /** Jump to the project wiki (the workbench pages live there). */
   readonly openWiki = output<void>();
@@ -107,6 +112,10 @@ export class ExplorerWorkbenchListComponent {
     this.openOverview.emit();
   }
 
+  openPage(workbench: WorkbenchListItem, pagePath: string): void {
+    if (workbench.valid) this.openWorkbench.emit({ ...workbench, pagePath });
+  }
+
   private setExpanded(expanded: boolean): void {
     this.expanded.set(expanded);
     const projects = readExpandedProjects();
@@ -176,6 +185,7 @@ export class ExplorerWorkbenchListComponent {
     if (!item.valid) return 'Needs attention';
     if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
+    if (item.status === 'living-standard') return 'Living standard';
     if (item.status === 'active') return item.phase ?? 'Active';
     if (item.status === 'decided') return 'Tracking';
     if (item.status === 'documented') return 'Documented';

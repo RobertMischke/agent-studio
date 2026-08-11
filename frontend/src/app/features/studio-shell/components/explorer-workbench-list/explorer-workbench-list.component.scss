@@ -26,6 +26,10 @@
 .studio-workbench-topic--active .studio-workbench-topic__meta { color: var(--studio-nav-active-fg); opacity: 0.72; }
 .studio-workbench-topic__meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-accent-3); flex: none; }
 .studio-workbench-topic__meta i[data-status='decision-pending'], .studio-workbench-topic__meta i[data-status='invalid'] { background: var(--studio-warn); }
+.studio-workbench-pages { display: flex; flex-direction: column; width: calc(100% - var(--studio-spacing-7)); margin-left: var(--studio-spacing-7); }
+.studio-workbench-pages button { border: 0; background: transparent; padding: var(--studio-spacing-1) var(--studio-spacing-2); color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; text-align: left; cursor: pointer; }
+.studio-workbench-pages button:hover { background: var(--studio-bg-hover); color: var(--studio-fg); }
+.studio-workbench-pages button:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: -2px; }
 .studio-workbench-history { margin: var(--studio-spacing-1) 0 0; padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
 .studio-workbench-history:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
 
@@ -33,4 +37,5 @@
 // these padding declarations so the intended nested band and action rhythm
 // survive that shell reset.
 .studio .studio-workbench-topic { padding: var(--studio-spacing-1) var(--studio-spacing-2); }
+.studio .studio-workbench-pages button { padding: var(--studio-spacing-1) var(--studio-spacing-2); }
 .studio .studio-workbench-history { padding: var(--studio-spacing-1); }

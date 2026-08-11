@@ -10,7 +10,44 @@
   color: var(--studio-fg);
 }
 
+.workbench-viewer--paged { grid-template-rows: auto auto minmax(0, 1fr); }
+
 .workbench-viewer__head { min-width: 0; }
+
+.workbench-viewer__pages {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--studio-border);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg);
+  padding: 0 var(--studio-spacing-3);
+  gap: var(--studio-spacing-1);
+}
+
+.workbench-viewer__pages button {
+  min-height: 30px;
+  flex: 0 0 auto;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0 var(--studio-spacing-3);
+  color: var(--studio-fg-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.workbench-viewer__pages button:hover { background: var(--studio-bg-hover); color: var(--studio-fg); }
+.workbench-viewer__pages button:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: -2px;
+}
+.workbench-viewer__pages .workbench-viewer__page--active {
+  border-bottom-color: var(--studio-accent);
+  background: var(--studio-nav-active-bg);
+  color: var(--studio-nav-active-fg);
+}
 
 .workbench-viewer__documentation-ready {
   display: flex;

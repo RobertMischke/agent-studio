@@ -30,6 +30,7 @@ const DOCUMENT: WorkbenchDocument = {
     relatedTaskKeys: ['AGT-12'],
   },
   html: '<h1>Compact viewer header</h1>',
+  pages: [],
   branch: 'develop',
   revision: '1234567890abcdef',
   workingTreeModified: false,

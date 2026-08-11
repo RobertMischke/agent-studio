@@ -13,6 +13,7 @@
         <app-workbench-viewer
           [projectName]="project"
           [workbenchId]="id"
+          [pagePath]="pagePath()"
           (openWiki)="openWiki.emit($event)" />
       }
     }

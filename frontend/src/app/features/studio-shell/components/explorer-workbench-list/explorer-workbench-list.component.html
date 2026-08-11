@@ -34,6 +34,15 @@
             @if (openCount(workbench) > 0) { <strong>{{ openCount(workbench) }} open</strong> }
           </span>
         </button>
+        @if (workbench.pages?.length) {
+          <nav class="studio-workbench-pages" [attr.aria-label]="workbench.title + ' pages'">
+            @for (page of workbench.pages!; track page.path) {
+              <button type="button"
+                      [attr.data-testid]="'studio-explorer-workbench-page-' + projectName() + '-' + workbench.id + '-' + page.path"
+                      (click)="openPage(workbench, page.path)">{{ page.title }}</button>
+            }
+          </nav>
+        }
       } @empty { <span class="studio-workbench-topics__state">No open Dossiers</span> }
       <button type="button" class="studio-workbench-history"
               [attr.data-testid]="'studio-explorer-workbench-wiki-' + projectName()"

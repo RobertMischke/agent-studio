@@ -211,9 +211,26 @@ export interface WikiRevisionContent {
   content: string;
 }
 
-export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
+export type WorkbenchStatus =
+  | 'active'
+  | 'living-standard'
+  | 'decision-pending'
+  | 'decided'
+  | 'documented'
+  | 'archived'
+  | 'invalid';
 export type WorkbenchDecisionStage = 'prepared' | 'pending' | 'failed' | 'succeeded' | 'archived';
 export type ArticlePattern = 'ui' | 'concept';
+
+export interface WorkbenchPage {
+  title: string;
+  /** Dossier-relative HTML path below pages/. */
+  path: string;
+}
+
+export interface WorkbenchPageDocument extends WorkbenchPage {
+  html: string;
+}
 
 export interface WorkbenchTaskDraft {
   title: string;
@@ -329,7 +346,7 @@ export interface WorkbenchListItem {
   title: string;
   summary: string;
   status: WorkbenchStatus;
-  phase: 'shaping' | 'testing' | 'decision-ready' | null;
+  phase: 'shaping' | 'testing' | 'decision-ready' | 'maintenance' | null;
   updatedAtUtc: string;
   entryPath: string;
   valid: boolean;
@@ -348,6 +365,8 @@ export interface WorkbenchListItem {
   /** Dossier-level gate count until inline decision points extend it. */
   openDecisionCount?: number;
   documentation?: WorkbenchDocumentationProjection | null;
+  /** Ordered subpage navigation declared by workbench.json. */
+  pages?: WorkbenchPage[];
 }
 
 export interface WorkbenchDocumentationReference {
@@ -395,6 +414,14 @@ export interface WorkbenchOverviewItem {
   workbench: WorkbenchListItem;
 }
 
+export type WorkbenchOverviewOpenRequest = WorkbenchOverviewItem & {
+  pagePath?: string | null;
+};
+
+export type WorkbenchListOpenRequest = WorkbenchListItem & {
+  pagePath?: string | null;
+};
+
 export interface WorkbenchOverview {
   projectName: string | null;
   count: number;
@@ -422,6 +449,7 @@ export interface WorkbenchHubEvent {
 export interface WorkbenchDocument {
   workbench: WorkbenchListItem;
   html: string;
+  pages: WorkbenchPageDocument[];
   branch: string | null;
   revision: string | null;
   workingTreeModified: boolean;

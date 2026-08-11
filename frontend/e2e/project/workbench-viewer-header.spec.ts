@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Route, TestInfo } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setTheme } from '../helpers/theme';
 
@@ -73,6 +73,13 @@ interface DossierFixture {
   summary: string;
   entryPath: string;
   html: string;
+  status?: 'decision-pending' | 'active' | 'living-standard';
+  phase?: 'decision-ready' | 'implementation' | 'maintenance';
+  pages?: Array<{
+    title: string;
+    path: string;
+    html: string;
+  }>;
 }
 
 interface WorkbenchMockOptions {
@@ -97,6 +104,37 @@ const DEFAULT_DOSSIER: DossierFixture = {
     <section data-decision-id="density" data-decision-kind="single"><strong>Density</strong><span data-option-id="compact">Compact</span></section>
     <section data-decision-id="proof" data-decision-kind="confirm"><strong>Proof</strong><span data-option-id="capture">Capture</span></section>
   </main></body></html>`,
+};
+
+const GUIDELINE_ROOT = resolve(
+  process.cwd(),
+  '..',
+  'docs',
+  'operations',
+  'admin-design-guideline',
+);
+
+const GUIDELINE_DOSSIER: DossierFixture = {
+  key: 'AGT-W1',
+  title: 'Admin Surface Design Guideline',
+  heading: 'Admin Surface Design Guideline',
+  summary: 'Living standard for flat, dense, and legible operational surfaces.',
+  entryPath: 'docs/operations/admin-design-guideline/index.html',
+  status: 'living-standard',
+  phase: 'maintenance',
+  html: readFileSync(resolve(GUIDELINE_ROOT, 'index.html'), 'utf8'),
+  pages: [
+    {
+      title: "Dos and Don'ts",
+      path: 'pages/dos-and-donts.html',
+      html: readFileSync(resolve(GUIDELINE_ROOT, 'pages', 'dos-and-donts.html'), 'utf8'),
+    },
+    {
+      title: 'Applied surfaces',
+      path: 'pages/applied-surfaces.html',
+      html: readFileSync(resolve(GUIDELINE_ROOT, 'pages', 'applied-surfaces.html'), 'utf8'),
+    },
+  ],
 };
 
 function scrollingDossierFixture(
@@ -167,6 +205,9 @@ async function installMocks(
   options: WorkbenchMockOptions = {},
 ): Promise<RefreshCapture> {
   const dossier = options.dossier ?? DEFAULT_DOSSIER;
+  const dossierStatus = dossier.status ?? 'decision-pending';
+  const dossierPhase = dossier.phase ?? 'decision-ready';
+  const dossierPages = (dossier.pages ?? []).map(({ title, path }) => ({ title, path }));
   let releaseWorkbench = () => undefined;
   const workbenchReady = options.deferWorkbench
     ? new Promise<void>((resolveWorkbench) => {
@@ -351,8 +392,8 @@ async function installMocks(
             key: dossier.key,
             title: dossier.title,
             summary: dossier.summary,
-            status: 'decision-pending',
-            phase: 'decision-ready',
+            status: dossierStatus,
+            phase: dossierPhase,
             updatedAtUtc: '2026-08-09T10:00:00Z',
             entryPath: dossier.entryPath,
             valid: true,
@@ -360,6 +401,7 @@ async function installMocks(
             sourceTaskKeys: [],
             relatedTaskKeys: ['VHE-12', 'VHE-13'],
             openDecisionCount: 3,
+            pages: dossierPages,
           },
         },
       ],
@@ -376,14 +418,15 @@ async function installMocks(
           key: dossier.key,
           title: dossier.title,
           summary: dossier.summary,
-          status: 'decision-pending',
-          phase: 'decision-ready',
+          status: dossierStatus,
+          phase: dossierPhase,
           updatedAtUtc: '2026-08-09T10:00:00Z',
           entryPath: dossier.entryPath,
           valid: true,
           error: null,
           sourceTaskKeys: [],
           relatedTaskKeys: ['VHE-12', 'VHE-13'],
+          pages: dossierPages,
         },
       ],
     }),
@@ -405,16 +448,18 @@ async function installMocks(
           key: dossier.key,
           title: dossier.title,
           summary: dossier.summary,
-          status: 'decision-pending',
-          phase: 'decision-ready',
+          status: dossierStatus,
+          phase: dossierPhase,
           updatedAtUtc: '2026-08-09T10:00:00Z',
           entryPath: dossier.entryPath,
           valid: true,
           error: null,
           sourceTaskKeys: [],
           relatedTaskKeys: ['VHE-12', 'VHE-13'],
+          pages: dossierPages,
         },
         html: dossier.html,
+        pages: dossier.pages ?? [],
         branch: 'task/compact-viewer-header',
         revision: '1234567890abcdef',
         workingTreeModified: false,
@@ -635,6 +680,66 @@ test('direct dossier route settles without a persistent loading surface', async 
     path: evidencePath(testInfo, 'dossier-direct-entry-settled-dark--mocked.png'),
     fullPage: true,
   });
+});
+
+test('living standard dossier exposes and renders its registered subpages', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await installMocks(page, { dossier: GUIDELINE_DOSSIER });
+  await page.goto(
+    `/#/projects/viewer-header-evidence/workbenches/${encodeURIComponent(WORKBENCH_ID)}`,
+  );
+  await page.addStyleTag({
+    content: '[data-testid="offline-banner"] { display: none !important; }',
+  });
+  await page.getByTestId('sidesheet-close').click();
+
+  const navigation = page.getByTestId('workbench-page-navigation');
+  await expect(navigation).toBeVisible({ timeout: 30_000 });
+  await expect(navigation.getByRole('button')).toHaveCount(3);
+  await expect(navigation.getByRole('button', { name: 'Overview' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  const frame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
+  await expect(frame.getByRole('heading', { name: 'Admin Surface Design Guideline' }))
+    .toBeVisible();
+
+  await navigation.getByRole('button', { name: "Dos and Don'ts" }).click();
+  await expect(frame.getByRole('heading', { name: "Dos and Don'ts" })).toBeVisible();
+  await expect(frame.getByText('Flat composition', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('workbench-viewer-frame')).toHaveAttribute(
+    'title',
+    /Dos and Don'ts$/,
+  );
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await setTheme(page, theme);
+    await page.screenshot({
+      path: evidencePath(testInfo, `admin-guideline-dos-and-donts-${theme}--mocked.png`),
+      fullPage: true,
+    });
+  }
+
+  await frame.getByRole('link', { name: 'Applied surfaces' }).click();
+  await expect(frame.getByRole('heading', { name: 'Applied surfaces' })).toBeVisible();
+  await expect(frame.getByText('Multi-page Dossier viewer', { exact: true })).toBeVisible();
+  await expect(navigation.getByRole('button', { name: 'Applied surfaces' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await setTheme(page, theme);
+    await page.screenshot({
+      path: evidencePath(testInfo, `admin-guideline-applied-surfaces-${theme}--mocked.png`),
+      fullPage: true,
+    });
+  }
 });
 
 test('unreadable dossier replaces loading feedback with the backend reason', async ({
