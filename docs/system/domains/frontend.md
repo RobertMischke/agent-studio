@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-10
+Version: 2026-08-11
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -199,12 +199,24 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   decision-recorded, and status-changed events travel over the existing jobs
   hub and converge the Explorer catalogue, both overview scopes, and an open
   viewer without a page reload. Pulse reuses the same catalogue as a thinking
-  inbox. An active Dossier is
+  inbox. The Explorer projects that catalogue into a first-class Dossiers
+  branch rather than exposing the descriptor's physical `operations/` path.
+  Current entries are grouped as `Needs a decision` and `In implementation`;
+  `Documented` and `Discarded` stay under a collapsed History branch. Every
+  leaf shows the catalogue key and a quiet status dot. The Dossiers count is
+  the number of open decisions, not the number of documents. The catalogue's
+  `docs/operations/admin-design-guideline/index.html` entry is promoted once as
+  the permanent `Style Guide` project destination and is omitted from the
+  nested Dossiers list. This applies the AGT-2607 navigation-citizenship
+  direction without introducing a second lifecycle or taxonomy source.
+  An active Dossier is
   the selected leaf in the Explorer rather than making its Dossiers disclosure
   parent current. Opening one expands the owning workspace, project, and
-  project-specific Dossiers section, persists that section state, and scrolls
-  the selected leaf into view. Settled Dossiers keep the same selection
-  semantics but are revealed under the existing History disclosure. Repository
+  owning lifecycle group, persists those disclosure choices in session state,
+  and scrolls the selected leaf into view. It does not open or close unrelated
+  branches. The Explorer-head Collapse all action closes workspace, project,
+  Dossiers, lifecycle, and History branches. Settled Dossiers keep the same
+  selection semantics but are revealed under History. Repository
   HTML runs only
   in an opaque-origin `srcdoc` iframe with the Dossier CSP. A source-checked
   message boundary maps docs-relative links to the in-app Wiki and opens absolute

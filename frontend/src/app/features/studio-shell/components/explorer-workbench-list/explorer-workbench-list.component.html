@@ -1,6 +1,21 @@
-<app-tree-row level="child" glyph="eye" label="Dossiers"
+@if (styleGuide(); as guide) {
+  <span #styleGuideRow class="studio-workbench-style-guide">
+    <app-tree-row level="child" glyph="book" label="Style Guide"
+                  [meta]="guide.key ?? null"
+                  [active]="isActive(guide)"
+                  [ariaCurrent]="isActive(guide) ? 'page' : null"
+                  [ariaLabel]="'Style Guide, ' + accessibleMeta(guide)"
+                  [testid]="'studio-explorer-project-style-guide-' + projectName()"
+                  (selectRequest)="openWorkbench.emit(guide)">
+      <i class="studio-workbench-status-dot" aria-hidden="true" [attr.data-status]="guide.status"></i>
+    </app-tree-row>
+  </span>
+}
+
+<app-tree-row level="child" glyph="book" label="Dossiers"
               [chevron]="expanded() ? 'expanded' : 'collapsed'"
-              [count]="catalogue()?.count ?? null"
+              [count]="pendingDecisionCount() > 0 ? pendingDecisionCount() : null"
+              [ariaLabel]="dossierAriaLabel()"
               [active]="overviewActive()"
               [ariaCurrent]="overviewActive() ? 'page' : null"
               [testid]="'studio-explorer-project-workbenches-' + projectName()"
@@ -10,50 +25,74 @@
     @if (loading()) {
       <span class="studio-workbench-topics__state">Loading…</span>
     } @else {
-      @for (workbench of catalogue()?.items ?? []; track workbench.id) {
-        <button #workbenchTopic type="button" class="studio-workbench-topic"
-                [class.studio-workbench-topic--active]="isActive(workbench)"
-                [disabled]="!workbench.valid"
-                [attr.aria-current]="isActive(workbench) ? 'page' : null"
-                [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
-                [appTooltip]="navTooltip(workbench)"
-                [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
-                (click)="openWorkbench.emit(workbench)">
-          <span class="studio-workbench-topic__primary">
-            <span class="studio-workbench-topic__pattern"
-                  aria-hidden="true"
-                  [attr.data-pattern]="documentPattern(workbench)"
-                  [attr.data-testid]="'studio-explorer-workbench-pattern-' + projectName() + '-' + workbench.id">
-              <app-studio-icon [name]="patternIcon(workbench)" [size]="12" />
-            </span>
-            <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
-          </span>
-          <span class="studio-workbench-topic__meta">
-            @if (isAcute(workbench)) { <i [attr.data-status]="workbench.status"></i> }
-            {{ secondaryMeta(workbench) }}
-            @if (openCount(workbench) > 0) { <strong>{{ openCount(workbench) }} open</strong> }
-          </span>
-        </button>
-      } @empty { <span class="studio-workbench-topics__state">No open Dossiers</span> }
-      <button type="button" class="studio-workbench-history"
-              [attr.data-testid]="'studio-explorer-workbench-wiki-' + projectName()"
-              (click)="openWiki.emit()">
-        Open wiki →
-      </button>
-      <button type="button" class="studio-workbench-history" [attr.aria-expanded]="historyOpen()"
-              [attr.data-testid]="'studio-explorer-workbench-history-' + projectName()" (click)="toggleHistory()">
-        {{ historyOpen() ? 'Hide history' : 'History' }}
-      </button>
-      @if (historyOpen()) {
-        @defer (when historyOpen()) {
-          <app-explorer-workbench-history
-            [projectName]="projectName()"
-            [items]="historyCatalogue()?.items ?? []"
-            [activeWorkbenchId]="activeWorkbenchId()"
-            (openWorkbench)="openWorkbench.emit($event)"
-          />
+      @for (group of currentGroups(); track group.id) {
+        <app-tree-row level="root"
+                      [chevron]="groupExpanded(group.id) ? 'expanded' : 'collapsed'"
+                      [label]="group.label"
+                      [count]="group.items.length"
+                      [testid]="'studio-explorer-workbench-group-' + projectName() + '-' + group.id"
+                      (chevronClick)="toggleGroup(group.id)"
+                      (selectRequest)="toggleGroup(group.id)" />
+        @if (groupExpanded(group.id)) {
+          <div class="studio-workbench-group-items"
+               [attr.data-testid]="'studio-explorer-workbench-group-items-' + projectName() + '-' + group.id">
+            @for (workbench of group.items; track workbench.id) {
+              <button #workbenchTopic type="button" class="studio-workbench-topic"
+                      [class.studio-workbench-topic--active]="isActive(workbench)"
+                      [disabled]="!workbench.valid"
+                      [attr.aria-current]="isActive(workbench) ? 'page' : null"
+                      [attr.aria-label]="workbench.title + ', ' + accessibleMeta(workbench)"
+                      [appTooltip]="navTooltip(workbench)"
+                      [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
+                      (click)="openWorkbench.emit(workbench)">
+                <span class="studio-workbench-topic__primary">
+                  <span class="studio-workbench-topic__pattern"
+                        aria-hidden="true"
+                        [attr.data-pattern]="documentPattern(workbench)"
+                        [attr.data-testid]="'studio-explorer-workbench-pattern-' + projectName() + '-' + workbench.id">
+                    <app-studio-icon [name]="patternIcon(workbench)" [size]="12" />
+                  </span>
+                  <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+                </span>
+                <span class="studio-workbench-topic__meta">
+                  <i class="studio-workbench-status-dot" aria-hidden="true"
+                     [attr.data-status]="workbench.status"
+                     [attr.data-testid]="'studio-explorer-workbench-status-' + projectName() + '-' + workbench.id"></i>
+                  @if (workbench.key; as key) {
+                    <span class="studio-workbench-topic__key"
+                          [attr.data-testid]="'studio-explorer-workbench-key-' + projectName() + '-' + workbench.id">{{ key }}</span>
+                  }
+                  @if (openCount(workbench) > 0) { <strong>{{ openCount(workbench) }} open</strong> }
+                </span>
+              </button>
+            } @empty {
+              <span class="studio-workbench-topics__state">{{ group.empty }}</span>
+            }
+          </div>
         }
       }
+
+      <app-tree-row level="root"
+                    [chevron]="groupExpanded('history') ? 'expanded' : 'collapsed'"
+                    label="History"
+                    [count]="historyItems().length"
+                    [testid]="'studio-explorer-workbench-history-' + projectName()"
+                    (chevronClick)="toggleGroup('history')"
+                    (selectRequest)="toggleGroup('history')" />
+      @if (groupExpanded('history')) {
+        <div class="studio-workbench-history-items"
+             [attr.data-testid]="'studio-explorer-workbench-history-items-' + projectName()">
+          <app-explorer-workbench-history
+            [projectName]="projectName()"
+            [items]="historyItems()"
+            [activeWorkbenchId]="activeWorkbenchId()"
+            (openWorkbench)="openWorkbench.emit($event)" />
+        </div>
+      }
+
+      <button type="button" class="studio-workbench-wiki"
+              [attr.data-testid]="'studio-explorer-workbench-wiki-' + projectName()"
+              (click)="openWiki.emit()">Open wiki →</button>
     }
   </div>
 }

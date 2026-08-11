@@ -86,6 +86,9 @@ export class ExplorerWorkspaceTreeComponent {
   readonly showAllActive = input(false);
   readonly activeProjectSurface = input<ExplorerProjectSurface | null>(null);
   readonly activeWorkbench = input<ActiveExplorerWorkbench | null>(null);
+  /** Monotonic command from the tree head. Each new value closes every
+   * workspace branch without becoming a reactive default for later clicks. */
+  readonly collapseAllVersion = input(0);
   /** Experimental active-work visualization. Numbers remain the default. */
   readonly metricView = input<ExplorerTreeMetricView>('numbers');
   /** Project name to always-visible auto-pickup configuration and gate state. */
@@ -196,23 +199,36 @@ export class ExplorerWorkspaceTreeComponent {
       this.projectStorageByName(),
     ));
 
-  private lastRevealedWorkbenchPath: string | null = null;
-  private readonly revealActiveWorkbenchFx = effect(() => {
+  private lastRevealedNavigationPath: string | null = null;
+  private readonly revealActiveNavigationFx = effect(() => {
     const activeWorkbench = this.activeWorkbench();
-    if (!activeWorkbench) {
-      this.lastRevealedWorkbenchPath = null;
+    const activeSurface = this.activeProjectSurface();
+    const projectName = activeWorkbench?.projectName
+      ?? this.groups().flatMap(group => group.projects).find(project => project.isActive)?.name;
+    if (!projectName || !activeSurface) {
+      this.lastRevealedNavigationPath = null;
       return;
     }
 
     const workspace = this.groups()
-      .find(group => group.projects.some(project => project.name === activeWorkbench.projectName));
+      .find(group => group.projects.some(project => project.name === projectName));
     if (!workspace) return;
 
-    const revealPath = `${workspace.id}:${activeWorkbench.projectName}:${activeWorkbench.workbenchId}`;
-    if (this.lastRevealedWorkbenchPath === revealPath) return;
-    this.lastRevealedWorkbenchPath = revealPath;
+    const revealPath = `${workspace.id}:${projectName}:${activeSurface}:${activeWorkbench?.workbenchId ?? ''}`;
+    if (this.lastRevealedNavigationPath === revealPath) return;
+    this.lastRevealedNavigationPath = revealPath;
     this.setCollapsed('workspace', false);
     this.setCollapsed(`ws:${workspace.id}`, false);
+  });
+
+  private lastCollapseAllVersion = 0;
+  private readonly collapseAllFx = effect(() => {
+    const version = this.collapseAllVersion();
+    const groups = this.groups();
+    if (version === 0 || version === this.lastCollapseAllVersion) return;
+    this.lastCollapseAllVersion = version;
+    this.setCollapsed('workspace', true);
+    for (const group of groups) this.setCollapsed(`ws:${group.id}`, true);
   });
 
   isCollapsed(key: string): boolean {

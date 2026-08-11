@@ -6,8 +6,9 @@ import { dismissDevErrorDialog, setTheme, type Theme } from '../helpers/theme';
 
 /**
  * ASS-658/ASS-597: a project node in the Workspaces Explorer exposes exactly
- * five project-scoped links: "Board" (the kanban), "Deck", "Wiki",
- * "Dossiers", and "Epics" (overview). The retired per-lane children (active /
+ * five baseline project-scoped links: "Board" (the kanban), "Deck", "Wiki",
+ * "Dossiers", and "Epics" (overview). A catalogue-owned Living Style Guide
+ * may add one promoted sibling. The retired per-lane children (active /
  * human review / archive) stay gone, and Epics opens scoped to the
  * clicked project rather than the global rollup.
  *
@@ -107,7 +108,7 @@ test.describe('Explorer · project links to Board / Deck / Wiki / Epics', () => 
     }
   });
 
-  test('expanded project shows exactly the five project links, no lane rows', async ({ page, devBackend }) => {
+  test('expanded project shows the baseline project links, optional Style Guide, and no lane rows', async ({ page, devBackend }) => {
     expect(devBackend.port).toBeGreaterThan(0);
     await gotoStudio(page);
     const expanded = await expandFirstProject(page);
@@ -118,9 +119,12 @@ test.describe('Explorer · project links to Board / Deck / Wiki / Epics', () => 
     const { row, name } = expanded;
     const children = row.locator('.studio-tree-children');
 
-    // Exactly five child rows.
+    // Five baseline rows plus the catalogue-promoted Style Guide when this
+    // project owns the living standard.
     const rows = children.locator('.tree-row');
-    await expect(rows).toHaveCount(5);
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThanOrEqual(5);
+    expect(rowCount).toBeLessThanOrEqual(6);
 
     // Each is addressable by its stable testid.
     await expect(page.getByTestId(`studio-explorer-project-board-${name}`)).toBeVisible();
