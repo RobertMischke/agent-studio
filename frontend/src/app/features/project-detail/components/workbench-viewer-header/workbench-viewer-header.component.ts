@@ -278,7 +278,9 @@ export function implementationStatusFor(
   const allTerminal = references.every(
     (task) => task.exists && task.lane !== null && isTerminalLane(task.lane),
   );
-  return !allTerminal && known.some((task) => hasImplementationStarted(task.lane))
+  return !allTerminal && known.some(
+    (task) => !isTerminalLane(task.lane) && hasImplementationStarted(task.lane),
+  )
     ? 'In implementation'
     : null;
 }
