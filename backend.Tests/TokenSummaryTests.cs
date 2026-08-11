@@ -106,6 +106,48 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_AndWorkspaceAggregate_PreserveRecordedModelBounds()
+    {
+        var first = new DateTime(2026, 7, 11, 8, 15, 0, DateTimeKind.Utc);
+        var latest = new DateTime(2026, 8, 11, 19, 42, 18, DateTimeKind.Utc);
+        var projectA = TokenSummaryService.Summarize("A", new[]
+        {
+            Entry("gpt-5-codex", 100, 20) with { Ts = latest },
+            Entry("gpt-5-codex", 200, 40) with { Ts = first },
+        });
+        var projectB = TokenSummaryService.Summarize("B", new[]
+        {
+            Entry("gpt-5-codex", 300, 60) with { Ts = first.AddDays(2) },
+        });
+
+        var model = Assert.Single(projectA.ByModel);
+        Assert.Equal(first, model.FirstActivity);
+        Assert.Equal(latest, model.LastActivity);
+
+        var aggregate = TokenSummaryService.AggregateSummaries([
+            ("A", projectA),
+            ("B", projectB),
+        ]);
+        var aggregateModel = Assert.Single(aggregate.ByModel);
+        Assert.Equal(first, aggregateModel.FirstActivity);
+        Assert.Equal(latest, aggregateModel.LastActivity);
+
+        var legacyProject = projectB with
+        {
+            ByModel = projectB.ByModel
+                .Select(row => row with { FirstActivity = null, LastActivity = null })
+                .ToList(),
+        };
+        var partialAggregate = TokenSummaryService.AggregateSummaries([
+            ("A", projectA),
+            ("legacy", legacyProject),
+        ]);
+        var partialModel = Assert.Single(partialAggregate.ByModel);
+        Assert.Null(partialModel.FirstActivity);
+        Assert.Null(partialModel.LastActivity);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with

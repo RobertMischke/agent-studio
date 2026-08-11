@@ -13,6 +13,13 @@ export { CostBreakdownTriggerDirective } from './components/cost-breakdown-trigg
 export { CostBreakdownService } from './services/cost-breakdown.service';
 export type { CostBreakdownRequestItem } from './services/cost-breakdown.service';
 export {
+  deriveTelemetryPeriod,
+  formatTelemetryPeriod,
+  formatUtcDate,
+  formatUtcMinute,
+} from './telemetry-period.util';
+export type { TelemetryPeriod, TelemetryPeriodSource } from './telemetry-period.util';
+export {
   TOKEN_COST_ESTIMATE_NOTICE,
   buildTokenCostTooltip,
   formatTokenCostDisplay,

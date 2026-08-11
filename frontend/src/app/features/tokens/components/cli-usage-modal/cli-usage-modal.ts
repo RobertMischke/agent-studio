@@ -7,6 +7,7 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
+import { deriveTelemetryPeriod, formatTelemetryPeriod, formatUtcMinute } from '../../telemetry-period.util';
 
 interface ModelUsageRow {
   model: string;
@@ -20,6 +21,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstActivity?: string | null;
+  lastActivity?: string | null;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -92,7 +95,9 @@ export class CliUsageModalComponent {
     if (!r) return 'No data yet';
     const parts: string[] = [r.plan ?? 'No plan reported'];
     if (r.source) parts.push(r.source);
-    parts.push(r.freshness);
+    parts.push(r.fetchedAt
+      ? `quota as of ${formatUtcMinute(r.fetchedAt)}${r.stale ? ' (stale)' : ''}`
+      : r.freshness);
     return parts.join(' · ');
   });
 
@@ -149,6 +154,16 @@ export class CliUsageModalComponent {
       if (this.totalTokens(row) > 0) rows.push(row);
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
+  });
+
+  readonly recordedPeriodLabel = computed(() => {
+    const cli = this.cliType();
+    const sources = [
+      ...(this.tokens()?.byModel ?? []),
+      ...(this.adhoc()?.byModel ?? []),
+    ].filter(model => this.modelBelongsToCli(model.model, cli));
+    const period = deriveTelemetryPeriod(sources);
+    return period ? formatTelemetryPeriod(period) : null;
   });
 
   limitText(window: QuotaWindow): string {

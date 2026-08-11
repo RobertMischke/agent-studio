@@ -3,12 +3,12 @@
     <div>
       <h2 class="wtt__title">Workspace token usage</h2>
       <p class="wtt__sub">
-        All LLM token usage across every watched project - agent runs,
-        supporting loops, and orchestrator turns - bucketed on the wall clock.
+        All LLM token usage across every watched project - agent runs, supporting loops, and orchestrator turns - bucketed on the wall clock.
         @if (timeline(); as t) {
           <span class="wtt__sub-stats">
             · {{ totalCalls() }} call{{ totalCalls() === 1 ? '' : 's' }}
             · {{ formatTokens(grandTotalTokens()) }} tokens
+            · <span data-testid="workspace-token-window-period">Window {{ formatUtcMinute(t.windowStart) }} to {{ formatUtcMinute(t.windowEnd) }} · snapshot fetched as of {{ formatUtcMinute(t.fetchedAt) }}</span>
           </span>
         }
       </p>

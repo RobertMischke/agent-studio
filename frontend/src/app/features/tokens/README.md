@@ -22,5 +22,8 @@ Imports via `from './features/tokens'`. See [`index.ts`](./index.ts).
 
 ## Notable
 
-- Numbers come straight from the JSONL logs (per-turn token usage) — they're authoritative, not estimates.
+- Numbers come from the canonical hybrid projection of historical bus events
+  and durable task receipts. Per-model rollups carry their oldest and newest
+  included entry timestamps so lifetime totals can show an entry-derived
+  recording period.
 - The workspace timeline overlay open/close lives in `features/shell/state/workspace-overlays.service.ts`.

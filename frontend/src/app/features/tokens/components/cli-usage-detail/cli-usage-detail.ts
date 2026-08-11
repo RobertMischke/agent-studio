@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { deriveTelemetryPeriod, formatTelemetryPeriod, formatUtcMinute } from '../../telemetry-period.util';
 
 interface SparkPoint {
   label: string;
@@ -65,6 +66,7 @@ interface ModelUsageRow {
   styleUrl: './cli-usage-detail.scss',
 })
 export class CliUsageDetailComponent {
+  readonly formatUtcMinute = formatUtcMinute;
   /** Workspace mode keeps project attribution and task totals while account
    * windows live on the dedicated per-CLI pages. */
   readonly workspaceOnly = input(false);
@@ -81,6 +83,13 @@ export class CliUsageDetailComponent {
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
   /** Project name whose Settings rail the shell should open on a row click. */
   readonly openProjectSettings = output<string>();
+
+  readonly runtimePeriodLabel = computed(() => {
+    const contributingModels = (this.tokens()?.byModel ?? [])
+      .filter(model => this.totalTokens(model) > 0);
+    const period = deriveTelemetryPeriod(contributingModels);
+    return period ? formatTelemetryPeriod(period) : null;
+  });
 
   /**
    * Per-project orchestrator spend, busiest first. Each row is the
@@ -201,7 +210,7 @@ export class CliUsageDetailComponent {
     return this.toSparkPoints(Array.from(byDay.entries()).slice(-7));
   }
 
-  totalTokens(row: ModelUsageRow): number {
+  totalTokens(row: Pick<ModelUsageRow, 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheCreationTokens'>): number {
     return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
   }
 

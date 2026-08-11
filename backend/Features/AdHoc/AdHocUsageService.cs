@@ -129,7 +129,9 @@ public sealed class AdHocUsageService
                     CacheReadTokens: kv.Value.CacheRead,
                     CacheCreationTokens: kv.Value.CacheCreate,
                     EstimatedApiCostUsd: kv.Value.Cost,
-                    ModelPriced: priced);
+                    ModelPriced: priced,
+                    FirstActivity: kv.Value.FirstActivity,
+                    LastActivity: kv.Value.LastActivity);
             })
             .ToList();
 
@@ -164,6 +166,9 @@ public sealed class AdHocUsageService
         b.CacheRead += r.CacheReadTokens;
         b.CacheCreate += r.CacheCreationTokens;
         b.Cost += cost.Total;
+        var activity = r.Ts.ToUniversalTime();
+        if (activity < (b.FirstActivity ?? DateTime.MaxValue)) b.FirstActivity = activity;
+        if (activity > (b.LastActivity ?? DateTime.MinValue)) b.LastActivity = activity;
     }
 
     private sealed class Bucket
@@ -175,5 +180,7 @@ public sealed class AdHocUsageService
         public long CacheRead;
         public long CacheCreate;
         public decimal Cost;
+        public DateTime? FirstActivity;
+        public DateTime? LastActivity;
     }
 }

@@ -11,6 +11,7 @@ import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { TokenTimeline, TokenTimelineCell } from '../../../../features/tokens';
 import { TokensApiService } from '../../../../features/tokens';
+import { formatUtcMinute } from '../../telemetry-period.util';
 
 const STORAGE_DISABLED_KEY = 'workspaceTokens.disabledProjects';
 const STORAGE_WINDOW_KEY = 'workspaceTokens.windowHours';
@@ -90,6 +91,7 @@ export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly hoverCell = signal<TokenTimelineCell | null>(null);
   readonly disabledProjects = signal<Set<string>>(this.readSavedDisabled());
+  readonly formatUtcMinute = formatUtcMinute;
 
   private pollTimer: VisibleIntervalHandle | null = null;
 
@@ -405,11 +407,6 @@ export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
     const a = new Date(c.bucketStart);
     const b = new Date(c.bucketEnd);
     return `${pad2(a.getHours())}:${pad2(a.getMinutes())} – ${pad2(b.getHours())}:${pad2(b.getMinutes())}`;
-  }
-
-  formatTime(iso: string): string {
-    const d = new Date(iso);
-    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }
 
   formatAgo(iso: string): string {

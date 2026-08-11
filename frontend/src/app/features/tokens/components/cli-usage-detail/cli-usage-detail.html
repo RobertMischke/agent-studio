@@ -53,7 +53,11 @@
     <div class="cud__trend-head">
       <h4>Token trend</h4>
       @if (tokens(); as t) {
-        <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
+        <span data-testid="cli-usage-runtime-period">
+          {{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total
+          · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost
+          · {{ runtimePeriodLabel() ?? 'recording period unavailable' }}
+        </span>
       }
     </div>
     <div class="cud__sparks">
@@ -110,7 +114,7 @@
             <p>
               {{ row.plan ?? 'No plan reported' }}
               @if (row.source) { <span> · {{ row.source }}</span> }
-              <span> · {{ row.freshness }}</span>
+              <span> · {{ row.fetchedAt ? 'quota as of ' + formatUtcMinute(row.fetchedAt) : row.freshness }}</span>
             </p>
           </div>
           <button type="button"

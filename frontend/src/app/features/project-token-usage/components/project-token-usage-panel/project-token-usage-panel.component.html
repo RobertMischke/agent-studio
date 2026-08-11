@@ -27,12 +27,7 @@
          data-testid="token-usage-as-of">
       <span class="tup__freshness-dot" aria-hidden="true"></span>
       <span>
-        Data as of
-        @if (freshness.asOf) {
-          <time [attr.datetime]="freshness.asOf">{{ formatTs(freshness.asOf) }} UTC</time>
-        } @else {
-          <span>no readable activity timestamp</span>
-        }
+        {{ recordedPeriodLabel() ?? 'Recording period unavailable' }}
       </span>
     </div>
     @if (freshness.warning; as warning) {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
 import { setTheme } from '../helpers/theme';
 
@@ -25,12 +25,28 @@ import { setTheme } from '../helpers/theme';
  */
 
 const SCREENSHOT_DIR = process.env.STATUS_BAR_RESULTS_DIR?.trim() || 'test-results';
+const EVIDENCE_PHASE = process.env.USAGE_EVIDENCE_PHASE?.trim() || 'after';
 const CLIS = ['copilot', 'claude', 'codex'] as const;
 
+async function hideRecoveryOverlay(page: import('@playwright/test').Page): Promise<void> {
+  const overlay = page.getByTestId('crash-recovery-prompt-overlay');
+  await overlay.waitFor({ state: 'attached', timeout: 2_000 }).catch(() => undefined);
+  if (await overlay.count()) {
+    await overlay.evaluate(element => {
+      (element as HTMLElement).style.display = 'none';
+      (element as HTMLElement).style.pointerEvents = 'none';
+    });
+  }
+}
+
 test.describe('Status bar usage modal', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, devBackend }) => {
+    void devBackend;
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
+    await page.route('**/api/auth/status', route => route.fulfill({
+      json: { profile: 'local', bootstrapRequired: false, authenticated: true, user: null },
+    }));
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     // Let the first quota poll fire so the strip has cards to render.
@@ -124,11 +140,11 @@ test.describe('Status bar usage modal', () => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
         json: {
-          at: new Date().toISOString(),
+          at: '2026-08-11T20:43:00Z',
           ttlSeconds: 600,
           snapshots: [{
             cliType: 'codex',
-            fetchedAt: new Date().toISOString(),
+            fetchedAt: '2026-08-11T20:43:00Z',
             plan: 'Pro',
             source: '/status',
             error: null,
@@ -157,12 +173,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstActivity: '2026-07-11T08:15:00Z', lastActivity: '2026-08-11T19:42:18Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstActivity: '2026-07-17T10:00:00Z', lastActivity: '2026-08-10T17:04:00Z',
           },
         ],
         byProject: [],
@@ -186,11 +204,13 @@ test.describe('Status bar usage modal', () => {
             model: 'gpt-5-codex', calls: 4,
             inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: true,
+            firstActivity: '2026-07-15T09:00:00Z', lastActivity: '2026-08-09T14:30:00Z',
           },
           {
             model: 'gpt-5.6-sol', calls: 7,
             inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstActivity: '2026-07-18T09:00:00Z', lastActivity: '2026-08-08T14:30:00Z',
           },
         ],
         logPath: '(bus)',
@@ -201,21 +221,29 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
+    await hideRecoveryOverlay(page);
     await page.getByTestId('hquota-card-codex').click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible();
+    await expect(modal).toContainText('quota as of 2026-08-11 20:43 UTC');
+    await expect(modal.getByText('5-hour', { exact: true })).toBeVisible();
+    await expect(modal.getByText('01:49 on 11 Jul', { exact: false })).toBeVisible();
+    await expect(modal.getByText('Weekly', { exact: true })).toBeVisible();
+    await expect(modal.getByText('20:49 on 17 Jul', { exact: false })).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-recorded-period')).toHaveText(
+      'Recorded since 2026-07-11 · as of 2026-08-11 19:42 UTC. Independent of the provider quota windows above.',
+    );
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-model-period-${EVIDENCE_PHASE}--light--mocked.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-model-period-${EVIDENCE_PHASE}--dark--mocked.png` });
   });
 });

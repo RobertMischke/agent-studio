@@ -3,12 +3,12 @@ id: token-aggregation-concept
 title: "Token aggregators use canonical hybrid projections (concept + living knowledge)"
 status: active
 category: concept
-updatedAt: 2026-08-11
-last-updated: 2026-08-11
-reason: "Align pipeline RUNS totals with canonical task-ledger attribution and expose missing run telemetry"
-taskKey: AGT-2626
+updatedAt: 2026-08-12
+last-updated: 2026-08-12
+reason: "Expose entry-derived recording periods and as-of timestamps on Usage surfaces"
+taskKey: AGT-2604
 tags: [token-aggregation, hybrid-projection, task-receipt, drift-rule, observability, cost]
-related-tasks: [ASS-881, ASS-1717, AGT-2542, AGT-2624, AGT-2626]
+related-tasks: [ASS-881, ASS-1717, AGT-2542, AGT-2604, AGT-2624, AGT-2626]
 related-adrs: []
 related-docs:
   - "docs/system/domains/tokens.md"
@@ -241,6 +241,11 @@ For an operator or an LLM instance working in this area, the rules of the road:
 Append new findings about the token-aggregation area here, newest on top. Keep
 each entry short: date, what was learned, and a pointer to the code/commit/task.
 
+- **2026-08-12 (AGT-2604).** Lifetime per-model aggregates now preserve the
+  oldest and newest included telemetry timestamps across the canonical hybrid
+  projection and ad-hoc usage. Workspace, project, modal, and CLI attribution
+  surfaces show those entry-derived bounds; quota windows retain their
+  provider duration/reset and expose the exact probe snapshot time.
 - **2026-08-11 (AGT-2626).** The task-detail pipeline counted visible RUNS
   from `session-events.jsonl` but built token totals from pipeline attempts.
   Those are different lifecycles, so six CLI runs could appear beside one

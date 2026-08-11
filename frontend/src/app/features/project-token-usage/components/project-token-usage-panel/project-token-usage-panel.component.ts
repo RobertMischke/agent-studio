@@ -12,6 +12,7 @@ import { TaskService } from '../../../../services/task.service';
 import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectPipelineCostTimeline, ProjectTokenCategory, ProjectTokenDataFreshness, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../../features/project-token-usage';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ProjectPipelineCostTrendComponent } from '../project-pipeline-cost-trend/project-pipeline-cost-trend.component';
+import { deriveTelemetryPeriod, formatTelemetryPeriod } from '../../../../features/tokens';
 interface CardSpec {
   testid: string;
   label: string;
@@ -74,6 +75,14 @@ export class ProjectTokenUsagePanelComponent {
       warning: null,
       sources: [],
     };
+  });
+
+  readonly recordedPeriodLabel = computed(() => {
+    const value = this.summary();
+    const asOf = this.tokenFreshness()?.asOf;
+    if (!value?.firstActivity || !asOf) return null;
+    const period = deriveTelemetryPeriod([{ firstActivity: value.firstActivity, lastActivity: asOf }]);
+    return period ? formatTelemetryPeriod(period) : null;
   });
 
   readonly selectedJobId = signal<string | null>(null);

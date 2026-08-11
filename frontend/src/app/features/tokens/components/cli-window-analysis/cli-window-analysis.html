@@ -4,6 +4,7 @@
       <span class="cwa__eyebrow">CLI account level</span>
       <h2>{{ label() }} usage windows</h2>
       <p>Provider quota windows, resets, and burn rate for the signed-in {{ label() }} account.</p>
+      <p data-testid="cli-window-quota-as-of">{{ quotaAsOfLabel() }}</p>
     </div>
     <button type="button" data-testid="cli-window-refresh" [disabled]="refreshing()" (click)="refresh.emit()">
       {{ refreshing() ? 'Refreshing...' : 'Refresh probe' }}
@@ -13,7 +14,7 @@
   <div class="cwa__levels" data-testid="cli-usage-levels">
     <article><span>Account</span><strong>{{ row()?.plan ?? 'Plan not reported' }}</strong><small>Identity exposed by the local CLI probe</small></article>
     <article><span>Quota windows</span><strong>{{ row()?.windows?.length ?? 0 }} reported</strong><small>Provider units, not raw token totals</small></article>
-    <article><span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong><small>Workspace events mapped to {{ label() }} models</small></article>
+    <article><span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong><small data-testid="cli-window-recorded-period">{{ attributionPeriodLabel() }}</small></article>
   </div>
 
   <section class="cwa__panel" data-testid="cli-window-cards">
@@ -35,7 +36,7 @@
 
   <section class="cwa__panel" data-testid="cli-window-trend">
     <div class="cwa__section-head">
-      <div><h3>Captured token trend</h3><p>Workspace event baseline for plausibility. The current timeline API does not identify CLI per bucket.</p></div>
+      <div><h3>Captured token trend</h3><p>Workspace event baseline for plausibility. {{ trendAsOfLabel() }}. The current timeline API does not identify CLI per bucket.</p></div>
       <div class="cwa__periods" role="group" aria-label="Analysis period">
         @for (item of periods; track item) { <button type="button" [class.cwa__period--active]="period() === item" [attr.aria-pressed]="period() === item" [attr.data-testid]="'cli-window-period-' + item" (click)="period.set(item)">{{ item }}</button> }
       </div>

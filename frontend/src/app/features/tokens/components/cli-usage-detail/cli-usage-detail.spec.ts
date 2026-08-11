@@ -73,4 +73,33 @@ describe('CliUsageDetailComponent (smoke)', () => {
     fixture.componentInstance.openProjectSettings.emit('Agent Taskboard');
     expect(emitted).toBe('Agent Taskboard');
   });
+
+  it('labels lifetime workspace totals with entry-derived bounds', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CliUsageDetailComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CliUsageDetailComponent);
+    fixture.componentRef.setInput('tokens', {
+      totalInputTokens: 100,
+      totalOutputTokens: 20,
+      totalCacheReadTokens: 0,
+      totalCacheCreationTokens: 0,
+      estimatedApiCostUsd: 0.1,
+      byProject: [],
+      byModel: [{
+        model: 'gpt-5-codex', calls: 2,
+        inputTokens: 100, outputTokens: 20, cacheReadTokens: 0, cacheCreationTokens: 0,
+        estimatedApiCostUsd: 0.1, modelPriced: true,
+        firstActivity: '2026-07-11T08:15:00Z', lastActivity: '2026-08-11T19:42:18Z',
+      }],
+    } as never);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.runtimePeriodLabel())
+      .toBe('Recorded since 2026-07-11 · as of 2026-08-11 19:42 UTC');
+    expect((fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="cli-usage-runtime-period"]')?.textContent)
+      .toContain('Recorded since 2026-07-11 · as of 2026-08-11 19:42 UTC');
+  });
 });

@@ -43,7 +43,9 @@ public sealed record TokenSummaryByModel(
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
     bool ModelPriced,
-    bool ModelInCatalog);
+    bool ModelInCatalog,
+    DateTime? FirstActivity,
+    DateTime? LastActivity);
 
 public class TokenSummaryService
 {
@@ -316,6 +318,17 @@ public class TokenSummaryService
                 bucket.Cost += m.EstimatedApiCostUsd;
                 if (!m.ModelPriced) bucket.AnyUnpriced = true;
                 if (!m.ModelInCatalog) bucket.AnyUnknownModel = true;
+                if (!m.FirstActivity.HasValue || !m.LastActivity.HasValue)
+                {
+                    bucket.MissingActivityBounds = true;
+                }
+                else
+                {
+                    if (m.FirstActivity.Value < (bucket.FirstActivity ?? DateTime.MaxValue))
+                        bucket.FirstActivity = m.FirstActivity.Value;
+                    if (m.LastActivity.Value > (bucket.LastActivity ?? DateTime.MinValue))
+                        bucket.LastActivity = m.LastActivity.Value;
+                }
             }
         }
 
@@ -330,7 +343,9 @@ public class TokenSummaryService
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
                 ModelPriced: !b.AnyUnpriced,
-                ModelInCatalog: !b.AnyUnknownModel))
+                ModelInCatalog: !b.AnyUnknownModel,
+                FirstActivity: b.MissingActivityBounds ? null : b.FirstActivity,
+                LastActivity: b.MissingActivityBounds ? null : b.LastActivity))
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -424,6 +439,11 @@ public class TokenSummaryService
             if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
             if (entryCost.Status == TokenEconomy.PriceStatus.UnknownModel)
                 bucket.AnyUnknownModel = true;
+            var activity = entry.Ts.ToUniversalTime();
+            if (activity < (bucket.FirstActivity ?? DateTime.MaxValue))
+                bucket.FirstActivity = activity;
+            if (activity > (bucket.LastActivity ?? DateTime.MinValue))
+                bucket.LastActivity = activity;
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -442,7 +462,9 @@ public class TokenSummaryService
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
                 ModelPriced: !bucket.AnyUnpriced,
-                ModelInCatalog: !bucket.AnyUnknownModel));
+                ModelInCatalog: !bucket.AnyUnknownModel,
+                FirstActivity: bucket.FirstActivity,
+                LastActivity: bucket.LastActivity));
         }
 
         return new TokenSummary(
@@ -472,6 +494,9 @@ public class TokenSummaryService
         public decimal Cost;
         public bool AnyUnpriced;
         public bool AnyUnknownModel;
+        public bool MissingActivityBounds;
+        public DateTime? FirstActivity;
+        public DateTime? LastActivity;
         public ModelBucket(string model) : this(model, model)
         {
         }

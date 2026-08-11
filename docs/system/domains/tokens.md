@@ -6,13 +6,16 @@
 > is the knowledge-collection point for this area. This document is the
 > system-of-record plan and migration record.
 
-> **Status (2026-08-09):** Project and task-card surfaces read a deduplicated
+> **Status (2026-08-12):** Project and task-card surfaces read a deduplicated
 > union of the historical token bus and durable `task.json.tokenSummary`
 > receipts. The bus remains the historical source, while task receipts are the
 > current source for remote runner calls. Project summary, heatmap, and pipeline
 > cost responses include the newest successfully read usage timestamp and
 > report partial or unavailable sources instead of presenting an unexplained
-> zero. The legacy services (`TokenSummaryService`,
+> zero. Lifetime per-model rollups also carry the oldest and newest included
+> entry timestamp, so Usage surfaces label their recording period and as-of
+> timestamp from telemetry rather than from configuration or fetch time. The
+> legacy services (`TokenSummaryService`,
 > `WorkspaceTokensTimelineService`, `ProjectTokenUsageService`) retain the pure
 > fold helpers used by the canonical readers and parity fixtures. Each surface ships
 > with a Phase-5 parity test
@@ -249,6 +252,9 @@ mixed dashboard:
   aggregate contract has no reasoning-effort field. The UI therefore labels
   the trend as a workspace plausibility baseline and effort as unattributed. It
   does not invent either attribution.
+- Lifetime workspace, project, and per-CLI attribution totals show the oldest
+  and newest included entry timestamps. Quota surfaces keep their provider
+  window label and reset separate, and show the exact quota snapshot time.
 - Per-task cap forecast (TE-4) is a labelled future integration point only.
 
 Workspace and project usage calculations are unchanged by this navigation

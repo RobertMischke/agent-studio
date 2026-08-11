@@ -151,12 +151,14 @@ describe('CliUsageModalComponent', () => {
           inputTokens: 39_646_031, outputTokens: 97_412,
           cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstActivity: '2026-07-11T08:15:00Z', lastActivity: '2026-08-11T19:42:18Z',
         },
         {
           model: 'GPT-5.5', calls: 8,
           inputTokens: 10_782_081, outputTokens: 66_760,
           cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstActivity: '2026-07-17T10:00:00Z', lastActivity: '2026-08-10T17:04:00Z',
         },
       ],
       byProject: [],
@@ -178,11 +180,13 @@ describe('CliUsageModalComponent', () => {
           model: 'gpt-5-codex', calls: 4,
           inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: true,
+          firstActivity: '2026-07-15T09:00:00Z', lastActivity: '2026-08-09T14:30:00Z',
         },
         {
           model: 'gpt-5.6-sol', calls: 7,
           inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstActivity: '2026-07-18T09:00:00Z', lastActivity: '2026-08-08T14:30:00Z',
         },
       ],
       logPath: '(bus)',
@@ -197,6 +201,8 @@ describe('CliUsageModalComponent', () => {
     expect(component.modelRows().map(r => r.model)).toEqual(['gpt-5.6-sol', 'GPT-5.5']);
     expect(component.modelRows().every(r => r.source === 'project runtime')).toBe(true);
     expect(component.totals().tokens).toBe(50_592_284);
+    expect(component.recordedPeriodLabel())
+      .toBe('Recorded since 2026-07-11 · as of 2026-08-11 19:42 UTC');
   });
 
   it('still returns "n/a" when a window carries no usable number at all', async () => {
