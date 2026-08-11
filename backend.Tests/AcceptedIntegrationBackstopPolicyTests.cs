@@ -89,6 +89,39 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
     }
 
     [Theory]
+    [InlineData(IntegrationRecordClasses.IntegratedVerified)]
+    [InlineData(IntegrationRecordClasses.IntegratedHistorical)]
+    [InlineData(IntegrationRecordClasses.NoCodeExpected)]
+    [InlineData(IntegrationRecordClasses.ContentOnFence)]
+    [InlineData(IntegrationRecordClasses.GenuinelyMissing)]
+    public void Alert_HistoricalVerificationClass_IsNotALiveAcceptanceStall(string classification)
+    {
+        var candidate = Candidate("AGT-2589", 45, MergeIntoIntegrationOutcome.Error.ToString()) with
+        {
+            HasHistoricalVerification = true,
+            Task = Candidate("AGT-2589", 45, MergeIntoIntegrationOutcome.Error.ToString()).Task with
+            {
+                IntegrationRecords =
+                [
+                    new TaskIntegrationRecord
+                    {
+                        Id = "operator-gpt-verification-2026-08-11",
+                        Classification = classification,
+                    },
+                ],
+            },
+        };
+
+        var snapshot = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [candidate]);
+
+        Assert.False(snapshot.Active);
+        Assert.Empty(snapshot.Items);
+    }
+
+    [Theory]
     [InlineData(TaskStates.Archive, true, false)]
     [InlineData(TaskStates.Completed, false, false)]
     [InlineData(TaskStates.Completed, true, true)]

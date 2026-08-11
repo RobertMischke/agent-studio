@@ -181,6 +181,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 Task = job,
                 AcceptedAt = acceptanceRecord.RecordedAt,
                 HasIntegrationRecord = acceptanceRecord.Exists,
+                HasHistoricalVerification = TaskIntegrationRecordDetector.LatestVerification(job) is not null,
                 IntegrationStatus = status?.Status,
                 LastOutcome = NormalizeOutcome(recovery.LastMergeAttempt?.Verdict),
                 Detail = recovery.LastMergeAttempt?.Reason

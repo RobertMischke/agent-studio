@@ -129,6 +129,17 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `{ "sha": "<full-40-character-sha>" }`. The commit message must name the
   task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
   it as the final singular `commit`, and never creates or rewrites Git history.
+- Operator- or GPT-reviewed historical classifications can be appended through
+  `POST /api/tasks/{id}/integration-records?watchPath=...`. The request uses
+  the five classes owned by `HistoricalIntegrationVerificationSweep`, a stable
+  caller-supplied record id, and explicit evidence. The server owns
+  `recordedAtUtc`, rejects non-schema classes, and refuses cards in Preparation,
+  Ready, Progress, or Post Processing so an in-flight delivery cannot be sealed
+  by bookkeeping. Repeating a record id is an idempotent no-op. This mutation
+  never changes a lane, commit chain, task branch, or Git history.
+  Historical verification records also remove the card from the live
+  accepted-integration alert: they describe a reconciled historical fact, not
+  an active acceptance transaction.
 - Integration status accepts persisted abbreviated Git SHAs of at least seven
   hexadecimal characters when they match a reachable full SHA by prefix.
   Zero-file lifecycle entries whose subjects start with

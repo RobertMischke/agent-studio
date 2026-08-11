@@ -258,6 +258,31 @@ repository, and the commit message must name the task key. Repeating the same
 request refreshes that entry in place instead of duplicating it. Returns the
 refreshed `commit` and `commits` values.
 
+### `POST /api/tasks/{jobId}/integration-records?watchPath=...`
+
+Append one operator- or GPT-reviewed historical integration classification.
+The write is bookkeeping only and cannot change a lane or Git state. Use a
+stable campaign id so retries are idempotent.
+
+```json
+{
+  "id": "operator-gpt-verification-2026-08-11",
+  "classification": "integrated-verified",
+  "acceptedAtUtc": "2026-08-11T10:00:00Z",
+  "integrationBranch": "main",
+  "commitShas": ["0123456789abcdef0123456789abcdef01234567"],
+  "fenceRefs": [],
+  "evidence": "Git ancestry and task evidence reviewed on 2026-08-11."
+}
+```
+
+`classification` must be `integrated-verified`, `integrated-historical`,
+`no-code-expected`, `content-on-fence`, or `genuinely-missing`. The endpoint
+returns `409` for Preparation, Ready, Progress, and Post Processing cards so a
+current delivery wave remains untouched. Human Review, Escalated, Completed,
+and Archive cards are eligible. A repeated `id` returns `200` with
+`appended: false`.
+
 ## Runner mode
 
 ### `PUT /api/runner/{projectName}/mode`
