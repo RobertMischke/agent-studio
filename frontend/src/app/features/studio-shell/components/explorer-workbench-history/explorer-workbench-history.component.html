@@ -5,36 +5,23 @@
   >
     <span class="studio-workbench-history__label">{{ group.label }}</span>
     @for (workbench of group.items; track workbench.id) {
-      <button
-        #workbenchTopic
-        type="button"
-        class="studio-workbench-topic"
-        [class.studio-workbench-topic--active]="isActive(workbench)"
-        [attr.aria-current]="isActive(workbench) ? 'page' : null"
-        [attr.aria-label]="workbench.title + ', ' + secondaryMeta(workbench)"
-        [appTooltip]="tooltip(workbench)"
-        [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
-        (click)="openWorkbench.emit(workbench)"
-      >
-        <span class="studio-workbench-topic__primary">
-          <span class="studio-workbench-topic__pattern"
-                aria-hidden="true"
-                [attr.data-pattern]="documentPattern(workbench)">
-            <app-studio-icon [name]="patternIcon(workbench)" [size]="12" />
-          </span>
-          <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
-        </span>
-        <span class="studio-workbench-topic__meta">
+      <span #workbenchTopic class="studio-workbench-history__topic-host">
+        <app-tree-row
+          level="child"
+          [glyph]="patternIcon(workbench)"
+          [label]="workbench.title"
+          [active]="isActive(workbench)"
+          [ariaCurrent]="isActive(workbench) ? 'page' : null"
+          [ariaLabel]="workbench.title + ', ' + secondaryMeta(workbench)"
+          [tooltip]="tooltip(workbench)"
+          [tooltipTestId]="'studio-explorer-workbench-tooltip-' + projectName() + '-' + workbench.id"
+          [testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
+          (selectRequest)="openWorkbench.emit(workbench)">
           <i class="studio-workbench-status-dot" aria-hidden="true"
              [attr.data-status]="workbench.status"
              [attr.data-testid]="'studio-explorer-workbench-status-' + projectName() + '-' + workbench.id"></i>
-          @if (workbench.key; as key) {
-            <span class="studio-workbench-topic__key"
-                  [attr.data-testid]="'studio-explorer-workbench-key-' + projectName() + '-' + workbench.id">{{ key }}</span>
-          }
-          <span>{{ secondaryMeta(workbench) }}</span>
-        </span>
-      </button>
+        </app-tree-row>
+      </span>
     } @empty {
       <span class="studio-workbench-topics__state">{{ group.empty }}</span>
     }

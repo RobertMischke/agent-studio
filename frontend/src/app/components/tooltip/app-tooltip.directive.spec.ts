@@ -39,6 +39,7 @@ describe('AppTooltipDirective', () => {
     vi.advanceTimersByTime(1);
     const overlay = document.querySelector<HTMLElement>('[role="tooltip"]');
     expect(overlay?.textContent).toBe('<img src=x onerror=alert(1)> Safe text');
+    expect(overlay?.dataset['testid']).toBe('test-tooltip');
     expect(overlay?.querySelector('img')).toBeNull();
     expect(target.getAttribute('aria-describedby')).toBe(overlay?.id);
   });

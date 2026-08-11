@@ -111,7 +111,6 @@
                [class.studio-tree-project--moving]="!!p.projectId && projectDrag.movingProjectId() === p.projectId"
                [attr.data-project-name]="p.name"
                [attr.data-testid]="'studio-explorer-project-row-' + p.name"
-               [cacTooltip]="rowTitle(p)"
                (cdkDragStarted)="onDragStart(p)"
                (cdkDragEnded)="onDragEnd()">
             @if (p.projectId && projectActions.renamingProjectId() === p.projectId) {
@@ -131,13 +130,16 @@
                    right-click opens the project context menu. The visible label
                    is the registry displayName (p.displayLabel) so a rename shows
                    immediately; the row stays keyed by p.name everywhere else. -->
-              <app-tree-row level="root"
+              <app-tree-row class="studio-project-row" level="root"
                             [chevron]="isExpanded(p.name) ? 'expanded' : 'collapsed'"
                             [glyphChar]="p.initial"
                             [glyphColor]="p.color"
                             [label]="p.displayLabel"
-                            [count]="p.totalJobs"
+                            [count]="p.totalJobs > 0 ? p.totalJobs : null"
                             [active]="p.isActive"
+                            [ariaLabel]="projectTooltip(p).replaceAll('\n', ', ')"
+                            [tooltip]="projectTooltip(p)"
+                            [tooltipTestId]="'studio-explorer-project-tooltip-' + p.name"
                             [testid]="'studio-explorer-project-' + p.name"
                             (chevronClick)="toggleExpanded.emit(p.name)"
                             (selectRequest)="toggleExpanded.emit(p.name)"
@@ -164,14 +166,8 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- Fixed project-scoped rows for Board (kanban), Deck,
-                   Wiki, and Epics (overview), followed by 0..N dynamic
-                   Project URL rows (see the @for below). These are the third
-                   tree level: `level="child"` insets them one step under the
-                   project row (workspace → project → destinations) so a project
-                   reads as clearly superordinate to its destinations rather than
-                   flush beside them (AGT-2057 regression fix). Per-lane children
-                   stay retired. -->
+              <!-- Project destinations use `level="child"` below the project
+                   row; per-lane children stay retired (AGT-2057). -->
               <div class="studio-tree-children">
                 <app-tree-row level="child" glyph="grid"
                               label="Board"
@@ -194,7 +190,9 @@
                               (selectRequest)="openHubRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="book"
                               label="Wiki"
+                              [tooltip]="'Wiki\n' + p.displayLabel + ' project documentation'"
                               [active]="p.isActive && activeProjectSurface() === 'wiki'"
+                              [tooltipTestId]="'studio-explorer-project-wiki-tooltip-' + p.name"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
@@ -219,7 +217,8 @@
                   <app-tree-row level="child" glyph="link"
                                 [label]="u.label"
                                 [ariaLabel]="u.label + ', opens ' + u.url + ' as an embedded preview tab'"
-                                [cacTooltip]="u.url"
+                                [tooltip]="urlTooltip(p, u)"
+                                [tooltipTestId]="'studio-explorer-project-url-tooltip-' + p.name + '-' + u.id"
                                 [testid]="'studio-explorer-project-url-' + p.name + '-' + u.id"
                                 (selectRequest)="openUrlPreview(p.name, u.id)">
                     <span class="studio-url-status-dot"

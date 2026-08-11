@@ -8,6 +8,7 @@
  * is incomplete.
  */
 .tree-row {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -30,11 +31,17 @@
   color: var(--studio-fg);
   text-align: left;
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
   transition: background 120ms ease, color 120ms ease;
 
   &:hover {
     background: var(--studio-bg-hover);
+  }
+
+  &:disabled {
+    cursor: default;
   }
 
   // Visible keyboard focus. The shell resets native button chrome
@@ -113,7 +120,8 @@
   }
 
   &__name {
-    flex: 1;
+    min-width: 0;
+    flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -128,6 +136,11 @@
   // Count badge is the shared <app-count-badge>; its active inversion is
   // driven by the row's `active()` → `[tone]` binding, not a descendant
   // selector here.
+}
+
+app-tree-row {
+  display: block;
+  min-width: 0;
 }
 
 /*

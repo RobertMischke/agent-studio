@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 import { CountBadgeComponent } from '../count-badge/count-badge.component';
+import { AppTooltipDirective } from '../tooltip/app-tooltip.directive';
 
 /**
  * Reusable tree row used in the studio shell sidebar (Explorer
@@ -23,7 +24,7 @@ import { CountBadgeComponent } from '../count-badge/count-badge.component';
   selector: 'app-tree-row',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StudioIconComponent, CountBadgeComponent],
+  imports: [StudioIconComponent, CountBadgeComponent, AppTooltipDirective],
   encapsulation: ViewEncapsulation.None,
   templateUrl: './tree-row.component.html',
   styleUrl: './tree-row.component.scss',
@@ -44,6 +45,9 @@ export class TreeRowComponent {
   readonly label = input('');
   readonly count = input<string | number | null>(null);
   readonly meta = input<string | null>(null);
+  /** Complete row context shown through the viewport-safe shared tooltip. */
+  readonly tooltip = input<string | null>(null);
+  readonly tooltipTestId = input<string | null>(null);
   readonly ariaLabel = input<string | null>(null);
   readonly active = input(false);
   readonly level = input<'root' | 'child'>('root');
@@ -52,6 +56,7 @@ export class TreeRowComponent {
   readonly ariaCurrent = input<'page' | 'true' | null>(null);
   /** data-testid for the chevron control — lets callers assert on the disclosure twisty. */
   readonly chevronTestid = input<string | null>(null);
+  readonly disabled = input(false);
 
   readonly chevronClick = output<Event>();
   readonly selectRequest = output<Event>();
@@ -63,6 +68,7 @@ export class TreeRowComponent {
   }
 
   onSelect(ev: Event): void {
+    if (this.disabled()) return;
     this.selectRequest.emit(ev);
   }
 

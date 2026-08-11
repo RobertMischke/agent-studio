@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -95,5 +95,28 @@ describe('TreeRowComponent (smoke)', () => {
     expect(host.querySelector('.tree-row__chev--placeholder')).toBeTruthy();
     expect(host.querySelector('.tree-row__glyph-icon--placeholder')).toBeTruthy();
     expect(host.textContent).toContain('Iconless');
+  });
+
+  it('discloses the complete label context through the shared tooltip', () => {
+    vi.useFakeTimers();
+    TestBed.configureTestingModule({
+      imports: [TreeRowComponent],
+      providers: [provideZonelessChangeDetection()],
+    });
+    const fixture = TestBed.createComponent(TreeRowComponent);
+    fixture.componentRef.setInput('label', 'A long project name');
+    fixture.componentRef.setInput('tooltip', 'A long project name\n3 open tasks');
+    fixture.componentRef.setInput('tooltipTestId', 'tree-row-tooltip');
+    fixture.detectChanges();
+
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button')!;
+    button.dispatchEvent(new MouseEvent('mouseenter'));
+    vi.advanceTimersByTime(300);
+
+    const tooltip = document.querySelector<HTMLElement>('[data-testid="tree-row-tooltip"]');
+    expect(tooltip?.textContent).toBe('A long project name\n3 open tasks');
+    expect(button.getAttribute('aria-describedby')).toBe(tooltip?.id);
+    fixture.destroy();
+    vi.useRealTimers();
   });
 });

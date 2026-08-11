@@ -401,6 +401,33 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(root.querySelector('.studio-tree-children .tree-row--root')).toBeNull();
   });
 
+  it('gives project and URL names priority while keeping complete tooltip context', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Agent Orchestration Studio')]);
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const projectRow = root.querySelector<HTMLElement>(
+      '[data-testid="studio-explorer-project-Agent Orchestration Studio"]',
+    );
+    expect(projectRow?.querySelector('app-count-badge')).toBeNull();
+    expect(projectRow?.getAttribute('aria-label')).toContain('Agent Orchestration Studio, 0 open tasks');
+
+    const node = cmp.groups()[0].projects[0];
+    expect(cmp.projectTooltip(node)).toContain(
+      'Agent Orchestration Studio\n0 open tasks\nAuto-pickup manual',
+    );
+    expect(cmp.urlTooltip(node, {
+      id: 'preview',
+      label: 'Public development preview',
+      url: 'https://example.test/preview',
+      sortOrder: 0,
+      startRule: null,
+    })).toBe('Public development preview\nhttps://example.test/preview\nStatus unknown');
+  });
+
   it('insets every project destination one level below the project row (AGT-2057 regression)', () => {
     // Explorer hierarchy is workspace -> project -> destinations. The project
     // row is `level="root"`; its Board / Deck / Wiki / Epics (+ URL)

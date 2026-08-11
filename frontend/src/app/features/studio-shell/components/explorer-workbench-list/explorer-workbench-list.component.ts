@@ -13,8 +13,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
-import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
-import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import type { ArticlePattern, WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
@@ -36,7 +35,7 @@ interface WorkbenchNavigationGroup {
 @Component({
   selector: 'app-explorer-workbench-list',
   standalone: true,
-  imports: [TreeRowComponent, AppTooltipDirective, ExplorerWorkbenchHistoryComponent, StudioIconComponent],
+  imports: [TreeRowComponent, ExplorerWorkbenchHistoryComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './explorer-workbench-list.component.html',
   styleUrl: './explorer-workbench-list.component.scss',
@@ -82,7 +81,7 @@ export class ExplorerWorkbenchListComponent {
       .filter(item => item.status === 'decision-pending')
       .reduce((count, item) => count + this.openCount(item), 0));
 
-  private readonly topics = viewChildren<ElementRef<HTMLButtonElement>>('workbenchTopic');
+  private readonly topics = viewChildren<ElementRef<HTMLElement>>('workbenchTopic');
   private readonly styleGuideRow = viewChild<ElementRef<HTMLElement>>('styleGuideRow');
   private lastProjectName: string | null = null;
   private lastRevealedWorkbench: string | null = null;
@@ -117,8 +116,8 @@ export class ExplorerWorkbenchListComponent {
     effect(() => {
       const activeWorkbenchId = this.activeWorkbenchId();
       const activeTopic = this.topics()
-        .map(topic => topic.nativeElement)
-        .find(topic => topic.getAttribute('aria-current') === 'page');
+        .map(topic => topic.nativeElement.querySelector<HTMLButtonElement>('[aria-current="page"]'))
+        .find(topic => topic !== null);
       const activeStyleGuide = this.styleGuideRow()?.nativeElement
         .querySelector<HTMLButtonElement>('[aria-current="page"]');
       const activeRow = activeTopic ?? activeStyleGuide;
@@ -178,7 +177,7 @@ export class ExplorerWorkbenchListComponent {
   }
 
   navTooltip(item: WorkbenchListItem): string {
-    return [item.key, item.title, this.accessibleMeta(item)].filter(Boolean).join(' · ');
+    return [item.title, item.key, this.accessibleMeta(item)].filter(Boolean).join('\n');
   }
 
   dossierAriaLabel(): string {

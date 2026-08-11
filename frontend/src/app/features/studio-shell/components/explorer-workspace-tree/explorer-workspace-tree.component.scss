@@ -2,6 +2,10 @@
   display: block;
 }
 
+.studio-tree-project {
+  container-type: inline-size;
+}
+
 .studio-explorer-tree__registry-hint {
   color: var(--studio-fg-muted);
   font-size: 9px;
@@ -48,6 +52,28 @@
   &:hover {
     background: var(--studio-bg-hover);
     color: var(--studio-accent);
+  }
+}
+
+/* Narrow Explorer rows protect the project or URL name before optional
+   decoration. Zero task counts are omitted in the template; hover-only jump
+   actions and the quiet manual-mode dot collapse at the panel's tight width. */
+@container (max-width: 260px) {
+  .studio-project-row .tree-row,
+  .studio-tree-children .tree-row {
+    gap: var(--studio-spacing-1);
+  }
+
+  .studio-project-row .studio-tree-row__hub-link,
+  .studio-tree-children .studio-tree-row__url-ext,
+  .studio-project-row .studio-auto-pickup--manual {
+    display: none;
+  }
+
+  .studio-project-row .count-badge {
+    min-width: 16px;
+    padding-right: var(--studio-spacing-1);
+    padding-left: var(--studio-spacing-1);
   }
 }
 
