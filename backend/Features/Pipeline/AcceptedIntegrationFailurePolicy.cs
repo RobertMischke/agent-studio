@@ -12,6 +12,7 @@ public static class AcceptedIntegrationFailureCodes
     public const string DeliveryGateFailed = "delivery-gate-failed";
     public const string BuildGateFailed = "build-gate-failed";
     public const string SourceNeedsRebase = "source-needs-rebase";
+    public const string DeliveryAttributionAmbiguous = "delivery-attribution-ambiguous";
     public const string ReviewSubjectTaskKeyUnavailable = "review-subject-task-key-unavailable";
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
@@ -81,6 +82,14 @@ public static class AcceptedIntegrationFailurePolicy
                 "Rebase required",
                 "The reviewed delivery is behind the current integration branch and must be rebased before acceptance.",
                 RebaseRecoveryAvailable: true),
+            AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous => new(
+                code,
+                "Delivery attribution needs a new round",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "Automatic integration could not retain a one-to-one delivery commit mapping."),
+                RebaseRecoveryAvailable: false),
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable => new(
                 code,
                 "Task key unavailable",
@@ -117,6 +126,8 @@ public static class AcceptedIntegrationFailurePolicy
             return AcceptedIntegrationFailureCodes.DeliveryGateFailed;
         if (string.Equals(verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.NoTaskBranch;
+        if (string.Equals(verdict, "agent-round-required", StringComparison.OrdinalIgnoreCase))
+            return AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous;
 
         var detail = reason ?? string.Empty;
         if (detail.Contains(
@@ -145,6 +156,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.DeliveryGateFailed => AcceptedIntegrationFailureCodes.DeliveryGateFailed,
             AcceptedIntegrationFailureCodes.BuildGateFailed => AcceptedIntegrationFailureCodes.BuildGateFailed,
             AcceptedIntegrationFailureCodes.SourceNeedsRebase => AcceptedIntegrationFailureCodes.SourceNeedsRebase,
+            AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous => AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous,
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable => AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,

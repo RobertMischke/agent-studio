@@ -346,7 +346,7 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
-    public void MergeBranchIntoIntegration_BehindCurrentTarget_RebasesMechanicallyBeforeMerge()
+    public void MergeBranchIntoIntegration_BehindCurrentTarget_DirectMergePreservesDeliverySha()
     {
         var repo = SeedRepo("merge-behind-target");
         var git = BuildGitService(("Fixture", repo));
@@ -363,11 +363,47 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
 
         var result = git.MergeBranchIntoIntegration(repo, "task/behind", "develop");
 
-        Assert.Equal(MergeIntoIntegrationOutcome.MergedAfterRebase, result.Outcome);
-        var replacement = Assert.Single(result.RebasedCommits);
-        Assert.Equal(originalTaskTip, replacement.OriginalSha);
-        Assert.Equal(RunGit(repo, "rev-parse develop^2").Out.Trim(), replacement.RebasedSha);
-        Assert.NotEqual(originalTaskTip, replacement.RebasedSha);
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, result.Outcome);
+        Assert.Empty(result.RebasedCommits);
+        Assert.Equal(originalTaskTip, RunGit(repo, "rev-parse develop^2").Out.Trim());
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {originalTaskTip} develop").Code);
+        Assert.False(git.RepoHasUncommittedChanges(repo));
+    }
+
+    [Fact]
+    public void MergeBranchIntoIntegration_DirectConflict_UsesRerereMergeWithoutRewritingDelivery()
+    {
+        var repo = SeedRepo("merge-rerere");
+        var git = BuildGitService(("Fixture", repo));
+
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "base\n");
+        Commit(repo, "chore: add shared base");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/rerere");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "task version\n");
+        Commit(repo, "feat: task edits shared");
+        var deliverySha = RunGit(repo, "rev-parse task/rerere").Out.Trim();
+
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version\n");
+        Commit(repo, "chore: develop edits shared");
+        RunGit(repo, "config rerere.enabled true");
+        RunGit(repo, "config rerere.autoupdate true");
+
+        var training = RunGit(repo, "merge --no-ff --no-commit task/rerere");
+        Assert.NotEqual(0, training.Code);
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "combined resolution\n");
+        RunGit(repo, "add shared.txt");
+        RunGit(repo, "rerere");
+        RunGit(repo, "merge --abort");
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/rerere", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, result.Outcome);
+        Assert.Empty(result.RebasedCommits);
+        Assert.Equal(deliverySha, RunGit(repo, "rev-parse develop^2").Out.Trim());
+        Assert.Equal(deliverySha, RunGit(repo, "rev-parse task/rerere").Out.Trim());
+        Assert.Equal("combined resolution", File.ReadAllText(Path.Combine(repo, "shared.txt")).Trim());
         Assert.False(git.RepoHasUncommittedChanges(repo));
     }
 
@@ -392,7 +428,7 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
-    public void MergeBranchIntoIntegration_Conflict_AbortsLeavesTreeCleanAndReportsFiles()
+    public void MergeBranchIntoIntegration_UnresolvedConflict_RequestsAgentRoundAndLeavesTreeClean()
     {
         var repo = SeedRepo("merge-conflict");
         var git = BuildGitService(("Fixture", repo));
@@ -412,7 +448,7 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
 
         var result = git.MergeBranchIntoIntegration(repo, "task/12", "develop");
 
-        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, result.Outcome);
+        Assert.Equal(MergeIntoIntegrationOutcome.AgentRoundRequired, result.Outcome);
         // The conflict is made visible, not silent.
         Assert.Contains("shared.txt", result.ConflictedFiles);
         // The merge was aborted: develop is unchanged, the tree is clean, and no

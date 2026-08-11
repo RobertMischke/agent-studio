@@ -675,9 +675,12 @@ operator changes cause the step to fail before its writer runs.
 - Failed accepted-integration steps persist a machine-readable `failureCode`.
   The board projects that code with concise operator copy and recovery
   eligibility. `merge-conflict` and `source-needs-rebase` offer focused rebase
-  recovery; task-key or review-subject validation failures stay visible but do
-  not offer an unrelated rebase action. The raw pipeline reason and timeline
-  event remain the detailed evidence.
+  recovery for legacy or explicitly operator-owned cases. A current immediate
+  integration that cannot retain a one-to-one delivery commit mapping records
+  `delivery-attribution-ambiguous` and starts one bounded automatic steer round
+  before Human Review. Task-key or review-subject validation failures stay
+  visible but do not offer an unrelated rebase action. The raw pipeline reason
+  and timeline event remain the detailed evidence.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
@@ -831,10 +834,24 @@ operator changes cause the step to fail before its writer runs.
   it completes only a Git-proven integrated delivery. The
   `AcceptedIntegrationWorker` and its backstop may finish only a legacy
   transaction that already has the durable `integrating` phase. A
-  clean mechanical replay records `merged-after-rebase` and continues through
-  the ordinary gate. A remaining conflict is a visible `Failed` outcome with conflicted files in the verdict
-  summary; the phase clears, the card remains in Review, and the working tree is
-  left clean. Once merge/gate/rollback starts, host cancellation
+  delivery first receives a normal `--no-ff` merge. This best case preserves
+  every original delivery SHA and adds only the integration merge commit. A
+  direct conflict receives one mechanical three-way `ort` merge with recorded
+  `rerere` resolution, which has the same SHA-preserving shape. This ordering
+  treats attribution as a product value: Grades, Evidence, Records, and review
+  subjects refer to exact delivery SHAs (AGT-2562, AGT-2624). Only if both merge
+  paths fail may a disposable-worktree rebase run, and it may continue only when
+  delivery commit cardinality is unchanged and the old-to-new SHA map is
+  one-to-one. A clean replay records `merged-after-rebase` and continues
+  through the ordinary gate. A conflict or ambiguous mapping records
+  `agent-round-required`; the Remote integration coordinator persists a Steer
+  intent, supersedes the current delivery generation, moves the card to the
+  front of Ready, and writes `Automatically started a new agent round to
+  preserve unambiguous delivery SHA attribution.` to the timeline. This loop is
+  limited to one automatic round per operator-owned review epoch. Repetition
+  reaches Human Review with the failed step and conflicted files visible. Every
+  failed attempt leaves the integration working tree clean. Once
+  merge/gate/rollback starts, host cancellation
   does not interrupt that consistency boundary. `/healthz/drain` reports
   `gate-busy` while the boundary is active so the external stable restart
   watcher can wait for a bounded drain window. The paired

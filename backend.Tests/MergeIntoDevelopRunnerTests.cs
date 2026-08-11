@@ -64,7 +64,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_BehindCurrentTarget_RebasesRunsGateAndRecordsDistinctPassedVerdict()
+    public async Task RunAsync_BehindCurrentTarget_DirectMergePreservesShaAndRunsGate()
     {
         var repo = SeedRepo("runner-rebase");
         RunGit(repo, "checkout -q -b develop");
@@ -101,15 +101,15 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             "develop",
             CancellationToken.None);
 
-        Assert.Equal(MergeIntoIntegrationOutcome.MergedAfterRebase, outcome.Outcome);
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Empty(outcome.RebasedCommits);
         Assert.Equal(1, gateRunner.Invocations);
         Assert.Equal(outcome.MergedSha, gateRunner.Request!.ExpectedSha);
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Passed, step!.Status);
-        Assert.Equal("merged-after-rebase", step.Verdict);
-        Assert.Contains("1 commit SHA(s) were superseded", step.VerdictSummary);
-        Assert.Contains("Build gate Ok", step.VerdictSummary);
+        Assert.Equal("merged", step.Verdict);
+        Assert.Contains("rebased merge gate passed", step.VerdictSummary);
     }
 
     [Fact]
@@ -433,14 +433,14 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             "main",
             CancellationToken.None);
 
-        Assert.Equal(MergeIntoIntegrationOutcome.MergedAfterRebase, outcome.Outcome);
-        var replacement = Assert.Single(outcome.RebasedCommits);
-        Assert.Equal(taskSha, replacement.OriginalSha);
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Empty(outcome.RebasedCommits);
         Assert.False(HasTag(repo, "pre-main-suite-ran"),
             "a docs-only delivery must not run the full suite");
         // The docs delivery landed on main as a merge commit.
         Assert.Equal(0, RunGit(repo, "rev-parse --verify main^2").Code);
-        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {replacement.RebasedSha} main").Code);
+        Assert.Equal(taskSha, RunGit(repo, "rev-parse main^2").Out.Trim());
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {taskSha} main").Code);
 
         var evidencePath = Assert.Single(
             Directory.GetFiles(Path.Combine(jobFolder, "post-steps"), "pre-main-test-gate-*.log"));
@@ -799,11 +799,11 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
         var outcome = runner.Run("Fixture", "22", jobFolder, repo, "develop");
 
-        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, outcome.Outcome);
+        Assert.Equal(MergeIntoIntegrationOutcome.AgentRoundRequired, outcome.Outcome);
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Failed, step!.Status);
-        Assert.Equal("conflict", step.Verdict);
+        Assert.Equal("agent-round-required", step.Verdict);
         // The conflicted file is surfaced in the verdict summary tooltip.
         Assert.Contains("shared.txt", step.VerdictSummary);
     }

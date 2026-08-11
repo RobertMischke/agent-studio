@@ -633,6 +633,7 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
 builder.Services.AddSingleton<AcceptedIntegrationInventorySweep>();
 builder.Services.AddSingleton<HistoricalIntegrationVerificationSweep>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationAgentRoundService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();

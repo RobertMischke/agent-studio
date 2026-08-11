@@ -156,6 +156,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Provenance,
             deps.Pipeline,
             deps.Timeline,
+            AgentRounds(deps),
             NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance);
         var result = await coordinator.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
             Project,
@@ -208,7 +209,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
 
     [Fact]
     [Trait("Category", "MachineBound")]
-    public async Task Acceptance_DoesNotRetryArtificiallyFailedImmediateMerge()
+    public async Task UnresolvedImmediateIntegration_AutomaticallyStartsSteerRoundBeforeHumanReview()
     {
         var deliverySha = PublishDelivery("shared.txt", "delivery version\n");
         RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
@@ -227,6 +228,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Provenance,
             deps.Pipeline,
             deps.Timeline,
+            AgentRounds(deps),
             NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance);
 
         var immediate = await coordinator.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
@@ -238,34 +240,57 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             IntegrationStrategies.DirectMerge,
             PipelineTypes.Task,
             ReviewSubjectStore.Read(autoReview.FolderPath)!.CompletedAtUtc));
-        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, immediate.Outcome);
+        Assert.Equal(MergeIntoIntegrationOutcome.AgentRoundRequired, immediate.Outcome);
+        var queued = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(TaskStates.Ready, queued.State);
+        Assert.Equal(ContinueModes.Steer, queued.PendingIntent?.Mode);
         Assert.Equal(
-            IntegrationStatuses.ConflictSkipped,
-            Assert.Single(deps.Integration.BuildLookup([autoReview]).Values).Status);
-
-        RunGit(_repo, "checkout", "-q", "develop");
-        RunGit(_repo, "reset", "-q", "--hard", "origin/develop");
-        RunGit(_repo, "checkout", "-q", "main");
-        var reviewed = await deps.Transitions.MoveAsync(
-            Slug,
-            TaskStates.HumanReview,
-            _watchPath,
-            suppressProductExecution: true,
-            expectedSourceState: TaskStates.AutoReview);
-        Assert.Equal(MoveJobStatus.Success, reviewed.Status);
-
-        var accepted = await deps.Transitions.MoveAsync(
-            Slug,
-            TaskStates.Completed,
-            _watchPath);
-        Assert.Equal(MoveJobStatus.IntegrationFailed, accepted.Status);
-        var stillReviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
-        Assert.Equal(TaskStates.HumanReview, stillReviewed.State);
-        Assert.Null(stillReviewed.Phase);
-        Assert.Equal(
-            IntegrationStatuses.ConflictSkipped,
-            Assert.Single(deps.Integration.BuildLookup([stillReviewed]).Values).Status);
+            IntegrationAgentRoundService.AttributionAmbiguousReason,
+            queued.PendingIntent?.SavedReason);
+        Assert.Contains("direct merge", queued.PendingIntent?.Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("one-to-one", queued.PendingIntent?.Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            deps.Timeline.ReadAll(queued.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationRecoveryQueued
+                     && entry.Summary.Contains("Automatically started a new agent round", StringComparison.Ordinal));
         Assert.False(deps.AcceptedQueue!.Reader.TryRead(out _));
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task CardinalityAmbiguity_AutomaticallyRequeuesWithSteerNote()
+    {
+        var deliverySha = PublishDelivery("cardinality.txt", "delivery version\n");
+        var deps = Build(deliverySha, initialState: TaskStates.AutoReview);
+        var job = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var request = new RemoteDeliveryIntegrationRequest(
+            Project,
+            job.Id,
+            job.FolderPath,
+            job.WatchPath,
+            "develop",
+            IntegrationStrategies.DirectMerge,
+            PipelineTypes.Task,
+            DateTimeOffset.UtcNow);
+        var result = MergeIntoIntegrationResult.RequiresAgentRound(
+            [],
+            "Mechanical rebase changed the delivery commit cardinality; refusing ambiguous SHA attribution.");
+
+        var started = await AgentRounds(deps).TryStartAsync(request, result);
+
+        Assert.True(started.Started, started.Reason);
+        var queued = deps.Scanner.FindJob(Slug, _watchPath)!;
+        Assert.Equal(TaskStates.Ready, queued.State);
+        Assert.Equal(ContinueModes.Steer, queued.PendingIntent?.Mode);
+        Assert.Contains("cardinality", queued.PendingIntent?.Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("do not squash, split, drop, or combine", queued.PendingIntent?.Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "Automatically started a new agent round to preserve unambiguous delivery SHA attribution.",
+            deps.Timeline.ReadAll(queued.FolderPath).Select(entry => entry.Summary));
+        Assert.Contains(
+            "Automatic integration recovery",
+            File.ReadAllText(Path.Combine(queued.FolderPath, "prompt.md")),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -492,6 +517,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             deps.Provenance,
             deps.Pipeline,
             deps.Timeline,
+            AgentRounds(deps),
             NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance);
         var immediate = await coordinator.EnqueueAsync(new RemoteDeliveryIntegrationRequest(
             Project,
@@ -502,7 +528,7 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             IntegrationStrategies.DirectMerge,
             PipelineTypes.Task,
             DateTimeOffset.UtcNow));
-        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, immediate.Outcome);
+        Assert.Equal(MergeIntoIntegrationOutcome.AgentRoundRequired, immediate.Outcome);
 
         var outcome = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
 
@@ -520,13 +546,15 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             step => step.StepId == PipelineCatalogue.MergeIntoDevelopStepId);
         Assert.NotNull(mergeStep);
         Assert.Equal(PipelineStepStatus.Failed, mergeStep!.Status);
-        Assert.Equal("conflict", mergeStep.Verdict);
+        Assert.Equal("agent-round-required", mergeStep.Verdict);
+        Assert.Equal(
+            AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous,
+            mergeStep.FailureCode);
         Assert.Contains("shared.txt", mergeStep.VerdictSummary);
 
         var integration = deps.Integration.BuildLookup([reviewed])[reviewed.TaskKey];
         Assert.Equal(IntegrationStatuses.ConflictSkipped, integration.Status);
-        Assert.Contains("rebase", integration.Detail, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("develop", integration.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Mechanical rebase conflicted", integration.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
             deps.Timeline.ReadAll(reviewed.FolderPath),
             entry => entry.Kind == TimelineEventKinds.IntegrationFailed);
@@ -838,16 +866,17 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         RunGit(_repo, "commit", "-q", "-m", "develop edits shared");
         var deps = Build(deliverySha);
 
-        var immediate = await deps.Merge.RunAsync(
-            Project,
-            Slug,
-            deps.Scanner.FindJob(Slug, _watchPath)!.FolderPath,
-            _watchPath,
-            "develop",
-            CancellationToken.None,
-            IntegrationStrategies.DirectMerge,
-            PipelineTypes.Task);
-        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, immediate.Outcome);
+        var conflicted = deps.Scanner.FindJob(Slug, _watchPath)!;
+        deps.Pipeline.RecordStep(conflicted.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "conflict",
+            VerdictSummary = "Conflicted: shared.txt.",
+            Reason = "Merge conflict in one file; merge aborted.",
+            FailureCode = AcceptedIntegrationFailureCodes.MergeConflict,
+        });
 
         var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
         Assert.Equal(MoveJobStatus.IntegrationFailed, accepted.Status);
@@ -1566,6 +1595,14 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         attribution = "automatic",
         confidence = 1,
     };
+
+    private static IntegrationAgentRoundService AgentRounds(Deps deps)
+        => new(
+            deps.Scanner,
+            deps.Mutations,
+            deps.States,
+            deps.Timeline,
+            NullLogger<IntegrationAgentRoundService>.Instance);
 
     public void Dispose()
     {

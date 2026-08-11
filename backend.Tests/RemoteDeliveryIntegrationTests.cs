@@ -108,6 +108,42 @@ public sealed class RemoteDeliveryIntegrationPolicyTests
 
 public sealed class RemoteDeliveryIntegrationCoordinatorTests
 {
+    [Theory]
+    [InlineData(MergeIntoIntegrationOutcome.Merged, 0, RemoteIntegrationContinuationAction.None)]
+    [InlineData(MergeIntoIntegrationOutcome.Conflict, 0, RemoteIntegrationContinuationAction.None)]
+    [InlineData(MergeIntoIntegrationOutcome.AgentRoundRequired, 0, RemoteIntegrationContinuationAction.StartAgentRound)]
+    [InlineData(MergeIntoIntegrationOutcome.AgentRoundRequired, 1, RemoteIntegrationContinuationAction.LeaveForHumanReview)]
+    public void ContinuationPolicy_BoundsAutomaticAgentRound(
+        MergeIntoIntegrationOutcome outcome,
+        int roundsUsed,
+        RemoteIntegrationContinuationAction expected)
+    {
+        Assert.Equal(
+            expected,
+            RemoteIntegrationContinuationPolicy.Decide(outcome, roundsUsed));
+    }
+
+    [Fact]
+    public async Task EnqueueAsync_AttributionAmbiguity_StartsAgentRound()
+    {
+        RemoteDeliveryIntegrationRequest? startedFor = null;
+        var coordinator = new RemoteDeliveryIntegrationCoordinator(
+            request => Task.FromResult(MergeIntoIntegrationResult.RequiresAgentRound(
+                [],
+                "Mechanical rebase changed the delivery commit cardinality.")),
+            NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance,
+            startAgentRound: (request, _) =>
+            {
+                startedFor = request;
+                return Task.FromResult(new IntegrationAgentRoundStartResult(true, "steer saved"));
+            });
+
+        var result = await coordinator.EnqueueAsync(Request("cardinality", 1));
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AgentRoundRequired, result.Outcome);
+        Assert.Equal("cardinality", startedFor?.JobId);
+    }
+
     [Fact]
     public async Task EnqueueAsync_SerializesSameProjectInDeliveryOrder()
     {

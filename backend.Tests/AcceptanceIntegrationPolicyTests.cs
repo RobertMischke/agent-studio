@@ -16,6 +16,7 @@ public sealed class AcceptanceIntegrationPolicyTests
     [InlineData(MergeIntoIntegrationOutcome.NoTaskBranch, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]
     [InlineData(MergeIntoIntegrationOutcome.Error, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]
     [InlineData(MergeIntoIntegrationOutcome.Conflict, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]
+    [InlineData(MergeIntoIntegrationOutcome.AgentRoundRequired, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]
     [InlineData(MergeIntoIntegrationOutcome.NoTaskBranch, true, true, AcceptedIntegrationLaneDecision.Complete)]
     [InlineData(MergeIntoIntegrationOutcome.NoTaskBranch, false, false, AcceptedIntegrationLaneDecision.Complete)]
     public void WorkerOutcomeMatrix_DecidesAcceptedLane(
