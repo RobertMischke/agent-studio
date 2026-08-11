@@ -314,7 +314,7 @@
         <div class="rule-id">ADM-01</div>
         <div>
           <h4>Flat composition</h4>
-          <p><strong>Admin content MUST remain flat.</strong> Do not wrap a section, row group, banner, or status summary in a decorative card, border, radius, or resting shadow. Separate content with spacing, alignment, typography, or a low-contrast tint across the complete surface. Borders remain valid only for controls, focus, resizable shell boundaries, and data structures that require a boundary.</p>
+          <p><strong>Admin content MUST remain flat.</strong> Do not wrap a section, row group, banner, or status summary in a decorative card, border, radius, or resting shadow. Separate content with spacing, alignment, typography, or a low-contrast tint across the complete surface. Borders remain valid only for controls, focus, resizable shell boundaries, and data structures that require a boundary. Do not place labelled summary regions such as Goal and Where it stopped inside one outer decorated summary container and then decorate an inner region again.</p>
         </div>
       </article>
       <article class="rule">
@@ -396,6 +396,18 @@
       </article>
     </div>
 
+    <h3>Do and don't: related summary rows</h3>
+    <div class="spec-grid" aria-label="Flat summary row examples">
+      <article class="spec">
+        <h4>Do</h4>
+        <p>Render related facts as flat sibling rows. Use spacing or a neutral separator for hierarchy. When a stopped-state needs emphasis, tint the complete row quietly with the semantic error surface and keep the geometry flat.</p>
+      </article>
+      <article class="spec">
+        <h4>Don't</h4>
+        <p>Do not put Goal and Where it stopped inside an outer bordered or tinted box and then wrap Where it stopped in another inset box. Do not replace the nested box with a colored left edge.</p>
+      </article>
+    </div>
+
     <h3>Decision provenance</h3>
     <div class="audit-wrap">
       <table>
@@ -410,6 +422,7 @@
           <tr><td>ADM-09</td><td>Light and dark change semantic tokens, not structure or behavior.</td><td>Style-guide hard rule R5.</td></tr>
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
           <tr><td>ADM-11</td><td>Push panels use a distinct shell layer, one fixed header row, and collision-free transcript controls.</td><td>AGT-2613 and operator evidence from 11.08.</td></tr>
+          <tr><td>ADM-01</td><td>Related Result summary facts are flat sibling rows; a stopped-state uses one calm whole-row tint and never a nested box.</td><td>AGT-2643 operator direction and Stable evidence from 11.08.</td></tr>
         </tbody>
       </table>
     </div>
@@ -708,7 +721,7 @@
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <footer>Prepared 10 August 2026; flat summary-row clarification added 11 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2643.</footer>
 </main>
 </body>
 </html>

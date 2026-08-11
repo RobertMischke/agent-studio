@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "escalation-view-information-architecture",
+  "title": "Escalation View Information Architecture",
+  "summary": "Decision dossier for removing redundant escalation status surfaces from task detail. It maps the current Angular ownership, makes the escalation header the single owner of the concrete blocker, keeps step failure in Pipeline, flattens the Result narrative, includes real Stable evidence and before/after SVG mockups, and defines review-gated implementation slices.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-11T18:17:13Z",
+  "sourceTaskKeys": [
+    "AGT-2643"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2599",
+    "AGT-2278"
+  ],
+  "implementationTasks": []
+}
