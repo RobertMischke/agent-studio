@@ -708,6 +708,155 @@
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 
+  <section id="navigation-citizenship" data-concept-section="recommendation">
+    <h2><span class="section-no">08</span>Navigation citizenship</h2>
+    <p>This append-only chapter responds to the 11 August 2026 operator capture in which Dossiers looked like a foreign object beside Board, Deck, Wiki, and Epics. The design goal is not to make Dossiers invisible. It is to give them the same quiet row grammar as their siblings while preserving the one fact an operator may need before opening the page: how many decisions are waiting.</p>
+
+    <h3>Icon register</h3>
+    <ul>
+      <li><strong>Use a document motif.</strong> Dossiers are documents with a lifecycle, not a folder type. Use the existing monochrome document outline at the same 12 px size, stroke weight, and muted foreground as Wiki and Epics. Do not give the icon an orange fill or a Dossier-only background tile.</li>
+      <li><strong>Keep disclosure separate from identity.</strong> The document icon remains stable when the row opens. The shared chevron occupies the same leading column and uses the same right/down shapes, hit area, muted color, and motion as every other expandable tree entry.</li>
+      <li><strong>Selection belongs to the destination.</strong> Opening the Dossiers overview selects the Dossiers row. Opening a Dossier selects that leaf; its parent remains expanded but is not also marked current.</li>
+    </ul>
+
+    <h3>Counter semantics</h3>
+    <p>The trailing number means <strong>waiting decisions</strong>, not Dossier files, current lifecycle items, or hidden history. It is the sum of <code>openDecisionCount</code> across the currently visible non-history children. The same count must reconcile with the visible child metadata. Zero is omitted.</p>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>Variant</th><th>Meaning</th><th>Trade-off</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr><td><strong>No counter</strong></td><td>The row is only a destination.</td><td>Calmest option, but it hides the operator queue until the section or overview opens.</td><td>Valid when the product deliberately removes decision attention from the tree.</td></tr>
+          <tr><td><strong>Neutral counter</strong></td><td>Exact number of waiting decisions among visible current Dossiers.</td><td>Preserves magnitude and reconciles with children without presenting a normal decision as an alarm.</td><td><strong>Recommended.</strong></td></tr>
+          <tr><td><strong>Point indicator</strong></td><td>At least one decision is waiting.</td><td>Quiet and compact, but loses magnitude and can be confused with health or unread-state signals.</td><td>Fallback only when horizontal space cannot hold the number.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Use the shared neutral navigation-count treatment in both themes. An active row may invert the count only as part of the shared selection contrast. Orange remains reserved for an invalid Dossier, a load failure, or another actual error class. A waiting decision is a normal workflow state, following AGT-2606.</p>
+
+    <h3>States and children</h3>
+    <div class="spec-grid" aria-label="Dossiers navigation state contract">
+      <article class="spec"><h4>Resting and hover</h4><p>At rest, icon, chevron, and optional count use muted neutral tokens. Hover uses the shared full-row hover fill. It does not recolor only the icon, add an outline, or introduce an orange state.</p></article>
+      <article class="spec"><h4>Active overview</h4><p>The Dossiers row uses the shared navigation selection background and foreground with <code>aria-current="page"</code>. No left status stripe is added.</p></article>
+      <article class="spec"><h4>Active leaf</h4><p>The selected Dossier leaf owns active treatment. The parent shows only its expanded chevron. This avoids two simultaneous current destinations.</p></article>
+      <article class="spec"><h4>With children</h4><p>Current Dossiers appear first at one stable nested indent. The document motif stays in the icon column; waiting-decision metadata remains quiet and uses tabular figures.</p></article>
+      <article class="spec"><h4>Zero visible Dossiers</h4><p>Never render a zero badge. If History may contain entries, retain the Dossiers destination and its disclosure, show a quiet <q>No current Dossiers</q> state on expansion, and keep the existing History toggle closed by default.</p></article>
+      <article class="spec"><h4>Truly empty</h4><p>When the catalogue can prove that both Current and History are empty, keep Dossiers as a simple overview destination without a chevron or count. The overview owns the explanatory empty state.</p></article>
+    </div>
+
+    <h3>Tree excerpt variants</h3>
+    <p>All three variants use the same document icon, chevron column, row geometry, hover surface, active fill, and History convention. Only the waiting-decision signal changes.</p>
+
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+      <defs>
+        <symbol id="nav-doc-icon" viewBox="0 0 16 16">
+          <path d="M4 2.5h5.5l2.5 2.5v8.5H4z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9.5 2.5V5H12M6.25 8h3.5M6.25 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+        </symbol>
+        <symbol id="nav-grid-icon" viewBox="0 0 16 16">
+          <rect x="2.5" y="2.5" width="4.5" height="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2.5" width="4.5" height="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.5" y="9" width="4.5" height="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="4.5" height="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        </symbol>
+        <symbol id="nav-deck-icon" viewBox="0 0 16 16">
+          <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M7 2.5v11M7 7.5h6.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        </symbol>
+        <symbol id="nav-book-icon" viewBox="0 0 16 16">
+          <path d="M3 3.5A1.5 1.5 0 0 1 4.5 2H13v11.5H4.5A1.5 1.5 0 0 0 3 15zM5.5 5h4.5M5.5 7.5h4.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </symbol>
+        <symbol id="nav-chevron-down" viewBox="0 0 16 16">
+          <path d="m4.5 6 3.5 3.5L11.5 6" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+        </symbol>
+        <symbol id="nav-variant-none" viewBox="0 0 540 258">
+          <rect class="side" width="540" height="258"/>
+          <circle class="identity" style="--identity:#6f8fc9" cx="28" cy="22" r="7"/><text class="text-strong" x="45" y="27">Agent Studio</text>
+          <use href="#nav-grid-icon" x="54" y="39" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="52">Board</text>
+          <use href="#nav-deck-icon" x="54" y="65" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="78">Deck</text>
+          <use href="#nav-book-icon" x="54" y="91" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="104">Wiki</text>
+          <rect class="soft" x="20" y="112" width="500" height="28" rx="4"/>
+          <use href="#nav-chevron-down" x="28" y="118" width="16" height="16" style="color:var(--m-muted)"/><use href="#nav-doc-icon" x="54" y="118" width="16" height="16" style="color:var(--m-muted)"/><text class="text-strong" x="80" y="132">Dossiers</text>
+          <rect x="72" y="143" width="448" height="27" rx="4" fill="var(--m-accent-soft)"/><use href="#nav-doc-icon" x="84" y="149" width="16" height="16" style="color:var(--m-accent)"/><text class="text-strong accent-text" x="108" y="163">Admin surface guideline</text>
+          <use href="#nav-doc-icon" x="84" y="176" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="108" y="189">Release gates</text>
+          <text class="faint-text" x="84" y="216">History</text>
+          <use href="#nav-book-icon" x="54" y="226" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="239">Epics</text>
+        </symbol>
+        <symbol id="nav-variant-count" viewBox="0 0 540 258">
+          <rect class="side" width="540" height="258"/>
+          <circle class="identity" style="--identity:#6f8fc9" cx="28" cy="22" r="7"/><text class="text-strong" x="45" y="27">Agent Studio</text>
+          <use href="#nav-grid-icon" x="54" y="39" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="52">Board</text>
+          <use href="#nav-deck-icon" x="54" y="65" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="78">Deck</text>
+          <use href="#nav-book-icon" x="54" y="91" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="104">Wiki</text>
+          <rect class="soft" x="20" y="112" width="500" height="28" rx="4"/>
+          <use href="#nav-chevron-down" x="28" y="118" width="16" height="16" style="color:var(--m-muted)"/><use href="#nav-doc-icon" x="54" y="118" width="16" height="16" style="color:var(--m-muted)"/><text class="text-strong" x="80" y="132">Dossiers</text>
+          <rect class="chip" x="484" y="118" width="24" height="17" rx="8.5"/><text class="meta-text" x="496" y="131" text-anchor="middle">2</text>
+          <rect x="72" y="143" width="448" height="27" rx="4" fill="var(--m-accent-soft)"/><use href="#nav-doc-icon" x="84" y="149" width="16" height="16" style="color:var(--m-accent)"/><text class="text-strong accent-text" x="108" y="163">Admin surface guideline</text><text class="faint-text" x="472" y="163">1 open</text>
+          <use href="#nav-doc-icon" x="84" y="176" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="108" y="189">Release gates</text><text class="faint-text" x="472" y="189">1 open</text>
+          <text class="faint-text" x="84" y="216">History</text>
+          <use href="#nav-book-icon" x="54" y="226" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="239">Epics</text>
+        </symbol>
+        <symbol id="nav-variant-dot" viewBox="0 0 540 258">
+          <rect class="side" width="540" height="258"/>
+          <circle class="identity" style="--identity:#6f8fc9" cx="28" cy="22" r="7"/><text class="text-strong" x="45" y="27">Agent Studio</text>
+          <use href="#nav-grid-icon" x="54" y="39" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="52">Board</text>
+          <use href="#nav-deck-icon" x="54" y="65" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="78">Deck</text>
+          <use href="#nav-book-icon" x="54" y="91" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="104">Wiki</text>
+          <rect class="soft" x="20" y="112" width="500" height="28" rx="4"/>
+          <use href="#nav-chevron-down" x="28" y="118" width="16" height="16" style="color:var(--m-muted)"/><use href="#nav-doc-icon" x="54" y="118" width="16" height="16" style="color:var(--m-muted)"/><text class="text-strong" x="80" y="132">Dossiers</text>
+          <circle cx="496" cy="127" r="3.5" fill="var(--m-faint)"/>
+          <rect x="72" y="143" width="448" height="27" rx="4" fill="var(--m-accent-soft)"/><use href="#nav-doc-icon" x="84" y="149" width="16" height="16" style="color:var(--m-accent)"/><text class="text-strong accent-text" x="108" y="163">Admin surface guideline</text>
+          <use href="#nav-doc-icon" x="84" y="176" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="108" y="189">Release gates</text>
+          <text class="faint-text" x="84" y="216">History</text>
+          <use href="#nav-book-icon" x="54" y="226" width="16" height="16" style="color:var(--m-muted)"/><text class="text" x="80" y="239">Epics</text>
+        </symbol>
+      </defs>
+    </svg>
+
+    <figure class="reference-figure">
+      <h4>Variant A: document row without a counter</h4>
+      <div class="spec-grid">
+        <article class="spec"><div class="proof-label"><span>Light theme</span><span>No counter</span></div><svg class="reference-svg theme-light" viewBox="0 0 540 258" role="img" aria-label="Light tree excerpt with a Dossiers document row and no counter"><use href="#nav-variant-none"/></svg></article>
+        <article class="spec"><div class="proof-label"><span>Dark theme</span><span>Same hierarchy</span></div><svg class="reference-svg theme-dark" viewBox="0 0 540 258" role="img" aria-label="Dark tree excerpt with a Dossiers document row and no counter"><use href="#nav-variant-none"/></svg></article>
+      </div>
+      <figcaption>The quietest variant. It makes the section a full sibling immediately, but requires opening it to discover waiting decisions.</figcaption>
+    </figure>
+
+    <figure class="reference-figure">
+      <h4>Variant B: neutral waiting-decision count</h4>
+      <div class="spec-grid">
+        <article class="spec"><div class="proof-label"><span>Light theme</span><span>Recommended</span></div><svg class="reference-svg theme-light" viewBox="0 0 540 258" role="img" aria-label="Light tree excerpt with a neutral count of two waiting Dossier decisions"><use href="#nav-variant-count"/></svg></article>
+        <article class="spec"><div class="proof-label"><span>Dark theme</span><span>Recommended</span></div><svg class="reference-svg theme-dark" viewBox="0 0 540 258" role="img" aria-label="Dark tree excerpt with a neutral count of two waiting Dossier decisions"><use href="#nav-variant-count"/></svg></article>
+      </div>
+      <figcaption><strong>Recommendation:</strong> use the neutral count. It preserves exact operator value, reconciles with the two visible <q>1 open</q> child facts, and remains in the same visual register as other navigation counters.</figcaption>
+    </figure>
+
+    <figure class="reference-figure">
+      <h4>Variant C: neutral point indicator</h4>
+      <div class="spec-grid">
+        <article class="spec"><div class="proof-label"><span>Light theme</span><span>Presence only</span></div><svg class="reference-svg theme-light" viewBox="0 0 540 258" role="img" aria-label="Light tree excerpt with a neutral point indicating waiting Dossier decisions"><use href="#nav-variant-dot"/></svg></article>
+        <article class="spec"><div class="proof-label"><span>Dark theme</span><span>Presence only</span></div><svg class="reference-svg theme-dark" viewBox="0 0 540 258" role="img" aria-label="Dark tree excerpt with a neutral point indicating waiting Dossier decisions"><use href="#nav-variant-dot"/></svg></article>
+      </div>
+      <figcaption>The point saves width but answers only <q>is anything waiting?</q> It must have an accessible label such as <q>Decisions waiting</q> and must not reuse an error or liveness color.</figcaption>
+    </figure>
+
+    <h3>Follow-up slice note: immediate changes and framework dependencies</h3>
+    <p>This note is planning input only. It does not authorize implementation in AGT-2607.</p>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>Finding or idea</th><th>Current develop evidence, 11 August 2026</th><th>Follow-up ownership</th></tr></thead>
+        <tbody>
+          <tr><td>Document icon in the shared gray register</td><td>The captured orange folder is no longer literal in fresh <code>origin/develop</code>: the Dossiers parent already uses shared <code>&lt;app-tree-row&gt;</code> with <code>glyph="eye"</code>. The existing <code>file</code> Studio icon provides the required document outline.</td><td><strong>Immediate Dossiers slice.</strong> Change the glyph input and verify both themes. No tree-framework change is required.</td></tr>
+          <tr><td>Chevron citizenship</td><td>The parent already delegates collapsed and expanded chevrons to <code>app-tree-row</code>.</td><td><strong>Immediate verification.</strong> Remove or avoid local color overrides; keep the shared hit area and focus behavior.</td></tr>
+          <tr><td>Waiting-decision count</td><td>The row currently passes <code>catalogue().count</code>, which is the number of visible Dossier items. Each item already exposes <code>openDecisionCount</code>.</td><td><strong>Immediate Dossiers slice.</strong> Sum visible current items, pass <code>null</code> at zero, and add a reconciliation test. No backend change is required for the recommended counter.</td></tr>
+          <tr><td>Orange only for errors</td><td>The shared count badge is already neutral, but Dossier child metadata currently maps both <code>decision-pending</code> and <code>invalid</code> to <code>--studio-warn</code>.</td><td><strong>Immediate Dossiers slice.</strong> Keep warning color for invalid and load-failure classes; render normal waiting decisions with neutral copy or the neutral counter, aligned with AGT-2606.</td></tr>
+          <tr><td>Active and hover states</td><td>The parent uses shared tree-row states, while Dossier leaves are feature-local buttons with parallel active, hover, and focus CSS.</td><td><strong>Parent is immediate.</strong> Exact leaf-level unification depends on either migrating leaves to <code>app-tree-row</code> or extending the shared component for compact nested metadata.</td></tr>
+          <tr><td>Point variant</td><td>Tree rows accept projected trailing content, and the Explorer already projects status dots for URL rows. There is no named neutral decision-indicator contract.</td><td><strong>Framework follow-up only if selected.</strong> Add a reusable, accessible trailing-indicator API or token before using the point across navigation families.</td></tr>
+          <tr><td>Zero-current chevron</td><td>Current and History catalogues load separately; History is fetched only after its toggle opens.</td><td><strong>Data-contract follow-up.</strong> A guaranteed no-chevron truly-empty state needs a lightweight history-presence summary or eager history read. Until then, retain the disclosure and the closed History toggle.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <h4>Recommended delivery boundary</h4>
+      <p>Ship Variant B first: document icon, shared chevron, neutral sum of waiting decisions, zero omission, and error-only orange. Cover resting, hover, overview-active, leaf-active, expanded children, zero current with History available, and both themes. Keep shared TreeRow API work and history-summary work as separate follow-ups unless the implementation proves they are required for this parent-row slice.</p>
+    </div>
+  </section>
+
   <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
 </main>
 </body>
