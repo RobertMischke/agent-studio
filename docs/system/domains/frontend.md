@@ -210,13 +210,16 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   message boundary maps docs-relative links to the in-app Wiki and opens absolute
   HTTP(S) links in a new tab without exposing host APIs or credentials. An inert
   DOM parse moves artifact nodes into a fixed policy-first wrapper. Dossier
-  pages expose Maximize and `Open in Wiki` actions, and dirty working-tree
+  pages expose a Maximize action, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
   revision. Canonical entries expose their stable project reference key as a
   compact copyable mono chip in the viewer header and lifecycle lists; Explorer
   leaf tooltips include the same key. A task's `references.workbenches` entries
   render as linked key chips that open the existing viewer tab. Decision
-  mutations use the two-phase decision gate. A decided item
+  mutations use the two-phase decision gate. Unfinished feature preparation
+  retains its title, goal, actor, option responses, comments, and operation id
+  for the browser session. The details panel shows that retained state and an
+  explicit discard action. A decided item
   remains current while its referenced cards are still moving. References are
   derived from the Slice-1 `references.workbenches` index, with descriptor
   `relatedTaskKeys` and decision receipts retained as compatibility bridges.

@@ -671,6 +671,34 @@
     <p>The recommendation is approval. No product implementation, migration wave, or bulk task creation is part of this dossier.</p>
   </section>
 
+  <section id="details-panel-addendum" data-concept-section="decision-log">
+    <h2><span class="section-no">07</span>Details panel addendum</h2>
+    <p>This append-only record captures the operator decisions proven by AGT-2610 on 11 August 2026. It applies to Dossier details panels and compatible preparation flows.</p>
+
+    <h3>Navigation and identity</h3>
+    <ul>
+      <li><strong>Keep one navigation path.</strong> A details panel does not repeat an <q>Open in Wiki</q> action when the regular navigation and document title links already provide that path.</li>
+      <li><strong>Keep one stable key.</strong> The global viewer header owns the copyable Dossier key. Preparation rows and nested controls do not repeat it.</li>
+    </ul>
+
+    <h3>Preparation draft contract</h3>
+    <ul>
+      <li><strong>Open locally and immediately.</strong> Starting feature preparation reveals editable title and goal fields without waiting for a server mutation.</li>
+      <li><strong>Preserve unfinished work.</strong> Title, goal, actor, selected options, comments, and the operation identifier persist for the browser session across panel closure, navigation, and reload.</li>
+      <li><strong>Make persistence legible.</strong> A visible draft notice and an explicit discard action accompany every retained draft. Draft state clears only after a successful decision or explicit discard.</li>
+      <li><strong>Keep the mutation sequence coherent.</strong> Final creation performs prepare, card creation, and confirm in order. A retained created-card reference prevents an interrupted retry from creating a duplicate card.</li>
+    </ul>
+
+    <h3>Flat surface and contrast contract</h3>
+    <ul>
+      <li><strong>One panel boundary.</strong> The popover supplies the containing surface. Linked-card, decision, and draft regions remain flat and use spacing, separators, or quiet semantic tint instead of a stack of nested boxes.</li>
+      <li><strong>Use semantic foreground and field tokens.</strong> Body copy uses the primary foreground, supporting copy uses the muted foreground, and controls use the strong border token against the field surface in both themes.</li>
+      <li><strong>Prove readable controls.</strong> Normal field text meets a minimum 4.5:1 contrast ratio in light and dark themes. The same geometry must fit inside the details panel at a desktop viewport without clipping.</li>
+    </ul>
+
+    <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
+  </section>
+
   <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
 </main>
 </body>
