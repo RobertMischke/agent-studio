@@ -166,7 +166,8 @@ test('Dossier sort and live filter share URL and session state across both overv
 
   await page.getByTestId('workbench-overview-filter').fill('Decision pending');
   await expect(page.locator('[data-testid^="workbench-overview-item-"]')).toHaveCount(2);
-  await expect(page.getByTestId('workbench-overview-current-count')).toHaveText('2 Dossiers');
+  await expect(page.getByTestId('workbench-overview-current-count')).toHaveText('2 current');
+  await expect(page.getByTestId('workbench-overview-history-count')).toHaveText('0 history');
   await expect.poll(() => decodeURIComponent(new URL(page.url()).hash))
     .toContain('dossier=q=Decision+pending&sort=openDecisions&dir=desc');
 

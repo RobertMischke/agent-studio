@@ -4,12 +4,290 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { setTheme } from '../helpers/theme';
 
+const VISUAL_OVERVIEW = {
+  projectName: null,
+  count: 5,
+  currentCount: 3,
+  historyCount: 2,
+  items: [
+    {
+      projectName: 'Agent Studio',
+      workbench: {
+        id: 'admin-design-language',
+        key: 'AGT-W12',
+        title: 'Admin surface design language',
+        summary: 'Define a calm, consistent visual grammar for dense operator surfaces and their decision queues.',
+        status: 'decision-pending',
+        phase: 'decision-ready',
+        updatedAtUtc: '2026-08-11T12:25:00Z',
+        entryPath: 'docs/operations/admin-design-guideline/index.html',
+        valid: true,
+        error: null,
+        sourceTaskKeys: ['AGT-2606'],
+        relatedTaskKeys: ['AGT-2611'],
+        openDecisionCount: 1,
+        pattern: 'ui',
+        documentation: {
+          eligible: false,
+          totalCount: 2,
+          terminalCount: 0,
+          openCount: 2,
+          missingCount: 0,
+          references: [
+            { key: 'AGT-2606', exists: true, terminal: false, lane: '3-progress' },
+            { key: 'AGT-2611', exists: true, terminal: false, lane: '2-ready' },
+          ],
+        },
+      },
+    },
+    {
+      projectName: 'Coding Agent Chat',
+      workbench: {
+        id: 'conversation-recovery',
+        key: 'CAC-W4',
+        title: 'Conversation recovery contract',
+        summary: 'Keep interrupted operator conversations resumable without duplicating settled work.',
+        status: 'active',
+        phase: 'testing',
+        updatedAtUtc: '2026-08-10T16:40:00Z',
+        entryPath: 'docs/operations/conversation-recovery/index.html',
+        valid: true,
+        error: null,
+        sourceTaskKeys: [],
+        relatedTaskKeys: ['CAC-418'],
+        openDecisionCount: 0,
+        pattern: 'concept',
+      },
+    },
+    {
+      projectName: 'Agent Studio',
+      workbench: {
+        id: 'runner-host-hardening',
+        key: 'AGT-W9',
+        title: 'Runner host hardening',
+        summary: 'The direction is accepted while the linked implementation cards move through delivery.',
+        status: 'decided',
+        phase: 'testing',
+        updatedAtUtc: '2026-08-10T09:15:00Z',
+        entryPath: 'docs/operations/runner-host-hardening/index.html',
+        valid: true,
+        error: null,
+        sourceTaskKeys: [],
+        relatedTaskKeys: ['AGT-2590'],
+        openDecisionCount: 0,
+        pattern: 'concept',
+      },
+    },
+    {
+      projectName: 'Agent Studio',
+      workbench: {
+        id: 'old-navigation-study',
+        key: 'AGT-W3',
+        title: 'Old navigation study',
+        summary: 'Superseded direction retained for traceability.',
+        status: 'archived',
+        phase: null,
+        updatedAtUtc: '2026-08-04T11:00:00Z',
+        entryPath: 'docs/archive/old-navigation-study/index.html',
+        valid: true,
+        error: null,
+        sourceTaskKeys: [],
+        relatedTaskKeys: [],
+        openDecisionCount: 0,
+        pattern: 'ui',
+      },
+    },
+    {
+      projectName: 'Agent Studio',
+      workbench: {
+        id: 'task-reference-contract',
+        key: 'AGT-W2',
+        title: 'Task reference contract',
+        summary: 'Settled contract recorded in the product documentation.',
+        status: 'documented',
+        phase: null,
+        updatedAtUtc: '2026-08-02T08:30:00Z',
+        entryPath: 'docs/system/contracts/task-reference.html',
+        valid: true,
+        error: null,
+        sourceTaskKeys: [],
+        relatedTaskKeys: [],
+        openDecisionCount: 0,
+        pattern: 'concept',
+      },
+    },
+  ],
+};
+
+const VISUAL_REFERENCE_STATUSES = [
+  {
+    key: 'AGT-2606', exists: true, taskKey: 'Agent Studio::AGT-2606', title: 'Calm Dossier list',
+    lane: '3-progress', projectId: 'PROJ-002', projectName: 'Agent Studio', projectColor: null,
+    merge: null, reviewGrade: null,
+  },
+  {
+    key: 'AGT-2611', exists: true, taskKey: 'Agent Studio::AGT-2611', title: 'Dossier task references',
+    lane: '2-ready', projectId: 'PROJ-002', projectName: 'Agent Studio', projectColor: null,
+    merge: null, reviewGrade: null,
+  },
+  {
+    key: 'CAC-418', exists: true, taskKey: 'Coding Agent Chat::CAC-418', title: 'Conversation recovery',
+    lane: '5-human-review', projectId: 'PROJ-003', projectName: 'Coding Agent Chat', projectColor: null,
+    merge: null, reviewGrade: null,
+  },
+  {
+    key: 'AGT-2590', exists: true, taskKey: 'Agent Studio::AGT-2590', title: 'Runner host hardening',
+    lane: '4-auto-review', projectId: 'PROJ-002', projectName: 'Agent Studio', projectColor: null,
+    merge: null, reviewGrade: null,
+  },
+];
+
+const BEFORE_OVERVIEW_STYLE = `
+  .workbench-overview__list { gap: var(--studio-spacing-3) !important; }
+  .workbench-overview__row {
+    border: 1px solid var(--studio-border) !important;
+    border-radius: var(--studio-card-compact-radius) !important;
+    background: var(--studio-card-bg) !important;
+    padding: var(--studio-spacing-4) !important;
+  }
+  .workbench-overview__status,
+  .workbench-overview__open-count {
+    border-radius: 999px !important;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2) !important;
+  }
+  .workbench-overview__status[data-status='decision-pending'] {
+    background: color-mix(in srgb, var(--studio-warn) 15%, transparent) !important;
+    color: var(--studio-warn) !important;
+  }
+  .workbench-overview__open-count {
+    background: var(--studio-warn) !important;
+    color: var(--studio-on-accent) !important;
+  }
+  .workbench-overview__action-link,
+  .workbench-overview__action-primary {
+    border: 1px solid var(--studio-accent-3) !important;
+    border-radius: var(--studio-card-compact-radius) !important;
+    background: transparent !important;
+    color: var(--studio-accent-3-strong) !important;
+  }
+`;
+
 function evidencePath(testInfo: TestInfo, fileName: string): string {
   const resultRoot = process.env['JOB_RESULTS_DIR']?.trim();
   const directory = resultRoot ? path.resolve(resultRoot) : testInfo.outputDir;
   fs.mkdirSync(directory, { recursive: true });
   return path.join(directory, fileName);
 }
+
+test('captures the Dossier overview at wide and narrow widths in both themes', async ({ page }, testInfo) => {
+  const phase = process.env['DOSSIER_EVIDENCE_PHASE']?.trim() === 'before' ? 'before' : 'after';
+  const referenceBatches: string[][] = [];
+  const projects = [
+    {
+      sourceType: 'local-folder', id: 'PROJ-002', displayName: 'Agent Studio', shortCode: 'AGT',
+      workspaceId: 'workspace', color: '#6f8fc9', cliDefault: null, modelDefault: null,
+      sortOrder: 0, storageLocation: '/projects/agent-studio', repositoryPath: null,
+      rootPath: '/projects/agent-studio', repositoryUrl: null, urls: [], archived: false,
+      createdAt: '2026-01-01T00:00:00Z',
+    },
+    {
+      sourceType: 'local-folder', id: 'PROJ-003', displayName: 'Coding Agent Chat', shortCode: 'CAC',
+      workspaceId: 'workspace', color: '#67a783', cliDefault: null, modelDefault: null,
+      sortOrder: 1, storageLocation: '/projects/coding-agent-chat', repositoryPath: null,
+      rootPath: '/projects/coding-agent-chat', repositoryUrl: null, urls: [], archived: false,
+      createdAt: '2026-01-01T00:00:00Z',
+    },
+  ];
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      profile: 'local',
+      bootstrapRequired: false,
+      authenticated: true,
+      user: null,
+    }),
+  }));
+  await page.route('**/api/runner/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ projects: {} }),
+  }));
+  await page.route('**/api/workbenches**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(VISUAL_OVERVIEW),
+  }));
+  await page.route('**/api/tasks/reference-status', route => {
+    referenceBatches.push((route.request().postDataJSON() as { keys: string[] }).keys);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: VISUAL_REFERENCE_STATUSES }),
+    });
+  });
+  await page.route('**/api/workspaces', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'workspace', displayName: 'Workspace', sortOrder: 0, isDefault: true,
+      color: null, createdAt: '2026-01-01T00:00:00Z', projects,
+    }]),
+  }));
+  await page.route('**/api/projects', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(projects),
+  }));
+  await page.route('**/api/watch-paths', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([]),
+  }));
+  await page.route('**/api/tasks/grouped', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
+      failedPickup: [], codeNotComplete: [], review: [], autoReview: [], humanReview: [],
+      escalated: [], completed: [], archive: [],
+    }),
+  }));
+
+  await page.goto('/#/workbenches');
+  await expect(page.getByTestId('workbench-overview')).toBeVisible();
+  await expect(page.getByTestId('workbench-overview-item-Agent Studio-admin-design-language'))
+    .toBeVisible();
+  await expect.poll(() => referenceBatches).toEqual([
+    ['AGT-2606', 'AGT-2611', 'CAC-418', 'AGT-2590'],
+  ]);
+  await expect(page.getByTestId('workbench-overview-current-count')).toHaveText('3 current');
+  await expect(page.getByTestId('workbench-overview-history-count')).toHaveText('2 history');
+  const decidedRow = page.getByTestId('workbench-overview-item-Agent Studio-runner-host-hardening');
+  await expect(decidedRow).toContainText('Accepted / In progress');
+  await expect(decidedRow).not.toContainText('Decision pending');
+  await expect(decidedRow).not.toContainText('Tracking');
+  await expect(page.getByTestId('workbench-overview-task-Agent Studio-admin-design-language-AGT-2606').locator('a'))
+    .toHaveAttribute('aria-label', /Open task AGT-2606/);
+
+  if (phase === 'before') {
+    await page.addStyleTag({ content: BEFORE_OVERVIEW_STYLE });
+    await decidedRow.locator('[data-status="decided"]').evaluate(element => {
+      element.textContent = 'Tracking';
+    });
+  }
+
+  for (const [widthName, width] of [['wide', 1440], ['narrow', 760]] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(testInfo, `workbench-overview-${phase}-${theme}-${widthName}--mocked.png`),
+        fullPage: true,
+      });
+    }
+  }
+});
 
 async function proxyApi(page: Page, backendBaseUrl: string): Promise<void> {
   await page.route('**/healthz', route => route.fulfill({ status: 200, body: 'Healthy' }));
