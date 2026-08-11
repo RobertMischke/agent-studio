@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de" data-document-pattern="concept">
+<html lang="en" data-document-pattern="concept">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dossiers: Name, Muster, App-Werdung | Article document</title>
+<title>Dossiers: Name, Patterns, and Becoming an App | Article document</title>
 <style data-article-template="v2">
   :root {
     color-scheme: light;
@@ -46,7 +46,7 @@
   table { border-collapse: collapse; width: 100%; margin: 20px 0; font: 14.5px/1.5 system-ui, sans-serif; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
-  /* Full-bleed breakout: Figuren duerfen das Lesemass sprengen — genau der vorgeschlagene Mechanismus. */
+  /* Full-bleed breakout: figures may exceed the reading measure, which is the proposed mechanism. */
   .breakout { width: min(1080px, calc(100vw - 48px)); margin-left: 50%; transform: translateX(-50%); }
   figure { margin: 30px 0; }
   figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
@@ -78,11 +78,12 @@
 
 <header class="page">
   <p class="kicker">Article document · Meta</p>
-  <h1>Dossiers: Name, Muster, App-Werdung</h1>
-  <p class="lede">Der Operator hält das Arbeitsmuster für fast ideal — Analyse reift zu Entscheidungen, Entscheidungen zu Tasks. Was stört: der Name, die Nav-Einbindung, die statische Natur. Dieses Dokument ordnet den Bestand und legt die Entscheidungen vor. Es demonstriert dabei selbst den vorgeschlagenen Artikel-Stil.</p>
+  <h1>Dossiers: Name, Patterns, and Becoming an App</h1>
+  <p class="lede">The operator considers the working pattern almost ideal: analysis matures into decisions, and decisions into tasks. The points of friction are the name, the navigation integration, and the static nature. This document organizes the current state and presents the decisions. In doing so, it demonstrates the proposed article style itself.</p>
   <div class="meta">
-    <span><b>Datum</b> 2026-08-09</span>
-    <span><b>Status</b> in Umsetzung · Name entschieden: Dossier</span>
+    <span><b>Date</b> 2026-08-09</span>
+    <span><b>Status</b> documented · Name decided: Dossier</span>
+    <span><b>Translation</b> translated 2026-08-11 · original German</span>
   </div>
 </header>
 
@@ -92,147 +93,147 @@
 </div>
 
 <div class="box" style="background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 30%,var(--line))">
-  <h4>Entschieden (Operator, 09.08.): "Sonst TOP — kann man so machen und loslegen."</h4>
-  <p>GO für die Umsetzung: <b>04 Muster-Feld ja · 05 Artikel-Stil ja</b> (und der Artikel-Stil wird zusätzlich zentrales Element auf der Agent-Studio-Website) · 08 korrigiert (Dossier bündelt den gesamten Lebenszyklus) · Viewer-Kopf: <b>sehr kompakt</b>. Zu diesem Zeitpunkt blieb nur der <b>Name</b> offen; die zweite Namensrunde ist inzwischen abgeschlossen. Slices laufen als Karten: siehe relatedTaskKeys.</p>
+  <h4>Decided (operator, 9 August): "Otherwise excellent. This works; go ahead."</h4>
+  <p>GO for implementation: <b>04 pattern field yes · 05 article style yes</b> (and the article style will also become a central element of the Agent Studio website) · 08 corrected (the Dossier covers the entire lifecycle) · viewer header: <b>very compact</b>. At that point, only the <b>name</b> remained open; the second naming round has since concluded. The slices run as cards: see relatedTaskKeys.</p>
 </div>
 
-<h2><span class="no">01</span>These</h2>
-<p>Das Dossier ist die <b>Vorstufe zum Task</b>. Hier wird analysiert, verglichen und entschieden; erst danach entstehen Karten. Dass es im Wiki liegt (versioniert, verlinkbar, ohne Studio lesbar), ist richtig und bleibt. Was fehlt, ist die App-Schicht darüber: Entscheidungen erfassen (kommt mit AGT-2520), Status halten, die entstandenen Tasks live zeigen, Inhalte aktuell halten.</p>
-<p>Die Praxis bestätigt das Muster: Allein am 08./09.08. entstanden vier Entscheidungs-Dossiers (Navigation, Task-Kopf, Badge-Kontrast, Protokoll-Verdichtung), jeweils mit vorbereiteter Backlog-Karte — der Fluss <i>Analyse → Entscheidung → Karte</i> funktioniert, aber jeder Schritt ist heute Handarbeit.</p>
+<h2><span class="no">01</span>Thesis</h2>
+<p>The Dossier is the <b>preliminary stage of a task</b>. Analysis, comparison, and decisions happen here; cards are created only afterward. Its location in the Wiki (versioned, linkable, and readable without Studio) is correct and remains unchanged. What is missing is the app layer above it: recording decisions (coming with AGT-2520), maintaining status, showing the resulting tasks live, and keeping content current.</p>
+<p>Practice confirms the pattern: on 8 and 9 August alone, four decision Dossiers were created (navigation, task header, badge contrast, and protocol condensation), each with a prepared backlog card. The flow <i>analysis → decision → card</i> works, but every step is currently manual.</p>
 
-<h2><span class="no">02</span>Bestand (nüchtern)</h2>
+<h2><span class="no">02</span>Current state (plainly)</h2>
 <ul>
-  <li><b>Discovery:</b> Ordner mit <code>workbench.json</code> irgendwo unter <code>docs/</code> des Projekt-Repos; Schema v1 (<code>id, title, summary, entrypoint, status, phase, updatedAt, sourceTaskKeys, relatedTaskKeys</code>).</li>
-  <li><b>Lifecycle:</b> status <code>active | decision-pending | decided | archived</code>; phase <code>shaping | testing | decision-ready</code> (andere Werte ⇒ invalid). Liste zeigt nur active/decision-pending, Rest unter History.</li>
-  <li><b>Entscheidung:</b> bisher Sichtblick-Formular; wird durch Inline-Entscheidungen im Dokument ersetzt (AGT-2520: Checkboxen + Freitext, „Prepare feature card" vorbefüllt).</li>
-  <li><b>Bekannte Reibungen:</b> Nav-Einbindung unbeholfen, aktives Dossier nicht hervorgehoben (AGT-2509); Archiv-Knopf schreibt am Sichtbarkeitsfeld vorbei (AGT-2375-Kontext); relatedTaskKeys sind tote Strings ohne Live-Zustand; Inhalte sind Momentaufnahmen und veralten still.</li>
+  <li><b>Discovery:</b> a folder containing <code>workbench.json</code> anywhere below <code>docs/</code> in the project repository; schema v1 (<code>id, title, summary, entrypoint, status, phase, updatedAt, sourceTaskKeys, relatedTaskKeys</code>).</li>
+  <li><b>Lifecycle:</b> status <code>active | decision-pending | decided | archived</code>; phase <code>shaping | testing | decision-ready</code> (other values ⇒ invalid). The list shows only active/decision-pending; everything else appears under History.</li>
+  <li><b>Decision:</b> previously a sight-review form; it is being replaced by inline decisions in the document (AGT-2520: checkboxes + free text, with "Prepare feature card" prefilled).</li>
+  <li><b>Known friction:</b> awkward navigation integration, with the active Dossier not highlighted (AGT-2509); the archive button writes to the wrong visibility field (AGT-2375 context); relatedTaskKeys are inert strings without live state; content is a snapshot that silently becomes stale.</li>
 </ul>
 
-<h2><span class="no">03</span>Der Name</h2>
-<p>„Dossier" beschreibt das Werkzeug, nicht den Zweck — und kollidiert im Sprachgefühl mit Werkstatt-Metaphern, die sonst nirgends im Produkt vorkommen. Kandidaten, an der Funktion gemessen (Vorstufe zum Task, Ort der Entscheidung):</p>
+<h2><span class="no">03</span>The name</h2>
+<p>"Dossier" describes the tool, not its purpose, and feels at odds with workshop metaphors that appear nowhere else in the product. Candidates measured against the function (preliminary stage of a task, place of decision):</p>
 <table>
-  <thead><tr><th>Kandidat</th><th>Dafür</th><th>Dagegen</th></tr></thead>
+  <thead><tr><th>Candidate</th><th>For</th><th>Against</th></tr></thead>
   <tbody>
-    <tr><td><b>Concepts / Konzepte</b></td><td>deckt beide Muster (Mockup + Text); nüchternes Substantiv; passt zur bestehenden concepts/-Ablage</td><td>klingt nach Endzustand, nicht nach lebendem Prozess</td></tr>
-    <tr><td><b>Briefs</b></td><td>kurz; impliziert Auftrag-Werdung</td><td>anglizistisch mehrdeutig (Brief/Briefing); im Deutschen schief</td></tr>
-    <tr><td><b>Studies / Studien</b></td><td>betont Analyse-Charakter</td><td>verfehlt den Entscheidungs-/Task-Zweck</td></tr>
-    <tr><td><b>Dossier (behalten)</b></td><td>eingeführt, im Code überall; Umbenennung kostet</td><td>der Operator ist unsicher; beschreibt Werkzeug statt Zweck</td></tr>
+    <tr><td><b>Concepts</b></td><td>covers both patterns (mockup + text); plain noun; fits the existing concepts/ location</td><td>sounds like an end state, not a living process</td></tr>
+    <tr><td><b>Briefs</b></td><td>short; implies becoming a commission</td><td>ambiguous (brief/document vs. briefing)</td></tr>
+    <tr><td><b>Studies</b></td><td>emphasizes the analytical character</td><td>misses the decision/task purpose</td></tr>
+    <tr><td><b>Dossier (keep)</b></td><td>established and used throughout the code; renaming has a cost</td><td>the operator is uncertain; describes the tool rather than the purpose</td></tr>
   </tbody>
 </table>
 <div class="box warn">
-  <h4>Namens-Runde 2 — ENTSCHIEDEN (Operator, 09.08.): <b>Dossier</b></h4>
+  <h4>Naming round 2: DECIDED (operator, 9 August): <b>Dossier</b></h4>
   <table>
-    <thead><tr><th>Kandidat</th><th>Dafür</th><th>Dagegen</th></tr></thead>
+    <thead><tr><th>Candidate</th><th>For</th><th>Against</th></tr></thead>
     <tbody>
-      <tr><td><b>Dossier / Task Dossier</b></td><td>Akte über den GESAMTEN Lebenszyklus (Analyse → Entscheidung → Karten → Doku); nüchtern; deutsch = englisch; key-tauglich</td><td>leicht bürokratischer Klang</td></tr>
-      <tr><td><b>Charter / Task Charter</b></td><td>Gründungsdokument eines Arbeitsstrangs — die Epic-Verwandtschaft im Namen; aus dem Charter entstehen Karten</td><td>betont den Anfang, weniger die Doku-Endphase</td></tr>
-      <tr><td><b>Initiative</b></td><td>klassische Epic-Familien-Sprache (bündelt werdende + laufende Arbeit)</td><td>generisch, in PM-Tools abgenutzt</td></tr>
-      <tr><td><b>Task Docs</b> (Operator-Idee)</td><td>schlicht, Task-Bezug direkt</td><td>kollidiert mit docs/-Wiki-Begriff; klingt nach Ablage statt Entscheidung</td></tr>
-      <tr><td><b>Task Companion</b> (Operator-Idee)</td><td>Begleiter über den Lebenszyklus — trifft die Mechanik</td><td>leicht verspielt; im Deutschen sperrig</td></tr>
+      <tr><td><b>Dossier / Task Dossier</b></td><td>a file covering the ENTIRE lifecycle (analysis → decision → cards → documentation); plain; the same word in German and English; suitable for keys</td><td>slightly bureaucratic tone</td></tr>
+      <tr><td><b>Charter / Task Charter</b></td><td>founding document for a stream of work, with its Epic relationship in the name; cards emerge from the Charter</td><td>emphasizes the beginning more than the final documentation phase</td></tr>
+      <tr><td><b>Initiative</b></td><td>classic Epic-family language (groups emerging + active work)</td><td>generic and overused in project-management tools</td></tr>
+      <tr><td><b>Task Docs</b> (operator idea)</td><td>plain, with a direct task connection</td><td>collides with the Wiki term docs/; sounds like storage rather than decision-making</td></tr>
+      <tr><td><b>Task Companion</b> (operator idea)</td><td>a companion throughout the lifecycle, accurately reflecting the behavior</td><td>slightly playful; unwieldy in German</td></tr>
     </tbody>
   </table>
-  <p><b>Entschieden: Dossier.</b> Umbenennung läuft als AGT-2539 (UI + Doku; Code-Bezeichner bleiben). Ursprüngliche Begründung: Es trägt die Lebenszyklus-Korrektur aus Abschnitt 08 im Namen (eine Akte, die von der Analyse bis zur Doku alles sammelt) und bleibt nüchtern. Zweitplatz: Charter, wenn die Epic-Nähe im Vordergrund stehen soll.</p>
+  <p><b>Decided: Dossier.</b> The rename is tracked as AGT-2539 (UI + documentation; code identifiers remain). Original rationale: the name carries the lifecycle correction from section 08 (a file that collects everything from analysis through documentation) and remains plain. Runner-up: Charter, if the relationship to Epics should take precedence.</p>
 </div>
 <div class="box accent">
-  <p><b>Empfehlung Runde 1 (überholt): „Concepts" / „Konzepte".</b> Funktionstreu genug, nüchtern, ohne Kunstbegriff. Wichtig: NICHT „Decisions" — AGT-2520 benennt gerade die Entscheidungs-<i>Punkte</i> im Dokument so; zwei Ebenen mit demselben Wort wären schlimmer als der heutige Zustand. Umbenennung nur an der UI-Oberfläche + Doku; Code-Bezeichner (<code>workbench.json</code>, Services) bleiben — ein Datei-Format umzubenennen kauft nichts.</p>
+  <p><b>Round 1 recommendation (superseded): "Concepts".</b> True enough to the function, plain, and not a coined term. Important: NOT "Decisions", because AGT-2520 uses that word for the decision <i>points</i> in the document; two layers with the same name would be worse than the current state. Rename only the UI surface + documentation; code identifiers (<code>workbench.json</code>, services) remain because renaming a file format gains nothing.</p>
 </div>
 
-<h2><span class="no">04</span>Zwei Muster als erste Klasse</h2>
-<p>Aus der Praxis kristallisieren sich zwei Typen, die unterschiedliche Darstellung und Werkzeuge brauchen:</p>
+<h2><span class="no">04</span>Two first-class patterns</h2>
+<p>Practice reveals two types that need different presentation and tools:</p>
 <table>
   <thead><tr><th></th><th>ui-heavy</th><th>concept-heavy</th></tr></thead>
   <tbody>
-    <tr><td><b>Primärinhalt</b></td><td>Mockups, Screenshots, Varianten-Bilder</td><td>Text, Tabellen, SVG-Diagramme</td></tr>
-    <tr><td><b>Beispiele</b></td><td>Deck-Icon-Exploration, Task-Kopf-Layout</td><td>Härtung verteilte Ausführung, Nav-Konsistenz</td></tr>
-    <tr><td><b>Braucht</b></td><td>Full-Bleed-Bilder, Varianten-Vergleich nebeneinander, Bild-Zoom</td><td>Lesemaß, Beleg-Links, Evidenz-Klassen</td></tr>
+    <tr><td><b>Primary content</b></td><td>mockups, screenshots, variant images</td><td>text, tables, SVG diagrams</td></tr>
+    <tr><td><b>Examples</b></td><td>Deck icon exploration, task header layout</td><td>distributed execution hardening, navigation consistency</td></tr>
+    <tr><td><b>Needs</b></td><td>full-bleed images, side-by-side variant comparison, image zoom</td><td>reading measure, evidence links, evidence classes</td></tr>
   </tbody>
 </table>
-<p>Vorschlag: ein <code>pattern</code>-Feld (<code>ui | concept</code>) im Descriptor. Es steuert Listen-Icon und Template-Variante — mehr nicht. Keine zwei getrennten Systeme.</p>
+<p>Proposal: a <code>pattern</code> field (<code>ui | concept</code>) in the descriptor. It controls the list icon and template variant, and nothing more. There are no two separate systems.</p>
 
-<h2><span class="no">05</span>Visuelles Ziel: Artikel-Stil</h2>
-<p>Beide Muster teilen den Medium-Artikel-Rahmen: ein Lesemaß um 70 Zeichen, ruhige Serifen-Grundschrift, großzügiger Weißraum, Systemschrift für Struktur-Elemente. Dieses Dokument ist in genau diesem Rahmen gesetzt. Mockups und breite Diagramme brechen das Maß gezielt auf — so:</p>
+<h2><span class="no">05</span>Visual target: article style</h2>
+<p>Both patterns share the Medium-style article frame: a reading measure of about 70 characters, a calm serif body typeface, generous whitespace, and a system typeface for structural elements. This document uses precisely that frame. Mockups and wide diagrams deliberately break out of the measure, like this:</p>
 
 <figure class="breakout">
-<svg viewBox="0 0 1080 240" role="img" aria-label="Lebenszyklus">
+<svg viewBox="0 0 1080 240" role="img" aria-label="Lifecycle">
   <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="context-stroke"/></marker></defs>
   <rect x="20" y="60" width="200" height="80" rx="10" class="s-node" stroke-width="1.4"/>
-  <text x="50" y="95" class="s-label">Analyse</text>
-  <text x="50" y="117" class="s-sub">Kartierung, Belege, Varianten</text>
+  <text x="50" y="95" class="s-label">Analysis</text>
+  <text x="50" y="117" class="s-sub">Mapping, evidence, variants</text>
   <rect x="290" y="60" width="200" height="80" rx="10" class="badge-accent" stroke-width="1.4"/>
-  <text x="320" y="95" class="s-label">Entscheidung</text>
-  <text x="320" y="117" class="s-sub">inline im Dokument (AGT-2520)</text>
+  <text x="320" y="95" class="s-label">Decision</text>
+  <text x="320" y="117" class="s-sub">inline in the document (AGT-2520)</text>
   <rect x="560" y="60" width="200" height="80" rx="10" class="s-node" stroke-width="1.4"/>
-  <text x="590" y="95" class="s-label">Karten</text>
-  <text x="590" y="117" class="s-sub">vorbefüllt aus Entscheidungen</text>
+  <text x="590" y="95" class="s-label">Cards</text>
+  <text x="590" y="117" class="s-sub">prefilled from decisions</text>
   <rect x="830" y="60" width="230" height="80" rx="10" class="badge-ok" stroke-width="1.4"/>
-  <text x="860" y="95" class="s-label">Live-Verfolgung</text>
-  <text x="860" y="117" class="s-sub">Karten-Zustände im Dokument</text>
+  <text x="860" y="95" class="s-label">Live tracking</text>
+  <text x="860" y="117" class="s-sub">card states in the document</text>
   <path d="M220 100 H286" class="s-flow"/>
   <path d="M490 100 H556" class="s-flow"/>
   <path d="M760 100 H826" class="s-flow"/>
   <path d="M945 140 C 945 200, 420 210, 395 144" class="s-flow" stroke-dasharray="4 5"/>
-  <text x="560" y="196" class="s-sub">Ergebnisse fließen zurück: das Dokument bleibt aktuell</text>
+  <text x="560" y="196" class="s-sub">Results flow back: the document stays current</text>
 </svg>
-<figcaption><b>Abb. 1</b> — Ziel-Lebenszyklus: Das Dossier begleitet die Arbeit statt sie nur vorzubereiten. Diese Figur bricht als Full-Bleed das Lesemaß — der vorgeschlagene Mechanismus für Mockups.</figcaption>
+<figcaption><b>Fig. 1</b>: Target lifecycle. The Dossier accompanies the work instead of merely preparing it. This full-bleed figure breaks out of the reading measure, demonstrating the proposed mechanism for mockups.</figcaption>
 </figure>
 
-<h2><span class="no">06</span>Mehr App: Status, Task-Tracking, Kontinuität</h2>
+<h2><span class="no">06</span>More app: status, task tracking, continuity</h2>
 <ol>
-  <li><b>Live-Task-Block (Host-gerendert):</b> Der Viewer rendert oberhalb des Dokuments die <code>relatedTaskKeys</code> als lebende Zeile — Key, Lane, Integrations-Zustand, direkt verlinkt. Kein Inhalt im HTML dupliziert; das Dokument bleibt statisch lesbar, die App-Schicht kommt vom Studio. Billigster erster Schritt mit dem größten Effekt.</li>
-  <li><b>Status halten:</b> Entscheidungs-Stände aus AGT-2520 (angekreuzt/offen, von wem, wann) erscheinen im selben Kopf-Block; „decided" wird ableitbar statt handgepflegt.</li>
-  <li><b>Kontinuierliche Aktualisierung:</b> Zwei Mechanismen, klar getrennt: (a) <i>Live-Daten</i> (Karten-Zustände, Zähler) rendert der Host bei jedem Öffnen frisch — nie stale. (b) <i>Inhaltliche</i> Aktualisierung (neue Befunde, erledigte Abschnitte) bleibt ein Schreib-Akt: eine kleine „Refresh"-Aktion, die eine vorbefüllte Update-Karte erzeugt (Agent aktualisiert das Dokument gegen die Realität). Kein stiller Selbst-Umbau von Dokumenten.</li>
-  <li><b>Interaktivität:</b> Fundament ist AGT-2520 (Checkboxen + Freitext). Darauf: Varianten-Bilder als umschaltbare Vergleiche (ui-heavy), einklappbare Beleg-Blöcke (concept-heavy). Alles progressive enhancement — ohne Studio bleibt es ein lesbarer Artikel.</li>
+  <li><b>Live task block (host-rendered):</b> above the document, the viewer renders <code>relatedTaskKeys</code> as a live row containing key, lane, integration state, and a direct link. No content is duplicated in the HTML; the document remains statically readable while Studio provides the app layer. This is the least expensive first step with the greatest effect.</li>
+  <li><b>Maintain status:</b> decision states from AGT-2520 (selected/open, by whom, when) appear in the same header block; "decided" becomes derived instead of manually maintained.</li>
+  <li><b>Continuous updates:</b> two clearly separated mechanisms: (a) the host renders <i>live data</i> (card states, counts) fresh on every opening, never stale. (b) <i>Content</i> updates (new findings, completed sections) remain an explicit write: a small "Refresh" action creates a prefilled update card (an agent updates the document against reality). Documents do not silently rewrite themselves.</li>
+  <li><b>Interactivity:</b> AGT-2520 is the foundation (checkboxes + free text). On top of it: variant images as switchable comparisons (ui-heavy), and collapsible evidence blocks (concept-heavy). Everything is progressive enhancement; without Studio, it remains a readable article.</li>
 </ol>
 
-<h2><span class="no">07</span>Nav-Einbindung, Projektebene, Echtzeit</h2>
-<p>Heute: Unterpunkt je Projekt, ohne Hervorhebung, ohne Zustand (AGT-2509 fixt Hervorhebung + Expansion). Darüber hinaus: Der Listen-Eintrag trägt künftig Pattern-Icon, Status-Punkt und — bei decision-pending — die Zahl offener Entscheidungen („Nav-Konsistenz · 4 offen"). Damit wird die Nav vom Ablageort zur Arbeitsliste.</p>
-<h3>Projektebene: eigene Listen-Seite</h3>
-<p>Zusätzlich zur zentralen Seite (Abschnitt 08) bekommt <b>jedes Projekt seine Dossier-Liste als eigene Seite</b> — gleiche Sortierung und Entscheiden-aus-der-Liste wie zentral, nur projektgefiltert. Die Nav-Kinder unter „Dossiers" bleiben als Schnellzugriff; die Seite ist der Arbeitsort. (Analog Board vs. Karten-Links.)</p>
-<h3>Echtzeit statt Reload: SignalR</h3>
-<p>Heutiger Beleg aus der Praxis: Vier neue Dossiers waren per API sofort gelistet, im Nav-Tree aber unsichtbar, bis der Operator neu lädt — der Tree pollt nicht und bekommt nichts gepusht. Da das System mehrbenutzerfähig werden soll, gehören Dossier-Ereignisse auf die vorhandene SignalR-Strecke (das Studio betreibt bereits Hubs unter <code>/hubs</code>): <code>created</code>, <code>updated</code>, <code>decisionRecorded</code>, <code>statusChanged</code>. Konsumenten: Nav-Tree (Kinder + Zähler), Projekt-Liste, zentrale Seite, geöffneter Viewer (fremde Entscheidungen erscheinen live, mit Entscheider-Attribution aus AGT-2520). Kein neues Transport-Konzept — dieselbe Mechanik, mit der Board-Lanes aktuell bleiben.</p>
+<h2><span class="no">07</span>Navigation integration, project level, real time</h2>
+<p>Today: one subitem per project, without highlighting or state (AGT-2509 fixes highlighting + expansion). Beyond that, each list entry will carry a pattern icon, status dot, and, for decision-pending, the number of open decisions ("Navigation consistency · 4 open"). This turns the navigation from a storage location into a work list.</p>
+<h3>Project level: dedicated list page</h3>
+<p>In addition to the central page (section 08), <b>each project gets its Dossier list as a dedicated page</b>, with the same sorting and list-based decision-making as the central page, but filtered by project. The navigation children under "Dossiers" remain as shortcuts; the page is the working surface. (Analogous to Board vs. card links.)</p>
+<h3>Real time instead of reload: SignalR</h3>
+<p>Evidence from current practice: four new Dossiers were immediately listed through the API but remained invisible in the navigation tree until the operator reloaded. The tree does not poll and receives no push updates. Because the system is intended to support multiple users, Dossier events belong on the existing SignalR route (Studio already operates hubs under <code>/hubs</code>): <code>created</code>, <code>updated</code>, <code>decisionRecorded</code>, <code>statusChanged</code>. Consumers: the navigation tree (children + count), project list, central page, and open viewer (other users' decisions appear live, with decision-maker attribution from AGT-2520). This uses no new transport concept, but the same mechanism that keeps Board lanes current.</p>
 
-<h2><span class="no">08</span>Verwandtschaft mit Epics — und die zentrale Seite</h2>
-<p>Epics und Dossiers sind Geschwister: Beide bündeln Arbeit oberhalb der einzelnen Karte. Der Unterschied liegt im Aggregatzustand — das <b>Epic bündelt beschlossene Arbeit</b> (Karten, die es schon gibt), das <b>Dossier bündelt den gesamten Lebenszyklus</b>: werdende Arbeit (Entscheidungen, aus denen Karten entstehen) UND deren Verfolgung bis zum dokumentierten Abschluss (Operator-Korrektur 09.08.). Es ist damit zu einem gewissen Teil das Backlog des Operators: Was hier liegt, ist ernst gemeint, aber noch nicht geschnitten.</p>
-<p>Daraus folgt direkt die Forderung nach einer <b>zentralen Seite analog zur Epics-Seite</b>: alle Dossiers aller Projekte an einem Ort, unter dem neuen Namen, sortiert nach Handlungsbedarf — decision-pending mit Zähler offener Entscheidungen zuerst, dann active nach letzter Bewegung, History dahinter. Auf dieser Seite wird <i>entschieden</i>, nicht nur gelesen: Die Inline-Entscheidungspunkte (AGT-2520) sind direkt von der Übersicht aus erreichbar, idealerweise als aufklappbare Karte ohne Seitenwechsel. Der Operator sieht auf einen Blick, wo er gebraucht wird.</p>
-<h3>Der vollständige Lebenszyklus: am Ende Doku</h3>
-<p>Die entscheidende Ergänzung: Ein Dossier, das nicht verworfen wurde, endet nicht mit der Entscheidung. Es <b>trackt die entstandenen Karten bis zum Abschluss</b> (Slice-Plan-Zeile für Zeile) und kippt dann in seinen Endzustand: <b>Dokumentation</b>. Aus dem Entscheidungsdokument wird das Sachstands-Dokument — was gebaut wurde, warum, mit welchen Belegen. Der heutige status-Wert <code>decided</code> ist dafür zu früh gedacht; der Lebenszyklus braucht die Stufe <code>documented</code> (oder: archived behält die Doppelrolle, aber die Liste unterscheidet „verworfen" von „abgeschlossen und dokumentiert"). Verworfene Dossiers bleiben als verworfene Historie sichtbar — auch das ist Wissen.</p>
+<h2><span class="no">08</span>Relationship to Epics, and the central page</h2>
+<p>Epics and Dossiers are siblings: both group work above the individual card. The difference is the state of aggregation. An <b>Epic groups decided work</b> (cards that already exist), while a <b>Dossier groups the entire lifecycle</b>: emerging work (decisions from which cards are created) AND its tracking through documented completion (operator correction, 9 August). To some extent, it is therefore the operator's backlog: what is here is serious, but has not yet been sliced.</p>
+<p>This leads directly to the requirement for a <b>central page analogous to the Epics page</b>: all Dossiers from all projects in one place, under the new name, sorted by need for action. Decision-pending items with a count of open decisions come first, then active items by most recent activity, followed by History. This page supports <i>decisions</i>, not just reading: inline decision points (AGT-2520) are accessible directly from the overview, ideally in an expandable card without changing pages. The operator can see at a glance where they are needed.</p>
+<h3>The complete lifecycle: documentation at the end</h3>
+<p>The crucial addition: a Dossier that was not discarded does not end with the decision. It <b>tracks the resulting cards through completion</b> (line by line in the slice plan) and then moves into its final state: <b>documentation</b>. The decision document becomes the record of current reality, covering what was built, why, and with what evidence. The current status value <code>decided</code> is conceived too early for this; the lifecycle needs a <code>documented</code> stage (alternatively, archived retains its dual role but the list distinguishes "discarded" from "completed and documented"). Discarded Dossiers remain visible as discarded history, which is also knowledge.</p>
 
-<h2><span class="no">09</span>Schlüssel und Referenzen</h2>
-<p>Dossiers haben heute nur den Ordner-Slug (<code>workbench-konzept</code>) — unhandlich zum Zitieren, unbrauchbar als Referenz in Karten. Sie bekommen einen <b>Key nach Karten-Vorbild</b>:</p>
+<h2><span class="no">09</span>Keys and references</h2>
+<p>Dossiers currently have only the folder slug (<code>workbench-konzept</code>), which is unwieldy to cite and unusable as a card reference. They receive a <b>key modeled after card keys</b>:</p>
 <ul>
-  <li><b>Schema:</b> projektgebunden mit W-Präfix, z. B. <code>AGT-W4</code> (Alternative zur Entscheidung: globale Sequenz <code>WB-17</code>). Das W disambiguiert gegen Task-Keys, die Projektbindung sortiert wie gewohnt.</li>
-  <li><b>Vergabe:</b> automatisch bei Erst-Discovery ohne Key — das Backend zieht die nächste Nummer aus einer Projekt-Sequenz (analog <code>NextTaskKeySeq</code>) und schreibt sie atomar in die <code>workbench.json</code> (Decision-Service-Schreibpfad). Der Slug bleibt Ordner-Identität; der Key übersteht Umbenennungen.</li>
-  <li><b>Darstellung:</b> subtil — kleiner Mono-Chip im Viewer-Kopf, in Listen und Nav-Tooltip; <b>Klick kopiert den Key</b> (gleiches Muster wie Commit-SHAs).</li>
-  <li><b>Karten referenzieren per Key:</b> Karten, die aus einem Dossier entstehen oder sich darauf beziehen, tragen den Key — als eigenes Referenzfeld (<code>references.workbenches</code>) oder als erweitertes relatedTo-Vokabular (Validator löst beide Namensräume auf; das W-Präfix macht es eindeutig). Das Task-Detail zeigt den Dossier-Chip verlinkt.</li>
-  <li><b>Die elegante Folge:</b> Der Live-Task-Block des Dossiers (Abschnitt 06) muss nicht mehr handgepflegt werden — er wird <b>ableitbar</b> aus allen Karten, die den Key referenzieren. <code>relatedTaskKeys</code> degradiert zur Alt-Daten-Brücke.</li>
+  <li><b>Schema:</b> project-scoped with a W prefix, for example <code>AGT-W4</code> (alternative considered for the decision: global sequence <code>WB-17</code>). The W disambiguates it from task keys, and the project scope sorts as usual.</li>
+  <li><b>Assignment:</b> automatic on first discovery without a key. The backend takes the next number from a project sequence (analogous to <code>NextTaskKeySeq</code>) and writes it atomically to <code>workbench.json</code> (the Decision Service write path). The slug remains the folder identity; the key survives renames.</li>
+  <li><b>Presentation:</b> subtle, with a small monospace chip in the viewer header, lists, and navigation tooltip; <b>clicking copies the key</b> (the same pattern as commit SHAs).</li>
+  <li><b>Cards reference by key:</b> cards that emerge from a Dossier or relate to it carry the key, either in a dedicated reference field (<code>references.workbenches</code>) or as an extension to the relatedTo vocabulary (the validator resolves both namespaces; the W prefix makes it unambiguous). Task detail displays the Dossier chip as a link.</li>
+  <li><b>The elegant consequence:</b> the Dossier's live task block (section 06) no longer requires manual maintenance. It becomes <b>derivable</b> from all cards that reference the key. <code>relatedTaskKeys</code> is demoted to a legacy-data bridge.</li>
 </ul>
 
-<h2><span class="no">10</span>Entscheidungen</h2>
+<h2><span class="no">10</span>Decisions</h2>
 <ul>
-  <li>Name: Concepts/Konzepte (Empfehlung) — oder Dossier behalten / anderer Kandidat?</li>
-  <li><code>pattern</code>-Feld (ui | concept) mit Template-Varianten: GO?</li>
-  <li>Artikel-Stil als kanonisches Template v2 (dieses Dokument als Referenz): GO?</li>
-  <li>Live-Task-Block + Entscheidungs-Stand im Viewer-Kopf: GO?</li>
-  <li>Refresh-Mechanik als vorbefüllte Update-Karte (kein stiller Selbst-Umbau): GO?</li>
-  <li>Zentrale projektübergreifende Seite (analog Epics) mit Entscheiden-ohne-Seitenwechsel: GO?</li>
-  <li>Projektebenen-Liste als eigene Seite (gleiches Muster, projektgefiltert): GO?</li>
-  <li>SignalR-Ereignisse für Dossier-Änderungen (Tree/Listen/Viewer live, Mehrbenutzer-Grundlage): GO?</li>
-  <li>Lebenszyklus-Endzustand „Doku": eigene Stufe <code>documented</code> oder archived mit Unterscheidung verworfen/abgeschlossen?</li>
-  <li>Erklärung des Arbeitsmodells auf agent-orchestrator.dev (zentrale Seite): GO? (Karte liegt im AOW-Backlog, wartet auf die Namens-Entscheidung.)</li>
-  <li>Key-Schema: projektgebunden <code>AGT-W4</code> (Empfehlung) oder global <code>WB-17</code>?</li>
-  <li>Karten-Referenz: eigenes Feld <code>references.workbenches</code> (Empfehlung: explizit, validierbar) oder relatedTo-Vokabular erweitern?</li>
+  <li>Name: Concepts (recommendation), or keep Dossier / choose another candidate?</li>
+  <li><code>pattern</code> field (ui | concept) with template variants: GO?</li>
+  <li>Article style as canonical template v2 (using this document as the reference): GO?</li>
+  <li>Live task block + decision state in the viewer header: GO?</li>
+  <li>Refresh mechanism as a prefilled update card (no silent self-rewrite): GO?</li>
+  <li>Central cross-project page (analogous to Epics) with decision-making without changing pages: GO?</li>
+  <li>Project-level list as a dedicated page (same pattern, filtered by project): GO?</li>
+  <li>SignalR events for Dossier changes (live tree/lists/viewer, foundation for multiple users): GO?</li>
+  <li>Lifecycle end state "documentation": dedicated <code>documented</code> stage, or archived with a distinction between discarded/completed?</li>
+  <li>Explanation of the working model on agent-orchestrator.dev (central page): GO? (The card is in the AOW backlog, waiting for the naming decision.)</li>
+  <li>Key schema: project-scoped <code>AGT-W4</code> (recommendation), or global <code>WB-17</code>?</li>
+  <li>Card reference: dedicated <code>references.workbenches</code> field (recommendation: explicit, validatable), or extend the relatedTo vocabulary?</li>
 </ul>
 
-<h2><span class="no">11</span>Slice-Plan (nach GO)</h2>
+<h2><span class="no">11</span>Slice plan (after GO)</h2>
 <ol>
-  <li><b>Slice 1 — Schlüssel & Referenzen:</b> Key-Vergabe (Projekt-Sequenz, atomarer Descriptor-Write), Klick-Kopier-Chip in Viewer/Listen/Nav, Karten-Referenzfeld + verlinkter Chip im Task-Detail. Früh, weil es die abgeleitete Task-Verfolgung für alle weiteren Slices freischaltet.</li>
-  <li><b>Slice 2 — Viewer-Kopf (Operator: SEHR kompakt — eine Zeile):</b> Live-Task-Block (abgeleitet aus Key-Referenzen, relatedTaskKeys als Alt-Brücke) + Status-Zeile + kompakter Header (baut auf AGT-2520 auf; enthält die Nav-Zähler).</li>
-  <li><b>Slice 3 — Zentrale Seite + Projektebenen-Liste:</b> projektübergreifende Übersicht analog Epics — decision-pending mit Offen-Zähler zuerst, Entscheiden direkt aus der Liste; History getrennt nach verworfen/dokumentiert; dieselbe Seite projektgefiltert je Projekt. Inklusive SignalR-Ereignisse (created/updated/decisionRecorded/statusChanged) für Tree, Listen und offenen Viewer.</li>
-  <li><b>Slice 4 — Template v2:</b> kanonisches Artikel-Stylesheet + Autoren-Doku + <code>pattern</code>-Feld; bestehende aktive Dossiers migrieren nur bei Anfassen.</li>
-  <li><b>Slice 5 — Lebenszyklus bis Doku:</b> Tracking-Abschluss + <code>documented</code>-Stufe + Übergangs-Mechanik (alle referenzierenden Karten terminal ⇒ Vorschlag „als Doku abschließen").</li>
-  <li><b>Slice 6 — Refresh-Karte:</b> „Aktualisieren"-Aktion erzeugt vorbefüllte Update-Karte mit Dokument-Kontext.</li>
-  <li><b>Slice 7 — Umbenennung</b> (falls entschieden): UI-Oberfläche + Doku, Code-Bezeichner bleiben.</li>
-  <li><b>Slice 8 — Website:</b> Das Arbeitsmodell (Analyse → Entscheidung → Karten → Doku) als Abschnitt auf agent-orchestrator.dev erklären — nüchtern, mit dem Lebenszyklus-Diagramm (AOW-Karte, nach Namens-Entscheidung).</li>
+  <li><b>Slice 1: keys & references:</b> key assignment (project sequence, atomic descriptor write), click-to-copy chip in viewer/lists/navigation, card reference field + linked chip in task detail. Early, because it unlocks derived task tracking for all further slices.</li>
+  <li><b>Slice 2: viewer header (operator: VERY compact, one line):</b> live task block (derived from key references, with relatedTaskKeys as the legacy bridge) + status line + compact header (builds on AGT-2520; includes the navigation counts).</li>
+  <li><b>Slice 3: central page + project-level list:</b> cross-project overview analogous to Epics, with decision-pending and its open count first, and decisions directly from the list; History separated into discarded/documented; the same page filtered for each project. Includes SignalR events (created/updated/decisionRecorded/statusChanged) for the tree, lists, and open viewer.</li>
+  <li><b>Slice 4: template v2:</b> canonical article stylesheet + authoring documentation + <code>pattern</code> field; migrate existing active Dossiers only when touched.</li>
+  <li><b>Slice 5: lifecycle through documentation:</b> tracking completion + <code>documented</code> stage + transition mechanism (all referencing cards terminal ⇒ suggestion to "mark as documented").</li>
+  <li><b>Slice 6: refresh card:</b> the "Refresh" action creates a prefilled update card with document context.</li>
+  <li><b>Slice 7: rename</b> (if decided): UI surface + documentation, while code identifiers remain.</li>
+  <li><b>Slice 8: website:</b> explain the working model (analysis → decision → cards → documentation) in a section on agent-orchestrator.dev, plainly and with the lifecycle diagram (AOW card, after the naming decision).</li>
 </ol>
 
 <div class="evidence-list" aria-label="Evidence map">
@@ -240,7 +241,7 @@
   <a class="evidence" href="../../system/contracts/wiki-tree.md"><span class="evidence-class" data-evidence-class="observed">Observed</span><span><b>Wiki and descriptor contract</b><small>Discovery, lifecycle metadata, and sandboxed HTML behavior.</small></span></a>
   <a class="evidence" href="../article-document-authoring.md"><span class="evidence-class" data-evidence-class="proposed">Proposed</span><span><b>Article template v2</b><small>The authoring contract approved for this implementation slice.</small></span></a>
 </div>
-<p class="dim">Quellen: Dossier-Machinerie-Kartierungen vom 08.08. (Catalogue/Decision-Service, Nav-Feedback), Operator-Aussagen 08./09.08. Der Operator-Satz „Bisher mache ich …" brach ab. Ergänzungen fließen in die nächste Fassung.</p>
+<p class="dim">Sources: mappings of the Dossier machinery from 8 August (Catalogue/Decision Service, navigation feedback), operator statements from 8 and 9 August. The operator's sentence "So far, I ..." broke off. Additions will flow into the next version.</p>
 
 </main>
 </body>
