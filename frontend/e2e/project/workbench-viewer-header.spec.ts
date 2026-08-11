@@ -59,6 +59,16 @@ interface RefreshCapture {
   linked: boolean;
   taskRequest: Record<string, unknown> | null;
   referenceRequest: Record<string, unknown> | null;
+  releaseWorkbench: () => void;
+}
+
+interface DossierFixture {
+  key: string;
+  title: string;
+  heading: string;
+  summary: string;
+  entryPath: string;
+  html: string;
 }
 
 interface WorkbenchMockOptions {
@@ -66,7 +76,79 @@ interface WorkbenchMockOptions {
     status: number;
     message: string;
   };
+  dossier?: DossierFixture;
+  deferWorkbench?: boolean;
 }
+
+const DEFAULT_DOSSIER: DossierFixture = {
+  key: WORKBENCH_KEY,
+  title: 'Compact viewer header keeps operational context in one quiet line',
+  heading: 'Compact viewer header',
+  summary: 'Source metadata, actions, and decision controls move into a detail popover.',
+  entryPath: 'docs/operations/compact-viewer-header/index.html',
+  html: `<!doctype html><html><body><main>
+    <h1>Compact viewer header</h1>
+    <p>The document remains the primary reading surface.</p>
+    <section data-decision-id="route" data-decision-kind="single"><strong>Route</strong><span data-option-id="direct">Direct</span></section>
+    <section data-decision-id="density" data-decision-kind="single"><strong>Density</strong><span data-option-id="compact">Compact</span></section>
+    <section data-decision-id="proof" data-decision-kind="confirm"><strong>Proof</strong><span data-option-id="capture">Capture</span></section>
+  </main></body></html>`,
+};
+
+function scrollingDossierFixture(
+  metadata: Omit<DossierFixture, 'html'>,
+  sectionCount: number,
+): DossierFixture {
+  const sections = Array.from({ length: sectionCount }, (_, index) => `
+    <section>
+      <h2>${String(index + 1).padStart(2, '0')} · Evidence section</h2>
+      <p>Repository evidence remains readable inside the document viewport after asynchronous loading.</p>
+      <p>The viewer owns the available height while this document owns its vertical scroll position.</p>
+    </section>`).join('');
+  return {
+    ...metadata,
+    html: `<!doctype html><html><head><style>
+      :root { color-scheme: light dark; --bg: #fcfcfb; --fg: #11110f; --muted: #5f5e59; --line: #d8d6cf; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #1a1a19; --fg: #f7f6f2; --muted: #b7b6ae; --line: #3d3d3a; } }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+      main { width: min(100% - 48px, 960px); margin: 0 auto; padding: 36px 0 64px; }
+      h1 { margin: 0 0 12px; font-size: 34px; }
+      h2 { margin: 0 0 8px; font-size: 20px; }
+      p { max-width: 76ch; color: var(--muted); }
+      section { min-height: 150px; padding: 28px 0; border-top: 1px solid var(--line); }
+      footer { padding-top: 28px; border-top: 1px solid var(--line); font-weight: 700; }
+    </style></head><body><main>
+      <h1 data-testid="dossier-start">${metadata.heading}</h1>
+      <p>${metadata.summary}</p>
+      ${sections}
+      <footer data-testid="dossier-end">Complete dossier · ${metadata.key}</footer>
+    </main></body></html>`,
+  };
+}
+
+const HEIGHT_DOSSIERS = [
+  {
+    label: 'short',
+    fixture: scrollingDossierFixture({
+      key: 'QS-W5',
+      title: 'Quality Studio Test Baseline',
+      heading: 'A test baseline that stays green',
+      summary: 'A compact quality dossier with enough evidence to require internal scrolling.',
+      entryPath: 'docs/operations/test-baseline/index.html',
+    }, 8),
+  },
+  {
+    label: 'long',
+    fixture: scrollingDossierFixture({
+      key: 'AGT-W1',
+      title: 'Admin Surface Design Guideline',
+      heading: 'Admin Surface Design Guideline',
+      summary: 'A long Agent Studio dossier that exercises the same viewer height contract.',
+      entryPath: 'docs/operations/admin-design-guideline/index.html',
+    }, 24),
+  },
+] as const;
 
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({
@@ -80,10 +162,18 @@ async function installMocks(
   page: Page,
   options: WorkbenchMockOptions = {},
 ): Promise<RefreshCapture> {
+  const dossier = options.dossier ?? DEFAULT_DOSSIER;
+  let releaseWorkbench = () => undefined;
+  const workbenchReady = options.deferWorkbench
+    ? new Promise<void>((resolveWorkbench) => {
+        releaseWorkbench = resolveWorkbench;
+      })
+    : Promise.resolve();
   const capture: RefreshCapture = {
     linked: false,
     taskRequest: null,
     referenceRequest: null,
+    releaseWorkbench,
   };
   await page.route('**/healthz', (route) => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', (route) => json(route, []));
@@ -254,13 +344,13 @@ async function installMocks(
           projectName: PROJECT,
           workbench: {
             id: WORKBENCH_ID,
-            key: WORKBENCH_KEY,
-            title: 'Compact viewer header',
-            summary: 'Source metadata and controls stay in a detail popover.',
+            key: dossier.key,
+            title: dossier.title,
+            summary: dossier.summary,
             status: 'decision-pending',
             phase: 'decision-ready',
             updatedAtUtc: '2026-08-09T10:00:00Z',
-            entryPath: 'docs/operations/compact-viewer-header/index.html',
+            entryPath: dossier.entryPath,
             valid: true,
             error: null,
             sourceTaskKeys: [],
@@ -279,13 +369,13 @@ async function installMocks(
       items: [
         {
           id: WORKBENCH_ID,
-          key: WORKBENCH_KEY,
-          title: 'Compact viewer header',
-          summary: 'Source metadata and controls stay in a detail popover.',
+          key: dossier.key,
+          title: dossier.title,
+          summary: dossier.summary,
           status: 'decision-pending',
           phase: 'decision-ready',
           updatedAtUtc: '2026-08-09T10:00:00Z',
-          entryPath: 'docs/operations/compact-viewer-header/index.html',
+          entryPath: dossier.entryPath,
           valid: true,
           error: null,
           sourceTaskKeys: [],
@@ -296,7 +386,8 @@ async function installMocks(
   );
   await page.route(
     `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}`,
-    (route) => {
+    async (route) => {
+      await workbenchReady;
       if (options.workbenchError) {
         return route.fulfill({
           status: options.workbenchError.status,
@@ -307,25 +398,19 @@ async function installMocks(
       return json(route, {
         workbench: {
           id: WORKBENCH_ID,
-          key: WORKBENCH_KEY,
-          title: 'Compact viewer header keeps operational context in one quiet line',
-          summary: 'Source metadata, actions, and decision controls move into a detail popover.',
+          key: dossier.key,
+          title: dossier.title,
+          summary: dossier.summary,
           status: 'decision-pending',
           phase: 'decision-ready',
           updatedAtUtc: '2026-08-09T10:00:00Z',
-          entryPath: 'docs/operations/compact-viewer-header/index.html',
+          entryPath: dossier.entryPath,
           valid: true,
           error: null,
           sourceTaskKeys: [],
           relatedTaskKeys: ['VHE-12', 'VHE-13'],
         },
-        html: `<!doctype html><html><body><main>
-        <h1>Compact viewer header</h1>
-        <p>The document remains the primary reading surface.</p>
-        <section data-decision-id="route" data-decision-kind="single"><strong>Route</strong><span data-option-id="direct">Direct</span></section>
-        <section data-decision-id="density" data-decision-kind="single"><strong>Density</strong><span data-option-id="compact">Compact</span></section>
-        <section data-decision-id="proof" data-decision-kind="confirm"><strong>Proof</strong><span data-option-id="capture">Capture</span></section>
-      </main></body></html>`,
+        html: dossier.html,
         branch: 'task/compact-viewer-header',
         revision: '1234567890abcdef',
         workingTreeModified: false,
@@ -334,11 +419,11 @@ async function installMocks(
     },
   );
   await page.route(
-    `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_KEY}/references`,
+    `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${dossier.key}/references`,
     (route) =>
       json(route, {
         projectName: PROJECT,
-        workbenchKey: WORKBENCH_KEY,
+        workbenchKey: dossier.key,
         workbenchId: WORKBENCH_ID,
         legacyTaskKeys: ['VHE-12', 'VHE-13'],
         items: [
@@ -432,6 +517,78 @@ async function expectViewerSettled(page: Page): Promise<void> {
     .getByRole('heading', { name: 'Compact viewer header' })).toBeVisible();
   await expect(page.getByTestId('workbench-viewer-loading')).toHaveCount(0);
   await expect(page.getByTestId('loading-surface-list')).toHaveCount(0);
+}
+
+async function expectViewerHeightAndInternalScroll(page: Page): Promise<void> {
+  const viewer = page.getByTestId('workbench-viewer');
+  const geometry = await viewer.evaluate((element) => {
+    const header = element.querySelector<HTMLElement>('[data-testid="workbench-viewer-header"]');
+    const shell = element.querySelector<HTMLElement>('[data-testid="workbench-viewer-frame-shell"]');
+    const frame = element.querySelector<HTMLIFrameElement>('[data-testid="workbench-viewer-frame"]');
+    if (!header || !shell || !frame) throw new Error('Viewer geometry nodes are missing.');
+    return {
+      viewerHeight: element.getBoundingClientRect().height,
+      viewerClientHeight: element.clientHeight,
+      viewerScrollHeight: element.scrollHeight,
+      headerHeight: header.getBoundingClientRect().height,
+      shellHeight: shell.getBoundingClientRect().height,
+      frameHeight: frame.getBoundingClientRect().height,
+    };
+  });
+  expect(geometry.viewerHeight).toBeGreaterThan(650);
+  expect(geometry.shellHeight).toBeGreaterThan(
+    geometry.viewerHeight - geometry.headerHeight - 2,
+  );
+  expect(Math.abs(geometry.frameHeight - geometry.shellHeight)).toBeLessThanOrEqual(1);
+  expect(geometry.viewerScrollHeight).toBeLessThanOrEqual(geometry.viewerClientHeight + 1);
+
+  const isolatedRoot = page.frameLocator('[data-testid="workbench-viewer-frame"]').locator('html');
+  const scroll = await isolatedRoot.evaluate(() => ({
+    clientHeight: document.documentElement.clientHeight,
+    scrollHeight: document.documentElement.scrollHeight,
+  }));
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+  await isolatedRoot.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
+    .getByTestId('dossier-end')).toBeInViewport();
+}
+
+for (const dossier of HEIGHT_DOSSIERS) {
+  test(`${dossier.fixture.key} ${dossier.label} dossier fills the viewer after late load and scrolls internally`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const capture = await installMocks(page, {
+      dossier: dossier.fixture,
+      deferWorkbench: true,
+    });
+    await page.goto(
+      `/#/projects/viewer-header-evidence/workbenches/${encodeURIComponent(WORKBENCH_ID)}`,
+    );
+    await page.addStyleTag({
+      content: '[data-testid="offline-banner"] { display: none !important; }',
+    });
+    await expect(page.getByTestId('workbench-viewer-loading')).toBeVisible({ timeout: 30_000 });
+
+    capture.releaseWorkbench();
+    await expect(page.getByTestId('workbench-viewer-frame')).toBeVisible({ timeout: 30_000 });
+    const frame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
+    await expect(frame.getByTestId('dossier-start')).toContainText(dossier.fixture.heading);
+    await expectViewerHeightAndInternalScroll(page);
+
+    await frame.locator('html').evaluate(() => window.scrollTo(0, 0));
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: evidencePath(
+          testInfo,
+          `dossier-height-${dossier.label}-${theme}--mocked.png`,
+        ),
+        fullPage: true,
+      });
+    }
+  });
 }
 
 test('overview entry settles without a persistent loading surface', async ({

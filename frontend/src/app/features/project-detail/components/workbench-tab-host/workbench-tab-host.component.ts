@@ -15,6 +15,7 @@ import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.c
   imports: [LoadingSurfaceComponent, WorkbenchOverviewComponent, WorkbenchViewerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-tab-host.component.html',
+  styleUrl: './workbench-tab-host.component.scss',
 })
 export class WorkbenchTabHostComponent {
   readonly mode = input.required<'overview' | 'viewer'>();

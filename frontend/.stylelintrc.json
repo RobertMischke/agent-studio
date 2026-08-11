@@ -241,6 +241,7 @@
         "src/app/features/project-detail/components/workbench-decision-panel/workbench-decision-panel.scss",
         "src/app/features/project-detail/components/workbench-viewer-header/workbench-viewer-header.component.scss",
         "src/app/features/project-detail/components/workbench-overview/workbench-overview.component.scss",
+        "src/app/features/project-detail/components/workbench-tab-host/workbench-tab-host.component.scss",
         "src/app/features/project-detail/components/workbench-viewer/workbench-viewer.component.scss",
         "src/app/features/remote-hosts/components/git-token-capability/git-token-capability.scss",
         "src/app/features/remote-hosts/components/host-workload-summary/host-workload-summary.scss",
