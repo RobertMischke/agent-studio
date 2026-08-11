@@ -45,6 +45,23 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     [Fact]
+    public void List_AcceptsInformationalSnapshotDossiers()
+    {
+        WriteWorkbench("lagebild", "Lagebild", "active", "2026-08-03T04:00:00Z");
+        var descriptorPath = Path.Combine(
+            _root, "docs", "workbenches", "lagebild", "workbench.json");
+        var descriptor = JsonNode.Parse(File.ReadAllText(descriptorPath))!.AsObject();
+        descriptor["phase"] = "informational";
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+
+        var item = Assert.Single(Service().List("Project")!.Items);
+
+        Assert.True(item.Valid, item.Error);
+        Assert.Equal("informational", item.Phase);
+        Assert.Equal("in-progress", item.LifecycleState);
+    }
+
+    [Fact]
     public void Overview_UsesOneProjectionForWorkspaceAndProjectScopes()
     {
         WriteWorkbench("current", "Current", "active", "2026-07-12T10:00:00Z");
