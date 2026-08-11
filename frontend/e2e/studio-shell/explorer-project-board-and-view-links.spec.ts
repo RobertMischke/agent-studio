@@ -43,6 +43,34 @@ async function gotoStudio(page: Page): Promise<void> {
   await expect(page.getByTestId('studio-sidebar')).toBeVisible({ timeout: 10_000 });
 }
 
+async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    const json = (body: unknown) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    if (/^\/api\/cli\/[^/]+\/models$/.test(url.pathname)) {
+      await json({ models: [], source: 'deck-icon-evidence' });
+      return;
+    }
+    if (url.pathname === '/api/cli/quota') {
+      await json({ at: new Date().toISOString(), ttlSeconds: 600, snapshots: [] });
+      return;
+    }
+    if (url.pathname === '/api/cli/usage') {
+      await json({ at: new Date().toISOString(), sessions: [] });
+      return;
+    }
+    const response = await route.fetch({
+      url: `${baseUrl}${url.pathname}${url.search}`,
+      timeout: 30_000,
+    });
+    await route.fulfill({ response });
+  });
+}
+
 /** Expand the first project row and return its locator + name. */
 async function expandFirstProject(page: Page): Promise<{ row: ReturnType<Page['locator']>; name: string } | null> {
   const row = page.locator('[data-testid^="studio-explorer-project-row-"]').first();
@@ -57,53 +85,116 @@ async function expandFirstProject(page: Page): Promise<{ row: ReturnType<Page['l
   return { row, name };
 }
 
-const DECK_NAMING_SCREENSHOTS = path.resolve(
-  __dirname,
-  '..',
-  '..',
-  'playwright-screenshots',
-  'deck-naming',
-);
+const DECK_ICON_SCREENSHOTS = process.env['JOB_RESULTS_DIR']
+  ? path.resolve(process.env['JOB_RESULTS_DIR'])
+  : path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'deck-icon');
 const LEGACY_DECK_NAME = ['Project', 'Hub'].join(' ');
 
 test.describe('Explorer · project links to Board / Deck / Wiki / Epics', () => {
   test('Deck naming is visible in the tree and opened surface in both themes', async ({ page, devBackend }, testInfo) => {
+    test.setTimeout(120_000);
     expect(devBackend.port).toBeGreaterThan(0);
-    mkdirSync(DECK_NAMING_SCREENSHOTS, { recursive: true });
-
-    for (const theme of ['light', 'dark'] satisfies Theme[]) {
-      await gotoStudio(page);
-      await setTheme(page, theme);
-      await dismissDevErrorDialog(page);
-
-      const expanded = await expandFirstProject(page);
-      expect(expanded, 'The dev-backend fixture must expose a project').not.toBeNull();
-      const { name } = expanded!;
-      const deckRow = page.getByTestId(`studio-explorer-project-deck-${name}`);
-
-      await expect(deckRow).toContainText('Deck');
-      await expect(deckRow.getByRole('button', { name: `Deck, ${name}` })).toBeVisible();
-
-      const deckShortcut = page.locator('button[aria-label="Open Deck"]').first();
-      await expect(deckShortcut).toHaveAttribute('aria-label', 'Open Deck');
-
-      await deckRow.getByRole('button', { name: `Deck, ${name}` }).click();
-      await expect(page.getByRole('tab', { name: / · Deck$/ }))
-        .toHaveAttribute('aria-selected', 'true');
-      await expect(page.getByTestId('deck-sidebar-header')).toContainText('Deck');
-      await page.getByTestId('project-shell').hover({ position: { x: 400, y: 300 } });
-
-      await expect(page.locator('body')).not.toContainText(LEGACY_DECK_NAME);
-      await expect(page.locator(
-        `[aria-label*="${LEGACY_DECK_NAME}"], [title*="${LEGACY_DECK_NAME}"]`,
-      )).toHaveCount(0);
-
-      const screenshotPath = path.join(DECK_NAMING_SCREENSHOTS, `deck-tree-open-${theme}.png`);
-      await page.screenshot({ path: screenshotPath, fullPage: true });
-      await testInfo.attach(`Deck tree and opened surface (${theme})`, {
-        path: screenshotPath,
-        contentType: 'image/png',
+    mkdirSync(DECK_ICON_SCREENSHOTS, { recursive: true });
+    const clientResponse = await fetch(`${devBackend.baseUrl}/api/clients/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ displayName: `deck-icon-evidence-${Date.now().toString(36)}` }),
+    });
+    const clientText = await clientResponse.text();
+    expect(clientResponse.ok, clientText).toBe(true);
+    const client = JSON.parse(clientText) as { id: string };
+    const mutationHeaders = {
+      'content-type': 'application/json',
+      'X-Client-Id': client.id,
+    };
+    const workspaceResponse = await fetch(`${devBackend.baseUrl}/api/workspaces`);
+    const workspaces = await workspaceResponse.json() as { id: string }[];
+    let createdWorkspaceId: string | null = null;
+    if (workspaces.length === 0) {
+      const createWorkspaceResponse = await fetch(`${devBackend.baseUrl}/api/workspaces`, {
+        method: 'POST',
+        headers: mutationHeaders,
+        body: JSON.stringify({ displayName: 'Deck Icon Evidence' }),
       });
+      const createWorkspaceText = await createWorkspaceResponse.text();
+      expect(createWorkspaceResponse.ok, createWorkspaceText).toBe(true);
+      const workspace = JSON.parse(createWorkspaceText) as { id: string };
+      createdWorkspaceId = workspace.id;
+      workspaces.push(workspace);
+    }
+    const uniqueSuffix = Date.now().toString(36);
+    const projectResponse = await fetch(`${devBackend.baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: mutationHeaders,
+      body: JSON.stringify({
+        sourceType: 'local-folder',
+        workspaceId: workspaces[0].id,
+        displayName: `Deck Icon Evidence ${uniqueSuffix}`,
+        shortCode: `DI${uniqueSuffix.slice(-4)}`.toUpperCase(),
+        rootPath: devBackend.workspace,
+        repositoryPath: devBackend.workspace,
+      }),
+    });
+    const projectText = await projectResponse.text();
+    expect(projectResponse.ok, projectText).toBe(true);
+    const createdProject = JSON.parse(projectText) as { id: string };
+    await proxyBackend(page, devBackend.baseUrl);
+
+    try {
+      for (const theme of ['light', 'dark'] satisfies Theme[]) {
+        await gotoStudio(page);
+        await setTheme(page, theme);
+        await dismissDevErrorDialog(page);
+
+        const expanded = await expandFirstProject(page);
+        expect(expanded, 'The dev-backend fixture must expose a project').not.toBeNull();
+        const { name } = expanded!;
+        const deckRow = page.getByTestId(`studio-explorer-project-deck-${name}`);
+
+        await expect(deckRow).toContainText('Deck');
+        await expect(deckRow.getByRole('button', { name: `Deck, ${name}` })).toBeVisible();
+        const deckIcon = deckRow.locator('app-studio-icon svg');
+        await expect(deckIcon).toHaveCount(1);
+        await expect(deckIcon).toHaveAttribute('viewBox', '0 0 24 24');
+        await expect(deckIcon).toHaveAttribute('stroke', 'currentColor');
+        await expect(deckIcon.locator('path')).toHaveAttribute('d', 'M9 3v18M9 10h12');
+        await expect(deckIcon.locator('circle')).toHaveAttribute('cy', '15.5');
+
+        const deckShortcut = page.locator('button[aria-label="Open Deck"]').first();
+        await expect(deckShortcut).toHaveAttribute('aria-label', 'Open Deck');
+
+        await deckRow.getByRole('button', { name: `Deck, ${name}` }).click();
+        await expect(page.getByRole('tab', { name: / · Deck$/ }))
+          .toHaveAttribute('aria-selected', 'true');
+        await expect(page.getByTestId('deck-sidebar-header')).toContainText('Deck');
+        await page.getByTestId('project-shell').hover({ position: { x: 400, y: 300 } });
+
+        await expect(page.locator('body')).not.toContainText(LEGACY_DECK_NAME);
+        await expect(page.locator(
+          `[aria-label*="${LEGACY_DECK_NAME}"], [title*="${LEGACY_DECK_NAME}"]`,
+        )).toHaveCount(0);
+
+        const screenshotPath = path.join(
+          DECK_ICON_SCREENSHOTS,
+          `deck-icon-in-context--real-${theme}.png`,
+        );
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        await testInfo.attach(`Deck tree and opened surface (${theme})`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    } finally {
+      await fetch(`${devBackend.baseUrl}/api/projects/${createdProject.id}`, {
+        method: 'DELETE',
+        headers: { 'X-Client-Id': client.id },
+      });
+      if (createdWorkspaceId) {
+        await fetch(`${devBackend.baseUrl}/api/workspaces/${createdWorkspaceId}`, {
+          method: 'DELETE',
+          headers: { 'X-Client-Id': client.id },
+        });
+      }
     }
   });
 
