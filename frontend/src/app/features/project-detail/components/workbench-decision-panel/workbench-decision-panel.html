@@ -3,13 +3,6 @@
          [attr.data-stage]="stage()">
   <header class="decision-panel__header">
     <strong class="decision-panel__title">{{ document().workbench.title }}</strong>
-    @if (document().workbench.key; as key) {
-      <app-copyable-task-key
-        [key]="key"
-        variant="reference"
-        ariaLabel="Copy reference key"
-        testId="workbench-key-chip" />
-    }
     <span class="decision-panel__separator" aria-hidden="true">·</span>
     <span class="decision-panel__stage">
       <i aria-hidden="true"></i>{{ stageLabel() }}
@@ -33,17 +26,18 @@
         <span>{{ document().revision!.slice(0, 8) }}</span>
       }
     </span>
-    @if (showWikiAction()) {
-      <button type="button"
-              class="decision-panel__wiki"
-              data-testid="workbench-viewer-open-wiki"
-              aria-label="Open Dossier in Wiki"
-              title="Open in Wiki"
-              (click)="openWiki.emit()">
-        <app-studio-icon name="book" [size]="13" />
-      </button>
-    }
   </header>
+
+  @if (hasBrowserDraft()) {
+    <div class="decision-panel__draft" role="status" data-testid="workbench-decision-draft-notice">
+      <span><i aria-hidden="true"></i>Draft saved for this browser session.</span>
+      <button type="button"
+              class="decision-panel__discard"
+              data-testid="workbench-decision-discard"
+              [disabled]="pending()"
+              (click)="discardDraft()">Discard draft</button>
+    </div>
+  }
 
   @if (mutationBlocked() && !settled()) {
     <p class="decision-panel__notice" role="status" data-testid="workbench-decision-blocked">
@@ -81,7 +75,7 @@
         </div>
       }
     </div>
-  } @else if (stage() === 'prepared' && draftMode() === 'feature-spawn') {
+  } @else if (draftMode() === 'feature-spawn') {
     <form class="decision-panel__confirmation"
           data-testid="workbench-decision-feature-confirmation"
           (submit)="$event.preventDefault(); createFeatureCard()">
@@ -89,6 +83,7 @@
         <span>Title</span>
         <input type="text"
                data-testid="workbench-decision-title"
+               maxlength="240"
                [value]="title()"
                [disabled]="pending()"
                (input)="updateTitle($event)" />
@@ -97,6 +92,7 @@
         <span>Goal</span>
         <textarea rows="2"
                   data-testid="workbench-decision-goal"
+                  maxlength="20000"
                   [value]="goal()"
                   [disabled]="pending()"
                   (input)="updateGoal($event)"></textarea>
@@ -106,10 +102,10 @@
         <strong>{{ selectedSummary() || 'No inline decision points' }}</strong>
       </p>
       <div class="decision-panel__actions">
-        <button type="button" [disabled]="pending()" (click)="cancelDraft()">Cancel</button>
         <button type="submit"
                 data-testid="workbench-decision-confirm"
-                [appPendingButton]="requestState().pending === 'confirm'"
+                [disabled]="!canCreateFeature()"
+                [appPendingButton]="pending()"
                 pendingLabel="Creating…">Create feature card</button>
       </div>
     </form>
@@ -158,8 +154,6 @@
         <button type="button"
                 data-testid="workbench-decision-prepare"
                 [disabled]="!canPrepareFeature()"
-                [appPendingButton]="requestState().pending === 'prepare'"
-                pendingLabel="Preparing…"
                 (click)="prepareFeatureCard()">Prepare feature card</button>
       </div>
     </div>

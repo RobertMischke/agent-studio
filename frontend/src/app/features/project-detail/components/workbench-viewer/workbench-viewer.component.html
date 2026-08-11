@@ -19,8 +19,7 @@
           [document]="doc"
           [decisionPoints]="decisionMarkup().points"
           [responses]="decisionResponses()"
-          [showWikiAction]="showWikiAction()"
-          (openWiki)="openCurrentPageInWiki()"
+          (draftDiscarded)="discardDecisionDraft()"
           (decisionChanged)="refreshDecision()"
         />
       }

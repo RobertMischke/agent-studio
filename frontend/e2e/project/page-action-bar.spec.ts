@@ -591,6 +591,8 @@ test('shared page action bar preserves placement, task source, chat context, and
   const decisionFrame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
   const compactOption = decisionFrame.locator('[data-option-id="compact"] input');
   await expect(compactOption).toBeVisible();
+  await page.getByTestId('workbench-viewer-details-trigger').click();
+  await expect(page.getByTestId('workbench-viewer-details-popover')).toBeVisible();
   await expect(page.getByTestId('workbench-decision-prepare')).toBeDisabled();
   await compactOption.check();
   await decisionFrame.locator('[data-studio-decision-comment]').fill('Keep the header in one compact row.');
