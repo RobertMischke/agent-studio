@@ -254,7 +254,12 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   DOM parse moves artifact nodes into a fixed policy-first wrapper. Dossier
   pages expose a Maximize action, and dirty working-tree
   content is labelled as uncommitted instead of receiving the current HEAD
-  revision. Canonical entries expose their stable project reference key as a
+  revision. A descriptor may register an ordered `pages` list of titled HTML
+  subpages below its own `pages/` directory. The viewer renders those entries
+  as flat subnavigation, loads only registered contained paths, and keeps
+  `index.html` as the default and decision authority. The Dossier key remains
+  stable; registered paths and document-local anchors retain deep-reference
+  identity. Canonical entries expose their stable project reference key as a
   compact copyable mono chip in the viewer header and lifecycle lists; Explorer
   leaf tooltips include the same key. A task's `references.workbenches` entries
   render as linked key chips that open the existing viewer tab. Decision
