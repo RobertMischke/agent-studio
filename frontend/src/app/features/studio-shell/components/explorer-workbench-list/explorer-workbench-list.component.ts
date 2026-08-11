@@ -2,12 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
   effect,
   inject,
   input,
   output,
   signal,
   untracked,
+  viewChild,
   viewChildren,
 } from '@angular/core';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
@@ -16,9 +18,20 @@ import { StudioIconComponent, type StudioIconName } from '../../../../components
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import type { ArticlePattern, WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
+import {
+  ExplorerWorkbenchStateService,
+  type ExplorerWorkbenchGroupId,
+} from '../../services/explorer-workbench-state.service';
 import { ExplorerWorkbenchHistoryComponent } from '../explorer-workbench-history/explorer-workbench-history.component';
 
-const EXPANDED_WORKBENCH_SECTIONS_KEY = 'atp.studio.explorer.workbenches.expanded.v1';
+const STYLE_GUIDE_PATH = 'docs/operations/admin-design-guideline/index.html';
+
+interface WorkbenchNavigationGroup {
+  id: Exclude<ExplorerWorkbenchGroupId, 'history'>;
+  label: string;
+  empty: string;
+  items: WorkbenchListItem[];
+}
 
 @Component({
   selector: 'app-explorer-workbench-list',
@@ -34,16 +47,43 @@ export class ExplorerWorkbenchListComponent {
   readonly overviewActive = input(false);
   readonly openWorkbench = output<WorkbenchListItem>();
   readonly openOverview = output<void>();
-  /** Jump to the project wiki (the workbench pages live there). */
   readonly openWiki = output<void>();
+
   private readonly docs = inject(ProjectDocsService);
   private readonly hub = inject(JobsHubClient);
-  readonly expanded = signal(false);
+  private readonly navigationState = inject(ExplorerWorkbenchStateService);
   readonly loading = signal(false);
   readonly catalogue = signal<WorkbenchCatalogue | null>(null);
-  readonly historyCatalogue = signal<WorkbenchCatalogue | null>(null);
-  readonly historyOpen = signal(false);
+  readonly expanded = computed(() =>
+    this.navigationState.stateFor(this.projectName()).dossiersExpanded);
+  readonly styleGuide = computed(() =>
+    this.catalogue()?.items.find(item => normalizePath(item.entryPath) === STYLE_GUIDE_PATH) ?? null);
+  readonly currentGroups = computed<WorkbenchNavigationGroup[]>(() => {
+    const items = this.dossierItems();
+    return [
+      {
+        id: 'needs-decision',
+        label: 'Needs a decision',
+        empty: 'No decisions waiting',
+        items: items.filter(item => item.status === 'decision-pending' || item.status === 'invalid'),
+      },
+      {
+        id: 'in-implementation',
+        label: 'In implementation',
+        empty: 'No Dossiers in implementation',
+        items: items.filter(item => item.status === 'active' || item.status === 'decided'),
+      },
+    ];
+  });
+  readonly historyItems = computed(() =>
+    this.dossierItems().filter(item => item.status === 'documented' || item.status === 'archived'));
+  readonly pendingDecisionCount = computed(() =>
+    (this.catalogue()?.items ?? [])
+      .filter(item => item.status === 'decision-pending')
+      .reduce((count, item) => count + this.openCount(item), 0));
+
   private readonly topics = viewChildren<ElementRef<HTMLButtonElement>>('workbenchTopic');
+  private readonly styleGuideRow = viewChild<ElementRef<HTMLElement>>('styleGuideRow');
   private lastProjectName: string | null = null;
   private lastRevealedWorkbench: string | null = null;
 
@@ -51,39 +91,27 @@ export class ExplorerWorkbenchListComponent {
     effect(() => {
       const projectName = this.projectName();
       const activeWorkbenchId = this.activeWorkbenchId();
-      const projectChanged = projectName !== this.lastProjectName;
-
-      if (projectChanged) {
+      const catalogue = this.catalogue();
+      if (projectName !== this.lastProjectName) {
         this.lastProjectName = projectName;
         this.lastRevealedWorkbench = null;
         untracked(() => {
           this.catalogue.set(null);
-          this.historyCatalogue.set(null);
-          this.historyOpen.set(false);
-          this.expanded.set(readExpandedProjects().has(projectName));
           this.loadCatalogue();
         });
-      }
-
-      if (!activeWorkbenchId) {
-        this.lastRevealedWorkbench = null;
         return;
       }
-
-      const revealKey = `${projectName}:${activeWorkbenchId}`;
-      if (this.lastRevealedWorkbench === revealKey) return;
-      this.lastRevealedWorkbench = revealKey;
-      untracked(() => {
-        this.setExpanded(true);
-        this.loadCatalogue();
-        this.revealHistoryItem(activeWorkbenchId);
-      });
+      if (activeWorkbenchId && catalogue?.projectName === projectName) {
+        untracked(() => this.revealActiveWorkbench(activeWorkbenchId));
+      } else if (!activeWorkbenchId) {
+        this.lastRevealedWorkbench = null;
+      }
     });
 
     effect(() => {
       const event = this.hub.workbenchEvent();
       if (!event || event.projectName && event.projectName !== this.projectName()) return;
-      untracked(() => this.refreshCatalogues());
+      untracked(() => this.refreshCatalogue());
     });
 
     effect(() => {
@@ -91,77 +119,33 @@ export class ExplorerWorkbenchListComponent {
       const activeTopic = this.topics()
         .map(topic => topic.nativeElement)
         .find(topic => topic.getAttribute('aria-current') === 'page');
-      if (!activeWorkbenchId || !activeTopic || typeof activeTopic.scrollIntoView !== 'function') return;
-      queueMicrotask(() => activeTopic.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+      const activeStyleGuide = this.styleGuideRow()?.nativeElement
+        .querySelector<HTMLButtonElement>('[aria-current="page"]');
+      const activeRow = activeTopic ?? activeStyleGuide;
+      if (!activeWorkbenchId || !activeRow || typeof activeRow.scrollIntoView !== 'function') return;
+      queueMicrotask(() => activeRow.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
     });
   }
 
   toggle(): void {
     this.setExpanded(!this.expanded());
-    if (this.expanded()) this.loadCatalogue();
   }
 
   openOverviewPage(): void {
-    if (!this.expanded()) this.setExpanded(true);
-    this.loadCatalogue();
+    this.setExpanded(true);
     this.openOverview.emit();
   }
 
-  private setExpanded(expanded: boolean): void {
-    this.expanded.set(expanded);
-    const projects = readExpandedProjects();
-    if (expanded) projects.add(this.projectName());
-    else projects.delete(this.projectName());
-    writeExpandedProjects(projects);
+  groupExpanded(group: ExplorerWorkbenchGroupId): boolean {
+    return this.navigationState.stateFor(this.projectName()).groups[group];
   }
 
-  private loadCatalogue(): void {
-    if (this.catalogue() || this.loading()) return;
-    this.loading.set(true);
-    this.docs.getWorkbenches(this.projectName()).subscribe({
-      next: value => {
-        this.catalogue.set(value);
-        this.loading.set(false);
-        const activeWorkbenchId = this.activeWorkbenchId();
-        if (activeWorkbenchId) this.revealHistoryItem(activeWorkbenchId);
-      },
-      error: () => this.loading.set(false),
-    });
-  }
-
-  toggleHistory(): void {
-    this.historyOpen.update(value => !value);
-    if (this.historyOpen()) this.loadHistoryCatalogue();
-  }
-
-  private loadHistoryCatalogue(): void {
-    if (this.historyCatalogue() || this.loading()) return;
-    this.loading.set(true);
-    this.docs.getWorkbenches(this.projectName(), true).subscribe({
-      next: value => { this.historyCatalogue.set(value); this.loading.set(false); },
-      error: () => this.loading.set(false),
-    });
-  }
-
-  private refreshCatalogues(): void {
-    const projectName = this.projectName();
-    this.docs.getWorkbenches(projectName).subscribe({
-      next: value => this.catalogue.set(value),
-      error: () => undefined,
-    });
-    if (!this.historyOpen()) return;
-    this.docs.getWorkbenches(projectName, true).subscribe({
-      next: value => this.historyCatalogue.set(value),
-      error: () => undefined,
-    });
+  toggleGroup(group: ExplorerWorkbenchGroupId): void {
+    this.navigationState.setGroupExpanded(this.projectName(), group, !this.groupExpanded(group));
   }
 
   isActive(item: WorkbenchListItem): boolean {
     return item.id === this.activeWorkbenchId();
-  }
-
-  isAcute(item: WorkbenchListItem): boolean {
-    return !item.valid || item.status === 'decision-pending';
   }
 
   documentPattern(item: WorkbenchListItem): ArticlePattern {
@@ -177,9 +161,9 @@ export class ExplorerWorkbenchListComponent {
     if (item.documentation?.eligible) return 'Ready to document';
     if (item.status === 'decision-pending') return 'Decision pending';
     if (item.status === 'active') return item.phase ?? 'Active';
-    if (item.status === 'decided') return 'Tracking';
+    if (item.status === 'decided') return 'In implementation';
     if (item.status === 'documented') return 'Documented';
-    if (item.status === 'archived') return 'Archived';
+    if (item.status === 'archived') return 'Discarded';
     return item.status;
   }
 
@@ -197,30 +181,59 @@ export class ExplorerWorkbenchListComponent {
     return [item.key, item.title, this.accessibleMeta(item)].filter(Boolean).join(' · ');
   }
 
-  private revealHistoryItem(activeWorkbenchId: string): void {
-    const catalogue = this.catalogue();
-    if (!catalogue || catalogue.items.some(item => item.id === activeWorkbenchId)) return;
-    this.historyOpen.set(true);
-    this.loadHistoryCatalogue();
+  dossierAriaLabel(): string {
+    const count = this.pendingDecisionCount();
+    return count > 0 ? `Dossiers, ${count} decisions waiting` : 'Dossiers';
+  }
+
+  private dossierItems(): WorkbenchListItem[] {
+    const styleGuideId = this.styleGuide()?.id;
+    return (this.catalogue()?.items ?? []).filter(item => item.id !== styleGuideId);
+  }
+
+  private setExpanded(expanded: boolean): void {
+    this.navigationState.setDossiersExpanded(this.projectName(), expanded);
+    if (expanded) this.loadCatalogue();
+  }
+
+  private loadCatalogue(): void {
+    if (this.catalogue() || this.loading()) return;
+    this.loading.set(true);
+    this.docs.getWorkbenches(this.projectName(), true).subscribe({
+      next: value => {
+        this.catalogue.set(value);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  private refreshCatalogue(): void {
+    this.docs.getWorkbenches(this.projectName(), true).subscribe({
+      next: value => this.catalogue.set(value),
+      error: () => undefined,
+    });
+  }
+
+  private revealActiveWorkbench(activeWorkbenchId: string): void {
+    const item = this.catalogue()?.items.find(candidate => candidate.id === activeWorkbenchId);
+    if (!item) return;
+    const revealKey = `${this.projectName()}:${activeWorkbenchId}`;
+    if (this.lastRevealedWorkbench === revealKey) return;
+    this.lastRevealedWorkbench = revealKey;
+    if (item.id === this.styleGuide()?.id) return;
+    this.setExpanded(true);
+    if (item.status === 'documented' || item.status === 'archived') {
+      this.navigationState.setGroupExpanded(this.projectName(), 'history', true);
+    } else {
+      const group = item.status === 'decision-pending' || item.status === 'invalid'
+        ? 'needs-decision'
+        : 'in-implementation';
+      this.navigationState.setGroupExpanded(this.projectName(), group, true);
+    }
   }
 }
 
-function readExpandedProjects(): Set<string> {
-  if (typeof window === 'undefined') return new Set<string>();
-  try {
-    const value = JSON.parse(window.localStorage?.getItem(EXPANDED_WORKBENCH_SECTIONS_KEY) ?? '[]') as unknown;
-    if (!Array.isArray(value)) return new Set<string>();
-    return new Set(value.filter((projectName): projectName is string => typeof projectName === 'string'));
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function writeExpandedProjects(projects: ReadonlySet<string>): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage?.setItem(EXPANDED_WORKBENCH_SECTIONS_KEY, JSON.stringify([...projects]));
-  } catch {
-    /* storage may be full or blocked */
-  }
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, '/').replace(/^\/+/, '');
 }

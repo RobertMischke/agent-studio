@@ -1,36 +1,91 @@
 :host {
   display: contents;
   // One more visible step than the Dossiers disclosure row. This keeps the
-  // project -> section -> entry hierarchy legible without a decorative guide
-  // line, which the product style rules prohibit.
-  --workbench-topics-indent: calc(var(--studio-spacing-7) + var(--studio-spacing-6));
+  // project -> section -> entry hierarchy legible without a decorative guide.
+  --workbench-topics-indent: calc(var(--studio-spacing-7) + var(--studio-spacing-4));
 }
-// Nest the expanded workbench items under the "Dossiers" child row.
-.studio-workbench-topics { padding-left: var(--workbench-topics-indent); padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3)); }
-.studio-workbench-topics__state { display: block; padding: var(--studio-spacing-1) var(--studio-spacing-2); color: var(--studio-fg-muted); font-size: 11px; }
-.studio-workbench-topic { width: calc(100% - var(--studio-spacing-4)); margin-left: var(--studio-spacing-4); display: flex; flex-direction: column; align-items: flex-start; padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; }
+
+.studio-workbench-style-guide { display: contents; }
+
+.studio-workbench-topics {
+  padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3));
+  padding-left: var(--workbench-topics-indent);
+}
+
+.studio-workbench-topics__state {
+  display: block;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+
+.studio-workbench-group-items,
+.studio-workbench-history-items {
+  padding-left: var(--studio-spacing-4);
+}
+
+.studio-workbench-topic {
+  display: flex;
+  width: calc(100% - var(--studio-spacing-4));
+  margin-left: var(--studio-spacing-4);
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--studio-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
 .studio-workbench-topic:hover { background: var(--studio-bg-hover); }
 .studio-workbench-topic:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: -2px; }
 .studio-workbench-topic:disabled { cursor: default; }
 .studio-workbench-topic--active { background: var(--studio-nav-active-bg); color: var(--studio-nav-active-fg); font-weight: 600; }
 .studio-workbench-topic--active:hover { background: var(--studio-nav-active-bg-hover); }
-// Match the tree-row type scale (13px rows) so the section reads as part of
-// the tree instead of a foreign block.
-.studio-workbench-topic__primary { width: 100%; min-width: 0; display: flex; align-items: center; gap: var(--studio-spacing-1); }
+
+.studio-workbench-topic__primary {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+}
+
 .studio-workbench-topic__pattern { display: inline-flex; flex: none; color: var(--studio-fg-muted); }
 .studio-workbench-topic__pattern[data-pattern='ui'] { color: var(--studio-accent-3); }
 .studio-workbench-topic--active .studio-workbench-topic__pattern { color: var(--studio-nav-active-fg); }
 .studio-workbench-topic__title { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.35; }
 .studio-workbench-topic__meta { display: flex; align-items: center; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 10px; line-height: 1.3; }
 .studio-workbench-topic__meta strong { font-weight: 700; font-variant-numeric: tabular-nums; }
-.studio-workbench-topic--active .studio-workbench-topic__meta { color: var(--studio-nav-active-fg); opacity: 0.72; }
-.studio-workbench-topic__meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-accent-3); flex: none; }
-.studio-workbench-topic__meta i[data-status='decision-pending'], .studio-workbench-topic__meta i[data-status='invalid'] { background: var(--studio-warn); }
-.studio-workbench-history { margin: var(--studio-spacing-1) 0 0; padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
-.studio-workbench-history:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
+.studio-workbench-topic__key { font-family: var(--font-mono); }
+.studio-workbench-topic--active .studio-workbench-topic__meta { color: var(--studio-nav-active-fg); opacity: 0.78; }
 
-// `.studio button` has higher specificity than the component classes. Scope
-// these padding declarations so the intended nested band and action rhythm
-// survive that shell reset.
+.studio-workbench-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--studio-fg-muted);
+  flex: none;
+}
+
+.studio-workbench-status-dot[data-status='invalid'] { background: var(--studio-error); }
+
+.studio-workbench-wiki {
+  margin: var(--studio-spacing-1) 0 0;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.studio-workbench-wiki:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
+
+// The Studio button reset is more specific than the component classes.
 .studio .studio-workbench-topic { padding: var(--studio-spacing-1) var(--studio-spacing-2); }
-.studio .studio-workbench-history { padding: var(--studio-spacing-1); }
+.studio .studio-workbench-wiki { padding: var(--studio-spacing-1); }
