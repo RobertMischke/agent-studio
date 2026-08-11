@@ -285,6 +285,7 @@ builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
 builder.Services.AddSingleton<LocalOrchestratorChatPersistence>();
+builder.Services.AddSingleton<AgentStudio.Host.OrchestratorContextHubBroadcaster>();
 builder.Services.AddSingleton<TaskServerOrchestratorChatPersistence>();
 builder.Services.AddSingleton<IOrchestratorChatPersistence>(sp =>
     TaskServerPlaneProxy.IsConfigured(sp.GetRequiredService<IConfiguration>())

@@ -36,6 +36,7 @@ export class StudioActivityBarComponent {
   /** Fires when the user clicks the Epics button (shown only when epics exist). */
   readonly openEpicsRequest = output<void>();
   readonly openWorkbenchesRequest = output<void>();
+  readonly openChatHistoryRequest = output<void>();
 
   badgeLabel(item: StudioActivityBarItem, count: number): string {
     if (item.key === 'activity') return `${count} fresh ${count === 1 ? 'alert' : 'alerts'}`;
