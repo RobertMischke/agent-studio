@@ -11,11 +11,10 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    // 10 adds the central Orchestrator context, transcript, and receipt store,
-    // plus the durable application-owned Result-finalization state used by the
-    // awaited remote post-core gate. The migration block is idempotent; the
-    // number only guards downgrades.
-    public const int CurrentSchemaVersion = 10;
+    // 11 adds the durable application-owned Result-finalization state used by
+    // the awaited remote post-core gate. The migration block is idempotent;
+    // the number guards downgrades from binaries that do not know this state.
+    public const int CurrentSchemaVersion = 11;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
