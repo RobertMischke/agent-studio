@@ -62,6 +62,7 @@ export class WorkbenchOverviewComponent {
   readonly filteredCount = computed(() => this.filteredItems().length);
   readonly decisionPending = computed(() => this.sortedItemsWithStatus('decision-pending'));
   readonly current = computed(() => this.viewState.sort([
+    ...this.filteredItemsWithStatus('living-standard'),
     ...this.filteredItemsWithStatus('active'),
     ...this.filteredItemsWithStatus('decided'),
     ...this.filteredItemsWithStatus('invalid'),
@@ -133,6 +134,7 @@ export class WorkbenchOverviewComponent {
     if (!workbench.valid) return 'Needs attention';
     if (workbench.documentation?.eligible) return 'Ready to document';
     if (workbench.status === 'decision-pending') return 'Decision pending';
+    if (workbench.status === 'living-standard') return 'Living standard';
     if (workbench.status === 'active') return workbench.phase ?? 'Active';
     if (workbench.status === 'decided') return 'Tracking';
     if (workbench.status === 'archived') return 'Discarded';

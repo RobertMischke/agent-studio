@@ -235,6 +235,74 @@ describe('WorkbenchViewerComponent', () => {
     http.verify();
   });
 
+  it('renders registered pages as subnavigation and keeps entrypoint decisions stable', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'boundary');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const multipage: WorkbenchDocument = {
+      ...DOCUMENT,
+      workbench: {
+        ...DOCUMENT.workbench,
+        key: null,
+        sourceTaskKeys: [],
+        pages: [
+          { title: "Dos and don'ts", path: 'pages/dos-and-donts.html' },
+          { title: 'Applied surfaces', path: 'pages/applied-surfaces.html' },
+        ],
+      },
+      contentPath: DOCUMENT.workbench.entryPath,
+      contentTitle: DOCUMENT.workbench.title,
+    };
+    http.expectOne('/api/projects/Demo/workbenches/boundary').flush(multipage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dosAndDonts = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-page-pages-dos-and-donts-html"]',
+    ) as HTMLButtonElement;
+    expect(dosAndDonts.textContent).toContain("Dos and don'ts");
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-page-overview"]')
+      ?.getAttribute('aria-current')).toBe('page');
+
+    dosAndDonts.click();
+    const request = http.expectOne(candidate => candidate.url ===
+      '/api/projects/Demo/workbenches/boundary'
+      && candidate.params.get('page') === 'pages/dos-and-donts.html');
+    request.flush({
+      ...multipage,
+      html: '<!doctype html><html><body><h1>Visual pairs</h1></body></html>',
+      entryHtml: DOCUMENT.html,
+      contentPath: 'docs/workbenches/boundary/pages/dos-and-donts.html',
+      contentTitle: "Dos and don'ts",
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(dosAndDonts.getAttribute('aria-current')).toBe('page');
+    expect(fixture.componentInstance.srcdoc()).toContain('Visual pairs');
+    expect(fixture.componentInstance.decisionMarkup().points[0].id).toBe('route');
+    fixture.componentInstance.discardDecisionDraft();
+    expect(fixture.componentInstance.decisionResponses()[0]?.decisionId).toBe('route');
+    const frame = fixture.nativeElement.querySelector(
+      '[data-testid="workbench-viewer-frame"]',
+    ) as HTMLIFrameElement;
+    expect(frame.title).toBe("Dossier artifact: Dos and don'ts");
+    http.verify();
+  });
+
   it('offers the documented transition after every referenced card is terminal', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],

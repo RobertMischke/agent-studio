@@ -90,6 +90,7 @@ export class WorkbenchViewerHeaderComponent {
   });
   readonly statusLabel = computed(() => {
     const workbench = this.document().workbench;
+    if (workbench.status === 'living-standard') return 'Living standard';
     return [
       this.implementationStatus() ?? humanize(workbench.status),
       workbench.phase ? humanize(workbench.phase) : null,

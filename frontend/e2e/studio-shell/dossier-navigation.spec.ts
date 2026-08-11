@@ -8,7 +8,7 @@ interface CatalogueItem {
   id: string;
   key?: string | null;
   title: string;
-  status: 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
+  status: 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'living-standard' | 'invalid';
   entryPath: string;
   openDecisionCount?: number;
 }
