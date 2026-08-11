@@ -24,7 +24,16 @@
           </span>
           <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
         </span>
-        <span class="studio-workbench-topic__meta">{{ secondaryMeta(workbench) }}</span>
+        <span class="studio-workbench-topic__meta">
+          <i class="studio-workbench-status-dot" aria-hidden="true"
+             [attr.data-status]="workbench.status"
+             [attr.data-testid]="'studio-explorer-workbench-status-' + projectName() + '-' + workbench.id"></i>
+          @if (workbench.key; as key) {
+            <span class="studio-workbench-topic__key"
+                  [attr.data-testid]="'studio-explorer-workbench-key-' + projectName() + '-' + workbench.id">{{ key }}</span>
+          }
+          <span>{{ secondaryMeta(workbench) }}</span>
+        </span>
       </button>
     } @empty {
       <span class="studio-workbench-topics__state">{{ group.empty }}</span>

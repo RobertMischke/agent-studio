@@ -176,8 +176,8 @@
                     type="button"
                     class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-collapse-all"
-                    cacTooltip="Collapse all projects"
-                    aria-label="Collapse all projects"
+                    cacTooltip="Collapse all navigation"
+                    aria-label="Collapse all navigation"
                     (click)="onCollapseAllProjects()">
               <app-studio-icon name="collapse" [size]="14"></app-studio-icon>
             </button>
@@ -210,7 +210,7 @@
                   [expandedProjects]="expandedProjects()"
                   [showAllActive]="activeProjectName() === null && activeTab()?.kind === 'board'"
                   [activeProjectSurface]="activeProjectSurface()"
-                  [activeWorkbench]="activeWorkbench()"
+                  [activeWorkbench]="activeWorkbench()" [collapseAllVersion]="collapseAllVersion()"
                   [metricView]="uiPrefs.treeMetricView()"
                   [projectAutoPickupByName]="projectAutoPickupByName()"
                   (showAll)="pickProject(null)"

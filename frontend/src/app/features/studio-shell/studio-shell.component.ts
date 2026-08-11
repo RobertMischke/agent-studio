@@ -59,6 +59,7 @@ import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.me
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
 import { ExplorerSectionsService } from './services/explorer-sections.service';
+import { ExplorerWorkbenchStateService } from './services/explorer-workbench-state.service';
 import { buildProjectSidebarRows, type ProjectSidebarRow } from './studio-shell.project-rows';
 import { StudioTab, studioTabKey } from './studio-shell.types';
 import { GlobalSearchComponent } from './components/global-search/global-search.component';
@@ -137,6 +138,7 @@ export class StudioShellComponent {
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly explorerSections = inject(ExplorerSectionsService);
+  private readonly explorerWorkbenchState = inject(ExplorerWorkbenchStateService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
@@ -189,6 +191,7 @@ export class StudioShellComponent {
     new Set(this.readExpandedProjects()),
   );
   readonly expandedProjects = this._expandedProjects.asReadonly();
+  readonly collapseAllVersion = signal(0);
 
   toggleProjectExpanded(name: string, event?: Event): void {
     event?.stopPropagation();
@@ -448,14 +451,7 @@ export class StudioShellComponent {
     return 'Request failed';
   }
 
-  /**
-   * Track which active-project name we've already auto-expanded for, so
-   * the auto-expand effect only fires when the active project CHANGES —
-   * not when the user manually collapses it. Without this guard the
-   * effect re-runs on every `_expandedProjects` mutation, instantly
-   * re-expanding the project the user just collapsed.
-   */
-  private lastAutoExpandedActive: string | null = null;
+  private lastAutoExpandedNavigationPath: string | null = null;
 
   /**
    * Auto-expand the active project in the Explorer tree so the lane
@@ -464,44 +460,26 @@ export class StudioShellComponent {
    * agent-orchestrator.zip mockup, which always shows the active project
    * expanded.
    *
-   * Only acts when the active project name CHANGES — never on
-   * `_expandedProjects` mutations, so the user's chevron-collapse is
-   * preserved. We read `_expandedProjects` via `untracked()` to avoid
-   * setting up a reactive dependency that would re-fire the effect on
-   * every mutation.
+   * Only acts when the active destination changes. A manual collapse does not
+   * alter that destination key, so the user's choice remains intact until the
+   * next navigation. Other project branches are never changed.
    */
-  private readonly autoExpandActiveFx = effect(() => {
+  private readonly autoExpandActivePathFx = effect(() => {
     const name = this.activeProjectName();
-    if (!name) return;
-    if (this.lastAutoExpandedActive === name) return;
-    this.lastAutoExpandedActive = name;
+    const surface = this.activeProjectSurface();
+    const workbenchId = this.activeWorkbench()?.workbenchId ?? '';
+    if (!name || !surface) {
+      this.lastAutoExpandedNavigationPath = null;
+      return;
+    }
+    const navigationPath = `${name}:${surface}:${workbenchId}`;
+    if (this.lastAutoExpandedNavigationPath === navigationPath) return;
+    this.lastAutoExpandedNavigationPath = navigationPath;
     untracked(() => {
       if (this._expandedProjects().has(name)) return;
       this._expandedProjects.update(set => {
         const next = new Set(set);
         next.add(name);
-        this.writeExpandedProjects(next);
-        return next;
-      });
-    });
-  });
-
-  private lastAutoExpandedWorkbench: string | null = null;
-  private readonly autoExpandActiveWorkbenchFx = effect(() => {
-    const activeWorkbench = this.activeWorkbench();
-    if (!activeWorkbench) {
-      this.lastAutoExpandedWorkbench = null;
-      return;
-    }
-
-    const revealKey = `${activeWorkbench.projectName}:${activeWorkbench.workbenchId}`;
-    if (this.lastAutoExpandedWorkbench === revealKey) return;
-    this.lastAutoExpandedWorkbench = revealKey;
-    untracked(() => {
-      if (this._expandedProjects().has(activeWorkbench.projectName)) return;
-      this._expandedProjects.update(projects => {
-        const next = new Set(projects);
-        next.add(activeWorkbench.projectName);
         this.writeExpandedProjects(next);
         return next;
       });
@@ -1073,10 +1051,12 @@ export class StudioShellComponent {
     this.jobService.refresh();
   }
 
-  /** Collapse every project row in the Explorer tree. */
+  /** Collapse every workspace, project, Dossier, and Dossier-status branch. */
   onCollapseAllProjects(): void {
     this._expandedProjects.set(new Set<string>());
     this.writeExpandedProjects(new Set<string>());
+    this.explorerWorkbenchState.collapseAll(this.projectRows().map(project => project.name));
+    this.collapseAllVersion.update(version => version + 1);
   }
 
 

@@ -193,10 +193,61 @@ describe('ExplorerWorkspaceTreeComponent', () => {
       projectName: 'Alpha',
       workbenchId: 'routing-lab',
     });
+    fixture.componentRef.setInput('activeProjectSurface', 'workbench');
     fixture.detectChanges();
 
     expect(sections.isCollapsed('workspace')).toBe(false);
     expect(sections.isCollapsed('ws:ws-default')).toBe(false);
+  });
+
+  it('reveals the owning workspace for a regular project destination without changing other branches', () => {
+    const fixture = mount();
+    const sections = TestBed.inject(ExplorerSectionsService);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+      workspace('ws-other', 'Other', 1, [project('Beta', 'ws-other', '/repos/Beta')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true }), row('Beta')]);
+    sections.setCollapsed('workspace', true);
+    sections.setCollapsed('ws:ws-default', true);
+    sections.setCollapsed('ws:ws-other', true);
+
+    fixture.componentRef.setInput('activeProjectSurface', 'wiki');
+    fixture.detectChanges();
+
+    expect(sections.isCollapsed('workspace')).toBe(false);
+    expect(sections.isCollapsed('ws:ws-default')).toBe(false);
+    expect(sections.isCollapsed('ws:ws-other')).toBe(true);
+
+    sections.setCollapsed('ws:ws-default', true);
+    fixture.detectChanges();
+    expect(sections.isCollapsed('ws:ws-default')).toBe(true);
+
+    sections.setCollapsed('workspace', false);
+    sections.setCollapsed('ws:ws-default', false);
+    sections.setCollapsed('ws:ws-other', false);
+  });
+
+  it('collapse-all closes the tree head and every workspace branch', () => {
+    const fixture = mount();
+    const sections = TestBed.inject(ExplorerSectionsService);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+      workspace('ws-other', 'Other', 1, [project('Beta', 'ws-other', '/repos/Beta')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta')]);
+    fixture.detectChanges();
+
+    fixture.componentRef.setInput('collapseAllVersion', 1);
+    fixture.detectChanges();
+
+    expect(sections.isCollapsed('workspace')).toBe(true);
+    expect(sections.isCollapsed('ws:ws-default')).toBe(true);
+    expect(sections.isCollapsed('ws:ws-other')).toBe(true);
+
+    sections.setCollapsed('workspace', false);
+    sections.setCollapsed('ws:ws-default', false);
+    sections.setCollapsed('ws:ws-other', false);
   });
 
   it('renders Board lane counters with a descriptive aria label', () => {

@@ -4,39 +4,60 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, vi } from 'vitest';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
+import { ExplorerWorkbenchStateService } from '../../services/explorer-workbench-state.service';
 import { ExplorerWorkbenchListComponent } from './explorer-workbench-list.component';
+
+const STORAGE_KEY = 'atp.studio.explorer.workbenches.state.v2';
 
 function item(
   id: string,
   status: WorkbenchListItem['status'],
-  pattern?: WorkbenchListItem['pattern'],
+  overrides: Partial<WorkbenchListItem> = {},
 ): WorkbenchListItem {
   return {
     id,
-    key: `DEM-W${id === 'active' ? '4' : '5'}`,
+    key: `DEM-${id.toUpperCase()}`,
     title: id,
     summary: `${id} summary`,
     status,
     phase: 'testing',
     updatedAtUtc: '2026-07-12T10:00:00Z',
-    entryPath: `docs/workbenches/${id}/index.html`,
+    entryPath: `docs/operations/${id}/index.html`,
     valid: true,
     error: null,
     sourceTaskKeys: [],
     relatedTaskKeys: [],
-    pattern,
+    pattern: 'concept',
+    ...overrides,
   };
 }
 
-function catalogue(items: WorkbenchListItem[], includesHistory: boolean): WorkbenchCatalogue {
-  return { projectName: 'Demo', includesHistory, count: items.length, items };
+function catalogue(items: WorkbenchListItem[]): WorkbenchCatalogue {
+  return { projectName: 'Demo', includesHistory: true, count: items.length, items };
+}
+
+async function mount(activeWorkbenchId: string | null = null) {
+  await TestBed.configureTestingModule({
+    imports: [ExplorerWorkbenchListComponent],
+    providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
+  fixture.componentRef.setInput('projectName', 'Demo');
+  fixture.componentRef.setInput('activeWorkbenchId', activeWorkbenchId);
+  fixture.detectChanges();
+  return {
+    fixture,
+    component: fixture.componentInstance,
+    http: TestBed.inject(HttpTestingController),
+    state: TestBed.inject(ExplorerWorkbenchStateService),
+  };
 }
 
 describe('ExplorerWorkbenchListComponent', () => {
   const scrollIntoView = vi.fn();
 
   beforeEach(() => {
-    window.localStorage.removeItem('atp.studio.explorer.workbenches.expanded.v1');
+    sessionStorage.removeItem(STORAGE_KEY);
     scrollIntoView.mockClear();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -44,192 +65,117 @@ describe('ExplorerWorkbenchListComponent', () => {
     });
   });
 
-  it('renders the descriptor pattern icon and defaults missing values to concept', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ExplorerWorkbenchListComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-
-    fixture.componentInstance.toggle();
-    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([
-      item('visual', 'active', 'ui'),
-      item('reasoning', 'active'),
-      item('explicit-concept', 'active', 'concept'),
-    ], false));
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-pattern-Demo-visual"]')?.getAttribute('data-pattern'))
-      .toBe('ui');
-    expect(fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-pattern-Demo-reasoning"]')?.getAttribute('data-pattern'))
-      .toBe('concept');
-    const iconMarkup = (id: string) => fixture.nativeElement.querySelector(
-      `[data-testid="studio-explorer-workbench-Demo-${id}"] svg`)?.innerHTML;
-    expect(iconMarkup('visual')).not.toBe(iconMarkup('reasoning'));
-    expect(iconMarkup('reasoning')).toBe(iconMarkup('explicit-concept'));
-    http.verify();
-  });
-
-  it('loads history separately and shows the empty state after filtering current items', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ExplorerWorkbenchListComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-
-    fixture.componentInstance.toggle();
-    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([item('active', 'active')], false));
-    fixture.detectChanges();
-    fixture.componentInstance.toggleHistory();
+  it('groups the full catalogue by lifecycle, shows quiet status dots and visible keys', async () => {
+    const { fixture, component, http } = await mount();
+    component.toggle();
     http.expectOne(request => request.url === '/api/projects/Demo/workbenches'
       && request.params.get('history') === 'true')
-      .flush(catalogue([item('active', 'active')], true));
-    fixture.detectChanges();
-    await fixture.whenStable();
+      .flush(catalogue([
+        item('pending', 'decision-pending', { openDecisionCount: 3 }),
+        item('active', 'active', { pattern: 'ui' }),
+        item('tracking', 'decided'),
+        item('documented', 'documented'),
+        item('discarded', 'archived'),
+      ]));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('No documented items');
-    expect(fixture.nativeElement.textContent).toContain('No archived items');
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="studio-explorer-project-workbenches-Demo"]')?.textContent)
+      .toContain('3');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-group-Demo-needs-decision"]')?.textContent)
+      .toContain('Needs a decision');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-group-Demo-in-implementation"]')?.textContent)
+      .toContain('In implementation');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-pending"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-active"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-key-Demo-pending"]')?.textContent)
+      .toBe('DEM-PENDING');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-status-Demo-pending"]')
+      ?.getAttribute('data-status')).toBe('decision-pending');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-history-Demo"]')
+      ?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-documented"]')).toBeNull();
+
+    component.toggleGroup('history');
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-documented"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-discarded"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-documented-history"]')?.textContent)
+      .toContain('Documented');
     http.verify();
   });
 
-  it('renders archived and documented entries in separate history sections', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ExplorerWorkbenchListComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([], false));
-    fixture.componentInstance.expanded.set(true);
-    fixture.componentInstance.historyOpen.set(true);
-    const archived = item('archived', 'archived');
-    const documented = item('documented', 'documented');
-    fixture.componentInstance.historyCatalogue.set(catalogue([item('active', 'active'), archived, documented], true));
-    let opened: WorkbenchListItem | null = null;
-    fixture.componentInstance.openWorkbench.subscribe(value => opened = value);
-    fixture.detectChanges();
+  it('reveals only the active Dossier path and leaves foreign status groups untouched', async () => {
+    const { fixture, component, http, state } = await mount('active');
+    state.setGroupExpanded('Demo', 'needs-decision', false);
+    state.setGroupExpanded('Demo', 'in-implementation', false);
+    state.setGroupExpanded('Demo', 'history', true);
 
-    const archivedButton = fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-Demo-archived"]') as HTMLButtonElement;
-    const documentedButton = fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-Demo-documented"]') as HTMLButtonElement;
-    expect(archivedButton).toBeTruthy();
-    expect(documentedButton).toBeTruthy();
-    expect(fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-documented-history"]')?.textContent).toContain('documented');
-    expect(fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-archived-history"]')?.textContent).toContain('archived');
-    expect(fixture.nativeElement.querySelector('[data-testid="studio-explorer-workbench-Demo-active"]')).toBeNull();
-    archivedButton.click();
-    expect(opened).toEqual(archived);
-    http.verify();
-  });
-
-  it('selects and reveals the active Dossier while keeping its disclosure parent neutral', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ExplorerWorkbenchListComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.componentRef.setInput('activeWorkbenchId', 'active');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-
-    http.expectOne('/api/projects/Demo/workbenches')
-      .flush(catalogue([item('active', 'active'), item('another', 'active')], false));
+    http.expectOne(request => request.url === '/api/projects/Demo/workbenches'
+      && request.params.get('history') === 'true')
+      .flush(catalogue([item('pending', 'decision-pending'), item('active', 'active')]));
     await fixture.whenStable();
     fixture.detectChanges();
 
+    expect(component.expanded()).toBe(true);
+    expect(component.groupExpanded('in-implementation')).toBe(true);
+    expect(component.groupExpanded('needs-decision')).toBe(false);
+    expect(component.groupExpanded('history')).toBe(true);
     const active = fixture.nativeElement.querySelector(
       '[data-testid="studio-explorer-workbench-Demo-active"]') as HTMLButtonElement;
-    const another = fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-Demo-another"]') as HTMLButtonElement;
-    const disclosure = fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-project-workbenches-Demo"]') as HTMLButtonElement;
-
-    expect(fixture.componentInstance.expanded()).toBe(true);
-    expect(active.classList.contains('studio-workbench-topic--active')).toBe(true);
     expect(active.getAttribute('aria-current')).toBe('page');
-    expect(fixture.componentInstance.navTooltip(item('active', 'active'))).toContain('DEM-W4');
-    expect(another.getAttribute('aria-current')).toBeNull();
-    expect(disclosure.classList.contains('tree-row--active')).toBe(false);
-    expect(disclosure.getAttribute('aria-current')).toBeNull();
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
-    expect(JSON.parse(window.localStorage.getItem(
-      'atp.studio.explorer.workbenches.expanded.v1') ?? '[]')).toContain('Demo');
     http.verify();
   });
 
-  it('persists the Dossiers disclosure independently for each project', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ExplorerWorkbenchListComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-
-    fixture.componentInstance.toggle();
-    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([], false));
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.expanded()).toBe(true);
-    expect(JSON.parse(window.localStorage.getItem(
-      'atp.studio.explorer.workbenches.expanded.v1') ?? '[]')).toEqual(['Demo']);
-
-    fixture.componentRef.setInput('projectName', 'Other');
-    fixture.detectChanges();
-    expect(fixture.componentInstance.expanded()).toBe(false);
-    http.expectOne('/api/projects/Other/workbenches').flush({
-      ...catalogue([], false),
-      projectName: 'Other',
+  it('promotes the catalogue-owned living standard without opening the Dossiers branch', async () => {
+    const guide = item('admin-design-guideline', 'decision-pending', {
+      key: 'AGT-W20',
+      title: 'Admin Surface Design Guideline',
+      entryPath: 'docs/operations/admin-design-guideline/index.html',
     });
-
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.detectChanges();
-    expect(fixture.componentInstance.expanded()).toBe(true);
-    http.expectOne('/api/projects/Demo/workbenches').flush(catalogue([], false));
-    http.verify();
-  });
-
-  it('opens History when a deep-linked settled Dossier is outside the current catalogue', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ExplorerWorkbenchListComponent],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(ExplorerWorkbenchListComponent);
-    fixture.componentRef.setInput('projectName', 'Demo');
-    fixture.componentRef.setInput('activeWorkbenchId', 'archived');
-    fixture.detectChanges();
-    const http = TestBed.inject(HttpTestingController);
-    const archived = item('archived', 'archived');
-
-    http.expectOne('/api/projects/Demo/workbenches')
-      .flush(catalogue([item('active', 'active')], false));
+    const { fixture, component, http } = await mount(guide.id);
     http.expectOne(request => request.url === '/api/projects/Demo/workbenches'
       && request.params.get('history') === 'true')
-      .flush(catalogue([item('active', 'active'), archived], true));
+      .flush(catalogue([guide, item('active', 'active')]));
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const archivedButton = fixture.nativeElement.querySelector(
-      '[data-testid="studio-explorer-workbench-Demo-archived"]') as HTMLButtonElement;
-    expect(fixture.componentInstance.historyOpen()).toBe(true);
-    expect(archivedButton.getAttribute('aria-current')).toBe('page');
-    expect(archivedButton.classList.contains('studio-workbench-topic--active')).toBe(true);
+    const root = fixture.nativeElement as HTMLElement;
+    const styleGuide = root.querySelector(
+      '[data-testid="studio-explorer-project-style-guide-Demo"]') as HTMLButtonElement;
+    expect(component.expanded()).toBe(false);
+    expect(styleGuide.textContent).toContain('Style Guide');
+    expect(styleGuide.textContent).toContain('AGT-W20');
+    expect(styleGuide.getAttribute('aria-current')).toBe('page');
+    expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-admin-design-guideline"]'))
+      .toBeNull();
+
+    let opened: WorkbenchListItem | null = null;
+    component.openWorkbench.subscribe(value => opened = value);
+    styleGuide.click();
+    expect(opened).toEqual(guide);
+    http.verify();
+  });
+
+  it('opens the collapsed History path for a deep-linked documented Dossier', async () => {
+    const { fixture, component, http, state } = await mount('documented');
+    state.setGroupExpanded('Demo', 'needs-decision', false);
+    state.setGroupExpanded('Demo', 'in-implementation', false);
+    state.setGroupExpanded('Demo', 'history', false);
+    http.expectOne(request => request.url === '/api/projects/Demo/workbenches'
+      && request.params.get('history') === 'true')
+      .flush(catalogue([item('documented', 'documented'), item('active', 'active')]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.expanded()).toBe(true);
+    expect(component.groupExpanded('history')).toBe(true);
+    expect(component.groupExpanded('needs-decision')).toBe(false);
+    expect(component.groupExpanded('in-implementation')).toBe(false);
+    const documented = fixture.nativeElement.querySelector(
+      '[data-testid="studio-explorer-workbench-Demo-documented"]') as HTMLButtonElement;
+    expect(documented.getAttribute('aria-current')).toBe('page');
     http.verify();
   });
 });
