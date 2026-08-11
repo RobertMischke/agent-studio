@@ -16,7 +16,7 @@ namespace TaskServer.Tests;
 public sealed class TopologyTests
 {
     [Fact(Timeout = 90000)]
-    public async Task Client_off_golden_path_replays_canonical_history_without_owning_review_reissue()
+    public async Task Remote_concept_run_generates_real_status_without_repeating_core_agent_run()
     {
         if (!OperatingSystem.IsLinux())
             return;
@@ -58,8 +58,8 @@ public sealed class TopologyTests
             studioClient,
             $"/api/v1/projects/{project.ProjectId}/tasks",
             new CreateTaskRequest(
-                "Client-off lifecycle proof",
-                "Produce bounded typed evidence and finish with the required terminal sentinel.",
+                "Remote concept finalization proof",
+                "Produce a decision dossier, publish bounded evidence, and finish with the required terminal sentinel.",
                 "2-ready"));
 
         using var runner = StartBuilt(
@@ -72,6 +72,7 @@ public sealed class TopologyTests
                 ["RUNNER_RUN_TIMEOUT_SECONDS"] = "45",
                 ["TOPOLOGY_RELEASE_FILE"] = releaseFile,
                 ["TOPOLOGY_INVOCATION_COUNTER"] = invocationCounter,
+                ["TOPOLOGY_DONE_ON_FIRST"] = "1",
             },
             "--poll",
             "--server", serverUrl,
@@ -142,16 +143,25 @@ public sealed class TopologyTests
             item.Kind == LifecycleEventKinds.AgentMessage
             && item.PayloadJson.Contains("agent_message", StringComparison.Ordinal));
         Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.ToolTrace);
-        Assert.Contains(history.Events, item =>
-            item.Kind == LifecycleEventKinds.AgentMessage
-            && item.PayloadJson.Contains("attempt 1 complete", StringComparison.Ordinal));
         Assert.Contains(history.Events, item => item.Kind == LifecycleEventKinds.RunnerTrace);
         Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
         Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.PostProcessingCompleted);
+        Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.ResultFinalizationReady);
         Assert.DoesNotContain(history.Events, item => item.Kind == LifecycleEventKinds.Reissued);
         Assert.DoesNotContain(history.Events, item => item.Kind == LifecycleEventKinds.TerminalHandoff);
-        Assert.Single(history.Artifacts);
-        Assert.StartsWith("results/proof-attempt-", history.Artifacts[0].Name);
+        Assert.Equal(ResultFinalizationStatus.Ready, history.ResultFinalization!.Status);
+        Assert.Equal(2, history.Artifacts.Count);
+        Assert.Single(history.Artifacts, item => item.Name.StartsWith("results/proof-attempt-", StringComparison.Ordinal));
+        var statusArtifact = Assert.Single(history.Artifacts, item => item.Name == "status.md");
+        var statusContent = await serverClient.GetFromJsonAsync<ArtifactContentDto>(
+            $"/api/v1/runs/{activeRun.RunId}/artifacts/{statusArtifact.ArtifactId}/content");
+        var statusMarkdown = System.Text.Encoding.UTF8.GetString(
+            Convert.FromBase64String(statusContent!.ContentBase64));
+        Assert.Contains("# Status", statusMarkdown, StringComparison.Ordinal);
+        Assert.Contains("- Result: Success", statusMarkdown, StringComparison.Ordinal);
+        Assert.Contains("Remote concept finalization proof", statusMarkdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent-studio:result-scaffold", statusMarkdown, StringComparison.Ordinal);
+        Assert.Equal("1", await File.ReadAllTextAsync(invocationCounter));
         Assert.Equal(history.Events.Max(item => item.Cursor), history.LastCursor);
         Assert.Contains(history.Audit, item => item.Action == "work.permit.accepted");
         Assert.Single(history.Audit, item => item.Action == "run.completed");
@@ -412,7 +422,11 @@ public sealed class TopologyTests
         Assert.Equal(
             history.Events.Count,
             history.Events.Select(item => item.IdempotencyKey).Distinct(StringComparer.Ordinal).Count());
-        Assert.Single(history.Artifacts);
+        Assert.Equal(2, history.Artifacts.Count);
+        Assert.Single(history.Artifacts, item =>
+            item.Name.StartsWith("results/proof-attempt-", StringComparison.Ordinal));
+        Assert.Single(history.Artifacts, item => item.Name == "status.md");
+        Assert.Equal(ResultFinalizationStatus.Ready, history.ResultFinalization!.Status);
         Assert.Contains(history.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
     }
 
@@ -665,6 +679,10 @@ public sealed class TopologyTests
         await File.WriteAllTextAsync(path, """
             #!/bin/sh
             set -eu
+            if [ "${1:-}" = "--version" ]; then
+              printf 'topology-agent 1.0.0\n'
+              exit 0
+            fi
             input_count=0
             if [ -f "$TOPOLOGY_INVOCATION_COUNTER" ]; then
               input_count=$(cat "$TOPOLOGY_INVOCATION_COUNTER")
@@ -692,10 +710,10 @@ public sealed class TopologyTests
             printf 'artifact from attempt %s\n' "$attempt" > "$JOB_RESULTS_DIR/proof-attempt-$attempt.txt"
             printf '{"type":"agent_message","text":"attempt %s complete"}\n' "$attempt"
             printf '{"type":"tool","name":"fixture-tool","attempt":%s}\n' "$attempt"
-            if [ "$attempt" -eq 1 ]; then
-              printf '[[TASK_BLOCKED:bounded-review-reissue]]\n'
-            else
+            if [ "${TOPOLOGY_DONE_ON_FIRST:-}" = "1" ] || [ "$attempt" -ne 1 ]; then
               printf '[[TASK_DONE]]\n'
+            else
+              printf '[[TASK_BLOCKED:bounded-review-reissue]]\n'
             fi
             """);
         File.SetUnixFileMode(

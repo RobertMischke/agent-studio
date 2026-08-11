@@ -7,13 +7,14 @@ namespace AgentStudio.Review;
 
 /// <summary>
 /// Builds the post-run <c>status.md</c> protocol by handing the tail of the CLI
-/// output log to a one-shot Claude Haiku subprocess. Runs fire-and-forget after
-/// each successful CLI completion. State is in-memory only - after a backend
-/// restart, jobs whose summary was mid-flight fall back to <c>None|Ready</c>
-/// based on whether <c>status.md</c> exists on disk.
+/// output log to a one-shot Claude Haiku subprocess. Normal completion awaits
+/// the bounded Result-finalization gate. State is in-memory only; after a
+/// backend restart, jobs fall back to <c>None|Ready|Degraded</c> based on the
+/// presence and provenance marker of <c>status.md</c> on disk.
 /// </summary>
 public sealed class SummaryGenerationService
 {
+    public const int DefaultFinalizationMaxAttempts = 3;
     private const int MaxLogChars = 60_000;
     private const int HaikuTimeoutSeconds = 90;
     private static readonly Regex ProtocolImagePathRegex = new(
@@ -71,6 +72,83 @@ public sealed class SummaryGenerationService
 
     public Task GenerateAsync(TaskInfo info, CancellationToken ct = default)
         => GenerateAsync(info, runOutcome: null, ct);
+
+    /// <summary>
+    /// Awaited post-core gate for the application-owned Result document. Only
+    /// summary generation is retried. Exhaustion records a typed degraded state
+    /// and returns normally so the already completed core run remains
+    /// reviewable and is never reissued for a summary-side failure.
+    /// </summary>
+    public async Task<ResultFinalizationOutcome> FinalizeAsync(
+        TaskInfo info,
+        TerminalRunOutcome? runOutcome = null,
+        CancellationToken ct = default)
+    {
+        var maxAttempts = Math.Clamp(
+            _configuration.GetValue(
+                "SummaryGeneration:FinalizationMaxAttempts",
+                DefaultFinalizationMaxAttempts),
+            1,
+            10);
+        string? error = null;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            await GenerateAsync(info, runOutcome, ct);
+            var state = GetState(info.TaskKey);
+            var statusPath = Path.Combine(info.FolderPath, "status.md");
+            var statusMarkdown = File.Exists(statusPath)
+                ? await File.ReadAllTextAsync(statusPath, ct)
+                : string.Empty;
+            var generated = state?.Status == TaskSummaryStatus.Ready
+                            && !string.IsNullOrWhiteSpace(statusMarkdown)
+                            && !statusMarkdown.Contains(
+                                AgentStudio.Tasks.TaskTransitionService.ResultScaffoldMarker,
+                                StringComparison.Ordinal);
+            if (generated)
+            {
+                _states[info.TaskKey] = state! with
+                {
+                    Attempt = attempt,
+                    MaxAttempts = maxAttempts,
+                };
+                return new ResultFinalizationOutcome(
+                    TaskSummaryStatus.Ready,
+                    attempt,
+                    maxAttempts,
+                    null);
+            }
+
+            error = state?.ErrorMessage ?? "Generated status.md is missing.";
+            _logger.LogWarning(
+                "Result finalization retry taskKey={TaskKey} jobId={JobId} attempt={Attempt}/{MaxAttempts} error={Error}",
+                info.TaskKey,
+                info.Id,
+                attempt,
+                maxAttempts,
+                error);
+        }
+
+        var previous = GetState(info.TaskKey) ?? new TaskSummaryState();
+        _states[info.TaskKey] = previous with
+        {
+            Status = TaskSummaryStatus.Degraded,
+            FinishedAt = DateTime.UtcNow,
+            ErrorMessage = error,
+            Attempt = maxAttempts,
+            MaxAttempts = maxAttempts,
+        };
+        _logger.LogWarning(
+            "Result finalization degraded taskKey={TaskKey} jobId={JobId} attempts={Attempts} error={Error}",
+            info.TaskKey,
+            info.Id,
+            maxAttempts,
+            error);
+        return new ResultFinalizationOutcome(
+            TaskSummaryStatus.Degraded,
+            maxAttempts,
+            maxAttempts,
+            error);
+    }
 
     public async Task GenerateAsync(TaskInfo info, TerminalRunOutcome? runOutcome, CancellationToken ct = default)
     {
@@ -619,6 +697,15 @@ public sealed class SummaryGenerationService
             long durationMs)
             => new(false, null, error, model, null, durationMs, startedAt, endedAt);
     }
+}
+
+public sealed record ResultFinalizationOutcome(
+    TaskSummaryStatus Status,
+    int Attempt,
+    int MaxAttempts,
+    string? Error)
+{
+    public bool Generated => Status == TaskSummaryStatus.Ready;
 }
 
 /// <summary>

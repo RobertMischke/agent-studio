@@ -451,7 +451,10 @@ cannot erase an operator decision.
   control-plane task, run, lease, event, artifact, audit, and canonical replay
   store. The path-free
   `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history` projection is
-  the reconnect source for detached Studio clients.
+  the reconnect source for detached Studio clients. It also carries the latest
+  typed Result-finalization state (`Retryable`, `Ready`, or `Degraded`) and its
+  bounded attempt count, so card reviewability does not depend on inferring
+  success from the presence of a scaffold.
 - `backend/Endpoints/Tasks/*`: task CRUD, runner, files, git, review evidence,
   merge, pipeline, and query endpoints.
 - `backend/Services/TaskAccess/*`: typed read/list/mutate/transition/subscribe

@@ -165,6 +165,13 @@ function collectSignals(input: ProtocolVerdictInputs): RunOutcomeSignal[] {
 
   if (input.summaryStatus === 'failed') {
     signals.push(signal('summary', 'unclear', 'Result summary failed', 'The result summary could not be generated.'));
+  } else if (input.summaryStatus === 'degraded') {
+    signals.push(signal(
+      'summary',
+      'unclear',
+      'Result degraded',
+      'The summary retry budget was exhausted. The completed core run remains reviewable.',
+    ));
   }
   return signals;
 }

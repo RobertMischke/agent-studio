@@ -235,7 +235,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
         File.Delete(Path.Combine(_watchPath, TaskStates.Progress, TaskKey, "status.md"));
 
-        using var factory = BuildFactory(summaryOneShot: new StubSummaryOneShot());
+        var summaryOneShot = new StubSummaryOneShot(false, true);
+        using var factory = BuildFactory(summaryOneShot: summaryOneShot);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         var ct = CancellationToken.None;
@@ -280,6 +281,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(2, artifactUpload!.Uploaded);
         Assert.True(artifactUpload.ResultDocumentGenerated, artifactUpload.ResultDocumentStatus);
         Assert.Equal("generated", artifactUpload.ResultDocumentStatus);
+        Assert.Equal(2, summaryOneShot.Calls);
         Assert.Equal(
             ["results/deliverables.md", "results/nested/proof.txt"],
             artifactUpload.Files);
@@ -433,13 +435,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
-    public async Task Remote_result_finalization_uses_scaffold_only_when_summary_is_actually_missing()
+    public async Task Remote_result_finalization_exhaustion_is_typed_degraded_before_scaffold_fallback()
     {
         const string resultSha = "589c462f589c462f589c462f589c462f589c462f";
         SeedTask(TaskStates.Progress, TaskKey, "Remote summary gap", "Make a trivial change.");
         File.Delete(Path.Combine(_watchPath, TaskStates.Progress, TaskKey, "status.md"));
 
-        using var factory = BuildFactory(summaryOneShot: new StubSummaryOneShot(succeed: false));
+        var summaryOneShot = new StubSummaryOneShot(false);
+        using var factory = BuildFactory(summaryOneShot: summaryOneShot);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         var ct = CancellationToken.None;
@@ -477,7 +480,19 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             FinalizeResult: true), ct);
         Assert.NotNull(artifactUpload);
         Assert.False(artifactUpload!.ResultDocumentGenerated);
+        Assert.StartsWith("degraded:", artifactUpload.ResultDocumentStatus);
         Assert.Contains("summary fixture failed", artifactUpload.ResultDocumentStatus);
+        Assert.Equal(3, summaryOneShot.Calls);
+        var canonicalTaskKey = Assert.Single(factory.Services
+            .GetRequiredService<ITaskScanner>()
+            .ScanAllJobs(), item => item.Id == TaskKey).TaskKey;
+        var summaryState = factory.Services
+            .GetRequiredService<SummaryGenerationService>()
+            .GetState(canonicalTaskKey);
+        Assert.NotNull(summaryState);
+        Assert.Equal(TaskSummaryStatus.Degraded, summaryState.Status);
+        Assert.Equal(3, summaryState.Attempt);
+        Assert.Equal(3, summaryState.MaxAttempts);
         var activeFolder = Assert.Single(Directory.GetDirectories(
             _watchPath, TaskKey, SearchOption.AllDirectories));
         Assert.False(File.Exists(Path.Combine(activeFolder, "status.md")));
@@ -2560,14 +2575,44 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 }
             });
 
-    private sealed class StubSummaryOneShot(bool succeed = true) : ICliOneShot
+    private sealed class StubSummaryOneShot : ICliOneShot
     {
+        private readonly object _gate = new();
+        private readonly Queue<bool> _outcomes;
+        private bool _lastOutcome;
+
+        public StubSummaryOneShot(params bool[] outcomes)
+        {
+            _outcomes = new Queue<bool>(outcomes.Length == 0 ? [true] : outcomes);
+            _lastOutcome = _outcomes.Last();
+        }
+
         public string CliType => CliTypes.Claude;
+
+        public int Calls { get; private set; }
 
         public Task<CliOneShotResult> RunAsync(
             CliOneShotRequest request,
             CancellationToken ct = default)
         {
+            var isSummary = string.Equals(
+                request.Source,
+                AdHocUsageSources.SummaryGeneration,
+                StringComparison.Ordinal);
+            bool succeed;
+            lock (_gate)
+            {
+                if (isSummary)
+                {
+                    Calls++;
+                    if (_outcomes.Count > 0) _lastOutcome = _outcomes.Dequeue();
+                    succeed = _lastOutcome;
+                }
+                else
+                {
+                    succeed = _lastOutcome;
+                }
+            }
             const string markdown = """
                 # Status
 
@@ -2593,7 +2638,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                 Ok: succeed,
                 ExitCode: succeed ? 0 : 1,
                 Stdout: succeed ? markdown : string.Empty,
-                Stderr: succeed ? string.Empty : "summary fixture failed",
+                Stderr: succeed ? string.Empty : isSummary ? "summary fixture failed" : "not a summary fixture",
                 Duration: completedAt - requestedAt,
                 ParsedText: succeed ? markdown : string.Empty,
                 Usage: null,
@@ -2602,7 +2647,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     RequestedAt: requestedAt,
                     CompletedAt: completedAt,
                     TotalMs: 1),
-                Error: succeed ? null : "summary fixture failed"));
+                Error: succeed ? null : isSummary ? "summary fixture failed" : "not a summary fixture"));
         }
     }
 

@@ -45,9 +45,15 @@ public sealed class HostOrchestratorStoreTests
             "runner-a",
             default);
         Assert.Equal("accepted", acceptance.Status);
-        var postStep = Assert.Single(acceptance.PostProcessingPlan);
+        Assert.Equal(2, acceptance.PostProcessingPlan.Count);
+        var postStep = Assert.Single(
+            acceptance.PostProcessingPlan,
+            step => step.StepId == HostPostStepIds.WorktreeContainment);
+        var resultStep = Assert.Single(
+            acceptance.PostProcessingPlan,
+            step => step.StepId == HostPostStepIds.ResultFinalization);
         Assert.Equal("runner-a", postStep.EligibleRunnerId);
-        Assert.Equal("post-worktree-containment", postStep.StepId);
+        Assert.Equal("runner-a", resultStep.EligibleRunnerId);
 
         var queuedWork = Work(acceptance, "queued", queuePosition: 0);
         var report2 = Report(
@@ -157,6 +163,51 @@ public sealed class HostOrchestratorStoreTests
             "runner-a",
             default);
         Assert.Equal("completed", completedClaimReplay.Status);
+
+        var resultFinalization = await restarted.FinalizeResultAsync(
+            acceptance.Run.RunId,
+            new ResultFinalizationRequest(
+                "runner-a",
+                "instance-a",
+                acceptance.Lease.LeaseId,
+                acceptance.Lease.Fence,
+                1,
+                "result-finalization-once"),
+            "runner-a",
+            default);
+        Assert.Equal(ResultFinalizationStatus.Ready, resultFinalization.Status);
+        var resultClaim = await restarted.ClaimPostStepAsync(
+            acceptance.Run.RunId,
+            resultStep.StepExecutionId,
+            new PostStepClaimRequest(
+                HostOrchestratorContract.Current,
+                "host-a",
+                "instance-replacement",
+                "runner-a",
+                acceptance.Lease.LeaseId,
+                acceptance.Lease.Fence,
+                3,
+                "result-step-claim-once",
+                LeaseInstanceId: "instance-a"),
+            "runner-a",
+            default);
+        await restarted.CompletePostStepAsync(
+            acceptance.Run.RunId,
+            resultStep.StepExecutionId,
+            new PostStepCompleteRequest(
+                HostOrchestratorContract.Current,
+                "host-a",
+                "instance-replacement",
+                "runner-a",
+                acceptance.Lease.LeaseId,
+                acceptance.Lease.Fence,
+                resultClaim.ClaimFence,
+                "passed",
+                [resultFinalization.ArtifactSha256!],
+                "result-step-complete-once",
+                LeaseInstanceId: "instance-a"),
+            "runner-a",
+            default);
 
         var envelope = new ImmutableResultEnvelope(
             "project",
