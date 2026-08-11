@@ -24,14 +24,89 @@ public sealed class RemoteQueueStarvationPolicyTests
         var snapshot = RemoteQueueStarvationPolicy.Evaluate(
             Now,
             TimeSpan.FromMinutes(30),
+            TimeSpan.FromMinutes(5),
+            null,
             [task],
             _ => RemoteSettings(),
             TaskReferenceIndex.Build([task]),
-            [Runner(availableSlots, runnerAgeMinutes)]);
+            [Runner(availableSlots, runnerAgeMinutes, lastClaimAgeMinutes: 31)]);
 
         Assert.Equal(expectedActive, snapshot.Active);
         Assert.Equal(expectedAvailableSlots, snapshot.AvailableSlots);
-        Assert.Equal(waitingMinutes >= 30 ? 1 : 0, snapshot.WaitingTaskCount);
+        Assert.Equal(expectedActive ? 1 : 0, snapshot.WaitingTaskCount);
+    }
+
+    [Fact]
+    public void Evaluate_SuppressesAHealthySerialQueueWhileSuccessfulClaimsContinue()
+    {
+        var tasks = Enumerable.Range(1, 8)
+            .Select(index => ReadyTask(30 + index, $"task-{index}"))
+            .ToList();
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromMinutes(5),
+            null,
+            tasks,
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build(tasks),
+            [Runner(1, lastClaimAgeMinutes: 1)]);
+
+        Assert.False(snapshot.Active);
+        Assert.False(snapshot.ClaimProgressStalled);
+        Assert.Equal(1, snapshot.AvailableSlots);
+        Assert.Equal(Now.AddMinutes(-1), snapshot.LastSuccessfulClaimAt);
+        Assert.Empty(snapshot.Items);
+    }
+
+    [Theory]
+    [InlineData(4, false)]
+    [InlineData(5, true)]
+    [InlineData(6, true)]
+    public void Evaluate_DebouncesAQueueWithoutRejectionsUntilClaimProgressStalls(
+        int lastClaimAgeMinutes,
+        bool expectedActive)
+    {
+        var task = ReadyTask(40);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromMinutes(5),
+            null,
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, lastClaimAgeMinutes: lastClaimAgeMinutes)]);
+
+        Assert.Equal(expectedActive, snapshot.Active);
+        Assert.Equal(expectedActive, snapshot.ClaimProgressStalled);
+        Assert.Equal(expectedActive ? 1 : 0, snapshot.WaitingTaskCount);
+    }
+
+    [Theory]
+    [InlineData(4, false)]
+    [InlineData(5, true)]
+    public void Evaluate_DebouncesAQueueWhenNoSuccessfulClaimHasBeenRecorded(
+        int observationAgeMinutes,
+        bool expectedActive)
+    {
+        var task = ReadyTask(40);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromMinutes(5),
+            Now.AddMinutes(-observationAgeMinutes),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2)]);
+
+        Assert.Equal(expectedActive, snapshot.Active);
+        Assert.Equal(expectedActive, snapshot.ClaimProgressStalled);
+        Assert.Null(snapshot.LastSuccessfulClaimAt);
     }
 
     [Fact]
@@ -50,13 +125,45 @@ public sealed class RemoteQueueStarvationPolicyTests
         var snapshot = RemoteQueueStarvationPolicy.Evaluate(
             Now,
             TimeSpan.FromMinutes(30),
+            TimeSpan.FromMinutes(5),
+            null,
             [task],
             _ => RemoteSettings(),
             TaskReferenceIndex.Build([task]),
-            [Runner(1, 0)]);
+            [Runner(1, lastClaimAgeMinutes: 1)]);
 
         Assert.True(snapshot.Active);
+        Assert.False(snapshot.ClaimProgressStalled);
         Assert.Equal(rejection, Assert.Single(snapshot.Items).LastRejection);
+    }
+
+    [Fact]
+    public void Evaluate_DoesNotTreatARejectionFromAnEarlierLaneGenerationAsEvidence()
+    {
+        var task = ReadyTask(40) with
+        {
+            RemoteDispatchRejection = new RemoteDispatchRejection
+            {
+                Code = "stale-refusal",
+                RunnerId = "runner-01",
+                RunnerName = "Runner 01",
+                Reason = "belongs to the previous Ready generation",
+                RejectedAtUtc = Now.AddMinutes(-41),
+            },
+        };
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromMinutes(5),
+            null,
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(1, lastClaimAgeMinutes: 1)]);
+
+        Assert.False(snapshot.Active);
+        Assert.Empty(snapshot.Items);
     }
 
     [Fact]
@@ -89,10 +196,10 @@ public sealed class RemoteQueueStarvationPolicyTests
             && entry.Message.Contains("recovered", StringComparison.Ordinal));
     }
 
-    private static TaskInfo ReadyTask(int waitingMinutes) => new()
+    private static TaskInfo ReadyTask(int waitingMinutes, string id = "task-1") => new()
     {
-        Id = "task-1",
-        Key = "AGT-1",
+        Id = id,
+        Key = id.ToUpperInvariant(),
         Title = "Waiting task",
         ProjectName = "demo",
         State = TaskStates.Ready,
@@ -107,7 +214,10 @@ public sealed class RemoteQueueStarvationPolicyTests
         ExecutionLocation = "runner-01",
     };
 
-    private static ClientIdentity Runner(int availableSlots, int ageMinutes) => new()
+    private static ClientIdentity Runner(
+        int availableSlots,
+        int ageMinutes = 0,
+        int? lastClaimAgeMinutes = null) => new()
     {
         Id = "runner-01",
         DisplayName = "Runner 01",
@@ -115,6 +225,9 @@ public sealed class RemoteQueueStarvationPolicyTests
         LastSeenAt = Now.AddMinutes(-ageMinutes),
         RunnerDaemonState = "running",
         RunnerAvailableSlots = availableSlots,
+        RunnerLastClaimAt = lastClaimAgeMinutes is { } claimAge
+            ? Now.AddMinutes(-claimAge)
+            : null,
     };
 
     private sealed class CapturingLogger : ILogger<RemoteQueueStarvationWatchdog>

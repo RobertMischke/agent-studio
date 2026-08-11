@@ -16,9 +16,13 @@ public sealed record RemoteQueueStarvationSnapshot
     public int WaitingTaskCount { get; init; }
     public int AvailableSlots { get; init; }
     public int ThresholdMinutes { get; init; }
+    public int ClaimProgressWindowMinutes { get; init; }
+    public bool ClaimProgressStalled { get; init; }
+    public DateTime? LastSuccessfulClaimAt { get; init; }
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
+    internal bool TrackMissingClaimProgress { get; init; }
 }
 
 /// <summary>Pure policy for the ready-queue starvation watchdog.</summary>
@@ -27,12 +31,14 @@ public static class RemoteQueueStarvationPolicy
     public static RemoteQueueStarvationSnapshot Evaluate(
         DateTime now,
         TimeSpan threshold,
+        TimeSpan claimProgressWindow,
+        DateTime? missingClaimProgressObservedAt,
         IEnumerable<TaskInfo> tasks,
         Func<string, ProjectSettings> projectSettings,
         TaskReferenceIndex references,
         IEnumerable<ClientIdentity> runners)
     {
-        var availableSlots = runners
+        var liveRunners = runners
             .Where(runner => string.Equals(
                 runner.RunnerDaemonState,
                 "running",
@@ -41,9 +47,16 @@ public static class RemoteQueueStarvationPolicy
             .Where(runner => runner.DrainRequestedAt is null)
             .Where(runner => runner.LastSeenAt is { } lastSeen
                              && now - lastSeen.ToUniversalTime() <= TimeSpan.FromMinutes(2))
+            .ToList();
+        var availableSlots = liveRunners
             .Sum(runner => Math.Max(0, runner.RunnerAvailableSlots ?? 0));
+        var lastSuccessfulClaimAt = liveRunners
+            .Where(runner => runner.RunnerLastClaimAt is not null)
+            .Select(runner => runner.RunnerLastClaimAt!.Value.ToUniversalTime())
+            .Cast<DateTime?>()
+            .Max();
 
-        var items = tasks
+        var waitingItems = tasks
             .Where(task => task.State == TaskStates.Ready && !task.Fixture)
             .Where(task => now - task.EnteredLaneAt.ToUniversalTime() >= threshold)
             .Where(task =>
@@ -66,9 +79,24 @@ public static class RemoteQueueStarvationPolicy
                 ProjectName = task.ProjectName,
                 Title = task.Title,
                 EnteredLaneAt = task.EnteredLaneAt,
-                LastRejection = task.RemoteDispatchRejection,
+                LastRejection = task.RemoteDispatchRejection is { } rejection
+                                && rejection.RejectedAtUtc >= task.EnteredLaneAt.ToUniversalTime()
+                    ? rejection
+                    : null,
             })
             .ToList();
+        var trackMissingClaimProgress = lastSuccessfulClaimAt is null
+                                        && waitingItems.Count > 0
+                                        && availableSlots > 0;
+        var claimProgressStalled = waitingItems.Count > 0
+                                   && availableSlots > 0
+                                   && (lastSuccessfulClaimAt is { } lastClaim
+                                       ? now - lastClaim >= claimProgressWindow
+                                       : missingClaimProgressObservedAt is { } firstObserved
+                                         && now - firstObserved >= claimProgressWindow);
+        var items = claimProgressStalled
+            ? waitingItems
+            : waitingItems.Where(item => item.LastRejection is not null).ToList();
 
         return new RemoteQueueStarvationSnapshot
         {
@@ -76,9 +104,15 @@ public static class RemoteQueueStarvationPolicy
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
+            ClaimProgressWindowMinutes = Math.Max(
+                1,
+                (int)Math.Ceiling(claimProgressWindow.TotalMinutes)),
+            ClaimProgressStalled = claimProgressStalled,
+            LastSuccessfulClaimAt = lastSuccessfulClaimAt,
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
+            TrackMissingClaimProgress = trackMissingClaimProgress,
         };
     }
 }
@@ -91,6 +125,7 @@ public static class RemoteQueueStarvationPolicy
 public sealed class RemoteQueueStarvationWatchdog : BackgroundService
 {
     public const int DefaultThresholdMinutes = 30;
+    public const int DefaultClaimProgressWindowMinutes = 5;
     public const int DefaultIntervalSeconds = 30;
 
     private readonly TaskScannerService _scanner;
@@ -100,6 +135,7 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
     private readonly ILogger<RemoteQueueStarvationWatchdog> _logger;
     private readonly object _gate = new();
     private RemoteQueueStarvationSnapshot _current = new() { ObservedAt = DateTime.UtcNow };
+    private DateTime? _missingClaimProgressObservedAt;
     private string? _warningSignature;
     private DateTime? _lastWarningAt;
 
@@ -130,17 +166,28 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             ?? DefaultThresholdMinutes,
             1,
             24 * 60);
+        var claimProgressWindowMinutes = Math.Clamp(
+            _configuration.GetValue<int?>("RemoteQueueStarvation:ClaimProgressWindowMinutes")
+            ?? DefaultClaimProgressWindowMinutes,
+            1,
+            24 * 60);
         var snapshot = _scanner.GetLiveSnapshotWithReferenceIndex();
-        var next = RemoteQueueStarvationPolicy.Evaluate(
-            now,
-            TimeSpan.FromMinutes(thresholdMinutes),
-            snapshot.Live,
-            _settings.Get,
-            snapshot.References,
-            _clients.ListAll());
+        var runners = _clients.ListAll();
 
         lock (_gate)
         {
+            var next = RemoteQueueStarvationPolicy.Evaluate(
+                now,
+                TimeSpan.FromMinutes(thresholdMinutes),
+                TimeSpan.FromMinutes(claimProgressWindowMinutes),
+                _missingClaimProgressObservedAt,
+                snapshot.Live,
+                _settings.Get,
+                snapshot.References,
+                runners);
+            _missingClaimProgressObservedAt = next.TrackMissingClaimProgress
+                ? _missingClaimProgressObservedAt ?? now
+                : null;
             PublishLogTransition(_current, next, now);
             _current = next;
             return _current;
@@ -193,16 +240,20 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             return;
         }
 
-        var signature = string.Join(',', next.Items.Select(item => item.TaskKey));
+        var signature = string.Join(',', next.Items.Select(item =>
+            $"{item.TaskKey}:{item.LastRejection?.Code ?? "stalled"}"));
         var repeatDue = _lastWarningAt is null || now - _lastWarningAt >= TimeSpan.FromMinutes(30);
         if (string.Equals(signature, _warningSignature, StringComparison.Ordinal) && !repeatDue)
             return;
 
         _logger.LogWarning(
-            "remote-ready-starvation waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} oldestEnteredLaneAt={OldestEnteredLaneAt}",
+            "remote-ready-starvation waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} oldestEnteredLaneAt={OldestEnteredLaneAt} rejectedTasks={RejectedTaskCount} claimProgressStalled={ClaimProgressStalled} lastSuccessfulClaimAt={LastSuccessfulClaimAt}",
             next.WaitingTaskCount,
             next.AvailableSlots,
-            next.OldestEnteredLaneAt);
+            next.OldestEnteredLaneAt,
+            next.Items.Count(item => item.LastRejection is not null),
+            next.ClaimProgressStalled,
+            next.LastSuccessfulClaimAt);
         _warningSignature = signature;
         _lastWarningAt = now;
     }

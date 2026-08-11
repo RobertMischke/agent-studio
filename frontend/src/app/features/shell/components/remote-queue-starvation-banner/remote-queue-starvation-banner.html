@@ -5,6 +5,6 @@
     ariaLive="polite"
     testid="remote-queue-starvation-banner">
     <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
-    <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. Open a task to inspect its latest rejection.</span>
+    <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. @if (hasVisibleRejection()) { At least one affected task has a recorded claim rejection. Open it to inspect the details. } @else { No successful claim was recorded within the <span class="notification__number">{{ claimProgressWindowMinutes() }}</span>-minute progress window. }</span>
   </app-notification>
 }
