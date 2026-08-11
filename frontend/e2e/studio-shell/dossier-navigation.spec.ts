@@ -7,8 +7,8 @@ import { setTheme } from '../helpers/theme';
 interface CatalogueItem {
   id: string;
   key?: string | null;
+  status: 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'living-standard' | 'invalid';
   title: string;
-  status: 'active' | 'decision-pending' | 'decided' | 'documented' | 'archived' | 'invalid';
   entryPath: string;
   openDecisionCount?: number;
 }

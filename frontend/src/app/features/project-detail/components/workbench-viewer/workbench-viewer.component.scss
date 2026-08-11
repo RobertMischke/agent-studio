@@ -12,6 +12,43 @@
 
 .workbench-viewer__head { min-width: 0; }
 
+.workbench-viewer__pages {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  overflow-x: auto;
+  align-items: stretch;
+  gap: var(--studio-spacing-1);
+  padding: 0 var(--studio-spacing-4);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg);
+  scrollbar-width: thin;
+}
+
+.workbench-viewer__pages button {
+  min-height: 32px;
+  flex: 0 0 auto;
+  padding: 0 var(--studio-spacing-2);
+  border: 0;
+  border-radius: var(--studio-radius-sm);
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.workbench-viewer__pages button:hover { background: var(--studio-bg-hover); color: var(--studio-fg); }
+.workbench-viewer__pages button:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: -2px;
+}
+.workbench-viewer__pages .workbench-viewer__page--active {
+  background: var(--studio-nav-active-bg);
+  color: var(--studio-nav-active-fg);
+  font-weight: 650;
+}
+
 .workbench-viewer__documentation-ready {
   display: flex;
   align-items: center;

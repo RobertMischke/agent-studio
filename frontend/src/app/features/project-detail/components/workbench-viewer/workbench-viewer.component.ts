@@ -67,6 +67,7 @@ export class WorkbenchViewerComponent {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly maximized = signal(false);
+  readonly selectedPagePath = signal<string | null>(null);
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
   readonly documenting = signal(false);
   readonly documentationError = signal<string | null>(null);
@@ -82,8 +83,11 @@ export class WorkbenchViewerComponent {
       documentPattern: document?.workbench.pattern === 'ui' ? 'ui' : 'concept',
     });
   });
+  readonly pages = computed(() => this.document()?.workbench.pages ?? []);
   readonly decisionMarkup = computed(() =>
-    discoverWorkbenchDecisionMarkup(this.document()?.html ?? ''),
+    discoverWorkbenchDecisionMarkup(
+      this.document()?.entryHtml ?? this.document()?.html ?? '',
+    ),
   );
 
   constructor() {
@@ -97,6 +101,7 @@ export class WorkbenchViewerComponent {
       const project = this.projectName();
       const id = this.workbenchId();
       this.maximized.set(false);
+      this.selectedPagePath.set(null);
       this.loadDocument(project, id);
     });
     effect(() => {
@@ -106,7 +111,7 @@ export class WorkbenchViewerComponent {
       const id = this.workbenchId();
       if (event.projectName && event.projectName !== project) return;
       if (event.workbenchId && event.workbenchId !== id) return;
-      this.loadDocument(project, id, false);
+      this.loadDocument(project, id, false, this.selectedPagePath());
     });
   }
 
@@ -136,10 +141,24 @@ export class WorkbenchViewerComponent {
       return;
     }
     if (message?.type !== ISOLATED_HTML_LINK_MESSAGE || typeof message.href !== 'string') return;
-    const entryPath = this.document()?.workbench.entryPath;
+    const entryPath = this.document()?.contentPath ?? this.document()?.workbench.entryPath;
     if (!entryPath) return;
     const navigation = resolveIsolatedHtmlNavigation(entryPath, message.href);
     if (navigation?.kind === 'wiki') {
+      const repositoryPath = `docs/${navigation.relPath}`;
+      const dossierEntry = this.document()?.workbench.entryPath;
+      const dossierDirectory = dossierEntry?.slice(0, dossierEntry.lastIndexOf('/') + 1);
+      if (dossierEntry && repositoryPath === dossierEntry) {
+        this.selectPage(null);
+        return;
+      }
+      const registeredPage = dossierDirectory
+        ? this.pages().find(page => `${dossierDirectory}${page.path}` === repositoryPath)
+        : null;
+      if (registeredPage) {
+        this.selectPage(registeredPage.path);
+        return;
+      }
       this.openWiki.emit(navigation.relPath);
     } else if (navigation?.kind === 'external') {
       window.open(navigation.url, '_blank', 'noopener,noreferrer');
@@ -156,7 +175,17 @@ export class WorkbenchViewerComponent {
   }
 
   refreshDecision(): void {
-    this.loadDocument(this.projectName(), this.workbenchId(), false);
+    this.loadDocument(this.projectName(), this.workbenchId(), false, this.selectedPagePath());
+  }
+
+  selectPage(path: string | null): void {
+    if (path === this.selectedPagePath() || this.loading()) return;
+    this.selectedPagePath.set(path);
+    this.loadDocument(this.projectName(), this.workbenchId(), false, path);
+  }
+
+  pageTestId(path: string): string {
+    return `workbench-viewer-page-${path.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}`;
   }
 
   refreshManually(): void {
@@ -192,7 +221,7 @@ export class WorkbenchViewerComponent {
       }).subscribe({
       next: () => {
         this.documenting.set(false);
-        this.loadDocument(this.projectName(), this.workbenchId(), false);
+        this.loadDocument(this.projectName(), this.workbenchId(), false, this.selectedPagePath());
       },
       error: error => {
         this.documenting.set(false);
@@ -217,7 +246,7 @@ export class WorkbenchViewerComponent {
     );
   }
 
-  private loadDocument(project: string, id: string, clear = true): void {
+  private loadDocument(project: string, id: string, clear = true, pagePath: string | null = null): void {
     const generation = ++this.requestGeneration;
     this.loading.set(true);
     this.error.set(null);
@@ -226,12 +255,14 @@ export class WorkbenchViewerComponent {
       this.document.set(null);
       this.lastUpdatedAtUtc.set(null);
     }
-    this.docs.getWorkbench(project, id).subscribe({
+    this.docs.getWorkbench(project, id, pagePath).subscribe({
       next: (document) => {
         if (generation !== this.requestGeneration) return;
         this.document.set(document);
         this.lastUpdatedAtUtc.set(new Date().toISOString());
-        const discovered = discoverWorkbenchDecisionMarkup(document.html);
+        const discovered = discoverWorkbenchDecisionMarkup(
+          document.entryHtml ?? document.html,
+        );
         if (document.workbench.decision?.state === 'succeeded')
           this.decisionDrafts.discard(project, id);
         const saved = this.decisionDrafts.draft(project, id)?.responses;

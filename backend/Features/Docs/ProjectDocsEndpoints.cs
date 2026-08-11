@@ -118,13 +118,13 @@ public static class ProjectDocsEndpoints
             return Results.Ok(docs.GetWikiWorkbenchOverview(names, requested));
         });
 
-        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, ProjectDocsService docs) =>
+        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, string? page, ProjectDocsService docs) =>
         {
             var item = docs.GetWikiWorkbenchCatalogue(projectName, includeHistory: true)?.Items
                 .FirstOrDefault(candidate => candidate.Id == id);
             if (item is { Valid: false })
                 return Results.UnprocessableEntity(new { error = item.Error ?? "Dossier descriptor is invalid." });
-            var document = docs.ReadWikiWorkbench(projectName, id);
+            var document = docs.ReadWikiWorkbench(projectName, id, page);
             return document == null
                 ? Results.NotFound(new { error = "Dossier is not available in the selected Wiki source." })
                 : Results.Ok(document);

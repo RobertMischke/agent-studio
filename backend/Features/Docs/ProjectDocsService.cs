@@ -603,7 +603,10 @@ public class ProjectDocsService
         return WorkbenchCatalogueService.BuildOverview(items, projectName);
     }
 
-    public WorkbenchDocument? ReadWikiWorkbench(string projectName, string id)
+    public WorkbenchDocument? ReadWikiWorkbench(
+        string projectName,
+        string id,
+        string? pagePath = null)
     {
         var snapshot = _wikiContentCache.GetSnapshot(projectName);
         return snapshot == null || _workbenches == null
@@ -612,7 +615,8 @@ public class ProjectDocsService
                 projectName,
                 id,
                 snapshot.Source,
-                snapshot.Workbenches);
+                snapshot.Workbenches,
+                pagePath);
     }
 
     /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
