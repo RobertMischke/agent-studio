@@ -811,7 +811,13 @@ export interface MergeSignalView {
   branch: string | null;
   develop: MergeSignalSegment;
   main: MergeSignalSegment;
-  /** Plain-text tooltip: branch + merge-target status in Klartext. */
+  /**
+   * Human-readable target branches. Projects that integrate directly into
+   * their release branch expose that branch once instead of repeating it as
+   * two identical targets.
+   */
+  displaySegments: readonly MergeSignalSegment[];
+  /** Plain-text tooltip: branch plus merge-target status in plain language. */
   tooltip: string;
   /** Compact aria label for screen readers ("in develop, not in main"). */
   ariaLabel: string;
@@ -909,6 +915,15 @@ export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
     sha: mainSha,
   };
 
+  const sameTarget = integrationLabel === releaseLabel;
+  const displaySegments: readonly MergeSignalSegment[] = sameTarget
+    ? [{
+        ...main,
+        merged: inDevelop || inMain,
+        sha: mainSha || developSha,
+      }]
+    : [develop, main];
+
   const developLine = inDevelop
     ? developSha
       ? `In ${integrationLabel} since ${developSha}`
@@ -919,19 +934,28 @@ export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
       ? `In ${releaseLabel} (${mainSha})`
       : `In ${releaseLabel}`
     : `Not in ${releaseLabel}`;
+  let displayLines: readonly string[];
+  if (sameTarget) {
+    const target = displaySegments[0];
+    const mergedLine = target.sha
+      ? `In ${target.label} (${target.sha})`
+      : `In ${target.label}`;
+    displayLines = [target.merged ? mergedLine : `Not yet in ${target.label}`];
+  } else {
+    displayLines = [developLine, mainLine];
+  }
 
   const tooltip = [
     branch ? `Branch: ${branch}` : null,
     'Merge status:',
-    `• ${developLine}`,
-    `• ${mainLine}`,
+    ...displayLines.map(line => `• ${line}`),
   ].filter((l): l is string => l !== null).join('\n');
 
-  const ariaLabel =
-    `Merge status: ${inDevelop ? `in ${integrationLabel}` : `not in ${integrationLabel}`}, ` +
-    `${inMain ? `in ${releaseLabel}` : `not in ${releaseLabel}`}`;
+  const ariaLabel = `Merge status: ${displaySegments
+    .map(segment => `${segment.merged ? 'in' : 'not in'} ${segment.label}`)
+    .join(', ')}`;
 
-  return { branch, develop, main, tooltip, ariaLabel };
+  return { branch, develop, main, displaySegments, tooltip, ariaLabel };
 }
 
 export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';

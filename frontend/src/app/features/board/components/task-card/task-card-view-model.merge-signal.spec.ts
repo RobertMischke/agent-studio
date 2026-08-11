@@ -163,6 +163,41 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
     expect(view.tooltip).toContain('Not in release');
   });
 
+  it('collapses a shared integration and release branch into one display segment', () => {
+    const view = buildMergeSignal(makeJob({
+      mergeSignal: signal({
+        inIntegration: true,
+        inRelease: true,
+        integrationBranch: 'main',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: 'a1b2c3d',
+      }),
+      integration: integration({ integrationBranch: 'main', sha: 'a1b2c3d' }),
+    }))!;
+
+    expect(view.displaySegments).toEqual([
+      expect.objectContaining({ label: 'main', merged: true, sha: 'a1b2c3d' }),
+    ]);
+    expect(view.tooltip).toContain('• In main (a1b2c3d)');
+    expect(view.tooltip.match(/•/g)).toHaveLength(1);
+    expect(view.ariaLabel).toBe('Merge status: in main');
+  });
+
+  it('describes a shared pending branch once', () => {
+    const view = buildMergeSignal(makeJob({
+      state: TaskState.Progress,
+      mergeSignal: signal({ integrationBranch: 'main', releaseBranch: 'main' }),
+    }))!;
+
+    expect(view.displaySegments).toEqual([
+      expect.objectContaining({ label: 'main', merged: false, sha: null }),
+    ]);
+    expect(view.tooltip).toContain('• Not yet in main');
+    expect(view.tooltip.match(/•/g)).toHaveLength(1);
+    expect(view.ariaLabel).toBe('Merge status: not in main');
+  });
+
   it('carries the branch name into the tooltip', () => {
     const view = buildMergeSignal(makeJob({ mergeSignal: signal({ branch: 'task/xyz' }) }))!;
     expect(view.branch).toBe('task/xyz');

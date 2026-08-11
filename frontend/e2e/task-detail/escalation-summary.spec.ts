@@ -37,7 +37,7 @@ async function saveShot(testInfo: TestInfo, name: string, body: Buffer): Promise
   }
 }
 
-function buildInfo(state: string, emptyContext = false) {
+function buildInfo(state: string, emptyContext = false, sharedTarget = false) {
   return {
     id: JOB_ID,
     taskKey: `${WATCH_PATH}::${JOB_ID}`,
@@ -62,10 +62,10 @@ function buildInfo(state: string, emptyContext = false) {
       branch: 'task/AGT-1994',
       inIntegration: true,
       inRelease: true,
-      integrationBranch: 'develop',
+      integrationBranch: sharedTarget ? 'main' : 'develop',
       releaseBranch: 'main',
       integrationSha: 'b2ed3f4',
-      releaseSha: '1a526e9',
+      releaseSha: sharedTarget ? 'b2ed3f4' : '1a526e9',
     },
     tags: [],
     ownerClientId: 'local-default',
@@ -73,9 +73,9 @@ function buildInfo(state: string, emptyContext = false) {
   };
 }
 
-function buildDetail(state: string, emptyContext = false) {
+function buildDetail(state: string, emptyContext = false, sharedTarget = false) {
   return {
-    info: buildInfo(state, emptyContext),
+    info: buildInfo(state, emptyContext, sharedTarget),
     promptMarkdown: '# Task',
     promptHistory: [],
     titleHistory: [],
@@ -226,9 +226,14 @@ const TIMELINE = [
   },
 ];
 
-async function installRoutes(page: Page, state: string, emptyContext = false): Promise<void> {
-  const info = buildInfo(state, emptyContext);
-  const detail = buildDetail(state, emptyContext);
+async function installRoutes(
+  page: Page,
+  state: string,
+  emptyContext = false,
+  sharedTarget = false,
+): Promise<void> {
+  const info = buildInfo(state, emptyContext, sharedTarget);
+  const detail = buildDetail(state, emptyContext, sharedTarget);
   const grouped = {
     backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
     failedPickup: [], codeNotComplete: [], review: [], autoReview: [],
@@ -318,9 +323,14 @@ async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
   }, theme);
 }
 
-async function openDetail(page: Page, state: string, emptyContext = false): Promise<void> {
+async function openDetail(
+  page: Page,
+  state: string,
+  emptyContext = false,
+  sharedTarget = false,
+): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 960 });
-  await installRoutes(page, state, emptyContext);
+  await installRoutes(page, state, emptyContext, sharedTarget);
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await expect(page.getByTestId('escalation-summary')).toBeVisible({ timeout: 20_000 });
 }
@@ -540,6 +550,42 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     expect(decisionContract.primary.fontWeight).toBe(decisionContract.secondary.fontWeight);
     await dismissAppErrorDialog(page);
     await shootBothThemes(page, testInfo, 'escalation-5e-open');
+  });
+
+  test('shows one readable merge segment when integration and release share main', async ({ page }, testInfo) => {
+    await openDetail(page, '5e-escalated', false, true);
+    const panel = page.getByTestId('escalation-summary');
+    const merge = page.getByTestId('escalation-essence-merge');
+    const segments = page.getByTestId('escalation-merge-segment');
+
+    await expect(segments).toHaveCount(1);
+    await expect(segments).toHaveText('main ✓ merged');
+    await expect(segments).toHaveAttribute('data-branch', 'main');
+    await expect(segments).toHaveAttribute('data-merge-state', 'merged');
+
+    await dismissAppErrorDialog(page);
+    await merge.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('In main (b2ed3f4)');
+    await page.mouse.move(0, 0);
+
+    for (const width of [1440, 720]) {
+      await page.setViewportSize({ width, height: 960 });
+      const geometry = await panel.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await dismissAppErrorDialog(page);
+        await panel.scrollIntoViewIfNeeded();
+        const shot = await panel.screenshot();
+        const name = `escalation-shared-main-${width}-${theme}--mocked.png`;
+        await saveShot(testInfo, name, shot);
+        writeFileSync(path.join(SHOTS_DIR, name), shot);
+      }
+    }
   });
 
   test('collapses three empty context columns into one compact row', async ({ page }, testInfo) => {

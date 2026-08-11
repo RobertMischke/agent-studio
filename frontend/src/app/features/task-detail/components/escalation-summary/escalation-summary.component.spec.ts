@@ -272,4 +272,45 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
     );
     expect(el.querySelectorAll('[data-testid="escalation-essence-merge"]')).toHaveLength(1);
   });
+
+  it.each([
+    {
+      merged: true,
+      expectedText: 'main ✓ merged',
+      expectedState: 'merged',
+      integrationSha: 'b2ed3f4',
+      releaseSha: 'b2ed3f4',
+    },
+    {
+      merged: false,
+      expectedText: 'main · pending',
+      expectedState: 'pending',
+      integrationSha: null,
+      releaseSha: null,
+    },
+  ])('renders one readable main segment when integration and release share a branch ($expectedState)', (state) => {
+    const base = detail();
+    const sameBranch = {
+      ...base,
+      info: {
+        ...base.info,
+        mergeSignal: {
+          ...base.info.mergeSignal,
+          inIntegration: state.merged,
+          inRelease: state.merged,
+          integrationBranch: 'main',
+          releaseBranch: 'main',
+          integrationSha: state.integrationSha,
+          releaseSha: state.releaseSha,
+        },
+      },
+    } as TaskDetail;
+    const el: HTMLElement = mount({ reviews: [], detail: sameBranch }).nativeElement;
+    const segments = el.querySelectorAll<HTMLElement>('[data-testid="escalation-merge-segment"]');
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0].textContent?.trim()).toBe(state.expectedText);
+    expect(segments[0].dataset['branch']).toBe('main');
+    expect(segments[0].dataset['mergeState']).toBe(state.expectedState);
+  });
 });

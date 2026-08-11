@@ -25,12 +25,16 @@
                 data-testid="escalation-essence-merge"
                 [cacTooltip]="m.tooltip"
                 [attr.aria-label]="m.ariaLabel">
-                <span class="escalation__seg" [class.escalation__seg--in]="m.develop.merged">
-                  {{ m.develop.label }} {{ m.develop.merged ? '✓' : '—' }}
-                </span>
-                <span class="escalation__seg" [class.escalation__seg--in]="m.main.merged">
-                  {{ m.main.label }} {{ m.main.merged ? '✓' : '—' }}
-                </span>
+                @for (segment of m.displaySegments; track segment.key) {
+                  <span
+                    class="escalation__seg"
+                    [class.escalation__seg--in]="segment.merged"
+                    data-testid="escalation-merge-segment"
+                    [attr.data-branch]="segment.label"
+                    [attr.data-merge-state]="segment.merged ? 'merged' : 'pending'">
+                    {{ segment.label }} {{ segment.merged ? '✓ merged' : '· pending' }}
+                  </span>
+                }
               </span>
             }
           </span>
