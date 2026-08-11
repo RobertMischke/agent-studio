@@ -316,6 +316,10 @@
         <div>
           <h4>Flat composition</h4>
           <p><strong>Admin content MUST remain flat.</strong> Do not wrap a section, row group, banner, or status summary in a decorative card, border, radius, or resting shadow. Separate content with spacing, alignment, typography, or a low-contrast tint across the complete surface. Borders remain valid only for controls, focus, resizable shell boundaries, and data structures that require a boundary.</p>
+          <ul>
+            <li><strong>Do:</strong> render paired outcome facts such as GOAL and WHERE IT STOPPED as sibling rows on the containing surface. Use a calm whole-row semantic tint when the stopped state needs emphasis.</li>
+            <li><strong>Do not:</strong> place those rows inside an outer bordered summary box and then wrap the stopped row in a second inset box. Box-in-box outcome summaries create competing boundaries and obscure the information hierarchy.</li>
+          </ul>
         </div>
       </article>
       <article class="rule">
@@ -402,7 +406,7 @@
       <table>
         <thead><tr><th>Rule</th><th>Established decision</th><th>Source</th></tr></thead>
         <tbody>
-          <tr><td>ADM-01, ADM-02</td><td>Stay flat; use the full available width; remove floating notice chrome.</td><td>AGT-2568 and operator direction from 10.08.</td></tr>
+          <tr><td>ADM-01, ADM-02</td><td>Stay flat; use the full available width; remove floating notice chrome and nested outcome boxes.</td><td>AGT-2568, AGT-2643, and operator direction from 10.08. and 11.08.</td></tr>
           <tr><td>ADM-03</td><td>Every activity type uses one entry grid; cross-project Activity is chronological.</td><td>AGT-2565 and AGT-2579.</td></tr>
           <tr><td>ADM-04</td><td>Keep the normal header to one compact line and reveal detail on demand.</td><td>AGT-2534 and AGT-2549.</td></tr>
           <tr><td>ADM-05, ADM-06</td><td>State each operational fact once and remove explanatory narrative from persistent UI.</td><td>AGT-2547, AGT-2579, and the repository language policy.</td></tr>
@@ -877,7 +881,7 @@
     </div>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <footer>Prepared 10 August 2026; flat outcome-summary guidance extended 12 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2643.</footer>
 </main>
 </body>
 </html>
