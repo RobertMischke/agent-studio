@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Locator, Page } from '@playwright/test';
 import * as path from 'path';
 import { setTheme } from '../helpers/theme';
 
@@ -49,7 +49,12 @@ const CLAUDE_TOKEN_SUMMARY = {
   entries: [],
 };
 
-function makeDetail(state: string, key = 'FIXTURE-1', title = 'Agent-run metrics fixture') {
+function makeDetail(
+  state: string,
+  key = 'FIXTURE-1',
+  title = 'Agent-run metrics fixture',
+  reviewEvidence: readonly Record<string, unknown>[] = [],
+) {
   return {
     info: {
       id: JOB_ID,
@@ -77,7 +82,7 @@ function makeDetail(state: string, key = 'FIXTURE-1', title = 'Agent-run metrics
     log: [],
     promptHistory: [],
     contextUsage: null,
-    reviewEvidence: [],
+    reviewEvidence,
     summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null },
   };
 }
@@ -303,6 +308,22 @@ function multiRunTimeline() {
   };
 }
 
+function overflowReviewEvidence(): readonly Record<string, unknown>[] {
+  return Array.from({ length: 8 }, (_, index) => ({
+    id: `overflow-evidence-${index + 1}`,
+    source: index % 2 === 0 ? 'code-review' : 'task-check',
+    severity: index % 3 === 0 ? 'warn' : 'info',
+    title: `Responsive evidence finding ${index + 1}`,
+    body: 'A deliberately long finding verifies that evidence content wraps inside its pane without creating horizontal or nested vertical scrolling.',
+    createdAt: `2026-08-11T10:${String(index).padStart(2, '0')}:00Z`,
+    runIndex: 5,
+    artifacts: [],
+    fileRefs: [`frontend/src/app/features/task-detail/very-long-evidence-reference-${index + 1}.ts`],
+    acknowledged: false,
+    followupJobId: null,
+  }));
+}
+
 function legacyMissingCloseoutTimeline() {
   return {
     runCount: 1,
@@ -358,9 +379,15 @@ async function installRoutes(
     | ReturnType<typeof mkt21HealedTimeline>
     = multiRunTimeline(),
   detailIdentity?: { key: string; title: string },
+  reviewEvidence: readonly Record<string, unknown>[] = [],
 ): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const detail = makeDetail(state, detailIdentity?.key, detailIdentity?.title);
+  const detail = makeDetail(
+    state,
+    detailIdentity?.key,
+    detailIdentity?.title,
+    reviewEvidence,
+  );
 
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {
@@ -544,6 +571,25 @@ async function openDetail(page: Page): Promise<void> {
   await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
 }
 
+async function expectNoHorizontalOverflow(locator: Locator): Promise<void> {
+  await expect.poll(async () => locator.evaluate(
+    element => element.scrollWidth <= element.clientWidth + 1,
+  )).toBe(true);
+}
+
+async function verticalScrollOwners(root: Locator): Promise<string[]> {
+  return root.evaluate((element) => {
+    const nodes = [element, ...Array.from(element.querySelectorAll<HTMLElement>('*'))];
+    return nodes
+      .filter((node) => {
+        const overflowY = getComputedStyle(node).overflowY;
+        return (overflowY === 'auto' || overflowY === 'scroll')
+          && node.scrollHeight > node.clientHeight + 1;
+      })
+      .map((node) => node.getAttribute('data-testid') || node.tagName.toLowerCase());
+  });
+}
+
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
 test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', () => {
@@ -685,6 +731,119 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
           path: path.join(RESULTS_DIR, `mkt-21-runs-healed-${theme}--mocked.png`),
         });
       }
+    }
+  });
+
+  test('tabs, Pipeline, Runs, and Evidence stay within one pane scroll surface', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'taskboard.panesVisible',
+        JSON.stringify({ prompt: true, protocol: true, git: true }),
+      );
+      localStorage.setItem(
+        'taskboard.paneWeights',
+        JSON.stringify({ prompt: 1, protocol: 1, git: 1 }),
+      );
+    });
+    await installRoutes(page, '6-completed', multiRunTimeline(), undefined, overflowReviewEvidence());
+
+    for (const viewport of [
+      { name: 'wide', width: 1440, height: 900 },
+      { name: 'narrow', width: 980, height: 720 },
+    ] as const) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await openDetail(page);
+      const promptPane = page.getByTestId('pane-prompt');
+      const promptHeader = page.getByTestId('pane-prompt-header');
+      const promptBody = page.getByTestId('pane-prompt-body');
+      const runs = page.getByTestId('overview-runs');
+      const pipeline = page.getByTestId('overview-pipeline');
+
+      const headerGeometry = await promptHeader.evaluate((header) => {
+        const tabs = Array.from(header.querySelectorAll<HTMLElement>('[role="tab"]'));
+        const more = header.querySelector<HTMLElement>('[data-testid="pane-tabs-overflow"]');
+        const maximize = header.querySelector<HTMLElement>('[data-testid="pane-header-maximize"]');
+        const close = header.querySelector<HTMLElement>('[data-testid="pane-header-hide"]');
+        const headerBox = header.getBoundingClientRect();
+        if (!more || !maximize || !close) return null;
+        return {
+          headerRight: headerBox.right,
+          lastTabRight: tabs.at(-1)?.getBoundingClientRect().right ?? 0,
+          moreLeft: more.getBoundingClientRect().left,
+          moreRight: more.getBoundingClientRect().right,
+          maximizeLeft: maximize.getBoundingClientRect().left,
+          maximizeRight: maximize.getBoundingClientRect().right,
+          closeLeft: close.getBoundingClientRect().left,
+          closeRight: close.getBoundingClientRect().right,
+          tabCount: tabs.length,
+        };
+      });
+      expect(headerGeometry).not.toBeNull();
+      expect(headerGeometry!.tabCount).toBe(3);
+      expect(headerGeometry!.lastTabRight).toBeLessThanOrEqual(headerGeometry!.moreLeft + 1);
+      expect(headerGeometry!.moreRight).toBeLessThanOrEqual(headerGeometry!.maximizeLeft - 4);
+      expect(headerGeometry!.maximizeRight).toBeLessThanOrEqual(headerGeometry!.closeLeft - 4);
+      expect(headerGeometry!.closeRight).toBeLessThanOrEqual(headerGeometry!.headerRight + 1);
+
+      const evidenceLabel = await page.getByTestId('prompt-tab-evidence').evaluate((tab) => {
+        const label = tab.querySelector<HTMLElement>('.pane-tab__label');
+        if (!label) return null;
+        const style = getComputedStyle(label);
+        return {
+          overflow: style.overflow,
+          textOverflow: style.textOverflow,
+          whiteSpace: style.whiteSpace,
+        };
+      });
+      expect(evidenceLabel).toEqual({
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      });
+
+      await page.getByTestId('pane-tabs-overflow').click();
+      await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeVisible();
+      await expect(page.getByTestId('pane-tabs-overflow-item-code-review')).toHaveText('Code Review');
+      await expect(page.getByTestId('pane-tabs-overflow-item-description')).toContainText('Docs');
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeHidden();
+
+      await expectNoHorizontalOverflow(promptPane);
+      await expectNoHorizontalOverflow(promptBody);
+      await expectNoHorizontalOverflow(pipeline);
+      await expectNoHorizontalOverflow(runs);
+      expect(await runs.evaluate((host) => {
+        const boundary = host.getBoundingClientRect();
+        const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="overview-run-row"]'));
+        return rows.every((row) => {
+          const box = row.getBoundingClientRect();
+          return box.left >= boundary.left - 1 && box.right <= boundary.right + 1;
+        });
+      })).toBe(true);
+      expect(await verticalScrollOwners(promptBody)).toEqual(['pane-prompt-body']);
+
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+        await promptBody.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+        if (RESULTS_DIR) {
+          await page.screenshot({
+            path: path.join(
+              RESULTS_DIR,
+              `agt-2625--after--${viewport.name}-${theme}--mocked.png`,
+            ),
+            fullPage: false,
+          });
+        }
+      }
+
+      await page.getByTestId('prompt-tab-evidence').click();
+      const evidence = page.getByTestId('evidence-view');
+      await expect(evidence).toBeVisible();
+      await expect(page.getByTestId('review-evidence-count')).toHaveText('8 findings');
+      await expectNoHorizontalOverflow(evidence);
+      await expectNoHorizontalOverflow(page.getByTestId('review-evidence-panel'));
+      expect(await verticalScrollOwners(promptBody)).toEqual(['pane-prompt-body']);
     }
   });
 });

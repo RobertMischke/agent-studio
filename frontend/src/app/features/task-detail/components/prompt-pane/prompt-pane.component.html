@@ -12,10 +12,11 @@
                      ariaLabel="Prompt pane tabs"
                      [tabs]="promptTabs()"
                      [activeTabId]="activeTab()"
+                     [overflowAfter]="maximized() ? null : 3"
                      (tabChange)="onPromptTabChange($event)" />
     </ng-container>
   </app-pane-header>
-  <div class="pane__body">
+  <div class="pane__body" data-testid="pane-prompt-body">
     @switch (activeTab()) {
       @case ('overview') {
         @defer (on immediate) {

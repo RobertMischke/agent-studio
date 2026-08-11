@@ -1,14 +1,21 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  OnDestroy,
   ViewEncapsulation,
   computed,
+  inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 import { CountBadgeComponent } from '../count-badge/count-badge.component';
+import { MenuComponent } from '../menu/menu.component';
+import type { MenuItem, MenuItemClickEvent } from '../menu/menu.types';
 
 /**
  * Shape of a single tab in the shared {@link PaneTabsComponent} strip.
@@ -68,11 +75,17 @@ export type PaneTabsVariant = 'header' | 'pill';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
-  imports: [NgClass, StudioIconComponent, CountBadgeComponent],
+  host: {
+    '[class.pane-tabs-host--header]': 'variant() === "header"',
+  },
+  imports: [NgClass, StudioIconComponent, CountBadgeComponent, MenuComponent],
   templateUrl: './pane-tabs.component.html',
   styleUrl: './pane-tabs.component.scss',
 })
-export class PaneTabsComponent {
+export class PaneTabsComponent implements AfterViewInit, OnDestroy {
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private resizeObserver: ResizeObserver | null = null;
+
   readonly tabs = input.required<readonly PaneTabDef[]>();
   readonly activeTabId = input.required<string>();
   readonly variant = input<PaneTabsVariant>('header');
@@ -80,14 +93,69 @@ export class PaneTabsComponent {
   readonly listModifier = input<string | null>(null);
   /** `aria-label` for the tablist container. */
   readonly ariaLabel = input<string | null>(null);
+  /**
+   * Optional responsive inline limit. Remaining tabs move into the shared
+   * text-only overflow menu. If the active tab would be hidden, it replaces
+   * the final inline slot so current location remains visible.
+  */
+  readonly overflowAfter = input<number | null>(null);
+  /** Host width below which `overflowAfter` is applied. */
+  readonly overflowBelow = input<number>(440);
 
   readonly tabChange = output<string>();
+  readonly overflowOpen = signal(false);
+  readonly overflowAnchor = signal<HTMLElement | null>(null);
+  readonly availableWidth = signal<number | null>(null);
+
+  readonly inlineTabs = computed<readonly PaneTabDef[]>(() => {
+    const tabs = this.tabs();
+    const requestedLimit = this.overflowAfter();
+    const width = this.availableWidth();
+    const compact = width === null || width < this.overflowBelow();
+    if (!compact || requestedLimit === null || requestedLimit >= tabs.length) return tabs;
+
+    const limit = Math.max(1, requestedLimit);
+    const visible = tabs.slice(0, limit);
+    const active = tabs.find(tab => tab.id === this.activeTabId());
+    if (!active || visible.some(tab => tab.id === active.id)) return visible;
+    return [...visible.slice(0, -1), active];
+  });
+
+  readonly overflowTabs = computed<readonly PaneTabDef[]>(() => {
+    const visibleIds = new Set(this.inlineTabs().map(tab => tab.id));
+    return this.tabs().filter(tab => !visibleIds.has(tab.id));
+  });
+
+  readonly overflowMenuItems = computed<readonly MenuItem[]>(() =>
+    this.overflowTabs().map(tab => ({
+      kind: 'row',
+      id: tab.id,
+      label: tab.label,
+      disabled: tab.disabled,
+      active: tab.id === this.activeTabId(),
+      trailingBadge: tab.badge ? String(tab.badge) : undefined,
+    })),
+  );
 
   readonly containerClass = computed(() => {
     const base = `pane-tabs pane-tabs--${this.variant()}`;
     const mod = this.listModifier();
     return mod ? `${base} pane-tabs--${mod}` : base;
   });
+
+  ngAfterViewInit(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    this.resizeObserver = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      this.availableWidth.set(entry.contentRect.width);
+      if (entry.contentRect.width >= this.overflowBelow()) this.closeOverflow();
+    });
+    this.resizeObserver.observe(this.host.nativeElement);
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
+  }
 
   trackTab(_index: number, tab: PaneTabDef): string {
     return tab.id;
@@ -109,5 +177,21 @@ export class PaneTabsComponent {
     if (tab.disabled) return;
     if (tab.id === this.activeTabId()) return;
     this.tabChange.emit(tab.id);
+  }
+
+  toggleOverflow(event: MouseEvent): void {
+    event.stopPropagation();
+    this.overflowAnchor.set(event.currentTarget as HTMLElement);
+    this.overflowOpen.update(open => !open);
+  }
+
+  closeOverflow(): void {
+    this.overflowOpen.set(false);
+  }
+
+  onOverflowItemClick(event: MenuItemClickEvent): void {
+    const tab = this.overflowTabs().find(candidate => candidate.id === event.id);
+    this.closeOverflow();
+    if (tab) this.onClick(tab);
   }
 }

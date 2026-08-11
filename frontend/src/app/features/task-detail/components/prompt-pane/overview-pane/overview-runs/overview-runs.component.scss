@@ -1,12 +1,18 @@
 :host {
   display: block;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   container-type: inline-size;
 }
 
 .overview-runs {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   gap: var(--studio-spacing-1);
 }
 
@@ -41,9 +47,17 @@
 }
 
 .overview-runs__summary {
-  align-self: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-self: stretch;
+  gap: var(--studio-spacing-1);
+  width: 100%;
+  min-width: 0;
   color: var(--studio-fg-muted);
   font-size: 11px;
+  overflow-wrap: anywhere;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
@@ -65,7 +79,9 @@
     minmax(118px, 0.9fr);
   gap: var(--studio-spacing-2);
   align-items: center;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   padding: var(--studio-spacing-2);
   border: 1px solid var(--studio-border);
   border-radius: 6px;
@@ -79,16 +95,20 @@
   flex-direction: column;
   gap: var(--studio-spacing-1);
   min-width: 0;
+  overflow: hidden;
   color: var(--studio-fg-strong);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .overview-runs__started {
+  min-width: 0;
+  overflow: hidden;
   color: var(--studio-fg-muted);
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
 }
 
 .overview-runs__fact {
@@ -112,8 +132,11 @@
   gap: var(--studio-spacing-1);
   width: fit-content;
   min-width: 0;
+  max-width: 100%;
   color: var(--severity-warn);
   font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .overview-runs__result-dot {
@@ -189,6 +212,10 @@
 }
 
 @container (max-width: 420px) {
+  .overview-runs__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .overview-runs__engine,
   .overview-runs__tokens {
     grid-column: 1 / -1;

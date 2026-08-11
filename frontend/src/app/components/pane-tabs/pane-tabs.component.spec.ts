@@ -69,4 +69,54 @@ describe('PaneTabsComponent (smoke)', () => {
     expect(evidenceBadge?.classList.contains('count-badge--pane-tab')).toBe(true);
     expect(evidenceBadge?.classList.contains('count-badge--active')).toBe(true);
   });
+
+  it('keeps the active tab inline and moves the remaining tabs into one overflow model', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PaneTabsComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PaneTabsComponent);
+    fixture.componentRef.setInput('tabs', [
+      { id: 'overview', label: 'Overview' },
+      { id: 'timeline', label: 'Timeline' },
+      { id: 'evidence', label: 'Evidence' },
+      { id: 'code-review', label: 'Code Review' },
+      { id: 'docs', label: 'Docs', badge: 4 },
+    ]);
+    fixture.componentRef.setInput('activeTabId', 'code-review');
+    fixture.componentRef.setInput('overflowAfter', 3);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual([
+      'overview',
+      'timeline',
+      'code-review',
+    ]);
+    expect(fixture.componentInstance.overflowTabs().map(tab => tab.id)).toEqual([
+      'evidence',
+      'docs',
+    ]);
+    expect(fixture.componentInstance.overflowMenuItems()).toEqual([
+      expect.objectContaining({ id: 'evidence', label: 'Evidence' }),
+      expect.objectContaining({ id: 'docs', label: 'Docs', trailingBadge: '4' }),
+    ]);
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="pane-tabs-overflow"]')).toHaveLength(1);
+
+    fixture.componentInstance.availableWidth.set(500);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual([
+      'overview',
+      'timeline',
+      'evidence',
+      'code-review',
+      'docs',
+    ]);
+    expect(fixture.componentInstance.overflowTabs()).toEqual([]);
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="pane-tabs-overflow"]')).toHaveLength(0);
+  });
 });

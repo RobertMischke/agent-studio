@@ -46,13 +46,17 @@
   align-items: flex-start;
   gap: var(--studio-section-gap);
   width: 100%;
+  min-width: 0;
   max-width: none;
+  overflow-x: clip;
   margin: 0;
 }
 
 .ov-section {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   gap: 2px;
 
   &__heading-row {
@@ -534,6 +538,8 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
+  max-width: 100%;
   margin-top: var(--studio-spacing-2);
 
   &:first-child {
@@ -551,6 +557,9 @@
   align-items: center;
   gap: var(--studio-spacing-2);
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   min-height: calc(var(--studio-row-min-h) + var(--studio-row-gap));
   padding: var(--studio-row-pad-block) var(--studio-spacing-2);
   border: 0;
@@ -1179,6 +1188,20 @@
   }
 }
 
+@container ov-pipeline (max-width: 300px) {
+  .ov-pl-phase {
+    flex-wrap: wrap;
+  }
+
+  .ov-pl-phase__summary {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+    margin-left: 0;
+  }
+}
+
 .ov-token-modal {
   display: grid;
   gap: 12px;
@@ -1308,6 +1331,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   margin-top: 2px;
   padding-top: 3px;
   border-top: 1px dashed var(--studio-border);
@@ -1329,8 +1356,9 @@
   }
 
   &__cost {
-    flex: 0 0 auto;
-    width: 11rem;
+    flex: 0 1 11rem;
+    min-width: 0;
+    max-width: 11rem;
     text-align: right;
   }
 }
