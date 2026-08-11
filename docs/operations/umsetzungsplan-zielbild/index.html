@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Umsetzungsplan Richtung Zielbild | Konzept-Workbench</title>
+<title>Umsetzungsplan Richtung Zielbild | Konzept-Dossier</title>
 <style>
   :root { color-scheme: light;
     --surface-1:#fcfcfb; --surface-2:#f2f1ee; --surface-3:#e9e8e3;
@@ -47,7 +47,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Umsetzung</p>
+  <p class="kicker">Konzept-Dossier · Umsetzung</p>
   <h1>Umsetzungsplan Richtung Zielbild</h1>
   <p class="lede">Detaillierter, kartenbasierter Plan vom heutigen Stand zum Zielbild — geordnet in vier Phasen, mit dem Container-Default-Ausführungsmodell und Roberts Leitplanken (Isolation/Worktree, Self-Push mit Git-+CLI-Tokens, gepflegte Basis-Images, Installer=Container-Default) fest verankert. Jede Phase nennt die konkreten Karten und ob sie als koordinierter Batch, Einzel-Task oder Direkt-Arbeit laufen.</p>
   <div class="meta">
@@ -130,7 +130,7 @@
   <ol>
     <li><b>Runner aufs v1-Protokoll</b> — agent-host emittiert <code>ResultEnvelope</code>, ruft <code>POST</code> /capabilities, schreibt Canonical-Logs. <b>Behebt Auto-Review + alle drei Drift-Blocker.</b> Das ist inhaltlich der Kern von <b>AGT-2370</b> (Runner→CAR, Zielbild-Konformität) — als koordinierte Änderung, direkt (betrifft die Pipeline selbst).</li>
     <li><b>Build-Gate</b> im Merge-into-develop scharf (Backend+Frontend grün, sonst kein Merge).</li>
-    <li><b>Reste als ein koordinierter Batch</b> (die „auf einmal"-Demo): <b>AGT-2302</b> (Host-Kapazität) + <b>AGT-2375</b> (Workbench-UI) + <b>Modell-Routing-Backend-Endpoints</b> — eine Branch, gemeinsam gebaut, ein Review, ein Integrate.</li>
+    <li><b>Reste als ein koordinierter Batch</b> (die „auf einmal"-Demo): <b>AGT-2302</b> (Host-Kapazität) + <b>AGT-2375</b> (Dossier-UI) + <b>Modell-Routing-Backend-Endpoints</b> - eine Branch, gemeinsam gebaut, ein Review, ein Integrate.</li>
     <li><b>Danach:</b> die 12 schon integrierten 5e-Karten regulär durchs (jetzt funktionierende) Auto-Review nach main; kein manuelles Salvage mehr.</li>
   </ol>
 </div>
@@ -152,7 +152,7 @@
   <ul>
     <li><b>Wer pflegt:</b> ein Agent (neue Rolle „Umgebungs-Pflege") <b>schreibt/aktualisiert das Dockerfile</b> (Toolchain verstehen = LLM-Arbeit); <code>docker build</code> selbst ist deterministisch (Pipeline-Step).</li>
     <li><b>Workflow:</b> Onboarding → Agent erzeugt initiales Dockerfile → committet → Image gebaut+gecacht → Coding <em>und</em> Gate spawnen ins selbe Image → bei Toolchain-Änderung (z. B. Build schlägt fehl) aktualisiert ein Agent das Dockerfile → Rebuild.</li>
-    <li><b>Konsequenz:</b> <b>hermetische, reproduzierbare Verifikation</b> (Coding = Gate-Umgebung); der Container-Def wird ein First-Class-Projekt-Artefakt neben Wiki/Workbenches.</li>
+    <li><b>Konsequenz:</b> <b>hermetische, reproduzierbare Verifikation</b> (Coding = Gate-Umgebung); der Container-Def wird ein First-Class-Projekt-Artefakt neben Wiki/Dossiers.</li>
   </ul>
 </div>
 

@@ -237,7 +237,7 @@
     </tr>
     <tr>
       <td><b>AGT-2355</b><br>Coding, Feature; semantic decision card</td>
-      <td>Deck-icon exploration delivered its decision Workbench.</td>
+      <td>Deck-icon exploration delivered its decision Dossier.</td>
       <td><code>statusGeneration=null</code>; transition-preflight scaffold for Completed.</td>
       <td>Confirms the semantic concept symptom and the metadata-classification gap.</td>
     </tr>
@@ -261,7 +261,7 @@
   <thead><tr><th>Boundary</th><th>Current contract</th><th>Finding</th></tr></thead>
   <tbody>
     <tr><td><b>Fresh-run prompt</b></td><td><code>prompts/runtime/runner-fresh-start.md</code> says not to rely on a hand-written <code>status.md</code>; the application regenerates it from logs.</td><td><span class="pill done">Intentional</span> Agent omission is expected.</td></tr>
-    <tr><td><b>Concept framing</b></td><td>Requires exactly one docs-only Workbench; no separate status-writing duty.</td><td><span class="pill done">Consistent</span> The dossier is the primary deliverable, not the Result summary.</td></tr>
+    <tr><td><b>Concept framing</b></td><td>Requires exactly one docs-only Dossier; no separate status-writing duty.</td><td><span class="pill done">Consistent</span> The dossier is the primary deliverable, not the Result summary.</td></tr>
     <tr><td><b>Local completion</b></td><td>Moves the card to review, then starts <code>SummaryGenerationService.GenerateAsync</code> in a fire-and-forget task.</td><td><span class="pill part">Race-tolerant</span> Transition can scaffold first; summary failure does not block review.</td></tr>
     <tr><td><b>Legacy remote artifacts</b></td><td><code>/api/runner/artifacts</code> honors <code>FinalizeResult</code>, awaits the summary, and returns <code>ResultDocumentGenerated</code>.</td><td><span class="pill done">Complete</span> Application ownership is implemented.</td></tr>
     <tr><td><b>V1 remote artifacts</b></td><td>The client uploads each artifact to <code>/api/v1/runs/{runId}/artifacts</code> and returns a synthetic acknowledgement. The source request's <code>FinalizeResult</code> is not represented.</td><td><span class="pill open">Contract gap</span> Finalization intent is dropped.</td></tr>
@@ -282,7 +282,7 @@
     <text x="34" y="34" class="s-label">Expected ownership</text>
     <rect x="34" y="50" width="182" height="66" class="s-node"/>
     <text x="50" y="76" class="s-label">Agent core run</text>
-    <text x="50" y="96" class="s-sub">Report or Workbench + Done</text>
+    <text x="50" y="96" class="s-sub">Report or Dossier + Done</text>
     <rect x="256" y="50" width="206" height="66" class="s-node"/>
     <text x="272" y="76" class="s-label">Application finalizer</text>
     <text x="272" y="96" class="s-sub">Generate status.md from logs</text>
@@ -321,7 +321,7 @@
   <thead><tr><th>Candidate</th><th>Verdict</th><th>Evidence</th></tr></thead>
   <tbody>
     <tr><td><b>Missing concept-prompt duty</b></td><td><span class="pill queued">Not root cause</span></td><td>The global prompt deliberately assigns status generation to the application. Adding only a concept instruction would create two writers and would still not repair V1 application finalization.</td></tr>
-    <tr><td><b>Different concept termination</b></td><td><span class="pill part">Visibility factor</span></td><td>Concept and report-only modes use a Workbench or report as the primary result and skip Coding gates. Their Result summary remains application-owned.</td></tr>
+    <tr><td><b>Different concept termination</b></td><td><span class="pill part">Visibility factor</span></td><td>Concept and report-only modes use a Dossier or report as the primary result and skip Coding gates. Their Result summary remains application-owned.</td></tr>
     <tr><td><b>No-code-change watchdog</b></td><td><span class="pill queued">Not root cause</span></td><td>The report-only acceptance path checks the primary artifact and terminal sentinel, not <code>status.md</code>. The transition backstop permits closure by creating the scaffold.</td></tr>
     <tr><td><b>Remote V1 finalization</b></td><td><span class="pill open">Primary cause</span></td><td>The V1 client ignores <code>FinalizeResult</code>; V1 ingestion and completion provide no summary replacement. AGT-2514 matches this path exactly.</td></tr>
     <tr><td><b>Local summary timing</b></td><td><span class="pill part">Secondary weakness</span></td><td>Local completion starts summary generation after the lane move and does not await it. A crash or persistent summary failure leaves the scaffold as the final Result.</td></tr>

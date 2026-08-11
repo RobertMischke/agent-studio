@@ -353,7 +353,7 @@ public static class TaskCrudEndpoints
         });
 
         // Concept promotion is an explicit sight-review action. It reads only
-        // validated implementation proposals from the published Workbench,
+        // validated implementation proposals from the published Dossier,
         // creates coding cards in preparation, and completes the source concept
         // card after recording the human gate.
         group.MapGet("/{jobId}/promote-concept", (string jobId, string? project, string? watchPath,
@@ -368,7 +368,7 @@ public static class TaskCrudEndpoints
 
             var plan = scanner.BuildPromoteConceptPlan(jobId, watchPath);
             return plan is null
-                ? Results.Conflict(new { error = "The concept Workbench is missing or did not pass concept review." })
+                ? Results.Conflict(new { error = "The concept Dossier is missing or did not pass concept review." })
                 : Results.Ok(plan);
         });
 
@@ -394,7 +394,7 @@ public static class TaskCrudEndpoints
 
             var plan = scanner.BuildPromoteConceptPlan(jobId, watchPath);
             if (plan is null)
-                return Results.Conflict(new { error = "The concept Workbench is missing or did not pass concept review." });
+                return Results.Conflict(new { error = "The concept Dossier is missing or did not pass concept review." });
 
             PromoteConceptTasksResponse result;
             try
@@ -433,7 +433,7 @@ public static class TaskCrudEndpoints
                     Verdict = result.Created.Count == 0 ? "no-implementation" : "implementation-cards-created",
                     VerdictSummary = result.Created.Count == 0
                         ? "Sight review completed without implementation cards."
-                        : $"Created {result.Created.Count} implementation card(s) from the Workbench.",
+                        : $"Created {result.Created.Count} implementation card(s) from the Dossier.",
                 });
                 pipelineLog.Complete(info.FolderPath, now);
                 SteerPendingMarker.Clear(info.FolderPath);

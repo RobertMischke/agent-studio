@@ -431,7 +431,7 @@ export class DetailHeaderComponent {
           ? 'Planning task: read-only. It investigates and proposes the next work; it is only done once it spawns follow-up cards or declares no follow-up intended.'
           : mode === 'research'
             ? 'Research task: read-only with web access. It gathers information and reports findings.'
-            : 'Concept task: docs-only. It delivers one Workbench and waits for human sight review before implementation cards are promoted.',
+            : 'Concept task: one docs-only Dossier awaiting human review before card promotion.',
     };
   });
 

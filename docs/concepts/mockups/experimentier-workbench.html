@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Experiment Workbench - interactive concept mockup</title>
+  <title>Experiment Dossier - interactive concept mockup</title>
   <style>
     :root {
       color-scheme: light;
@@ -959,7 +959,7 @@
             <button class="tree-row child" type="button"><span>▱</span><span class="label">Wiki</span><span></span></button>
             <div class="workbench-group" id="workbenchGroup">
               <button class="tree-row child group-row active" id="workbenchToggle" type="button" aria-expanded="true">
-                <span class="chevron">⌄</span><span class="label">Workbenches</span><span class="count">3</span>
+                <span class="chevron">⌄</span><span class="label">Dossiers</span><span class="count">3</span>
               </button>
               <div class="workbench-topics">
                 <button class="tree-row topic" type="button" aria-current="page" data-testid="workbench-topic-active">
@@ -993,7 +993,7 @@
         <section class="workbench-host" aria-labelledby="workbenchTitle">
           <header class="workbench-head">
             <div class="workbench-title">
-              <div class="eyebrow">Workbenches / active experiment</div>
+              <div class="eyebrow">Dossiers / active experiment</div>
               <h1 id="workbenchTitle">Project state at a glance</h1>
               <p>Compare Explorer signals before one becomes a production feature.</p>
             </div>
@@ -1119,8 +1119,8 @@
             </div>
           </div>
           <form class="composer" id="chatForm">
-            <textarea id="chatInput" aria-label="Message the project orchestrator" placeholder="Ask about this Workbench..." required></textarea>
-            <div class="composer-row"><small>Workbench path and revision are attached to this turn.</small><button class="send-button" type="submit">Send</button></div>
+            <textarea id="chatInput" aria-label="Message the project orchestrator" placeholder="Ask about this Dossier..." required></textarea>
+            <div class="composer-row"><small>Dossier path and revision are attached to this turn.</small><button class="send-button" type="submit">Send</button></div>
           </form>
         </aside>
       </div>
@@ -1136,7 +1136,7 @@
       </header>
       <div class="dialog-body">
         <div class="source-receipt">
-          <div class="receipt-cell"><span>Workbench</span><strong>project-state-at-a-glance</strong></div>
+          <div class="receipt-cell"><span>Dossier</span><strong>project-state-at-a-glance</strong></div>
           <div class="receipt-cell"><span>Revision</span><strong>develop@8f21c4a</strong></div>
           <div class="receipt-cell"><span>Selected option</span><strong id="previewOption">A · Micro dashboard dots</strong></div>
         </div>
@@ -1164,13 +1164,13 @@ Source: docs/workbenches/project-state-at-a-glance/ at develop@8f21c4a.</textare
   <div class="modal-backdrop" id="archiveModal" hidden>
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="archiveTitle" data-testid="archive-preview">
       <header class="dialog-header">
-        <div><h2 id="archiveTitle">Archive Workbench</h2><p>Close the experiment explicitly without creating an implementation card.</p></div>
+        <div><h2 id="archiveTitle">Archive Dossier</h2><p>Close the experiment explicitly without creating an implementation card.</p></div>
         <span class="preview-badge">Archive preview</span>
         <button class="icon-button" id="closeArchiveModal" type="button" aria-label="Close archive preview">×</button>
       </header>
       <div class="dialog-body">
         <div class="source-receipt">
-          <div class="receipt-cell"><span>Workbench</span><strong>project-state-at-a-glance</strong></div>
+          <div class="receipt-cell"><span>Dossier</span><strong>project-state-at-a-glance</strong></div>
           <div class="receipt-cell"><span>Revision</span><strong>develop@8f21c4a</strong></div>
           <div class="receipt-cell"><span>Outcome</span><strong>archive · no feature spawn</strong></div>
         </div>
@@ -1178,7 +1178,7 @@ Source: docs/workbenches/project-state-at-a-glance/ at develop@8f21c4a.</textare
           <label for="archiveReason">Why should no feature follow?</label>
           <textarea id="archiveReason" required placeholder="Record the evidence or decision that closes this experiment."></textarea>
         </div>
-        <div class="simulation-note"><strong>i</strong><div><strong>Explicit closure contract</strong><span>A production action records this non-empty reason, source revision, operator, and decision time. It creates no task and keeps the Workbench available as quiet history.</span></div></div>
+        <div class="simulation-note"><strong>i</strong><div><strong>Explicit closure contract</strong><span>A production action records this non-empty reason, source revision, operator, and decision time. It creates no task and keeps the Dossier available as quiet history.</span></div></div>
       </div>
       <footer class="dialog-footer">
         <button class="secondary-button" id="cancelArchiveModal" type="button">Keep current</button>
@@ -1302,7 +1302,7 @@ Source: docs/workbenches/project-state-at-a-glance/ at develop@8f21c4a.</textare
         this.setAttribute("aria-expanded", String(!group.classList.contains("collapsed")));
       });
       document.getElementById("historyButton").addEventListener("click", function () {
-        showToast("History is quiet", "A production view would list decided and archived Workbenches without acute styling.");
+        showToast("History is quiet", "A production view would list decided and archived Dossiers without acute styling.");
       });
 
       function openModal() {
@@ -1364,7 +1364,7 @@ Source: docs/workbenches/project-state-at-a-glance/ at develop@8f21c4a.</textare
           return;
         }
         closeArchiveModal();
-        showToast("Simulated archive decision", "No task was created. Production would keep this Workbench as quiet history with the recorded reason.");
+        showToast("Simulated archive decision", "No task was created. Production would keep this Dossier as quiet history with the recorded reason.");
       });
       document.getElementById("archiveReason").addEventListener("input", function () {
         this.removeAttribute("aria-invalid");

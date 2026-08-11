@@ -24,7 +24,7 @@ controls use the tooltip "Your personal shortlist."
 The component reads semantic Studio surfaces, borders, foregrounds, accent,
 hover, spacing, and elevation. Its production variants and both themes are
 shown in the
-[Visual StyleGuide page action Workbench](../../visual-styleguide-workbench-wiki/index.html).
+[Visual StyleGuide page action Dossier](../../visual-styleguide-workbench-wiki/index.html).
 The interaction contract and page-context decision are documented in
 [Wiki as a Cognitive Interface](../../../concepts/wiki-as-cognitive-interface.md).
 

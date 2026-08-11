@@ -12,7 +12,7 @@ public sealed record ConceptWorkbenchReview(
     IReadOnlyList<string> Findings)
 {
     public string Summary => IsComplete
-        ? $"Concept Workbench '{Descriptor?.Title ?? Topic}' is complete and evidence-ready."
+        ? $"Concept Dossier '{Descriptor?.Title ?? Topic}' is complete and evidence-ready."
         : string.Join(" ", Findings);
 }
 
@@ -40,7 +40,7 @@ public static class ConceptWorkbenchContract
     };
 
     /// <summary>
-    /// Creates a valid house-style Workbench skeleton. The concept agent owns the
+    /// Creates a valid house-style Dossier skeleton. The concept agent owns the
     /// substantive content; this helper gives the pipeline a deterministic
     /// materialization contract and makes the required two-file deliverable
     /// directly testable.
@@ -86,7 +86,7 @@ public static class ConceptWorkbenchContract
             .ToList();
         var findings = new List<string>();
         if (normalized.Count == 0)
-            findings.Add("The concept run produced no Workbench files.");
+            findings.Add("The concept run produced no Dossier files.");
 
         var outside = normalized.Where(path =>
             !path.StartsWith(DossierPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -106,7 +106,7 @@ public static class ConceptWorkbenchContract
             .Cast<string>()
             .ToList();
         if (topicRoots.Count != 1)
-            findings.Add($"Exactly one concept Workbench is required; found {topicRoots.Count} topic directories.");
+            findings.Add($"Exactly one concept Dossier is required; found {topicRoots.Count} topic directories.");
 
         if (findings.Count > 0)
             return new ConceptWorkbenchReview(false, null, null, null, findings);
@@ -139,7 +139,7 @@ public static class ConceptWorkbenchContract
         var root = Path.GetFullPath(checkoutRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!directory.StartsWith(root, PathComparison()))
         {
-            findings.Add("Workbench directory escapes the repository root.");
+            findings.Add("Dossier directory escapes the repository root.");
             return new ConceptWorkbenchReview(false, topic, rel, null, findings);
         }
 

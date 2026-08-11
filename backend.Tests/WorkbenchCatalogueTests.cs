@@ -183,7 +183,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
               "spawnedTaskKeys": ["AGT-2400"],
               "taskDraft": {
                 "title": "Implement the decision",
-                "goal": "Ship the confirmed Workbench direction.",
+                "goal": "Ship the confirmed Dossier direction.",
                 "acceptanceCriteria": ["The direction is implemented and verified."],
                 "evidenceLinks": [],
                 "relatedTaskKeys": [],

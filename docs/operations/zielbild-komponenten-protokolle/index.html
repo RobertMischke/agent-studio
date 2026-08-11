@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy | Konzept-Workbench</title>
+<title>Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy | Konzept-Dossier</title>
 <style>
   :root { color-scheme: light;
     --surface-1:#fcfcfb; --surface-2:#f2f1ee; --surface-3:#e9e8e3;
@@ -49,7 +49,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Architektur / Betrieb</p>
+  <p class="kicker">Konzept-Dossier · Architektur / Betrieb</p>
   <h1>Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy</h1>
   <p class="lede">Die Nacht vom 27.07. hat empirisch gezeigt, wo das verteilte Agent-Studio-System bricht: nicht im Code der Features, sondern an den <b>Verträgen zwischen den Komponenten</b> und am <b>Integrations- und Ausliefer-Modell</b>. Dieses Dokument beschreibt die Komponenten und ihre Protokolle, den Kern-Befund (Versions-Drift), und beantwortet die vier Steuerungsfragen — wie schneiden, bauen, deployen wir, und gehören Binaries/Architektur-Arbeit überhaupt in unabhängige Tasks.</p>
   <div class="meta">
@@ -81,7 +81,7 @@
 </table>
 <div class="box bad">
   <h4>Und die Integrations-Branch selbst ist kaputt</h4>
-  <p>Beim Versuch, die gecodete Arbeit manuell zu integrieren, zeigte sich: <b>develop baut prinzipiell nicht</b>. Ein früherer Teil-Salvage (<code>wip(runner): salvage before teardown</code>) legte Workbench-Dateien ab, die auf Typen zeigen (<code>WorkbenchPresentationSelection</code>, <code>WorkbenchAttachmentRequest</code>), die <b>nirgends definiert</b> sind. Das ist unabhängig von den heutigen Karten — die Integrations-Branch hat sich über Teil-Salvages in einen nicht-baubaren Zustand verheddert.</p>
+  <p>Beim Versuch, die gecodete Arbeit manuell zu integrieren, zeigte sich: <b>develop baut prinzipiell nicht</b>. Ein früherer Teil-Salvage (<code>wip(runner): salvage before teardown</code>) legte Dossier-Dateien ab, die auf Typen zeigen (<code>WorkbenchPresentationSelection</code>, <code>WorkbenchAttachmentRequest</code>), die <b>nirgends definiert</b> sind. Das ist unabhängig von den heutigen Karten - die Integrations-Branch hat sich über Teil-Salvages in einen nicht-baubaren Zustand verheddert.</p>
 </div>
 
 <h2 id="komponenten"><span class="no">2</span>Komponenten &amp; ihre Protokolle</h2>

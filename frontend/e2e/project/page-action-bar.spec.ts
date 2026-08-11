@@ -24,7 +24,7 @@ const pages: Record<string, string> = {
   [DOC_PATH]: '# Action bar contract\n\nEvery repository page exposes the same dependable actions in its page head.',
   [CONCEPT_PATH]: '# Pages as interfaces\n\nAIP-4 treats each page as a bidirectional interface between knowledge and delivery.',
   [WORKBENCH_PATH]: `<main>
-    <h1>Action Bar Workbench</h1>
+    <h1>Action Bar Dossier</h1>
     <p>Compare the shared actions in both themes.</p>
     <section data-decision-id="action-density" data-decision-kind="single">
       <h2>Choose the action density</h2>
@@ -138,7 +138,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
   await page.route('**/api/tasks/reference-status', route => json(route, {
     items: workbenchTaskCreated ? [{
       key: 'AGT-2400', exists: true, taskKey: `${PROJECT}::AGT-2400`,
-      title: 'Implement Action Bar Workbench', lane: '1-preparation',
+      title: 'Implement Action Bar Dossier', lane: '1-preparation',
       projectId: 'project-evidence', projectName: PROJECT, projectColor: null,
       merge: null, reviewGrade: null,
     }] : [],
@@ -156,7 +156,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
           watchPath: WATCH_PATH,
         }, ...(workbenchTaskCreated ? [{
           id: 'workbench-feature-1', key: 'AGT-2400', displayKey: 'AGT-2400',
-          taskKey: `${PROJECT}::AGT-2400`, title: 'Implement Action Bar Workbench',
+          taskKey: `${PROJECT}::AGT-2400`, title: 'Implement Action Bar Dossier',
           state: '1-preparation', projectName: PROJECT, watchPath: WATCH_PATH,
         }] : [])],
       }
@@ -166,7 +166,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
       const body = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
       captured.taskBodies.push(body);
       created = true;
-      if (String(body['title']).includes('Action Bar Workbench')) {
+      if (String(body['title']).includes('Action Bar Dossier')) {
         workbenchTaskCreated = true;
         return json(route, { id: 'workbench-feature-1' });
       }
@@ -185,7 +185,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
   await page.route(/\/api\/tasks\/workbench-feature-1(?:\?.*)?$/, route => json(route, {
     info: {
       id: 'workbench-feature-1', key: 'AGT-2400', displayKey: 'AGT-2400',
-      taskKey: `${PROJECT}::AGT-2400`, title: 'Implement Action Bar Workbench',
+      taskKey: `${PROJECT}::AGT-2400`, title: 'Implement Action Bar Dossier',
       state: '1-preparation', projectName: PROJECT, watchPath: WATCH_PATH,
     },
   }));
@@ -236,7 +236,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         type: 'folder',
         children: [{
           name: 'action-bar-workbench',
-          title: 'Action Bar Workbench',
+          title: 'Action Bar Dossier',
           relPath: WORKBENCH_PATH,
           type: 'html',
           children: [],
@@ -306,7 +306,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
       count: 1,
       items: [{
         id: WORKBENCH_ID,
-        title: 'Action Bar Workbench',
+        title: 'Action Bar Dossier',
         summary: 'Canonical variants and theme tokens.',
         status: 'active',
         phase: 'decision-ready',
@@ -410,7 +410,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
   await page.route(`**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}`, route => json(route, {
     workbench: {
       id: WORKBENCH_ID,
-      title: 'Action Bar Workbench',
+      title: 'Action Bar Dossier',
       summary: 'Canonical variants and theme tokens for page actions.',
       status: decisionStage === 'succeeded' ? 'decided' : decision ? 'decision-pending' : 'active',
       phase: 'decision-ready',
@@ -576,7 +576,7 @@ test('shared page action bar preserves placement, task source, chat context, and
       kind: 'workbench',
       projectName: project,
       workbenchId,
-      title: 'Action Bar Workbench',
+      title: 'Action Bar Dossier',
     };
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
       v: 1,
@@ -585,7 +585,7 @@ test('shared page action bar preserves placement, task source, chat context, and
     }));
   }, { project: PROJECT, workbenchId: WORKBENCH_ID });
   await page.reload();
-  const workbenchTab = page.getByRole('tab', { name: 'Action Bar Workbench' });
+  const workbenchTab = page.getByRole('tab', { name: 'Action Bar Dossier' });
   if (await workbenchTab.count()) await workbenchTab.click();
   await expect(page.getByTestId('workbench-viewer')).toBeVisible({ timeout: 30_000 });
   const decisionFrame = page.frameLocator('[data-testid="workbench-viewer-frame"]');
@@ -601,7 +601,7 @@ test('shared page action bar preserves placement, task source, chat context, and
   await page.getByTestId('workbench-decision-confirm').click();
   const createdTask = page.getByTestId('workbench-decision-created-tasks');
   await expect(createdTask).toContainText('AGT-2400');
-  await expect(createdTask).toContainText('Implement Action Bar Workbench');
+  await expect(createdTask).toContainText('Implement Action Bar Dossier');
   await expect(createdTask).toContainText('Preparation');
   await expect(createdTask.locator('a')).toHaveAttribute('href', '#task:AGT-2400');
   expect(captured.decisionBodies).toHaveLength(2);
@@ -624,7 +624,7 @@ test('shared page action bar preserves placement, task source, chat context, and
     spawnedTaskKeys: ['AGT-2400'],
   }));
   expect(captured.taskBodies[1]).toEqual(expect.objectContaining({
-    title: 'Implement Action Bar Workbench',
+    title: 'Implement Action Bar Dossier',
     watchPath: WATCH_PATH,
     targetState: '1-preparation',
     taskType: 'feature',

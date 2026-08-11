@@ -1228,7 +1228,7 @@ export interface ConceptSourceDocument {
   title: string;
 }
 
-/** Validated implementation-card proposals from a published concept Workbench. */
+/** Validated implementation-card proposals from a published concept Dossier. */
 export interface PromoteConceptResponse {
   source: ConceptSourceDocument;
   items: ConceptImplementationTask[];

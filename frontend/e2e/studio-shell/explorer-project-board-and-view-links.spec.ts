@@ -7,7 +7,7 @@ import { dismissDevErrorDialog, setTheme, type Theme } from '../helpers/theme';
 /**
  * ASS-658/ASS-597: a project node in the Workspaces Explorer exposes exactly
  * five project-scoped links: "Board" (the kanban), "Deck", "Wiki",
- * "Workbenches", and "Epics" (overview). The retired per-lane children (active /
+ * "Dossiers", and "Epics" (overview). The retired per-lane children (active /
  * human review / archive) stay gone, and Epics opens scoped to the
  * clicked project rather than the global rollup.
  *

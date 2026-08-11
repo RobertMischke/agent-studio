@@ -1,4 +1,4 @@
-# Visual Style Guide Workbench
+# Visual Style Guide Dossier
 
 This folder is the working area behind the
 [Visual Style Guide](../visual-style-guide.html). The upper page records the
@@ -6,7 +6,7 @@ current visual language as rendered specimens. This folder holds focused
 comparisons, vNext candidates, and the decision trail that turns a visual idea
 into a bounded implementation card.
 
-## Workbench map
+## Dossier map
 
 | Page | Question it answers | Current status |
 |---|---|---|
@@ -23,7 +23,7 @@ its acceptance criteria.
 
 ## Source hierarchy
 
-The Workbench is an observation and decision surface. It does not replace the
+The Dossier is an observation and decision surface. It does not replace the
 implementation sources of truth:
 
 1. Raw palette and shadow values live in
@@ -37,17 +37,17 @@ implementation sources of truth:
 5. Architecture diagrams follow the
    [Agent Host Protocol diagram recipe](../../app/prompts/diagramm-stil-agent-host-protocol.md).
 
-If a Workbench decision changes a token or component contract, update the
+If a Dossier decision changes a token or component contract, update the
 appropriate source above in the implementation slice. Do not make this folder
 a competing token registry.
 
 ## Tone of Voice twin
 
 **AGT-2237, the Tone of Voice Style Guide, is the textual twin of this visual
-Workbench.** The relation is registered in the Wiki companion metadata for this
+Dossier.** The relation is registered in the Wiki companion metadata for this
 family, so the Wiki can route from this page to the task. Use the pair together:
 
-- this Workbench owns visual hierarchy, density, color, containment, state and
+- this Dossier owns visual hierarchy, density, color, containment, state and
   motion;
 - AGT-2237 owns labels, voice, vocabulary, guidance, errors and action wording;
 - patterns that combine both, such as empty states, Welcome, error banners and
@@ -66,7 +66,7 @@ not approved product wording until it is checked against AGT-2237.
    honest aggregates, reduced motion and both themes.
 6. Record the decision in [vNext](vnext.md) before creating an implementation
    card.
-7. Put the selected option and Workbench link into the card's acceptance
+7. Put the selected option and Dossier link into the card's acceptance
    criteria.
 
 ## Decision states
@@ -77,12 +77,12 @@ not approved product wording until it is checked against AGT-2237.
 | `comparing` | Bounded variants exist and can be reviewed side by side. |
 | `decided` | One variant and its acceptance boundary are recorded. |
 | `sliced` | A delivery card references the decision and owns implementation. |
-| `shipped` | Product and Workbench inventory agree. |
+| `shipped` | Product and Dossier inventory agree. |
 | `parked` | Candidate is intentionally not proceeding; rationale remains. |
 
 ## Living knowledge log
 
-- **2026-07-23:** Created the visual Style Guide as a Wiki Workbench with a
+- **2026-07-23:** Created the visual Style Guide as a Wiki Dossier with a
   rendered current-state inventory, focused comparison pages, a vNext register,
   explicit AGT-2237 pairing, and permanent light/dark evidence.
 

@@ -108,13 +108,13 @@ test('populated state - brief, references, and council note populate the panel',
     '---\n' +
     'status: iteration-active\n' +
     'lastUpdated: 2026-04-15\n' +
-    'summary: Workbench-first dark UI; deny marketing-page polish.\n' +
+    'summary: Dossier-first dark UI; deny marketing-page polish.\n' +
     '---\n\n' +
     '## Tone\n\nDense, technical, evidence-first.\n');
   plant('references/workbench-shell.md',
     '---\n' +
     'kind: accepted\n' +
-    'title: Workbench shell\n' +
+    'title: Dossier shell\n' +
     'summary: Final layout that landed in slice 2.\n' +
     '---\n');
   plant('references/marketing-hero.md',
@@ -147,7 +147,7 @@ test('populated state - brief, references, and council note populate the panel',
   await expect(page.getByTestId('uxui-card-council-value')).toContainText('1');
 
   // Reference grid populated.
-  await expect(page.getByTestId('uxui-ref-accepted')).toContainText('Workbench shell');
+  await expect(page.getByTestId('uxui-ref-accepted')).toContainText('Dossier shell');
   await expect(page.getByTestId('uxui-ref-rejected')).toContainText('Marketing-style hero');
   await expect(page.getByTestId('uxui-ref-external')).toContainText('VS Code density reference');
 

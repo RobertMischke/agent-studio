@@ -39,6 +39,13 @@ async function captureWorkbenchFrame(
   throw lastError;
 }
 
+async function closeOrchestratorIfOpen(page: Page): Promise<void> {
+  const close = page.locator(
+    'app-orchestrator-side-sheet [data-testid="sidesheet-close"]',
+  );
+  if (await close.isVisible()) await close.click({ force: true });
+}
+
 async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false): Promise<void> {
   await page.route('**/healthz', route => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route(/\/api\//, async route => {
@@ -87,7 +94,7 @@ async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false):
       });
     if (mockWikiPulse && url.pathname.endsWith('/wiki/pulse'))
       return json({
-        projectName: 'Workbench navigation',
+        projectName: 'Dossier navigation',
         baseDir: '/repo/docs',
         exists: true,
         generatedAtUtc: '2026-07-29T12:00:00Z',
@@ -144,7 +151,7 @@ async function proxyBackend(page: Page, baseUrl: string, mockWikiPulse = false):
   });
 }
 
-test('article patterns drive the Workbench Explorer and isolated viewer in both themes', async ({ page, devBackend }, testInfo) => {
+test('article patterns drive the Dossier Explorer and isolated viewer in both themes', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(180_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
@@ -171,13 +178,13 @@ test('article patterns drive the Workbench Explorer and isolated viewer in both 
     if (workspaces.length === 0) {
       const workspaceCreate = await fetch(`${devBackend.baseUrl}/api/workspaces`, {
         method: 'POST', headers: { 'content-type': 'application/json', 'X-Client-Id': client.id },
-        body: JSON.stringify({ displayName: 'Workbench Evidence' }),
+        body: JSON.stringify({ displayName: 'Dossier Evidence' }),
       });
       const workspace = await workspaceCreate.json() as { id: string };
       createdWorkspaceId = workspace.id;
       workspaces.push(workspace);
     }
-    const displayName = `Workbench Evidence ${Date.now().toString(36)}`;
+    const displayName = `Dossier Evidence ${Date.now().toString(36)}`;
     const response = await fetch(`${devBackend.baseUrl}/api/projects`, {
       method: 'POST', headers: { 'content-type': 'application/json', 'X-Client-Id': client.id },
       body: JSON.stringify({ sourceType: 'local-folder', workspaceId: workspaces[0].id,
@@ -204,6 +211,7 @@ test('article patterns drive the Workbench Explorer and isolated viewer in both 
   await proxyBackend(page, devBackend.baseUrl);
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.addStyleTag({ content: '[data-testid="offline-banner"] { display: none !important; }' });
+  await closeOrchestratorIfOpen(page);
   const projectRow = page.getByTestId(`studio-explorer-project-${project.name}`);
   await expect(projectRow).toBeVisible();
   if (await projectRow.getAttribute('aria-expanded') === 'false') await projectRow.click();
@@ -225,9 +233,17 @@ test('article patterns drive the Workbench Explorer and isolated viewer in both 
   await expect(page.getByTestId(
     `workbench-overview-pattern-${project.name}-workbench-konzept`)).toHaveAttribute('data-pattern', 'concept');
   await expect(page.getByTestId(`studio-explorer-workbench-history-${project.name}`)).toBeVisible();
+  const dossierList = page.getByTestId(`studio-explorer-workbench-list-${project.name}`);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
+    await workbenchesRow.scrollIntoViewIfNeeded();
+    await page.getByTestId('studio-sidebar').screenshot({
+      path: evidencePath(testInfo, `dossier-nav-${theme}--real.png`),
+    });
+    await dossierList.screenshot({
+      path: evidencePath(testInfo, `dossier-list-${theme}--real.png`),
+    });
     await page.screenshot({
       path: evidencePath(testInfo, `workbench-explorer--${theme}--real.png`),
       fullPage: true,
@@ -237,6 +253,7 @@ test('article patterns drive the Workbench Explorer and isolated viewer in both 
   await page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-konzept`).click();
   const frame = page.getByTestId('workbench-viewer-frame');
   await expect(frame).toBeVisible();
+  await expect(frame).toHaveAttribute('title', /^Dossier artifact:/);
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
   await expect(page.getByTestId('workbench-viewer-provenance')
     .filter({ hasText: 'docs/operations/workbench-konzept/index.html' }))
@@ -255,6 +272,13 @@ test('article patterns drive the Workbench Explorer and isolated viewer in both 
   expect(conceptGeometry.bodyFont).toContain('Georgia');
   expect(conceptGeometry.mainWidth).toBeLessThanOrEqual(780);
   expect(conceptGeometry.breakoutWidth).toBeGreaterThan(conceptGeometry.mainWidth);
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await setTheme(page, theme);
+    await page.getByTestId('studio-editor').screenshot({
+      path: evidencePath(testInfo, `dossier-viewer-${theme}--real.png`),
+    });
+  }
   await page.getByTestId('workbench-viewer-maximize').click();
   await expect(page.getByTestId('workbench-viewer-frame-shell'))
     .toHaveClass(/workbench-viewer__frame-shell--maximized/);
@@ -355,7 +379,7 @@ test('article patterns drive the Workbench Explorer and isolated viewer in both 
   }
 });
 
-test('Nordstern Workbench links, maximize, and Wiki jump stay in the Studio', async ({ page, devBackend }, testInfo) => {
+test('Nordstern Dossier links, maximize, and Wiki jump stay in the Studio', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(120_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
@@ -372,7 +396,7 @@ test('Nordstern Workbench links, maximize, and Wiki jump stay in the Studio', as
       break;
     }
   }
-  expect(projectName, 'The real backend must expose the Nordstern Workbench.').not.toBeNull();
+  expect(projectName, 'The real backend must expose the Nordstern Dossier.').not.toBeNull();
 
   await proxyBackend(page, devBackend.baseUrl, true);
   await page.goto('/');

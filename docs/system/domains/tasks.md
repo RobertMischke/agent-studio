@@ -37,7 +37,7 @@ or commit attribution.
   gets one compact `No dossier linked` notice with the two correction actions.
   Existing cards are not bulk-migrated. MKT-21 is the reference example and
   remains a manual backfill rather than an application migration.
-- The AGT-2533 handoff replaces this write/read adapter with the Workbench-key
+- The AGT-2533 handoff replaces this write/read adapter with the Dossier-key
   reference. It must reuse the same detail row and operator actions, not add a
   second Dossier block. The Markdown detector may remain read-only compatibility
   for already-linked cards during the transition, but it must never produce a
@@ -304,8 +304,8 @@ content is fetched through the existing task-file endpoint and
 rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
 of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
-or controlled network integration belong to the Workbench viewer described in
-[Experimentier-Workbench](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
+or controlled network integration belong to the Dossier viewer described in
+[Experimentier-Dossier](../../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
 Task-authored links are resolved separately from the top-level Files manifest.
 Every task Markdown surface binds relative `results/*` and allowed `logs/*`

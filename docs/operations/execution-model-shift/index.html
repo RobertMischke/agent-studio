@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ausführungsmodell: Container-Default | Konzept-Workbench</title>
+<title>Ausführungsmodell: Container-Default | Konzept-Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -72,7 +72,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Ausführungsmodell</p>
+  <p class="kicker">Konzept-Dossier · Ausführungsmodell</p>
   <h1>Container-Default für die lokale Ausführung</h1>
   <p class="lede">Richtungswechsel: die Coding-Agent-CLIs laufen künftig standardmäßig in einer lokalen Container-Instanz. Host-direkt und Mischbetrieb bleiben möglich — als bewusstes Opt-out in der Host-Verwaltung, nicht als Default. Dieses Dokument ist der Steuerungs-Ausgangspunkt: Ist-Stand, Zielbild, Änderungen je Projekt, getakteter Plan.</p>
   <div class="meta">
@@ -200,7 +200,7 @@
   </ul>
 </div>
 
-<p><b>Adoptionsstand — der eigentliche Punkt.</b> Das Studio nutzt von CAR heute nur <code>Model</code>, <code>Events</code> und <code>Adapters</code> (Typ-Aliase in <code>OrchestratorApi.csproj</code>), <b>nicht</b> die Ausführungs-Engine <code>CliRunEngine</code>. Gespawnt wird an zwei eigenen Stellen im Studio (lokal / Remote-Daemon); <code>ICliProcessSpawner</code> ist ein Hook in einem Codepfad, den das Produkt gar nicht durchläuft — im Studio existiert keine einzige Implementierung davon. <b>Folge: Ein Container-Spawner allein in CAR liefert dem Produkt heute nichts.</b> Er nützt den Library-Konsumenten (z. B. dem Chat-Workbench), nicht dem Ausführungspfad des Studios.</p>
+<p><b>Adoptionsstand - der eigentliche Punkt.</b> Das Studio nutzt von CAR heute nur <code>Model</code>, <code>Events</code> und <code>Adapters</code> (Typ-Aliase in <code>OrchestratorApi.csproj</code>), <b>nicht</b> die Ausführungs-Engine <code>CliRunEngine</code>. Gespawnt wird an zwei eigenen Stellen im Studio (lokal / Remote-Daemon); <code>ICliProcessSpawner</code> ist ein Hook in einem Codepfad, den das Produkt gar nicht durchläuft - im Studio existiert keine einzige Implementierung davon. <b>Folge: Ein Container-Spawner allein in CAR liefert dem Produkt heute nichts.</b> Er nützt den Library-Konsumenten (z. B. dem Chat-Dossier), nicht dem Ausführungspfad des Studios.</p>
 
 <table>
   <tr><th>Frage</th><th>Antwort</th><th>Beleg / Status</th></tr>
@@ -235,7 +235,7 @@
 <p>Reihenfolge nach Abhängigkeit — jede Phase wird zu Karten, dieses Dokument ist der Ankerpunkt fürs Nachhalten.</p>
 <table>
   <tr><th>Phase</th><th>Inhalt</th><th>Vorbedingung</th></tr>
-  <tr><td><b>0 · Entscheidung sichtbar</b></td><td>Dieses Workbench-Doc; Docs/Marketing-Umschrift-Karten schneiden; Entscheidungswechsel in decision-history.</td><td>—</td></tr>
+  <tr><td><b>0 · Entscheidung sichtbar</b></td><td>Dieses Dossier-Doc; Docs/Marketing-Umschrift-Karten schneiden; Entscheidungswechsel in decision-history.</td><td>-</td></tr>
   <tr><td><b>1 · Mount-Konzept</b></td><td>Repo-/Credential-Durchreichung lösen (Konzept + Prototyp). Der kritische Pfad — hier entscheidet sich Machbarkeit.</td><td>Phase 0</td></tr>
   <tr><td><b>1b · CAR adoption</b></td><td>The execution layer converges on CodingAgentRunner. T1 is complete and T2 is implemented; T3 parity and T4 cleanup remain. This continues in parallel with the mount concept and remains a prerequisite for phase 2.</td><td>T3 and T4</td></tr>
   <tr><td><b>2 · Placement + Spawn</b></td><td>ExecutionPlacement-Konzept, Container-Spawn <em>einmal</em> in der CAR-Ausführungsschicht, Agent-Image. Host-direkt bleibt Default bis grün.</td><td>Phase 1 + 1b</td></tr>
@@ -245,7 +245,7 @@
 </table>
 
 <h2 id="abgleich"><span class="no">7</span>Abgleich mit „Verteilte Ausführung"</h2>
-<p>Der Container-Default ist kein separates Thema neben der Härtung der verteilten Ausführung, sondern greift in deren Kontrollmodell ein. Die Workbench <b>Verteilte Ausführung</b> (<code>docs/operations/haertung-verteilte-ausfuehrung/</code>, Stand 24.07.) beschreibt Schreibmodell, Fencing, hermetische Verifikation und Betriebsbedingung. Fünf Stellen dort berühren diese Entscheidung unmittelbar — an vieren beantwortet der Container eine dort bereits <em>offen</em> ausgewiesene Kontrolle, an einer erzeugt er eine neue Frage.</p>
+<p>Der Container-Default ist kein separates Thema neben der Härtung der verteilten Ausführung, sondern greift in deren Kontrollmodell ein. Das Dossier <b>Verteilte Ausführung</b> (<code>docs/operations/haertung-verteilte-ausfuehrung/</code>, Stand 24.07.) beschreibt Schreibmodell, Fencing, hermetische Verifikation und Betriebsbedingung. Fünf Stellen dort berühren diese Entscheidung unmittelbar - an vieren beantwortet der Container eine dort bereits <em>offen</em> ausgewiesene Kontrolle, an einer erzeugt er eine neue Frage.</p>
 
 <table>
   <tr><th>Stelle dort</th><th>Was dort gilt</th><th>Was der Container-Default daran ändert</th></tr>
@@ -297,7 +297,7 @@
 </div>
 
 <h2 id="offen"><span class="no">8</span>Offene Entscheidungen (Robert)</h2>
-<p>Sechs Weichen. E1–E4 sind die klassischen vier — die Begleitseite <b>Container-Isolation: Grundlagen und die vier Grundsatzfragen</b> (<code>container-grundlagen/</code> in dieser Workbench) erklärt sie visuell von Grund auf; hier stehen sie in Entscheidungsform mit Konsequenz und Empfehlung. E5 und E6 sind neu und kommen aus dem Code-Befund (§5) bzw. dem Abgleich (§7) — sie waren bisher nicht sichtbar, blockieren die Taktung aber genauso.</p>
+<p>Sechs Weichen. E1–E4 sind die klassischen vier - die Begleitseite <b>Container-Isolation: Grundlagen und die vier Grundsatzfragen</b> (<code>container-grundlagen/</code> in diesem Dossier) erklärt sie visuell von Grund auf; hier stehen sie in Entscheidungsform mit Konsequenz und Empfehlung. E5 und E6 sind neu und kommen aus dem Code-Befund (§5) bzw. dem Abgleich (§7) - sie waren bisher nicht sichtbar, blockieren die Taktung aber genauso.</p>
 
 <h3>E1 · Mount-Strategie — was sieht der Agent vom Dateisystem?</h3>
 <p>Der Agent arbeitet nicht im Repo-Root, sondern in einem <b>verlinkten Worktree</b> aus einem geteilten Klon (lokal <code>ass-worktrees</code>, remote <code>&lt;projektcache&gt;/worktrees/&lt;taskKey&gt;</code> aus <code>SharedRepoPath</code>). Das prägt die Frage stärker als die naive Alternative „ganzer Ordner vs. ein Repo": Ein verlinkter Worktree enthält <em>keine</em> eigene Objektdatenbank — seine <code>.git</code>-Datei zeigt auf den geteilten Klon. Wird nur der Worktree gemountet, funktioniert im Container kein einziges Git-Kommando.</p>

@@ -49,7 +49,7 @@ export interface JobsHubHandlers {
 export class JobsHubClient {
   /** True while the hub socket is up. The poll cadence does not depend on this — it is exposed for diagnostics / tests. */
   readonly connected = signal(false);
-  /** Latest Workbench change on the same shared hub connection. */
+  /** Latest Dossier change on the same shared hub connection. */
   readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
 
   private connection: HubConnection | null = null;

@@ -37,7 +37,7 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerComponent', () => {
-  it('ends loading and shows the API reason when a listed Workbench cannot be read', async () => {
+  it('ends loading and shows the API reason when a listed Dossier cannot be read', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],
       providers: [
@@ -55,7 +55,7 @@ describe('WorkbenchViewerComponent', () => {
     TestBed.inject(HttpTestingController)
       .expectOne('/api/projects/Demo/workbenches/missing')
       .flush(
-        { error: 'Workbench entrypoint is missing.' },
+        { error: 'Dossier entrypoint is missing.' },
         { status: 404, statusText: 'Not Found' },
       );
     fixture.detectChanges();
@@ -64,7 +64,7 @@ describe('WorkbenchViewerComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-loading"]'))
       .toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-error"]')?.textContent)
-      .toContain('Workbench entrypoint is missing.');
+      .toContain('Dossier entrypoint is missing.');
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -123,6 +123,7 @@ describe('WorkbenchViewerComponent', () => {
       '[data-testid="workbench-viewer-frame"]',
     ) as HTMLIFrameElement;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('title')).toBe('Dossier artifact: Boundary probe');
     expect(frame.srcdoc).toBe(srcdoc);
     expect(srcdoc).toContain(ISOLATED_HTML_LINK_MESSAGE);
     expect(srcdoc).toContain(WORKBENCH_DECISION_CHANGE_MESSAGE);

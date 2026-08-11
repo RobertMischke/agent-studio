@@ -88,5 +88,5 @@ function decisionError(error: HttpErrorResponse): string {
   const payload = error.error as Partial<WorkbenchDecisionResult> | null;
   if (payload?.error) return payload.error;
   if (error.status === 0) return 'The decision service is unavailable.';
-  return 'The Workbench decision could not be persisted.';
+  return 'The Dossier decision could not be persisted.';
 }
