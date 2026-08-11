@@ -74,6 +74,10 @@ public sealed class ConceptPipelineTests : IDisposable
         Assert.Contains("width: min(70ch", html);
         Assert.Contains("[data-document-pattern=\"ui\"] .variant-grid", html);
         Assert.Contains("[data-document-pattern=\"concept\"] .evidence-class", html);
+        Assert.Contains("data-article-example=\"evidence-figure\"", html);
+        Assert.Contains("docs/operations/&lt;slug&gt;/assets/", html);
+        Assert.Contains("figure-as-of", html);
+        Assert.Contains("AOW-W1", html);
     }
 
     [Fact]

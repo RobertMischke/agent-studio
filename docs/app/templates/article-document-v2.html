@@ -80,6 +80,7 @@
     figcaption,
     .box,
     .callout,
+    .evidence-figure,
     .variant-grid,
     .evidence-list {
       font-family: var(--article-sans);
@@ -166,6 +167,64 @@
       background: var(--article-paper);
     }
     figcaption { margin-top: 10px; color: var(--article-muted); font-size: 0.8rem; line-height: 1.5; }
+    .evidence-figure { margin-top: 38px; margin-bottom: 38px; }
+    .evidence-captures {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+      gap: 12px;
+    }
+    .evidence-capture {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-paper);
+    }
+    .evidence-capture > img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .capture-theme,
+    .figure-annotation {
+      position: absolute;
+      z-index: 1;
+      border: 1px solid var(--article-line);
+      border-radius: 999px;
+      background: var(--article-surface);
+      color: var(--article-muted);
+      font-size: 0.68rem;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+      line-height: 1.35;
+    }
+    .capture-theme {
+      top: 10px;
+      left: 10px;
+      padding: 3px 8px;
+      text-transform: uppercase;
+    }
+    .figure-annotation {
+      right: 12px;
+      bottom: 12px;
+      max-width: min(28ch, calc(100% - 24px));
+      padding: 5px 10px;
+      border-color: color-mix(in srgb, var(--article-link) 45%, var(--article-line));
+      background: var(--article-link-soft);
+      color: var(--article-link);
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .figure-claim { display: block; color: var(--article-ink); font-size: 0.84rem; }
+    .figure-as-of {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 14px;
+      margin-top: 6px;
+      color: var(--article-faint);
+      font-size: 0.72rem;
+    }
     .breakout,
     .media-breakout {
       width: min(1120px, calc(100vw - 48px));
@@ -235,6 +294,7 @@
       [data-document-pattern="ui"] .mockup { width: calc(100vw - 20px); }
       [data-document-pattern="ui"] .variant-grid { grid-template-columns: 1fr; }
       .evidence { grid-template-columns: 1fr; }
+      .evidence-captures { grid-template-columns: 1fr; }
       table { display: block; overflow-x: auto; }
     }
 
@@ -271,10 +331,34 @@
   <section data-document-section="evidence">
     <h2><span class="number">03</span> Evidence</h2>
     <p>Classify evidence so readers can distinguish observations, inferences, and proposals.</p>
+    <p>Claims about visible surfaces require screenshot evidence in a full-bleed figure. Its caption states the exact claim the image proves, and its as-of lines give the capture date and provenance for every image. Use no more than one accented annotation per finding. Include light and dark captures when theme, contrast, status, or visual hierarchy is part of the claim.</p>
+    <p class="dim">Published operations Dossiers keep their images under <code>docs/operations/&lt;slug&gt;/assets/</code> with descriptive filenames. A new Dossier still at <code>docs/&lt;slug&gt;/</code> uses its adjacent <code>assets/</code> directory. The parallel AOW-W1 Dossier extension is the first worked reference for this figure block; reference its integrated result without copying its assets or local CSS.</p>
     <div class="evidence-list">
       <a class="evidence" href="#evidence-source"><span class="evidence-class" data-evidence-class="observed">Observed</span><span><b id="evidence-source">Source or measurement</b><small>Link the artifact and summarize what it establishes.</small></span></a>
       <a class="evidence" href="#evidence-inference"><span class="evidence-class" data-evidence-class="inferred">Inferred</span><span><b id="evidence-inference">Interpretation</b><small>State the inference separately from the observed fact.</small></span></a>
     </div>
+    <template data-article-example="evidence-figure">
+      <figure class="evidence-figure media-breakout">
+        <div class="evidence-captures">
+          <div class="evidence-capture">
+            <span class="capture-theme">Light</span>
+            <img src="assets/surface-name-finding-name-light--pinned.png" alt="Describe the visible surface and finding without repeating the caption.">
+            <span class="figure-annotation">One finding</span>
+          </div>
+          <div class="evidence-capture">
+            <span class="capture-theme">Dark</span>
+            <img src="assets/surface-name-finding-name-dark--pinned.png" alt="Describe the same visible surface and finding in the dark theme.">
+          </div>
+        </div>
+        <figcaption>
+          <span class="figure-claim"><b>Evidence.</b> State the visible fact this figure proves.</span>
+          <span class="figure-as-of">
+            <span><b>Light:</b> captured <time datetime="2026-08-11">11 August 2026</time> from the named provenance.</span>
+            <span><b>Dark:</b> captured <time datetime="2026-08-11">11 August 2026</time> from the named provenance.</span>
+          </span>
+        </figcaption>
+      </figure>
+    </template>
   </section>
 
   <section data-document-section="open-decisions">

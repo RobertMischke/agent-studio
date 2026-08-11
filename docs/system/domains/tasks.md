@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-09
+Version: 2026-08-11
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -23,12 +23,23 @@ or commit attribution.
   task `results/` is optional. `workbench.json` names the source card in
   `sourceTaskKeys` and remains `status=decision-pending` until sight review.
   The published document, not `status.md`, is the promotion source.
-- The concept prompt names the current house-style fallback explicitly:
-  `docs/operations/haertung-verteilte-ausfuehrung/index.html` in agent-taskboard.
-  Dossiers reuse its style block until the AGT-2536 article template is
-  integrated. The contract requires calm noun headings, factual copy, bounded
-  reading width, theme variables, inline SVG diagrams, and no dossier-specific
-  colour or font system.
+- The concept prompt names the AGT-2536 article template at
+  `docs/app/templates/article-document-v2.html` as the current house style and
+  retains `docs/operations/haertung-verteilte-ausfuehrung/index.html` only as a
+  compatibility fallback. The contract requires calm noun headings, factual
+  copy, bounded reading width, theme variables, inline SVG diagrams, and no
+  dossier-specific colour or font system.
+- Claims about visible product surfaces require full-bleed screenshot evidence.
+  Each figure states the fact it proves, dates and labels the provenance of
+  every capture, uses no more than one accented annotation per finding, and
+  includes both themes when the finding depends on theme, contrast, status, or
+  visual hierarchy. Published operations-Dossier assets live at
+  `docs/operations/<slug>/assets/`; a new `docs/<slug>/` concept delivery uses
+  its adjacent `assets/` directory. The prompt points authors to
+  `docs/operations/setup/presentation-capture.md`,
+  `frontend/e2e/visual-evidence/presentation-capture.spec.ts`,
+  `scripts/stable-frontend-boot-probe.mjs`, and
+  `frontend/e2e/fixtures/dev-backend.ts` for the capture and readiness patterns.
 - Until AGT-2533 supplies `references.workbenches`, `TaskInfo.ConceptDossier`
   detects a repository-relative `docs/.../index.html` path from
   `results/deliverables.md` first and `status.md` second. Task detail renders
