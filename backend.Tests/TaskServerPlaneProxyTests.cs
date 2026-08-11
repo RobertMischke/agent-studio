@@ -8,6 +8,28 @@ namespace AgentStudio.Tests;
 
 public sealed class TaskServerPlaneProxyTests
 {
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("task-server", false)]
+    [InlineData("ftp://task-server.test", false)]
+    [InlineData("http://task-server.test", true)]
+    [InlineData("https://task-server.test/control", true)]
+    public void Only_an_explicit_absolute_HTTP_or_HTTPS_URL_selects_remote_mode(
+        string? configured,
+        bool expectedRemote)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskServer:BaseUrl"] = configured,
+            })
+            .Build();
+
+        Assert.Equal(expectedRemote, TaskServerPlaneProxy.IsConfigured(configuration));
+        Assert.Equal(!expectedRemote, EndpointMapping.MapsLocalV1(configuration));
+    }
+
     [Fact]
     public void Standalone_base_url_disables_every_local_v1_owner()
     {

@@ -30,6 +30,182 @@ public interface IOrchestratorChatPersistence
 }
 
 /// <summary>
+/// In-process context store for the monolith profile. The local host derives
+/// project ownership from its registry-backed watch paths and uses the
+/// existing context-keyed transcript files directly, so no self-HTTP URL is
+/// required. Configuring a standalone Task Server selects the remote store
+/// instead.
+/// </summary>
+public sealed class LocalOrchestratorChatPersistence(
+    OrchestratorChat chat,
+    TaskScannerService scanner)
+    : IOrchestratorChatPersistence
+{
+    private const int ContextSummaryMaxLength = 180;
+
+    public bool IsCentralTaskServerStore => false;
+
+    public Task<IReadOnlyList<OrchestratorChatTurn>> ReadAsync(
+        string projectName,
+        string watchPath,
+        OrchestratorContextKey? context,
+        int limit,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!chat.EnsureContext(watchPath, context))
+            throw new InvalidOperationException(
+                $"The local context store could not materialize a context for project '{projectName}'.");
+        return Task.FromResult<IReadOnlyList<OrchestratorChatTurn>>(
+            chat.Read(watchPath, context)
+                .TakeLast(Math.Clamp(limit, 1, 1000))
+                .ToArray());
+    }
+
+    public Task AppendAsync(
+        string projectName,
+        string watchPath,
+        OrchestratorContextKey? context,
+        OrchestratorChatTurn turn,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!chat.Append(watchPath, turn, context))
+            throw new InvalidOperationException(
+                $"The local context store could not append a turn for project '{projectName}'.");
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<OrchestratorContextDto>> ListContextsAsync(
+        bool includeHidden,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var tasks = scanner.ScanAllJobsWithArchive();
+        var result = new List<OrchestratorContextDto>();
+        foreach (var project in scanner.GetWatchPaths())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!OrchestratorContextKey.TryParse($"project:{project.Name}", out var projectContext))
+                continue;
+
+            var projectTurns = chat.Read(project.Path, projectContext);
+            result.Add(BuildContext(
+                projectContext,
+                project.Name,
+                task: null,
+                projectTurns,
+                OrchestratorChat.ResolveContextPath(project.Path, projectContext),
+                project.Path));
+
+            var contextDirectory = Path.Combine(
+                project.Path,
+                ".orchestrator",
+                "context-chats");
+            if (!Directory.Exists(contextDirectory)) continue;
+
+            foreach (var path in Directory.EnumerateFiles(
+                         contextDirectory,
+                         "*.jsonl",
+                         SearchOption.TopDirectoryOnly))
+            {
+                ct.ThrowIfCancellationRequested();
+                var encoded = Path.GetFileNameWithoutExtension(path);
+                if (!OrchestratorContextKey.TryDecode(encoded, out var taskContext)
+                    || taskContext.Kind != OrchestratorContextKey.TaskKind
+                    || !string.Equals(
+                        taskContext.ProjectId,
+                        project.Name,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var task = tasks.FirstOrDefault(candidate =>
+                    string.Equals(candidate.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(candidate.Key, taskContext.TaskKey, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(candidate.TaskKey, taskContext.TaskKey, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(candidate.Id, taskContext.TaskKey, StringComparison.OrdinalIgnoreCase)));
+                var hidden = OrchestratorContextVisibilityPolicy.IsHidden(
+                    OrchestratorContextKinds.Task,
+                    task?.State);
+                if (hidden && !includeHidden) continue;
+
+                result.Add(BuildContext(
+                    taskContext,
+                    project.Name,
+                    task,
+                    chat.Read(project.Path, taskContext),
+                    path,
+                    project.Path));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<OrchestratorContextDto>>(result);
+    }
+
+    private static OrchestratorContextDto BuildContext(
+        OrchestratorContextKey context,
+        string projectName,
+        AgentStudio.Shared.TaskInfo? task,
+        IReadOnlyList<OrchestratorChatTurn> turns,
+        string transcriptPath,
+        string projectPath)
+    {
+        var fallbackTimestamp = File.Exists(transcriptPath)
+            ? File.GetCreationTimeUtc(transcriptPath)
+            : Directory.Exists(projectPath)
+                ? Directory.GetCreationTimeUtc(projectPath)
+                : DateTime.UnixEpoch;
+        var createdAt = turns.Count == 0 ? fallbackTimestamp : turns.Min(turn => turn.Ts);
+        var updatedAt = turns.Count == 0 ? fallbackTimestamp : turns.Max(turn => turn.Ts);
+        var hiddenAt = OrchestratorContextVisibilityPolicy.IsHidden(context.Kind, task?.State)
+            ? updatedAt
+            : (DateTime?)null;
+        var fallbackSummary = task?.Title
+                              ?? context.TaskKey
+                              ?? $"Project chat for {projectName}";
+        var summary = BuildSummary(
+            turns.LastOrDefault(turn => turn.Role == OrchestratorChatRoles.User)?.Text,
+            fallbackSummary);
+        var latestModel = turns.LastOrDefault(turn =>
+            !string.IsNullOrWhiteSpace(turn.Model)
+            || !string.IsNullOrWhiteSpace(turn.TokenUsage?.Model));
+
+        return new OrchestratorContextDto(
+            context.Value,
+            context.Kind,
+            projectName,
+            projectName,
+            task?.Id,
+            context.TaskKey,
+            summary,
+            createdAt,
+            updatedAt,
+            hiddenAt,
+            turns.Count,
+            latestModel?.Model ?? latestModel?.TokenUsage?.Model,
+            turns.Sum(turn => (long)(turn.TokenUsage?.InputTokens ?? 0)),
+            turns.Sum(turn => (long)(turn.TokenUsage?.OutputTokens ?? 0)),
+            turns.Sum(turn => (long)(turn.TokenUsage?.CacheReadTokens ?? 0)),
+            turns.Sum(turn => (long)(turn.TokenUsage?.CacheCreationTokens ?? 0)));
+    }
+
+    private static string BuildSummary(string? body, string fallback)
+    {
+        var compact = string.Join(
+            ' ',
+            (body ?? string.Empty).Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries));
+        if (string.IsNullOrWhiteSpace(compact)) return fallback;
+        return compact.Length <= ContextSummaryMaxLength
+            ? compact
+            : compact[..(ContextSummaryMaxLength - 3)].TrimEnd() + "...";
+    }
+}
+
+/// <summary>
 /// Remote-ready persistence boundary for Orchestrator Chat. All transcript,
 /// summary, lifecycle, and receipt state is owned by the configured Task
 /// Server; the Studio host only resolves execution evidence and invokes the
@@ -243,7 +419,6 @@ public sealed class TaskServerOrchestratorChatPersistence(
 
 public sealed class OrchestratorChatLegacyMigrationHostedService(
     IOrchestratorChatPersistence persistence,
-    IConfiguration configuration,
     TaskScannerService scanner,
     OrchestratorChat legacy,
     ILogger<OrchestratorChatLegacyMigrationHostedService> logger)
@@ -251,8 +426,7 @@ public sealed class OrchestratorChatLegacyMigrationHostedService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!TaskServerPlaneProxy.IsConfigured(configuration)
-            || persistence is not TaskServerOrchestratorChatPersistence central)
+        if (persistence is not TaskServerOrchestratorChatPersistence central)
             return;
         foreach (var project in scanner.GetWatchPaths())
         {

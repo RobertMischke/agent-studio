@@ -32,11 +32,14 @@ public static class TaskServerPlaneProxy
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        if (!TryGetBaseUri(configuration, out var baseUri))
+        {
+            services.AddHttpClient(ClientName);
+            return;
+        }
+
         services.AddHttpClient(ClientName, client =>
         {
-            if (!TryGetBaseUri(configuration, out var baseUri))
-                throw new InvalidOperationException(
-                    "TaskServer:BaseUrl must be an absolute HTTP or HTTPS URL.");
             client.BaseAddress = baseUri;
             client.Timeout = TimeSpan.FromSeconds(100);
             client.DefaultRequestHeaders.Add(
