@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentRunner;
+using AgentStudio.TestSupport;
 using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
@@ -20,7 +21,7 @@ namespace AgentRunner.Tests;
 /// A pin that has to be edited is a behaviour change that needs a decision, not
 /// a test fix.</para>
 ///
-/// <para>The complete recorded matrix pins P1-P5, P9 and P22. P5 is the sharp
+/// <para>The complete recorded matrix pins P1-P5, P9, P22, and P23. P5 is the sharp
 /// protocol-form case: the same scenario classifies differently in plaintext
 /// and stream-json, and that intentional difference is recorded instead of
 /// being mistaken for engine drift. Process and host scenarios P6-P8 and
@@ -151,6 +152,22 @@ public sealed class ParityFixtureTests
                 ExecutionOutcomeKind.QuotaExceeded,
                 ExecutionRecoveryAction.WaitForCapabilityRecovery
             },
+            {
+                "p23-unknown-frame.claude.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
+            {
+                "p23-unknown-frame.codex.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
         };
 
     [Theory]
@@ -269,11 +286,14 @@ public sealed class ParityFixtureTests
         var problems = new List<string>();
         foreach (var file in CliFixture.All())
         {
+            var relativePath = Path.GetRelativePath(
+                CliCaptureFixtureLocator.Root(RepoRoot()),
+                file);
             var name = Path.GetFileName(file);
             CliFixture fixture;
             try
             {
-                fixture = CliFixture.Load(name);
+                fixture = CliFixture.Load(relativePath);
             }
             catch (Exception ex)
             {
@@ -297,6 +317,21 @@ public sealed class ParityFixtureTests
                 problems.Add($"{name}: metadata has no title");
             if (string.IsNullOrWhiteSpace(fixture.StdOut))
                 problems.Add($"{name}: replays nothing on stdout");
+            if (fixture.SchemaVersion != 1)
+                problems.Add($"{name}: expected capture schemaVersion 1");
+            if (!fixture.Scrubbed)
+                problems.Add($"{name}: fixture is not marked scrubbed");
+            if (!DateOnly.TryParse(fixture.CapturedAt, out _))
+                problems.Add($"{name}: capturedAt is not an ISO date");
+            if (fixture.CaptureSource is not ("real-cli-stream" or "synthetic-drift-probe"))
+                problems.Add($"{name}: unsupported captureSource '{fixture.CaptureSource}'");
+
+            var relative = relativePath
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (relative.Length != 3
+                || !string.Equals(relative[0], fixture.Cli, StringComparison.Ordinal)
+                || !string.Equals(relative[1], fixture.CliVersion, StringComparison.Ordinal))
+                problems.Add($"{name}: expected path <cli>/<cliVersion>/<fixture>");
 
             if (fixture.Form != "stream-json") continue;
             foreach (var line in fixture.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
@@ -334,8 +369,14 @@ public sealed class ParityFixtureTests
             SignalFromExitCode(fixture.ExitCode),
             SessionState: sessionState,
             SessionId: provider.SessionId,
-            DurableOutputState: DurableOutputState.LocalOnly,
-            DurableOutputReference: WorktreePath);
+            DurableOutputState: fixture.DurableOutputState switch
+            {
+                "missing" => DurableOutputState.Missing,
+                "published" => DurableOutputState.Published,
+                "acknowledged" => DurableOutputState.Acknowledged,
+                _ => DurableOutputState.LocalOnly,
+            },
+            DurableOutputReference: fixture.DurableOutputState == "missing" ? null : WorktreePath);
     }
 
     /// <summary>Mirrors <c>RemoteTaskRunner.SignalFromExitCode</c>.</summary>
@@ -350,10 +391,16 @@ public sealed class ParityFixtureTests
     /// </summary>
     private sealed record CliFixture(
         string Name,
+        int SchemaVersion,
         string Scenario,
         string Title,
         string Cli,
+        string CliVersion,
         string Form,
+        string DurableOutputState,
+        string CaptureSource,
+        string CapturedAt,
+        bool Scrubbed,
         int ExitCode,
         string StdOut,
         string StdErr)
@@ -363,13 +410,12 @@ public sealed class ParityFixtureTests
 
         public static IEnumerable<string> All()
             => Directory
-                .EnumerateFiles(FixtureDirectory(), "*.fixture", SearchOption.TopDirectoryOnly)
+                .EnumerateFiles(FixtureDirectory(), "*.fixture", SearchOption.AllDirectories)
                 .OrderBy(file => file, StringComparer.Ordinal);
 
         public static CliFixture Load(string name)
         {
-            var path = Path.Combine(FixtureDirectory(), name);
-            if (!File.Exists(path)) throw new FileNotFoundException($"Fixture '{name}' not found.", path);
+            var path = CliCaptureFixtureLocator.Resolve(RepoRoot(), name);
 
             JsonElement meta = default;
             var seenMeta = false;
@@ -397,10 +443,16 @@ public sealed class ParityFixtureTests
 
             return new CliFixture(
                 name,
+                meta.TryGetProperty("schemaVersion", out var schema) ? schema.GetInt32() : 0,
                 Text(meta, "scenario"),
                 Text(meta, "title"),
                 Text(meta, "cli"),
+                Text(meta, "cliVersion"),
                 Text(meta, "form"),
+                Text(meta, "durableOutputState"),
+                Text(meta, "captureSource"),
+                Text(meta, "capturedAt"),
+                meta.TryGetProperty("scrubbed", out var scrubbed) && scrubbed.ValueKind == JsonValueKind.True,
                 meta.TryGetProperty("exitCode", out var exit) ? exit.GetInt32() : 0,
                 string.Join('\n', stdout),
                 string.Join('\n', stderr));

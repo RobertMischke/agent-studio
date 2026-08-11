@@ -1,4 +1,4 @@
-#! {"scenario":"P22","title":"rate_limit_event, camelCase fields (Claude's shipped form)","cli":"claude","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P22","title":"rate_limit_event, camelCase fields (Claude's shipped form)","cli":"claude","cliVersion":"2.1.202","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # CAR-E regression pair. The rate-limit frame is informational: it must feed the
 # quota panel and must NOT change the terminal verdict of the run.
 {"type":"system","subtype":"init","session_id":"9f3b7e5d-14c8-4a02-bb6f-2c81d4907e13","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Edit"],"slash_commands":[]}

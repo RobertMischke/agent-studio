@@ -53,6 +53,13 @@ state.
   task marker, seed, restart adoption, CAR environment bridge, and bounded
   retention contract. Continue planning resolves this stable home before Codex
   rollout viability is checked.
+- `runner/CliProtocolNoveltyTracker.cs`,
+  `contracts/TaskServer.Contracts/ProtocolNoveltyContracts.cs`, and
+  `contracts/TaskServer.Contracts/ExecutionOutcomeContracts.cs`: version-aware
+  provider-frame observation, scrubbed unknown-frame telemetry, provider
+  terminal extraction, and the pure typed-outcome policy. The
+  [CLI frame compatibility matrix](../cli/frame-compatibility-matrix.md) is the
+  current vocabulary and replay-corpus system of record.
 - `backend/Features/Runner/PromptEnrichmentService.cs`,
   `backend/Features/Tasks/LeaseEndpoints.cs`, and
   `runner/RemoteRunPrompt.cs`: shared pre-spawn prompt materialization. Local

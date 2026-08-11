@@ -1,4 +1,4 @@
-#! {"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"claude","form":"plaintext","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"claude","cliVersion":"2.1.202","form":"plaintext","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # Today's remote alt path: claude -p with the prompt on stdin and NO
 # --output-format, so the runner classifies raw prose. Same scenario, same
 # terminal verdict, different bytes - this is the pair P1 parity compares.

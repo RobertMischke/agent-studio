@@ -1,4 +1,4 @@
-#! {"scenario":"P4","title":"[[TASK_NEEDS_INPUT:...]] with a question","cli":"codex","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P4","title":"[[TASK_NEEDS_INPUT:...]] with a question","cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 {"type":"thread.started","thread_id":"019dee78-1f55-7c40-b8a3-6be0d9142c88"}
 {"type":"turn.started"}
 {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I need a decision before I can write the migration.\n\n[[TASK_NEEDS_INPUT:choose-primary-column]]"}}

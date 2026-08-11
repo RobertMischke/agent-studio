@@ -303,9 +303,16 @@ Legacy `Current session` and `Current week` formats remain supported. The real
 ### "Add a regression test for a new behaviour"
 
 1. Capture a real raw frame (or several) from `logs/cli-output.log` — the unparsed JSON line(s).
-2. Save under `backend.Tests/Fixtures/cli/claude/<name>.jsonl` (one frame per line).
-3. Add a `ClaudeCliServiceTests` that loads the fixture, runs `TransformReadLine` over each frame, and asserts the emitted marker(s).
+2. Scrub and save the canonical provider capture under
+   `testdata/cli-fixtures/streams/claude/<exact-version>/<name>.claude.fixture`.
+3. Add Agent Host replay assertions for derived events and outcomes. Add a
+   backend renderer snapshot only when marker rendering changes.
+4. Update the shared
+   [frame compatibility matrix](../frame-compatibility-matrix.md).
 
 ## Fixtures
 
-`backend.Tests/Fixtures/cli/claude/` holds raw stream-json frames captured from real runs. Format: NDJSON (one JSON object per line). New frame shapes that we observe in the wild should land here in the same PR that handles them, with a regression test that loads the fixture.
+`testdata/cli-fixtures/streams/claude/<exact-version>/` holds the canonical
+stream-json captures and replay metadata. `backend.Tests/Fixtures/cli/claude/`
+is limited to renderer-specific snapshots that cannot consume the shared
+fixture directly.

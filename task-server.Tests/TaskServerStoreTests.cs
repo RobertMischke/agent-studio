@@ -641,6 +641,45 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Protocol_novelty_event_remains_visible_in_run_and_task_history()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+        var novelty = new ProtocolNoveltyTelemetry(
+            "codex",
+            "0.7.0",
+            "item.completed/future_widget",
+            1,
+            1,
+            new string('a', 64));
+
+        var ingested = await store.IngestEventAsync(
+            claim.Run!.RunId,
+            new EventIngestRequest(
+                "evt-protocol-novelty",
+                LifecycleEventKinds.ProtocolUnknownFrame,
+                JsonSerializer.Serialize(new { stream = "system", text = novelty.ToMarker() }),
+                "protocol-novelty-1",
+                claim.Lease!.Fence),
+            "runner-a",
+            default);
+
+        Assert.Equal(LifecycleEventKinds.ProtocolUnknownFrame, ingested.Kind);
+        var runJournal = await store.ListEventsAsync(claim.Run.RunId, 0, default);
+        Assert.Equal(ingested, Assert.Single(runJournal));
+        var taskHistory = await store.GetTaskHistoryAsync(project.ProjectId, task.TaskKey, 0, default);
+        Assert.NotNull(taskHistory);
+        Assert.Equal(ingested, Assert.Single(taskHistory!.Events));
+    }
+
+    [Fact]
     public async Task Drain_stops_new_admission_allows_completion_and_prepares_safe_shutdown()
     {
         using var temp = new TempDirectory();

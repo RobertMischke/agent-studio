@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using AgentStudio.TestSupport;
 using CodingAgentRunner.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,8 +44,9 @@ public sealed class BackendCarProjectPipelineAcceptanceTests : IDisposable
                 "the legacy fixture executable currently requires a POSIX shell");
         WriteReadyCard();
 
-        var fixturePath = Path.Combine(
-            RepoRoot(), "testdata", "cli-fixtures", "streams", "p1-happy-done.claude.fixture");
+        var fixturePath = CliCaptureFixtureLocator.Resolve(
+            RepoRoot(),
+            "p1-happy-done.claude.fixture");
         var spawner = new FixtureSpawner(fixturePath);
         var harness = BuildHarness(spawner, fixturePath, executionEngine);
         var liveOutput = new ConcurrentQueue<CliOutputLine>();

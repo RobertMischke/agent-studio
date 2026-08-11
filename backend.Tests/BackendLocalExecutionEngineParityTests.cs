@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentStudio.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using AgentStudio.CliHosting;
@@ -140,7 +141,7 @@ public sealed class BackendLocalExecutionEngineParityTests : IDisposable
         Directory.CreateDirectory(jobFolder);
         await File.WriteAllTextAsync(rulesPath, "Finish with one terminal sentinel.\n");
 
-        var fixturePath = Path.Combine(FixtureDirectory(), fixtureName);
+        var fixturePath = CliCaptureFixtureLocator.Resolve(RepoRoot(), fixtureName);
         Assert.True(File.Exists(fixturePath), $"fixture not found: {fixturePath}");
         var wrapperPath = Path.Combine(runRoot, "fixture-codex");
         await WriteFixtureWrapperAsync(
@@ -458,9 +459,6 @@ public sealed class BackendLocalExecutionEngineParityTests : IDisposable
 
     private static string FakeCliPath()
         => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");
-
-    private static string FixtureDirectory()
-        => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "streams");
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "")
     {

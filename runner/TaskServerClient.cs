@@ -1074,7 +1074,36 @@ public sealed class TaskServerClient : IDisposable
 
     public async Task<LogIngestResponse?> IngestLogsAsync(LogIngestRequest req, CancellationToken ct)
     {
-        if (!_useV1) return await PostJsonAsync<LogIngestRequest, LogIngestResponse>("/api/runner/logs", req, ct);
+        if (!_useV1)
+        {
+            var response = await PostJsonAsync<LogIngestRequest, LogIngestResponse>(
+                "/api/runner/logs",
+                req,
+                ct);
+            foreach (var line in req.Lines)
+            {
+                if (!Contract.ProtocolNoveltyTelemetry.TryParseMarker(line.Text, out var novelty))
+                    continue;
+                var eventId = $"protocol-novelty:{req.AttemptId ?? req.LeaseId ?? req.TaskKey}:" +
+                              $"{novelty.Cli}:{novelty.FrameType}:{novelty.Occurrence}:{novelty.PayloadSha256}";
+                await PostJsonWithoutResponseAsync(
+                    "/api/runner/events",
+                    new RunnerEventIngestRequest(
+                        req.TaskKey,
+                        "diagnostic",
+                        line.Timestamp,
+                        novelty.ToDiagnosticMessage(),
+                        req.RunnerId,
+                        req.LeaseId,
+                        req.FencingToken,
+                        eventId,
+                        novelty.Cli,
+                        Severity: "warning",
+                        Code: "cli-frame-unknown"),
+                    ct);
+            }
+            return response;
+        }
         var authority = V1Authority(req.TaskKey);
         var appended = 0;
         foreach (var line in req.Lines)
@@ -1096,10 +1125,12 @@ public sealed class TaskServerClient : IDisposable
         return new LogIngestResponse(req.TaskKey, appended);
     }
 
-    private static string ClassifyV1Event(CliOutputLine line)
+    internal static string ClassifyV1Event(CliOutputLine line)
     {
         if (string.Equals(line.Stream, "system", StringComparison.OrdinalIgnoreCase))
         {
+            if (Contract.ProtocolNoveltyTelemetry.TryParseMarker(line.Text, out _))
+                return Contract.LifecycleEventKinds.ProtocolUnknownFrame;
             if (line.Text.Contains("runner transport disconnected", StringComparison.Ordinal))
                 return Contract.LifecycleEventKinds.RunnerDisconnected;
             if (line.Text.Contains("runner transport reconnected", StringComparison.Ordinal))
@@ -1415,6 +1446,18 @@ public sealed class TaskServerClient : IDisposable
 
     private async Task<TResp?> PostJsonAsync<TReq, TResp>(string url, TReq body, CancellationToken ct)
         => await SendJsonAsync<TReq, TResp>(HttpMethod.Post, url, body, ct);
+
+    private async Task PostJsonWithoutResponseAsync<TReq>(string url, TReq body, CancellationToken ct)
+    {
+        using var response = await _http.PostAsJsonAsync(url, body, Json, ct);
+        if (response.IsSuccessStatusCode) return;
+
+        var text = await response.Content.ReadAsStringAsync(ct);
+        throw new TaskServerException(
+            (int)response.StatusCode,
+            $"POST {url} -> {(int)response.StatusCode}: {Trim(text)}",
+            TryReadApiErrorCode(text));
+    }
 
     private async Task<TResp?> SendJsonAsync<TReq, TResp>(HttpMethod method, string url, TReq body, CancellationToken ct)
     {

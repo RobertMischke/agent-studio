@@ -428,9 +428,16 @@ To extend it for a new frame or `item.type`:
 ### "Add a regression test for a new frame shape"
 
 1. Capture the raw JSON from `~/.runtime/cli-output/codex-*.jsonl`.
-2. Save under `backend.Tests/Fixtures/cli/codex/<name>.jsonl`.
-3. Add a `CodexCliServiceTests` that asserts whatever invariant holds.
+2. Scrub and save the canonical provider capture under
+   `testdata/cli-fixtures/streams/codex/<exact-version>/<name>.codex.fixture`.
+3. Add Agent Host replay assertions for derived events and outcomes. Add a
+   `CodexCliServiceTests` renderer snapshot only when marker rendering changes.
+4. Update the shared
+   [frame compatibility matrix](../frame-compatibility-matrix.md).
 
 ## Fixtures
 
-`backend.Tests/Fixtures/cli/codex/` holds raw `--json` frames. Keep one fixture per concern (one for session_meta, one for tool calls, etc.) so adding a new behaviour doesn't pollute existing assertions.
+`testdata/cli-fixtures/streams/codex/<exact-version>/` holds the canonical
+`--json` captures and replay metadata. Keep one fixture per concern.
+`backend.Tests/Fixtures/cli/codex/` is limited to renderer-specific snapshots
+that cannot consume the shared fixture directly.

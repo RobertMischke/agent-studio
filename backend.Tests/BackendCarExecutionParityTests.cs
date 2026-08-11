@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using AgentStudio.TestSupport;
 using CodingAgentRunner.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,11 +27,9 @@ public sealed class BackendCarExecutionParityTests : IDisposable
     public static TheoryData<string> AllStreamFixtures()
     {
         var data = new TheoryData<string>();
-        foreach (var path in Directory
-                     .EnumerateFiles(FixtureDirectory(), "*.fixture", SearchOption.TopDirectoryOnly)
-                     .OrderBy(path => path, StringComparer.Ordinal))
+        foreach (var path in CliCaptureFixtureLocator.AllRelativePaths(RepoRoot()))
         {
-            data.Add(Path.GetFileName(path));
+            data.Add(path);
         }
         return data;
     }
@@ -651,7 +650,7 @@ public sealed class BackendCarExecutionParityTests : IDisposable
     {
         public static Fixture Load(string name)
         {
-            var path = System.IO.Path.Combine(FixtureDirectory(), name);
+            var path = CliCaptureFixtureLocator.Resolve(RepoRoot(), name);
             Assert.True(File.Exists(path), $"fixture not found: {path}");
 
             JsonElement metadata = default;
@@ -692,16 +691,17 @@ public sealed class BackendCarExecutionParityTests : IDisposable
 
         private static (string Status, string Outcome) ExpectedTerminal(string name)
         {
-            if (name.StartsWith("p2-", StringComparison.Ordinal))
+            var fixtureName = System.IO.Path.GetFileName(name);
+            if (fixtureName.StartsWith("p2-", StringComparison.Ordinal))
                 return (RunStatuses.Completed, TerminalRunOutcomeKinds.NoOp);
-            if (name.StartsWith("p3-", StringComparison.Ordinal))
+            if (fixtureName.StartsWith("p3-", StringComparison.Ordinal))
                 return (RunStatuses.Completed, TerminalRunOutcomeKinds.Blocked);
-            if (name.StartsWith("p4-", StringComparison.Ordinal))
+            if (fixtureName.StartsWith("p4-", StringComparison.Ordinal))
                 return (RunStatuses.Completed, TerminalRunOutcomeKinds.NeedsInput);
-            if (name.StartsWith("p5-", StringComparison.Ordinal))
+            if (fixtureName.StartsWith("p5-", StringComparison.Ordinal))
                 return (RunStatuses.Completed, TerminalRunOutcomeKinds.Success);
-            if (name.StartsWith("p9-", StringComparison.Ordinal)
-                || string.Equals(name, "p22-rate-limit.codex.fixture", StringComparison.Ordinal))
+            if (fixtureName.StartsWith("p9-", StringComparison.Ordinal)
+                || string.Equals(fixtureName, "p22-rate-limit.codex.fixture", StringComparison.Ordinal))
                 return (RunStatuses.Failed, TerminalRunOutcomeKinds.Failed);
             return (RunStatuses.Completed, TerminalRunOutcomeKinds.Success);
         }
@@ -768,9 +768,6 @@ public sealed class BackendCarExecutionParityTests : IDisposable
 
     private static string FakeCliPath()
         => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");
-
-    private static string FixtureDirectory()
-        => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "streams");
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "")
     {
