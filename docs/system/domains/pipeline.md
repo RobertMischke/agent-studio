@@ -99,6 +99,13 @@ pipeline view.
   gate, rollback, conflict evidence, and push hand-off. Recovery replays the
   delivery in a disposable detached worktree with `rerere` disabled and proceeds
   only after conflict-free application, exact SHA mapping, and verified cleanup.
+  When the configured target resolves to `main` and the repository also has a
+  `develop` line, immediate integration never merges the delivery ref into
+  `main`. It first requires `main` to be an ancestor of synchronized `develop`,
+  merges and gates the delivery on `develop`, runs the release gate on that exact
+  develop merge commit, and fast-forwards `main` to the same commit. Existing
+  divergence blocks before the delivery merge. A main-only repository retains
+  the single-target release path.
   Human acceptance remains a retry path for a failed
   immediate or legacy delivery: `TaskTransitionService` keeps the card in Human
   Review with phase `integrating`, stamps the internal `integrationpending`
@@ -140,7 +147,11 @@ pipeline view.
   `Failed` step flagged `environmental`. Default-on; opt out per project via the
   step's `PipelineSteps` override. The origin push primitive is
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
-  reported, never overwritten).
+  reported, never overwritten). A queued `main` publication in a dual-line
+  repository pushes the approved SHA to `develop` first and does not push
+  `main` when that prerequisite fails. The intermediate success is not recorded
+  as a terminal push step, so restart recovery repeats the ordered pair if the
+  process stops between the two pushes.
   An `AlreadyMerged` replay is not gate evidence. When the pre-develop build
   gate applies, recovery requires a durable
   `post-steps/pre-develop-build-gate-N.log` receipt whose expected and tested
@@ -471,8 +482,10 @@ pipeline view.
   evidence into a failure, so callers cannot accidentally accept an incomplete
   release check. It also forces exact-subject execution even if the caller
   supplied a weaker request. The existing deferred integration merge is an
-  enforced caller when its configured target resolves to `main`: it runs the
-  full suite once on the exact source SHA, records
+  enforced caller when its configured target resolves to `main`: in a dual-line
+  repository its source is exclusively the exact `develop` merge commit, never
+  a raw delivery fence. It verifies that the candidate descends from `main`, runs
+  the full suite once on that exact source SHA, records
   `post-steps/pre-main-test-gate-*.log`, rechecks both branch tips after the
   suite, and only then fast-forwards `main`. A red or incomplete result leaves
   `main` unchanged. The future manifest-based release workflow must use the

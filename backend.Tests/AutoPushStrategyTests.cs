@@ -136,6 +136,40 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(localHead, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
+    [Fact]
+    public async Task AlwaysImmediate_WithDevelopLine_DoesNotAdvanceMainWithRawCommit()
+    {
+        var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
+        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repoRoot, "checkout", "-q", "main");
+        WriteJobWithoutCommit(TaskStates.Progress, "lineage-task");
+        var sessionLogs = Path.Combine(_watchPath, TaskStates.Progress, "lineage-task", "logs");
+        Directory.CreateDirectory(sessionLogs);
+        File.WriteAllText(Path.Combine(sessionLogs, "session-events.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new SessionEvent
+            {
+                Ts = DateTime.UtcNow.AddSeconds(-1), Kind = "start", Cli = "codex"
+            }) + Environment.NewLine);
+        File.WriteAllText(Path.Combine(_repoRoot, "lineage.txt"), "must integrate through develop\n");
+        var queue = new CompletedPushQueue();
+        var deps = BuildDeps(queue);
+
+        var outcome = await deps.Transitions.MoveAsync(
+            "lineage-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        var rawCommit = RunGitCapture(_repoRoot, "rev-parse", "HEAD");
+        Assert.NotEqual(remoteBefore, rawCommit);
+
+        var worker = new CompletedPushWorker(queue, deps.Transitions, NullLogger<CompletedPushWorker>.Instance);
+        await worker.ProcessAsync(queued!, CancellationToken.None);
+
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
+    }
+
     private void InstallSlowPushHook(int seconds)
     {
         var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");

@@ -2775,6 +2775,10 @@ public class GitService
             _logger.LogInformation("Auto-push did not find origin/{Branch} before pushing {Sha}: {Error}", targetBranch, sha, remoteErr.Trim());
         }
 
+        var lineageFailure = ValidateDirectMainAdvance(root, sha, targetBranch, ct);
+        if (lineageFailure is not null)
+            return Task.FromResult(lineageFailure);
+
         var (pushOut, pushErr, pushCode) = RunGitArgs(
             root, ct, "push", "origin", $"{sha}:refs/heads/{targetBranch}");
         if (pushCode == 0)
@@ -2789,6 +2793,75 @@ public class GitService
                 ? "remote-rejected"
                 : "failed";
         return Task.FromResult(new GitPushResult(false, sha, status, err));
+    }
+
+    private GitPushResult? ValidateDirectMainAdvance(
+        string repoRoot,
+        string sha,
+        string targetBranch,
+        CancellationToken ct)
+    {
+        if (!string.Equals(targetBranch, "main", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var (_, localDevelopError, localDevelopCode) = RunGitArgs(
+            repoRoot,
+            "rev-parse",
+            "--verify",
+            "refs/heads/develop");
+        if (localDevelopCode is not 0 and not 1 and not 128)
+        {
+            return new GitPushResult(
+                false,
+                sha,
+                "lineage-check-failed",
+                $"Could not inspect the local develop line: {localDevelopError.Trim()}");
+        }
+
+        var (remoteDevelop, remoteDevelopError, remoteDevelopCode) = RunGitArgs(
+            repoRoot,
+            ct,
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "origin",
+            "refs/heads/develop");
+        if (ct.IsCancellationRequested)
+            return new GitPushResult(false, sha, "cancelled", "Push cancelled.");
+        if (remoteDevelopCode is not 0 and not 2)
+        {
+            return new GitPushResult(
+                false,
+                sha,
+                "lineage-check-failed",
+                $"Could not inspect origin/develop before advancing main: {remoteDevelopError.Trim()}");
+        }
+
+        var localDevelopAvailable = localDevelopCode == 0;
+        var publishedDevelopTip = remoteDevelopCode == 0
+            ? remoteDevelop.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+            : null;
+        var (candidateTip, candidateError, candidateCode) = RunGitArgs(
+            repoRoot,
+            "rev-parse",
+            $"{sha}^{{commit}}");
+        if (candidateCode != 0)
+        {
+            return new GitPushResult(
+                false,
+                sha,
+                "lineage-check-failed",
+                $"Could not resolve the candidate before advancing main: {candidateError.Trim()}");
+        }
+
+        var decision = ImmediateIntegrationLineagePolicy.DecideDirectMainAdvance(
+            targetBranch,
+            developAvailable: localDevelopAvailable || publishedDevelopTip is not null,
+            candidateIsPublishedDevelopTip: publishedDevelopTip is not null
+                && string.Equals(candidateTip.Trim(), publishedDevelopTip, StringComparison.OrdinalIgnoreCase));
+        return decision.Mode == ImmediateMainAdvanceMode.Allowed
+            ? null
+            : new GitPushResult(false, sha, "lineage-blocked", decision.Reason);
     }
 
     public async Task<GitPushResult> PushShaWithRetryAsync(

@@ -274,6 +274,52 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
+    public async Task PushShaAsync_MainWithDevelop_BlocksRawCandidate()
+    {
+        var repo = SeedRepo("push-main-lineage-guard");
+        var bare = Path.Combine(_tempDir, "remote-main-lineage-guard.git");
+        Assert.Equal(0, RunGit(_tempDir, $"init -q --bare \"{bare}\"").Code);
+        Assert.Equal(0, RunGit(repo, $"remote add origin \"{bare}\"").Code);
+        Assert.Equal(0, RunGit(repo, "push -q -u origin main").Code);
+        var publishedTip = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        Assert.Equal(0, RunGit(repo, "branch develop").Code);
+        Assert.Equal(0, RunGit(repo, "push -q -u origin develop").Code);
+
+        File.WriteAllText(Path.Combine(repo, "raw-delivery.txt"), "raw delivery");
+        Commit(repo, "feat: raw delivery");
+        var rawCandidate = RunGit(repo, "rev-parse HEAD").Out.Trim();
+
+        var git = BuildGitService(("Fixture", repo));
+        var result = await git.PushShaAsync(rawCandidate, repo);
+
+        Assert.False(result.Success);
+        Assert.Equal("lineage-blocked", result.Status);
+        Assert.Equal(publishedTip, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse refs/heads/main").Out.Trim());
+        Assert.Equal(publishedTip, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse refs/heads/develop").Out.Trim());
+    }
+
+    [Fact]
+    public async Task PushShaAsync_MainWithDevelop_AllowsExactPublishedDevelopTip()
+    {
+        var repo = SeedRepo("push-published-develop");
+        var bare = Path.Combine(_tempDir, "remote-published-develop.git");
+        Assert.Equal(0, RunGit(_tempDir, $"init -q --bare \"{bare}\"").Code);
+        Assert.Equal(0, RunGit(repo, $"remote add origin \"{bare}\"").Code);
+        Assert.Equal(0, RunGit(repo, "push -q -u origin main").Code);
+        Assert.Equal(0, RunGit(repo, "checkout -q -b develop").Code);
+        File.WriteAllText(Path.Combine(repo, "integrated.txt"), "integrated delivery");
+        Commit(repo, "merge: integrated delivery");
+        var developTip = RunGit(repo, "rev-parse HEAD").Out.Trim();
+        Assert.Equal(0, RunGit(repo, "push -q -u origin develop").Code);
+
+        var git = BuildGitService(("Fixture", repo));
+        var result = await git.PushShaAsync(developTip, repo);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(developTip, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse refs/heads/main").Out.Trim());
+    }
+
+    [Fact]
     public void MergeBranchIntoIntegration_CreatesMergeCommitOnDevelop()
     {
         var repo = SeedRepo("merge-dev");
