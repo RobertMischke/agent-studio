@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="en" data-document-pattern="ui">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Timeline redesign | Decision dossier</title>
+  <style data-article-template="v2">
+    :root {
+      color-scheme: light;
+      --article-paper: #fcfcfb;
+      --article-surface: #f2f1ee;
+      --article-surface-strong: #e9e8e3;
+      --article-ink: #151515;
+      --article-muted: #5f5e59;
+      --article-faint: #7c7a74;
+      --article-line: #d8d6cf;
+      --article-link: #1f67b2;
+      --article-link-soft: #eaf1fb;
+      --article-good: #18753a;
+      --article-good-soft: #eaf4ea;
+      --article-warn: #8b6100;
+      --article-warn-soft: #f8f0dd;
+      --article-bad: #b72f2f;
+      --article-bad-soft: #fbecec;
+      --article-serif: Georgia, "Times New Roman", serif;
+      --article-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --article-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --article-paper: #1a1a19;
+        --article-surface: #232322;
+        --article-surface-strong: #2c2c2a;
+        --article-ink: #f7f7f4;
+        --article-muted: #c3c2b7;
+        --article-faint: #9d9c94;
+        --article-line: #3d3d3a;
+        --article-link: #78aef0;
+        --article-link-soft: #1e2a3a;
+        --article-good: #67b867;
+        --article-good-soft: #1f2f1f;
+        --article-warn: #d9a63f;
+        --article-warn-soft: #33301e;
+        --article-bad: #e66767;
+        --article-bad-soft: #382222;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--article-paper); scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--article-paper);
+      color: var(--article-ink);
+      font: 17px/1.75 var(--article-serif);
+      text-rendering: optimizeLegibility;
+    }
+    main,
+    .article {
+      width: min(70ch, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 0 0 80px;
+    }
+    header.page {
+      margin-bottom: 12px;
+      padding: 48px 0 28px;
+      border-bottom: 1px solid var(--article-line);
+    }
+    h1,
+    h2,
+    h3,
+    h4,
+    .kicker,
+    .meta,
+    .number,
+    nav,
+    table,
+    figcaption,
+    .box,
+    .callout,
+    .evidence-figure,
+    .variant-grid,
+    .evidence-list,
+    .register-grid,
+    .decision-grid,
+    .mockup-grid,
+    .mini-spec,
+    .legend {
+      font-family: var(--article-sans);
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(2.2rem, 6vw, 3.4rem);
+      line-height: 1.08;
+      letter-spacing: -0.025em;
+    }
+    h2 {
+      margin: 56px 0 10px;
+      font-size: 1.55rem;
+      line-height: 1.25;
+      scroll-margin-top: 72px;
+    }
+    h3 { margin: 34px 0 8px; font-size: 1.08rem; line-height: 1.35; }
+    h4 { margin: 0 0 8px; font-size: 0.94rem; }
+    p { margin: 0 0 18px; }
+    p:last-child { margin-bottom: 0; }
+    .kicker,
+    .number {
+      margin: 0 0 12px;
+      color: var(--article-faint);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+    .lede { margin: 0; color: var(--article-muted); font-size: 1.18rem; line-height: 1.6; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 20px; color: var(--article-faint); font-size: 0.78rem; }
+    .meta b { color: var(--article-muted); font-weight: 650; }
+    a { color: var(--article-link); text-underline-offset: 0.16em; }
+    a:focus-visible { outline: 2px solid var(--article-link); outline-offset: 3px; border-radius: 2px; }
+    code {
+      padding: 0.08em 0.34em;
+      border-radius: 4px;
+      background: var(--article-surface-strong);
+      font: 0.84em/1.5 var(--article-mono);
+      overflow-wrap: anywhere;
+    }
+    pre {
+      overflow-x: auto;
+      margin: 24px 0;
+      padding: 16px 18px;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-surface);
+    }
+    pre code { padding: 0; background: transparent; }
+    ul,
+    ol { margin: 0 0 18px; padding-left: 24px; }
+    li + li { margin-top: 6px; }
+    table { width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 0.88rem; line-height: 1.5; }
+    th,
+    td { padding: 10px 12px; border-bottom: 1px solid var(--article-line); text-align: left; vertical-align: top; }
+    th { color: var(--article-faint); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; }
+    .box,
+    .callout {
+      margin: 24px 0;
+      padding: 18px 22px;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-surface);
+      font-size: 0.92rem;
+      line-height: 1.65;
+    }
+    .box.accent,
+    .callout[data-tone="accent"] { border-color: color-mix(in srgb, var(--article-link) 30%, var(--article-line)); background: var(--article-link-soft); }
+    .box.good,
+    .callout[data-tone="good"] { border-color: color-mix(in srgb, var(--article-good) 30%, var(--article-line)); background: var(--article-good-soft); }
+    .box.warn,
+    .callout[data-tone="warn"] { border-color: color-mix(in srgb, var(--article-warn) 35%, var(--article-line)); background: var(--article-warn-soft); }
+    .box.bad,
+    .callout[data-tone="bad"] { border-color: color-mix(in srgb, var(--article-bad) 30%, var(--article-line)); background: var(--article-bad-soft); }
+    figure { margin: 30px 0; }
+    figure > img,
+    figure > svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-paper);
+    }
+    figcaption { margin-top: 10px; color: var(--article-muted); font-size: 0.8rem; line-height: 1.5; }
+    .breakout,
+    .media-breakout {
+      width: min(1120px, calc(100vw - 48px));
+      margin-left: 50%;
+      transform: translateX(-50%);
+    }
+    .variant-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 24px 0; }
+    .variant {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-surface);
+    }
+    .variant h3 { margin: 0 0 8px; }
+    .variant img,
+    .variant svg { display: block; width: 100%; height: auto; margin-top: 12px; }
+    [data-document-pattern="ui"] .variant-grid {
+      width: min(1120px, calc(100vw - 48px));
+      margin-left: 50%;
+      transform: translateX(-50%);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    [data-document-pattern="ui"] .mockup { width: min(1120px, calc(100vw - 48px)); margin-left: 50%; transform: translateX(-50%); }
+    .evidence-list { display: grid; gap: 10px; margin: 24px 0; }
+    .evidence {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px 14px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--article-line);
+      border-radius: 9px;
+      background: var(--article-surface);
+      color: var(--article-ink);
+      text-decoration: none;
+    }
+    .evidence:hover { border-color: var(--article-link); background: var(--article-link-soft); }
+    .evidence-class {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--article-surface-strong);
+      color: var(--article-muted);
+      font-size: 0.68rem;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    [data-document-pattern="concept"] .evidence-class[data-evidence-class="observed"],
+    .evidence-class[data-evidence-class="observed"] { background: var(--article-good-soft); color: var(--article-good); }
+    [data-document-pattern="concept"] .evidence-class[data-evidence-class="inferred"],
+    .evidence-class[data-evidence-class="inferred"] { background: var(--article-warn-soft); color: var(--article-warn); }
+    [data-document-pattern="concept"] .evidence-class[data-evidence-class="proposed"],
+    .evidence-class[data-evidence-class="proposed"] { background: var(--article-link-soft); color: var(--article-link); }
+    .evidence b { display: block; margin-bottom: 2px; font-size: 0.88rem; }
+    .evidence small { display: block; color: var(--article-muted); font-size: 0.78rem; line-height: 1.45; }
+    .dim { color: var(--article-muted); }
+
+    .evidence-figure { margin-top: 38px; margin-bottom: 38px; }
+    .evidence-captures {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+      gap: 12px;
+    }
+    .evidence-capture {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-paper);
+    }
+    .evidence-capture > img { display: block; width: 100%; height: auto; }
+    .capture-theme,
+    .figure-annotation {
+      position: absolute;
+      z-index: 1;
+      border: 1px solid var(--article-line);
+      border-radius: 999px;
+      background: var(--article-surface);
+      color: var(--article-muted);
+      font-size: 0.68rem;
+      font-weight: 750;
+      font-family: var(--article-sans);
+      line-height: 1.35;
+    }
+    .capture-theme { top: 10px; left: 10px; padding: 3px 8px; text-transform: uppercase; }
+    .figure-annotation {
+      right: 12px;
+      bottom: 12px;
+      max-width: min(28ch, calc(100% - 24px));
+      padding: 5px 10px;
+      border-color: color-mix(in srgb, var(--article-link) 45%, var(--article-line));
+      background: var(--article-link-soft);
+      color: var(--article-link);
+    }
+    .figure-claim { display: block; color: var(--article-ink); font-size: 0.84rem; }
+    .figure-as-of { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 6px; color: var(--article-faint); font-size: 0.72rem; }
+
+    .toc { columns: 2; gap: 28px; }
+    .toc a { color: var(--article-muted); text-decoration: none; }
+    .toc a:hover { color: var(--article-link); text-decoration: underline; }
+    .toc li { break-inside: avoid; }
+    .decision-grid,
+    .register-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
+    .decision,
+    .register,
+    .mini-spec {
+      min-width: 0;
+      border: 1px solid var(--article-line);
+      border-radius: 10px;
+      background: var(--article-surface);
+      padding: 16px;
+    }
+    .decision p,
+    .register p,
+    .mini-spec p { color: var(--article-muted); font-size: 0.86rem; line-height: 1.55; }
+    .status-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 8px;
+      color: var(--article-muted);
+      font: 700 0.7rem/1 var(--article-sans);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .status-key::before { width: 8px; height: 8px; border-radius: 50%; background: var(--tone, var(--article-faint)); content: ""; }
+    .category-table td:first-child { white-space: nowrap; font-weight: 700; }
+    .category-table code { font-size: 0.76rem; }
+    .event-kinds { color: var(--article-muted); font-size: 0.78rem; line-height: 1.55; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 16px 0; color: var(--article-muted); font-size: 0.8rem; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--tone); }
+    .mockup-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 24px 0;
+    }
+    .mockup-card { min-width: 0; }
+    .mockup-card h3 { margin: 0 0 7px; }
+    .mockup-card > p { color: var(--article-muted); font-size: 0.82rem; line-height: 1.5; }
+    .mockup-card svg { display: block; width: 100%; height: auto; border: 1px solid var(--article-line); border-radius: 10px; }
+    .mockup-provenance { display: block; margin-top: 7px; color: var(--article-faint); font: 0.68rem/1.45 var(--article-sans); }
+    .s-light-bg { fill: #f7f7f5; }
+    .s-light-surface { fill: #ffffff; }
+    .s-light-soft { fill: #f0f0ed; }
+    .s-light-line { stroke: #d6d5d0; }
+    .s-light-ink { fill: #20201e; }
+    .s-light-muted { fill: #66655f; }
+    .s-dark-bg { fill: #101018; }
+    .s-dark-surface { fill: #191a25; }
+    .s-dark-soft { fill: #232432; }
+    .s-dark-line { stroke: #393a49; }
+    .s-dark-ink { fill: #f4f4f1; }
+    .s-dark-muted { fill: #a6a7b2; }
+    .s-danger-soft-light { fill: #f8e5e7; }
+    .s-danger-soft-dark { fill: #342126; }
+    .s-danger { fill: #c63e49; }
+    .s-good-soft-light { fill: #e7f3e9; }
+    .s-good-soft-dark { fill: #1c3024; }
+    .s-good { fill: #27864c; }
+    .s-accent-soft-light { fill: #e7effb; }
+    .s-accent-soft-dark { fill: #1e2b43; }
+    .s-accent { fill: #337bd0; }
+    .s-row { stroke-width: 1; rx: 9; }
+    .s-title { font: 700 14px var(--article-sans); }
+    .s-label { font: 700 10px var(--article-sans); letter-spacing: 0.08em; }
+    .s-copy { font: 12px var(--article-sans); }
+    .s-small { font: 10.5px var(--article-sans); }
+    .s-mono { font: 10.5px var(--article-mono); }
+    .s-mono-small { font: 9.5px var(--article-mono); }
+    .s-button { stroke-width: 1; rx: 12; }
+    .popover-proof { margin-top: 26px; }
+    .popover-proof svg { background: var(--article-surface); }
+    .glossary-table td:first-child { width: 145px; font-weight: 700; }
+    .slice-table td:first-child { white-space: nowrap; font-weight: 750; }
+    .slice-table td:nth-child(2) { min-width: 160px; }
+    .contract-list strong { font-family: var(--article-sans); }
+    .decision-request { border-color: color-mix(in srgb, var(--article-link) 42%, var(--article-line)); }
+
+    @media (max-width: 760px) {
+      main,
+      .article { width: min(100% - 28px, 70ch); padding-bottom: 52px; }
+      header.page { padding-top: 32px; }
+      .breakout,
+      .media-breakout,
+      [data-document-pattern="ui"] .variant-grid,
+      [data-document-pattern="ui"] .mockup { width: calc(100vw - 20px); }
+      [data-document-pattern="ui"] .variant-grid,
+      .decision-grid,
+      .register-grid,
+      .mockup-grid { grid-template-columns: 1fr; }
+      .evidence { grid-template-columns: 1fr; }
+      .toc { columns: 1; }
+      table { display: block; overflow-x: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+    }
+  </style>
+</head>
+<body>
+<main class="article">
+  <header class="page">
+    <p class="kicker">Decision dossier · Task detail</p>
+    <h1>Make the Task Timeline a readable operational history</h1>
+    <p class="lede">Replace a flat ledger dump with a category-led, incident-aware stream. Keep normal history quiet, make unresolved failures unmistakable, move technical identifiers behind explanatory copyable popovers, and preserve raw evidence through bounded disclosure and Trace.</p>
+    <div class="meta">
+      <span><b>Snapshot</b> 11 August 2026</span>
+      <span><b>Source card</b> AGT-2631</span>
+      <span><b>Evidence case</b> AGT-2577</span>
+      <span><b>Status</b> decision pending</span>
+      <span><b>Phase</b> decision ready</span>
+    </div>
+  </header>
+
+  <nav class="box" aria-label="Contents">
+    <h4>Contents</h4>
+    <ol class="toc">
+      <li><a href="#decision">Decision brief</a></li>
+      <li><a href="#evidence">Observed baseline</a></li>
+      <li><a href="#scope">Surface boundary</a></li>
+      <li><a href="#ia">Information architecture</a></li>
+      <li><a href="#registers">Visual registers</a></li>
+      <li><a href="#mockups">Before and after mockups</a></li>
+      <li><a href="#internals">Technical chips and copy</a></li>
+      <li><a href="#payloads">Payloads, tools, and Trace</a></li>
+      <li><a href="#state">Recoverable state semantics</a></li>
+      <li><a href="#scroll">Scrolling and navigation</a></li>
+      <li><a href="#slices">Delivery slices</a></li>
+      <li><a href="#glossary">Timeline glossary</a></li>
+    </ol>
+  </nav>
+
+  <section id="decision" data-document-section="open-decisions">
+    <h2><span class="number">01</span> Decision brief</h2>
+    <div class="callout decision-request" data-tone="accent">
+      <h3>Approve one presentation contract</h3>
+      <p><b>Recommended:</b> adopt six event categories in one shared row grid, three structural row registers, explicit incident-resolution links, newest-first day sections, and one centrally maintained technical-concept glossary. Apply the same payload and Trace rules to the task-level Timeline and the run-level Activity stream without merging their underlying stores.</p>
+    </div>
+    <div class="decision-grid">
+      <article class="decision">
+        <span class="status-key" style="--tone:var(--article-link)">D1 · Structure</span>
+        <h4>Six categories, three row shapes</h4>
+        <p>Category is expressed through a stable label, glyph, and filter. Rows remain geometrically consistent. Failure is a state treatment, not a seventh rainbow category.</p>
+      </article>
+      <article class="decision">
+        <span class="status-key" style="--tone:var(--article-bad)">D2 · Incidents</span>
+        <h4>Open state comes from unresolved events</h4>
+        <p>A banner represents only an open incident. Recovery, supersession, override, or success closes it with a second event and a durable relation.</p>
+      </article>
+      <article class="decision">
+        <span class="status-key" style="--tone:var(--article-good)">D3 · Disclosure</span>
+        <h4>Summary first, evidence on demand</h4>
+        <p>Commands, outputs, Markdown payloads, and raw frames are never open prose. They remain one disclosure away and always copyable.</p>
+      </article>
+      <article class="decision">
+        <span class="status-key" style="--tone:var(--article-warn)">D4 · Navigation</span>
+        <h4>Newest first with stable anchors</h4>
+        <p>Day groups, run anchors, a sticky time context, and a reserved jump row replace long undifferentiated scrolling.</p>
+      </article>
+    </div>
+    <p class="dim">No implementation is part of AGT-2631. Approval turns the slices in section 11 into delivery cards. Rejection should name the decision above that changes; the remaining contract is fully specified.</p>
+  </section>
+
+  <section id="evidence" data-document-section="evidence">
+    <h2><span class="number">02</span> Observed baseline</h2>
+    <p>The live Task API snapshot for AGT-2577 contains 42 timeline events across six recorded runs. A QuotaExceeded run at 19:10 on 10 August moved the card to Escalated and emitted <code>orchestrator_escalated</code>. Later runs completed at 00:30, 02:26, and 16:24 on 11 August and each returned the card to Auto Review. No resolution event exists, so the current frontend projection still treats the older escalation as the latest completion-loop terminal.</p>
+
+    <table>
+      <thead><tr><th>Observed fact</th><th>Evidence</th><th>Design consequence</th></tr></thead>
+      <tbody>
+        <tr><td>Stale acute state</td><td>The red <q>Escalated to human</q> banner remains while the card is in Post Processing.</td><td>Header state must be projected from open incidents, not the last event of one narrow kind set.</td></tr>
+        <tr><td>Technical wall</td><td>Lane and run entries expose attempt IDs, fences, authority epochs, idempotency keys, branches, URLs, and several SHAs inline.</td><td>Keep the human event sentence clean; expose internals as compact concept chips with explanatory popovers.</td></tr>
+        <tr><td>Failure is visually ordinary</td><td><code>integration_failed</code> shares the same neutral geometry and emphasis as routine lane changes.</td><td>Open failures and refusals need the acute problem register. Settled failures keep a quiet historical marker.</td></tr>
+        <tr><td>Long output is prose</td><td>Gate output can occupy the event body as a long sentence with test names and status fragments.</td><td>Attach a collapsed, wrapped code or rendered-Markdown disclosure to the owning event.</td></tr>
+        <tr><td>Chronology starts at creation</td><td>The view opens on the oldest events, so the operator must scroll to discover what is current.</td><td>Use newest-first sections and preserve a deliberate jump to task start.</td></tr>
+      </tbody>
+    </table>
+
+    <figure class="evidence-figure media-breakout">
+      <div class="evidence-captures">
+        <div class="evidence-capture">
+          <span class="capture-theme">Light</span>
+          <img src="assets/task-timeline-agt-2577-current-light--real.png" alt="Current AGT-2577 Timeline in the light theme showing a stale escalated banner and long technical chips in early events.">
+          <span class="figure-annotation">Stale banner and inline internals</span>
+        </div>
+        <div class="evidence-capture">
+          <span class="capture-theme">Dark</span>
+          <img src="assets/task-timeline-agt-2577-current-dark--real.png" alt="Current AGT-2577 Timeline in the dark theme showing the same stale escalated banner and dense technical metadata.">
+        </div>
+      </div>
+      <figcaption>
+        <span class="figure-claim"><b>Evidence.</b> The current Timeline presents a resolved QuotaExceeded escalation as acute current truth and lets technical identifiers dominate the first visible events in both themes.</span>
+        <span class="figure-as-of">
+          <span><b>Light as of:</b> <time datetime="2026-08-11">11 August 2026</time>. <b>Provenance:</b> real Stable AGT-2577 task capture.</span>
+          <span><b>Dark as of:</b> <time datetime="2026-08-11">11 August 2026</time>. <b>Provenance:</b> real capture of the same Stable task.</span>
+        </span>
+      </figcaption>
+    </figure>
+
+    <div class="evidence-list">
+      <a class="evidence" href="../../../backend/Shared/Models/TimelineEvent.cs"><span class="evidence-class" data-evidence-class="observed">Observed</span><span><b>Closed task ledger schema</b><small>The current event has timestamp, kind, actor, run ID, payload reference, summary, and a string details bag, but no durable event ID or resolution relation.</small></span></a>
+      <a class="evidence" href="../../../frontend/src/app/features/task-timeline/models/task-timeline.model.ts"><span class="evidence-class" data-evidence-class="observed">Observed</span><span><b>Current completion-loop projection</b><small>The frontend selects the last accepted, reopened, or escalated event. Later lane and run events cannot close that verdict.</small></span></a>
+      <a class="evidence" href="../protokoll-verdichtung/index.html"><span class="evidence-class" data-evidence-class="observed">Decided input</span><span><b>AGT-W17 protocol condensation</b><small>Supervisor grouping, tool-call summaries, and edit-row clarity are predecessor decisions, not reopened questions.</small></span></a>
+      <a class="evidence" href="../admin-design-guideline/index.html"><span class="evidence-class" data-evidence-class="proposed">Binding input</span><span><b>Admin stream grid</b><small>Comparable events retain one time, identity, type, summary, state, and disclosure grid with flat surfaces and quiet normal rows.</small></span></a>
+    </div>
+  </section>
+
+  <section id="scope">
+    <h2><span class="number">03</span> Surface boundary</h2>
+    <p>The screenshots span two related surfaces. They should share presentation rules, but they answer different questions and must not become a new combined event store.</p>
+    <table>
+      <thead><tr><th>Surface</th><th>Question</th><th>Source</th><th>What belongs here</th></tr></thead>
+      <tbody>
+        <tr><td><b>Task Timeline</b></td><td>What changed in this card's durable lifecycle?</td><td><code>logs/timeline.jsonl</code> plus run summaries for legacy gaps</td><td>Lane transitions, runs, gates, integrations, escalations, and decisions.</td></tr>
+        <tr><td><b>Activity</b></td><td>What did the CLI and runner do inside a run?</td><td>CLI output, typed runner events, and the conversation projection</td><td>Agent messages, tool-call clusters, edits, diagnostics, and bounded payload disclosures.</td></tr>
+        <tr><td><b>Trace</b></td><td>What exact frame or raw line produced this presentation?</td><td>Unmodified raw ranges and frames</td><td>Transport frames, full payloads, lifecycle records, and line-level evidence.</td></tr>
+      </tbody>
+    </table>
+    <div class="box">
+      <h4>Shared contract, separate truth</h4>
+      <p>A single presentation registry owns category labels, severity, technical concept metadata, disclosure policy, and copy behavior. Timeline and Activity adapters feed that registry. Trace remains the raw evidence view and never becomes the default reading surface.</p>
+    </div>
+  </section>
+
+  <section id="ia">
+    <h2><span class="number">04</span> Information architecture</h2>
+    <p>Every task event resolves to one primary category before rendering. Severity and incident state are orthogonal overlays. A failed integration is still an Integration event; its open failure state selects the problem register.</p>
+
+    <table class="category-table">
+      <thead><tr><th>Category</th><th>Operator meaning</th><th>Primary kinds</th><th>Normal row summary</th></tr></thead>
+      <tbody>
+        <tr><td><span class="status-key" style="--tone:#5279a5">Lane</span></td><td>Where the card moved, who moved it, and why.</td><td class="event-kinds"><code>prompt_created</code>, <code>lane_changed</code>, <code>operator_requeued</code>, <code>external_completion</code></td><td><q>Moved to Post Processing</q>, with from/to and actor as secondary facts.</td></tr>
+        <tr><td><span class="status-key" style="--tone:#278b79">Run</span></td><td>One bounded agent execution and its outcome.</td><td class="event-kinds"><code>runner_slot_admission</code>, <code>agent_run_started</code>, <code>agent_run_finished</code>, <code>settled_run_recovered</code>, <code>execution_context</code></td><td><q>Run 6 finished · No changes · 14m 43s</q>. Lifecycle frames fold into this row.</td></tr>
+        <tr><td><span class="status-key" style="--tone:#7562ad">Integration</span></td><td>Whether the delivered revision reached the integration branch.</td><td class="event-kinds"><code>integration_started</code>, <code>integration_succeeded</code>, <code>integration_failed</code>, <code>integration_overridden</code>, <code>integration_lease</code>, <code>integration_recovery_queued</code>, <code>integration_branch_corrected</code>, <code>integration_pending_warning</code></td><td><q>Integration failed · Build gate blocked the merge</q> with output collapsed.</td></tr>
+        <tr><td><span class="status-key" style="--tone:#8a6e2f">Gate</span></td><td>What a validation or containment boundary decided.</td><td class="event-kinds"><code>pre_step_*</code>, <code>post_step_*</code>, <code>delivery_unverified</code>, <code>read_only_containment_violation</code>, <code>review_infrastructure_repeat_diagnosed</code>, <code>review_attempt_superseded</code></td><td><q>Build and test gate failed · 10 tests</q>, not the full output.</td></tr>
+        <tr><td><span class="status-key" style="--tone:#b2474f">Escalation</span></td><td>What requires attention now or did so earlier.</td><td class="event-kinds"><code>orchestrator_escalated</code>, <code>quota_fallback_activated</code>, <code>quota_admission_decision</code>, <code>load_throttle_decision</code>, <code>steer_timeout_resolved</code>, new resolution events</td><td><q>Quota exhausted · Escalated</q>, later paired with <q>Quota restored</q>.</td></tr>
+        <tr><td><span class="status-key" style="--tone:#4f6f91">Orchestrator decision</span></td><td>Why the orchestrator or a person selected the next action.</td><td class="event-kinds"><code>orchestrator_steered</code>, <code>orchestrator_verdict_accepted</code>, <code>quality_loop_reopened</code>, <code>human_review_decided</code>, <code>post_acceptance_review_report_recorded</code>, <code>parked_blocker_resolved</code>, <code>task_spawned</code>, <code>merged_in</code>, <code>epic_decomposed</code></td><td><q>Re-opened · Visual evidence missing</q>, with decision evidence disclosed.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Registry contract</h3>
+    <pre><code>event kind
+  -> category: lane | run | integration | gate | escalation | orchestrator-decision
+  -> severity: routine | success | warning | failure | refusal
+  -> incident effect: none | opens | resolves | supersedes | overrides
+  -> disclosure: none | technical facts | markdown | code | raw frame
+  -> copy targets: summary | command | output | payload | identifier</code></pre>
+    <p>The registry is exhaustive. An unknown future kind renders as <q>Unknown event</q> in the normal row, keeps its raw value in Trace, and emits a diagnostic. It never guesses a success state.</p>
+  </section>
+
+  <section id="registers">
+    <h2><span class="number">05</span> Three visual registers</h2>
+    <p>Categories remain recognizable without introducing six incompatible card designs. The stream uses at most three structural registers, satisfying the AGT-W17 condensation direction and the admin grid contract.</p>
+    <div class="register-grid">
+      <article class="register">
+        <span class="status-key" style="--tone:var(--article-faint)">Register A</span>
+        <h4>Routine event row</h4>
+        <p>One-line category label, title, relative time, and optional quiet status. Metadata and evidence are disclosed. No border box per row and no colored left bar.</p>
+      </article>
+      <article class="register">
+        <span class="status-key" style="--tone:var(--article-bad)">Register B</span>
+        <h4>Problem or refusal row</h4>
+        <p>An unresolved failure uses a low-alpha whole-row danger tint, explicit <q>Open</q> status, and expanded one-sentence cause. This is the legitimate alarm-color use from AGT-2606.</p>
+      </article>
+      <article class="register">
+        <span class="status-key" style="--tone:var(--article-link)">Register C</span>
+        <h4>Grouped or disclosed row</h4>
+        <p>Runs, tool-call clusters, and repeated lifecycle facts collapse to a summary row. Opening it reveals structured children without changing column geometry.</p>
+      </article>
+      <article class="register">
+        <span class="status-key" style="--tone:var(--article-good)">Settled overlay</span>
+        <h4>History becomes quiet again</h4>
+        <p>A resolved failure keeps a small <q>Failed, resolved</q> receipt and its relation to the healing event. The acute tint drops to a faint historical tone.</p>
+      </article>
+    </div>
+    <div class="legend" aria-label="Semantic color legend">
+      <span><i style="--tone:var(--article-faint)"></i>routine history</span>
+      <span><i style="--tone:var(--article-link)"></i>selection or control</span>
+      <span><i style="--tone:var(--article-good)"></i>recovery or success</span>
+      <span><i style="--tone:var(--article-bad)"></i>open failure or refusal</span>
+    </div>
+  </section>
+
+  <section id="mockups">
+    <h2><span class="number">06</span> AGT-2577 before and after</h2>
+    <p>The four inline SVGs use the real AGT-2577 sequence as the content baseline. The after state adds one open integration problem, a collapsed gate-output disclosure, and the healed QuotaExceeded pair. The geometry is the same in both themes.</p>
+
+    <figure class="media-breakout">
+      <div class="mockup-grid">
+        <article class="mockup-card">
+          <h3>Before · Light</h3>
+          <p>Oldest first, stale acute banner, and identifiers treated as content.</p>
+          <svg viewBox="0 0 540 500" role="img" aria-label="Before mockup in light theme with a stale escalation banner and dense inline technical values">
+            <rect width="540" height="500" class="s-light-bg"/>
+            <rect x="18" y="18" width="504" height="45" class="s-light-surface s-light-line s-row"/>
+            <text x="34" y="38" class="s-title s-light-ink">Timeline</text>
+            <text x="34" y="53" class="s-small s-light-muted">42 events · oldest first</text>
+            <rect x="18" y="76" width="504" height="82" class="s-danger-soft-light s-row"/>
+            <text x="34" y="101" class="s-title s-danger">Escalated to human</text>
+            <text x="34" y="124" class="s-copy s-light-ink">The remote runner ended without a recognized</text>
+            <text x="34" y="143" class="s-copy s-light-ink">terminal outcome: QuotaExceeded</text>
+            <circle cx="35" cy="186" r="9" class="s-light-soft s-light-line"/>
+            <text x="55" y="183" class="s-title s-light-ink">Prompt created</text>
+            <text x="55" y="202" class="s-copy s-light-muted">Task created: Kontext-Chats S6: Zentrale Chat-Verwaltung...</text>
+            <line x1="35" y1="195" x2="35" y2="462" class="s-light-line"/>
+            <circle cx="35" cy="234" r="9" class="s-light-soft s-light-line"/>
+            <text x="55" y="231" class="s-title s-light-ink">Lane changed · 2-ready → 3-progress</text>
+            <rect x="55" y="245" width="224" height="24" class="s-light-soft s-light-line s-button"/>
+            <text x="67" y="261" class="s-mono-small s-light-ink">Attempt Id run_c5e924a0562548db...</text>
+            <rect x="287" y="245" width="70" height="24" class="s-light-soft s-light-line s-button"/>
+            <text x="300" y="261" class="s-small s-light-muted">Fence 1</text>
+            <rect x="55" y="277" width="110" height="24" class="s-light-soft s-light-line s-button"/>
+            <text x="67" y="293" class="s-small s-light-muted">Authority Epoch 1</text>
+            <rect x="55" y="309" width="411" height="46" class="s-light-soft s-light-line s-row"/>
+            <text x="67" y="327" class="s-small s-light-muted">Idempotency Key</text>
+            <text x="67" y="344" class="s-mono-small s-light-ink">lane-claim:claim:agent-runner-01:9dd5622466ad4a...</text>
+            <circle cx="35" cy="385" r="9" class="s-light-soft s-light-line"/>
+            <text x="55" y="382" class="s-title s-light-ink">Run ended</text>
+            <text x="55" y="401" class="s-copy s-light-muted">remote run done on agent-runner-01</text>
+            <rect x="55" y="414" width="420" height="34" class="s-light-soft s-light-line s-row"/>
+            <text x="67" y="435" class="s-mono-small s-light-ink">Salvage Branch agent-studio/salvage/.../fence-1/052f459a...</text>
+            <text x="55" y="478" class="s-small s-light-muted">Scroll through 39 more events to reach current state</text>
+          </svg>
+          <span class="mockup-provenance">As of <time datetime="2026-08-11">11 August 2026</time> · Provenance: mocked from real AGT-2577 evidence.</span>
+        </article>
+
+        <article class="mockup-card">
+          <h3>After · Light</h3>
+          <p>Newest first, one shared grid, open problems visible, and healed history linked.</p>
+          <svg viewBox="0 0 540 500" role="img" aria-label="After mockup in light theme with categorized rows, collapsed gate output, and a resolved quota incident">
+            <rect width="540" height="500" class="s-light-bg"/>
+            <rect x="18" y="18" width="504" height="52" class="s-light-surface s-light-line s-row"/>
+            <text x="32" y="39" class="s-title s-light-ink">Timeline</text>
+            <rect x="308" y="30" width="62" height="26" class="s-accent-soft-light s-button"/>
+            <text x="324" y="47" class="s-small s-accent">Latest</text>
+            <rect x="378" y="30" width="84" height="26" class="s-light-soft s-button"/>
+            <text x="392" y="47" class="s-small s-light-muted">Problems 1</text>
+            <rect x="470" y="30" width="34" height="26" class="s-light-soft s-button"/>
+            <text x="482" y="47" class="s-title s-light-muted">···</text>
+            <rect x="18" y="78" width="504" height="32" class="s-light-soft"/>
+            <text x="32" y="99" class="s-label s-light-muted">TODAY · CURRENT CONTEXT 16:24</text>
+            <rect x="18" y="118" width="504" height="58" class="s-light-surface s-light-line s-row"/>
+            <circle cx="35" cy="139" r="5" class="s-accent"/>
+            <text x="51" y="137" class="s-label s-light-muted">LANE</text>
+            <text x="51" y="158" class="s-title s-light-ink">Moved to Post Processing</text>
+            <text x="430" y="148" class="s-small s-light-muted">16:24</text>
+            <rect x="18" y="184" width="504" height="70" class="s-light-surface s-light-line s-row"/>
+            <circle cx="35" cy="207" r="5" fill="#278b79"/>
+            <text x="51" y="205" class="s-label s-light-muted">RUN</text>
+            <text x="51" y="226" class="s-title s-light-ink">Run 6 finished · No changes · 14m 43s</text>
+            <rect x="51" y="235" width="108" height="18" class="s-light-soft s-button"/>
+            <text x="61" y="248" class="s-mono-small s-light-muted">Attempt run_f276…</text>
+            <rect x="165" y="235" width="96" height="18" class="s-light-soft s-button"/>
+            <text x="175" y="248" class="s-mono-small s-light-muted">Result 178c2bf</text>
+            <rect x="18" y="262" width="504" height="108" class="s-danger-soft-light s-row"/>
+            <circle cx="35" cy="284" r="5" class="s-danger"/>
+            <text x="51" y="282" class="s-label s-danger">INTEGRATION · OPEN</text>
+            <text x="51" y="304" class="s-title s-light-ink">Integration failed · Gate blocked the merge</text>
+            <text x="51" y="326" class="s-copy s-light-muted">10 backend tests failed. develop was rolled back.</text>
+            <rect x="51" y="337" width="185" height="24" class="s-light-surface s-light-line s-button"/>
+            <text x="65" y="353" class="s-small s-light-ink">› Show gate output · 10 lines</text>
+            <text x="456" y="284" class="s-small s-light-muted">15:42</text>
+            <rect x="18" y="378" width="504" height="55" class="s-good-soft-light s-row"/>
+            <circle cx="35" cy="399" r="5" class="s-good"/>
+            <text x="51" y="397" class="s-label s-good">ESCALATION · RESOLVED</text>
+            <text x="51" y="419" class="s-title s-light-ink">Quota restored · next run completed</text>
+            <text x="393" y="405" class="s-small s-light-muted">00:30</text>
+            <rect x="18" y="441" width="504" height="42" class="s-light-surface s-light-line s-row"/>
+            <circle cx="35" cy="462" r="5" fill="#9c8d8f"/>
+            <text x="51" y="460" class="s-small s-light-muted">Quota exhausted · Escalated · resolved 5h 20m later</text>
+          </svg>
+          <span class="mockup-provenance">As of <time datetime="2026-08-11">11 August 2026</time> · Provenance: mocked proposal.</span>
+        </article>
+
+        <article class="mockup-card">
+          <h3>Before · Dark</h3>
+          <p>The same hierarchy defect persists when theme tokens change.</p>
+          <svg viewBox="0 0 540 500" role="img" aria-label="Before mockup in dark theme with a stale escalation banner and dense inline technical values">
+            <rect width="540" height="500" class="s-dark-bg"/>
+            <rect x="18" y="18" width="504" height="45" class="s-dark-surface s-dark-line s-row"/>
+            <text x="34" y="38" class="s-title s-dark-ink">Timeline</text>
+            <text x="34" y="53" class="s-small s-dark-muted">42 events · oldest first</text>
+            <rect x="18" y="76" width="504" height="82" class="s-danger-soft-dark s-row"/>
+            <text x="34" y="101" class="s-title" fill="#f07b84">Escalated to human</text>
+            <text x="34" y="124" class="s-copy s-dark-ink">The remote runner ended without a recognized</text>
+            <text x="34" y="143" class="s-copy s-dark-ink">terminal outcome: QuotaExceeded</text>
+            <circle cx="35" cy="186" r="9" class="s-dark-soft s-dark-line"/>
+            <text x="55" y="183" class="s-title s-dark-ink">Prompt created</text>
+            <text x="55" y="202" class="s-copy s-dark-muted">Task created: Kontext-Chats S6: Zentrale Chat-Verwaltung...</text>
+            <line x1="35" y1="195" x2="35" y2="462" class="s-dark-line"/>
+            <circle cx="35" cy="234" r="9" class="s-dark-soft s-dark-line"/>
+            <text x="55" y="231" class="s-title s-dark-ink">Lane changed · 2-ready → 3-progress</text>
+            <rect x="55" y="245" width="224" height="24" class="s-dark-soft s-dark-line s-button"/>
+            <text x="67" y="261" class="s-mono-small s-dark-ink">Attempt Id run_c5e924a0562548db...</text>
+            <rect x="287" y="245" width="70" height="24" class="s-dark-soft s-dark-line s-button"/>
+            <text x="300" y="261" class="s-small s-dark-muted">Fence 1</text>
+            <rect x="55" y="277" width="110" height="24" class="s-dark-soft s-dark-line s-button"/>
+            <text x="67" y="293" class="s-small s-dark-muted">Authority Epoch 1</text>
+            <rect x="55" y="309" width="411" height="46" class="s-dark-soft s-dark-line s-row"/>
+            <text x="67" y="327" class="s-small s-dark-muted">Idempotency Key</text>
+            <text x="67" y="344" class="s-mono-small s-dark-ink">lane-claim:claim:agent-runner-01:9dd5622466ad4a...</text>
+            <circle cx="35" cy="385" r="9" class="s-dark-soft s-dark-line"/>
+            <text x="55" y="382" class="s-title s-dark-ink">Run ended</text>
+            <text x="55" y="401" class="s-copy s-dark-muted">remote run done on agent-runner-01</text>
+            <rect x="55" y="414" width="420" height="34" class="s-dark-soft s-dark-line s-row"/>
+            <text x="67" y="435" class="s-mono-small s-dark-ink">Salvage Branch agent-studio/salvage/.../fence-1/052f459a...</text>
+            <text x="55" y="478" class="s-small s-dark-muted">Scroll through 39 more events to reach current state</text>
+          </svg>
+          <span class="mockup-provenance">As of <time datetime="2026-08-11">11 August 2026</time> · Provenance: mocked from real AGT-2577 evidence.</span>
+        </article>
+
+        <article class="mockup-card">
+          <h3>After · Dark</h3>
+          <p>Semantic emphasis survives theme changes without adding a new geometry.</p>
+          <svg viewBox="0 0 540 500" role="img" aria-label="After mockup in dark theme with categorized rows, collapsed gate output, and a resolved quota incident">
+            <rect width="540" height="500" class="s-dark-bg"/>
+            <rect x="18" y="18" width="504" height="52" class="s-dark-surface s-dark-line s-row"/>
+            <text x="32" y="39" class="s-title s-dark-ink">Timeline</text>
+            <rect x="308" y="30" width="62" height="26" class="s-accent-soft-dark s-button"/>
+            <text x="324" y="47" class="s-small" fill="#80b4f1">Latest</text>
+            <rect x="378" y="30" width="84" height="26" class="s-dark-soft s-button"/>
+            <text x="392" y="47" class="s-small s-dark-muted">Problems 1</text>
+            <rect x="470" y="30" width="34" height="26" class="s-dark-soft s-button"/>
+            <text x="482" y="47" class="s-title s-dark-muted">···</text>
+            <rect x="18" y="78" width="504" height="32" class="s-dark-soft"/>
+            <text x="32" y="99" class="s-label s-dark-muted">TODAY · CURRENT CONTEXT 16:24</text>
+            <rect x="18" y="118" width="504" height="58" class="s-dark-surface s-dark-line s-row"/>
+            <circle cx="35" cy="139" r="5" fill="#78aef0"/>
+            <text x="51" y="137" class="s-label s-dark-muted">LANE</text>
+            <text x="51" y="158" class="s-title s-dark-ink">Moved to Post Processing</text>
+            <text x="430" y="148" class="s-small s-dark-muted">16:24</text>
+            <rect x="18" y="184" width="504" height="70" class="s-dark-surface s-dark-line s-row"/>
+            <circle cx="35" cy="207" r="5" fill="#58b9a5"/>
+            <text x="51" y="205" class="s-label s-dark-muted">RUN</text>
+            <text x="51" y="226" class="s-title s-dark-ink">Run 6 finished · No changes · 14m 43s</text>
+            <rect x="51" y="235" width="108" height="18" class="s-dark-soft s-button"/>
+            <text x="61" y="248" class="s-mono-small s-dark-muted">Attempt run_f276…</text>
+            <rect x="165" y="235" width="96" height="18" class="s-dark-soft s-button"/>
+            <text x="175" y="248" class="s-mono-small s-dark-muted">Result 178c2bf</text>
+            <rect x="18" y="262" width="504" height="108" class="s-danger-soft-dark s-row"/>
+            <circle cx="35" cy="284" r="5" fill="#e66767"/>
+            <text x="51" y="282" class="s-label" fill="#ef7b82">INTEGRATION · OPEN</text>
+            <text x="51" y="304" class="s-title s-dark-ink">Integration failed · Gate blocked the merge</text>
+            <text x="51" y="326" class="s-copy s-dark-muted">10 backend tests failed. develop was rolled back.</text>
+            <rect x="51" y="337" width="185" height="24" class="s-dark-surface s-dark-line s-button"/>
+            <text x="65" y="353" class="s-small s-dark-ink">› Show gate output · 10 lines</text>
+            <text x="456" y="284" class="s-small s-dark-muted">15:42</text>
+            <rect x="18" y="378" width="504" height="55" class="s-good-soft-dark s-row"/>
+            <circle cx="35" cy="399" r="5" fill="#67b867"/>
+            <text x="51" y="397" class="s-label" fill="#78c47a">ESCALATION · RESOLVED</text>
+            <text x="51" y="419" class="s-title s-dark-ink">Quota restored · next run completed</text>
+            <text x="393" y="405" class="s-small s-dark-muted">00:30</text>
+            <rect x="18" y="441" width="504" height="42" class="s-dark-surface s-dark-line s-row"/>
+            <circle cx="35" cy="462" r="5" fill="#84787c"/>
+            <text x="51" y="460" class="s-small s-dark-muted">Quota exhausted · Escalated · resolved 5h 20m later</text>
+          </svg>
+          <span class="mockup-provenance">As of <time datetime="2026-08-11">11 August 2026</time> · Provenance: mocked proposal.</span>
+        </article>
+      </div>
+      <figcaption>
+        <span class="figure-claim"><b>Proposed UI.</b> The redesign makes current problems, category, and chronology visible before disclosure while retaining every technical fact and the full raw trace.</span>
+        <span class="figure-as-of"><span><b>All four:</b> authored <time datetime="2026-08-11">11 August 2026</time> as mocked inline SVGs from the real AGT-2577 event sequence.</span></span>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="internals">
+    <h2><span class="number">07</span> Technical chips, explanatory popovers, and copy</h2>
+    <p>Identifiers leave the prose sentence. The event registry classifies technical detail keys and emits a concept chip only when the value matters for audit or recovery. The compact label uses a meaningful prefix and a stable abbreviation; it never exposes an unlabeled hash.</p>
+
+    <table>
+      <thead><tr><th>Value</th><th>Compact chip</th><th>Popover value</th><th>Copy behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Commit or result SHA</td><td><code>Result 178c2bf</code></td><td>Full 40-character SHA, wrapped anywhere</td><td>Copy exact value, no label or ellipsis</td></tr>
+        <tr><td>Branch or immutable ref</td><td><code>Branch develop</code> or <code>Delivery ref …/fence-10/178c2bf</code></td><td>Full ref plus whether it is movable or immutable</td><td>Copy exact ref</td></tr>
+        <tr><td>Fence</td><td><code>Fence 10</code></td><td>Concept explanation first, then integer value</td><td>Copy <code>10</code></td></tr>
+        <tr><td>Authority epoch</td><td><code>Epoch 1</code></td><td>Concept explanation first, then integer value</td><td>Copy <code>1</code></td></tr>
+        <tr><td>Attempt ID</td><td><code>Attempt run_f276…</code></td><td>Full ID, related run, and attempt type</td><td>Copy exact ID</td></tr>
+        <tr><td>Idempotency key</td><td><code>Retry key completion…</code></td><td>Full operation-scoped key</td><td>Copy exact key</td></tr>
+      </tbody>
+    </table>
+
+    <figure class="popover-proof">
+      <svg viewBox="0 0 920 330" role="img" aria-label="Technical concept chip popover with explanation first, full value, copy button, and Wiki link">
+        <rect width="920" height="330" fill="var(--article-surface)"/>
+        <rect x="38" y="38" width="844" height="70" rx="10" fill="var(--article-paper)" stroke="var(--article-line)"/>
+        <circle cx="62" cy="66" r="5" fill="#278b79"/>
+        <text x="78" y="62" class="s-label" fill="var(--article-faint)">RUN</text>
+        <text x="78" y="87" class="s-title" fill="var(--article-ink)">Run 6 finished · No changes · 14m 43s</text>
+        <rect x="548" y="58" width="102" height="28" rx="14" fill="var(--article-surface-strong)"/>
+        <text x="564" y="77" class="s-mono" fill="var(--article-muted)">Fence 10</text>
+        <rect x="659" y="58" width="175" height="28" rx="14" fill="var(--article-surface-strong)"/>
+        <text x="675" y="77" class="s-mono" fill="var(--article-muted)">Attempt run_f276…</text>
+        <path d="M600 92 L600 120" stroke="var(--article-link)" stroke-width="1.5"/>
+        <rect x="330" y="121" width="512" height="174" rx="12" fill="var(--article-paper)" stroke="var(--article-link)"/>
+        <text x="354" y="151" class="s-title" fill="var(--article-ink)">Fence</text>
+        <text x="354" y="179" class="s-copy" fill="var(--article-muted)">A monotonically increasing token that rejects writes from a stale</text>
+        <text x="354" y="199" class="s-copy" fill="var(--article-muted)">runner after task authority has moved to a newer lease.</text>
+        <text x="354" y="230" class="s-label" fill="var(--article-faint)">VALUE</text>
+        <rect x="354" y="240" width="330" height="34" rx="6" fill="var(--article-surface-strong)"/>
+        <text x="368" y="262" class="s-mono" fill="var(--article-ink)">10</text>
+        <rect x="696" y="240" width="118" height="34" rx="7" fill="var(--article-link-soft)" stroke="var(--article-link)"/>
+        <text x="731" y="262" class="s-copy" fill="var(--article-link)">Copy</text>
+        <text x="354" y="288" class="s-small" fill="var(--article-link)">More about timeline concepts ↗</text>
+      </svg>
+      <figcaption><span class="figure-claim"><b>Popover order.</b> The one-sentence concept explanation always precedes the full value and Copy action. <q>More about timeline concepts</q> opens this Dossier's glossary anchor in the Wiki.</span><span class="figure-as-of"><span><b>As of:</b> <time datetime="2026-08-11">11 August 2026</time>. <b>Provenance:</b> mocked proposal.</span></span></figcaption>
+    </figure>
+
+    <h3>One glossary module</h3>
+    <p>Do not hard-code explanations in Timeline, Activity, tool rows, or generic chip components. A single host-owned <code>TIMELINE_CONCEPT_GLOSSARY</code> maps canonical concept keys to label, one-sentence explanation, value formatter, copy label, and Wiki anchor. Both Timeline and Studio-projected Activity events pass a concept key to the same popover. The generic chip knows layout and clipboard behavior only.</p>
+    <pre><code>technical detail key -> concept key -> central glossary entry
+                                      -> short label
+                                      -> explanation
+                                      -> exact copy value
+                                      -> /wiki?page=operations/timeline-redesign/index.html#glossary</code></pre>
+    <p>Copy succeeds with a quiet inline confirmation that preserves the chip width. Failure exposes <q>Copy failed</q> and leaves the value selectable. Keyboard activation, focus return, Escape, click-away, and screen-reader naming follow the shared popover contract.</p>
+  </section>
+
+  <section id="payloads">
+    <h2><span class="number">08</span> Payload, tool-call, typography, and Trace rules</h2>
+    <div class="box accent">
+      <h4>Core rule</h4>
+      <p>Frames and payloads never render as open flowing JSON. The readable event owns a compact summary; the exact payload remains collapsed on that event and in Trace.</p>
+    </div>
+
+    <table>
+      <thead><tr><th>Input</th><th>Collapsed row</th><th>Disclosure</th><th>Trace</th></tr></thead>
+      <tbody>
+        <tr><td>Gate or test output</td><td>Gate name, result, failed-test count, duration</td><td>Wrapped code block, first about 10 lines, <q>Show more</q>, Copy output</td><td>Full log or payload range</td></tr>
+        <tr><td>Failed command execution</td><td><code>dotnet test …</code> plus the exact exit status</td><td>Command and output in one mono size; raw <code>item.completed</code> frame collapsed below</td><td>Full original frame</td></tr>
+        <tr><td>CLI FAILED Markdown payload</td><td>Rendered title and short first paragraph</td><td>Render Markdown, convert literal <code>\n</code> to real line breaks, cap at about 10 visual lines, then <q>Show more</q></td><td>Unmodified payload</td></tr>
+        <tr><td>Agent message containing a raw frame</td><td>The semantic message or owning tool result only</td><td>Raw frame as a collapsed code block attached to that entry</td><td>Unmodified frame sequence</td></tr>
+        <tr><td>Codex lifecycle frames</td><td><q>Run 6 · started · 3 turns · completed</q></td><td>Optional run details, not one row per frame</td><td><code>thread.started</code>, <code>turn.started</code>, and <code>turn.completed</code> individually</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Tool-call truth is per call</h3>
+    <ul class="contract-list">
+      <li><strong>One tool call, one result:</strong> a single failed call renders <q>1 tool call · 1 failed</q> and that call carries the failure status.</li>
+      <li><strong>No contradictory chips:</strong> a row cannot say <q>1 failed</q> while the same command says <q>exit 0</q>. A transport or parsing failure is labeled separately and does not falsify the command exit code.</li>
+      <li><strong>Several calls remain attributable:</strong> two calls show two child lines, each with its own completed, failed, signal, or unknown result. The aggregate equals the visible children.</li>
+      <li><strong>Failed calls are never hidden by clustering:</strong> the cluster can stay collapsed, but the summary names the failure count and opens directly to the failed child.</li>
+    </ul>
+
+    <h3>One typographic system</h3>
+    <ul class="contract-list">
+      <li><strong>Language:</strong> all Timeline and Activity UI labels are English. Raw user content remains as authored.</li>
+      <li><strong>Identity:</strong> the header uses the public task-key chip, such as <code>AGT-2577</code>. The storage slug never appears in the entry head.</li>
+      <li><strong>Sans register:</strong> category, title, explanation, time, and status use the product sans hierarchy.</li>
+      <li><strong>Mono register:</strong> commands, paths, identifiers, code, and output use one shared mono size within an entry.</li>
+    </ul>
+
+    <h3>One Trace access pattern</h3>
+    <p>The Activity stream header's three-dot menu owns <q>Trace</q>, <q>Debug</q>, and <q>Copy current view</q>. A specific event can expose <q>Open this event in Trace</q> inside its disclosure or context menu. There is no Trace button on every row. The repeated sentence <q>No action needed; raw frame is available in Trace</q> becomes a one-time legend in the entry-type help and is omitted from individual entries.</p>
+  </section>
+
+  <section id="state">
+    <h2><span class="number">09</span> Recoverable state semantics</h2>
+    <p>Timeline entries are immutable history. Banners are a projection of current open incidents. Conflating these two roles is what makes a healed QuotaExceeded incident remain red.</p>
+
+    <figure>
+      <svg viewBox="0 0 900 260" role="img" aria-label="Incident state model from raised to open to resolved, superseded, or overridden">
+        <defs>
+          <marker id="incident-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="none" stroke="var(--article-faint)" stroke-width="1.4"/></marker>
+        </defs>
+        <rect width="900" height="260" fill="var(--article-paper)"/>
+        <rect x="30" y="78" width="182" height="96" rx="11" fill="var(--article-bad-soft)" stroke="var(--article-bad)"/>
+        <text x="52" y="111" class="s-label" fill="var(--article-bad)">EVENT A · OPENS</text>
+        <text x="52" y="139" class="s-title" fill="var(--article-ink)">Quota exhausted</text>
+        <text x="52" y="159" class="s-small" fill="var(--article-muted)">incident quota:AGT-2577:3</text>
+        <path d="M212 126 L330 126" stroke="var(--article-faint)" stroke-width="1.5" marker-end="url(#incident-arrow)"/>
+        <rect x="332" y="78" width="182" height="96" rx="11" fill="var(--article-warn-soft)" stroke="var(--article-warn)"/>
+        <text x="354" y="111" class="s-label" fill="var(--article-warn)">CURRENT PROJECTION</text>
+        <text x="354" y="139" class="s-title" fill="var(--article-ink)">Open incident</text>
+        <text x="354" y="159" class="s-small" fill="var(--article-muted)">Banner is visible</text>
+        <path d="M514 126 L632 126" stroke="var(--article-faint)" stroke-width="1.5" marker-end="url(#incident-arrow)"/>
+        <rect x="634" y="44" width="236" height="58" rx="11" fill="var(--article-good-soft)" stroke="var(--article-good)"/>
+        <text x="654" y="69" class="s-label" fill="var(--article-good)">EVENT B · RESOLVES</text>
+        <text x="654" y="90" class="s-copy" fill="var(--article-ink)">Quota restored</text>
+        <rect x="634" y="111" width="236" height="58" rx="11" fill="var(--article-surface)" stroke="var(--article-line)"/>
+        <text x="654" y="136" class="s-label" fill="var(--article-faint)">EVENT B · SUPERSEDES</text>
+        <text x="654" y="157" class="s-copy" fill="var(--article-ink)">New attempt replaces old gate result</text>
+        <rect x="634" y="178" width="236" height="58" rx="11" fill="var(--article-surface)" stroke="var(--article-line)"/>
+        <text x="654" y="203" class="s-label" fill="var(--article-faint)">EVENT B · OVERRIDES</text>
+        <text x="654" y="224" class="s-copy" fill="var(--article-ink)">Operator accepts with reason</text>
+      </svg>
+      <figcaption><span class="figure-claim"><b>State rule.</b> Only an unresolved opening event produces persistent acute UI. A later typed event closes it while both events remain in history.</span></figcaption>
+    </figure>
+
+    <h3>Additive ledger identity</h3>
+    <p>New events need a durable <code>eventId</code>. Incident-opening events also carry an <code>incidentId</code>. Closing events carry the same <code>incidentId</code>, a <code>resolutionOf</code> event ID, and a closure kind: <code>recovered</code>, <code>succeeded</code>, <code>superseded</code>, or <code>overridden</code>. Legacy rows receive a deterministic read-time ID derived from timestamp, kind, actor, run ID, and payload reference; no historical file rewrite is required.</p>
+
+    <table>
+      <thead><tr><th>Condition</th><th>Opens</th><th>Closes</th><th>Banner rule</th></tr></thead>
+      <tbody>
+        <tr><td>QuotaExceeded</td><td>Typed quota incident or an escalated remote outcome linked to quota</td><td>Quota admission succeeds and the next run starts, or an explicit quota-restored probe succeeds</td><td>Red only while the card cannot run because of quota. Recovery removes the header banner immediately.</td></tr>
+        <tr><td>Transient gate failure</td><td>Gate finish with failed/refused outcome and stable gate/run identity</td><td>The same gate passes, the generation is superseded, or an operator override is recorded</td><td>Open failure remains visible; recovered and superseded failures move to settled history.</td></tr>
+        <tr><td>Integration failure</td><td><code>integration_failed</code></td><td><code>integration_succeeded</code>, <code>integration_overridden</code>, or a typed supersession of that delivery generation</td><td>Do not infer closure merely from a lane move. Review may continue while integration remains open.</td></tr>
+        <tr><td>Attempt-budget escalation</td><td><code>orchestrator_escalated</code></td><td>Human decision, operator requeue with a new attempt, or accepted verdict explicitly linked to the escalation</td><td>Header follows the linked open incident, not the latest event-kind subset.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>AGT-2577 projection</h3>
+    <ol>
+      <li>19:10, 10 August: <q>Quota exhausted · Escalated</q> opens incident Q1.</li>
+      <li>00:15, 11 August: operator requeue records intent but does not by itself prove quota recovery.</li>
+      <li>00:15 to 00:30: the next run is admitted and completes. The quota producer emits <q>Quota restored</q>, linked to Q1.</li>
+      <li>The red header disappears. The Timeline keeps both events and shows <q>resolved 5h 20m later</q> on the earlier event.</li>
+    </ol>
+  </section>
+
+  <section id="scroll">
+    <h2><span class="number">10</span> Scrolling and navigation model</h2>
+    <table>
+      <thead><tr><th>Element</th><th>Contract</th></tr></thead>
+      <tbody>
+        <tr><td><b>Default order</b></td><td>Newest event first. Opening Timeline lands at the top, which is the latest durable event, without an automatic animated scroll.</td></tr>
+        <tr><td><b>Day sections</b></td><td>Events group under local-date headings. <q>Today</q> is expanded. Older dates show event, problem, run, and decision counts and can collapse.</td></tr>
+        <tr><td><b>Run context</b></td><td>Run-start, run-finish, lifecycle frames, tool clusters, and run-scoped gate entries share a Run N anchor. A run summary remains one row even when it contains many turns.</td></tr>
+        <tr><td><b>Jump menu</b></td><td>Latest, first open problem, latest run, each day, each review epoch, and task start. The URL can carry a stable event or section anchor.</td></tr>
+        <tr><td><b>Sticky context</b></td><td>The Timeline action row and active day/run context stay below the task tabs. They show the date and run currently crossing the viewport.</td></tr>
+        <tr><td><b>Live arrivals</b></td><td>If the operator is at the top, prepend quietly and preserve focus. If they have scrolled away, reserve a <q>New event · Jump to latest</q> row below the sticky context. Never float it over text.</td></tr>
+        <tr><td><b>Expansion</b></td><td>Opening a popover or disclosure never changes scroll position. Deep-linked events expand only the requested detail and retain the section anchor.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Layering contract from AGT-2613</h3>
+    <pre><code>task tabs and pane header       z-layer 30
+timeline action and jump row    z-layer 20
+sticky day / run context        z-layer 10
+event rows and disclosures      base layer
+popover overlay                 shared overlay layer above the pane</code></pre>
+    <p>Each sticky layer has an opaque surface and a reserved block in normal flow. The jump row never uses absolute positioning over stream content. Popovers use the shared overlay service, flip away from viewport edges, and restore focus to their chip.</p>
+
+    <h3>Long streams</h3>
+    <p>Presentation slices can ship against the existing full endpoint. The performance slice then adds cursor pagination by stable event identity and virtualizes only collapsed rows. Expanded disclosures remain measured blocks. The browser keeps an anchor event plus pixel offset when older pages load, so grouping and newest-first order do not cause jumps.</p>
+  </section>
+
+  <section id="slices">
+    <h2><span class="number">11</span> Decision-ready delivery slices</h2>
+    <table class="slice-table">
+      <thead><tr><th>Slice</th><th>Owns</th><th>Depends on</th><th>Acceptance boundary</th></tr></thead>
+      <tbody>
+        <tr><td>T1 · Registry</td><td>Exhaustive event-kind to category, severity, incident effect, disclosure, and copy mapping; unknown-kind fallback.</td><td>None</td><td>Every backend kind has one primary category and direct matrix coverage. No visual change yet.</td></tr>
+        <tr><td>T2 · Timeline shell</td><td>Newest-first order, day sections, category labels and filters, three row registers, sticky context, jump anchors, stable event tracking.</td><td>T1, Admin guideline</td><td>AGT-2577 fixture opens on current events, reaches task start in one jump, and has no overlapping sticky controls in wide or narrow view.</td></tr>
+        <tr><td>T3 · Technical disclosure</td><td>Central glossary module, concept chips, explanation-first popovers, exact Copy, Wiki glossary link.</td><td>T1, shared popover</td><td>SHA, branch/ref, fence, epoch, idempotency key, and attempt ID are absent from prose and copy exactly from keyboard or pointer.</td></tr>
+        <tr><td>T4 · Incident semantics</td><td>Additive event IDs and resolution links; quota, gate, integration, and escalation producers; open-incident projection and current banner.</td><td>T1, backend ledger contract</td><td>QuotaExceeded escalates, later recovers, removes the banner, and leaves the linked pair in Timeline. Lane movement alone cannot falsely heal integration failure.</td></tr>
+        <tr><td>T5 · Payload renderer</td><td>Collapsed gate/test output, rendered and capped CLI FAILED Markdown, raw-frame attachment, per-call status truth, Copy, event-level Trace link.</td><td>T1, AGT-2556 renderer line</td><td>No <code>item.completed</code> or command payload is open JSON in Activity. A two-call fixture attributes each result without aggregate contradiction.</td></tr>
+        <tr><td>T6 · Lifecycle condensation</td><td>Fold Codex thread/turn frames into run summaries, extend AGT-W17 grouping, remove per-row Trace actions and repeated explanatory copy.</td><td>T5, CAC-21/library release where applicable</td><td>A run uses no more than the three row registers; lifecycle frames remain individually accessible in Trace.</td></tr>
+        <tr><td>T7 · Scale and proof</td><td>Cursor paging, collapsed-row virtualization, anchor preservation, accessibility audit, light/dark and narrow/wide Playwright evidence.</td><td>T2 to T6, measured long-stream baseline</td><td>Measured long streams meet the agreed render/scroll budget; expanded evidence is not clipped; screenshot names and captions follow AGT-2609.</td></tr>
+      </tbody>
+    </table>
+    <div class="box warn">
+      <h4>Sequencing note</h4>
+      <p>T2 and T3 can proceed in parallel after T1. T4 is the semantic correction and must land before the stale banner is considered fixed. T5 and T6 share the Activity projection boundary and should be coordinated with the coding-agent-chat release rather than duplicated in Studio.</p>
+    </div>
+
+    <h3>Verification matrix for the implementation train</h3>
+    <ul>
+      <li>Unit matrix for every event kind, severity, incident opening/closure, and legacy deterministic ID.</li>
+      <li>Component coverage for category filtering, stable row identity, popover keyboard behavior, Copy success/failure, and per-call truth.</li>
+      <li>Playwright scenarios for real-shaped AGT-2577 history, open integration failure, healed QuotaExceeded, raw tool frame, CLI FAILED Markdown, and a long stream.</li>
+      <li>Visual proof in light and dark at wide and narrow widths, with screenshot provenance and as-of captions.</li>
+      <li>Accessibility proof for heading hierarchy, ordered chronology, disclosure names, live-arrival announcement, focus return, and color-independent status text.</li>
+    </ul>
+  </section>
+
+  <section id="glossary">
+    <h2><span class="number">12</span> Appendix: Timeline concept glossary</h2>
+    <p>This appendix is the Wiki target for every technical chip's <q>More about timeline concepts</q> link. The implementation module should use these one-sentence texts verbatim unless a later documentation decision updates both sources together.</p>
+    <table class="glossary-table">
+      <thead><tr><th>Concept</th><th>One-sentence explanation</th></tr></thead>
+      <tbody>
+        <tr><td id="glossary-attempt-id">Attempt ID</td><td>A stable identifier for one bounded run or review attempt, used to keep retries and their evidence distinct.</td></tr>
+        <tr><td id="glossary-attempt-chain">Attempt chain ID</td><td>An identifier that groups replacement attempts belonging to the same delivery or recovery chain.</td></tr>
+        <tr><td id="glossary-authority-epoch">Authority epoch</td><td>The Task Server's claim-generation number; a write is valid only against the epoch assigned to its attempt.</td></tr>
+        <tr><td id="glossary-base-sha">Base SHA</td><td>The immutable Git revision from which an attempt started and against which its delivery range is evaluated.</td></tr>
+        <tr><td id="glossary-branch">Branch or ref</td><td>A named Git reference to a revision; a branch can move, while an immutable result ref is expected to keep pointing at one exact delivery.</td></tr>
+        <tr><td id="glossary-delivery-ref">Delivery ref</td><td>The Git reference selected as the authoritative source that review and integration consume for a completed attempt.</td></tr>
+        <tr><td id="glossary-event-id">Event ID</td><td>A durable identifier for one timeline event so another event or shared link can refer to it unambiguously.</td></tr>
+        <tr><td id="glossary-fence">Fence</td><td>A monotonically increasing token that rejects writes from a stale runner after task authority has moved to a newer lease.</td></tr>
+        <tr><td id="glossary-idempotency-key">Idempotency key</td><td>An operation-scoped key that lets the Task Server recognize a safe replay of the same request without applying it twice.</td></tr>
+        <tr><td id="glossary-incident-id">Incident ID</td><td>An identifier shared by the event that opens a problem and the later event that resolves, supersedes, or overrides it.</td></tr>
+        <tr><td id="glossary-integration-branch">Integration branch</td><td>The project branch, such as <code>develop</code>, into which an accepted delivery must be merged before it is considered integrated.</td></tr>
+        <tr><td id="glossary-lease">Lease</td><td>A time-limited grant giving one executor authority to write for an attempt until it is renewed, released, expires, or is taken over.</td></tr>
+        <tr><td id="glossary-payload-ref">Payload reference</td><td>A task-relative pointer to the durable artifact or evidence body owned by an event.</td></tr>
+        <tr><td id="glossary-resolution-of">Resolution link</td><td>A reference from a closing event to the earlier event whose open condition it settles.</td></tr>
+        <tr><td id="glossary-result-sha">Result SHA</td><td>The immutable Git revision that contains the exact delivery produced by a completed attempt.</td></tr>
+        <tr><td id="glossary-run-id">Run ID</td><td>The correlator that groups task events and Activity evidence belonging to one CLI invocation.</td></tr>
+        <tr><td id="glossary-salvage-ref">Salvage ref</td><td>A recovery Git reference that preserves worktree content after an interrupted or nonstandard teardown and is not automatically authoritative.</td></tr>
+        <tr><td id="glossary-trace">Trace</td><td>The raw, line-level evidence view containing the original frames and payloads behind the readable Timeline or Activity presentation.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="non-goals">
+    <h2><span class="number">13</span> Non-goals and retained contracts</h2>
+    <ul>
+      <li>No new workflow engine, event bus, or competing timeline store.</li>
+      <li>No deletion or lossy rewriting of raw frames. Readability is a projection over durable evidence.</li>
+      <li>No colored left accent lines or per-category card geometry.</li>
+      <li>No inline diff viewer in the stream. AGT-W17's no-diff decision remains in force.</li>
+      <li>No persistent success or failure banner for settled history.</li>
+      <li>No automatic claim that a condition healed merely because a card changed lane.</li>
+      <li>No task storage slug in a human-facing event header.</li>
+    </ul>
+  </section>
+
+  <section id="sources">
+    <h2><span class="number">14</span> Source map</h2>
+    <div class="evidence-list">
+      <a class="evidence" href="../protokoll-verdichtung/index.html"><span class="evidence-class" data-evidence-class="observed">Predecessor</span><span><b>Protocol condensation, AGT-W17</b><small>Supervisor grouping, tool-call summary, edit paths, and the no-inline-diff decision.</small></span></a>
+      <a class="evidence" href="../admin-design-guideline/index.html"><span class="evidence-class" data-evidence-class="observed">Guideline</span><span><b>Admin Surface Design Guideline</b><small>Flat composition, one stream grid, density, hierarchy, and the AGT-2613 panel layering addendum.</small></span></a>
+      <a class="evidence" href="../../quality/design/style-guide-hard-rules.md"><span class="evidence-class" data-evidence-class="observed">Rule</span><span><b>Hard visual rules</b><small>No status accent bars, acute-only signals, both themes, and flat admin grammar.</small></span></a>
+      <a class="evidence" href="../../../frontend/src/app/features/task-timeline/components/task-timeline-pane/task-timeline-pane.component.ts"><span class="evidence-class" data-evidence-class="observed">Code</span><span><b>Current Timeline projection</b><small>Oldest-first display, verdict banner, row tone, and detail-chip behavior.</small></span></a>
+      <a class="evidence" href="../../../frontend/src/app/features/task-detail/components/protocol-pane/structured-activity-projection.ts"><span class="evidence-class" data-evidence-class="observed">Code</span><span><b>Structured Activity projection</b><small>Studio's current adapter for Codex messages, tool results, and runner status.</small></span></a>
+      <a class="evidence" href="../../../frontend/src/app/features/task-detail/components/protocol-pane/runner-event-replay.ts"><span class="evidence-class" data-evidence-class="observed">Code</span><span><b>Runner lifecycle replay</b><small>Current session and turn frames projected into stream events.</small></span></a>
+      <a class="evidence" href="../../research/status-modell-brechpunkte-glossar.md"><span class="evidence-class" data-evidence-class="observed">Glossary source</span><span><b>Authority terminology</b><small>Canonical meanings for leases, fences, authority epochs, delivery refs, salvage, and attempts.</small></span></a>
+    </div>
+  </section>
+
+  <!-- agent-studio:implementation-section:start -->
+  <section id="implementation" data-document-section="implementation">
+    <h2><span class="number">15</span> Implementation</h2>
+    <p>Delivery slices append their implementation status here after the decision is accepted. This Dossier currently contains design and evidence only.</p>
+    <ol class="implementation-log">
+<!-- agent-studio:implementation-log:start -->
+<!-- agent-studio:implementation-log:end -->
+    </ol>
+  </section>
+  <!-- agent-studio:implementation-section:end -->
+</main>
+</body>
+</html>
