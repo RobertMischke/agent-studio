@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildOrchestratorConversationEvents,
-  resolveAttachmentUrl,
   sameOrchestratorChatTurns,
   suppressLocalDuplicates,
 } from './orchestrator-side-sheet.util';
@@ -26,19 +25,6 @@ describe('orchestrator-side-sheet.util', () => {
 
     it('dedupes repeated tags and ignores mid-line hashes', () => {
       expect(parseBugHashtags('#bug\ntext with #notatag inline\n#bug')).toEqual(['bug']);
-    });
-  });
-
-  describe('resolveAttachmentUrl', () => {
-    it('routes a chat-attachments path through the per-project GET endpoint', () => {
-      expect(resolveAttachmentUrl('demo', 'chat-attachments/shot.png')).toBe(
-        '/api/runner/demo/orchestrator-chat/attachments/shot.png',
-      );
-    });
-
-    it('returns the input unchanged when project or path is missing', () => {
-      expect(resolveAttachmentUrl(null, 'chat-attachments/x.png')).toBe('chat-attachments/x.png');
-      expect(resolveAttachmentUrl('demo', '')).toBe('');
     });
   });
 
@@ -85,11 +71,6 @@ describe('orchestrator-side-sheet.util', () => {
         includedBlocks: ['task metadata', 'status.md'],
         capturedAt: '2026-07-23T11:59:58Z',
       },
-      attachments: [{
-        alt: 'evidence',
-        relativePath: 'chat-attachments/evidence.png',
-        mimeType: 'image/png',
-      }],
     };
 
     it('treats a freshly deserialized but unchanged poll as equal', () => {
@@ -105,10 +86,6 @@ describe('orchestrator-side-sheet.util', () => {
       }])).toBe(false);
       expect(sameOrchestratorChatTurns([turn], [{
         ...turn,
-        attachments: [{ ...turn.attachments![0], relativePath: 'changed.png' }],
-      }])).toBe(false);
-      expect(sameOrchestratorChatTurns([turn], [{
-        ...turn,
         contextReceipt: { ...turn.contextReceipt!, includedBlocks: ['task metadata'] },
       }])).toBe(false);
       expect(sameOrchestratorChatTurns([turn], [turn, { ...turn, id: 'turn-2' }])).toBe(false);
@@ -116,14 +93,13 @@ describe('orchestrator-side-sheet.util', () => {
   });
 
   describe('buildOrchestratorConversationEvents', () => {
-    it('dedupes optimistic turns, resolves attachments, maps actors, and sorts the transcript', () => {
+    it('dedupes optimistic turns, maps actors, and sorts the transcript', () => {
       const server: OrchestratorChatTurn[] = [
         {
           id: 'persisted-user',
           ts: '2026-07-08T00:01:00Z',
           role: 'user',
           text: 'hello',
-          attachments: [{ alt: 'local shot', relativePath: 'chat-attachments/local.png' }],
         },
         {
           id: 'reply',
@@ -140,7 +116,6 @@ describe('orchestrator-side-sheet.util', () => {
             cacheCreationTokens: 0,
           },
           errorMessage: 'connection closed',
-          attachments: [{ alt: 'reply shot', relativePath: 'chat-attachments/reply image.png' }],
         },
       ];
       const local = [{
@@ -149,7 +124,6 @@ describe('orchestrator-side-sheet.util', () => {
         role: 'user' as const,
         text: 'hello',
         pending: true,
-        localAttachments: [{ alt: 'local shot', previewUrl: 'blob:local-shot' }],
       }];
       const inline: ChatEvent[] = [{
         id: 'memory',
@@ -162,16 +136,13 @@ describe('orchestrator-side-sheet.util', () => {
         server,
         local,
         inline,
-        'Agent Studio',
         'project:Agent Studio',
       );
 
       expect(events.map(event => event.id)).toEqual([
         'memory',
         'local-user',
-        'local-user:attachment:0',
         'reply',
-        'reply:attachment:0',
       ]);
       expect(events[0]).toMatchObject({
         kind: 'system.status',
@@ -184,23 +155,13 @@ describe('orchestrator-side-sheet.util', () => {
         body: 'hello',
       });
       expect(events[2]).toMatchObject({
-        kind: 'artifact.image',
-        caption: 'local shot',
-        url: 'blob:local-shot',
-      });
-      expect(events[3]).toMatchObject({
         kind: 'message.orchestrator',
         actor: 'Orchestrator',
         severity: 'error',
         model: 'claude-opus-4-8',
         thinkingLevel: 'high',
       });
-      expect((events[3] as { body: string }).body).toContain('**Error:** connection closed');
-      expect(events[4]).toMatchObject({
-        kind: 'artifact.image',
-        caption: 'reply shot',
-        url: '/api/runner/Agent%20Studio/orchestrator-chat/attachments/reply%20image.png',
-      });
+      expect((events[2] as { body: string }).body).toContain('**Error:** connection closed');
       expect(events.every(event => event.rawRange.source === 'project:Agent Studio')).toBe(true);
     });
 
@@ -236,7 +197,7 @@ describe('orchestrator-side-sheet.util', () => {
         },
       ];
 
-      const events = buildOrchestratorConversationEvents([], [], inline, 'demo', 'project:demo');
+      const events = buildOrchestratorConversationEvents([], [], inline, 'project:demo');
 
       expect(events.map(event => event.kind)).toEqual([
         'toolBurst',

@@ -171,8 +171,7 @@ public sealed class TaskServerOrchestratorChatPersistence(
             usage,
             turn.ErrorMessage,
             turn.ErrorDetail,
-            turn.Attachments?.Select(item =>
-                new OrchestratorContextAttachmentDto(item.Alt, item.RelativePath)).ToArray(),
+            Attachments: null,
             receipt);
     }
 
@@ -225,11 +224,6 @@ public sealed class TaskServerOrchestratorChatPersistence(
             TokenUsage = usage,
             ErrorMessage = turn.ErrorMessage,
             ErrorDetail = turn.ErrorDetail,
-            Attachments = turn.Attachments?.Select(item => new OrchestratorChatAttachment
-            {
-                Alt = item.Alt,
-                RelativePath = item.RelativePath,
-            }).ToList(),
             ContextReceipt = receipt,
         };
     }

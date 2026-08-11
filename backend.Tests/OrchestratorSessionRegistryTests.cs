@@ -284,7 +284,6 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
             string prompt,
             string? model,
             string workingDirectory,
-            IReadOnlyList<CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
         {
             ResumeCalls++;

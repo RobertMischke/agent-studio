@@ -34,6 +34,7 @@ async function stubWorkspace(page: Page, sent: Record<string, unknown>[] = []) {
       });
     }
     if (/\/api\/(?:tags|workspaces|clients|git\/summary|crash-recovery\/pending)\/?$/.test(requestPath)) body = '[]';
+    if (requestPath === '/api/projects') body = '[]';
     if (requestPath.startsWith('/api/bus/')) body = '[]';
     if (requestPath === '/api/v1/management/remote-hosts') body = '[]';
     if (requestPath === '/api/runner/status') body = '{"projects":{}}';
@@ -119,16 +120,19 @@ async function choose(page: Page, model: string, reasoning: string) {
 
 test('full live GPT picker persists across Board and Task contexts', async ({ page }, testInfo) => {
   await stubWorkspace(page);
-  await page.addInitScript(({ project }) => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
-    v: 1,
-    tabs: [
-      { kind: 'board', projectName: project },
-      { kind: 'task', taskKey: `${project}::task-1` },
-      { kind: 'hub', projectName: project },
-      { kind: 'url-preview', projectName: project, urlId: 'preview' },
-    ],
-    activeKey: `board:${project}`,
-  })), { project: PROJECT });
+  await page.addInitScript(({ project }) => {
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+      v: 1,
+      tabs: [
+        { kind: 'board', projectName: project },
+        { kind: 'task', taskKey: `${project}::task-1` },
+        { kind: 'hub', projectName: project },
+        { kind: 'url-preview', projectName: project, urlId: 'preview' },
+      ],
+      activeKey: `board:${project}`,
+    }));
+  }, { project: PROJECT });
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
   // This focused spec mocks REST but deliberately does not start SignalR.
   // Keep the resulting connectivity chrome visible in screenshots without
@@ -144,20 +148,14 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await page.getByTestId('orch-side-sheet-toggle').click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
   await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
-  await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Inherited Codex default');
+  await expect(page.getByTestId('chat-toolbar')).toHaveCount(0);
+  await expect(page.getByTestId('chat-attach')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-draft-actions')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-make-task')).toHaveCount(0);
   await expect(page.getByTestId('orch-side-sheet-make-task-from-yours')).toHaveCount(0);
 
   const input = page.getByTestId('chat-input');
-  await input.fill('/bug preserved picker draft');
-  await page.getByTestId('chat-attach').click();
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'picker-proof.png', mimeType: 'image/png', buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-      'base64'),
-  });
-  await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
+  await input.fill('preserved picker draft');
 
   await page.getByTestId('cac-model-selector-trigger').click();
   await expect(page.getByTestId('cac-model-selector-picker-cli-claude')).toBeDisabled();
@@ -187,14 +185,11 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   expect(modelListLayout.scrollHeight).toBeGreaterThan(modelListLayout.clientHeight);
   expect(modelListLayout.maskImage).toContain('linear-gradient');
   await page.getByTestId('cac-model-selector-picker-cancel').click();
-  await expect(input).toHaveValue('/bug preserved picker draft');
-  await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
+  await expect(input).toHaveValue('preserved picker draft');
   await expect(page.getByTestId('cac-model-selector-trigger')).toBeFocused();
-  await input.fill('');
-  await page.getByTestId('chat-drafts').getByRole('button').click();
 
   await choose(page, 'gpt-5.6-sol', 'xhigh');
-  await expect(page.getByTestId('chat-toolbar-routing')).toHaveText('GPT-only · Operator choice');
+  await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
   await page.getByTestId(`studio-tab-hub:${PROJECT}`).click();
   await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Deck');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
@@ -202,10 +197,6 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
   await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('URL preview');
   await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('preview');
   await expect(page.getByTestId('cac-model-selector-trigger')).toContainText('gpt-5.6-sol');
-  await page.getByTestId(`studio-tab-task:${PROJECT}::task-1`).click();
-  await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
-  await expect(page.getByTestId('chat-composer-context-detail'))
-    .toHaveText(`${PROJECT}::task-1`);
   await expect(page.getByTestId('cac-model-selector-trigger'))
     .toHaveAttribute('aria-label', /gpt-5\.6-sol.*xhigh/);
   await page.getByTestId('orch-context-badge').click();
