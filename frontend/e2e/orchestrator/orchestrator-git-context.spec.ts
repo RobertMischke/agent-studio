@@ -26,7 +26,7 @@ test('adds current diff and known Git sources, sends typed references, and inspe
   const current = page.getByTestId('orch-context-current-source');
   await expect(current).toContainText(FILE);
   await expect(current).toContainText('L4-L7');
-  await page.getByTestId('orch-context-add-current').click();
+  await current.click();
 
   const search = page.getByTestId('orch-context-source-search');
   await search.fill('context');
@@ -35,7 +35,8 @@ test('adds current diff and known Git sources, sends typed references, and inspe
   const commitResults = page.getByTestId('orch-context-group-commits');
   await commitResults.getByRole('button', { name: 'Add commit' }).click();
   await commitResults.getByRole('button', { name: 'Add diff' }).click();
-  await expect(page.getByTestId('orch-context-reference-count')).toContainText('4 references');
+  const explicitContextChips = page.locator('[data-testid^="orch-context-chip-"]');
+  await expect(explicitContextChips).toHaveCount(4);
   await page.screenshot({
     path: resolve(RESULTS, 'orchestrator-git-context-picker-dark--mocked.png'),
     fullPage: false,
@@ -72,7 +73,7 @@ test('adds current diff and known Git sources, sends typed references, and inspe
   await page.getByTestId('orch-context-inspect-toggle').click();
   await expect(page.getByTestId('orch-answer-context-source')).toHaveCount(4);
   await expect(page.getByTestId('orch-answer-context-sources')).toContainText(`diff:${PROJECT}/${SHA}:${FILE}#L4-L7`);
-  await expect(page.getByTestId('orch-context-reference-count')).toContainText('0 references');
+  await expect(explicitContextChips).toHaveCount(0);
 
   await page.evaluate(() => localStorage.setItem('atp.studio.theme', 'light'));
   await page.reload();
