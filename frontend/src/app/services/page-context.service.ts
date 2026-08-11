@@ -9,8 +9,8 @@ import {
 
 /**
  * App-wide bridge from interactive repository pages to shell-owned actions.
- * The active page remains a navigation detail inside the project chat rather
- * than creating a separate persisted chat session for every file.
+ * Ordinary pages remain navigation detail inside the project chat. A canonical
+ * Dossier tab carries its own route-derived persisted chat context.
  */
 @Injectable({ providedIn: 'root' })
 export class PageContextService {

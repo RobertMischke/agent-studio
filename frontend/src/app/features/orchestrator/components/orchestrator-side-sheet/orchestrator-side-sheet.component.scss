@@ -257,6 +257,57 @@
   display: none;
 }
 
+// CAC owns the composer markup. The side-sheet host owns the available width,
+// so it also supplies the responsive footer contract for long route labels.
+.sheet__composer ::ng-deep [data-testid='chat-composer-foot'] {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sheet__composer ::ng-deep .chat__composer-foot-start {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.sheet__composer ::ng-deep .chat__composer-foot-end {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sheet__composer ::ng-deep [data-testid='chat-composer-context'] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.sheet__composer ::ng-deep [data-testid='chat-composer-context'] > span {
+  white-space: nowrap;
+}
+
+.sheet__composer ::ng-deep [data-testid='chat-composer-context-detail'] {
+  overflow: hidden;
+  max-width: min(100%, 28ch);
+  text-overflow: ellipsis;
+}
+
+.sheet__composer ::ng-deep cac-model-selector {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sheet__conversation-empty {
+  margin: 0;
+  padding: var(--studio-spacing-5) var(--studio-spacing-4);
+  color: var(--studio-fg-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .sheet__no-project {
   padding: var(--studio-spacing-5) var(--studio-spacing-4);
   border: 1px dashed var(--studio-border);

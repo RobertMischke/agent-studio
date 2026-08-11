@@ -35,11 +35,18 @@ transcript. Passive restore never moves keyboard focus into the composer.
 Task routes keep their task surface and Activity tab unchanged and do not
 trigger the project-entry behavior.
 
+Conversation identity is derived from the active route. A task route selects
+its task context, a Dossier tab selects its Dossier context, and every other
+project-bound route selects the one permanent project context. The global
+monitoring and watcher stream remains in the global context. It is never
+inserted into project, task, or Dossier transcripts.
+
 The chat has two scopes:
 
 - **Global orchestrator.** Answers cross-project questions: what is happening across the board, which projects need attention, whether the queue is healthy, and what should be reviewed first.
 - **Project orchestrator.** Answers project-local questions: what this application does, what jobs ran recently, what decisions were made, what the roadmap says, which tasks are blocked, and what follow-up should be created.
 - **Task context.** Answers read-only questions about one task in a separate task transcript. It does not replace or alter the task detail Activity tab.
+- **Dossier context.** Answers questions about one Dossier in a separate, durable transcript that resumes when the operator returns to that Dossier.
 
 The user should be able to tell which scope is active. A target selector is better than pretending one model sees everything at once.
 
@@ -61,7 +68,7 @@ That model matches the existing ADR-0007 and ADR-0009 direction. The chat is not
 ## Managed Context and Session Contracts
 
 Managed conversation context and CLI session mechanics are separate contracts.
-The selected context store is the authority for project and task context
+The selected context store is the authority for project, task, and Dossier context
 identity, transcripts, receipts, lifecycle visibility, and short summaries.
 The monolith profile selects its in-process, registry-backed store when no
 standalone Task Server URL is configured. A valid absolute HTTP or HTTPS
@@ -70,10 +77,13 @@ records may support execution continuity, but they are not Chat History and
 cannot become a competing transcript store.
 
 Every project is materialized as a permanently visible managed context. Opening
-Orchestrator Chat for a task materializes a new managed task context. It remains
-visible until the task reaches `7-archive`; archive sets `hiddenAt` and excludes
-it from the current list without deleting the context or any turns. If the task
-leaves archive, the retained context becomes visible again.
+Orchestrator Chat for a task or Dossier materializes a dedicated managed
+context on first access. A task context remains visible until the task reaches
+`7-archive`. A Dossier context remains visible while its descriptor is current
+and is hidden when the Dossier is archived or documented. Hiding sets
+`hiddenAt` and excludes the row from current lists without deleting the
+context, transcript, or receipts. If the source leaves its terminal lifecycle,
+the retained context becomes visible again.
 
 The backend exposes a context-keyed session registry for the canonical
 orchestrator scopes. The accepted context keys are:
@@ -81,6 +91,7 @@ orchestrator scopes. The accepted context keys are:
 - `global` for the board-level orchestrator.
 - `project:<PROJ-ID>` for one watched project's canonical orchestrator.
 - `task:<PROJ-ID>/<KEY>` for a task-scoped orchestrator context.
+- `dossier:<PROJ-ID>/<DOSSIER-ID>` for a Dossier-scoped orchestrator context.
 
 The execution-session registry is lazy: reading a valid context key creates the
 machine-local runtime record when it does not already exist. Records are stored below
@@ -92,9 +103,9 @@ URL-safe form produced by `OrchestratorContextKey`.
 The HTTP surface combines the selected context projection with asynchronous
 runtime dispatch:
 
-- `GET /api/orchestrator/sessions` lists current project and
-  task contexts with their short summaries, merged with ephemeral runtime
-  status and queue position. Archived task contexts are omitted.
+- `GET /api/orchestrator/sessions` lists current project, task, and Dossier
+  contexts with their short summaries, merged with ephemeral runtime status
+  and queue position. Archived task and settled Dossier contexts are omitted.
 - `GET /api/orchestrator/sessions/{contextKey}` returns or creates one valid
   context-key record. Invalid context keys return `400`.
 - `POST /api/orchestrator/sessions/{contextKey}/turns` appends a user prompt
@@ -118,12 +129,16 @@ session identity.
 
 The side sheet's chat follows the operator's navigation (MC-2, Concept §4): the
 board is a `project:<PROJ>` context, an open task page is a `task:<PROJ>/<KEY>`
-context, and a pin freezes whichever is current. Each context has its own
-transcript so a pinned task and the board no longer share one history.
+context, and an open Dossier is a `dossier:<PROJ>/<DOSSIER-ID>` context. All
+other routes inside a project resolve to that project's single permanent
+context. A pin freezes whichever is current. Each context has its own
+transcript and transient event projection, so project monitoring, tasks, and
+Dossiers cannot borrow or render each other's history.
 
 - `GET /api/runner/{contextKey}/orchestrator-chat` returns the transcript for a
   navigation context. `{contextKey}` is the same canonical key as the session
-  registry — `project:<PROJ>` (one path segment) or `task:<PROJ>/<KEY>` (two).
+  registry: `project:<PROJ>` (one path segment), `task:<PROJ>/<KEY>` (two), or
+  `dossier:<PROJ>/<DOSSIER-ID>` (two).
   The response is `{ contextKey, project, turns }`.
 - `POST /api/runner/{contextKey}/orchestrator-chat` sends a user message and
   persists both turns to that context's transcript, returning
@@ -181,7 +196,8 @@ unresolved, unavailable, blocked, and budget-excluded sources with revision,
 freshness, character, token, and reason metadata. The header opens **Chat
 history**, which consumes the current-context list and its short
 summaries. A watched project contributes exactly one permanent project row;
-archived task rows remain retained by the selected store but are omitted here.
+archived task and settled Dossier rows remain retained by the selected store
+but are omitted here.
 
 The side sheet consumes these routes directly: it derives the context key from
 navigation (`contextKey` on `OrchestratorSideSheetComponent`, frozen while
@@ -212,7 +228,7 @@ and recreate only those enriched nodes while ordinary text appeared stable.
 
 Side-sheet chat execution follows the same project assignment that controls
 card pickup. When `remoteExecutionEnabled` and `executionRunner` select a remote
-Runner, project and task chat turns are queued for that Runner. The host
+Runner, project, task, and Dossier chat turns are queued for that Runner. The host
 prepares a dedicated `project-chat` worktree from the same per-project git cache
 used by card runs, fetches the configured integration branch, and starts Codex
 with that checkout as its working directory. A project without a remote
@@ -291,10 +307,13 @@ instructs the orchestrator to ask before proposing or creating a task.
 
 The side sheet includes an optional, collapsed-by-default chat switcher. Its
 chip reports the number of active or queued contexts; expanding it groups the
-registry into Global, Projects, and Tasks. Rows expose the central short
+registry into Monitoring, Projects, Tasks, and Dossiers. Rows expose the central short
 summary, runtime state, local unread state, and cumulative token usage. Clicking a row name changes the chat
 context without moving the workspace. The separate arrow navigates to that
-context's all-project board, project board, or task tab.
+context's all-project board, project board, task tab, or Dossier tab. The
+currently selected row and every active or queued row have distinct indicators.
+The fixed chat header always shows the selected type icon, type label, and
+stable name, including forms such as `Dossier · AGT-W34`.
 
 The rail reads `GET /api/orchestrator/sessions`. The context row, summary, and
 durable usage come from the selected context store; its runtime badge is a snapshot of the
@@ -322,7 +341,7 @@ The orchestrator's memory should be layered, inspectable, and rebuildable:
 | Layer | Purpose | Storage |
 |-------|---------|---------|
 | Live session id | Optional CLI execution continuity. It is not transcript authority. | Existing machine-local orchestrator-session JSON files. |
-| Managed context | Authoritative project/task identity, transcript, source receipts, lifecycle visibility, short summary, and token usage. | In-process context-keyed JSONL for the monolith profile; Task Server SQLite and versioned API for remote mode. |
+| Managed context | Authoritative project/task/Dossier identity, transcript, source receipts, lifecycle visibility, short summary, and token usage. | In-process context-keyed JSONL for the monolith profile; Task Server SQLite and versioned API for remote mode. |
 | Event log | Durable record of decisions, follow-ups, overrides, and app actions outside managed chat turns. | Existing `orchestrator.jsonl`. |
 | Working memory | Compact "what I currently know" briefing: project purpose, current roadmap, active risks, recent task results, open decisions, next tasks. | New per-project memory snapshot, for example `.orchestrator/orchestrator-memory.md` or JSON. |
 | Source context | Human-owned truth: README, ROADMAP, AGENTS, architecture decisions, skills, project docs. | Existing repository files. |

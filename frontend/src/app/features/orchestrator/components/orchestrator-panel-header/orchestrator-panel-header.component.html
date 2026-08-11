@@ -50,6 +50,11 @@
     <span class="panel-head__divider" aria-hidden="true"></span>
     <span>Chats</span>
     <strong class="panel-head__count" data-testid="orch-context-count">{{ contextCount() }}</strong>
+    @if (activeChatCount() > 0) {
+      <span class="panel-head__active-count" data-testid="orch-active-chat-count">
+        {{ activeChatCount() }} active
+      </span>
+    }
     <app-studio-icon
       class="panel-head__caret"
       [name]="chatsOpen() ? 'chevronDown' : 'chevronRight'"

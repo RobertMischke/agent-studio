@@ -18,8 +18,15 @@ export function buildOrchestratorContextEnvelope(
   }
 
   const taskKey = navigation?.currentTaskKey ?? navigation?.currentTaskId ?? null;
+  const dossierId = navigation?.currentDossierId ?? parsed.dossierId ?? null;
   const activeSurface = taskKey
     ? { kind: 'task', reference: taskKey, title: navigation?.currentTaskTitle, taskKey }
+    : dossierId
+      ? {
+          kind: 'workbench',
+          reference: navigation?.pageRef ?? dossierId,
+          title: navigation?.currentDossierTitle ?? navigation?.pageTitle,
+        }
     : navigation?.pageRef
       ? {
           kind: navigation.pageType === 'workbench' ? 'workbench' : 'page',
@@ -36,6 +43,7 @@ export function buildOrchestratorContextEnvelope(
       contextKey,
       projectId: parsed.projectId,
       taskKey: parsed.taskKey,
+      ...(parsed.dossierId ? { dossierId: parsed.dossierId } : {}),
     },
     activeSurface,
     explicitReferences: explicitReferences.map(reference => ({

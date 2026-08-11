@@ -92,6 +92,11 @@
       outline-offset: 2px;
     }
 
+    &--working {
+      border-color: color-mix(in srgb, var(--studio-accent-success) 34%, var(--studio-border));
+      background: color-mix(in srgb, var(--studio-accent-success) 7%, var(--studio-bg-elevated));
+    }
+
     &:disabled {
       cursor: default;
       opacity: 0.6;
@@ -232,6 +237,11 @@
     &[data-kind='task'] {
       background: var(--studio-bg-hover);
       color: var(--studio-fg-muted);
+    }
+
+    &[data-kind='dossier'] {
+      background: color-mix(in srgb, var(--studio-accent-3) 12%, var(--studio-bg-elevated));
+      color: var(--studio-accent-3-strong);
     }
   }
 

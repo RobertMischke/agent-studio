@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -43,6 +44,9 @@ async function seedActiveTab(
   await page.addInitScript(({ tab, activeKey, theme }) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [tab], activeKey }));
     localStorage.setItem('atp.studio.theme', theme);
+    // This spec opens Chat explicitly after route hydration. Disable the
+    // independent project-entry preference so a toggle cannot race auto-open.
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
   }, { tab, activeKey, theme });
 }
 
@@ -188,6 +192,7 @@ async function stubWorkspace(
     withRunningTask: boolean;
     executionContext?: Record<string, unknown>;
     project?: string;
+    turns?: Array<Record<string, unknown>>;
   },
 ): Promise<string[]> {
   const unexpectedRequests = await stubBoardBootstrap(page);
@@ -250,7 +255,7 @@ async function stubWorkspace(
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
     await fulfillKnownGet(
       route,
-      { project, turns: [], executionContext: opts.executionContext ?? null },
+      { project, turns: opts.turns ?? [], executionContext: opts.executionContext ?? null },
       unexpectedRequests,
     );
   });
@@ -280,8 +285,39 @@ async function stubLongWorkbench(page: Page): Promise<string[]> {
   const unexpectedRequests = await stubWorkspace(page, {
     withRunningTask: false,
     project: LONG_CONTEXT_PROJECT,
+    turns: [{
+      id: 'board-monitoring',
+      ts: '2026-08-10T08:00:00Z',
+      role: 'orchestrator',
+      text: 'BOARD MONITORING HISTORY - never show in a Dossier.',
+    }],
   });
   const encodedProject = encodeURIComponent(LONG_CONTEXT_PROJECT);
+  const dossierContextKey = `dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`;
+  const dossierTurns: Array<Record<string, unknown>> = [];
+
+  await page.route(/\/api\/orchestrator\/sessions(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {
+      sessions: [{
+        contextKey: dossierContextKey,
+        kind: 'dossier',
+        projectId: LONG_CONTEXT_PROJECT,
+        taskKey: null,
+        dossierId: LONG_CONTEXT_WORKBENCH,
+        dossierKey: 'AOW-W1',
+        title: LONG_CONTEXT_TITLE,
+        createdAt: '2026-08-10T08:00:00Z',
+        updatedAt: '2026-08-10T08:00:00Z',
+        model: null,
+        cumulativeInputTokens: 0,
+        cumulativeOutputTokens: 0,
+        cumulativeCacheReadTokens: 0,
+        cumulativeCacheCreationTokens: 0,
+        runtimeStatus: 'active',
+        queuePosition: 0,
+      }],
+    }, unexpectedRequests);
+  });
 
   await page.route(/\/api\/workbenches(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, {
@@ -303,6 +339,82 @@ async function stubLongWorkbench(page: Page): Promise<string[]> {
       }, unexpectedRequests);
     },
   );
+  await page.route(
+    new RegExp(`/api/orchestrator/context/dossier:${encodedProject}/${LONG_CONTEXT_WORKBENCH}$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: dossierContextKey,
+        capturedAt: '2026-08-10T08:00:00Z',
+        digest: 'Dossier AOW-W1 | decision pending',
+        sources: [],
+      }, unexpectedRequests);
+    },
+  );
+  // One context-aware route keeps the project and Dossier fixtures under the
+  // exact same URL contract as the application. This also prevents the broad
+  // workspace fallback from accidentally swallowing one of the two contexts.
+  await page.route(/\/api\/runner\/.+\/orchestrator-chat$/, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    const encodedContext = pathname
+      .slice('/api/runner/'.length, -'/orchestrator-chat'.length);
+    const contextKey = decodeURIComponent(encodedContext);
+
+    if (contextKey === `project:${LONG_CONTEXT_PROJECT}` && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          contextKey,
+          project: LONG_CONTEXT_PROJECT,
+          turns: [{
+            id: 'board-monitoring',
+            ts: '2026-08-10T08:00:00Z',
+            role: 'orchestrator',
+            text: 'BOARD MONITORING HISTORY - never show in a Dossier.',
+          }],
+          executionContext: null,
+        }),
+      });
+    }
+    if (contextKey === dossierContextKey && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          contextKey: dossierContextKey,
+          project: LONG_CONTEXT_PROJECT,
+          turns: dossierTurns,
+          executionContext: null,
+        }),
+      });
+    }
+    if (contextKey === dossierContextKey && request.method() === 'POST') {
+      const body = request.postDataJSON() as { text: string };
+      dossierTurns.push(
+        { id: 'dossier-user', ts: '2026-08-10T08:01:00Z', role: 'user', text: body.text },
+        {
+          id: 'dossier-reply',
+          ts: '2026-08-10T08:01:01Z',
+          role: 'orchestrator',
+          text: 'Dossier continuation retained.',
+        },
+      );
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          contextKey: dossierContextKey,
+          project: LONG_CONTEXT_PROJECT,
+          reply: dossierTurns[1],
+          executionContext: null,
+        }),
+      });
+    }
+
+    unexpectedRequests.push(`${request.method()} ${pathname}`);
+    return route.fulfill({ status: 405, contentType: 'application/json', body: '{}' });
+  });
   await page.route(/\/api\/cli\/codex\/models(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, {
       models: [{
@@ -543,11 +655,88 @@ test.describe('Orchestrator context header · where am I', () => {
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
   });
 
+  test('Dossier chat starts fresh, resumes on return, and never shows project monitoring history', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await seedActiveTab(page, {
+      kind: 'board',
+      projectName: LONG_CONTEXT_PROJECT,
+    }, `board:${LONG_CONTEXT_PROJECT}`, 'light');
+    const unexpectedRequests = await stubLongWorkbench(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const workbenchSection = page.getByTestId(
+      `studio-explorer-project-workbenches-${LONG_CONTEXT_PROJECT}`,
+    );
+    const workbench = page.getByTestId(
+      `studio-explorer-workbench-${LONG_CONTEXT_PROJECT}-${LONG_CONTEXT_WORKBENCH}`,
+    );
+    if (!await workbench.isVisible()) await workbenchSection.click();
+    await workbench.click();
+    await expect(page.getByRole('heading', { name: LONG_CONTEXT_TITLE, exact: true })).toBeVisible();
+
+    const sheet = page.getByTestId('orch-side-sheet');
+    if (!await page.locator('app-orchestrator-side-sheet.is-open').count()) {
+      await showSideSheet(page, false);
+    }
+    const header = page.getByTestId('orch-context-header');
+    await expect(header).toHaveAttribute('data-scope', 'dossier');
+    await expect(page.getByTestId('orch-context-dossier')).toContainText('Dossier');
+    await expect(page.getByTestId('orch-context-dossier')).toContainText('AOW-W1');
+    await expect(sheet).not.toContainText('BOARD MONITORING HISTORY');
+    await expect(sheet).toBeVisible();
+    await sheet.screenshot({
+      path: resolve(RESULTS, 'dossier-chat-fresh-light--mocked.png'),
+    });
+
+    const persisted = await page.evaluate(async (url) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'Keep this Dossier-specific question.' }),
+      });
+      return response.ok;
+    }, `/api/runner/dossier:${encodeURIComponent(LONG_CONTEXT_PROJECT)}/${LONG_CONTEXT_WORKBENCH}/orchestrator-chat`);
+    expect(persisted).toBe(true);
+
+    await page.getByTestId(`studio-tab-board:${LONG_CONTEXT_PROJECT}`).click();
+    await expect(header).toHaveAttribute('data-scope', 'board');
+    await expect(sheet).toContainText('BOARD MONITORING HISTORY');
+
+    await page.getByTestId(
+      `studio-tab-workbench:${LONG_CONTEXT_PROJECT}:${LONG_CONTEXT_WORKBENCH}`,
+    ).click();
+    await expect(header).toHaveAttribute('data-scope', 'dossier');
+    await expect(sheet).toContainText('Dossier continuation retained.');
+    await expect(sheet).not.toContainText('BOARD MONITORING HISTORY');
+
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toContainText('Projects');
+    await expect(page.getByTestId('orch-context-menu')).toContainText('Tasks');
+    await expect(page.getByTestId('orch-context-menu')).toContainText('Dossiers');
+    await expect(page.getByTestId('orch-active-chat-count')).toHaveText('1 active');
+    const dossierRow = page.getByTestId(
+      `chat-switcher-row-dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`,
+    );
+    await expect(dossierRow).toHaveAttribute('data-runtime-status', 'active');
+    await expect(dossierRow).toContainText('working');
+    await sheet.screenshot({
+      path: resolve(RESULTS, 'dossier-chat-list-grouped-light--mocked.png'),
+    });
+    await page.getByTestId('orch-context-badge').click();
+
+    await setTheme(page, 'dark');
+    await sheet.screenshot({
+      path: resolve(RESULTS, 'dossier-chat-resumed-dark--mocked.png'),
+    });
+    expect(unexpectedRequests).toEqual([]);
+  });
+
   for (const variant of [
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`keeps the Dossier context chip row compact in ${variant.name}`, async ({ page }) => {
+    test(`keeps the Dossier identity clear in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
@@ -573,39 +762,24 @@ test.describe('Orchestrator context header · where am I', () => {
         await showSideSheet(page, false);
       }
 
-      const draft = page.getByTestId('orch-context-draft');
-      const chip = page.getByTestId('orch-current-tab-chip');
-      const chipLabel = page.getByTestId('orch-current-tab-label');
-      const estimate = page.getByTestId('orch-context-estimate');
-      await expect(draft).toBeVisible();
-      await expect(chip).toHaveAttribute('data-context-type', 'Dossier');
-      await expect(page.getByTestId('orch-current-tab-type-icon')).toBeVisible();
-      await expect(chipLabel).toHaveText('AOW-W1');
-      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
-      await expect(estimate).toHaveText('~1.6k');
-      await expect(estimate).not.toContainText('resolved when you send');
+      const panelHeader = page.getByTestId('orch-panel-header');
+      const panelIdentity = page.getByTestId('orch-panel-context-identity');
+      await expect(panelIdentity).toBeVisible();
+      await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Dossier');
+      await expect(page.getByTestId('orch-panel-context-name')).toHaveText('AOW-W1');
+      await expect(page.getByTestId('orch-context-dossier')).toContainText('Dossier');
+      await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Dossier');
+      await expect(page.getByTestId('chat-composer-context-detail')).toHaveText(LONG_CONTEXT_TITLE);
 
-      const layout = await draft.evaluate((element) => {
-        const rowItems = [
-          element.querySelector<HTMLElement>('[data-testid="orch-current-tab-chip"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-add-context"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-context-estimate"]')!,
-        ];
-        const label = element.querySelector<HTMLElement>('[data-testid="orch-current-tab-label"]')!;
+      const layout = await panelHeader.evaluate((element) => {
+        const label = element.querySelector<HTMLElement>('[data-testid="orch-panel-context-name"]')!;
         return {
           fits: element.scrollWidth <= element.clientWidth + 1,
-          rowCount: new Set(rowItems.map(item => {
-            const box = item.getBoundingClientRect();
-            return Math.round(box.top + box.height / 2);
-          })).size,
-          chipWhiteSpace: getComputedStyle(rowItems[0]).whiteSpace,
           labelOverflow: getComputedStyle(label).textOverflow,
         };
       });
       expect(layout).toEqual({
         fits: true,
-        rowCount: 1,
-        chipWhiteSpace: 'nowrap',
         labelOverflow: 'ellipsis',
       });
 
@@ -613,23 +787,7 @@ test.describe('Orchestrator context header · where am I', () => {
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-context-chip--after--${variant.name.replace(' ', '-')}--mocked.png`,
-        ),
-      });
-
-      await chip.hover();
-      await expect(page.locator('.app-tooltip-overlay')).toContainText(LONG_CONTEXT_TITLE);
-      await expect(page.locator('.app-tooltip-overlay')).toContainText('Current tab · Dossier');
-
-      await page.mouse.move(1, 1);
-      await expect(page.locator('.app-tooltip-overlay')).toHaveCount(0);
-      await estimate.hover();
-      await expect(page.locator('.app-tooltip-overlay'))
-        .toHaveText('1 source · about 1,600 tokens · resolved when you send');
-      await page.getByTestId('orch-side-sheet').screenshot({
-        path: resolve(
-          RESULTS,
-          `orchestrator-context-chip-meta-tooltip--after--${variant.name.replace(' ', '-')}--mocked.png`,
+          `dossier-context-identity--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
 

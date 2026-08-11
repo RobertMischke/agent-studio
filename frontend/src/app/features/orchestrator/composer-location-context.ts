@@ -25,6 +25,9 @@ export interface ComposerLocationContext {
   taskTitle?: string;
   taskState?: string;
   taskWatchPath?: string;
+  /** Dossier identity carried by a repository Dossier tab. */
+  dossierId?: string;
+  dossierTitle?: string;
 }
 
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
@@ -43,17 +46,22 @@ export interface ContextChipPresentation {
 export function buildContextChipPresentation(input: {
   project: string | null;
   page: PageContext | null;
-  contextKind: 'task' | 'project';
+  contextKind: 'task' | 'dossier' | 'project';
   taskKey: string | null;
   taskTitle: string | null;
+  dossierId: string | null;
+  dossierTitle: string | null;
   location: ComposerLocationContext | null;
 }): ContextChipPresentation {
-  const { project, page, contextKind, taskKey, taskTitle, location } = input;
+  const { project, page, contextKind, taskKey, taskTitle, dossierId, dossierTitle, location } = input;
   if (page && page.projectName === project) {
     return { label: page.title, key: null, typeLabel: pageTypeLabel(page.pageType), icon: pageTypeIcon(page.pageType) };
   }
   if (contextKind === 'task') {
     return { label: taskTitle ?? taskKey ?? 'Current task', key: taskKey, typeLabel: 'Task', icon: 'backlog' };
+  }
+  if (contextKind === 'dossier') {
+    return { label: dossierTitle ?? dossierId ?? 'Current Dossier', key: location?.referenceKey ?? null, typeLabel: 'Dossier', icon: 'eye' };
   }
   if (location && (!location.project || location.project === project)) {
     return {
@@ -111,6 +119,8 @@ export function buildComposerLocationContext(
         surface: 'Dossier',
         detail: tab.title ?? tab.workbenchId,
         ...(tab.key ? { referenceKey: tab.key } : {}),
+        dossierId: tab.workbenchId,
+        dossierTitle: tab.title ?? tab.workbenchId,
       };
     case 'workbenches':
       return { project: tab.projectName, surface: 'Dossiers' };

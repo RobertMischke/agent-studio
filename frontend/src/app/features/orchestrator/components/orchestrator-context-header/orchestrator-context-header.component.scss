@@ -18,7 +18,8 @@
 
 /* A running task earns a subtly stronger frame so "something is live" reads
    at a glance without shouting. */
-.octx[data-scope='task'] {
+.octx[data-scope='task'],
+.octx[data-scope='dossier'] {
   border-color: color-mix(in srgb, var(--studio-accent) 22%, var(--studio-border));
 }
 
@@ -66,6 +67,27 @@
   background: color-mix(in srgb, var(--studio-accent) 10%, transparent);
   color: var(--studio-fg-strong);
   flex: 1 1 auto;
+}
+
+.octx__chip--active {
+  flex: 1 1 auto;
+  border-color: color-mix(in srgb, var(--studio-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 10%, transparent);
+  color: var(--studio-fg-strong);
+}
+
+.octx__chip--dossier {
+  border-color: color-mix(in srgb, var(--studio-accent-3) 36%, transparent);
+  background: color-mix(in srgb, var(--studio-accent-3) 11%, transparent);
+}
+
+.octx__chip-type,
+.octx__chip-separator {
+  flex: 0 0 auto;
+}
+
+.octx__chip-separator {
+  color: var(--studio-fg-muted);
 }
 
 /* MC-2: pinned marker. Sits at the trailing edge of the primary row so the

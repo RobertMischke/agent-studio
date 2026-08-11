@@ -94,7 +94,7 @@ public sealed class TaskServerStoreTests
             await using var command = connection.CreateCommand();
             command.CommandText = """
                 DROP TABLE result_finalizations;
-                DELETE FROM schema_migrations WHERE version = 11;
+                DELETE FROM schema_migrations WHERE version >= 11;
                 UPDATE meta SET value = '10' WHERE key = 'schema_version';
                 """;
             await command.ExecuteNonQueryAsync();
@@ -113,7 +113,63 @@ public sealed class TaskServerStoreTests
             """;
         Assert.Equal(1L, (long)(await table.ExecuteScalarAsync())!);
         table.CommandText = "SELECT value FROM meta WHERE key = 'schema_version';";
-        Assert.Equal("11", (string)(await table.ExecuteScalarAsync())!);
+        Assert.Equal(
+            TaskServerStore.CurrentSchemaVersion.ToString(),
+            (string)(await table.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
+    public async Task Version_twelve_rebuilds_context_table_for_Dossier_identity()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={first.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                PRAGMA foreign_keys = OFF;
+                DROP INDEX IF EXISTS ix_orchestrator_contexts_project_visible;
+                CREATE TABLE orchestrator_contexts_v11(
+                    context_key TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK(kind IN ('project', 'task')),
+                    project_id TEXT NOT NULL REFERENCES projects(id),
+                    task_id TEXT REFERENCES tasks(id),
+                    summary TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    hidden_at TEXT,
+                    CHECK((kind = 'project' AND task_id IS NULL) OR (kind = 'task' AND task_id IS NOT NULL))
+                );
+                INSERT INTO orchestrator_contexts_v11
+                SELECT context_key, kind, project_id, task_id, summary, created_at, updated_at, hidden_at
+                  FROM orchestrator_contexts;
+                DROP TABLE orchestrator_contexts;
+                ALTER TABLE orchestrator_contexts_v11 RENAME TO orchestrator_contexts;
+                CREATE INDEX ix_orchestrator_contexts_project_visible
+                    ON orchestrator_contexts(project_id, hidden_at, updated_at);
+                DELETE FROM schema_migrations WHERE version = 12;
+                UPDATE meta SET value = '11' WHERE key = 'schema_version';
+                PRAGMA foreign_keys = ON;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var upgraded = Store(temp.Path);
+        await upgraded.InitializeAsync();
+
+        await using var upgradedConnection = new SqliteConnection(
+            $"Data Source={upgraded.DatabasePath};Pooling=False");
+        await upgradedConnection.OpenAsync();
+        await using var column = upgradedConnection.CreateCommand();
+        column.CommandText = """
+            SELECT count(*) FROM pragma_table_info('orchestrator_contexts')
+             WHERE name IN ('dossier_id', 'dossier_key', 'title');
+            """;
+        Assert.Equal(3L, (long)(await column.ExecuteScalarAsync())!);
     }
 
     [Fact]

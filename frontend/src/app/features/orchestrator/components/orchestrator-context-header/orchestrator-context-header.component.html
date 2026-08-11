@@ -3,32 +3,31 @@
 @if (hasProject()) {
   <section class="octx"
            data-testid="orch-context-header"
-           [attr.data-scope]="hasTask() ? 'task' : 'board'"
+           [attr.data-scope]="resolvedContextKind() === 'project' ? 'board' : resolvedContextKind()"
            [attr.data-pinned]="pinned() ? 'true' : null"
            [attr.data-context-key]="contextKey()">
-    <!-- Primary row: project + scope. Always present. -->
+    <!-- Primary row: explicit context type + identity. Always present. -->
     <div class="octx__row octx__row--primary">
-      <span class="octx__chip octx__chip--project"
-            data-testid="orch-context-project">
-        <app-studio-icon class="octx__chip-icon" name="folder" [size]="13"></app-studio-icon>
-        <span class="octx__chip-text">{{ project() }}</span>
+      <span class="octx__chip octx__chip--active"
+            [class.octx__chip--task]="hasTask()"
+            [class.octx__chip--dossier]="hasDossier()"
+            [attr.data-testid]="hasTask() ? 'orch-context-task' : hasDossier() ? 'orch-context-dossier' : 'orch-context-project'">
+        <app-studio-icon class="octx__chip-icon" [name]="scopeIcon()" [size]="13"></app-studio-icon>
+        <span class="octx__chip-type">{{ scopeLabel() }}</span>
+        <span class="octx__chip-separator" aria-hidden="true">·</span>
+        <strong class="octx__chip-key">{{ scopeIdentity() }}</strong>
+        @if (hasTask() && taskTitle() && taskTitle() !== scopeIdentity()) {
+          <span class="octx__chip-text octx__chip-text--task">{{ taskTitle() }}</span>
+        }
       </span>
 
-      <app-studio-icon class="octx__sep" name="chevronRight" [size]="12"></app-studio-icon>
-
-      @if (hasTask()) {
-        <span class="octx__chip octx__chip--task"
-              data-testid="orch-context-task"
-              [cacTooltip]="taskTitle()">
-          <app-studio-icon class="octx__chip-icon" name="code" [size]="13"></app-studio-icon>
-          @if (taskKey(); as key) {
-            <span class="octx__chip-key">{{ key }}</span>
-          }
-          <span class="octx__chip-text octx__chip-text--task">{{ taskTitle() }}</span>
+      @if (resolvedContextKind() !== 'project') {
+        <span class="octx__chip octx__chip--project" data-testid="orch-context-project">
+          <app-studio-icon class="octx__chip-icon" name="folder" [size]="13"></app-studio-icon>
+          <span class="octx__chip-text">{{ project() }}</span>
         </span>
       } @else {
-        <span class="octx__chip octx__chip--board"
-              data-testid="orch-context-board">
+        <span class="octx__chip octx__chip--board" data-testid="orch-context-board">
           <app-studio-icon class="octx__chip-icon" name="grid" [size]="13"></app-studio-icon>
           <span class="octx__chip-text">Board</span>
         </span>
@@ -37,7 +36,7 @@
       @if (pinned()) {
         <span class="octx__pin"
               data-testid="orch-context-pin"
-              [cacTooltip]="'Context pinned — the sheet is not following navigation'">📌 Pinned</span>
+              [cacTooltip]="'Context pinned - the sheet is not following navigation'">📌 Pinned</span>
       }
     </div>
 

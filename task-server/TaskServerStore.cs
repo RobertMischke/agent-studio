@@ -14,7 +14,7 @@ public sealed partial class TaskServerStore
     // 11 adds the durable application-owned Result-finalization state used by
     // the awaited remote post-core gate. The migration block is idempotent;
     // the number guards downgrades from binaries that do not know this state.
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -2018,14 +2018,20 @@ public sealed partial class TaskServerStore
             );
             CREATE TABLE IF NOT EXISTS orchestrator_contexts(
                 context_key TEXT PRIMARY KEY,
-                kind TEXT NOT NULL CHECK(kind IN ('project', 'task')),
+                kind TEXT NOT NULL CHECK(kind IN ('project', 'task', 'dossier')),
                 project_id TEXT NOT NULL REFERENCES projects(id),
                 task_id TEXT REFERENCES tasks(id),
+                dossier_id TEXT,
+                dossier_key TEXT,
+                title TEXT,
                 summary TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 hidden_at TEXT,
-                CHECK((kind = 'project' AND task_id IS NULL) OR (kind = 'task' AND task_id IS NOT NULL))
+                CHECK(
+                    (kind = 'project' AND task_id IS NULL AND dossier_id IS NULL)
+                    OR (kind = 'task' AND task_id IS NOT NULL AND dossier_id IS NULL)
+                    OR (kind = 'dossier' AND task_id IS NULL AND dossier_id IS NOT NULL))
             );
             CREATE TABLE IF NOT EXISTS orchestrator_context_turns(
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2396,6 +2402,7 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_post_steps_run_status
                 ON post_step_executions(run_id, status);
             """, ct);
+        await ApplyOrchestratorDossierContextMigrationAsync(connection, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
@@ -2444,6 +2451,60 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "review_attempts", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "review_attempts", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
+    }
+
+    private static async Task ApplyOrchestratorDossierContextMigrationAsync(
+        SqliteConnection connection,
+        CancellationToken ct)
+    {
+        var definition = Convert.ToString(await ScalarAsync(
+            connection,
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orchestrator_contexts';",
+            ct), CultureInfo.InvariantCulture);
+        if (definition?.Contains("dossier_id", StringComparison.OrdinalIgnoreCase) == true) return;
+
+        await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF;", ct);
+        try
+        {
+            await ExecuteAsync(connection, """
+                DROP INDEX IF EXISTS ix_orchestrator_contexts_project_visible;
+                CREATE TABLE orchestrator_contexts_v12(
+                    context_key TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK(kind IN ('project', 'task', 'dossier')),
+                    project_id TEXT NOT NULL REFERENCES projects(id),
+                    task_id TEXT REFERENCES tasks(id),
+                    dossier_id TEXT,
+                    dossier_key TEXT,
+                    title TEXT,
+                    summary TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    hidden_at TEXT,
+                    CHECK(
+                        (kind = 'project' AND task_id IS NULL AND dossier_id IS NULL)
+                        OR (kind = 'task' AND task_id IS NOT NULL AND dossier_id IS NULL)
+                        OR (kind = 'dossier' AND task_id IS NULL AND dossier_id IS NOT NULL))
+                );
+                INSERT INTO orchestrator_contexts_v12(
+                    context_key, kind, project_id, task_id, dossier_id, dossier_key, title,
+                    summary, created_at, updated_at, hidden_at)
+                SELECT context_key, kind, project_id, task_id, NULL, NULL, NULL,
+                       summary, created_at, updated_at, hidden_at
+                  FROM orchestrator_contexts;
+                DROP TABLE orchestrator_contexts;
+                ALTER TABLE orchestrator_contexts_v12 RENAME TO orchestrator_contexts;
+                CREATE INDEX ix_orchestrator_contexts_project_visible
+                    ON orchestrator_contexts(project_id, hidden_at, updated_at);
+                """, ct);
+        }
+        finally
+        {
+            await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", ct);
+        }
+
+        var foreignKeyViolation = await ScalarAsync(connection, "PRAGMA foreign_key_check;", ct);
+        if (foreignKeyViolation is not null)
+            throw new InvalidOperationException("Task Server dossier-context migration failed the foreign-key check.");
     }
 
     private static async Task EnsureColumnAsync(

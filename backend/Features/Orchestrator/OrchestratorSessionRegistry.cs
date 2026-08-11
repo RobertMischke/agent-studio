@@ -23,7 +23,8 @@ public sealed record OrchestratorSessionRecord(
     long CumulativeCacheCreationTokens,
     int Calls,
     DateTime? LastUsedAt,
-    string? LastError);
+    string? LastError,
+    string? DossierId = null);
 
 public sealed record OrchestratorSessionHistoryEntry(
     DateTime Ts,
@@ -101,7 +102,13 @@ public sealed class OrchestratorSessionRegistry
             }
 
             return records
-                .OrderBy(r => r.Kind == OrchestratorContextKey.GlobalKind ? 0 : r.Kind == OrchestratorContextKey.ProjectKind ? 1 : 2)
+                .OrderBy(r => r.Kind switch
+                {
+                    OrchestratorContextKey.GlobalKind => 0,
+                    OrchestratorContextKey.ProjectKind => 1,
+                    OrchestratorContextKey.TaskKind => 2,
+                    _ => 3,
+                })
                 .ThenBy(r => r.ContextKey, StringComparer.Ordinal)
                 .ToList();
         }
@@ -240,7 +247,8 @@ public sealed class OrchestratorSessionRegistry
             CumulativeCacheCreationTokens: 0,
             Calls: 0,
             LastUsedAt: null,
-            LastError: null);
+            LastError: null,
+            DossierId: key.DossierId);
 
     private OrchestratorSessionRecord? ReadRecord(string path)
     {

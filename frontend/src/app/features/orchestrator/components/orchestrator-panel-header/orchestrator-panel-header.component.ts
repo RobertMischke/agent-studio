@@ -28,10 +28,13 @@ export class OrchestratorPanelHeaderComponent {
   readonly project = input<string | null>(null);
   readonly taskKey = input<string | null>(null);
   readonly taskTitle = input<string | null>(null);
+  readonly dossierId = input<string | null>(null);
+  readonly dossierTitle = input<string | null>(null);
   readonly pageContext = input<PageContext | null>(null);
   readonly contextKey = input<string | null>(null);
   readonly executionContext = input<ChatExecutionContext | null>(null);
   readonly contextCount = input(0);
+  readonly activeChatCount = input(0);
   readonly chatsOpen = input(false);
   readonly active = input(false);
   readonly chatsToggle = output<void>();
@@ -39,6 +42,13 @@ export class OrchestratorPanelHeaderComponent {
   readonly identity = computed<PanelContextIdentity>(() => {
     const page = this.pageContext();
     const project = this.project();
+    if (this.dossierId()) {
+      return {
+        icon: 'eye',
+        type: 'Dossier',
+        name: this.dossierTitle() ?? this.dossierId()!,
+      };
+    }
     if (page && page.projectName === project) {
       return {
         icon: pageTypeIcon(page.pageType),

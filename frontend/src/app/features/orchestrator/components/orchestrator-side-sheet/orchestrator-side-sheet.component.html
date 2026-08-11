@@ -16,10 +16,13 @@
     [project]="effectiveProject()"
     [taskKey]="effectiveJobKey()"
     [taskTitle]="effectiveJobTitle()"
+    [dossierId]="effectiveDossierId()"
+    [dossierTitle]="effectiveDossierTitle()"
     [pageContext]="pageContext()"
     [contextKey]="contextKey()"
     [executionContext]="executionContext()"
     [contextCount]="contextCount()"
+    [activeChatCount]="activeChatCount()"
     [chatsOpen]="contextMenuOpen()"
     [active]="sending() || activeRun() !== null"
     (chatsToggle)="toggleContextMenu()" />
@@ -58,12 +61,14 @@
               {{ contextDigestState.refreshing() ? 'Refreshing...' : (loading() ? 'Loading...' : 'Refresh') }}
             </button>
             <button type="button"
-                    [attr.aria-pressed]="contextKind() === 'task' || !contextDismissed()"
-                    [disabled]="contextKind() === 'task'"
+                    [attr.aria-pressed]="contextKind() !== 'project' || !contextDismissed()"
+                    [disabled]="contextKind() !== 'project'"
                     (click)="toggleNextMessageContext()"
                     data-testid="orch-context-send-toggle">
               {{ contextKind() === 'task'
                 ? 'Task context always included'
+                : contextKind() === 'dossier'
+                  ? 'Dossier context always included'
                 : (contextDismissed() ? 'Include context next' : 'Exclude context once') }}
             </button>
           </div>
@@ -75,6 +80,9 @@
             [taskTitle]="effectiveJobTitle()"
             [taskKey]="effectiveJobKey()"
             [taskState]="effectiveJobState()"
+            [contextKind]="contextKind()"
+            [dossierId]="effectiveDossierId()"
+            [dossierTitle]="effectiveDossierTitle()"
             [pinned]="pinned()"
             [contextKey]="contextKey()"
             [runActive]="activeRun() !== null"
@@ -96,11 +104,27 @@
           [tasks]="jobService.jobs()"
           [activeContextKey]="contextKey()"
           [unreadContextKeys]="unreadContextKeys()"
+          [activeChatContextKeys]="activeChatContextKeys()"
           (contextSelected)="selectChatContext($event)"
           (locationRequested)="onNavigateToContext($event)" />
       </section>
     } @else {
       <div class="sheet__content">
+        @if (effectiveProject()) {
+          <app-orchestrator-context-header
+            [project]="effectiveProject()"
+            [taskTitle]="effectiveJobTitle()"
+            [taskKey]="effectiveJobKey()"
+            [taskState]="effectiveJobState()"
+            [contextKind]="contextKind()"
+            [dossierId]="effectiveDossierId()"
+            [dossierTitle]="effectiveDossierTitle()"
+            [pinned]="pinned()"
+            [contextKey]="contextKey()"
+            [runActive]="activeRun() !== null"
+            [runModel]="activeRun()?.model ?? null"
+            [runStartedAt]="activeRun()?.startedAt ?? null" />
+        }
         @if (errorMsg(); as err) {
           <div class="sheet__error">{{ err }}</div>
         }
@@ -112,12 +136,18 @@
         } @else if (effectiveProject()) {
           <section class="sheet__chat">
             <div #conversationHost class="sheet__conversation" data-testid="orchestrator-conversation">
-              <cac-conversation-view
-                variant="embedded"
-                [events]="conversationEvents()"
-                [isRunning]="sending() || loading()"
-                [showHeader]="false"
-                (openVerboseDebug)="onOpenVerboseDebug()" />
+              @if (!loading() && !sending() && conversationEvents().length === 0) {
+                <p class="sheet__conversation-empty" data-testid="orchestrator-conversation-empty">
+                  {{ emptyConversationText() }}
+                </p>
+              } @else {
+                <cac-conversation-view
+                  variant="embedded"
+                  [events]="conversationEvents()"
+                  [isRunning]="sending() || loading()"
+                  [showHeader]="false"
+                  (openVerboseDebug)="onOpenVerboseDebug()" />
+              }
             </div>
 
             @if (latestContextReceipt(); as receipt) {

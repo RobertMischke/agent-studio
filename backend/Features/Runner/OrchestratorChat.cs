@@ -53,9 +53,9 @@ public class OrchestratorChat
 
     /// <summary>
     /// Append one turn to the transcript for a specific navigation context
-    /// (MC-2, Concept §4). A <see cref="OrchestratorContextKey.TaskKind"/>
-    /// context is persisted to its own per-task file so a task page and the
-    /// board no longer share one history; <c>project</c> / <c>global</c> /
+    /// (MC-2, Concept §4). Task and Dossier contexts are persisted to their
+    /// own files so document, task, and project histories never mix;
+    /// <c>project</c> / <c>global</c> /
     /// <c>null</c> resolve to the canonical per-project
     /// <c>orchestrator-chat.jsonl</c>, so existing project chats are
     /// unaffected. Only project-scoped turns mirror into the project chat
@@ -84,7 +84,7 @@ public class OrchestratorChat
             // Only the project-scoped thread mirrors — the project chat tree
             // is per-project, so folding task-context turns into it would
             // cross-contaminate the board's history.
-            if (!IsTaskContext(context))
+            if (!IsDedicatedContext(context))
                 MirrorToProjectChat(watchPath, persisted);
             return true;
         }
@@ -185,7 +185,7 @@ public class OrchestratorChat
 
     internal bool EnsureContext(string watchPath, OrchestratorContextKey? context)
     {
-        if (!IsTaskContext(context)) return true;
+        if (!IsDedicatedContext(context)) return true;
         try
         {
             var path = ResolveContextPath(watchPath, context);
@@ -207,12 +207,13 @@ public class OrchestratorChat
     private static string ResolvePath(string watchPath) =>
         Path.Combine(watchPath, ".orchestrator", "orchestrator-chat.jsonl");
 
-    private static bool IsTaskContext(OrchestratorContextKey? context) =>
-        context != null && context.Kind == OrchestratorContextKey.TaskKind;
+    private static bool IsDedicatedContext(OrchestratorContextKey? context) =>
+        context != null
+        && context.Kind is OrchestratorContextKey.TaskKind or OrchestratorContextKey.DossierKind;
 
     /// <summary>
-    /// Resolve the on-disk transcript file for a navigation context. Task
-    /// contexts get a dedicated file under <c>.orchestrator/context-chats/</c>
+    /// Resolve the on-disk transcript file for a navigation context. Task and
+    /// Dossier contexts get a dedicated file under <c>.orchestrator/context-chats/</c>
     /// keyed by the reversible <see cref="OrchestratorContextKey.Encode"/>
     /// folder-safe form; every other context (including <c>null</c>) resolves
     /// to the legacy per-project <c>orchestrator-chat.jsonl</c> so the board
@@ -220,7 +221,7 @@ public class OrchestratorChat
     /// </summary>
     internal static string ResolveContextPath(string watchPath, OrchestratorContextKey? context)
     {
-        if (!IsTaskContext(context))
+        if (!IsDedicatedContext(context))
             return ResolvePath(watchPath);
         return Path.Combine(watchPath, ".orchestrator", "context-chats", context!.Encode() + ".jsonl");
     }
@@ -347,7 +348,8 @@ public sealed record OrchestratorContextReceipt(
     string? ReceiptId = null,
     string? UserTurnId = null,
     OrchestratorContextBudgetReceipt? Budget = null,
-    IReadOnlyList<OrchestratorContextSourceReceipt>? Sources = null);
+    IReadOnlyList<OrchestratorContextSourceReceipt>? Sources = null,
+    string? DossierId = null);
 
 internal sealed record OrchestratorChatPromptComposition(
     string Prompt,
@@ -405,12 +407,13 @@ public sealed record SendOrchestratorChatRequest(
     OrchestratorContextEnvelope? ContextEnvelope = null);
 
 /// <summary>
-/// Structured navigation context the frontend ships with every project-chat
-/// POST. The chat agent reads this to interpret context-dependent questions
-/// ("what is the current task?", "explain this") against the page the
-/// operator is actually looking at. Every field is optional from the
-/// agent's perspective: a missing or null <see cref="CurrentTaskId"/> means
-/// the operator is not on a task page and the agent must not invent one.
+/// Structured navigation context the frontend ships with every orchestrator
+/// chat POST. The chat agent reads this to interpret context-dependent
+/// questions ("what is the current task?", "explain this Dossier") against
+/// the surface the operator is actually viewing. Every field is optional from
+/// the agent's perspective: missing task and Dossier identifiers mean the
+/// operator is not in either dedicated document context and the agent must not
+/// invent one.
 ///
 /// <para>
 /// Background: before this field existed the agent answered context
@@ -432,7 +435,9 @@ public sealed record ChatNavigationContext(
     string? PageRef = null,
     string? PageTitle = null,
     string? PageType = null,
-    string? PageExcerpt = null);
+    string? PageExcerpt = null,
+    string? CurrentDossierId = null,
+    string? CurrentDossierTitle = null);
 
 /// <summary>
 /// Service that turns a user message into an orchestrator reply with the
@@ -768,7 +773,8 @@ public class OrchestratorChatService
                 envelope.Budget.AutomaticHardCapTokens,
                 envelope.Budget.TotalHardCapTokens,
                 estimatedTokens),
-            Sources: receipts);
+            Sources: receipts,
+            DossierId: envelope.Scope.DossierId);
 
         var sb = new StringBuilder();
         AppendScopedPreamble(sb, projectName, envelope);
@@ -1532,6 +1538,8 @@ public class OrchestratorChatService
                 && string.IsNullOrWhiteSpace(nav.ObservedSurface)
                 && string.IsNullOrWhiteSpace(nav.AffectedComponent)
                 && string.IsNullOrWhiteSpace(nav.PageRef)
+                && string.IsNullOrWhiteSpace(nav.CurrentDossierId)
+                && string.IsNullOrWhiteSpace(nav.CurrentDossierTitle)
                 && string.IsNullOrWhiteSpace(nav.PageTitle)
                 && string.IsNullOrWhiteSpace(nav.PageType)
                 && string.IsNullOrWhiteSpace(nav.PageExcerpt)))
@@ -1553,11 +1561,13 @@ public class OrchestratorChatService
         if (!string.IsNullOrWhiteSpace(nav.ObservedSurface)) sb.AppendLine($"  observedSurface: {nav.ObservedSurface}");
         if (!string.IsNullOrWhiteSpace(nav.AffectedComponent)) sb.AppendLine($"  affectedComponent: {nav.AffectedComponent}");
         if (!string.IsNullOrWhiteSpace(nav.PageRef)) sb.AppendLine($"  pageRef: {nav.PageRef}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentDossierId)) sb.AppendLine($"  currentDossierId: {nav.CurrentDossierId}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentDossierTitle)) sb.AppendLine($"  currentDossierTitle: {nav.CurrentDossierTitle}");
         if (!string.IsNullOrWhiteSpace(nav.PageTitle)) sb.AppendLine($"  pageTitle: {nav.PageTitle}");
         if (!string.IsNullOrWhiteSpace(nav.PageType)) sb.AppendLine($"  pageType: {nav.PageType}");
         if (!string.IsNullOrWhiteSpace(nav.PageExcerpt)) sb.AppendLine($"  pageExcerpt: {nav.PageExcerpt}");
         sb.AppendLine();
-        sb.AppendLine("Use this when interpreting context-dependent questions. When pageRef is set, the operator is asking from THAT repository page; use its title, type, path, and excerpt. When currentTaskKey or currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by key. When neither pageRef, currentTaskKey, nor currentTaskId is set, do NOT invent one; say no specific page or task is in scope and ask what they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
+        sb.AppendLine("Use this when interpreting context-dependent questions. When pageRef is set, the operator is asking from THAT repository page; use its title, type, path, and excerpt. When currentTaskKey or currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by key. When currentDossierId is set, the operator is asking about THAT Dossier; use its id and title. When no page, task, or Dossier identity is set, do NOT invent one; say no specific document is in scope and ask what they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
         sb.AppendLine();
     }
 

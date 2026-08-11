@@ -107,6 +107,21 @@ describe('buildChatNavigationContext', () => {
     expect(ctx.pageExcerpt).toBe('Pages are bidirectional interfaces.');
     expect(ctx.currentTaskId).toBeUndefined();
   });
+
+  it('carries Dossier identity independently from the repository page reference', () => {
+    const ctx = buildChatNavigationContext({
+      activeJobId: null,
+      activeJobTitle: null,
+      dossierId: 'context-model',
+      dossierTitle: 'Context model',
+      now: fixedNow,
+    });
+
+    expect(ctx.currentPage).toBe('dossier');
+    expect(ctx.currentDossierId).toBe('context-model');
+    expect(ctx.currentDossierTitle).toBe('Context model');
+    expect(ctx.currentTaskId).toBeUndefined();
+  });
 });
 
 describe('buildOrchestratorContextEnvelope', () => {
@@ -156,6 +171,32 @@ describe('buildOrchestratorContextEnvelope', () => {
 
     expect(envelope.scope.kind).toBe('project');
     expect(envelope.explicitReferences[0].projectId).toBe('Agent Studio');
+  });
+
+  it('freezes Dossier scope and active document identity', () => {
+    const navigation = buildChatNavigationContext({
+      activeJobId: null,
+      activeJobTitle: null,
+      dossierId: 'context-model',
+      dossierTitle: 'AGT-W34',
+      now: fixedNow,
+    });
+    const envelope = buildOrchestratorContextEnvelope(
+      'dossier:Agent Studio/context-model', navigation, [], fixedNow,
+    );
+
+    expect(envelope.scope).toEqual({
+      kind: 'dossier',
+      contextKey: 'dossier:Agent Studio/context-model',
+      projectId: 'Agent Studio',
+      taskKey: null,
+      dossierId: 'context-model',
+    });
+    expect(envelope.activeSurface).toEqual({
+      kind: 'workbench',
+      reference: 'context-model',
+      title: 'AGT-W34',
+    });
   });
 
   it('rejects invalid context keys before the network call starts', () => {

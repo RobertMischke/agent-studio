@@ -396,7 +396,7 @@
     <article class="decision-card primary">
       <span class="label">Operator decision, 10 August 2026</span>
       <h2>Single Chat System with Three Context Concepts</h2>
-      <p>Keep the existing project and task transcript scopes. Add a typed, per-turn context envelope made from the current surface plus explicit references. Reuse the task transcript inside a new task-detail Chat tab. Every model turn returns and persists a context receipt.</p>
+      <p>Keep the project and task transcript scopes and add Dossier as a first-class transcript scope. Add a typed, per-turn context envelope made from the current surface plus explicit references. Reuse the task transcript inside a new task-detail Chat tab. Every model turn returns and persists a context receipt.</p>
     </article>
     <article class="decision-card">
       <span class="label">Approved rollout</span>
@@ -411,6 +411,8 @@
       <li>The task's existing Activity tab and its execution semantics remain unchanged.</li>
       <li>Opening Orchestrator Chat in task scope creates a new managed task context and exposes it in Chat History.</li>
       <li>Every project owns a permanently visible project context. Task contexts remain visible until archive; archive hides them without deletion.</li>
+      <li>From 11 August 2026, opening a Dossier creates or resumes that Dossier's managed context. Archived or documented Dossiers are hidden without deletion.</li>
+      <li>Route selection is deterministic: task routes use task chat, Dossier tabs use Dossier chat, and all other project routes use the one project chat. Global monitoring never appears in document transcripts.</li>
       <li>The Task Server centrally owns contexts, transcripts, receipts, lifecycle visibility, and short summaries. Machine-local JSONL is migration input only.</li>
       <li>Chat History lists every current context with a compact summary. The follow-up management surface is delivered by AGT-2577.</li>
     </ul>
@@ -434,13 +436,13 @@
         <span class="section-kicker">01 · Current reality</span>
         <h2>Existing Foundation and Decided Context Contract</h2>
       </div>
-      <p>The app selects project and task chat threads from navigation. Slice 1 adds the typed per-turn envelope, bounded continuity, central Task Server persistence, and the source receipt required by the decision.</p>
+      <p>The app selects project, task, and Dossier chat threads from navigation. Slice 1 adds the typed per-turn envelope, bounded continuity, central Task Server persistence, and the source receipt required by the decision.</p>
     </div>
 
     <div class="grid-3">
       <article class="panel">
-        <div class="metric">2</div>
-        <div class="metric-label">durable transcript scopes today: project and task</div>
+        <div class="metric">3</div>
+        <div class="metric-label">document-level transcript types today: task and Dossier, plus the permanent project context</div>
       </article>
       <article class="panel">
         <div class="metric">~1.5k</div>
@@ -473,13 +475,13 @@
           <tr>
             <th>Per-context transcripts</th>
             <td><span class="status exists">Exists</span></td>
-            <td>The Task Server owns project and task contexts, turns, receipts, lifecycle visibility, and short summaries. Legacy project JSONL is imported idempotently and never becomes the active store.</td>
-            <td>Task Chat needs no machine-local history store. Wiki, Dossier, board, file, and diff remain context inputs, not new transcript owners.</td>
+            <td>The Task Server owns project, task, and Dossier contexts, turns, receipts, lifecycle visibility, and short summaries. Legacy project JSONL is imported idempotently and never becomes the active store.</td>
+            <td>Task and Dossier Chat need no machine-local history store. Wiki, board, file, and diff remain context inputs, not new transcript owners.</td>
           </tr>
           <tr>
             <th>Chat switcher</th>
             <td><span class="status exists">Exists</span></td>
-            <td>The context list groups global, project, and task rows and shows the Task Server-owned short summary for managed project and task contexts. Archived task contexts are omitted from the current list without deletion.</td>
+            <td>The context list groups monitoring, project, task, and Dossier rows and shows the Task Server-owned short summary. Archived tasks and archived or documented Dossiers are omitted from the current list without deletion. Active and queued rows have working indicators.</td>
             <td>Keep its thread-switching role, but rename it to <strong>Chats</strong> or <strong>Scopes</strong> once composer context attachments ship. This removes a three-way use of “context”.</td>
           </tr>
           <tr>
@@ -862,7 +864,7 @@
     <div class="grid-2" style="margin-top:18px">
       <article class="panel">
         <h3>Decided persistence contract</h3>
-        <p>Store project and task contexts centrally on the Task Server. The server owns transcript turns, compact receipts, summary, and lifecycle visibility. Project contexts are permanent. Task contexts are hidden, not deleted, after archive. Existing <code>.orchestrator/orchestrator-chat.jsonl</code> files are read once as an idempotent migration source.</p>
+        <p>Store project, task, and Dossier contexts centrally on the Task Server. The server owns transcript turns, compact receipts, summary, and lifecycle visibility. Project contexts are permanent. Task contexts are hidden, not deleted, after archive. Dossier contexts are hidden, not deleted, after archive or documentation. Existing <code>.orchestrator/orchestrator-chat.jsonl</code> files are read once as an idempotent migration source.</p>
       </article>
       <article class="panel">
         <h3>Decided continuity contract</h3>
@@ -1073,7 +1075,7 @@
               <h4>Outcome</h4>
               <ul>
                 <li>Extend AGT-2506's <code>ContextReferences</code> into one typed request containing conversation scope, active surface, explicit refs, and budget.</li>
-                <li>Build a single backend resolver that adds project/task evidence and a bounded recent transcript on every stateless side-sheet turn.</li>
+                <li>Build a single backend resolver that adds project, task, or Dossier evidence and a bounded recent transcript on every stateless side-sheet turn.</li>
                 <li>Use a project-scoped chat preamble instead of the all-project global boot prompt.</li>
                 <li>Return and append a context receipt event linked to the user turn. Store metadata and hashes, not resolved bodies.</li>
               </ul>
@@ -1222,7 +1224,7 @@
 
     <div class="callout teal">
       <strong>Approved operator cut</strong>
-      <p>Slices 1 through 5 have GO. Preserve their dependency order: Slice 1 is the persistence and prompt foundation; Slice 4 may proceed after it; Slices 2 and 3 establish the project and task UX before Slice 5 changes the default entry. AGT-2577 separately delivers the central all-context management view requested with the GO.</p>
+      <p>Slices 1 through 5 have GO. Preserve their dependency order: Slice 1 is the persistence and prompt foundation; Slice 4 may proceed after it; Slices 2 and 3 establish the project and task UX before Slice 5 changes the default entry. AGT-2577 separately delivers the central all-context management view requested with the GO. AGT-2612 extends that context management surface with the Dossier group and active-context identity.</p>
     </div>
   </section>
 
@@ -1261,9 +1263,9 @@
           </tr>
           <tr>
             <th>Transcript model</th>
-            <td>Project + task only.</td>
-            <td>One transcript per page, Dossier, or diff.</td>
-            <td>Two durable scopes preserve continuity. Per-surface threads fragment memory and multiply switcher noise.</td>
+            <td>Project + task + Dossier.</td>
+            <td>One transcript per arbitrary page or diff.</td>
+            <td>Dedicated document scopes preserve task and Dossier continuity. Arbitrary per-surface threads would still fragment memory and multiply switcher noise.</td>
           </tr>
           <tr>
             <th>Default entry</th>
@@ -1303,12 +1305,12 @@
       <li><strong>Side-sheet context and composer UI:</strong> <code>frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html:39-197</code>. Confirms Contexts menu, context freshness, switcher, transcript, footer label, and composer host.</li>
       <li><strong>Scope following, pinning, and first-send context cache:</strong> <code>orchestrator-side-sheet.component.ts:187-274</code>, <code>:318-353</code>, and <code>:688-797</code>.</li>
       <li><strong>Repository page context:</strong> <code>frontend/src/app/features/orchestrator/chat-navigation-context.ts:38-66</code> and <code>frontend/src/app/models/page-context.model.ts:8-88</code>. Confirms page ref/title/type/excerpt and 480-character default excerpt cap.</li>
-      <li><strong>Central context storage and lifecycle:</strong> <code>task-server/TaskServerOrchestratorContextStore.cs</code> and <code>contracts/TaskServer.Contracts/OrchestratorContextContracts.cs</code>. Confirms permanent project contexts, retained hidden archived-task contexts, central summaries, turns, and receipts.</li>
+      <li><strong>Central context storage and lifecycle:</strong> <code>task-server/TaskServerOrchestratorContextStore.cs</code> and <code>contracts/TaskServer.Contracts/OrchestratorContextContracts.cs</code>. Confirms permanent project contexts, retained hidden archived-task and settled-Dossier contexts, central summaries, turns, and receipts.</li>
       <li><strong>Legacy migration boundary:</strong> <code>backend/Features/Orchestrator/OrchestratorChatPersistence.cs</code>. Confirms the Task Server client is the active persistence boundary and local <code>.orchestrator/orchestrator-chat.jsonl</code> is read only as migration input.</li>
       <li><strong>Typed request and prompt assembly:</strong> <code>backend/Features/Orchestrator/OrchestratorContextEnvelope.cs</code> and <code>backend/Features/Runner/OrchestratorChat.cs</code>. Confirms route-bound scope, project/path validation, bounded evidence and continuity, ordered prompt sections, and receipt metadata without resolved source bodies.</li>
       <li><strong>Stateless Codex execution:</strong> <code>backend/Features/Runner/OrchestratorRunner.cs:104-141</code>. Confirms <code>CodexOneShot</code>, no resume id, and null captured session id.</li>
       <li><strong>ORCH-1 digest scope and caps:</strong> <code>backend/Features/Orchestrator/OrchestratorContextDigestService.cs:14-18</code>, <code>:57-114</code>, and <code>:406-524</code>.</li>
-      <li><strong>Scoped prompt preamble:</strong> <code>backend/Features/Runner/OrchestratorChat.cs</code>. Confirms project and task side-sheet turns no longer prepend the all-project global boot prompt.</li>
+      <li><strong>Scoped prompt preamble:</strong> <code>backend/Features/Runner/OrchestratorChat.cs</code>. Confirms project, task, and Dossier side-sheet turns no longer prepend the all-project global boot prompt.</li>
       <li><strong>Existing task-agent composer semantics:</strong> <code>frontend/src/app/features/task-detail/task-detail.ts:822-910</code> and <code>frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html:464-493</code>.</li>
       <li><strong>Product placement doctrine:</strong> <code>docs/quality/design-principles.md</code>, “Chat is a multi-actor conversation”. It places task-scoped conversation in task detail and project-scoped conversation in the resizable side sheet.</li>
       <li><strong>Live Task API snapshot, 8 August 2026:</strong> AGT-2506 was <code>2-ready</code>, blocked by CAC-20 in <code>5-human-review</code> and not released. AGT-2512 was <code>2-ready</code> with no attributed App commit. CAC-20 had result commit <code>928ebeb</code> but remained unintegrated/unpublished.</li>

@@ -387,6 +387,9 @@ public static class RunnerEndpoints
         runnerGroup.MapGet("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 ReadContextChat($"task:{projectId}/{taskKey}", scanner, chatService, ct));
+        runnerGroup.MapGet("/dossier:{projectId}/{dossierId}/orchestrator-chat",
+            (string projectId, string dossierId, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                ReadContextChat($"dossier:{projectId}/{dossierId}", scanner, chatService, ct));
 
         runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
             (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
@@ -394,6 +397,9 @@ public static class RunnerEndpoints
         runnerGroup.MapPost("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));
+        runnerGroup.MapPost("/dossier:{projectId}/{dossierId}/orchestrator-chat",
+            (string projectId, string dossierId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                SendContextChat($"dossier:{projectId}/{dossierId}", req, ctx, scanner, chatService, ct));
 
         // Image upload + serving for the orchestrator chat composer.
         // Files land under <watchPath>/.orchestrator/chat-attachments/.

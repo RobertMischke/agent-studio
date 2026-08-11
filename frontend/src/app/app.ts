@@ -1789,6 +1789,14 @@ export class App implements OnInit, OnDestroy {
       this.studioTabState.open({ kind: 'board', projectName: contextKey.slice('project:'.length) });
       return;
     }
+    if (contextKey.startsWith('dossier:')) {
+      const slash = contextKey.indexOf('/');
+      if (slash < 0) return;
+      const projectName = contextKey.slice('dossier:'.length, slash);
+      const workbenchId = contextKey.slice(slash + 1);
+      this.studioTabState.open({ kind: 'workbench', projectName, workbenchId });
+      return;
+    }
     if (!contextKey.startsWith('task:')) return;
     const slash = contextKey.indexOf('/');
     if (slash < 0) return;

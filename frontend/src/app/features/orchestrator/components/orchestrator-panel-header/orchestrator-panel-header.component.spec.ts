@@ -50,4 +50,22 @@ describe('OrchestratorPanelHeaderComponent', () => {
     );
     expect(host.querySelector('[data-testid="orch-context-count"]')?.textContent).toContain('17');
   });
+
+  it('shows a first-class Dossier identity and the active chat count', async () => {
+    await TestBed.configureTestingModule({
+      imports: [OrchestratorPanelHeaderComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(OrchestratorPanelHeaderComponent);
+    fixture.componentRef.setInput('project', 'Agent Studio');
+    fixture.componentRef.setInput('dossierId', 'context-model');
+    fixture.componentRef.setInput('dossierTitle', 'AGT-W34');
+    fixture.componentRef.setInput('activeChatCount', 2);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="orch-panel-context-type"]')?.textContent).toContain('Dossier');
+    expect(host.querySelector('[data-testid="orch-panel-context-name"]')?.textContent).toContain('AGT-W34');
+    expect(host.querySelector('[data-testid="orch-active-chat-count"]')?.textContent).toContain('2 active');
+  });
 });

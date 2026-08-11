@@ -19,6 +19,7 @@ export class ChatSwitcherRailComponent {
   readonly tasks = input<readonly TaskInfo[]>([]);
   readonly activeContextKey = input<string | null>(null);
   readonly unreadContextKeys = input<ReadonlySet<string>>(new Set());
+  readonly activeChatContextKeys = input<ReadonlySet<string>>(new Set());
   readonly contextSelected = output<string>();
   readonly locationRequested = output<string>();
 
@@ -41,13 +42,20 @@ export class ChatSwitcherRailComponent {
         ? 'Global orchestrator'
         : session.kind === 'project'
           ? (session.projectId ?? session.contextKey)
-          : this.taskLabel(session),
+          : session.kind === 'task'
+            ? this.taskLabel(session)
+            : session.dossierKey ?? session.title ?? session.dossierId ?? session.contextKey,
     }));
   });
 
   readonly globalRows = computed(() => this.rows().filter(row => row.kind === 'global'));
   readonly projectRows = computed(() => this.rows().filter(row => row.kind === 'project'));
   readonly taskRows = computed(() => this.rows().filter(row => row.kind === 'task'));
+  readonly dossierRows = computed(() => this.rows().filter(row => row.kind === 'dossier'));
+
+  isWorking(contextKey: string): boolean {
+    return this.activeChatContextKeys().has(contextKey);
+  }
 
   select(contextKey: string): void {
     this.contextSelected.emit(contextKey);
