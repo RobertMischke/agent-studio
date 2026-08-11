@@ -152,18 +152,20 @@
 
 @media (max-width: 900px) {
   .global-orch__status {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: center;
   }
 
   .global-orch__toggle {
-    flex-basis: 100%;
-    overflow: visible;
+    gap: var(--studio-spacing-2);
   }
 
   .global-orch__command {
-    margin-inline-start: var(--studio-spacing-6);
-    max-width: calc(100% - var(--studio-spacing-6));
+    max-width: min(30vw, 190px);
+  }
+
+  .global-orch__command > span:first-child,
+  .global-orch__role {
+    display: none;
   }
 
   .global-orch__details {
@@ -172,17 +174,12 @@
 }
 
 @media (max-width: 620px) {
-  .global-orch__role {
-    display: none;
-  }
-
   .global-orch__toggle {
-    flex-wrap: wrap;
-    white-space: normal;
+    white-space: nowrap;
   }
 
   .global-orch__command {
-    max-width: calc(100% - var(--studio-spacing-6));
+    max-width: min(30vw, 150px);
   }
 
   .global-orch__details {
