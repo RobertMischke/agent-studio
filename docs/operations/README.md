@@ -40,7 +40,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [kontext-orchestrator-chats/](kontext-orchestrator-chats/index.html) | Decision dossier for context-aware project and task chats, including current evidence, context ownership, token budgets, UX sketches, and five delivery slices (AGT-2514). |
 | [admin-design-guideline/](admin-design-guideline/index.html) | Decision-pending design guideline for flat, dense admin surfaces, with a light/dark Activity across projects reference, violation audit, and incremental adoption contract (AGT-2583). |
 | [statusmd-konzept-karten/](statusmd-konzept-karten/index.html) | Decision dossier on missing generated `status.md` for Concept and Planning cards: complete scaffold inventory, remote V1 finalization root cause, reissue evidence, and decision-ready repair options (AGT-2555). |
-| [article-document-authoring.md](article-document-authoring.md) | Authoring contract for the canonical article template, `ui` and `concept` patterns, full-bleed media, evidence classes, and touch-only migration. |
+| [article-document-authoring.md](article-document-authoring.md) | Authoring contract for the canonical article template, `ui` and `concept` patterns, full-bleed screenshot evidence, capture dates and provenance, and touch-only migration. |
 | [demo-instanz/](demo-instanz/index.html) | Decision dossier for a public, read-only demo instance with pinned mock data, a full Dossier lifecycle gallery, a real Task Server, a replay-only Runner, hard execution denial, scrub proof, isolated hosting, reset operations, and implementation slices (AGT-2582). |
 
 Konvergenz-Probe 2026-07-30: develop ist der Arbeitsbranch.

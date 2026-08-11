@@ -777,12 +777,19 @@ public class TaskRunnerPromptTests
         Assert.Contains("sourceTaskKeys", framing);
         Assert.Contains("results/deliverables.md", framing);
         Assert.Contains("status.md", framing);
+        Assert.Contains("docs/app/templates/article-document-v2.html", framing);
         Assert.Contains("docs/operations/haertung-verteilte-ausfuehrung/index.html", framing);
         Assert.Contains("plain nouns", framing);
         Assert.Contains("light and dark themes", framing);
         Assert.Contains("CSS variables", framing);
         Assert.Contains("inline SVG", framing);
         Assert.Contains("colour system or font family", framing);
+        Assert.Contains("full-bleed evidence figure", framing);
+        Assert.Contains("docs/operations/<slug>/assets/", framing);
+        Assert.Contains("docs/operations/setup/presentation-capture.md", framing);
+        Assert.Contains("frontend/e2e/visual-evidence/presentation-capture.spec.ts", framing);
+        Assert.Contains("scripts/stable-frontend-boot-probe.mjs", framing);
+        Assert.Contains("frontend/e2e/fixtures/dev-backend.ts", framing);
         Assert.Contains("[[TASK_NEEDS_INPUT:", framing);
         Assert.DoesNotContain("Read-only run", framing);
     }
