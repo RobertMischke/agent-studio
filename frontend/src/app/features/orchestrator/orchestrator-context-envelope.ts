@@ -36,6 +36,7 @@ export function buildOrchestratorContextEnvelope(
       contextKey,
       projectId: parsed.projectId,
       taskKey: parsed.taskKey,
+      dossierKey: parsed.dossierKey,
     },
     activeSurface,
     explicitReferences: explicitReferences.map(reference => ({

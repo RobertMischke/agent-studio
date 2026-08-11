@@ -17,7 +17,11 @@ public sealed class OrchestratorContextStoreTests
     [InlineData("project", "7-archive", false)]
     [InlineData("task", "6-completed", false)]
     [InlineData("task", "7-archive", true)]
-    public void Visibility_policy_only_hides_archived_task_contexts(
+    [InlineData("dossier", "active", false)]
+    [InlineData("dossier", "documented", true)]
+    [InlineData("dossier", "archived", true)]
+    [InlineData("dossier", "done", true)]
+    public void Visibility_policy_hides_terminal_document_contexts(
         string kind,
         string? taskState,
         bool expected)
@@ -75,6 +79,57 @@ public sealed class OrchestratorContextStoreTests
             default);
         Assert.NotNull(restored);
         Assert.Equal(2, (await store.ListOrchestratorContextsAsync(false, default)).Count);
+    }
+
+    [Fact]
+    public async Task Dossier_context_is_isolated_hidden_at_terminal_lifecycle_and_never_deleted()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Workspace"), "test", default);
+        var project = await store.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Agent Studio", "AGT"),
+            "test",
+            default);
+
+        var dossier = await store.EnsureOrchestratorContextAsync(
+            project.ProjectId, null, "test", default,
+            "AGT-W34", "Context boundaries", "active");
+        Assert.Equal("dossier:Agent Studio/AGT-W34", dossier.ContextKey);
+        Assert.Equal(OrchestratorContextKinds.Dossier, dossier.Kind);
+        Assert.Equal("AGT-W34", dossier.DossierKey);
+        Assert.Equal("Context boundaries", dossier.Summary);
+
+        var turn = new OrchestratorContextTurnDto(
+            "dossier_user", DateTime.UtcNow, "user", "Discuss this Dossier only.");
+        await store.AppendOrchestratorContextTurnAsync(
+            project.ProjectId, null, new AppendOrchestratorContextTurnRequest(turn),
+            "test", default, "AGT-W34", "Context boundaries", "active");
+        Assert.Empty((await store.ReadOrchestratorContextAsync(
+            project.ProjectId, null, 20, "test", default)).Turns);
+        Assert.Equal(turn.Body, Assert.Single((await store.ReadOrchestratorContextAsync(
+            project.ProjectId, null, 20, "test", default,
+            "AGT-W34", "Context boundaries", "active")).Turns).Body);
+
+        await store.EnsureOrchestratorContextAsync(
+            project.ProjectId, null, "test", default,
+            "AGT-W34", "Context boundaries", "documented");
+        Assert.DoesNotContain(
+            await store.ListOrchestratorContextsAsync(false, default),
+            context => context.Kind == OrchestratorContextKinds.Dossier);
+        var retained = Assert.Single(
+            await store.ListOrchestratorContextsAsync(true, default),
+            context => context.Kind == OrchestratorContextKinds.Dossier);
+        Assert.NotNull(retained.HiddenAt);
+        Assert.Equal(1, retained.TurnCount);
+
+        var resumed = await store.ReadOrchestratorContextAsync(
+            project.ProjectId, null, 20, "test", default,
+            "AGT-W34", "Context boundaries", "active");
+        Assert.Single(resumed.Turns);
+        Assert.Null(resumed.Context.HiddenAt);
     }
 
     [Fact]

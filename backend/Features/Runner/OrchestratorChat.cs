@@ -53,9 +53,9 @@ public class OrchestratorChat
 
     /// <summary>
     /// Append one turn to the transcript for a specific navigation context
-    /// (MC-2, Concept §4). A <see cref="OrchestratorContextKey.TaskKind"/>
-    /// context is persisted to its own per-task file so a task page and the
-    /// board no longer share one history; <c>project</c> / <c>global</c> /
+    /// (MC-2, Concept §4). Task and dossier contexts are persisted to
+    /// dedicated files so document pages and the board never share one
+    /// history; <c>project</c> / <c>global</c> /
     /// <c>null</c> resolve to the canonical per-project
     /// <c>orchestrator-chat.jsonl</c>, so existing project chats are
     /// unaffected. Only project-scoped turns mirror into the project chat
@@ -84,7 +84,7 @@ public class OrchestratorChat
             // Only the project-scoped thread mirrors — the project chat tree
             // is per-project, so folding task-context turns into it would
             // cross-contaminate the board's history.
-            if (!IsTaskContext(context))
+            if (!IsDocumentContext(context))
                 MirrorToProjectChat(watchPath, persisted);
             return true;
         }
@@ -185,7 +185,7 @@ public class OrchestratorChat
 
     internal bool EnsureContext(string watchPath, OrchestratorContextKey? context)
     {
-        if (!IsTaskContext(context)) return true;
+        if (!IsDocumentContext(context)) return true;
         try
         {
             var path = ResolveContextPath(watchPath, context);
@@ -207,12 +207,13 @@ public class OrchestratorChat
     private static string ResolvePath(string watchPath) =>
         Path.Combine(watchPath, ".orchestrator", "orchestrator-chat.jsonl");
 
-    private static bool IsTaskContext(OrchestratorContextKey? context) =>
-        context != null && context.Kind == OrchestratorContextKey.TaskKind;
+    private static bool IsDocumentContext(OrchestratorContextKey? context) =>
+        context != null
+        && context.Kind is OrchestratorContextKey.TaskKind or OrchestratorContextKey.DossierKind;
 
     /// <summary>
-    /// Resolve the on-disk transcript file for a navigation context. Task
-    /// contexts get a dedicated file under <c>.orchestrator/context-chats/</c>
+    /// Resolve the on-disk transcript file for a navigation context. Task and
+    /// dossier contexts get dedicated files under <c>.orchestrator/context-chats/</c>
     /// keyed by the reversible <see cref="OrchestratorContextKey.Encode"/>
     /// folder-safe form; every other context (including <c>null</c>) resolves
     /// to the legacy per-project <c>orchestrator-chat.jsonl</c> so the board
@@ -220,7 +221,7 @@ public class OrchestratorChat
     /// </summary>
     internal static string ResolveContextPath(string watchPath, OrchestratorContextKey? context)
     {
-        if (!IsTaskContext(context))
+        if (!IsDocumentContext(context))
             return ResolvePath(watchPath);
         return Path.Combine(watchPath, ".orchestrator", "context-chats", context!.Encode() + ".jsonl");
     }

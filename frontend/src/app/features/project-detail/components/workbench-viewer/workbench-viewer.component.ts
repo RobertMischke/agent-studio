@@ -14,6 +14,8 @@ import {
 import { HttpClient } from '@angular/common/http';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { PageContextService } from '../../../../services/page-context.service';
+import { pageContextKey, pageExcerpt } from '../../../../models/page-context.model';
 import {
   WorkbenchDecisionResponse,
   WorkbenchDocument,
@@ -59,6 +61,7 @@ export class WorkbenchViewerComponent {
   private readonly docs = inject(ProjectDocsService);
   private readonly http = inject(HttpClient);
   private readonly hub = inject(JobsHubClient);
+  private readonly pages = inject(PageContextService);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
   private requestGeneration = 0;
 
@@ -93,6 +96,24 @@ export class WorkbenchViewerComponent {
       const id = this.workbenchId();
       this.maximized.set(false);
       this.loadDocument(project, id);
+    });
+    effect((onCleanup) => {
+      const document = this.document();
+      if (!document) return;
+      const workbench = document.workbench;
+      const context = {
+        projectName: this.projectName(),
+        relPath: workbench.entryPath,
+        title: workbench.title,
+        pageType: 'workbench' as const,
+        excerpt: pageExcerpt(document.html, workbench.summary),
+        dossierKey: workbench.key,
+        dossierId: workbench.id,
+        dossierState: workbench.lifecycleState ?? workbench.status,
+      };
+      const key = pageContextKey(context);
+      this.pages.activate(context);
+      onCleanup(() => this.pages.clear(key));
     });
     effect(() => {
       const event = this.hub.workbenchEvent();

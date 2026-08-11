@@ -7,7 +7,7 @@
         Chat History
       </h1>
       <p class="chat-history__subtitle">
-        Current project and task contexts managed centrally by the Task Server.
+        Current project, task, and Dossier contexts managed centrally by the Task Server.
       </p>
     </div>
     <div class="chat-history__actions">
@@ -29,6 +29,7 @@
   <div class="chat-history__summary" data-testid="chat-history-counts">
     <span><strong>{{ projectContexts().length }}</strong> project {{ projectContexts().length === 1 ? 'context' : 'contexts' }}</span>
     <span><strong>{{ taskContexts().length }}</strong> task {{ taskContexts().length === 1 ? 'context' : 'contexts' }}</span>
+    <span><strong>{{ dossierContexts().length }}</strong> Dossier {{ dossierContexts().length === 1 ? 'context' : 'contexts' }}</span>
     <span class="chat-history__live" [attr.data-connected]="hub.connected()">
       <span class="chat-history__live-dot" aria-hidden="true"></span>
       {{ hub.connected() ? 'Live updates' : 'Live updates reconnecting' }}
@@ -72,7 +73,7 @@
                 </span>
                 <span class="chat-history__activity">
                   <span>Last activity</span>
-                  <time [attr.datetime]="context.updatedAt" [title]="activityTitle(context.updatedAt)">
+                  <time [attr.datetime]="context.updatedAt" [appTooltip]="activityTitle(context.updatedAt)">
                     {{ activityLabel(context.updatedAt) }}
                   </time>
                 </span>
@@ -81,6 +82,47 @@
             </li>
           }
         </ul>
+      </section>
+
+      <section class="chat-history__group" aria-labelledby="dossier-contexts-title">
+        <div class="chat-history__group-head">
+          <h2 id="dossier-contexts-title">Dossiers</h2>
+          <span>Visible until documented or archived</span>
+        </div>
+        @if (dossierContexts().length === 0) {
+          <p class="chat-history__group-empty" data-testid="chat-history-no-dossiers">
+            No current Dossier chats. Opening Orchestrator Chat from a Dossier creates one.
+          </p>
+        } @else {
+          <ul class="chat-history__list" role="list" data-testid="chat-history-dossier-list">
+            @for (context of dossierContexts(); track context.contextKey) {
+              <li>
+                <button type="button"
+                        class="chat-history__row"
+                        data-testid="chat-history-row"
+                        [attr.data-context-key]="context.contextKey"
+                        (click)="open(context)">
+                  <span class="chat-history__identity">
+                    <span class="chat-history__kind" data-kind="dossier">Dossier</span>
+                    <strong>{{ contextTitle(context) }}</strong>
+                    <span>{{ context.projectId }}</span>
+                  </span>
+                  <span class="chat-history__topic">
+                    <span class="chat-history__topic-label">Topic</span>
+                    <span>{{ context.summary || 'No conversation yet.' }}</span>
+                  </span>
+                  <span class="chat-history__activity">
+                    <span>Last activity</span>
+                    <time [attr.datetime]="context.updatedAt" [appTooltip]="activityTitle(context.updatedAt)">
+                      {{ activityLabel(context.updatedAt) }}
+                    </time>
+                  </span>
+                  <app-studio-icon class="chat-history__open-icon" name="chevronRight" [size]="16" />
+                </button>
+              </li>
+            }
+          </ul>
+        }
       </section>
 
       <section class="chat-history__group" aria-labelledby="task-contexts-title">
@@ -112,7 +154,7 @@
                   </span>
                   <span class="chat-history__activity">
                     <span>Last activity</span>
-                    <time [attr.datetime]="context.updatedAt" [title]="activityTitle(context.updatedAt)">
+                    <time [attr.datetime]="context.updatedAt" [appTooltip]="activityTitle(context.updatedAt)">
                       {{ activityLabel(context.updatedAt) }}
                     </time>
                   </span>

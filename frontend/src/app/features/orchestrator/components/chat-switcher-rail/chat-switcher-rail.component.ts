@@ -38,16 +38,19 @@ export class ChatSwitcherRailComponent {
     return [...byKey.values()].map(session => ({
       ...session,
       label: session.kind === 'global'
-        ? 'Global orchestrator'
+        ? 'Global monitoring'
         : session.kind === 'project'
           ? (session.projectId ?? session.contextKey)
-          : this.taskLabel(session),
+          : session.kind === 'dossier'
+            ? (session.dossierKey ?? session.contextKey)
+            : this.taskLabel(session),
     }));
   });
 
   readonly globalRows = computed(() => this.rows().filter(row => row.kind === 'global'));
   readonly projectRows = computed(() => this.rows().filter(row => row.kind === 'project'));
   readonly taskRows = computed(() => this.rows().filter(row => row.kind === 'task'));
+  readonly dossierRows = computed(() => this.rows().filter(row => row.kind === 'dossier'));
 
   select(contextKey: string): void {
     this.contextSelected.emit(contextKey);

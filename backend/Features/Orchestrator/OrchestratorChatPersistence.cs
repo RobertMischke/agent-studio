@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using AgentStudio.Docs;
 using AgentStudio.Host;
 using AgentStudio.Runner;
 using AgentStudio.TaskServer.Contracts;
@@ -38,7 +39,8 @@ public interface IOrchestratorChatPersistence
 /// </summary>
 public sealed class LocalOrchestratorChatPersistence(
     OrchestratorChat chat,
-    TaskScannerService scanner)
+    TaskScannerService scanner,
+    WorkbenchCatalogueService? workbenches = null)
     : IOrchestratorChatPersistence
 {
     private const int ContextSummaryMaxLength = 180;
@@ -94,6 +96,7 @@ public sealed class LocalOrchestratorChatPersistence(
                 projectContext,
                 project.Name,
                 task: null,
+                dossier: null,
                 projectTurns,
                 OrchestratorChat.ResolveContextPath(project.Path, projectContext),
                 project.Path));
@@ -111,31 +114,40 @@ public sealed class LocalOrchestratorChatPersistence(
             {
                 ct.ThrowIfCancellationRequested();
                 var encoded = Path.GetFileNameWithoutExtension(path);
-                if (!OrchestratorContextKey.TryDecode(encoded, out var taskContext)
-                    || taskContext.Kind != OrchestratorContextKey.TaskKind
+                if (!OrchestratorContextKey.TryDecode(encoded, out var documentContext)
+                    || documentContext.Kind is not (OrchestratorContextKey.TaskKind
+                        or OrchestratorContextKey.DossierKind)
                     || !string.Equals(
-                        taskContext.ProjectId,
+                        documentContext.ProjectId,
                         project.Name,
                         StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                var task = tasks.FirstOrDefault(candidate =>
-                    string.Equals(candidate.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)
-                    && (string.Equals(candidate.Key, taskContext.TaskKey, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(candidate.TaskKey, taskContext.TaskKey, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(candidate.Id, taskContext.TaskKey, StringComparison.OrdinalIgnoreCase)));
+                var task = documentContext.Kind == OrchestratorContextKey.TaskKind
+                    ? tasks.FirstOrDefault(candidate =>
+                        string.Equals(candidate.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)
+                        && (string.Equals(candidate.Key, documentContext.TaskKey, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(candidate.TaskKey, documentContext.TaskKey, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(candidate.Id, documentContext.TaskKey, StringComparison.OrdinalIgnoreCase)))
+                    : null;
+                var dossier = documentContext.Kind == OrchestratorContextKey.DossierKind
+                    ? workbenches?.List(project.Name, includeHistory: true)?.Items.FirstOrDefault(candidate =>
+                        candidate.Valid
+                        && string.Equals(candidate.Key, documentContext.DossierKey, StringComparison.OrdinalIgnoreCase))
+                    : null;
                 var hidden = OrchestratorContextVisibilityPolicy.IsHidden(
-                    OrchestratorContextKinds.Task,
-                    task?.State);
+                    documentContext.Kind,
+                    task?.State ?? dossier?.LifecycleState ?? dossier?.Status);
                 if (hidden && !includeHidden) continue;
 
                 result.Add(BuildContext(
-                    taskContext,
+                    documentContext,
                     project.Name,
                     task,
-                    chat.Read(project.Path, taskContext),
+                    dossier,
+                    chat.Read(project.Path, documentContext),
                     path,
                     project.Path));
             }
@@ -148,6 +160,7 @@ public sealed class LocalOrchestratorChatPersistence(
         OrchestratorContextKey context,
         string projectName,
         AgentStudio.Shared.TaskInfo? task,
+        WorkbenchListItem? dossier,
         IReadOnlyList<OrchestratorChatTurn> turns,
         string transcriptPath,
         string projectPath)
@@ -159,10 +172,14 @@ public sealed class LocalOrchestratorChatPersistence(
                 : DateTime.UnixEpoch;
         var createdAt = turns.Count == 0 ? fallbackTimestamp : turns.Min(turn => turn.Ts);
         var updatedAt = turns.Count == 0 ? fallbackTimestamp : turns.Max(turn => turn.Ts);
-        var hiddenAt = OrchestratorContextVisibilityPolicy.IsHidden(context.Kind, task?.State)
+        var hiddenAt = OrchestratorContextVisibilityPolicy.IsHidden(
+            context.Kind,
+            task?.State ?? dossier?.LifecycleState ?? dossier?.Status)
             ? updatedAt
             : (DateTime?)null;
         var fallbackSummary = task?.Title
+                              ?? dossier?.Title
+                              ?? context.DossierKey
                               ?? context.TaskKey
                               ?? $"Project chat for {projectName}";
         var summary = BuildSummary(
@@ -188,7 +205,8 @@ public sealed class LocalOrchestratorChatPersistence(
             turns.Sum(turn => (long)(turn.TokenUsage?.InputTokens ?? 0)),
             turns.Sum(turn => (long)(turn.TokenUsage?.OutputTokens ?? 0)),
             turns.Sum(turn => (long)(turn.TokenUsage?.CacheReadTokens ?? 0)),
-            turns.Sum(turn => (long)(turn.TokenUsage?.CacheCreationTokens ?? 0)));
+            turns.Sum(turn => (long)(turn.TokenUsage?.CacheCreationTokens ?? 0)),
+            context.DossierKey);
     }
 
     private static string BuildSummary(string? body, string fallback)
@@ -213,7 +231,8 @@ public sealed class LocalOrchestratorChatPersistence(
 /// </summary>
 public sealed class TaskServerOrchestratorChatPersistence(
     IHttpClientFactory clients,
-    OrchestratorContextHubBroadcaster? contextBroadcaster = null)
+    OrchestratorContextHubBroadcaster? contextBroadcaster = null,
+    WorkbenchCatalogueService? workbenches = null)
     : IOrchestratorChatPersistence
 {
     public bool IsCentralTaskServerStore => true;
@@ -226,7 +245,9 @@ public sealed class TaskServerOrchestratorChatPersistence(
         CancellationToken ct)
     {
         using var response = await Client().GetAsync(
-            ContextPath(projectName, context) + $"/turns?limit={Math.Clamp(limit, 1, 1000)}",
+            ContextPath(projectName, context)
+            + $"/turns?limit={Math.Clamp(limit, 1, 1000)}"
+            + ContextMetadataQuery(projectName, context, additionalParameter: true),
             ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         var transcript = await response.Content.ReadFromJsonAsync<OrchestratorContextTranscriptResponse>(
@@ -251,13 +272,15 @@ public sealed class TaskServerOrchestratorChatPersistence(
         CancellationToken ct)
     {
         using var response = await Client().PostAsJsonAsync(
-            ContextPath(projectName, context) + "/turns",
+            ContextPath(projectName, context)
+            + "/turns"
+            + ContextMetadataQuery(projectName, context, additionalParameter: false),
             new AppendOrchestratorContextTurnRequest(ToDto(turn)),
             ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         if (contextBroadcaster is not null)
         {
-            var contextKey = context?.Kind == OrchestratorContextKey.TaskKind
+            var contextKey = context?.Kind is OrchestratorContextKey.TaskKind or OrchestratorContextKey.DossierKind
                 ? context.Value
                 : $"project:{projectName}";
             await contextBroadcaster.ContextChangedAsync(
@@ -305,9 +328,29 @@ public sealed class TaskServerOrchestratorChatPersistence(
     {
         var project = Uri.EscapeDataString(projectName);
         var taskKey = context?.Kind == OrchestratorContextKey.TaskKind ? context.TaskKey : null;
-        return string.IsNullOrWhiteSpace(taskKey)
-            ? $"/api/v1/orchestrator-contexts/projects/{project}"
-            : $"/api/v1/orchestrator-contexts/projects/{project}/tasks/{Uri.EscapeDataString(taskKey)}";
+        var dossierKey = context?.Kind == OrchestratorContextKey.DossierKind ? context.DossierKey : null;
+        if (!string.IsNullOrWhiteSpace(taskKey))
+            return $"/api/v1/orchestrator-contexts/projects/{project}/tasks/{Uri.EscapeDataString(taskKey)}";
+        if (!string.IsNullOrWhiteSpace(dossierKey))
+            return $"/api/v1/orchestrator-contexts/projects/{project}/dossiers/{Uri.EscapeDataString(dossierKey)}";
+        return $"/api/v1/orchestrator-contexts/projects/{project}";
+    }
+
+    private string ContextMetadataQuery(
+        string projectName,
+        OrchestratorContextKey? context,
+        bool additionalParameter)
+    {
+        if (context?.Kind != OrchestratorContextKey.DossierKind) return string.Empty;
+        var dossier = workbenches?.List(projectName, includeHistory: true)?.Items.FirstOrDefault(candidate =>
+            candidate.Valid
+            && string.Equals(candidate.Key, context.DossierKey, StringComparison.OrdinalIgnoreCase));
+        if (dossier is null) return string.Empty;
+        var prefix = additionalParameter ? "&" : "?";
+        var lifecycleState = dossier.LifecycleState ?? dossier.Status;
+        return prefix
+               + "title=" + Uri.EscapeDataString(dossier.Title)
+               + "&state=" + Uri.EscapeDataString(lifecycleState);
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
@@ -388,7 +431,9 @@ public sealed class TaskServerOrchestratorChatPersistence(
         if (turn.Receipt is not null)
         {
             receipt = new OrchestratorContextReceipt(
-                turn.Receipt.ContextKey.StartsWith("task:", StringComparison.Ordinal) ? "task" : "project",
+                OrchestratorContextKey.TryParse(turn.Receipt.ContextKey, out var receiptContext)
+                    ? receiptContext.Kind
+                    : OrchestratorContextKey.ProjectKind,
                 turn.Receipt.ContextKey,
                 TaskKeyFromContext(turn.Receipt.ContextKey),
                 turn.Receipt.Sources.Select(source => source.SourceId).ToArray(),
@@ -432,6 +477,7 @@ public sealed class TaskServerOrchestratorChatPersistence(
 
     private static string? TaskKeyFromContext(string contextKey)
     {
+        if (!contextKey.StartsWith("task:", StringComparison.Ordinal)) return null;
         var slash = contextKey.LastIndexOf('/');
         return slash < 0 || slash == contextKey.Length - 1 ? null : contextKey[(slash + 1)..];
     }

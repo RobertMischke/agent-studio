@@ -28,6 +28,7 @@ public static class OrchestratorSessionEndpoints
                 session.Kind,
                 ProjectId = session.ProjectName,
                 session.TaskKey,
+                session.DossierKey,
                 session.CreatedAt,
                 session.UpdatedAt,
                 session.Model,
@@ -93,6 +94,8 @@ public static class OrchestratorSessionEndpoints
             PostTurn($"project:{projectId}", request, registry, turns));
         group.MapPost("/task:{projectId}/{taskKey}/turns", (string projectId, string taskKey, OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
             PostTurn($"task:{projectId}/{taskKey}", request, registry, turns));
+        group.MapPost("/dossier:{projectId}/{dossierKey}/turns", (string projectId, string dossierKey, OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
+            PostTurn($"dossier:{projectId}/{dossierKey}", request, registry, turns));
 
         group.MapPost("/global/park", (OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
             Park("global", registry, turns));
@@ -100,5 +103,7 @@ public static class OrchestratorSessionEndpoints
             Park($"project:{projectId}", registry, turns));
         group.MapPost("/task:{projectId}/{taskKey}/park", (string projectId, string taskKey, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
             Park($"task:{projectId}/{taskKey}", registry, turns));
+        group.MapPost("/dossier:{projectId}/{dossierKey}/park", (string projectId, string dossierKey, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
+            Park($"dossier:{projectId}/{dossierKey}", registry, turns));
     }
 }

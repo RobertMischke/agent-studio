@@ -9,7 +9,7 @@ Mockup: [`mockups/multichat-orchestrator.html`](mockups/multichat-orchestrator.h
 ## 1. The shift
 
 Away from ONE global orchestrator history ("everything that ever happened")
-to **context-bound orchestrator instances**: navigate to a task → get an
+to **context-bound orchestrator instances**: navigate to a task or Dossier and get an
 orchestrator that carries *that task's* context and keeps its **own
 persistent history**; re-enter any time. Many such instances exist in
 parallel (10–30), switchable at a glance. The global view survives as one
@@ -18,14 +18,15 @@ context among many — no longer the default.
 ## 2. Session model
 
 **Context key** (string, canonical): `global` | `project:<PROJ-ID>` |
-`task:<PROJ-ID>/<TASK-KEY>`. One `OrchestratorSession` per context key.
+`task:<PROJ-ID>/<TASK-KEY>` | `dossier:<PROJ-ID>/<DOSSIER-KEY>`. One
+`OrchestratorSession` exists per context key.
 
 | Property | Decision |
 |---|---|
 | Creation | lazy — first open of a context creates the session record |
 | Identity | context key + persisted CLI session id (resume token) |
 | History | per-context, persistent, append-only |
-| Default context | derived from navigation: task page → task context; board with active project → project context; explicit pin overrides |
+| Default context | derived from navigation: task page to task context; Dossier page to Dossier context; every other project route to the one project context; explicit pin overrides |
 
 **Persistence.** Task-scoped history data-side already exists (the
 conversation projection reads `logs/cli-output.log` per task). The
@@ -33,8 +34,9 @@ orchestrator chat history generalizes the existing persisted
 global-orchestrator session into a **session registry**:
 `<TaskRepository>/.metadata/orchestrator-sessions/<encoded-context-key>/`
 holding `session.json` (CLI session id, model, timestamps, counters) +
-`history.jsonl` (chat turns). Task-context sessions archive together with
-their task (same lifecycle, same git-backed evidence trail).
+`history.jsonl` (chat turns). Task contexts leave the current list at task
+archive. Dossier contexts leave it at `documented` or `archived`. Both remain
+persisted and resume if revisited.
 
 ## 3. Lifecycle & resources — 30 chats ≠ 30 processes
 
@@ -59,7 +61,8 @@ Host stays the **orchestrator side sheet** (push layout contract unchanged).
 Three principles (sharpened by operator feedback 2026-07-08):
 
 1. **Context is always automatic.** It derives from where the user is
-   (task page → task context; project board → project context). There is
+   (task page to task context; Dossier page to Dossier context; all other
+   project routes to project context). There is
    **no "create context" affordance anywhere** — sessions come into being
    lazily on first open of a place. A pin toggle freezes the sheet on a
    context; that is the only manual control. The active-tab projection is the
@@ -70,17 +73,18 @@ Three principles (sharpened by operator feedback 2026-07-08):
 2. **The switcher rail is extremely optional.** Default state: collapsed —
    the sheet simply *is* the chat of the current place, full width. A small
    "☰ n aktiv" chip in the header expands the rail on demand (sessions
-   grouped Global / Projects / Tasks; badges ● running, ◌ parked, unread,
+   grouped Monitoring / Projects / Tasks / Dossiers; badges ● running, ◌ parked, unread,
    token cost). A user who never opens it loses nothing.
 3. **Rail rows go both ways.** Clicking the name switches the chat;
    clicking the row's "→" **navigates the app to that place** (task detail
-   / project board) — the navigation then pulls the context along anyway.
+   / Dossier / project surface); the navigation then pulls the context along.
    The rail is monitoring + jump-off for parallel work, never a required
    step.
 
-**Context header** pinned above the chat: exactly the merged AGT-1916
-`OrchestratorContextHeaderComponent` (project · task + lane pill · live-run
-telemetry) — reused verbatim, as designed. Works unchanged inside the
+**Context header** pinned above the chat: the merged AGT-1916
+`OrchestratorContextHeaderComponent` shows an explicit type icon and identity
+for project, task, or Dossier, plus applicable lane and live-run telemetry.
+It works unchanged inside the
 AGT-1915 split view (the sheet IS the right-hand pane there).
 
 ## 5. Implementation plan (phases)

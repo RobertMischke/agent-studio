@@ -23,7 +23,8 @@ public sealed record OrchestratorSessionRecord(
     long CumulativeCacheCreationTokens,
     int Calls,
     DateTime? LastUsedAt,
-    string? LastError);
+    string? LastError,
+    string? DossierKey = null);
 
 public sealed record OrchestratorSessionHistoryEntry(
     DateTime Ts,
@@ -240,7 +241,8 @@ public sealed class OrchestratorSessionRegistry
             CumulativeCacheCreationTokens: 0,
             Calls: 0,
             LastUsedAt: null,
-            LastError: null);
+            LastError: null,
+            DossierKey: key.DossierKey);
 
     private OrchestratorSessionRecord? ReadRecord(string path)
     {

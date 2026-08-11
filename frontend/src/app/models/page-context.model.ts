@@ -11,6 +11,12 @@ export interface PageContext {
   title: string;
   pageType: PageType;
   excerpt: string;
+  /** Stable project-scoped Dossier key, for example `AGT-W34`. */
+  dossierKey?: string | null;
+  /** Repository descriptor id used by the Dossier route. */
+  dossierId?: string | null;
+  /** Current repository-owned Dossier lifecycle state. */
+  dossierState?: string | null;
 }
 
 export type PageTaskIntent = 'create-task' | 'build-feature' | 'create-follow-up';

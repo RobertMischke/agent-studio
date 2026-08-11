@@ -21,6 +21,10 @@ export interface ComposerLocationContext {
   taskTitle?: string;
   taskState?: string;
   taskWatchPath?: string;
+  /** Route identity while Dossier metadata is still loading. */
+  dossierId?: string;
+  /** Stable Dossier identity once its descriptor has loaded. */
+  dossierKey?: string;
 }
 
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
@@ -69,7 +73,12 @@ export function buildComposerLocationContext(
     case 'task':
       return taskContext('Task', tab.taskKey, tasks);
     case 'workbench':
-      return { project: tab.projectName, surface: 'Dossier', detail: tab.title ?? tab.workbenchId };
+      return {
+        project: tab.projectName,
+        surface: 'Dossier',
+        detail: tab.title ?? tab.workbenchId,
+        dossierId: tab.workbenchId,
+      };
     case 'workbenches':
       return { project: tab.projectName, surface: 'Dossiers' };
     case 'activity':

@@ -330,9 +330,10 @@ public static class RunnerEndpoints
 
         // Per-context transcript history (MC-2, Concept §4). The side sheet's
         // context follows the operator's navigation — the board yields a
-        // `project:<PROJ>` context, a task page a `task:<PROJ>/<KEY>` one — and
-        // the contextKey mirrors OrchestratorContextKey. A task context reads
-        // and writes its own thread so a pinned task and the board no longer
+        // `project:<PROJ>` context, a task page a `task:<PROJ>/<KEY>` one, and
+        // a Dossier page a `dossier:<PROJ>/<KEY>` one. The contextKey mirrors
+        // OrchestratorContextKey. Document contexts read and write their own
+        // threads so a pinned document and the board no longer
         // share one history; a project context resolves to the same canonical
         // per-project thread the bare-project route above serves, so existing
         // project chats are byte-for-byte unaffected. The literal-prefixed
@@ -387,6 +388,9 @@ public static class RunnerEndpoints
         runnerGroup.MapGet("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 ReadContextChat($"task:{projectId}/{taskKey}", scanner, chatService, ct));
+        runnerGroup.MapGet("/dossier:{projectId}/{dossierKey}/orchestrator-chat",
+            (string projectId, string dossierKey, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                ReadContextChat($"dossier:{projectId}/{dossierKey}", scanner, chatService, ct));
 
         runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
             (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
@@ -394,6 +398,9 @@ public static class RunnerEndpoints
         runnerGroup.MapPost("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));
+        runnerGroup.MapPost("/dossier:{projectId}/{dossierKey}/orchestrator-chat",
+            (string projectId, string dossierKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                SendContextChat($"dossier:{projectId}/{dossierKey}", req, ctx, scanner, chatService, ct));
 
         // Image upload + serving for the orchestrator chat composer.
         // Files land under <watchPath>/.orchestrator/chat-attachments/.

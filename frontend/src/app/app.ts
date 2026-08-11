@@ -103,6 +103,7 @@ import {
   type TaskInspectorRouteTab,
 } from './features/studio-shell';
 import { TaskService } from './services/task.service';
+import { ProjectDocsService } from './services/project-docs.service';
 import { ClientService } from './services/client.service';
 import { NotificationService } from './services/notification.service';
 import type { TaskDetail, TaskInfo, WatchPathEntry, CliType } from './models/task.model';
@@ -224,6 +225,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
 export class App implements OnInit, OnDestroy {
   readonly auth = inject(AuthService); private studioInitialized = false;
   readonly jobService = inject(TaskService);
+  private readonly projectDocs = inject(ProjectDocsService);
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
   readonly clientService = inject(ClientService);
@@ -1787,6 +1789,27 @@ export class App implements OnInit, OnDestroy {
     }
     if (contextKey.startsWith('project:')) {
       this.studioTabState.open({ kind: 'board', projectName: contextKey.slice('project:'.length) });
+      return;
+    }
+    if (contextKey.startsWith('dossier:')) {
+      const slash = contextKey.indexOf('/');
+      if (slash < 0) return;
+      const projectName = contextKey.slice('dossier:'.length, slash);
+      const dossierKey = contextKey.slice(slash + 1);
+      this.projectDocs.getWorkbenches(projectName, true).subscribe({
+        next: catalogue => {
+          const dossier = catalogue.items.find(item =>
+            item.valid
+            && item.key?.toLocaleUpperCase() === dossierKey.toLocaleUpperCase());
+          if (!dossier) return;
+          this.studioTabState.open({
+            kind: 'workbench',
+            projectName,
+            workbenchId: dossier.id,
+            title: dossier.title,
+          });
+        },
+      });
       return;
     }
     if (!contextKey.startsWith('task:')) return;

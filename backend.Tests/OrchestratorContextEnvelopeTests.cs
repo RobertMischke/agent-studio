@@ -42,6 +42,41 @@ public sealed class OrchestratorContextEnvelopeTests : IDisposable
     }
 
     [Fact]
+    public void Snapshot_BindsTheStableDossierKeyAndRejectsProjectScopeBleed()
+    {
+        Assert.True(OrchestratorContextKey.TryParse("dossier:project-a/AGT-W34", out var route));
+        var supplied = new OrchestratorContextEnvelope(
+            new OrchestratorConversationScope(
+                "dossier", route.Value, "project-a", DossierKey: "AGT-W34"),
+            new OrchestratorActiveSurface(
+                "workbench", "docs/dossiers/context.html", "Context boundaries"),
+            [],
+            new OrchestratorContextBudget(),
+            DateTime.UtcNow);
+
+        var result = OrchestratorContextEnvelopePolicy.Snapshot(
+            "project-a", route,
+            new SendOrchestratorChatRequest("Discuss this document", null, ContextEnvelope: supplied),
+            DateTime.UtcNow);
+
+        Assert.Equal("dossier", result.Scope.Kind);
+        Assert.Equal("dossier:project-a/AGT-W34", result.Scope.ContextKey);
+        Assert.Equal("AGT-W34", result.Scope.DossierKey);
+        Assert.Null(result.Scope.TaskKey);
+
+        var mismatched = supplied with
+        {
+            Scope = supplied.Scope with { Kind = "project", DossierKey = null },
+        };
+        var error = Assert.Throws<OrchestratorContextEnvelopeException>(() =>
+            OrchestratorContextEnvelopePolicy.Snapshot(
+                "project-a", route,
+                new SendOrchestratorChatRequest("Question", null, ContextEnvelope: mismatched),
+                DateTime.UtcNow));
+        Assert.Equal("context-scope-mismatch", error.Code);
+    }
+
+    [Fact]
     public void Snapshot_RejectsCrossProjectReferenceAndMismatchedActiveTask()
     {
         Assert.True(OrchestratorContextKey.TryParse("task:project-a/A-1", out var route));

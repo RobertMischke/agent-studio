@@ -310,4 +310,102 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     sessions.flush({ sessions: [] });
     http.verify();
   });
+
+  it('opens a fresh isolated Dossier transcript and resumes it on return', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+    const dossierPage = {
+      projectName: 'demo-project',
+      relPath: 'docs/dossiers/context-boundaries.html',
+      title: 'Context boundaries',
+      pageType: 'workbench' as const,
+      excerpt: 'Dossier content',
+      dossierKey: 'AGT-W34',
+      dossierId: 'context-boundaries',
+      dossierState: 'active',
+    };
+
+    c.activeProject.set('demo-project');
+    c.turns.set([{ id: 'board', ts: '2026-08-11T08:00:00Z', role: 'orchestrator', text: 'Board monitoring history' }]);
+    fixture.componentRef.setInput('composerContext', {
+      project: 'demo-project', surface: 'Dossier', detail: 'Context boundaries',
+      dossierId: 'context-boundaries', dossierKey: 'AGT-W34',
+    });
+    fixture.componentRef.setInput('pageContext', dossierPage);
+    TestBed.flushEffects();
+
+    expect(c.contextKind()).toBe('dossier');
+    expect(c.contextKey()).toBe('dossier:demo-project/AGT-W34');
+    expect(c.contextDigestState.scopeLabel()).toBe('Dossier context');
+    expect(c.turns()).toEqual([]);
+
+    http.expectOne('/api/runner/dossier:demo-project/AGT-W34/orchestrator-chat').flush({
+      project: 'demo-project',
+      turns: [],
+    });
+    http.expectOne('/api/orchestrator/context/dossier:demo-project/AGT-W34').flush({
+      contextKey: 'dossier:demo-project/AGT-W34', capturedAt: '2026-08-11T08:00:00Z',
+      sources: [], digest: '', staleAfter: '2026-08-11T08:05:00Z',
+    });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+    expect(c.turns()).toEqual([]);
+    c.hide();
+
+    fixture.componentRef.setInput('pageContext', null);
+    fixture.componentRef.setInput('composerContext', { project: 'demo-project', surface: 'Board' });
+    TestBed.flushEffects();
+    expect(c.contextKey()).toBe('project:demo-project');
+
+    fixture.componentRef.setInput('composerContext', {
+      project: 'demo-project', surface: 'Dossier', detail: 'Context boundaries',
+      dossierId: 'context-boundaries', dossierKey: 'AGT-W34',
+    });
+    fixture.componentRef.setInput('pageContext', dossierPage);
+    TestBed.flushEffects();
+    c.refresh(true);
+    http.expectOne('/api/runner/dossier:demo-project/AGT-W34/orchestrator-chat').flush({
+      project: 'demo-project',
+      turns: [{ id: 'dossier-1', ts: '2026-08-11T08:05:00Z', role: 'user', text: 'Discuss this Dossier' }],
+    });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+
+    expect(c.turns().map(turn => turn.text)).toEqual(['Discuss this Dossier']);
+    http.verify();
+  });
+
+  it('ignores a late project response after navigation enters a Dossier', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+
+    c.activeProject.set('demo-project');
+    c.refresh(true);
+    const staleProjectRead = http.expectOne('/api/runner/project:demo-project/orchestrator-chat');
+    fixture.componentRef.setInput('composerContext', {
+      project: 'demo-project', surface: 'Dossier', dossierId: 'dossier-id', dossierKey: 'AGT-W34',
+    });
+    fixture.componentRef.setInput('pageContext', {
+      projectName: 'demo-project', relPath: 'docs/dossier.html', title: 'Context boundaries',
+      pageType: 'workbench', excerpt: '', dossierId: 'dossier-id', dossierKey: 'AGT-W34',
+    });
+    TestBed.flushEffects();
+    staleProjectRead.flush({
+      project: 'demo-project',
+      turns: [{ id: 'stale', ts: '2026-08-11T08:00:00Z', role: 'orchestrator', text: 'Foreign board status' }],
+    });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+
+    expect(c.contextKey()).toBe('dossier:demo-project/AGT-W34');
+    expect(c.turns()).toEqual([]);
+    http.expectOne('/api/orchestrator/context/dossier:demo-project/AGT-W34').flush({
+      contextKey: 'dossier:demo-project/AGT-W34', capturedAt: '2026-08-11T08:00:00Z',
+      sources: [], digest: '', staleAfter: '2026-08-11T08:05:00Z',
+    });
+    http.expectOne('/api/runner/dossier:demo-project/AGT-W34/orchestrator-chat').flush({
+      project: 'demo-project', turns: [],
+    });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+    http.verify();
+  });
 });

@@ -83,12 +83,14 @@
               {{ contextDigestState.refreshing() ? 'Refreshing...' : (loading() ? 'Loading...' : 'Refresh') }}
             </button>
             <button type="button"
-                    [attr.aria-pressed]="contextKind() === 'task' || !contextDismissed()"
-                    [disabled]="contextKind() === 'task'"
+                    [attr.aria-pressed]="contextKind() !== 'project' || !contextDismissed()"
+                    [disabled]="contextKind() !== 'project'"
                     (click)="toggleNextMessageContext()"
                     data-testid="orch-context-send-toggle">
               {{ contextKind() === 'task'
                 ? 'Task context always included'
+                : contextKind() === 'dossier'
+                  ? 'Dossier context always included'
                 : (contextDismissed() ? 'Include context next' : 'Exclude context once') }}
             </button>
           </div>
@@ -100,9 +102,12 @@
             [taskTitle]="effectiveJobTitle()"
             [taskKey]="effectiveJobKey()"
             [taskState]="effectiveJobState()"
+            [contextKind]="contextKind()"
+            [dossierKey]="effectiveDossierKey()"
+            [dossierTitle]="effectiveDossierTitle()"
             [pinned]="pinned()"
             [contextKey]="contextKey()"
-            [runActive]="activeRun() !== null"
+            [runActive]="contextKind() !== 'dossier' && activeRun() !== null"
             [runModel]="activeRun()?.model ?? null"
             [runStartedAt]="activeRun()?.startedAt ?? null" />
           <nav class="sheet__scope-row" aria-label="Orchestrator scope">
@@ -136,6 +141,19 @@
           </section>
         } @else if (effectiveProject()) {
           <section class="sheet__chat">
+            <app-orchestrator-context-header
+              [project]="effectiveProject()"
+              [taskTitle]="effectiveJobTitle()"
+              [taskKey]="effectiveJobKey()"
+              [taskState]="effectiveJobState()"
+              [contextKind]="contextKind()"
+              [dossierKey]="effectiveDossierKey()"
+              [dossierTitle]="effectiveDossierTitle()"
+              [pinned]="pinned()"
+              [contextKey]="contextKey()"
+              [runActive]="contextKind() !== 'dossier' && activeRun() !== null"
+              [runModel]="activeRun()?.model ?? null"
+              [runStartedAt]="activeRun()?.startedAt ?? null" />
             <div class="sheet__conversation" data-testid="orchestrator-conversation">
               <cac-conversation-view
                 variant="embedded"

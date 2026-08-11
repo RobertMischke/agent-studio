@@ -16,6 +16,12 @@ describe('ChatSwitcherRailComponent', () => {
       cumulativeOutputTokens: 50, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
       runtimeStatus: 'parked', queuePosition: 0,
       summary: 'Investigate the task context lifecycle',
+    }, {
+      contextKey: 'dossier:Alpha/AGT-W34', kind: 'dossier', projectId: 'Alpha', taskKey: null,
+      dossierKey: 'AGT-W34', updatedAt: '2026-08-11T10:00:00Z', model: null,
+      cumulativeInputTokens: 0, cumulativeOutputTokens: 0, cumulativeCacheReadTokens: 0,
+      cumulativeCacheCreationTokens: 0, runtimeStatus: 'idle', queuePosition: 0,
+      summary: 'Dossier-specific discussion',
     }]);
     fixture.detectChanges();
   });
@@ -26,9 +32,11 @@ describe('ChatSwitcherRailComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="chat-context-groups"]')).not.toBeNull();
 
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Global');
+    expect(text).toContain('Monitoring');
     expect(text).toContain('Projects');
     expect(text).toContain('Tasks');
+    expect(text).toContain('Dossiers');
+    expect(text).toContain('AGT-W34');
     expect(text).toContain('parked');
     expect(text).toContain('new');
     expect(text).toContain('1k');
@@ -36,6 +44,7 @@ describe('ChatSwitcherRailComponent', () => {
 
     const current = fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]');
     expect(current.classList).toContain('context-list__row--active');
+    expect(current.getAttribute('aria-current')).toBe('true');
   });
 
   it('keeps chat selection separate from location navigation', () => {

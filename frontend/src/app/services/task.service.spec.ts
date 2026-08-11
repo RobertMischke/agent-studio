@@ -422,6 +422,9 @@ describe('orchestratorContextChatSegment', () => {
     expect(orchestratorContextChatSegment('task:Agent Studio/AGT-1916')).toBe(
       'task:Agent%20Studio/AGT-1916',
     );
+    expect(orchestratorContextChatSegment('dossier:Agent Studio/AGT-W34')).toBe(
+      'dossier:Agent%20Studio/AGT-W34',
+    );
   });
 
   it('falls back to a single encoded segment for unrecognized shapes', () => {

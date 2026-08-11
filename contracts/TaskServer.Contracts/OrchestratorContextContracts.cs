@@ -4,13 +4,21 @@ public static class OrchestratorContextKinds
 {
     public const string Project = "project";
     public const string Task = "task";
+    public const string Dossier = "dossier";
 }
 
 public static class OrchestratorContextVisibilityPolicy
 {
-    public static bool IsHidden(string kind, string? taskState)
-        => string.Equals(kind, OrchestratorContextKinds.Task, StringComparison.Ordinal)
-           && string.Equals(taskState, "7-archive", StringComparison.Ordinal);
+    public static bool IsHidden(string kind, string? lifecycleState)
+        => (string.Equals(kind, OrchestratorContextKinds.Task, StringComparison.Ordinal)
+               && string.Equals(lifecycleState, "7-archive", StringComparison.Ordinal)
+           || (string.Equals(kind, OrchestratorContextKinds.Dossier, StringComparison.Ordinal)
+               && lifecycleState is not null
+               && lifecycleState.Equals("documented", StringComparison.OrdinalIgnoreCase))
+           || (string.Equals(kind, OrchestratorContextKinds.Dossier, StringComparison.Ordinal)
+               && lifecycleState is not null
+               && (lifecycleState.Equals("archived", StringComparison.OrdinalIgnoreCase)
+                   || lifecycleState.Equals("done", StringComparison.OrdinalIgnoreCase))));
 }
 
 public sealed record OrchestratorContextDto(
@@ -29,7 +37,8 @@ public sealed record OrchestratorContextDto(
     long CumulativeInputTokens = 0,
     long CumulativeOutputTokens = 0,
     long CumulativeCacheReadTokens = 0,
-    long CumulativeCacheCreationTokens = 0);
+    long CumulativeCacheCreationTokens = 0,
+    string? DossierKey = null);
 
 public sealed record OrchestratorContextListResponse(
     IReadOnlyList<OrchestratorContextDto> Contexts);

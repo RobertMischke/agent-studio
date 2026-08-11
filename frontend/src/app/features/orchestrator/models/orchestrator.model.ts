@@ -68,9 +68,10 @@ export interface OrchestratorSessionResponse {
 
 export interface OrchestratorContextSession {
   contextKey: string;
-  kind: 'global' | 'project' | 'task';
+  kind: 'global' | 'project' | 'task' | 'dossier';
   projectId: string | null;
   taskKey: string | null;
+  dossierKey?: string | null;
   createdAt?: string;
   updatedAt: string;
   lastUsedAt?: string;
@@ -173,10 +174,11 @@ export interface OrchestratorContextSourceReceipt {
 }
 
 export interface OrchestratorConversationScope {
-  kind: 'project' | 'task';
+  kind: 'project' | 'task' | 'dossier';
   contextKey: string;
   projectId: string;
   taskKey?: string | null;
+  dossierKey?: string | null;
 }
 
 export interface OrchestratorActiveSurface {

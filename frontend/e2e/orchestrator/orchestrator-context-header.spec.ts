@@ -10,8 +10,8 @@ test.use({ serviceWorkers: 'block' });
  *
  * The chat + task endpoints are stubbed so the spec runs without a live
  * backend or CLI quota. What we lock:
- *   1. On board scope the header shows the active project chip and the
- *      "Board" scope chip (no task, no lane).
+ *   1. On project scope the header shows the active project chip and the
+ *      "Project chat" scope chip (no task, no lane).
  *   2. When a CLI run is live in the active project, the header surfaces
  *      the live-run pill with the short model name and a ticking duration
  *      even without opening the task detail (board-scope run resolution
@@ -43,6 +43,7 @@ async function seedActiveTab(
   await page.addInitScript(({ tab, activeKey, theme }) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [tab], activeKey }));
     localStorage.setItem('atp.studio.theme', theme);
+    localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', '0');
   }, { tab, activeKey, theme });
 }
 
@@ -283,6 +284,63 @@ async function stubLongWorkbench(page: Page): Promise<string[]> {
   });
   const encodedProject = encodeURIComponent(LONG_CONTEXT_PROJECT);
 
+  await page.route(/\/api\/orchestrator\/sessions(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, { sessions: [{
+      contextKey: `dossier:${LONG_CONTEXT_PROJECT}/AOW-W1`,
+      kind: 'dossier',
+      projectId: LONG_CONTEXT_PROJECT,
+      taskKey: null,
+      dossierKey: 'AOW-W1',
+      updatedAt: '2026-08-11T08:00:00Z',
+      model: null,
+      cumulativeInputTokens: 0,
+      cumulativeOutputTokens: 0,
+      cumulativeCacheReadTokens: 0,
+      cumulativeCacheCreationTokens: 0,
+      runtimeStatus: 'idle',
+      queuePosition: 0,
+      summary: 'Dossier-specific discussion',
+    }] }, unexpectedRequests);
+  });
+  await page.route(
+    new RegExp(`/api/orchestrator/context/dossier:${encodedProject}/AOW-W1$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `dossier:${LONG_CONTEXT_PROJECT}/AOW-W1`,
+        capturedAt: '2026-08-11T08:00:00Z',
+        digest: 'dossier: AOW-W1 | health: ok',
+        sources: [],
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/runner/dossier:${encodedProject}/AOW-W1/orchestrator-chat$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `dossier:${LONG_CONTEXT_PROJECT}/AOW-W1`,
+        project: LONG_CONTEXT_PROJECT,
+        turns: [],
+        executionContext: null,
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/runner/project:${encodedProject}/orchestrator-chat$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `project:${LONG_CONTEXT_PROJECT}`,
+        project: LONG_CONTEXT_PROJECT,
+        turns: [{
+          id: 'foreign-board-status',
+          ts: '2026-08-11T07:00:00Z',
+          role: 'orchestrator',
+          text: 'Board watcher status from another context',
+        }],
+        executionContext: null,
+      }, unexpectedRequests);
+    },
+  );
+
   await page.route(/\/api\/workbenches(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, {
       projectName: LONG_CONTEXT_PROJECT,
@@ -461,15 +519,15 @@ test.describe('Orchestrator context header · where am I', () => {
     expect(unexpectedRequests).toEqual([]);
   });
 
-  test('board scope shows the project chip and the Board scope chip', async ({ page }) => {
+  test('project scope shows the project chip and Project chat scope chip', async ({ page }) => {
     const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
     await openSideSheet(page);
 
     const header = page.getByTestId('orch-context-header');
     await expect(header).toBeVisible();
-    await expect(header).toHaveAttribute('data-scope', 'board');
+    await expect(header).toHaveAttribute('data-scope', 'project');
     await expect(page.getByTestId('orch-context-project')).toContainText(PROJECT);
-    await expect(page.getByTestId('orch-context-board')).toHaveText('Board');
+    await expect(page.getByTestId('orch-context-board')).toHaveText('Project chat');
     // Nothing running -> no live-run pill.
     await expect(page.getByTestId('orch-context-run')).toHaveCount(0);
     expect(unexpectedRequests).toEqual([]);
@@ -549,7 +607,7 @@ test.describe('Orchestrator context header · where am I', () => {
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`long Dossier context wraps cleanly in ${variant.name}`, async ({ page }) => {
+    test(`Dossier chat identity stays isolated in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: variant.width, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
@@ -558,6 +616,7 @@ test.describe('Orchestrator context header · where am I', () => {
       const unexpectedRequests = await stubLongWorkbench(page);
       await page.goto('/');
       await page.waitForLoadState('domcontentloaded');
+      await page.addStyleTag({ content: 'app-offline-banner { display: none !important; }' });
       const workbenchSection = page.getByTestId(
         `studio-explorer-project-workbenches-${LONG_CONTEXT_PROJECT}`,
       );
@@ -569,7 +628,15 @@ test.describe('Orchestrator context header · where am I', () => {
       await workbench.click();
       await showSideSheet(page, false);
 
-      const footer = page.getByTestId('chat-composer-foot');
+      const header = page.getByTestId('orch-context-header');
+      await expect(header).toHaveAttribute('data-scope', 'dossier');
+      await expect(page.getByTestId('orch-context-dossier')).toContainText('Dossier');
+      await expect(page.getByTestId('orch-context-dossier')).toContainText('AOW-W1');
+      await expect(page.getByTestId('orch-context-dossier')).toContainText(LONG_CONTEXT_TITLE);
+      await expect(page.getByTestId('orch-side-sheet')).not.toContainText(
+        'Board watcher status from another context',
+      );
+
       const context = page.getByTestId('chat-composer-context');
       const detail = page.getByTestId('chat-composer-context-detail');
       const model = page.getByTestId('cac-model-selector-trigger');
@@ -578,39 +645,19 @@ test.describe('Orchestrator context header · where am I', () => {
       await expect(detail).toHaveText(LONG_CONTEXT_TITLE);
       await expect(model).toContainText('gpt-5.6-sol');
 
-      const layout = await footer.evaluate((element) => {
-        const contextElement = element.querySelector<HTMLElement>('[data-testid="chat-composer-context"]')!;
-        const segmentElements = Array.from(contextElement.children) as HTMLElement[];
-        const modelElement = element.querySelector<HTMLElement>('[data-testid="cac-model-selector-trigger"]')!;
-        const footerBox = element.getBoundingClientRect();
-        const modelBox = modelElement.getBoundingClientRect();
-        return {
-          footerFits: element.scrollWidth <= element.clientWidth + 1,
-          contextWrap: getComputedStyle(contextElement).flexWrap,
-          rowCount: new Set(segmentElements.map(segment => Math.round(segment.getBoundingClientRect().top))).size,
-          segmentsStayWhole: segmentElements.every(segment => getComputedStyle(segment).whiteSpace === 'nowrap'),
-          modelFits: modelBox.right <= footerBox.right + 1 && modelBox.left >= footerBox.left - 1,
-        };
-      });
-      expect(layout).toMatchObject({
-        footerFits: true,
-        contextWrap: 'wrap',
-        segmentsStayWhole: true,
-        modelFits: true,
-      });
-      expect(layout.rowCount).toBeGreaterThanOrEqual(1);
-      expect(layout.rowCount).toBeLessThanOrEqual(2);
-      if (variant.width === 390) expect(layout.rowCount).toBe(2);
-      await expect(detail).toHaveCSS('text-overflow', 'ellipsis');
-      if (variant.width === 390) {
-        await expect.poll(() => detail.evaluate(element => element.scrollWidth > element.clientWidth))
-          .toBe(true);
-      }
-
+      await page.getByTestId('orch-context-badge').click();
+      await expect(page.getByTestId('orch-context-menu')).toBeVisible();
+      await expect(page.getByTestId('orch-context-scope')).toHaveText('Dossier context');
+      const dossierRow = page.getByTestId(
+        `chat-switcher-row-dossier:${LONG_CONTEXT_PROJECT}/AOW-W1`,
+      );
+      await expect(dossierRow).toBeVisible();
+      await expect(dossierRow).toHaveAttribute('aria-current', 'true');
+      await expect(page.getByTestId('chat-context-groups')).toContainText('Dossiers');
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-composer-long-context--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-dossier-context--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
       expect(unexpectedRequests).toEqual([]);

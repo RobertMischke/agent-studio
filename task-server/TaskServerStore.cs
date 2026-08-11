@@ -13,7 +13,7 @@ public sealed partial class TaskServerStore
 {
     // 10 adds the central Orchestrator context, transcript, and receipt store.
     // The migration block is idempotent; the number only guards downgrades.
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -1991,14 +1991,15 @@ public sealed partial class TaskServerStore
             );
             CREATE TABLE IF NOT EXISTS orchestrator_contexts(
                 context_key TEXT PRIMARY KEY,
-                kind TEXT NOT NULL CHECK(kind IN ('project', 'task')),
+                kind TEXT NOT NULL CHECK(kind IN ('project', 'task', 'dossier')),
                 project_id TEXT NOT NULL REFERENCES projects(id),
                 task_id TEXT REFERENCES tasks(id),
                 summary TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 hidden_at TEXT,
-                CHECK((kind = 'project' AND task_id IS NULL) OR (kind = 'task' AND task_id IS NOT NULL))
+                CHECK((kind IN ('project', 'dossier') AND task_id IS NULL)
+                    OR (kind = 'task' AND task_id IS NOT NULL))
             );
             CREATE TABLE IF NOT EXISTS orchestrator_context_turns(
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2356,6 +2357,7 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_post_steps_run_status
                 ON post_step_executions(run_id, status);
             """, ct);
+        await UpgradeOrchestratorContextsForDossiersAsync(connection, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
@@ -2404,6 +2406,88 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "review_attempts", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "review_attempts", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
+    }
+
+    private static async Task UpgradeOrchestratorContextsForDossiersAsync(
+        SqliteConnection connection,
+        CancellationToken ct)
+    {
+        var tableSql = Convert.ToString(await ScalarAsync(
+            connection,
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orchestrator_contexts';",
+            ct), CultureInfo.InvariantCulture);
+        if (tableSql?.Contains("'dossier'", StringComparison.Ordinal) == true) return;
+
+        await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF;", ct);
+        try
+        {
+            await ExecuteAsync(connection, """
+                BEGIN IMMEDIATE;
+                ALTER TABLE orchestrator_context_turns RENAME TO orchestrator_context_turns_v10;
+                ALTER TABLE orchestrator_contexts RENAME TO orchestrator_contexts_v10;
+                CREATE TABLE orchestrator_contexts(
+                    context_key TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK(kind IN ('project', 'task', 'dossier')),
+                    project_id TEXT NOT NULL REFERENCES projects(id),
+                    task_id TEXT REFERENCES tasks(id),
+                    summary TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    hidden_at TEXT,
+                    CHECK((kind IN ('project', 'dossier') AND task_id IS NULL)
+                        OR (kind = 'task' AND task_id IS NOT NULL))
+                );
+                INSERT INTO orchestrator_contexts(
+                    context_key, kind, project_id, task_id, summary,
+                    created_at, updated_at, hidden_at)
+                SELECT context_key, kind, project_id, task_id, summary,
+                       created_at, updated_at, hidden_at
+                  FROM orchestrator_contexts_v10;
+                CREATE TABLE orchestrator_context_turns(
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    context_key TEXT NOT NULL REFERENCES orchestrator_contexts(context_key),
+                    turn_id TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('user', 'orchestrator')),
+                    body TEXT NOT NULL,
+                    model TEXT,
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                    cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    error_detail TEXT,
+                    attachments_json TEXT,
+                    receipt_json TEXT,
+                    payload_sha256 TEXT NOT NULL
+                );
+                INSERT INTO orchestrator_context_turns(
+                    sequence, context_key, turn_id, created_at, role, body, model,
+                    input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+                    error_message, error_detail, attachments_json, receipt_json, payload_sha256)
+                SELECT sequence, context_key, turn_id, created_at, role, body, model,
+                       input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+                       error_message, error_detail, attachments_json, receipt_json, payload_sha256
+                  FROM orchestrator_context_turns_v10;
+                DROP TABLE orchestrator_context_turns_v10;
+                DROP TABLE orchestrator_contexts_v10;
+                CREATE INDEX ix_orchestrator_contexts_project_visible
+                    ON orchestrator_contexts(project_id, hidden_at, updated_at);
+                CREATE INDEX ix_orchestrator_context_turns_context_sequence
+                    ON orchestrator_context_turns(context_key, sequence);
+                COMMIT;
+                """, ct);
+        }
+        catch
+        {
+            try { await ExecuteAsync(connection, "ROLLBACK;", ct); }
+            catch (SqliteException) { }
+            throw;
+        }
+        finally
+        {
+            await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", ct);
+        }
     }
 
     private static async Task EnsureColumnAsync(

@@ -224,7 +224,8 @@ function uniqueJobsFromGrouped(grouped: GroupedJobs): TaskInfo[] {
 }
 
 /**
- * Turn an orchestrator context key (`project:<PROJ>` or `task:<PROJ>/<KEY>`,
+ * Turn an orchestrator context key (`project:<PROJ>`, `task:<PROJ>/<KEY>`, or
+ * `dossier:<PROJ>/<KEY>`,
  * mirroring the backend `OrchestratorContextKey`) into the URL path segment(s)
  * for the `/api/runner/{contextKey}/orchestrator-chat` route. Each id part is
  * URL-encoded on its own so a project name with spaces stays valid while the
@@ -234,14 +235,20 @@ function uniqueJobsFromGrouped(grouped: GroupedJobs): TaskInfo[] {
  */
 export function orchestratorContextChatSegment(contextKey: string): string {
   const taskPrefix = 'task:';
+  const dossierPrefix = 'dossier:';
   const projectPrefix = 'project:';
-  if (contextKey.startsWith(taskPrefix)) {
-    const rest = contextKey.slice(taskPrefix.length);
+  const isolatedPrefix = contextKey.startsWith(taskPrefix)
+    ? taskPrefix
+    : contextKey.startsWith(dossierPrefix)
+      ? dossierPrefix
+      : null;
+  if (isolatedPrefix) {
+    const rest = contextKey.slice(isolatedPrefix.length);
     const slash = rest.indexOf('/');
     if (slash >= 0) {
       const proj = rest.slice(0, slash);
       const key = rest.slice(slash + 1);
-      return `task:${encodeURIComponent(proj)}/${encodeURIComponent(key)}`;
+      return `${isolatedPrefix}${encodeURIComponent(proj)}/${encodeURIComponent(key)}`;
     }
   } else if (contextKey.startsWith(projectPrefix)) {
     return `project:${encodeURIComponent(contextKey.slice(projectPrefix.length))}`;

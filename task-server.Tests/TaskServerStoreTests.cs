@@ -81,6 +81,100 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Version_eleven_adds_Dossier_contexts_without_losing_existing_transcripts()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var workspace = await first.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Migration"), "test", default);
+        var project = await first.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Migration", "MIG"),
+            "test",
+            default);
+        await first.AppendOrchestratorContextTurnAsync(
+            project.ProjectId,
+            null,
+            new AppendOrchestratorContextTurnRequest(new OrchestratorContextTurnDto(
+                "before_v11", DateTime.UtcNow, "user", "Retain this turn")),
+            "test",
+            default);
+
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={first.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                PRAGMA foreign_keys = OFF;
+                BEGIN IMMEDIATE;
+                ALTER TABLE orchestrator_context_turns RENAME TO orchestrator_context_turns_v11;
+                ALTER TABLE orchestrator_contexts RENAME TO orchestrator_contexts_v11;
+                CREATE TABLE orchestrator_contexts(
+                    context_key TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK(kind IN ('project', 'task')),
+                    project_id TEXT NOT NULL REFERENCES projects(id),
+                    task_id TEXT REFERENCES tasks(id),
+                    summary TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    hidden_at TEXT,
+                    CHECK((kind = 'project' AND task_id IS NULL)
+                        OR (kind = 'task' AND task_id IS NOT NULL))
+                );
+                INSERT INTO orchestrator_contexts SELECT * FROM orchestrator_contexts_v11;
+                CREATE TABLE orchestrator_context_turns(
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    context_key TEXT NOT NULL REFERENCES orchestrator_contexts(context_key),
+                    turn_id TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('user', 'orchestrator')),
+                    body TEXT NOT NULL,
+                    model TEXT,
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                    cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    error_detail TEXT,
+                    attachments_json TEXT,
+                    receipt_json TEXT,
+                    payload_sha256 TEXT NOT NULL
+                );
+                INSERT INTO orchestrator_context_turns SELECT * FROM orchestrator_context_turns_v11;
+                DROP TABLE orchestrator_context_turns_v11;
+                DROP TABLE orchestrator_contexts_v11;
+                CREATE INDEX ix_orchestrator_contexts_project_visible
+                    ON orchestrator_contexts(project_id, hidden_at, updated_at);
+                CREATE INDEX ix_orchestrator_context_turns_context_sequence
+                    ON orchestrator_context_turns(context_key, sequence);
+                DELETE FROM schema_migrations WHERE version = 11;
+                UPDATE meta SET value = '10' WHERE key = 'schema_version';
+                COMMIT;
+                PRAGMA foreign_keys = ON;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var upgraded = Store(temp.Path);
+        await upgraded.InitializeAsync();
+        var transcript = await upgraded.ReadOrchestratorContextAsync(
+            project.ProjectId, null, 20, "test", default);
+        Assert.Equal("Retain this turn", Assert.Single(transcript.Turns).Body);
+        var dossier = await upgraded.EnsureOrchestratorContextAsync(
+            project.ProjectId, null, "test", default,
+            "MIG-W1", "Migrated Dossier", "active");
+        Assert.Equal(OrchestratorContextKinds.Dossier, dossier.Kind);
+
+        await using var verified = new SqliteConnection(
+            $"Data Source={first.DatabasePath};Pooling=False");
+        await verified.OpenAsync();
+        await using var check = verified.CreateCommand();
+        check.CommandText = "PRAGMA foreign_key_check;";
+        Assert.Null(await check.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task Version_nine_seeds_default_flow_and_adds_task_version_fence()
     {
         using var temp = new TempDirectory();

@@ -18,7 +18,8 @@
 
 /* A running task earns a subtly stronger frame so "something is live" reads
    at a glance without shouting. */
-.octx[data-scope='task'] {
+.octx[data-scope='task'],
+.octx[data-scope='dossier'] {
   border-color: color-mix(in srgb, var(--studio-accent) 22%, var(--studio-border));
 }
 
@@ -68,6 +69,13 @@
   flex: 1 1 auto;
 }
 
+.octx__chip--dossier {
+  border-color: color-mix(in srgb, var(--studio-accent-3) 38%, transparent);
+  background: color-mix(in srgb, var(--studio-accent-3) 11%, transparent);
+  color: var(--studio-fg-strong);
+  flex: 1 1 auto;
+}
+
 /* MC-2: pinned marker. Sits at the trailing edge of the primary row so the
    frozen-context state is visible without competing with the project/task
    chips. Quiet by default (muted), tinted with the accent to echo the
@@ -88,11 +96,17 @@
   white-space: nowrap;
 }
 
-.octx__chip--board {
+.octx__chip--project-context {
   border-color: var(--studio-border);
   background: var(--studio-bg-hover);
   color: var(--studio-fg-muted);
   flex: 0 0 auto;
+}
+
+.octx__chip-type {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+  font-size: 11px;
 }
 
 .octx__chip-key {
@@ -105,6 +119,10 @@
 }
 
 .octx__chip-text--task {
+  font-weight: 500;
+}
+
+.octx__chip-text--dossier {
   font-weight: 500;
 }
 

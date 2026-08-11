@@ -7,6 +7,18 @@ namespace AgentStudio.Tests;
 public sealed class OrchestratorContextDigestServiceTests
 {
     [Fact]
+    public void ContextKey_parses_and_round_trips_a_Dossier_identity()
+    {
+        Assert.True(OrchestratorContextKey.TryParse("dossier:Agent Studio/AGT-W34", out var dossier));
+        Assert.Equal(OrchestratorContextKey.DossierKind, dossier.Kind);
+        Assert.Equal("Agent Studio", dossier.ProjectId);
+        Assert.Equal("AGT-W34", dossier.DossierKey);
+        Assert.Null(dossier.TaskKey);
+        Assert.True(OrchestratorContextKey.TryDecode(dossier.Encode(), out var decoded));
+        Assert.Equal(dossier, decoded);
+    }
+
+    [Fact]
     public void ScopeTasks_GlobalProjectAndTaskRespectContextBoundary()
     {
         var alpha = Task("alpha", "ALPHA-1", "alpha-one");

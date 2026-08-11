@@ -44,6 +44,12 @@ export class OrchestratorContextHeaderComponent {
   readonly taskKey = input<string | null>(null);
   /** Canonical lane key (e.g. `3-progress`) for the task in scope. */
   readonly taskState = input<string | null>(null);
+  /** First-class context type selected by deterministic route resolution. */
+  readonly contextKind = input<'project' | 'task' | 'dossier'>('project');
+  /** Stable Dossier key shown as its primary context identity. */
+  readonly dossierKey = input<string | null>(null);
+  /** Human-readable Dossier title when the active route has loaded it. */
+  readonly dossierTitle = input<string | null>(null);
 
   /** Whether a CLI run is executing in the current scope right now. */
   readonly runActive = input(false);
@@ -66,9 +72,12 @@ export class OrchestratorContextHeaderComponent {
 
   readonly hasProject = computed<boolean>(() => !!this.project()?.trim());
   readonly hasTask = computed<boolean>(() => !!this.taskTitle()?.trim());
+  readonly hasDossier = computed<boolean>(() => this.contextKind() === 'dossier');
 
   /** "Task" when a task is open, otherwise the board is the scope. */
-  readonly scopeLabel = computed<string>(() => (this.hasTask() ? 'Task' : 'Board'));
+  readonly scopeLabel = computed<string>(() => this.contextKind() === 'dossier'
+    ? 'Dossier'
+    : this.hasTask() ? 'Task' : 'Project');
 
   /** Human lane label for the task in scope, else null (board scope). */
   readonly laneLabel = computed<string | null>(() => {

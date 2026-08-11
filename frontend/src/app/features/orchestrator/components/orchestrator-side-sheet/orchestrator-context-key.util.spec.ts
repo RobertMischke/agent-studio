@@ -22,8 +22,22 @@ describe('orchestrator context key resolution', () => {
 
     expect(key).toBe('task:Agent Studio/AGT-2149');
     expect(parseOrchestratorContextKey(key)).toEqual({
-      key, kind: 'task', projectId: 'Agent Studio', taskKey: 'AGT-2149',
+      key, kind: 'task', projectId: 'Agent Studio', taskKey: 'AGT-2149', dossierKey: null,
     });
+  });
+
+  it('builds a Dossier key only after its stable key is available', () => {
+    expect(buildNavigationContextKey('Agent Studio', null, null, true)).toBeNull();
+    const key = buildNavigationContextKey('Agent Studio', null, 'AGT-W34', true);
+    expect(key).toBe('dossier:Agent Studio/AGT-W34');
+    expect(parseOrchestratorContextKey(key)).toEqual({
+      key, kind: 'dossier', projectId: 'Agent Studio', taskKey: null, dossierKey: 'AGT-W34',
+    });
+  });
+
+  it('maps every non-document project route to the one project chat', () => {
+    expect(buildNavigationContextKey('Agent Studio', null)).toBe('project:Agent Studio');
+    expect(buildNavigationContextKey('Agent Studio', null, 'ignored', false)).toBe('project:Agent Studio');
   });
 
   it('rejects every control-character range rejected by the backend parser', () => {
@@ -58,7 +72,7 @@ describe('orchestrator context key resolution', () => {
   it('replaces the internal parser error with an actionable message', () => {
     expect(orchestratorContextErrorMessage(
       { error: { error: 'Invalid orchestrator context key.' } }, 'Failed to send',
-    )).toContain('Return to the current task or board');
+    )).toContain('Return to the current task, Dossier, or project');
     expect(orchestratorContextErrorMessage(
       { error: { error: { code: 'bad-context' } } }, 'Failed to send',
     )).toBe('Failed to send');

@@ -9,6 +9,7 @@ import {
   untracked,
 } from '@angular/core';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { TaskService } from '../../../../services/task.service';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
@@ -20,7 +21,7 @@ import type { OrchestratorContextSession } from '../../models/orchestrator.model
 @Component({
   selector: 'app-orchestrator-chat-history',
   standalone: true,
-  imports: [StudioIconComponent],
+  imports: [StudioIconComponent, AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-chat-history.component.html',
   styleUrl: './orchestrator-chat-history.component.scss',
@@ -39,6 +40,9 @@ export class OrchestratorChatHistoryComponent {
     .sort((left, right) => left.projectId!.localeCompare(right.projectId!)));
   readonly taskContexts = computed(() => this.contexts()
     .filter(context => context.kind === 'task')
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  readonly dossierContexts = computed(() => this.contexts()
+    .filter(context => context.kind === 'dossier')
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
 
   private requestVersion = 0;
@@ -61,11 +65,13 @@ export class OrchestratorChatHistoryComponent {
   contextTitle(context: OrchestratorContextSession): string {
     return context.kind === 'task'
       ? context.taskKey ?? context.contextKey
+      : context.kind === 'dossier'
+        ? context.dossierKey ?? context.contextKey
       : context.projectId ?? context.contextKey;
   }
 
   contextKindLabel(context: OrchestratorContextSession): string {
-    return context.kind === 'task' ? 'Task chat' : 'Project chat';
+    return context.kind === 'task' ? 'Task chat' : context.kind === 'dossier' ? 'Dossier chat' : 'Project chat';
   }
 
   activityLabel(value: string): string {

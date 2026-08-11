@@ -70,6 +70,7 @@
 }
 
 .context-list__presence--live { background: var(--studio-accent-success); }
+.context-list__presence--active { background: var(--studio-accent); }
 
 .context-list__label {
   min-width: 0;
