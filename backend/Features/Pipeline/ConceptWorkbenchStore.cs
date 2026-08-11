@@ -48,7 +48,7 @@ public static class ConceptWorkbenchStore
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Could not persist concept Workbench metadata for {Folder}", jobFolderPath);
+            logger?.LogWarning(ex, "Could not persist concept Dossier metadata for {Folder}", jobFolderPath);
             return false;
         }
     }

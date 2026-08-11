@@ -1043,12 +1043,12 @@ public class ProjectDocsService
 
         SortLifecycleItems(items);
         return new WikiPulseLifecycle(true,
-            items.Count == 0 ? "No lifecycle-aware designs, concepts, explorations, or Workbenches yet." : null,
+            items.Count == 0 ? "No lifecycle-aware designs, concepts, explorations, or Dossiers yet." : null,
             items.Count, items);
     }
 
     /// <summary>
-    /// Adds Workbenches to the same lifecycle projection without copying their
+    /// Adds Dossiers to the same lifecycle projection without copying their
     /// state into Markdown or companion metadata. Schema-v2 descriptors expose
     /// the common lifecycle fields directly; v1 descriptors are normalized by
     /// the Workbench catalogue as a bounded compatibility path.
@@ -1776,7 +1776,7 @@ public class ProjectDocsService
             }
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
             {
-                SilentCatch.Note(ex, "ProjectDocsService: unreadable Workbench registration during page-type derivation.");
+                SilentCatch.Note(ex, "ProjectDocsService: unreadable Dossier registration during page-type derivation.");
             }
         }
         return entries;

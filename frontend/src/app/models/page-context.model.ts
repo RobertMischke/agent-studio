@@ -1,7 +1,7 @@
 import type { StudioIconName } from '../components/studio-icon/studio-icon.component';
 import type { WikiClassification } from './project-docs.model';
 
-/** Canonical interactive page kinds shared by Wiki, Workbench, and chat. */
+/** Canonical interactive page kinds shared by Wiki, Dossier, and chat. */
 export type PageType = 'doc' | 'concept' | 'workbench' | 'incident' | 'report';
 
 /** One repository page in the operator's current navigation scope. */
@@ -57,7 +57,7 @@ export function derivePageType(
 export function pageTypeLabel(type: PageType): string {
   switch (type) {
     case 'concept': return 'Concept';
-    case 'workbench': return 'Workbench';
+    case 'workbench': return 'Dossier';
     case 'incident': return 'Incident / history';
     case 'report': return 'Report';
     default: return 'Document';

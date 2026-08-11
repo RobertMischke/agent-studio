@@ -299,7 +299,7 @@ export class WorkbenchDecisionPanelComponent {
       title,
       goal,
       acceptanceCriteria: [
-        'Implement every recorded Workbench selection and preserve its stated constraints.',
+        'Implement every recorded Dossier selection and preserve its stated constraints.',
         'Verify the resulting behavior with the checks required by the affected surface.',
       ],
       evidenceLinks: [this.document().workbench.entryPath],
@@ -376,7 +376,7 @@ function cardPrompt(
   responses: readonly WorkbenchDecisionResponse[],
 ): string {
   return [
-    '# Workbench-backed feature',
+    '# Dossier-backed feature',
     '',
     `Source: \`${document.workbench.entryPath}\``,
     '',

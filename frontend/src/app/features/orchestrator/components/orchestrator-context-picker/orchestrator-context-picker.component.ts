@@ -45,7 +45,7 @@ export class OrchestratorContextPickerComponent implements OnDestroy {
   readonly sourceCount = computed(() => (this.automaticIncluded() ? 1 : 0) + this.attachments().length);
   readonly groups = computed(() => [
     { id: 'tasks', label: 'Tasks', items: this.results().tasks },
-    { id: 'wiki', label: 'Wiki and Workbenches', items: this.results().wiki },
+    { id: 'wiki', label: 'Wiki and Dossiers', items: this.results().wiki },
     { id: 'files', label: 'Files', items: this.results().files },
     { id: 'commits', label: 'Commits', items: this.results().commits },
   ] as const);

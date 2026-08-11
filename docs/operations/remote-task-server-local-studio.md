@@ -347,7 +347,7 @@ concern.
 | `post-abort-review` | Local task contract, CLI output, prompt registry, rerun budget, and card report. | Host-capable ReviewAttempt plus server-owned abort policy and budget after typed abort facts exist. R1/S2. |
 | `post-ui-iteration-artifact` | Screenshots, Playwright evidence, task metadata, and pipeline log under the card. | Host uploads an evidence manifest; Task Server validates completeness and records the iteration. G0. |
 | `post-ui-human-review-gate` | Local marker plus lane move through `GuardedMoveJob` and `_postProcessingGitGate`. | Task Server decision. It remains an operator gate; Studio is optional. S2. |
-| `post-concept-workbench-placement` | Repository concept/Workbench paths and publication Git work. | Backend-bound until the repository-write contract exists. B1. |
+| `post-concept-workbench-placement` | Repository concept/Dossier paths and publication Git work. | Backend-bound until the repository-write contract exists. B1. |
 | `post-concept-review` | Concept artifact, card evidence, prompt/model/CLI services, and local review record. | Host-capable immutable-subject review with server-owned typed verdict. R1. |
 | `post-concept-sight-review` | Rendered concept evidence, local result inventory, and vision review. | Host-capable through the Remote Review vision plan; Task Server owns the gate. R1. |
 | `post-concept-promotion` | Operator acceptance, repository paths, commit/push, destination policy, and local task creation. | Operator or Task Server trigger with host Git execution after repository-write and integration contracts exist. B1/I1. |

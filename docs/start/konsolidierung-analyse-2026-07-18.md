@@ -26,17 +26,17 @@ Methodik: Jede der 474 Seiten wurde mindestens mit Titel + erster Sektion erfass
 
 - **474 Seiten** (412 md, 62 html) in 21 Top-Ordnern; dazu 49 `.meta.json`-Sidecars, 17 generierte `.report.html`-Companions, 12 JSON-Schemas, Bild-Assets. Zeitspanne der letzten Änderungen: **2026-05-03 bis 2026-07-18**.
 - Davon **generiert/uniform**: 110 common-problems-Dateien (18 Probleme × 6), 66 Survey-Proposals (paarweise Duplikate!), 13 Lane-Guides, 11 Visual-Feature-Seiten, 6 Workstream-Landing-Pages. Die eigentliche "Kurationsmasse" sind **~180 Hand-Seiten**.
-- **Größtes Problem 1 — Generationen-Stapel Remote/Runner/Completion:** mindestens 4 Generationen von Stabilitäts-/Completion-Analysen liegen nebeneinander (Mai-Postmortems → Juni-Incident-Seiten → Juli-Umbrella `completion-review-…` → **Härtungs-Workbench 18.07. = neuer kanonischer Ort**). Die Juni-HTMLs in `docs/concepts/` tragen keine "überholt durch"-Banner.
+- **Größtes Problem 1 - Generationen-Stapel Remote/Runner/Completion:** mindestens 4 Generationen von Stabilitäts-/Completion-Analysen liegen nebeneinander (Mai-Postmortems → Juni-Incident-Seiten → Juli-Umbrella `completion-review-…` → **Härtungs-Dossier 18.07. = neuer kanonischer Ort**). Die Juni-HTMLs in `docs/concepts/` tragen keine "überholt durch"-Banner.
 - **Größtes Problem 2 — Selbstreferenz-Wildwuchs "Wiki über das Wiki":** 10+ Seiten (wiki-tree, Pulse, Grading, Classification, Editing-Flow, docs-structure-migration, meta/*, usage) ohne eine klare Einstiegsseite; `docs/meta/documents/` + `docs/meta/reports/documents/` sind laut eigenem Drift-Audit **Alt-Evidenz vor der Sidecar-Migration**.
 - **Größtes Problem 3 — Sprachmix gegen die eigene Policy:** AGENTS.md verlangt Englisch, aber der neue kanonische Härtungs-Ort, 2 Konzepte und 2 Mockups sind Deutsch; der Drift-Report zu `remote-hosts-ux.html` moniert genau das (D5).
 - **Größtes Problem 4 — Wissen außerhalb des Wikis:** Phantom-Welle-/Salvage-Vollzugsprotokoll (17.07.), Org-Migration agent-orc und Pipeline-UI-Handoffs liegen nur im Devspace und sind aus dem Wiki nicht erreichbar.
-- **Top-5-Sofortmaßnahmen:** (1) "Überholt durch Härtungs-Workbench"-Banner auf `overnight-2026-06-23-summary.html`, `claude-termination-investigation.html`, `runner-stability-incidents.html`; (2) `docs/meta/documents/` + `meta/reports/documents/` archivieren/löschen; (3) Duplikat-Paare in `proposals/2026-07-11/` (33 inhaltsgleiche Paare) über die Hub-Löschfunktion halbieren; (4) `salvage-reconciliation-2026-07-17.md` + `github-org-naming-handoff-2026-07-11.md` ins Wiki übernehmen; (5) kuratierte Startseite aus den Kurations-Seeds unten bauen.
+- **Top-5-Sofortmaßnahmen:** (1) "Überholt durch Härtungs-Dossier"-Banner auf `overnight-2026-06-23-summary.html`, `claude-termination-investigation.html`, `runner-stability-incidents.html`; (2) `docs/meta/documents/` + `meta/reports/documents/` archivieren/löschen; (3) Duplikat-Paare in `proposals/2026-07-11/` (33 inhaltsgleiche Paare) über die Hub-Löschfunktion halbieren; (4) `salvage-reconciliation-2026-07-17.md` + `github-org-naming-handoff-2026-07-11.md` ins Wiki übernehmen; (5) kuratierte Startseite aus den Kurations-Seeds unten bauen.
 
 ---
 
 ## Bestandsaufnahme
 
-Legende Typ: K=Konzept, ADR, C=Contract, D=Domain-Map, A=Analyse/Research, R=Runbook/Ops, W=Workbench, P=Proposal, M=Mockup/Design-Spec, G=generiert, I=Index/README.
+Legende Typ: K=Konzept, ADR, C=Contract, D=Domain-Map, A=Analyse/Research, R=Runbook/Ops, W=Dossier, P=Proposal, M=Mockup/Design-Spec, G=generiert, I=Index/README.
 
 | Ordner | Seiten (md/html) | Dominante Typen | Sprache | Ältester … neuester Stand | Zustand |
 |---|---|---|---|---|---|
@@ -73,7 +73,7 @@ Nur Seiten, deren Zustand nicht "aktuell" oder trivial ist (vollständige unifor
 
 | Pfad | Titel/Kurzinhalt | Typ | Stand | Zustand |
 |---|---|---|---|---|
-| `concepts/completion-review-and-remote-runner-stability.html` | Umbrella: semantische Completion, Exact-Revision-Review, Runner-Provenienz, Remote-Stabilität | K/A | 07-13 | aktuell — kanonisches EN-Konzept der Kette; sollte auf Härtungs-Workbench verweisen |
+| `concepts/completion-review-and-remote-runner-stability.html` | Umbrella: semantische Completion, Exact-Revision-Review, Runner-Provenienz, Remote-Stabilität | K/A | 07-13 | aktuell - kanonisches EN-Konzept der Kette; sollte auf Härtungs-Dossier verweisen |
 | `concepts/runner-stability-incidents.html` | Incident-Log + Invarianten (seeded 06-23) | A | 07-13 | **überholt durch** `workbenches/haertung-verteilte-ausfuehrung/historie.html` (deren Pflege-Regel: "der eine Ort für Vorfälle") |
 | `concepts/overnight-2026-06-23-summary.html` | Overnight-Session-Zwischenstand 06-23 | A | 06-23 | historischer Sessionbericht; überholt durch historie.html |
 | `concepts/claude-termination-investigation.html` | claude.exe-Kill-Forensik, RESOLVED 06-23 (Sentinel-Scanner-Bug) | A | 06-23 | abgeschlossen; als Forensik-Archiv behalten, Banner setzen |
@@ -119,7 +119,7 @@ Das mit Abstand größte Konsolidierungsfeld.
 |---|---|---|
 | Gen 1 (Mai-Postmortems) | `research/arhciv-loop-postmortem-2026-05.md`, `auto-pickup-cascade-analysis-2026-05.md`, `anthropic-5xx-frequency-2026-05-07.md`, `runner-outcome-visibility-2026-05-11.md`, `cli-orchestration-survey-2026-05.md`, `path-forward-plan-2026-05.md`, `wsl2-vs-windows-decision-2026-05.md` | behalten als Research-Archiv (datiert, korrekt einsortiert); wsl2 als "überholt durch ADR-0059" bannern |
 | Gen 2 (Juni-Incident-Seiten) | `concepts/runner-stability-incidents.html`, `process-termination-scenarios.html`, `claude-termination-investigation.html`, `overnight-2026-06-23-summary.html`, `orchestrator-drive-to-conclusion.html` | **runner-stability-incidents, overnight, claude-termination: "überholt durch historie.html" bannern** (Chronik-Monopol liegt jetzt dort); process-termination-scenarios als Testsuite-Spec prüfen/behalten; drive-to-conclusion bleibt (designated topic) |
-| Gen 3 (Juli-Umbrella) | `concepts/completion-review-and-remote-runner-stability.html` (112 KB, 07-13) | **kanonisch für Completion-/Review-/Provenienz-Semantik (EN)**; Querverweis auf Workbench ergänzen |
+| Gen 3 (Juli-Umbrella) | `concepts/completion-review-and-remote-runner-stability.html` (112 KB, 07-13) | **kanonisch für Completion-/Review-/Provenienz-Semantik (EN)**; Querverweis auf Dossier ergänzen |
 | Gen 4 (kanonischer Härtungs-Ort) | `workbenches/haertung-verteilte-ausfuehrung/index.html` + `historie.html` (18.07.) | **kanonisch für Vorfalls-Chronik + Härtungsprogramm**; einzige Pflegestelle für neue Vorfälle |
 
 Dazu die Remote-**Zielbild**-Achse (kein Duplikat, aber ein Verweisnetz, das stimmen muss):
@@ -246,7 +246,7 @@ Umbenennungs-/Verschiebeplan (klein, 1 Ebene):
 |---|---|---|
 | `concepts/overnight-2026-06-23-summary.html` | `concepts/archive/…` | abgeschlossener Sessionbericht |
 | `concepts/claude-termination-investigation.html` | `concepts/archive/…` | RESOLVED-Forensik |
-| `concepts/runner-stability-incidents.html` | `concepts/archive/…` (nach Merge offener Invarianten in historie.html) | Chronik-Monopol liegt in der Workbench |
+| `concepts/runner-stability-incidents.html` | `concepts/archive/…` (nach Merge offener Invarianten in historie.html) | Chronik-Monopol liegt im Dossier |
 | `meta/documents/`, `meta/reports/documents/` | löschen oder `meta/archive/` | Vor-Sidecar-Alt-Evidenz |
 | `concepts/git-branching-integration-zielbild.md` | `research/git-branching-integration-zielbild-2026-06.md` (optional) | Entwurfsgeschichte gehört zu research |
 | `concepts/cli-completion-and-test-quality-gate.md` | `research/cli-completion-gate-entwurf-2026-06.md` (optional) + Banner | dito |
@@ -258,7 +258,7 @@ Wiki-Klassifikation kennt Direction/Health bereits) — Moves brechen Links, Ban
 Empfehlung: Banner zuerst (sofort), Moves nur wenn die kuratierte Startseite steht.
 
 Sprachkonvention-Empfehlung: **Englisch bleibt Default** (AGENTS.md-Policy; Drift-Report
-moniert DE-Artefakte aktiv). Ausnahme explizit machen: Operator-Workbenches
+moniert DE-Artefakte aktiv). Ausnahme explizit machen: Operator-Dossiers
 (`workbenches/haertung…`) dürfen Deutsch sein, tragen dafür eine einzeilige EN-Summary im
 Kopf. Die zwei deutschen `concepts/`-Seiten und die zwei deutschen Mockup-HTMLs sind
 historisch — nicht übersetzen, nur bannern.

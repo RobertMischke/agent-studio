@@ -473,7 +473,7 @@
             <th>Per-context transcripts</th>
             <td><span class="status exists">Exists</span></td>
             <td>The Task Server owns project and task contexts, turns, receipts, lifecycle visibility, and short summaries. Legacy project JSONL is imported idempotently and never becomes the active store.</td>
-            <td>Task Chat needs no machine-local history store. Wiki, Workbench, board, file, and diff remain context inputs, not new transcript owners.</td>
+            <td>Task Chat needs no machine-local history store. Wiki, Dossier, board, file, and diff remain context inputs, not new transcript owners.</td>
           </tr>
           <tr>
             <th>Chat switcher</th>
@@ -484,7 +484,7 @@
           <tr>
             <th><code>ComposerLocationContext</code></th>
             <td><span class="status partial">Presentational</span></td>
-            <td><code>{ project, surface, detail }</code> is derived from the active Studio tab and rendered in the composer footer. It maps Board, Task, Workbench, Deck/Wiki, URL preview, Diff, and other tabs.</td>
+            <td><code>{ project, surface, detail }</code> is derived from the active Studio tab and rendered in the composer footer. It maps Board, Task, Dossier, Deck/Wiki, URL preview, Diff, and other tabs.</td>
             <td>It is a useful label, not a model contract. It lacks stable typed references, board selection, revision, and a project identity for Diff.</td>
           </tr>
           <tr>
@@ -548,7 +548,7 @@
       </article>
       <article class="panel">
         <h3>2. Ambient surface</h3>
-        <p>What the operator is looking at now: board, Wiki page, Workbench, task, file, or diff. Recomputed per send.</p>
+        <p>What the operator is looking at now: board, Wiki page, Dossier, task, file, or diff. Recomputed per send.</p>
       </article>
       <article class="panel">
         <h3>3. Explicit references</h3>
@@ -569,7 +569,7 @@
       </svg>
       <article class="diagram-node">
         <h3>Studio state</h3>
-        <p>Active tab, project, task, board selection, page ref, Workbench selection, commit identity.</p>
+        <p>Active tab, project, task, board selection, page ref, Dossier selection, commit identity.</p>
       </article>
       <article class="diagram-node control">
         <h3>Typed request</h3>
@@ -607,7 +607,7 @@
             <th>Project</th>
             <td><code>project:&lt;project-id&gt;</code></td>
             <td>Project identity, compact purpose/memory snapshot, current board pulse, recent accepted decisions, and the last 3 integrated commit subjects.</td>
-            <td>Tasks, Wiki pages, Workbenches, files, commits, reports.</td>
+            <td>Tasks, Wiki pages, Dossiers, files, commits, reports.</td>
             <td>Never include another project's facts. Replace the current global boot preamble with scoped framing.</td>
           </tr>
           <tr>
@@ -632,9 +632,9 @@
             <td>Do not create one chat per page. Preserve the project conversation and attach page context per turn.</td>
           </tr>
           <tr>
-            <th>Workbench</th>
+            <th>Dossier</th>
             <td>Project transcript</td>
-            <td>Workbench id, title, summary, status/phase, current selection, and pending decision state.</td>
+            <td>Dossier id, title, summary, status/phase, current selection, and pending decision state.</td>
             <td>Chosen evidence rows or selected report sections.</td>
             <td>Never inject the complete HTML shell, CSS, or script. Resolve the semantic document and current selection.</td>
           </tr>
@@ -765,7 +765,7 @@
             <td>Auto-load identity and excerpt. Explicitly attach a section or bounded page body.</td>
           </tr>
           <tr>
-            <th>Workbench</th>
+            <th>Dossier</th>
             <td>250 to 600</td>
             <td>Captures decision state and the operator's current analytical focus.</td>
             <td>Raw HTML, CSS, and scripts are mostly noise.</td>
@@ -976,7 +976,7 @@
       </article>
       <article class="panel">
         <h3>Known-Source Search</h3>
-        <p>Sections for Tasks, Wiki and Workbenches, Files, and Commits. Task references reuse live task-key validation and microcard semantics. File and commit results must carry project identity.</p>
+        <p>Sections for Tasks, Wiki and Dossiers, Files, and Commits. Task references reuse live task-key validation and microcard semantics. File and commit results must carry project identity.</p>
       </article>
       <article class="panel">
         <h3>Send-Time Resolution</h3>
@@ -1104,8 +1104,8 @@
               <h4>Outcome</h4>
               <ul>
                 <li>Wire <code>contextAttachments</code>, remove, and <code>contextAttachmentAddRequested</code> from the released library into the side sheet.</li>
-                <li>Open a compact host popover with Current tab first, then Tasks, Wiki/Workbenches, Files, and Commits.</li>
-                <li>Support board filters and up to five selected cards, Wiki page identity/excerpt, and Workbench semantic state.</li>
+                <li>Open a compact host popover with Current tab first, then Tasks, Wiki/Dossiers, Files, and Commits.</li>
+                <li>Support board filters and up to five selected cards, Wiki page identity/excerpt, and Dossier semantic state.</li>
                 <li>Render pre-send estimate and per-turn “Used context” disclosure. Rename the transcript switcher from Contexts to Chats or Scopes.</li>
               </ul>
             </div>
@@ -1114,7 +1114,7 @@
               <ul>
                 <li>One click attaches the current tab; navigation during resolution cannot change the sent ref.</li>
                 <li>Remove, exclude-once, unresolved, excerpted, and over-budget states are keyboard accessible.</li>
-                <li>Playwright covers project board, Wiki, Workbench, pin/follow, light/dark, narrow/wide side sheet, and reload persistence of receipts.</li>
+                <li>Playwright covers project board, Wiki, Dossier, pin/follow, light/dark, narrow/wide side sheet, and reload persistence of receipts.</li>
                 <li>Reuse <code>cac-chat</code>, existing menu/overlay primitives, task microcards, and central spacing/theme tokens.</li>
               </ul>
             </div>
@@ -1261,7 +1261,7 @@
           <tr>
             <th>Transcript model</th>
             <td>Project + task only.</td>
-            <td>One transcript per page, Workbench, or diff.</td>
+            <td>One transcript per page, Dossier, or diff.</td>
             <td>Two durable scopes preserve continuity. Per-surface threads fragment memory and multiply switcher noise.</td>
           </tr>
           <tr>

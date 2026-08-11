@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Modell-Routing: Entscheidung an Token Economy | Konzept-Workbench</title>
+<title>Modell-Routing: Entscheidung an Token Economy | Konzept-Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -81,7 +81,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Token Economy</p>
+  <p class="kicker">Konzept-Dossier · Token Economy</p>
   <h1>Modell-Routing als Entscheidung von Token Economy</h1>
   <p class="lede">Heute wählt der Operator Modell und Reasoning-Stufe je Ticket von Hand. Zielbild: Token Economy entscheidet es — aus beobachtbaren Merkmalen einer Karte eine begründete, auditierbare Wahl von <b>Modell × Thinking-Level</b>, mit LLM-Schiedsrichter nur für die uneindeutigen Fälle. Dieses Dokument ist der Steuerungs-Ausgangspunkt: welche Information wertvoll ist, wie Komplexität erkannt wird, wie daraus eine Route wird — und die offenen Entscheidungen dafür.</p>
   <div class="meta">
@@ -98,7 +98,7 @@
   historical decision input, not the current routing contract. The canonical
   score, hard correctness floors, quota rule, and current model names live in
   <a href="../../system/domains/model-routing-policy.md">Model Routing
-  Policy</a>. This decided Workbench remains in History as the rationale that
+  Policy</a>. This decided Dossier remains in History as the rationale that
   preceded that policy.</p>
 </div>
 
@@ -128,7 +128,7 @@
     <li><b>Der Operator behält das Override.</b> Jede Auto-Route ist vorbelegt, nicht verriegelt — der Sichtblick-Gate bleibt die menschliche Instanz.</li>
   </ul>
 </div>
-<p class="dim">Diese Workbench erfindet den Schätzer nicht neu — die Komplexitäts-Schätzung existiert in der Library bereits (<code>TaskComplexityEstimator</code>, siehe TE-Konzept <span class="mono">docs/concepts/upfront-task-complexity.md</span>). Sie beschreibt die <b>fehlende Schicht darüber</b>: die Policy, die aus einer Schätzung eine konkrete Modell-/Stufen-Wahl macht — und die vier offenen Entscheidungen, die diese Schicht braucht.</p>
+<p class="dim">Dieses Dossier erfindet den Schätzer nicht neu - die Komplexitäts-Schätzung existiert in der Library bereits (<code>TaskComplexityEstimator</code>, siehe TE-Konzept <span class="mono">docs/concepts/upfront-task-complexity.md</span>). Es beschreibt die <b>fehlende Schicht darüber</b>: die Policy, die aus einer Schätzung eine konkrete Modell-/Stufen-Wahl macht - und die vier offenen Entscheidungen, die diese Schicht braucht.</p>
 
 <h2 id="ist"><span class="no">2</span>Ist-Stand: manuell — und drei Stolperfallen</h2>
 <p>Die Route wird heute per drei API-Puts je Karte gesetzt: <code>/cli-type</code>, <code>/model</code>, <code>/thinking-level</code>. Das funktioniert, hat aber drei Fehlerquellen, die schon zugeschlagen haben:</p>
@@ -227,7 +227,7 @@
   <tr><th>Band</th><th>Charakter</th><th>Typische Karte</th></tr>
   <tr><td><span class="band t1">trivial</span></td><td>lokal, eindeutig, geringe Verifikation</td><td>Kontextmenü-Scope-Fix, Copy-Änderung</td></tr>
   <tr><td><span class="band t2">standard</span></td><td>klar beschrieben, umrissene Fläche</td><td>Run-Historie in der Overview, lokalisierter Bug</td></tr>
-  <tr><td><span class="band t3">demanding</span></td><td>breit / neuartig / mehrere Subsysteme</td><td>Host-Kapazität zentralisieren, Workbench-Decision-UI</td></tr>
+  <tr><td><span class="band t3">demanding</span></td><td>breit / neuartig / mehrere Subsysteme</td><td>Host-Kapazität zentralisieren, Dossier-Decision-UI</td></tr>
   <tr><td><span class="band t4">critical</span></td><td>hohe Constraint-Dichte, Fehlerkosten groß</td><td>Push-Probe-Härtung, Review-Rolle-Fix</td></tr>
 </table>
 <p class="dim">Die Konfidenz ist das zweite, oft unterschätzte Signal. Ein <span class="band t2">standard</span>-Band bei Konfidenz 0,4 ist etwas anderes als bei 0,9 — im ersten Fall ist die Karte unscharf beschrieben, und genau dort lohnt sich der LLM-Schiedsrichter (§7) oder ein bewusstes Aufrunden.</p>
@@ -318,7 +318,7 @@
 <p class="dim">Grenze mit Ansage: die 30-Karten-Fixtures im TE-Backtest validieren die <em>Methode</em>, sie sind <b>keine Produktionsevidenz</b>. Die echte Kalibrierung kommt aus realen Karten (<span class="mono">results/complexity-backtest</span>). Keine beobachtete Historie als Kausalmodell verkaufen.</p>
 
 <h2 id="offen"><span class="no">11</span>Offene Entscheidungen</h2>
-<p>Vier Entscheidungen macht diese Schicht entscheidungsreif. Sie sind der Grund, warum die Workbench in den Sichtblick geht, bevor Tickets geschnitten werden.</p>
+<p>Vier Entscheidungen macht diese Schicht entscheidungsreif. Sie sind der Grund, warum das Dossier in den Sichtblick geht, bevor Tickets geschnitten werden.</p>
 
 <div class="box">
   <h4><span class="dnum">E1</span>Default-Tabelle: bestätigen oder justieren</h4>

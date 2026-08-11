@@ -53,7 +53,7 @@ test('project and central overviews receive a newly created item without reloadi
       break;
     }
   }
-  expect(projectName, 'The dev backend must expose the task checkout Workbenches.').not.toBeNull();
+  expect(projectName, 'The dev backend must expose the task checkout Dossiers.').not.toBeNull();
 
   const id = `live-tree-proof-${Date.now().toString(36)}`;
   const probeDir = path.join(devBackend.workspace, 'docs', 'operations', id);

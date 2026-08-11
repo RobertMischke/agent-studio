@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { derivePageType, pageContextKey, pageExcerpt, pageTypeIcon } from './page-context.model';
+import { derivePageType, pageContextKey, pageExcerpt, pageTypeIcon, pageTypeLabel } from './page-context.model';
 
 describe('page context model', () => {
   it('derives the five canonical kinds from meta, registration, and paths', () => {
@@ -14,7 +14,8 @@ describe('page context model', () => {
     expect(derivePageType('reports/quality.md')).toBe('report');
   });
 
-  it('uses the same eye icon for registered Workbench pages', () => {
+  it('uses the Dossier label and the same eye icon for registered pages', () => {
+    expect(pageTypeLabel('workbench')).toBe('Dossier');
     expect(pageTypeIcon('workbench')).toBe('eye');
   });
 

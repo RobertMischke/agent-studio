@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Remote Gate Target Architecture | Concept Workbench</title>
+<title>Remote Gate Target Architecture | Concept Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -151,7 +151,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Concept Workbench · Remote gates</p>
+  <p class="kicker">Concept Dossier · Remote gates</p>
   <h1>Replace the SSH bridge with a first-class remote gate step</h1>
   <p class="lede">Decision target for Robert's sight review: preserve the 2:11 remote path, but move ownership, scheduling, evidence, timeout, and recovery into the Tranche 0 control-plane contract. This page compares the three realistic shapes and recommends one bounded protocol addition.</p>
   <div class="meta">
@@ -190,7 +190,7 @@
 <section id="current" data-concept-section="evidence">
   <p class="sec-no">§1 · Evidence</p>
   <h2>The current bridge is fast, but out of band</h2>
-  <p>The existing <a href="../remote-gate-cleanup/index.html">remote-gate cleanup Workbench</a> correctly defines the ordering constraint: replacement first, teardown second. Code inspection on 2026-07-26 confirms that the replacement does not exist.</p>
+  <p>The existing <a href="../remote-gate-cleanup/index.html">remote-gate cleanup Dossier</a> correctly defines the ordering constraint: replacement first, teardown second. Code inspection on 2026-07-26 confirms that the replacement does not exist.</p>
 
   <figure>
     <div class="diagram-scroll">
@@ -443,7 +443,7 @@
         <div class="node risk n3"><b>3 · AGT-2262</b><span>Remove SSH bridge wholesale only after cutover acceptance</span></div>
       </div>
     </div>
-    <figcaption>The middle item is the only new implementation card proposed by this Workbench. AGT-2262 already exists and must remain parked until the acceptance conditions below are met.</figcaption>
+    <figcaption>The middle item is the only new implementation card proposed by this Dossier. AGT-2262 already exists and must remain parked until the acceptance conditions below are met.</figcaption>
   </figure>
 
   <h3>Implementation-card acceptance source</h3>
@@ -483,7 +483,7 @@
   </div>
 </section>
 
-<p class="footer-note">Sources inspected: <code>BuildTestGateRunner.cs</code>, <code>ReviewDecisionOrchestrator.cs</code>, <code>RemoteGateActivityStore.cs</code>, Task Server runner/review/capability/orchestration contracts, Remote Review Executor, Orchestrator Engine GateDispatch, pipeline and task domain maps, and the distributed-execution Tranche 0 target architecture. This Workbench recommends a target; it does not change runtime behavior.</p>
+<p class="footer-note">Sources inspected: <code>BuildTestGateRunner.cs</code>, <code>ReviewDecisionOrchestrator.cs</code>, <code>RemoteGateActivityStore.cs</code>, Task Server runner/review/capability/orchestration contracts, Remote Review Executor, Orchestrator Engine GateDispatch, pipeline and task domain maps, and the distributed-execution Tranche 0 target architecture. This Dossier recommends a target; it does not change runtime behavior.</p>
 </main>
 <script>
   (() => {

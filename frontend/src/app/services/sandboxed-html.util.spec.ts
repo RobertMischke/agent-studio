@@ -27,7 +27,7 @@ describe('sandboxed HTML navigation', () => {
     expect(srcdoc).toContain("reduceMotion ? 'auto' : 'smooth'");
   });
 
-  it('adds the inert Workbench decision bridge only when the host requests it', () => {
+  it('adds the inert Dossier decision bridge only when the host requests it', () => {
     const html = '<p data-decision-id="route" data-decision-kind="single"><span data-option-id="direct">Direct</span></p>';
     const ordinary = buildIsolatedHtmlSrcdoc(html);
     const workbench = buildIsolatedHtmlSrcdoc(html, { workbenchDecisions: true });

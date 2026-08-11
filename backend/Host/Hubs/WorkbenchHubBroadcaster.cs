@@ -106,7 +106,7 @@ public sealed class WorkbenchHubBroadcaster
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "TaskHub Workbench broadcast of {Method} failed for {Project}",
+                "TaskHub Dossier broadcast of {Method} failed for {Project}",
                 method, projectName);
         }
     }

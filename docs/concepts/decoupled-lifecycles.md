@@ -1,6 +1,6 @@
 # Decoupled agent-session lifecycles
 
-Status: operator-vision concept and Workbench-family mockup, 2026-07-12. This
+Status: operator-vision concept and Dossier-family mockup, 2026-07-12. This
 is an architecture target, not a claim that the production runtime already has
 these lifecycle guarantees.
 
@@ -11,9 +11,9 @@ Runner stay online. It does not authorize an autonomous Runner-side Task Store
 when Task Server is unavailable.
 
 Review artifact:
-[interactive lifecycle Workbench-family mockup](mockups/decoupled-lifecycles.html).
+[interactive lifecycle Dossier-family mockup](mockups/decoupled-lifecycles.html).
 It is browsable in the current Wiki. It is not yet a manifest-backed Project
-Hub Workbench because the WB-1 folder contract and catalogue from AGT-2084 are
+Hub Dossier because the WB-1 folder contract and catalogue from AGT-2084 are
 not implemented; promotion must create the single canonical
 `docs/workbenches/decoupled-lifecycles/` source rather than duplicate this HTML.
 
@@ -78,7 +78,7 @@ This builds on, rather than replaces, the current architecture:
 - [Orchestrator in-app](orchestrator-in-app.md) and the context-keyed
   [orchestrator session registry](./orchestrator-chat.md) provide the
   precedent for stable logical session identities and resumable transcripts.
-- [Experiment Workbenches](experimentier-workbench.md), created by AGT-2084,
+- [Experiment Dossiers](experimentier-workbench.md), created by AGT-2084,
   provide the repository-owned, self-contained review pattern followed by this
   Wiki-browsable mockup. The manifest-backed Project Hub object remains future
   WB-1 work; this concept references that parallel work without depending on
@@ -407,7 +407,7 @@ acknowledgement. Retention exhaustion produces a visible gap.
 ### Planning card with explicit Robert HALT
 
 **DL-0: Accept the lifecycle contract and recovery promise (planning, user
-HALT).** Robert reviews the linked Workbench and decides whether to accept this
+HALT).** Robert reviews the linked Dossier and decides whether to accept this
 recommended boundary: holder on each execution host, authenticated stream
 gateway at the Task Server, many read attachments, one separately fenced
 controller, and honest host-restart semantics as logical resume rather than
@@ -447,7 +447,7 @@ fencing fail together if partially substituted into the current run path.
 
 ## 10. Review status
 
-This document and its Wiki-browsable Workbench-family mockup are the complete
+This document and its Wiki-browsable Dossier-family mockup are the complete
 deliverables for the concept card. They do not implement session detachment or
 the AGT-2084 Project Hub catalogue in production.
 
@@ -456,10 +456,10 @@ on restart fencing. It found that the current in-memory lease authority could
 forget a live holder on Task Server restart and that heartbeat loss had been
 presented as proof of host reboot. It also challenged partition deadlines,
 browser-supplied fences, takeover policy, event ordering, two possible sequence
-writers, the provisional Workbench location, and a simulator path that visually
+writers, the provisional Dossier location, and a simulator path that visually
 assumed automatic provider resume.
 
-The blocking findings were folded into the concept and Workbench:
+The blocking findings were folded into the concept and Dossier:
 
 - durable lease/fence/authority-epoch restoration is now a cutover prerequisite,
   with a fail-closed restart quarantine as fallback;

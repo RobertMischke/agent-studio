@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Projekt-Feed | Konzept-Workbench</title>
+<title>Projekt-Feed | Konzept-Dossier</title>
 <style>
   :root {
     color-scheme: light;
@@ -66,7 +66,7 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Workbench · Orientierung</p>
+  <p class="kicker">Konzept-Dossier · Orientierung</p>
   <h1>Projekt-Feed</h1>
   <p class="lede">Ein Feed pro Projekt und über alle Projekte: wichtige Entscheidungen und Ereignisse als verlinkte High-Level-Timeline. Für Menschen der Blick „was passiert gerade", für Tasks der beste Einstieg, um Arbeit aufzugreifen — und der Ort, an dem Token-Kosten und Ideen sichtbar werden.</p>
   <div class="meta">
@@ -78,7 +78,7 @@
 </header>
 
 <h2 id="idee"><span class="no">1</span>Idee &amp; Zweck</h2>
-<p>Der Feed ist eine <b>chronologische, extrem High-Level-Sicht</b> auf das, was in einem Projekt zählt: getroffene Entscheidungen, gelandete Integrationen, Eskalationen, neue Konzepte, aufgekommene Ideen. Er ist zugleich <b>Orientierung</b> (der Überblick) und <b>Verbindung</b> (jeder Eintrag verlinkt in die Tiefe — auf Tasks, Workbench-Dokumente, Reviews).</p>
+<p>Der Feed ist eine <b>chronologische, extrem High-Level-Sicht</b> auf das, was in einem Projekt zählt: getroffene Entscheidungen, gelandete Integrationen, Eskalationen, neue Konzepte, aufgekommene Ideen. Er ist zugleich <b>Orientierung</b> (der Überblick) und <b>Verbindung</b> (jeder Eintrag verlinkt in die Tiefe - auf Tasks, Dossier-Dokumente, Reviews).</p>
 <table>
   <tr><th>Publikum</th><th>Was der Feed leistet</th></tr>
   <tr><td><b>Menschen</b></td><td>Auf einen Blick sehen, was passiert — ohne 80 Karten einzeln zu lesen. High-Level, kuratiert, verlinkt.</td></tr>
@@ -119,7 +119,7 @@
   <tr><th>Quelle</th><th>Was sie liefert</th><th>Status</th></tr>
   <tr><td><b>Task-Timelines</b></td><td>Lane-Wechsel, Human-Review-Entscheide, Eskalationen, Integrationen, Operator-Requeues (<code>TimelineEventKinds</code>).</td><td>vorhanden</td></tr>
   <tr><td><b>Agent Message Bus</b></td><td>Token-/Usage-Zahlen je Run — die Grundlage für die Kosten-Badges.</td><td>vorhanden (<code>logs/bus/</code>)</td></tr>
-  <tr><td><b>Workbench-Docs</b></td><td>Neue Konzepte/Entscheidungen (dieses Format) als Feed-würdige Ereignisse.</td><td>vorhanden</td></tr>
+  <tr><td><b>Dossier-Docs</b></td><td>Neue Konzepte/Entscheidungen (dieses Format) als Feed-würdige Ereignisse.</td><td>vorhanden</td></tr>
   <tr><td><b>Chats (Orchestrator)</b></td><td>Diskussionen und Entscheidungen im Tool — laut Vorgabe die <b>primäre</b> Quelle fürs Zusammenstellen.</td><td>teilweise</td></tr>
 </table>
 <div class="box warn">
@@ -160,7 +160,7 @@
     <li><b>Stakeholder-Teilen:</b> Als Artifact/Link teilbar — mit welcher Grenze (nichts Sensibles, keine internen Kosten nach außen)?</li>
   </ul>
 </div>
-<p class="dim">Dieses Konzept ist selbst nach der Konzept-Pipeline entstanden (read-only, Workbench-Deliverable, Abschluss = Sichtblick). Nach deiner Entscheidung wird es zu Umsetzungs-Karten promoted — der erste Schritt wäre der deterministische Live-Feed aus den vorhandenen Timeline-Events, noch ohne LLM-Rollups.</p>
+<p class="dim">Dieses Konzept ist selbst nach der Konzept-Pipeline entstanden (read-only, Dossier-Deliverable, Abschluss = Sichtblick). Nach deiner Entscheidung wird es zu Umsetzungs-Karten promoted - der erste Schritt wäre der deterministische Live-Feed aus den vorhandenen Timeline-Events, noch ohne LLM-Rollups.</p>
 
 </main>
 </body>

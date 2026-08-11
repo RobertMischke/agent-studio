@@ -170,7 +170,7 @@ resolved source body.
 The project composer shows the active tab as automatic context and keeps
 explicit additions as removable reference chips. **Add context** opens a
 project-bound picker with the current tab first, followed by Tasks, Wiki and
-Workbenches, Files, and Commits. Search results never carry repository content
+Dossiers, Files, and Commits. Search results never carry repository content
 in the browser. They add only stable task keys, page refs, repository-relative
 paths, or project-qualified commit SHAs to the next envelope. Send snapshots
 those refs once, so later navigation cannot change the in-flight turn.
@@ -307,7 +307,7 @@ silently borrowing a project's conversation.
 The side sheet is a host of the canonical `coding-agent-chat` composer. Studio
 derives a location context from the active `StudioTabStateService` tab
 (`buildComposerLocationContext`): the large scope is the project, while the
-local scope names the active Board, Task, Workbench, Project Hub, Wiki, URL
+local scope names the active Board, Task, Dossier, Project Hub, Wiki, URL
 preview, or other tab surface. The side sheet renders that value inside CAC's
 standard composer footer — currently via the `[chat-foot-start]` projection
 slot, until the library exposes a first-class `composerContext` input — and

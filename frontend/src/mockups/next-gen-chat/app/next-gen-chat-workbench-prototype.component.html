@@ -62,7 +62,7 @@
         <button class="detail-chrome__complete" title="Complete and move to next task">Complete & Next</button>
       </header>
 
-      <section class="workbench" aria-label="Task chat workbench">
+      <section class="workbench" aria-label="Task chat workspace">
         <mockup-next-gen-chat-rail
           [paneButtons]="paneButtons"
           [scenarios]="scenarios"
@@ -424,7 +424,7 @@
         </article>
         <button class="sheet__summary" (click)="setPane('debug')">
           <strong>Queue signal</strong>
-          <span>6 chat tasks aligned to v7 workbench · click to inspect debug context</span>
+          <span>6 chat tasks aligned to v7 workspace · click to inspect debug context</span>
         </button>
       </div>
       <footer class="sheet__composer">
@@ -729,7 +729,7 @@
               </article>
               <article>
                 <h3>Explanation</h3>
-                <p>The workbench keeps normal chat readable while preserving the deep diagnostic surface for confusing runs. It is read-only and links back to raw trace, tokens, commits, screenshots, and task markers.</p>
+                <p>The workspace keeps normal chat readable while preserving the deep diagnostic surface for confusing runs. It is read-only and links back to raw trace, tokens, commits, screenshots, and task markers.</p>
               </article>
             }
           }
@@ -742,13 +742,13 @@
     <div class="modal" data-testid="prototype-rail-guide-modal" (click)="guideOpen.set(false)" tabindex="0" (keydown.enter)="guideOpen.set(false)" (keydown.space)="guideOpen.set(false); $event.preventDefault()">
       <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header>
-          <strong>Workbench rail</strong>
+          <strong>Workspace rail</strong>
           <button (click)="guideOpen.set(false)">Close</button>
         </header>
         <div class="guide-grid">
           <article>
             <h3>Container rule</h3>
-            <p>Activity Bar modules navigate. Side Bar views select. Workbench documents do the work. Status Bar items summarize.</p>
+            <p>Activity Bar modules navigate. Side Bar views select. Workspace documents do the work. Status Bar items summarize.</p>
           </article>
           <article>
             <h3>Queue is optional</h3>
@@ -775,7 +775,7 @@
           <button (click)="lightboxOpen.set(false)">Close</button>
         </header>
         <div class="image-box">
-          <strong>Workbench Git split, verified</strong>
+          <strong>Workspace Git split, verified</strong>
           <code>docs/mockups/chat-window-next-gen/evidence/angular-prototype-git.png</code>
         </div>
       </section>
@@ -794,7 +794,7 @@
             @case ('prompt') {
               <article>
                 <h3>Prompt history</h3>
-                <p><code>prompt.md</code> is the original task. <code>prompt-2.md</code> and <code>prompt-3.md</code> are user extensions that should remain reviewable without leaving the chat workbench.</p>
+                <p><code>prompt.md</code> is the original task. <code>prompt-2.md</code> and <code>prompt-3.md</code> are user extensions that should remain reviewable without leaving the chat workspace.</p>
               </article>
               <article>
                 <h3>Edit path</h3>
@@ -854,7 +854,7 @@
   @if (commandOpen()) {
     <div class="modal" data-testid="prototype-command-palette" (click)="commandOpen.set(false)" tabindex="0" (keydown.enter)="commandOpen.set(false)" (keydown.space)="commandOpen.set(false); $event.preventDefault()">
       <section class="command" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-        <input value="workbench: switch to git changes" aria-label="Command palette input" />
+        <input value="workspace: switch to git changes" aria-label="Command palette input" />
         <button (click)="setPane('git'); commandOpen.set(false)">Pin Git review</button>
         <button (click)="setPane('preview'); commandOpen.set(false)">Open screenshots</button>
         <button (click)="setPane('debug'); commandOpen.set(false)">Open debug pane</button>

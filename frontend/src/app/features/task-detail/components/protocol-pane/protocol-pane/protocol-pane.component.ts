@@ -806,7 +806,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    * Projected conversation events for the next-gen chat renderer. Pure
    * derivation over the existing polled signals (cliOutput, runTimeline,
    * screenshots, tokenSummary). The projection itself stays pure TypeScript;
-   * the host only feeds it the evidence it already has in scope. Workbench
+   * the host only feeds it the evidence it already has in scope. Dossier
    * preview events are off until slice 6 wires the split presets.
    */
   readonly baseNextGenChatEvents = computed<ConversationEvent[]>(() => {

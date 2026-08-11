@@ -234,6 +234,6 @@ function workbenchLoadError(response: unknown): string {
       ? String((payload as { error?: unknown }).error ?? '').trim()
       : '';
   return reason
-    ? `Workbench could not be loaded: ${reason}`
-    : 'Workbench could not be loaded. The server did not provide a reason.';
+    ? `Dossier could not be loaded: ${reason}`
+    : 'Dossier could not be loaded. The server did not provide a reason.';
 }

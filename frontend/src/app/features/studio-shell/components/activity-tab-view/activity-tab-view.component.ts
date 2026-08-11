@@ -6,7 +6,7 @@ import type { TaskInfo } from '../../../../models/task.model';
 /**
  * Full-screen "Activity" tab. Looks up the owning job by taskKey and
  * renders the live execution + run-outcome summary, plus a CTA back to
- * the in-task chat workbench (which still owns the streaming protocol
+ * the in-task chat view (which still owns the streaming protocol
  * pane). The inline activity log streaming is a follow-up.
  *
  * The fact list at the top is rendered by the shared

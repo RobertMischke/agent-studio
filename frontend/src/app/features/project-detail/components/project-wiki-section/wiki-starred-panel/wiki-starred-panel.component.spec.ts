@@ -40,7 +40,7 @@ describe('WikiStarredPanelComponent', () => {
     expect(root.querySelector('[data-testid="project-wiki-starred"]')).toBeNull();
 
     stars.star('Demo', 'concepts/overview.md', 'Concept overview');
-    stars.star('Demo', 'workbench/board.html', 'Workbench board');
+    stars.star('Demo', 'workbench/board.html', 'Dossier board');
     fixture.detectChanges();
 
     const block = root.querySelector('[data-testid="project-wiki-starred"]')!;

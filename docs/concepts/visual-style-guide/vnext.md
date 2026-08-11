@@ -6,7 +6,7 @@ one problem, bounded alternatives, one decision, and one acceptance boundary at
 a time.
 
 Return to the [Visual Style Guide](../visual-style-guide.html) for the rendered
-current language and to the [Workbench index](README.md) for focused
+current language and to the [Dossier index](README.md) for focused
 comparisons.
 
 ## Candidate register
@@ -90,7 +90,7 @@ it to `decided` only when the record contains:
 - light and dark evidence.
 
 Only then create an implementation card. The card must link back to this
-section and the focused Workbench page.
+section and the focused Dossier page.
 
 ## Decision template
 

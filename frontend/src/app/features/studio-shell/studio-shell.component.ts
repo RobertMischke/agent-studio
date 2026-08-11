@@ -1134,9 +1134,7 @@ export class StudioShellComponent {
       case 'epics':
         return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'workbenches':
-        return tab.projectName === null
-          ? 'All projects · Overview'
-          : `${this.projectShortLabel(tab.projectName)} · Overview`;
+        return 'Dossiers';
       case 'epic': {
         const labelKey = tab.viewTaskKey ?? tab.epicKey;
         const job = this.findJob(labelKey);

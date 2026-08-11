@@ -57,9 +57,9 @@ export class WikiPageActionsComponent {
     || this.classification()?.status?.toLowerCase() === 'archived');
 
   /**
-   * Everything inside a registered Workbench folder settles through the
-   * Workbench's own two-phase decision gate. Wiki classification writes a
-   * `.meta.json` sidecar that a Workbench's visibility never reads, so the
+   * Everything inside a registered Dossier folder settles through the
+   * Dossier's own two-phase decision gate. Wiki classification writes a
+   * `.meta.json` sidecar that a Dossier's visibility never reads, so the
    * backend refuses it with 409 - the UI must not offer the path at all.
    */
   readonly decisionActionsOwned = computed(() => {
@@ -100,7 +100,7 @@ function normalizeWikiPath(relPath: string): string {
   return (relPath ?? '').replaceAll('\\', '/').replace(/^\/+/, '').replace(/^docs\//i, '').toLowerCase();
 }
 
-/** The folder that owns a Workbench entry point, or null for a bare file. */
+/** The folder that owns a Dossier entry point, or null for a bare file. */
 function workbenchFolder(entryPath: string): string | null {
   const cut = entryPath.lastIndexOf('/');
   return cut > 0 ? entryPath.slice(0, cut) : null;

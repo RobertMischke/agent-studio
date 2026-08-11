@@ -549,7 +549,7 @@ test.describe('Orchestrator context header · where am I', () => {
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`long Workbench context wraps cleanly in ${variant.name}`, async ({ page }) => {
+    test(`long Dossier context wraps cleanly in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: variant.width, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
@@ -574,7 +574,7 @@ test.describe('Orchestrator context header · where am I', () => {
       const detail = page.getByTestId('chat-composer-context-detail');
       const model = page.getByTestId('cac-model-selector-trigger');
       await expect(context).toContainText(LONG_CONTEXT_PROJECT);
-      await expect(context).toContainText('Workbench');
+      await expect(context).toContainText('Dossier');
       await expect(detail).toHaveText(LONG_CONTEXT_TITLE);
       await expect(model).toContainText('gpt-5.6-sol');
 
