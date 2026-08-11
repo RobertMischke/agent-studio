@@ -233,8 +233,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         {
             TestCmds = [TagMarker("pre-main-suite-ran")],
         });
-        var gateRunner = new BuildTestGateRunner(
-            NullLogger<BuildTestGateRunner>.Instance);
+        var gateRunner = HermeticGateRunner();
         var runner = new MergeIntoDevelopRunner(
             git,
             log,
@@ -302,8 +301,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             log,
             NullLogger<MergeIntoDevelopRunner>.Instance,
             projectSettings: settings,
-            preMainTestGate: new PreMainTestGate(new BuildTestGateRunner(
-                NullLogger<BuildTestGateRunner>.Instance)),
+            preMainTestGate: new PreMainTestGate(HermeticGateRunner()),
             preMainTimeout: TimeSpan.FromSeconds(30));
         var jobFolder = BeginRun(log, repo, jobId: "docs");
 
@@ -363,8 +361,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             log,
             NullLogger<MergeIntoDevelopRunner>.Instance,
             projectSettings: settings,
-            preMainTestGate: new PreMainTestGate(new BuildTestGateRunner(
-                NullLogger<BuildTestGateRunner>.Instance)),
+            preMainTestGate: new PreMainTestGate(HermeticGateRunner()),
             preMainTimeout: TimeSpan.FromSeconds(30));
         var jobFolder = BeginRun(log, repo, jobId: "mixed");
 
@@ -1313,7 +1310,7 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             git, log, NullLogger<MergeIntoDevelopRunner>.Instance,
             projectSettings: settings,
             preDevelopBuildGate: new PreDevelopBuildGate(
-                new BuildTestGateRunner(NullLogger<BuildTestGateRunner>.Instance)),
+                HermeticGateRunner()),
             preDevelopTimeout: TimeSpan.FromSeconds(60));
 
         var outcome = await runner.RunAsync(
@@ -1421,6 +1418,11 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     /// commands run through the same <c>bash -lc</c> contract as profile validation.
     /// </summary>
     private static string TagMarker(string tag) => $"git tag {tag}";
+
+    private static BuildTestGateRunner HermeticGateRunner()
+        => new(
+            NullLogger<BuildTestGateRunner>.Instance,
+            BuildTestMachineGateMode.BypassForHermeticTest);
 
     private static bool HasTag(string repo, string tag)
         => RunGit(repo, "tag --list " + tag).Out.Trim().Length > 0;

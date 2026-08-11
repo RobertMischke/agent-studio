@@ -28,7 +28,9 @@ internal static class RunTimelineEventFactory
             Actor = TimelineActors.Agent,
             RunId = runId,
             Summary = $"Run {status}" +
-                      (execution.DurationSeconds is double seconds ? $" after {seconds:F1}s" : ""),
+                      (execution.DurationSeconds is double seconds
+                          ? $" after {seconds.ToString("F1", CultureInfo.InvariantCulture)}s"
+                          : ""),
             Details = details,
         };
     }

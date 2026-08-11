@@ -18,14 +18,16 @@ public sealed class AtomicJsonFileWriter : IAtomicJsonFileWriter
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
         var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        var backupPath = $"{path}.{Guid.NewGuid():N}.bak";
         try
         {
             File.WriteAllText(tempPath, content);
-            ReplaceWithRetry(tempPath, path);
+            ReplaceWithRetry(tempPath, path, backupPath);
         }
         finally
         {
             if (File.Exists(tempPath)) File.Delete(tempPath);
+            RecoverOrRemoveBackup(backupPath, path);
         }
     }
 
@@ -36,12 +38,14 @@ public sealed class AtomicJsonFileWriter : IAtomicJsonFileWriter
     /// holding the destination open (FileShare.Read, no Delete) makes the
     /// rename fail, and a reader opening mid-swap gets a sharing violation.
     /// <c>File.Replace</c> (ReplaceFile) keeps the destination name valid
-    /// throughout, so new opens see either the old or the new content. A swap
-    /// attempt that collides with an in-flight reader is retried briefly; the
-    /// first-ever write (no destination yet) has no readers and uses the plain
-    /// move.
+    /// throughout, so new opens see either the old or the new content. Windows
+    /// can remove the destination after a failed ReplaceFile operation when no
+    /// backup name is supplied, so every attempt supplies a same-volume backup.
+    /// A swap attempt that collides with an in-flight reader is retried briefly;
+    /// the first-ever write (no destination yet) has no readers and uses the
+    /// plain move.
     /// </summary>
-    private static void ReplaceWithRetry(string tempPath, string path)
+    private static void ReplaceWithRetry(string tempPath, string path, string backupPath)
     {
         if (!File.Exists(path))
         {
@@ -53,14 +57,27 @@ public sealed class AtomicJsonFileWriter : IAtomicJsonFileWriter
         {
             try
             {
-                File.Replace(tempPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                File.Replace(tempPath, path, backupPath, ignoreMetadataErrors: true);
                 return;
             }
             catch (IOException) when (attempt < 200)
             {
+                RecoverOrRemoveBackup(backupPath, path);
                 Thread.Sleep(1);
             }
         }
+    }
+
+    private static void RecoverOrRemoveBackup(string backupPath, string path)
+    {
+        if (!File.Exists(backupPath)) return;
+        if (File.Exists(path))
+        {
+            File.Delete(backupPath);
+            return;
+        }
+
+        File.Move(backupPath, path);
     }
 }
 
