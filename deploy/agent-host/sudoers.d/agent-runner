@@ -1,0 +1,30 @@
+# Least-privilege service-account policy for a managed agent host.
+# Install as /etc/sudoers.d/agent-runner with owner root:root and mode 0440.
+
+Cmnd_Alias AGENT_RUNNER_SERVICE_CONTROL = \
+    /usr/bin/systemctl restart agent-runner.service, \
+    /usr/bin/systemctl restart agent-runner-review.service, \
+    /usr/bin/systemctl status agent-runner.service --no-pager, \
+    /usr/bin/systemctl status agent-runner-review.service --no-pager
+
+# Release promotion remains a no-argument operation over fixed paths.
+Cmnd_Alias AGENT_RUNNER_DEPLOY = /usr/local/sbin/agent-runner-deploy ""
+
+# Defense in depth: sudoers enumerates every role and accepted value. The
+# root-owned helper independently enforces the same role, variable, and 1..6
+# policy before touching a role EnvironmentFile.
+Cmnd_Alias AGENT_RUNNER_CONFIG = \
+    /usr/local/sbin/agent-runner-deploy config coding RUNNER_MAX_PARALLELISM 1, \
+    /usr/local/sbin/agent-runner-deploy config coding RUNNER_MAX_PARALLELISM 2, \
+    /usr/local/sbin/agent-runner-deploy config coding RUNNER_MAX_PARALLELISM 3, \
+    /usr/local/sbin/agent-runner-deploy config coding RUNNER_MAX_PARALLELISM 4, \
+    /usr/local/sbin/agent-runner-deploy config coding RUNNER_MAX_PARALLELISM 5, \
+    /usr/local/sbin/agent-runner-deploy config coding RUNNER_MAX_PARALLELISM 6, \
+    /usr/local/sbin/agent-runner-deploy config review RUNNER_MAX_PARALLELISM 1, \
+    /usr/local/sbin/agent-runner-deploy config review RUNNER_MAX_PARALLELISM 2, \
+    /usr/local/sbin/agent-runner-deploy config review RUNNER_MAX_PARALLELISM 3, \
+    /usr/local/sbin/agent-runner-deploy config review RUNNER_MAX_PARALLELISM 4, \
+    /usr/local/sbin/agent-runner-deploy config review RUNNER_MAX_PARALLELISM 5, \
+    /usr/local/sbin/agent-runner-deploy config review RUNNER_MAX_PARALLELISM 6
+
+agent ALL=(root) NOPASSWD: AGENT_RUNNER_SERVICE_CONTROL, AGENT_RUNNER_DEPLOY, AGENT_RUNNER_CONFIG

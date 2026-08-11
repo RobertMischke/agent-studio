@@ -217,6 +217,13 @@ state.
   `/etc/agent-host/profile.conf`, and adopts legacy resource drop-ins before the
   managed main unit replaces them. The target contract lives in
   [runner-host resource governance](../../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
+- `deploy/agent-host/agent-runner-deploy`, its configuration policy, and
+  `scripts/harden-agent-runner-host.sh`: the root-owned least-privilege release
+  and role-configuration boundary. Release promotion retains its fixed
+  no-argument ingress. Role configuration accepts only Coding or Review
+  `RUNNER_MAX_PARALLELISM` values from 1 through 6, updates an EnvironmentFile
+  loaded by that unit, restarts only the mapped unit, proves the value through
+  `/proc/<MainPID>/environ`, and journals or rolls back the result.
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store

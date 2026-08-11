@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Pure allowlist and value policy for role-scoped agent-host configuration.
+
+agent_runner_resolve_config() {
+  local role="${1:-}"
+  local variable="${2:-}"
+  local value="${3:-}"
+
+  [[ "$#" -eq 3 ]] || {
+    printf 'agent-runner-config-policy: expected <role> <variable> <value>\n' >&2
+    return 2
+  }
+
+  case "$role" in
+    coding)
+      AGENT_RUNNER_CONFIG_UNIT="agent-runner.service"
+      AGENT_RUNNER_CONFIG_PRIMARY_ENV="/etc/agent-runner/runner-coding.env"
+      AGENT_RUNNER_CONFIG_FALLBACK_ENV="/etc/agent-runner/runner.env"
+      ;;
+    review)
+      AGENT_RUNNER_CONFIG_UNIT="agent-runner-review.service"
+      AGENT_RUNNER_CONFIG_PRIMARY_ENV="/etc/agent-runner/runner-review.env"
+      AGENT_RUNNER_CONFIG_FALLBACK_ENV="/etc/agent-runner/review.env"
+      ;;
+    *)
+      printf "agent-runner-config-policy: role must be 'coding' or 'review'\n" >&2
+      return 2
+      ;;
+  esac
+
+  case "$variable" in
+    RUNNER_MAX_PARALLELISM) ;;
+    *)
+      printf "agent-runner-config-policy: variable is not allowlisted: %s\n" "$variable" >&2
+      return 2
+      ;;
+  esac
+
+  [[ "$value" =~ ^[1-6]$ ]] || {
+    printf 'agent-runner-config-policy: RUNNER_MAX_PARALLELISM must be an integer from 1 through 6\n' >&2
+    return 2
+  }
+
+  AGENT_RUNNER_CONFIG_VARIABLE="$variable"
+  AGENT_RUNNER_CONFIG_VALUE="$value"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  agent_runner_resolve_config "$@"
+  printf 'unit=%s\nprimary_env=%s\nfallback_env=%s\nvariable=%s\nvalue=%s\n' \
+    "$AGENT_RUNNER_CONFIG_UNIT" \
+    "$AGENT_RUNNER_CONFIG_PRIMARY_ENV" \
+    "$AGENT_RUNNER_CONFIG_FALLBACK_ENV" \
+    "$AGENT_RUNNER_CONFIG_VARIABLE" \
+    "$AGENT_RUNNER_CONFIG_VALUE"
+fi
