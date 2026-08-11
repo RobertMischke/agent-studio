@@ -80,6 +80,7 @@
   align-items: center;
   gap: var(--studio-spacing-1);
   min-width: 0;
+  min-height: 28px;
 }
 
 .viewer-head__task-loading {
@@ -107,9 +108,28 @@
   color: var(--studio-fg);
 }
 
+.viewer-head__freshness {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-head__freshness i,
+.viewer-details__live-heading i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--studio-warn);
+}
+
 .viewer-head__details-trigger,
-.viewer-head__refresh,
-.viewer-details__header button {
+.viewer-details__header button,
+.viewer-details__manual-refresh {
   border: 1px solid var(--studio-border-strong);
   background: var(--studio-bg-elevated);
   color: var(--studio-fg-strong);
@@ -122,32 +142,24 @@
   flex: 0 0 auto;
 }
 
-.viewer-head__refresh,
 .viewer-head__details-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 28px;
   height: 28px;
   padding: 0;
   border-radius: 6px;
+  line-height: 0;
   list-style: none;
 }
 
-.viewer-head__refresh:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.viewer-head__refresh.app-pending-button--pending {
-  width: auto;
-  min-width: 92px;
-  padding-inline: var(--studio-spacing-2);
-}
-
-.viewer-head__refresh:not(:disabled) {
-  border-color: var(--studio-accent-3);
-  background: color-mix(in srgb, var(--studio-accent-3) 16%, var(--studio-bg));
+.viewer-head__details-trigger app-studio-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  line-height: 0;
 }
 
 .viewer-head__details-trigger::-webkit-details-marker {
@@ -155,15 +167,11 @@
 }
 
 .viewer-head__details-trigger:hover,
-.viewer-details__header button:hover {
+.viewer-details__header button:hover,
+.viewer-details__manual-refresh:hover {
   background: var(--studio-bg-hover);
 }
 
-.viewer-head__refresh:not(:disabled):hover {
-  background: color-mix(in srgb, var(--studio-accent-3) 24%, var(--studio-bg));
-}
-
-.viewer-head__refresh:focus-visible,
 .viewer-head__details-trigger:focus-visible,
 .viewer-details button:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
@@ -200,10 +208,73 @@
 }
 
 .viewer-details__header button {
+  display: inline-grid;
   width: 24px;
   height: 24px;
+  place-items: center;
   padding: 0;
   border-radius: 5px;
+}
+
+.viewer-details__live {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--studio-spacing-2) var(--studio-spacing-4);
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  border-bottom: 1px solid var(--studio-border);
+  background: color-mix(in srgb, var(--studio-success) 7%, var(--studio-bg-surface));
+}
+
+.viewer-details__live[data-connected='false'] {
+  background: color-mix(in srgb, var(--studio-warn) 8%, var(--studio-bg-surface));
+}
+
+.viewer-details__live-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  font-size: 0.76rem;
+}
+
+.viewer-details__live[data-connected='true'] .viewer-details__live-heading i {
+  background: var(--studio-success);
+}
+
+.viewer-details__live dl {
+  display: grid;
+  grid-column: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--studio-spacing-4);
+  margin: 0;
+}
+
+.viewer-details__live dl div {
+  min-width: 0;
+}
+
+.viewer-details__live dt {
+  color: var(--studio-fg-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.viewer-details__live dd {
+  margin: var(--studio-spacing-1) 0 0;
+  color: var(--studio-fg-strong);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.viewer-details__manual-refresh {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  min-height: 28px;
+  padding: 0 var(--studio-spacing-3);
+  border-radius: 5px;
+  font-size: 0.72rem;
 }
 
 .viewer-details__summary {
@@ -261,6 +332,15 @@
   }
   .viewer-details__meta {
     grid-template-columns: 1fr;
+  }
+  .viewer-details__live,
+  .viewer-details__live dl {
+    grid-template-columns: 1fr;
+  }
+  .viewer-details__manual-refresh {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
   }
   .viewer-details__meta-wide {
     grid-column: auto;

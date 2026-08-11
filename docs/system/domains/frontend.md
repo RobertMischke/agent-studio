@@ -198,8 +198,14 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   Explorer project children stay available as quick links. Created, updated,
   decision-recorded, and status-changed events travel over the existing jobs
   hub and converge the Explorer catalogue, both overview scopes, and an open
-  viewer without a page reload. Pulse reuses the same catalogue as a thinking
-  inbox. The Explorer projects that catalogue into a first-class Dossiers
+  viewer without a page reload. The viewer header has no permanent refresh
+  control. Its details menu reports the live connection state, connection age,
+  and the last successful Dossier read. A disconnected viewer adds a quiet
+  as-of line to the header and exposes a manual read fallback only inside that
+  menu. Task-reference chips and lane dots share the viewport-positioned
+  application tooltip so long titles and merge-status lines wrap without
+  clipping in the viewer, lists, and Wiki surfaces. Pulse reuses the same
+  catalogue as a thinking inbox. The Explorer projects that catalogue into a first-class Dossiers
   branch rather than exposing the descriptor's physical `operations/` path.
   Current entries are grouped as `Needs a decision` and `In implementation`;
   `Documented` and `Discarded` stay under a collapsed History branch. Every

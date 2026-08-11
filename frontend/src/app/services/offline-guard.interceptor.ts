@@ -7,9 +7,10 @@ import { NotificationService } from './notification.service';
 /**
  * Refuses *mutating* backend calls while the app is offline, so an action the
  * operator takes during a backend outage fails loudly instead of silently
- * (AC3 of the backend-offline-warning feature). Reads (GET) pass through
- * untouched: already-loaded data stays usable and the reconnect re-hydrate
- * pull is a GET, so blocking writes never gets in the way of recovery.
+ * (AC3 of the backend-offline-warning feature). Reads pass through untouched:
+ * already-loaded data stays usable and reconnect re-hydration never gets in
+ * the way of recovery. The reference-status batch uses POST only because its
+ * set of keys belongs in a request body; it remains a side-effect-free read.
  *
  * "Offline" is the debounced {@link ConnectionStatusService.offline} signal
  * (the SignalR socket has been down past the grace window), the same trigger
@@ -21,6 +22,7 @@ import { NotificationService } from './notification.service';
  * top so even call sites that swallow their error never fail silently.
  */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+const READ_ONLY_POST_URLS = new Set(['/api/tasks/reference-status']);
 
 // One toast per burst: a single user action can fan out several writes, and a
 // stack of identical "backend offline" toasts is noise, not signal.
@@ -37,7 +39,9 @@ export const offlineGuardInterceptor: HttpInterceptorFn = (req, next) => {
   const notify = inject(NotificationService);
 
   const isOwnApi = req.url.startsWith('/api');
-  const isMutating = MUTATING_METHODS.has(req.method.toUpperCase());
+  const method = req.method.toUpperCase();
+  const isReadOnlyPost = method === 'POST' && READ_ONLY_POST_URLS.has(req.url);
+  const isMutating = MUTATING_METHODS.has(method) && !isReadOnlyPost;
 
   if (conn.offline() && isOwnApi && isMutating) {
     const now = Date.now();

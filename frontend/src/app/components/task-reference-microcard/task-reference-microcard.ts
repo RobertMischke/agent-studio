@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { TaskReferenceNavigationService } from '../../services/task-reference-navigation.service';
 import { projectIdentity } from '../../services/project-identity.util';
+import { AppTooltipDirective } from '../tooltip/app-tooltip.directive';
 
 export interface TaskReferenceMergeStatus {
   inIntegration: boolean;
@@ -25,6 +26,7 @@ export interface TaskReferenceStatus {
 @Component({
   selector: 'app-task-reference-microcard',
   standalone: true,
+  imports: [AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-reference-microcard.html',
   styleUrl: './task-reference-microcard.scss',
@@ -55,6 +57,12 @@ export class TaskReferenceMicrocardComponent {
     const releaseStatus = merge.inRelease ? 'merged' : 'open';
     return `${merge.integrationBranch}: ${integrationStatus} · ${merge.releaseBranch}: ${releaseStatus}`;
   });
+  readonly tooltipLabel = computed(() => [
+    this.status().title || 'Unknown or deleted task',
+    `${this.laneLabel()} · ${this.status().projectName}`,
+    this.mergePopoverLabel(),
+    this.status().reviewGrade ? `Review grade ${this.status().reviewGrade}` : null,
+  ].filter(Boolean).join('\n'));
 
   open(event: MouseEvent): void {
     event.preventDefault();

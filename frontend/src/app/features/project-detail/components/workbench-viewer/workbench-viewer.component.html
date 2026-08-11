@@ -19,8 +19,12 @@
           [document]="doc"
           [decisionPoints]="decisionMarkup().points"
           [responses]="decisionResponses()"
+          [liveConnected]="liveConnected()"
+          [connectionChangedAtUtc]="connectionChangedAtUtc()"
+          [lastUpdatedAtUtc]="lastUpdatedAtUtc()"
           (draftDiscarded)="discardDecisionDraft()"
           (decisionChanged)="refreshDecision()"
+          (manualRefresh)="refreshManually()"
         />
       }
       @if (documentationReady()) {

@@ -8,8 +8,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { catchError, finalize, map, of, switchMap, tap } from 'rxjs';
-import { PendingButtonDirective } from '../../../../components/async-feedback';
+import { catchError, map, of, switchMap } from 'rxjs';
 import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import {
   TaskReferenceMicrocardComponent,
@@ -23,8 +22,8 @@ import {
   WorkbenchDocument,
 } from '../../../../models/project-docs.model';
 import { TaskState } from '../../../../models/task.model';
-import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
-import { NotificationService } from '../../../../services/notification.service';
+import { formatRelativeTime, formatTime } from '../../../../services/format.util';
+import { NowTickService } from '../../../../services/now-tick.service';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { TaskService } from '../../../../services/task.service';
 import { WorkbenchDecisionPanelComponent } from '../workbench-decision-panel/workbench-decision-panel';
@@ -37,7 +36,6 @@ const MAX_INLINE_TASKS = 8;
   imports: [
     AppTooltipDirective,
     CopyableTaskKeyComponent,
-    PendingButtonDirective,
     StudioIconComponent,
     TaskReferenceMicrocardComponent,
     WorkbenchDecisionPanelComponent,
@@ -51,19 +49,20 @@ export class WorkbenchViewerHeaderComponent {
   readonly document = input.required<WorkbenchDocument>();
   readonly decisionPoints = input<readonly WorkbenchDecisionPoint[]>([]);
   readonly responses = input<readonly WorkbenchDecisionResponse[]>([]);
+  readonly liveConnected = input(false);
+  readonly connectionChangedAtUtc = input<string | null>(null);
+  readonly lastUpdatedAtUtc = input<string | null>(null);
   readonly decisionChanged = output<void>();
   readonly draftDiscarded = output<void>();
+  readonly manualRefresh = output<void>();
 
   private readonly docs = inject(ProjectDocsService);
   private readonly tasks = inject(TaskService);
-  private readonly confirmDialog = inject(ConfirmDialogService);
-  private readonly notifications = inject(NotificationService);
+  private readonly now = inject(NowTickService).now;
 
   readonly referenceKeys = signal<string[]>([]);
   readonly taskStatuses = signal<TaskReferenceStatus[]>([]);
   readonly taskStatusesLoading = signal(false);
-  readonly refreshPending = signal(false);
-  private readonly referenceReload = signal(0);
 
   readonly inlineTaskStatuses = computed(() => this.taskStatuses().slice(0, MAX_INLINE_TASKS));
   readonly hiddenTaskCount = computed(() =>
@@ -97,10 +96,27 @@ export class WorkbenchViewerHeaderComponent {
       .filter(Boolean)
       .join(' · ');
   });
+  readonly connectionLabel = computed(() => {
+    const state = this.liveConnected() ? 'Connected' : 'Disconnected';
+    const changedAt = this.connectionChangedAtUtc();
+    if (!changedAt) return state;
+    return `${state} since ${formatTime(changedAt)} · ${formatRelativeTime(changedAt, this.now())}`;
+  });
+  readonly lastUpdateLabel = computed(() => {
+    const updatedAt = this.lastUpdatedAtUtc();
+    if (!updatedAt) return 'Not yet loaded';
+    return `${formatTime(updatedAt)} · ${formatRelativeTime(updatedAt, this.now())}`;
+  });
+  readonly staleAsOfLabel = computed(() => {
+    const updatedAt = this.lastUpdatedAtUtc();
+    return updatedAt ? `Updates paused · as of ${formatTime(updatedAt)}` : 'Updates paused';
+  });
+  readonly liveStatusTooltip = computed(() =>
+    `${this.connectionLabel()}\nLast update ${this.lastUpdateLabel()}`,
+  );
 
   constructor() {
     effect((onCleanup) => {
-      this.referenceReload();
       const workbench = this.document().workbench;
       const projectName = this.projectName();
       const fallbackKeys = uniqueKeys([
@@ -154,96 +170,6 @@ export class WorkbenchViewerHeaderComponent {
   closeDetails(disclosure: HTMLDetailsElement): void {
     disclosure.open = false;
   }
-
-  requestRefreshCard(): void {
-    const projectName = this.projectName();
-    const workbench = this.document().workbench;
-    const workbenchKey = workbench.key?.trim();
-    if (!workbenchKey || this.refreshPending()) return;
-
-    void this.confirmDialog.confirm({
-      title: 'Create Dossier refresh card?',
-      message: 'Create a preparation card with the Dossier source and refresh goal prefilled.',
-      detail: `Refresh: ${workbench.title} · ${workbenchKey} · ${workbench.entryPath}`,
-      confirmLabel: 'Create card',
-      kind: 'primary',
-    }).then((confirmed) => {
-      const current = this.document().workbench;
-      if (
-        !confirmed
-        || current.id !== workbench.id
-        || this.projectName() !== projectName
-        || this.refreshPending()
-      ) return;
-      this.createRefreshCard(projectName, workbenchKey);
-    });
-  }
-
-  private createRefreshCard(projectName: string, workbenchKey: string): void {
-    const workbench = this.document().workbench;
-    this.refreshPending.set(true);
-    this.tasks.getWatchPaths().pipe(
-      map((entries) => {
-        const path = entries.find((entry) => entry.name === projectName)?.path;
-        if (!path) throw new Error(`Could not resolve the task path for ${projectName}.`);
-        return path;
-      }),
-      switchMap((watchPath) => this.tasks.createJob({
-        title: `Refresh: ${workbench.title}`,
-        agent: 'claude',
-        watchPath,
-        promptMarkdown: dossierRefreshPrompt(this.document(), workbenchKey),
-        targetState: TaskState.Preparation,
-        taskType: 'chore',
-        mode: 'coding',
-      }).pipe(map((created) => ({ created, watchPath })))),
-      switchMap(({ created, watchPath }) => this.tasks.setTaskReferences(created.id, {
-        dependsOn: [],
-        relatedTo: [],
-        blockedBy: [],
-        supersedes: [],
-        workbenches: [workbenchKey],
-      }, watchPath)),
-      tap(() => this.tasks.refresh()),
-      finalize(() => this.refreshPending.set(false)),
-    ).subscribe({
-      next: () => {
-        this.notifications.success(
-          `Refresh: ${workbench.title} is linked to this Dossier.`,
-          'Refresh card created',
-        );
-        this.referenceReload.update((value) => value + 1);
-      },
-      error: (error) => this.notifications.error(
-        refreshErrorMessage(error),
-        'Could not create refresh card',
-      ),
-    });
-  }
-}
-
-function dossierRefreshPrompt(document: WorkbenchDocument, workbenchKey: string): string {
-  return [
-    '# Dossier refresh',
-    '',
-    `Dossier path: \`${document.workbench.entryPath}\``,
-    `Dossier key: \`${workbenchKey}\``,
-    '',
-    '## Goal',
-    '',
-    'Update the document against reality (incorporate findings, mark completed sections, refresh figures).',
-    '',
-    '## Constraint',
-    '',
-    'Update the repository document explicitly. Do not add automatic document self-modification.',
-  ].join('\n');
-}
-
-function refreshErrorMessage(error: unknown): string {
-  const candidate = error as { error?: { error?: string } | string; message?: string } | null;
-  if (typeof candidate?.error === 'string') return candidate.error;
-  if (candidate?.error && typeof candidate.error.error === 'string') return candidate.error.error;
-  return candidate?.message || 'The Dossier refresh card could not be created and linked.';
 }
 
 function uniqueKeys(keys: readonly string[]): string[] {

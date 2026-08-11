@@ -16,6 +16,7 @@ let nextTooltipId = 0;
 })
 export class AppTooltipDirective implements OnDestroy {
   readonly appTooltip = input<string | null>(null);
+  readonly appTooltipTestId = input<string | null>(null);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly document = inject(DOCUMENT);
@@ -57,6 +58,8 @@ export class AppTooltipDirective implements OnDestroy {
     overlay.id = this.tooltipId;
     overlay.className = 'app-tooltip-overlay';
     overlay.setAttribute('role', 'tooltip');
+    const testId = this.appTooltipTestId()?.trim();
+    if (testId) overlay.setAttribute('data-testid', testId);
     overlay.textContent = content;
     this.document.body.append(overlay);
     this.overlay = overlay;
