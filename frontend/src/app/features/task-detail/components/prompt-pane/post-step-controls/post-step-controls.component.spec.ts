@@ -69,7 +69,7 @@ function setup(options: {
 }
 
 describe('PostStepControlsComponent', () => {
-  it('renders backend-owned state, source and precise reason, then deep-links the exact project row', () => {
+  it('renders a compact scope code while preserving state, source and reason for assistive output', () => {
     const activation: PostStepActivation = {
       state: 'skipped',
       source: 'condition',
@@ -78,8 +78,7 @@ describe('PostStepControlsComponent', () => {
     const { root, open } = setup({ stepId: 'post-code-review-grade', activation });
 
     const source = root.querySelector('[data-testid="overview-post-step-source"]') as HTMLButtonElement;
-    expect(source.textContent).toContain('skipped');
-    expect(source.textContent).toContain('condition');
+    expect(source.textContent?.trim()).toBe('C');
     expect(source.dataset['activationState']).toBe('skipped');
     expect(source.dataset['activationSource']).toBe('condition');
     expect(source.getAttribute('aria-label')).toContain(activation.reason);
@@ -91,6 +90,16 @@ describe('PostStepControlsComponent', () => {
       section: 'pipeline',
       pipelineStepId: 'post-code-review-grade',
     });
+  });
+
+  it.each([
+    ['global', 'G'],
+    ['project', 'P'],
+    ['condition', 'C'],
+  ] as const)('maps the %s source to the compact %s code', (source, code) => {
+    const { root } = setup({ activation: { ...ACTIVE, source } });
+
+    expect(root.querySelector('[data-testid="overview-post-step-source"]')?.textContent?.trim()).toBe(code);
   });
 
   it('uses the shared pending-button contract immediately and refreshes after success', () => {

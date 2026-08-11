@@ -18,9 +18,10 @@
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 26px;
-  // The name stays wide enough for "Agent execution" while the single flexible
-  // metadata track owns every badge, verdict, run count, and model on the row.
-  --ov-pipeline-name-col: minmax(9rem, 12rem);
+  // The step name is the row's primary information and owns twice the flexible
+  // space of metadata. Both tracks may contract within the row, but the name
+  // keeps a readable floor and secondary model text yields before timing.
+  --ov-pipeline-name-col: minmax(12rem, 2fr);
   --ov-pipeline-meta-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
@@ -803,31 +804,6 @@
     }
   }
 
-  &__running-badge {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 6px;
-    border-radius: 999px;
-    color: var(--studio-accent-3-strong);
-    background: color-mix(in srgb, var(--studio-accent-3) 18%, var(--studio-bg-elevated));
-    border: 1px solid color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
-  }
-
-  &__running-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: currentColor;
-    flex: 0 0 auto;
-    animation: ov-pulse 1.3s ease-in-out infinite;
-  }
-
   // Quiet metadata for read-only aspect rows that run concurrently in the
   // orchestrator pool. The status column carries the row's visual weight.
   &__parallel-note {
@@ -1007,6 +983,10 @@
     white-space: nowrap;
   }
 
+  &__meta > * {
+    min-width: 0;
+  }
+
   &__runs {
     flex: 0 0 auto;
     min-width: 0;
@@ -1017,7 +997,7 @@
   &__cost { grid-column: 7; }
 
   &__model {
-    flex: 0 0 auto;
+    flex: 0 1 132px;
     font-family: var(--font-mono);
     font-size: 9px;
     color: var(--studio-fg-muted);
@@ -1126,7 +1106,7 @@
     color: var(--studio-fg-muted);
   }
 
-  .ov-pl-step__status, .ov-pl-step__running-dot { animation: none; }
+  .ov-pl-step__status { animation: none; }
 
   .ov-pl-step__status {
     color: var(--studio-fg-muted);
@@ -1134,8 +1114,7 @@
     opacity: 0.72;
   }
 
-  .ov-pl-step__verdict, .ov-pl-step__final-decision,
-  .ov-pl-step__running-badge {
+  .ov-pl-step__verdict, .ov-pl-step__final-decision {
     border-color: var(--studio-border);
     background: transparent;
     color: var(--studio-fg-muted);
@@ -1148,7 +1127,7 @@
 // Tokens, by shortening the shared grid template and hiding the matching
 // cells. The metadata track absorbs the remaining width while Time / Duration
 // stay right-pinned. Step name, status, and duration are never dropped.
-@container ov-pipeline (max-width: 560px) {
+@container ov-pipeline (max-width: 620px) {
   .ov-pl-header,
   .ov-pl-step {
     --ov-pl-grid-cols:

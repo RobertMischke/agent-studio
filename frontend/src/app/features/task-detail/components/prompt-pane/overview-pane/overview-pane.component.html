@@ -347,7 +347,8 @@
                data-testid="overview-pipeline-step">
             <span class="ov-pl-step__status" data-testid="overview-pipeline-step-status"
                   [cacTooltip]="row.statusTooltip ?? stepStatusLabel(row.status)"
-                  aria-hidden="true">{{ row.historical ? historicalStepStatusIcon(row.status) : stepStatusIcon(row.status) }}</span>
+                  role="img"
+                  [attr.aria-label]="stepStatusLabel(row.status)">{{ row.historical ? historicalStepStatusIcon(row.status) : stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind"
                   [cacTooltip]="stepKindLabel(row.kind)"
                   role="img"
@@ -419,21 +420,14 @@
                 } @else if (row.historical) { · superseded }
               </span>
             }
-            @if (row.status === 'running') {
-              <span class="ov-pl-step__running-badge"
-                    data-testid="overview-pipeline-step-running"
-                    [cacTooltip]="'This step is running right now'">
-                <span class="ov-pl-step__running-dot" aria-hidden="true"></span>
-                Running
-              </span>
-            }
-            @if (!row.isFinalVerdict && row.verdict) {
+            @let visibleVerdict = visibleStepVerdict(row.status, row.verdict);
+            @if (!row.isFinalVerdict && visibleVerdict) {
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"
-                    [attr.data-verdict]="row.verdict"
+                    [attr.data-verdict]="visibleVerdict"
                     [cacTooltip]="row.concernTooltip"
-                    [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
-                    data-testid="overview-pipeline-step-verdict">{{ row.verdict }}@if (row.historical) { · superseded }</span>
+                    [tooltipSeverity]="visibleVerdict === 'block' || visibleVerdict === 'loop-detected' ? 'error' : 'warn'"
+                    data-testid="overview-pipeline-step-verdict">{{ visibleVerdict }}@if (row.historical) { · superseded }</span>
             }
             @if (selectedPipelineIsCurrent() && row.kind === 'core' && agentRunCount() > 0) {
               <app-pipeline-run-history
