@@ -235,15 +235,16 @@
   <h1>Deck Icon Exploration</h1>
   <p class="lede">Round 2 defines the Deck as the multi-faceted project console: overview panels, settings, Wiki, token usage, and other project views. These 24 by 24 line icons express that container rather than a board or card stack.</p>
   <div class="meta">
-    <span><b>Status:</b> round 2 ready for Robert's sight review</span>
-    <span><b>Scope:</b> concept only, no product-code change</span>
+    <span><b>Status:</b> documented after delivery</span>
+    <span><b>Scope:</b> selected Deck navigation icon</span>
     <span><b>Proof:</b> light and dark</span>
   </div>
 </header>
 
 <section class="decision" aria-labelledby="recommendation" data-document-section="recommendation">
-  <span class="badge">Recommended</span>
+  <span class="badge">Confirmed</span>
   <h2 id="recommendation">A · Project facets</h2>
+  <p><b>Operator decision, 11 August 2026:</b> the recommended Round 2 option A is confirmed for implementation.</p>
   <p>The asymmetric panel frame reads as one project surface with several distinct views. The small focus ring suggests a project overview without turning the icon into a Kanban grid, card stack, or terminal-only symbol.</p>
 </section>
 
@@ -314,10 +315,10 @@
   <figcaption>The standalone Round 2 review artifact is <a href="results/deck-icon-options-round-2.svg">results/deck-icon-options-round-2.svg</a>. Every icon above is inline SVG, not a font or emoji.</figcaption>
 </figure>
 
-<h2>Effect and recommendation</h2>
+<h2>Effect and recorded decision</h2>
 <div class="alternatives">
   <article class="card">
-    <h3>A · Project facets <span class="badge">Recommended</span></h3>
+    <h3>A · Project facets <span class="badge">Confirmed</span></h3>
     <p>An asymmetric project frame contains three visibly different areas and a focus ring. It communicates a console composed of facets while remaining legible at compact rail sizes.</p>
   </article>
   <article class="card">
@@ -341,19 +342,19 @@
 </section>
 
 <section data-document-section="evidence">
-<h2>Located implementation seam</h2>
+<h2>Implementation seam and delivered state</h2>
 <table>
-  <thead><tr><th>Surface</th><th>Current</th><th>Later one-place change</th></tr></thead>
+  <thead><tr><th>Surface</th><th>Delivered state</th><th>Result</th></tr></thead>
   <tbody>
     <tr>
       <td>Explorer Deck row</td>
-      <td><code>frontend/src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.html</code> uses <code>glyph="layout"</code>.</td>
-      <td>Add the picked Round 2 path as one <code>StudioIconName</code>, then change this glyph binding only.</td>
+      <td><code>frontend/src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.html</code> uses <code>glyph="deck"</code>.</td>
+      <td>The selected Round 2 geometry is now a canonical <code>StudioIconName</code> and this is the only primary navigation binding changed.</td>
     </tr>
     <tr>
       <td>Project-row Deck shortcut</td>
       <td>The inline "Open Deck" action uses <code>name="grid"</code>.</td>
-      <td>Optional follow-up for visual consistency after the primary Explorer row is approved.</td>
+      <td>Intentionally unchanged because the approved implementation seam covers the labelled Explorer Deck destination.</td>
     </tr>
     <tr>
       <td>Deck tab</td>
@@ -365,14 +366,29 @@
 <ul>
   <li>Canonical icon component: <code>frontend/src/app/components/studio-icon/studio-icon.component.{ts,html}</code>.</li>
   <li>Stable test IDs to preserve: <code>studio-explorer-project-hub-*</code> and the existing Deck wrapper <code>studio-explorer-project-deck-*</code>.</li>
-  <li>No source or test file is changed by this concept card. Implementation waits for Robert's pick.</li>
+  <li>Delivery card <code>AGT-2619</code> implements the confirmed pick with focused component and browser regression coverage.</li>
 </ul>
 </section>
 
-<section data-document-section="open-decisions">
-<h2>Open decision for Robert</h2>
-<p>Pick A, B, or C from Round 2. The recommended default is <b>A · Project facets</b>. No other dependency or product decision is required before the later implementation card can apply the selected path.</p>
+<section data-document-section="decision">
+<h2>Decision record</h2>
+<p>The operator confirmed option A on 11 August 2026 and authorized <code>AGT-2619</code> to implement it and archive this Dossier as documented after delivery. <code>AGT-2355</code>, the decision card retained in Human Review, can be accepted and archived once this delivery is available.</p>
 </section>
+
+<!-- agent-studio:implementation-section:start -->
+<section id="implementation" data-document-section="implementation">
+  <h2>Implementation</h2>
+  <p>Delivery slices append their current implementation status here.</p>
+  <ol class="implementation-log">
+<!-- agent-studio:implementation-log:start -->
+<li data-implementation-entry="" data-task-key="AGT-2619" data-delivered-at="2026-08-11" data-slice="Deck project-facets icon">
+  <strong>AGT-2619 · Deck project-facets icon</strong>
+  <span>Delivered: the confirmed 24 by 24 currentColor icon is live on the Explorer Deck row with focused component and Playwright coverage plus light and dark context captures.</span>
+</li>
+<!-- agent-studio:implementation-log:end -->
+  </ol>
+</section>
+<!-- agent-studio:implementation-section:end -->
 </main>
 </body>
 </html>

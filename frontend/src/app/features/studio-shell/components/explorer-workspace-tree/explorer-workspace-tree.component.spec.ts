@@ -338,6 +338,10 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(deck?.textContent).toContain('Deck');
     expect(deck?.querySelector('button')?.getAttribute('aria-label')).toBe('Deck, Alpha');
     expect(deck?.querySelector('[data-testid="studio-explorer-project-hub-Alpha"]')).toBe(hub);
+    const deckIcon = deck?.querySelector('.tree-row__glyph-icon svg');
+    expect(deckIcon?.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(deckIcon?.querySelector('path')?.getAttribute('d')).toBe('M9 3v18M9 10h12');
+    expect(deckIcon?.querySelector('circle')?.getAttribute('cy')).toBe('15.5');
     // The destinations are the third tree level: they render as `tree-row--child`
     // (one indent step below the project row), never flush `--root`. Guards the
     // AGT-2057 regression where AGT-2037 flattened them to `--root`.

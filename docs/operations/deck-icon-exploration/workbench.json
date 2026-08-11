@@ -2,19 +2,23 @@
   "schemaVersion": 1,
   "id": "deck-icon-exploration",
   "title": "Deck Icon Exploration",
-  "summary": "Round 2 explores three compact line-icon alternatives for the Deck as a multi-faceted project console: project facets, a console frame, and a faceted project tile. Includes light and dark theme proofs, a recommendation, the rejected Round 1 direction, and the exact later implementation seam.",
+  "summary": "Documented decision and delivery record for the Deck navigation icon. The operator confirmed Round 2 option A, Project facets, on 11 August 2026; AGT-2619 implemented the 24 by 24 currentColor icon at the identified Explorer seam with light and dark proof.",
   "entrypoint": "index.html",
-  "status": "active",
+  "status": "documented",
   "phase": "decision-ready",
   "pattern": "ui",
-  "updatedAt": "2026-08-10T12:27:49Z",
+  "updatedAt": "2026-08-11T13:43:47Z",
+  "editedBy": "AGT-2619",
   "sourceTaskKeys": [
     "AGT-2355"
   ],
+  "relatedTaskKeys": [
+    "AGT-2619"
+  ],
   "implementationTasks": [
     {
-      "title": "Apply Robert\u0027s selected Deck icon",
-      "promptMarkdown": "Implement the Round 2 Deck icon selected in docs/operations/deck-icon-exploration/index.html. Do not use any rejected Round 1 path. Add the selected 24 by 24 path to the canonical Studio icon component, change the Explorer Deck row from \u0060layout\u0060 to the new icon in one place, preserve the existing \u0060studio-explorer-project-hub-*\u0060 and \u0060studio-explorer-project-deck-*\u0060 test IDs, and add focused regression coverage. Do not change the active-section icon used by Deck tabs."
+      "title": "Apply the operator-selected Deck icon",
+      "promptMarkdown": "Implement the Round 2 Deck icon selected in docs/operations/deck-icon-exploration/index.html. Do not use any rejected Round 1 path. Add the selected 24 by 24 path to the canonical Studio icon component, change the Explorer Deck row from `layout` to the new icon in one place, preserve the existing `studio-explorer-project-hub-*` and `studio-explorer-project-deck-*` test IDs, and add focused regression coverage. Do not change the active-section icon used by Deck tabs."
     }
   ],
   "key": "AGT-W5"
