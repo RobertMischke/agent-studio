@@ -37,8 +37,7 @@ export class PostProcessingSummaryComponent implements OnInit, OnDestroy {
     return {
       active,
       waiting,
-      tooltip: `${active} active post-processing task${active === 1 ? '' : 's'}, `
-        + `${waiting} waiting. Gate-queued tasks count as waiting.`,
+      tooltip: `${active} active / ${waiting} waiting. Gate-queued tasks count as waiting.`,
     };
   });
 

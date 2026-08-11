@@ -77,12 +77,8 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly projectScope = input<string | null>(null);
   /** Current runner mode for the auto project, drives the chip's on/off look. */
   readonly autoMode = input<string>('manual');
-  /**
-   * Full runner-status snapshot for the lane's auto project. Drives the
-   * In-Progress lane's three-pill status cluster (RUNNING / mode / Q:N).
-   * Null when the lane is not project-scoped (e.g. board scoped to "All
-   * projects" with mixed projects in the lane).
-   */
+  /** Runner snapshot for the project-scoped In-Progress status cluster;
+   * null for mixed-project views. */
   readonly runnerStatus = input<ProjectRunnerStatus | null>(null);
   /**
    * Live wall-clock tick used so the RUNNING pill's duration string

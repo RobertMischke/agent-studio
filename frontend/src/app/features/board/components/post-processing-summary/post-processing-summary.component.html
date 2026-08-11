@@ -2,6 +2,12 @@
       data-testid="lane-post-processing-summary"
       [attr.data-active-count]="summary().active"
       [attr.data-waiting-count]="summary().waiting"
+      [attr.aria-label]="summary().tooltip"
       [cacTooltip]="summary().tooltip">
-  {{ summary().active }} active / {{ summary().waiting }} waiting
+  <span class="summary__full"
+        data-testid="lane-post-processing-summary-full"
+        aria-hidden="true">{{ summary().active }} active / {{ summary().waiting }} waiting</span>
+  <span class="summary__compact"
+        data-testid="lane-post-processing-summary-compact"
+        aria-hidden="true">{{ summary().active }}/{{ summary().waiting }}</span>
 </span>

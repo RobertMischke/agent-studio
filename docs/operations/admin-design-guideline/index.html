@@ -394,6 +394,26 @@
           <p>A push side panel MUST use its own semantic background level and a neutral hairline or shell elevation at the resizable boundary. This is a shell edge, not a boxed card or a status accent. Its normal header MUST remain one fixed-height row: context type and name take the flexible space, while status, panel access, and Close keep one shared control height. Execution details belong with status, not in the context title. Only the context name and secondary status copy may ellipsize, and their complete values MUST remain accessible. A jump-to-latest control belongs in a reserved transcript-control row immediately above and below the stacking layer of the composer. It MUST never float over message text.</p>
         </div>
       </article>
+      <article class="rule">
+        <div class="rule-id">ADM-12</div>
+        <div>
+          <h4>Name-first single-line headers</h4>
+          <p>Board lane headers and equivalent compact identity rows MUST use one UI font family and one vertically centered line. The name is primary; counts and status are secondary. The name claims flexible width before secondary decoration. At narrow widths, status copy MUST collapse to a compact numeric form such as <code>0/10</code>, with the complete status in an accessible tooltip, before the name may ellipsize. Ellipsis is the final fallback, not the first response to fixed decoration.</p>
+        </div>
+      </article>
+    </div>
+
+    <h3>Header dos and don'ts</h3>
+    <div class="audit-wrap">
+      <table>
+        <thead><tr><th>Do</th><th>Don't</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Keep identity glyph, primary name, secondary count and status, and controls on one centered line. Define one type hierarchy and compact secondary copy before taking width from the name.</td>
+            <td>Mix UI, monospace, and serif faces inside one header, align children by unrelated text baselines, or preserve a sentence-length status while reducing the primary name to a fragment.</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <h3>Decision provenance</h3>
@@ -410,6 +430,7 @@
           <tr><td>ADM-09</td><td>Light and dark change semantic tokens, not structure or behavior.</td><td>Style-guide hard rule R5.</td></tr>
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
           <tr><td>ADM-11</td><td>Push panels use a distinct shell layer, one fixed header row, and collision-free transcript controls.</td><td>AGT-2613 and operator evidence from 11.08.</td></tr>
+          <tr><td>ADM-12</td><td>Compact identity headers use one type hierarchy, one center line, and name-first responsive width allocation.</td><td>AGT-2642, AGT-2644, and operator evidence from 11.08.</td></tr>
         </tbody>
       </table>
     </div>
@@ -629,6 +650,13 @@
             <td><strong>AGT-2549</strong><br>One compact enrichment line above full-width Markdown; details expand below.</td>
             <td class="state"><span class="status owned">Owned</span></td>
           </tr>
+          <tr>
+            <td><strong>Board lane headers</strong></td>
+            <td>Lane name, count, status, and icon controls mix type families and vertical metrics. Fixed decoration keeps its long form while the primary lane name truncates first.</td>
+            <td>Operator capture of the Post Processing lane header, 11.08.</td>
+            <td><strong>AGT-2644</strong><br>One type hierarchy, one centered line, and name-first responsive status.</td>
+            <td class="state"><span class="status owned">Owned</span></td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -651,7 +679,7 @@
 
     <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
       <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
-      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-11 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-12 to the new or changed surface and its immediate family.</p></div>
       <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
       <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
     </div>
@@ -667,6 +695,7 @@
       <li>Rows track stable identity and use the same grid for comparable entries.</li>
       <li>Both themes and relevant widths are covered by Playwright and preserved screenshots.</li>
       <li>Push-panel boundaries, fixed header geometry, ellipsis behavior, and transcript overlays remain collision-free where applicable.</li>
+      <li>Compact identity headers preserve one type hierarchy and center line, and compact secondary copy before truncating the primary name.</li>
       <li>Any intentional exception names the user need, scope, and review evidence. Existing drift is not precedent.</li>
     </ol>
   </section>
@@ -708,7 +737,7 @@
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, and AGT-2644.</footer>
 </main>
 </body>
 </html>

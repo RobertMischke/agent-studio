@@ -13,8 +13,9 @@
   border: 1px solid var(--studio-border);
   background: transparent;
   color: var(--studio-fg-muted);
-  font-family: Georgia, 'Times New Roman', serif;
-  font-style: italic;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: 600;
   font-size: 11px;
   line-height: 1;
   cursor: pointer;

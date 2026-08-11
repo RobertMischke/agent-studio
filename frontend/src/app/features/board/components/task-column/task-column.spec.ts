@@ -386,8 +386,13 @@ describe('TaskColumnComponent (smoke)', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="auto-review-status"]')).toBeNull();
     expect(host.textContent ?? '').not.toContain('Last tick:');
-    expect(host.querySelector('[data-testid="lane-post-processing-summary"]')?.textContent)
+    const summary = host.querySelector('[data-testid="lane-post-processing-summary"]');
+    expect(summary?.querySelector('[data-testid="lane-post-processing-summary-full"]')?.textContent)
       .toContain('0 active / 0 waiting');
+    expect(summary?.querySelector('[data-testid="lane-post-processing-summary-compact"]')?.textContent)
+      .toContain('0/0');
+    expect(summary?.getAttribute('aria-label'))
+      .toBe('0 active / 0 waiting. Gate-queued tasks count as waiting.');
   });
 
   // AGT-2020: Delete moved off the hover trash button into the card context

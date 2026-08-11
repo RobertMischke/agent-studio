@@ -83,6 +83,12 @@ async function installBoardMocks(page: Page): Promise<void> {
     await route.fallback();
   });
 
+  await page.route('**/api/auth/status', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+    }) });
+  });
+
   await page.route('**/api/watch-paths', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify([{ name: FIXTURE_PROJECT, path: FIXTURE_WATCH, rootPath: FIXTURE_WATCH }]) });
@@ -153,6 +159,11 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     // of lane-groups silently shrinking past their content's min-width
     // and visually leaking lanes into each other.
     await page.addInitScript(() => {
+      window.localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+        v: 1,
+        tabs: [{ kind: 'board', projectName: '__all__' }],
+        activeKey: 'board:__all__',
+      }));
       window.localStorage.setItem(
         'collapsedLanes',
         JSON.stringify(['1-preparation', '7-archive'])
@@ -217,7 +228,7 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     // widths; the cheap pairwise check below keeps this seven-lane
     // contract anchored.
     const laneRects = await page.evaluate((laneIds: readonly string[]) => {
-      const rects: Array<{ id: string; left: number; right: number; top: number; bottom: number }> = [];
+      const rects: { id: string; left: number; right: number; top: number; bottom: number }[] = [];
       for (const id of laneIds) {
         const el =
           document.querySelector(`[data-testid="lane-${id}"]`) ??

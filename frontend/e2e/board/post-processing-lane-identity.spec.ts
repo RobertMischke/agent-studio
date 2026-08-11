@@ -418,6 +418,57 @@ test.describe('Post Processing lane identity', () => {
     await expect(summary).toContainText('1 active / 2 waiting');
     await expect(summary).toHaveAttribute('data-active-count', '1');
     await expect(summary).toHaveAttribute('data-waiting-count', '2');
+    await expect(summary).toHaveAttribute(
+      'aria-label',
+      '1 active / 2 waiting. Gate-queued tasks count as waiting.',
+    );
+
+    const title = lane.getByTestId('lane-title-4-auto-review');
+    const fullSummary = lane.getByTestId('lane-post-processing-summary-full');
+    const compactSummary = lane.getByTestId('lane-post-processing-summary-compact');
+    await expect(title).toHaveText('Post Processing');
+    await expect(compactSummary).toBeVisible();
+    await expect(compactSummary).toHaveText('1/2');
+    await expect(fullSummary).toBeHidden();
+
+    const titleWidth = await title.evaluate((element) => ({
+      client: element.clientWidth,
+      scroll: element.scrollWidth,
+    }));
+    expect(titleWidth.scroll).toBeLessThanOrEqual(titleWidth.client + 1);
+
+    const headerMetrics = await page.evaluate(() => {
+      const ids = [
+        'lane-icon-4-auto-review',
+        'lane-title-4-auto-review',
+        'lane-count-4-auto-review',
+        'lane-post-processing-summary',
+        'info-button-lane-4-auto-review',
+        'lane-collapse-4-auto-review',
+      ];
+      return ids.map((id) => {
+        const element = document.querySelector(`[data-testid="${id}"]`) as HTMLElement;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          id,
+          center: rect.top + rect.height / 2,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+        };
+      });
+    });
+    expect(new Set(headerMetrics.map((metric) => metric.fontFamily)).size).toBe(1);
+    expect(headerMetrics.find((metric) => metric.id === 'lane-title-4-auto-review')?.fontSize).toBe('13px');
+    expect(headerMetrics.find((metric) => metric.id === 'lane-count-4-auto-review')?.fontSize).toBe('11px');
+    expect(headerMetrics.find((metric) => metric.id === 'lane-post-processing-summary')?.fontSize).toBe('11px');
+    const centers = headerMetrics.map((metric) => metric.center);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
+
+    await summary.hover();
+    await expect(page.getByTestId('cac-tooltip'))
+      .toContainText('1 active / 2 waiting. Gate-queued tasks count as waiting.');
+    await page.mouse.move(0, 0);
 
     mkdirSync(SHOTS, { recursive: true });
     for (const theme of ['light', 'dark'] as const) {
@@ -426,6 +477,13 @@ test.describe('Post Processing lane identity', () => {
         path: `${SHOTS}/mixed-activity-${theme}--mocked.png`,
       });
     }
+
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await expect(fullSummary).toBeVisible();
+    await expect(fullSummary).toHaveText('1 active / 2 waiting');
+    await expect(compactSummary).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(compactSummary).toBeVisible();
 
     status.currentJob = waiting.id;
     status.activeJobs = [
