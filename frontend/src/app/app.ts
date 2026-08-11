@@ -1796,7 +1796,7 @@ export class App implements OnInit, OnDestroy {
     const taskKey = contextKey.slice(slash + 1);
     const task = this.jobService.jobs().find(item => item.projectName === projectName
       && (item.taskKey === taskKey || item.displayKey === taskKey || item.key === taskKey));
-    if (task) { this.routeInspectorTab.set('chat'); this.studioTabState.open({ kind: 'task', taskKey: task.taskKey }); }
+    if (task) this.studioTabState.open({ kind: 'task', taskKey: task.taskKey });
   }
 
   /**

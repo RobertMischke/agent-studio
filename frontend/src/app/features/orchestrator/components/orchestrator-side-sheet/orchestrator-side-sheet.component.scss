@@ -71,6 +71,36 @@
   outline-offset: 2px;
 }
 
+.sheet__task-context-note {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1) var(--studio-spacing-2);
+  padding: var(--studio-spacing-2) var(--studio-spacing-4);
+  border-bottom: 1px solid var(--studio-border);
+  background: color-mix(in srgb, var(--studio-accent-3) 8%, var(--studio-bg-editor));
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+
+.sheet__task-context-note strong {
+  color: var(--studio-fg-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet__task-context-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--studio-accent-3-strong);
+}
+
+.sheet__task-context-effect {
+  color: var(--studio-fg-dim);
+}
+
 .sheet__workspace {
   flex: 1 1 auto;
   min-width: 0;

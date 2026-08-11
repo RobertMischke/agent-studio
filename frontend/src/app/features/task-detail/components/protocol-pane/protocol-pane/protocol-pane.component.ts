@@ -68,7 +68,6 @@ import { mergeReplayEvents, projectRunnerReplay } from '../runner-event-replay';
 import { RunnerReplayMetadataComponent } from '../runner-replay-metadata/runner-replay-metadata';
 import { projectStructuredActivityContent } from '../structured-activity-projection';
 import { TaskInspectorTabComponent } from '../task-inspector-tab/task-inspector-tab.component';
-import { TaskChatComponent } from '../../task-chat/task-chat.component';
 import { DecisionSurfaceComponent } from '../../decision-surface/decision-surface.component';
 import { TaskArtifactLinksDirective } from '../../task-artifact-links/task-artifact-links.directive';
 
@@ -81,7 +80,7 @@ import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import { TaskReferenceNavigationService } from '../../../../../services/task-reference-navigation.service';
 import { StudioTabStateService } from '../../../../studio-shell/services/studio-tab-state.service';
-export type InspectorTab = 'task' | 'activity' | 'chat' | 'protocol';
+export type InspectorTab = 'task' | 'activity' | 'protocol';
 
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the compact
@@ -132,7 +131,6 @@ interface InterimSummaryState {
     PaneTabsComponent,
     RunnerReplayMetadataComponent,
     TaskInspectorTabComponent,
-    TaskChatComponent,
     DecisionSurfaceComponent,
     ActivityEventPresentationDirective,
     TaskArtifactLinksDirective,
@@ -536,7 +534,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       : 'Message this task. Ctrl+Enter to send.';
   }
 
-  /** Task / Activity / Chat / Result tab strip for the shared pane-tabs component. */
+  /** Task / Activity / Result tab strip for the shared pane-tabs component. */
   readonly protocolTabs = computed(() =>
     buildInspectorTabs({
       summaryStatus: this.summaryStatus(),
@@ -551,7 +549,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /** Bridge from the generic pane-tabs change event to the parent. */
   onInspectorTabChange(id: string): void {
-    if (id === 'task' || id === 'activity' || id === 'chat' || id === 'protocol') {
+    if (id === 'task' || id === 'activity' || id === 'protocol') {
       this.activeInspectorTab.set(id);
     }
   }
