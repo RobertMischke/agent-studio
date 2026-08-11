@@ -9,8 +9,10 @@
   display: flex;
   align-items: stretch;
   gap: 6px;
+  min-width: 0;
   min-height: 32px;
   padding: 0 6px 0 0;
+  overflow: hidden;
   background: transparent;
   border-bottom: 1px solid var(--studio-border);
   font-size: 12px;
@@ -67,11 +69,28 @@
   letter-spacing: 0;
 }
 
-.pane-header__spacer { flex: 1 1 auto; }
+.pane-header__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A projected tab strip already is the header's flexible content. Let it own
+ * the complete space before the fixed actions; the generic title-header
+ * spacer must not compete for that width. The sibling selector keeps this
+ * coordination in shared chrome instead of duplicating it in prompt/protocol
+ * callers. */
+.pane-header > app-pane-tabs.pane-tabs-host--header {
+  flex: 1 1 auto;
+}
+
+.pane-header > app-pane-tabs.pane-tabs-host--header ~ .pane-header__spacer {
+  flex: 0 0 0;
+}
 
 .pane-header__btn {
   @include m.icon-button(24px);
   align-self: center;
+  flex: 0 0 auto;
 
   // Blockify the inline expand/close SVG so its baseline descender gap
   // doesn't lift the glyph off the header's mid-axis — this keeps the two
