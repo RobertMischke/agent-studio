@@ -27,6 +27,34 @@
           (manualRefresh)="refreshManually()"
         />
       }
+      @if (pages().length > 0) {
+        <nav
+          class="workbench-viewer__pages"
+          aria-label="Dossier pages"
+          data-testid="workbench-viewer-pages"
+        >
+          <button
+            type="button"
+            [class.workbench-viewer__page--active]="selectedPagePath() === null"
+            [attr.aria-current]="selectedPagePath() === null ? 'page' : null"
+            data-testid="workbench-viewer-page-overview"
+            (click)="selectPage(null)"
+          >
+            Overview
+          </button>
+          @for (page of pages(); track page.path) {
+            <button
+              type="button"
+              [class.workbench-viewer__page--active]="selectedPagePath() === page.path"
+              [attr.aria-current]="selectedPagePath() === page.path ? 'page' : null"
+              [attr.data-testid]="pageTestId(page.path)"
+              (click)="selectPage(page.path)"
+            >
+              {{ page.title }}
+            </button>
+          }
+        </nav>
+      }
       @if (documentationReady()) {
         <div
           class="workbench-viewer__documentation-ready"
@@ -69,7 +97,7 @@
         class="workbench-viewer__frame"
         #workbenchFrame
         data-testid="workbench-viewer-frame"
-        title="Dossier artifact: {{ doc.workbench.title }}"
+        title="Dossier artifact: {{ doc.contentTitle || doc.workbench.title }}"
         sandbox="allow-scripts"
         referrerpolicy="no-referrer"
         (load)="onFrameLoaded()"

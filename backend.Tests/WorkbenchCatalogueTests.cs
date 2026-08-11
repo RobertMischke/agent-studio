@@ -65,6 +65,7 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     public void Overview_UsesOneProjectionForWorkspaceAndProjectScopes()
     {
         WriteWorkbench("current", "Current", "active", "2026-07-12T10:00:00Z");
+        WriteWorkbench("standard", "Standard", "living-standard", "2026-07-12T09:00:00Z");
         WriteWorkbench("tracking", "Tracking", "decided", "2026-07-11T12:00:00Z");
         WriteWorkbench("discarded", "Discarded", "archived", "2026-07-11T10:00:00Z");
         WriteWorkbench("documented", "Documented", "documented", "2026-07-11T09:00:00Z");
@@ -73,8 +74,8 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         var overview = service.ListOverview(["Project"], "Project");
 
         Assert.Equal("Project", overview.ProjectName);
-        Assert.Equal(4, overview.Count);
-        Assert.Equal(2, overview.CurrentCount);
+        Assert.Equal(5, overview.Count);
+        Assert.Equal(3, overview.CurrentCount);
         Assert.Equal(2, overview.HistoryCount);
         Assert.All(overview.Items, item => Assert.Equal("Project", item.ProjectName));
     }
@@ -131,6 +132,111 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.Equal("concept", items.Single(item => item.Id == "reasoning").Pattern);
         Assert.Equal("concept", items.Single(item => item.Id == "legacy").Pattern);
         Assert.Equal("concept", items.Single(item => item.Id == "future").Pattern);
+    }
+
+    [Fact]
+    public void ListAndRead_ProjectOnlyRegisteredContainedDossierPages()
+    {
+        WriteWorkbench("multi-page", "Multi-page", "living-standard", "2026-08-11T16:00:00Z", "ui");
+        var directory = Path.Combine(_root, "docs", "workbenches", "multi-page");
+        Directory.CreateDirectory(Path.Combine(directory, "pages"));
+        File.WriteAllText(
+            Path.Combine(directory, "pages", "dos-and-donts.html"),
+            "<h1>Dos and don'ts</h1>");
+        File.WriteAllText(
+            Path.Combine(directory, "pages", "applied-surfaces.html"),
+            "<h1>Applied surfaces</h1>");
+        File.WriteAllText(
+            Path.Combine(directory, "pages", "unregistered.html"),
+            "<h1>Not registered</h1>");
+        var descriptorPath = Path.Combine(directory, "workbench.json");
+        var descriptor = JsonNode.Parse(File.ReadAllText(descriptorPath))!.AsObject();
+        descriptor["pages"] = new JsonArray(
+            new JsonObject
+            {
+                ["title"] = "Dos and don'ts",
+                ["path"] = "pages/dos-and-donts.html",
+            },
+            new JsonObject
+            {
+                ["title"] = "Applied surfaces",
+                ["path"] = "pages/applied-surfaces.html",
+            });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+
+        var service = Service();
+        var item = Assert.Single(service.List("Project")!.Items);
+        var page = service.Read("Project", "multi-page", "pages/dos-and-donts.html");
+
+        Assert.True(item.Valid, item.Error);
+        Assert.Equal("living-standard", item.Status);
+        Assert.Collection(
+            item.Pages,
+            first => Assert.Equal(
+                new WorkbenchPage("Dos and don'ts", "pages/dos-and-donts.html"), first),
+            second => Assert.Equal(
+                new WorkbenchPage("Applied surfaces", "pages/applied-surfaces.html"), second));
+        Assert.NotNull(page);
+        Assert.Equal("<h1>Dos and don'ts</h1>", page.Html);
+        Assert.Equal("<h1>Multi-page</h1>", page.EntryHtml);
+        Assert.Equal("docs/workbenches/multi-page/pages/dos-and-donts.html", page.ContentPath);
+        Assert.Equal("Dos and don'ts", page.ContentTitle);
+        Assert.Null(service.Read("Project", "multi-page", "pages/unregistered.html"));
+        Assert.Null(service.Read("Project", "multi-page", "../index.html"));
+    }
+
+    [Fact]
+    public void List_RejectsMissingEscapingOrDuplicateRegisteredPages()
+    {
+        WriteWorkbench("bad-pages", "Bad pages", "active", "2026-08-11T16:00:00Z");
+        var descriptorPath = Path.Combine(
+            _root, "docs", "workbenches", "bad-pages", "workbench.json");
+        var descriptor = JsonNode.Parse(File.ReadAllText(descriptorPath))!.AsObject();
+        descriptor["pages"] = new JsonArray(
+            new JsonObject
+            {
+                ["title"] = "Escape",
+                ["path"] = "../outside.html",
+            });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+
+        var item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+
+        Assert.False(item.Valid);
+        Assert.Contains("below pages/", item.Error);
+
+        descriptor["pages"] = new JsonArray(
+            new JsonObject
+            {
+                ["title"] = "Normalized escape",
+                ["path"] = "pages/../index.html",
+            });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+        item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+        Assert.False(item.Valid);
+        Assert.Contains("below pages/", item.Error);
+
+        descriptor["pages"] = new JsonArray(
+            new JsonObject
+            {
+                ["title"] = "Missing",
+                ["path"] = "pages/missing.html",
+            });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+        item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+        Assert.False(item.Valid);
+        Assert.Contains("missing", item.Error);
+
+        var pagePath = Path.Combine(Path.GetDirectoryName(descriptorPath)!, "pages", "duplicate.html");
+        Directory.CreateDirectory(Path.GetDirectoryName(pagePath)!);
+        File.WriteAllText(pagePath, "<h1>Duplicate</h1>");
+        descriptor["pages"] = new JsonArray(
+            new JsonObject { ["title"] = "First", ["path"] = "pages/duplicate.html" },
+            new JsonObject { ["title"] = "Second", ["path"] = "pages/duplicate.html" });
+        File.WriteAllText(descriptorPath, descriptor.ToJsonString());
+        item = Assert.Single(Service().List("Project", includeHistory: true)!.Items);
+        Assert.False(item.Valid);
+        Assert.Contains("unique", item.Error);
     }
 
     [Fact]
