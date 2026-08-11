@@ -19,7 +19,7 @@ test('adds current diff and known Git sources, sends typed references, and inspe
   await page.goto('/');
   await expect(page.getByTestId('studio-diff-view')).toBeVisible();
   await expect(page.getByTestId('studio-diff-render-shell')).toBeVisible();
-  await page.getByTestId('orch-side-sheet-toggle').click();
+  await ensureOrchestratorOpen(page);
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
 
   await page.getByTestId('orch-add-context').click();
@@ -76,7 +76,7 @@ test('adds current diff and known Git sources, sends typed references, and inspe
 
   await page.evaluate(() => localStorage.setItem('atp.studio.theme', 'light'));
   await page.reload();
-  await page.getByTestId('orch-side-sheet-toggle').click();
+  await ensureOrchestratorOpen(page);
   const reloadedReceipt = page.getByTestId('orch-answer-context-receipt');
   await expect(reloadedReceipt).toBeVisible();
   await page.getByTestId('orch-context-inspect-toggle').click();
@@ -86,6 +86,13 @@ test('adds current diff and known Git sources, sends typed references, and inspe
     fullPage: false,
   });
 });
+
+async function ensureOrchestratorOpen(page: Page): Promise<void> {
+  const toggle = page.getByTestId('orch-side-sheet-toggle');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+}
 
 async function seedDiffTab(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await page.addInitScript(({ project, sha, theme }) => {
