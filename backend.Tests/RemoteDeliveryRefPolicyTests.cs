@@ -337,36 +337,36 @@ public sealed class RemoteDeliveryRefPolicyTests
         try
         {
             Directory.CreateDirectory(root);
-            RunGit(root, $"init -q --bare \"{remote}\"");
-            RunGit(root, $"clone -q \"{remote}\" \"{repo}\"");
-            RunGit(repo, "config user.email test@example.com");
-            RunGit(repo, "config user.name Test");
-            RunGit(repo, "checkout -q -b main");
+            RunGit(root, "init", "-q", "--bare", "--initial-branch=main", remote);
+            RunGit(root, "clone", "-q", remote, repo);
+            RunGit(repo, "config", "user.email", "test@example.com");
+            RunGit(repo, "config", "user.name", "Test");
+            RunGit(repo, "checkout", "-q", "-b", "main");
             File.WriteAllText(Path.Combine(repo, "base.txt"), "base");
-            RunGit(repo, "add -A");
-            RunGit(repo, "commit -q -m \"chore: base\"");
-            var baseSha = RunGit(repo, "rev-parse HEAD");
-            RunGit(repo, "push -q origin main");
+            RunGit(repo, "add", "-A");
+            RunGit(repo, "commit", "-q", "-m", "chore: base");
+            var baseSha = RunGit(repo, "rev-parse", "HEAD");
+            RunGit(repo, "push", "-q", "origin", "main");
 
             // The canonical branch as origin holds it: a foreign tip the salvage
             // collided with and refused to overwrite.
-            RunGit(repo, $"checkout -q -b {CanonicalBranch} {baseSha}");
+            RunGit(repo, "checkout", "-q", "-b", CanonicalBranch, baseSha);
             File.WriteAllText(Path.Combine(repo, "foreign.txt"), "foreign");
-            RunGit(repo, "add -A");
-            RunGit(repo, "commit -q -m \"feat: foreign tip that won the canonical ref\"");
-            var canonicalSha = RunGit(repo, "rev-parse HEAD");
-            RunGit(repo, $"push -q origin {CanonicalBranch}");
+            RunGit(repo, "add", "-A");
+            RunGit(repo, "commit", "-q", "-m", "feat: foreign tip that won the canonical ref");
+            var canonicalSha = RunGit(repo, "rev-parse", "HEAD");
+            RunGit(repo, "push", "-q", "origin", CanonicalBranch);
 
             // This run's own result, parked on the collision branch the
             // reconciliation names: <card-branch>-collision-<local>-<remote>.
-            RunGit(repo, $"checkout -q -b salvage-work {baseSha}");
+            RunGit(repo, "checkout", "-q", "-b", "salvage-work", baseSha);
             File.WriteAllText(Path.Combine(repo, "result.txt"), "result");
-            RunGit(repo, "add -A");
-            RunGit(repo, "commit -q -m \"feat(AGT-2220): the delivered result\"");
-            var resultSha = RunGit(repo, "rev-parse HEAD");
+            RunGit(repo, "add", "-A");
+            RunGit(repo, "commit", "-q", "-m", "feat(AGT-2220): the delivered result");
+            var resultSha = RunGit(repo, "rev-parse", "HEAD");
             var recoveryBranch = $"{CanonicalBranch}-collision-{resultSha}-{canonicalSha}";
-            RunGit(repo, $"push -q origin HEAD:refs/heads/{recoveryBranch}");
-            RunGit(repo, "checkout -q main");
+            RunGit(repo, "push", "-q", "origin", $"HEAD:refs/heads/{recoveryBranch}");
+            RunGit(repo, "checkout", "-q", "main");
 
             assert(
                 NewGitService(repo),
@@ -422,21 +422,22 @@ public sealed class RemoteDeliveryRefPolicyTests
         }
     }
 
-    private static string RunGit(string cwd, string arguments)
+    private static string RunGit(string cwd, params string[] arguments)
     {
-        using var process = Process.Start(new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = "git",
-            Arguments = arguments,
             WorkingDirectory = cwd,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-        })!;
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)!;
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {arguments} failed: {error}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} failed: {error}");
         return output.Trim();
     }
 }

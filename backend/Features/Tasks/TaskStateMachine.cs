@@ -101,7 +101,14 @@ public class TaskStateMachine
         if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
 
-        var info = _scanner.FindJob(jobId, watchPath);
+        // When the caller supplied the project path, take its lane lock before
+        // the first scan. An uncached scan enumerates every lane separately;
+        // without this early lock it can miss a different task that another
+        // writer moves between those enumerations.
+        using var requestedPathLock = string.IsNullOrWhiteSpace(watchPath)
+            ? null
+            : _laneMutex.Acquire(watchPath);
+        var info = FindJobForLaneMutation(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
         if (!string.IsNullOrWhiteSpace(expectedSourceState)
             && !string.Equals(info.State, expectedSourceState, StringComparison.OrdinalIgnoreCase))
@@ -112,14 +119,16 @@ public class TaskStateMachine
         }
         if (info.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: info.FolderPath);
 
-        // F21: serialise all lane writers on this project's watch path so a
-        // concurrent CrashRecovery/StaleProgressArchiver/runner sweep cannot
-        // race the same source slug. Re-check existence inside the mutex
-        // because another writer may have moved the source out from under us
-        // while we waited.
-        using var _ = _laneMutex.Acquire(info.WatchPath);
+        // A path-less internal caller still needs the original resolve-then-lock
+        // flow. Re-check existence inside the mutex because another writer may
+        // have moved the source while that caller resolved its project.
+        using var resolvedPathLock = requestedPathLock is null
+            ? _laneMutex.Acquire(info.WatchPath)
+            : null;
 
-        var recheck = _scanner.FindJob(jobId, watchPath);
+        var recheck = requestedPathLock is null
+            ? FindJobForLaneMutation(jobId, watchPath)
+            : info;
         if (recheck == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
         if (!string.IsNullOrWhiteSpace(expectedSourceState)
             && !string.Equals(recheck.State, expectedSourceState, StringComparison.OrdinalIgnoreCase))
@@ -272,6 +281,29 @@ public class TaskStateMachine
             _logger.LogError(ex, "Failed to move job {JobId} to {State}", jobId, targetState);
             return new MoveJobOutcome(MoveJobStatus.Failure, ex.Message);
         }
+    }
+
+    private TaskInfo? FindJobForLaneMutation(string jobId, string? watchPath)
+    {
+        if (!string.IsNullOrWhiteSpace(watchPath)
+            && string.Equals(Path.GetFileName(jobId), jobId, StringComparison.Ordinal)
+            && jobId.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+        {
+            var entry = _scanner.GetWatchPaths()
+                .FirstOrDefault(candidate => WatchPathComparison.PathsEqual(candidate.Path, watchPath));
+            if (entry is not null)
+            {
+                foreach (var state in TaskStates.All)
+                {
+                    var folder = Path.Combine(entry.Path, state, jobId);
+                    if (!File.Exists(Path.Combine(folder, "task.json"))) continue;
+                    var direct = _scanner.ScanJobFolder(folder, entry, state);
+                    if (direct is not null) return direct;
+                }
+            }
+        }
+
+        return _scanner.FindJob(jobId, watchPath);
     }
 
     /// <summary>

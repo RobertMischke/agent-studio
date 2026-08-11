@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using Xunit;
@@ -9,19 +10,28 @@ public sealed class RunTimelineEventFactoryTests
     [Fact]
     public void AgentRunFinished_LeavesCompletionFactsToTheTitleProjection()
     {
-        var timelineEvent = RunTimelineEventFactory.AgentRunFinished(new CliExecution
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
         {
-            Status = "completed",
-            DurationSeconds = 247.6,
-            Model = "gpt-5.6-sol",
-        }, "run-1");
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+            var timelineEvent = RunTimelineEventFactory.AgentRunFinished(new CliExecution
+            {
+                Status = "completed",
+                DurationSeconds = 247.6,
+                Model = "gpt-5.6-sol",
+            }, "run-1");
 
-        Assert.Equal(TimelineEventKinds.AgentRunFinished, timelineEvent.Kind);
-        Assert.Equal("Run completed after 247.6s", timelineEvent.Summary);
-        Assert.Equal("completed", timelineEvent.Details["status"]);
-        Assert.Equal("247.6", timelineEvent.Details["durationSeconds"]);
-        Assert.DoesNotContain("cli", timelineEvent.Details.Keys);
-        Assert.DoesNotContain("codex", timelineEvent.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(TimelineEventKinds.AgentRunFinished, timelineEvent.Kind);
+            Assert.Equal("Run completed after 247.6s", timelineEvent.Summary);
+            Assert.Equal("completed", timelineEvent.Details["status"]);
+            Assert.Equal("247.6", timelineEvent.Details["durationSeconds"]);
+            Assert.DoesNotContain("cli", timelineEvent.Details.Keys);
+            Assert.DoesNotContain("codex", timelineEvent.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     [Fact]

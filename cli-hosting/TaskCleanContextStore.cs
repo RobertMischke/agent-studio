@@ -150,17 +150,89 @@ public static class TaskCleanContextStore
         string? xdgStateHome)
     {
         if (!string.IsNullOrWhiteSpace(rootOverride))
-            return Path.GetFullPath(rootOverride.Trim());
+            return GetFullPath(platform, rootOverride.Trim());
         if (string.IsNullOrWhiteSpace(userHome))
             throw new ArgumentException("A user home is required to resolve the clean-context root.", nameof(userHome));
 
         if (platform == CleanContextHostPlatform.Windows)
-            return Path.GetFullPath(Path.Combine(userHome, ".atp", "clean-context"));
+            return GetFullPath(platform, Combine(platform, userHome, ".atp", "clean-context"));
 
         var stateHome = string.IsNullOrWhiteSpace(xdgStateHome)
-            ? Path.Combine(userHome, ".local", "state")
+            ? Combine(platform, userHome, ".local", "state")
             : xdgStateHome.Trim();
-        return Path.GetFullPath(Path.Combine(stateHome, "agent-studio", "clean-context"));
+        return GetFullPath(platform, Combine(platform, stateHome, "agent-studio", "clean-context"));
+    }
+
+    private static string Combine(CleanContextHostPlatform platform, params string[] parts)
+    {
+        var separator = platform == CleanContextHostPlatform.Windows ? '\\' : '/';
+        return string.Join(separator, parts.Select((part, index) => index == 0
+            ? TrimTrailingSeparatorsPreservingRoot(part, separator)
+            : part.Trim('\\', '/')));
+    }
+
+    private static string TrimTrailingSeparatorsPreservingRoot(string part, char separator)
+    {
+        var trimmed = part.TrimEnd('\\', '/');
+        return trimmed.Length == 0 && part.Length > 0 ? separator.ToString() : trimmed;
+    }
+
+    private static string GetFullPath(CleanContextHostPlatform platform, string path)
+    {
+        var hostMatches = platform == CleanContextHostPlatform.Windows
+            ? OperatingSystem.IsWindows()
+            : !OperatingSystem.IsWindows();
+        if (hostMatches) return Path.GetFullPath(path);
+
+        return platform == CleanContextHostPlatform.Windows
+            ? NormalizeWindowsAbsolutePath(path)
+            : NormalizeUnixAbsolutePath(path);
+    }
+
+    private static string NormalizeWindowsAbsolutePath(string path)
+    {
+        var candidate = path.Replace('/', '\\');
+        if (candidate.StartsWith("\\\\", StringComparison.Ordinal))
+        {
+            var parts = candidate.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+                throw new ArgumentException("A Windows UNC path must include a server and share.", nameof(path));
+            return CollapsePath($"\\\\{parts[0]}\\{parts[1]}\\", parts.Skip(2), '\\');
+        }
+
+        if (candidate.Length < 3
+            || !char.IsAsciiLetter(candidate[0])
+            || candidate[1] != ':'
+            || candidate[2] != '\\')
+        {
+            throw new ArgumentException("A Windows path must be absolute.", nameof(path));
+        }
+
+        return CollapsePath(candidate[..3], candidate[3..].Split('\\'), '\\');
+    }
+
+    private static string NormalizeUnixAbsolutePath(string path)
+    {
+        if (!path.StartsWith("/", StringComparison.Ordinal))
+            throw new ArgumentException("A Unix path must be absolute.", nameof(path));
+        return CollapsePath("/", path[1..].Split('/'), '/');
+    }
+
+    private static string CollapsePath(string root, IEnumerable<string> rawParts, char separator)
+    {
+        var parts = new List<string>();
+        foreach (var part in rawParts)
+        {
+            if (string.IsNullOrEmpty(part) || part == ".") continue;
+            if (part == "..")
+            {
+                if (parts.Count > 0) parts.RemoveAt(parts.Count - 1);
+                continue;
+            }
+            parts.Add(part);
+        }
+
+        return root + string.Join(separator, parts);
     }
 
     /// <summary>Return the deterministic, non-identifying home path for a task.</summary>

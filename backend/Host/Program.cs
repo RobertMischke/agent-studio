@@ -95,6 +95,14 @@ builder.Services.Configure<BackendFileLoggerOptions>(
     builder.Configuration.GetSection(BackendFileLoggerOptions.SectionName));
 var fileLoggerOptions = new BackendFileLoggerOptions();
 builder.Configuration.GetSection(BackendFileLoggerOptions.SectionName).Bind(fileLoggerOptions);
+if (underTestHost
+    && string.IsNullOrWhiteSpace(builder.Configuration[$"{BackendFileLoggerOptions.SectionName}:LogDirectory"]))
+{
+    fileLoggerOptions.LogDirectory = Path.Combine(
+        Path.GetTempPath(),
+        "agent-studio-test-host-logs",
+        $"{Environment.ProcessId}-{Guid.NewGuid():N}");
+}
 var fileLogSink = new BackendFileLogSink(fileLoggerOptions);
 var crashRecorder = new CrashRecorder(fileLoggerOptions, fileLogSink);
 builder.Services.AddSingleton(fileLogSink);
