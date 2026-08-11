@@ -1,4 +1,4 @@
-#! {"scenario":"P22","title":"Codex analogue: no rate_limit_event frame, the limit surfaces as turn.failed","cli":"codex","form":"stream-json","exitCode":1}
+#! {"schemaVersion":1,"scenario":"P22","title":"Codex analogue: no rate_limit_event frame, the limit surfaces as turn.failed","cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":1,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # Codex has no informational rate-limit frame. Its quota signal arrives as a
 # terminal turn.failed, which today's adapter classifies as QuotaExceeded ->
 # WaitForCapabilityRecovery. Recorded so the CAR path cannot quietly turn the

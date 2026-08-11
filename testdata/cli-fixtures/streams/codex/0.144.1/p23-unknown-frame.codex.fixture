@@ -1,0 +1,7 @@
+#! {"schemaVersion":1,"scenario":"P23","title":"unknown item frame remains visible while turn completion stays authoritative","cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"synthetic-drift-probe","capturedAt":"2026-08-11","scrubbed":true}
+# Synthetic drift probe appended to the scrubbed real-version corpus.
+{"type":"thread.started","thread_id":"019e4a4a-b509-7d10-b884-914ec0c8fa1d"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_future","type":"future_widget","syntheticSecret":"must-not-leave-worker"}}
+{"type":"item.completed","item":{"id":"item_message","type":"agent_message","text":"The drift probe completed.\n\n[[TASK_DONE]]"}}
+{"type":"turn.completed","usage":{"input_tokens":20,"output_tokens":10}}

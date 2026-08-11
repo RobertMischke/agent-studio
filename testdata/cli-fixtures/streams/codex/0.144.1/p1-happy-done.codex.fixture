@@ -1,5 +1,5 @@
-#! {"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"codex","form":"stream-json","exitCode":0}
-# Recorded shape: codex exec --experimental-json (codex-cli 0.1.44 frame names).
+#! {"schemaVersion":1,"scenario":"P1","title":"happy path, terminal [[TASK_DONE]]","cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
+# Recorded shape: codex exec --experimental-json (codex-cli 0.144.1 frame names).
 {"type":"thread.started","thread_id":"019dee65-7a9b-7843-bfd9-06e555fff02b"}
 {"type":"turn.started"}
 {"type":"item.started","item":{"id":"item_0","type":"command_call","command":"dotnet test runner.Tests"}}

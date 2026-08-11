@@ -1,4 +1,4 @@
-#! {"scenario":"P5","title":"substantial reply, no terminal sentinel","cli":"claude","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P5","title":"substantial reply, no terminal sentinel","cli":"claude","cliVersion":"2.1.202","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # The migration's sharpest edge (plan section 8): the legacy remote path scans
 # plaintext and lands on ProtocolInconclusive, while the stream-json form gives
 # the outcome adapter a provider completion plus a final reply and lands on

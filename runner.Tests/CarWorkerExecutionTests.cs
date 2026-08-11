@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentRunner;
+using AgentStudio.TestSupport;
 using AgentStudio.TaskServer.Contracts;
 using CodingAgentRunner.Abstractions;
 using Xunit;
@@ -33,10 +34,8 @@ public sealed class CarWorkerExecutionTests : IDisposable
     public static TheoryData<string> AllStreamFixtures()
     {
         var data = new TheoryData<string>();
-        foreach (var file in Directory
-                     .EnumerateFiles(FixtureDirectory(), "*.fixture", SearchOption.TopDirectoryOnly)
-                     .OrderBy(f => f, StringComparer.Ordinal))
-            data.Add(Path.GetFileName(file));
+        foreach (var file in CliCaptureFixtureLocator.AllRelativePaths(RepoRoot()))
+            data.Add(file);
         return data;
     }
 
@@ -63,6 +62,17 @@ public sealed class CarWorkerExecutionTests : IDisposable
         Assert.Equal(
             Classify(fixture.StdOut, fixture.StdErr, fixture.ExitCode).Outcome,
             Classify(run.Result.StdOut, run.Result.StdErr, run.Result.ExitCode).Outcome);
+
+        var novelty = run.Shipped
+            .Where(line => line.Stream == "system"
+                           && line.Text.StartsWith(
+                               ProtocolNoveltyTelemetry.MarkerPrefix,
+                               StringComparison.Ordinal))
+            .ToList();
+        if (string.Equals(fixture.Scenario, "P23", StringComparison.Ordinal))
+            Assert.Single(novelty);
+        else
+            Assert.Empty(novelty);
     }
 
     [Fact]
@@ -299,6 +309,34 @@ public sealed class CarWorkerExecutionTests : IDisposable
         Assert.Contains(lines, line => line.Contains("\"type\":\"TurnCompleted\""));
     }
 
+    [Theory]
+    [InlineData("claude/2.1.202/p23-unknown-frame.claude.fixture", "future.protocol.frame")]
+    [InlineData("codex/0.144.1/p23-unknown-frame.codex.fixture", "item.completed/future_widget")]
+    public async Task Unknown_frames_emit_scrubbed_typed_drift_telemetry_without_changing_the_outcome(
+        string fixtureName,
+        string expectedFrameType)
+    {
+        if (NodeMissing()) return;
+        var run = await RunFixtureAsync(Fixture.Load(fixtureName));
+
+        var markerLine = Assert.Single(run.Shipped, line =>
+            line.Stream == "system"
+            && line.Text.StartsWith(ProtocolNoveltyTelemetry.MarkerPrefix, StringComparison.Ordinal));
+        Assert.True(ProtocolNoveltyTelemetry.TryParseMarker(markerLine.Text, out var telemetry));
+        Assert.Equal(expectedFrameType, telemetry.FrameType);
+        Assert.Equal(1, telemetry.Occurrence);
+        Assert.Equal(1, telemetry.TotalUnknownFrames);
+        Assert.DoesNotContain("must-not-leave-worker", markerLine.Text, StringComparison.Ordinal);
+        Assert.Equal(
+            ExecutionOutcomeKind.SuccessfulCompletion,
+            Classify(run.Result.StdOut, run.Result.StdErr, run.Result.ExitCode).Outcome);
+
+        Assert.Equal(
+            LifecycleEventKinds.ProtocolUnknownFrame,
+            TaskServerClient.ClassifyV1Event(
+                new CliOutputLine(DateTime.UtcNow, markerLine.Stream, markerLine.Text)));
+    }
+
     [Fact]
     public void Legacy_engine_shadow_trace_maps_stream_json_lines_through_the_car_adapters()
     {
@@ -527,11 +565,17 @@ public sealed class CarWorkerExecutionTests : IDisposable
     }
 
     private sealed record Fixture(
-        string Path, string Cli, string Form, int ExitCode, string StdOut, string StdErr)
+        string Path,
+        string Scenario,
+        string Cli,
+        string Form,
+        int ExitCode,
+        string StdOut,
+        string StdErr)
     {
         public static Fixture Load(string name)
         {
-            var path = System.IO.Path.Combine(FixtureDirectory(), name);
+            var path = CliCaptureFixtureLocator.Resolve(RepoRoot(), name);
             Assert.True(File.Exists(path), $"fixture not found: {path}");
 
             JsonElement meta = default;
@@ -556,6 +600,7 @@ public sealed class CarWorkerExecutionTests : IDisposable
 
             return new Fixture(
                 path,
+                meta.GetProperty("scenario").GetString()!,
                 meta.GetProperty("cli").GetString()!,
                 meta.GetProperty("form").GetString()!,
                 meta.TryGetProperty("exitCode", out var exit) ? exit.GetInt32() : 0,
@@ -566,9 +611,6 @@ public sealed class CarWorkerExecutionTests : IDisposable
 
     private static string FakeCliPath()
         => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "fake-cli.mjs");
-
-    private static string FixtureDirectory()
-        => Path.Combine(RepoRoot(), "testdata", "cli-fixtures", "streams");
 
     private static string RepoRoot([CallerFilePath] string sourceFile = "")
     {

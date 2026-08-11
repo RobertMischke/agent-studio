@@ -133,6 +133,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(lease.Lease!.FencingToken > 0);
         var leaseId = lease.Lease.LeaseId;
         var token = lease.Lease.FencingToken;
+        var noveltyMarker = new Contract.ProtocolNoveltyTelemetry(
+            "codex",
+            "0.7.0",
+            "future.frame",
+            1,
+            1,
+            new string('a', 64)).ToMarker();
 
         // 2. Heartbeat renews the lease with the fencing token.
         var renew = await client.RenewLeaseAsync(new RHeartbeat(
@@ -145,6 +152,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         [
             new RCliLine(DateTime.UtcNow, "stdout", "remote runner: starting task"),
             new RCliLine(DateTime.UtcNow, "stdout", "● Read docs/concepts/remote-runner.md"),
+            new RCliLine(DateTime.UtcNow, "system", noveltyMarker),
             new RCliLine(DateTime.UtcNow, "stdout", "remote runner: [[TASK_DONE]]"),
         ],
             RunnerId: lease.Lease.RunnerId,
@@ -155,7 +163,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "e2e-logs-1"), ct);
         Assert.NotNull(logResp);
-        Assert.Equal(3, logResp!.Appended);
+        Assert.Equal(4, logResp!.Appended);
 
         // 4. Upload evidence — decoded under the task's results/ folder.
         var content = Convert.ToBase64String(Encoding.UTF8.GetBytes("evidence bytes"));
@@ -197,6 +205,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var cliLog = File.ReadAllText(Path.Combine(moved, "logs", "cli-output.log"));
         Assert.Contains("remote runner: starting task", cliLog);
         Assert.Contains("[[TASK_DONE]]", cliLog);
+        var protocolDiagnostic = Assert.Single(
+            RunnerEventSource.ReadRecords(new TaskInfo { Id = TaskKey, FolderPath = moved }),
+            recorded => recorded.Code == "cli-frame-unknown");
+        Assert.Equal("diagnostic", protocolDiagnostic.Kind);
+        Assert.Equal("codex", protocolDiagnostic.Cli);
+        Assert.Equal("warning", protocolDiagnostic.Severity);
+        Assert.Contains("future.frame", protocolDiagnostic.Message, StringComparison.Ordinal);
 
         using var agentReadState = JsonDocument.Parse(File.ReadAllText(WikiAgentReadStore.StatePathFor(
             Path.Combine(_watchPath, "docs"), "concepts/remote-runner.md")));

@@ -1,4 +1,4 @@
-#! {"scenario":"P3","title":"[[TASK_BLOCKED]] without a stated reason","cli":"claude","form":"stream-json","exitCode":0}
+#! {"schemaVersion":1,"scenario":"P3","title":"[[TASK_BLOCKED]] without a stated reason","cli":"claude","cliVersion":"2.1.202","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-07-28","scrubbed":true}
 # The agent signs off blocked but omits the ":reason" segment. The scanner must
 # synthesise the default reason text instead of reporting a null reason.
 {"type":"system","subtype":"init","session_id":"c7e2b511-0aa9-4a63-8f26-19d4e77a0b3f","model":"claude-sonnet-4-5","cwd":"/srv/agent-host/worktrees/AGT-2372","permissionMode":"bypassPermissions","apiKeySource":"none","output_style":"default","mcp_servers":[],"tools":["Read","Bash"],"slash_commands":[]}

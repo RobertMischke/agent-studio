@@ -70,6 +70,7 @@ internal static class CarWorkerExecution
 
         using var trace = CarEventTrace.Open(workerDirectory);
         using var logger = new CarWorkerLogger(Path.Combine(workerDirectory, "car.log"), append);
+        var protocolNovelty = new CliProtocolNoveltyTracker(cliType);
         var options = BuildCliOptions(spec, cliType);
         if (optionsCustomizer is not null) options = optionsCustomizer(options);
         var runner = new CliRunner(options, logger, new WorkerRunLogPathProvider(workerDirectory));
@@ -110,6 +111,9 @@ internal static class CarWorkerExecution
             if (line.Stream == "stdout") stdout.Append(line.Text);
             else if (line.Stream == "stderr") stderr.Append(line.Text);
             append(line.Stream, line.Text);
+            if (line.Stream == "stdout"
+                && protocolNovelty.TryObserveFrame(line.Text, out var novelty))
+                append("system", novelty.ToMarker());
         }
 
         void OnRunEvent(string id, CliRunEvent evt)
@@ -334,21 +338,36 @@ internal sealed class CarEventTrace : IDisposable
     }
 
     /// <summary>Legacy-engine shadow mode: map one raw output line through the CAR adapters.</summary>
-    public void WriteFromRawLine(string? cliType, string runId, string stream, string text)
+    public void WriteFromRawLine(
+        string? cliType,
+        string runId,
+        string stream,
+        string text,
+        Action<string>? onUnclassifiedFrame = null)
     {
+        IEnumerable<CliRunEvent> events;
         try
         {
             var kind = stream == "stderr" ? CliStreamKind.Stderr : CliStreamKind.Stdout;
-            var events = AgentCliProcess.NormalizeCliType(cliType) == AgentCliProcess.CodexCli
+            events = AgentCliProcess.NormalizeCliType(cliType) == AgentCliProcess.CodexCli
                 ? CodexEventAdapter.Map(text, runId, kind)
                 : kind == CliStreamKind.Stdout
                     ? ClaudeEventAdapter.Map(text, runId)
                     : Array.Empty<CliRunEvent>();
-            foreach (var evt in events) Write(evt);
         }
         catch
         {
-            // Same contract: shadow tracing must never disturb the run.
+            // Adapter failures remain non-fatal in legacy shadow mode, but a
+            // structured frame that triggered one must still become visible.
+            onUnclassifiedFrame?.Invoke(text);
+            return;
+        }
+
+        foreach (var evt in events)
+        {
+            Write(evt);
+            if (evt is CliRunEvent.Unknown unknown)
+                onUnclassifiedFrame?.Invoke(unknown.RawDetail ?? unknown.Sample ?? string.Empty);
         }
     }
 
