@@ -1763,7 +1763,8 @@ public class GitService
         }
 
         if (entry == null) return null;
-        var configured = ResolveConfiguredRepositoryPath(entry);
+        var record = _registry.FindByStorageLocation(entry.Path);
+        var configured = ProjectRepoResolver.Resolve(record, entry);
         if (string.IsNullOrWhiteSpace(configured)) return null;
         return ResolveGitToplevel(configured) ?? configured;
     }
@@ -3782,6 +3783,28 @@ public class GitService
         string expectedResultSha,
         string? recordedIntegrationBranch,
         CancellationToken cancellationToken = default)
+        => InspectRemoteDeliveryCommitRange(
+            repoRoot,
+            deliveryBranch,
+            expectedResultSha,
+            recordedIntegrationBranch,
+            expectedBaseSha: null,
+            cancellationToken);
+
+    /// <summary>
+    /// Fetches and verifies a pushed runner result, then attributes the exact
+    /// immutable ResultEnvelope base..result range. The integration branch is
+    /// still resolved independently so the card records the baseline used by
+    /// delivery, but a release that already advanced that branch cannot collapse
+    /// the producer range to empty.
+    /// </summary>
+    public RemoteDeliveryCommitRange InspectRemoteDeliveryCommitRange(
+        string repoRoot,
+        string deliveryBranch,
+        string expectedResultSha,
+        string? recordedIntegrationBranch,
+        string? expectedBaseSha,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return Failed("Repository root does not exist.");
@@ -3843,12 +3866,38 @@ public class GitService
         if (string.IsNullOrWhiteSpace(selected.Branch))
             return Failed("No recorded main/develop base line shares history with the remote delivery.");
 
-        var commits = GetCommitsInRangeAtRoot(repoRoot, selected.Base, deliveryRef);
+        var attributionBase = selected.Base;
+        if (!string.IsNullOrWhiteSpace(expectedBaseSha))
+        {
+            if (!ReviewSubjectStore.IsValidResultSha(expectedBaseSha))
+                return Failed(
+                    "Remote delivery has no valid fenced base SHA.",
+                    DeliveryVerificationStatus.CommitMissing);
+
+            var baseSha = expectedBaseSha.Trim();
+            var (_, baseError, baseCode) = RunGitArgs(
+                repoRoot, "cat-file", "-e", $"{baseSha}^{{commit}}");
+            if (baseCode != 0)
+                return Failed(
+                    $"Fenced delivery base {AbbreviateSha(baseSha)} is not present in the fetched result history: {baseError.Trim()}",
+                    DeliveryVerificationStatus.CommitMissing);
+
+            var (_, _, ancestorCode) = RunGitArgs(
+                repoRoot, "merge-base", "--is-ancestor", baseSha, deliveryRef);
+            if (ancestorCode != 0)
+                return Failed(
+                    $"Fenced delivery base {AbbreviateSha(baseSha)} is not an ancestor of result {AbbreviateSha(tip)}.",
+                    DeliveryVerificationStatus.ShaMismatch);
+
+            attributionBase = baseSha;
+        }
+
+        var commits = GetCommitsInRangeAtRoot(repoRoot, attributionBase, deliveryRef);
         commits.Reverse();
         return new RemoteDeliveryCommitRange(
             true,
             TaskIntegrationBranch.NormalizeRef(selected.Branch),
-            selected.Base,
+            attributionBase,
             tip,
             commits,
             null,

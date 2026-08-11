@@ -249,8 +249,12 @@ state.
   the generic local auto-commit, drift, provenance, and post-processing queue
   path. Remote completion owns a separate attribution contract: it fetches the
   pushed `agent-studio/results/<attempt>/fence-<n>/<result-sha>` ref, verifies
-  that its tip equals the fenced `ResultSha`, and writes every commit in the exact
-  `merge-base..ResultSha` range to `commits[]` with `automatic` attribution.
+  that its tip equals the fenced `ResultSha`, verifies that the immutable
+  ResultEnvelope `BaseSha` is an ancestor, and writes every commit in the exact
+  `BaseSha..ResultSha` range to `commits[]` with `automatic` attribution. The
+  target branch still determines the recorded integration baseline, but it is
+  never the producer-range boundary because a release may already have advanced
+  that branch to `ResultSha` before completion reaches the Task Server.
   The range is rejected as a whole, left empty, and logged as a warning when
   the delivery branch belongs to another task or any commit subject explicitly
   names a different task key.

@@ -193,6 +193,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   changed-file overlap, no more than three omitted paths, and comparable total
   breadth. Cases outside those bounds remain untouched and are listed in the
   durable sweep report for manual review.
+- Startup also runs `remote-delivery-attribution-v1` over the previous seven
+  days of delivered cards whose storage is `<repo>/.orchestrator/jobs`. It
+  reconstructs missing commit generations only from validated immutable
+  ResultEnvelopes, rebuilds token receipts from the durable CLI log, and then
+  applies the same superseded-generation policy. The migration report records
+  repaired commit and token counts plus every unresolved or ambiguous card.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,

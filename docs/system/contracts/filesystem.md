@@ -14,6 +14,7 @@ canonical layout:
     migrations/
       superseded-commits-v1.json
       historical-integration-verification-v1.json
+      remote-delivery-attribution-v1.json
     test-runs/
       PROJ-023.json
   projects/
@@ -86,6 +87,14 @@ all five verification classes and task rows only for `content-on-fence` and
 `genuinely-missing`. The related `task.json.integrationRecords[]` rows are
 append-only and use a stable id, so an interrupted or repeated sweep cannot
 duplicate card bookkeeping.
+
+`<TaskRepository>/.metadata/migrations/remote-delivery-attribution-v1.json` is
+the durable report and completion marker for the seven-day repair of legacy
+in-repository Remote deliveries. The sweep accepts only completed immutable
+result envelopes, verifies each exact `baseSha..resultSha` range against the
+remote result ref, replays token usage from the durable CLI log, and reapplies
+the conservative superseded-generation policy. Ambiguous or unverifiable
+cards stay unchanged and appear in the report with an error.
 
 ## Operational Boundary
 

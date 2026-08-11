@@ -334,6 +334,7 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<RemoteDeliveryAttributionSweep>();
 builder.Services.AddSingleton<SupersededCommitSweep>();
 builder.Services.AddSingleton<TaskListGitProjectionCache>();
 builder.Services.AddSingleton<OperatorReviewRequeueService>();
@@ -469,6 +470,7 @@ builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedAdHocUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedTokenSummaryReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedWorkspaceTimelineReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.ProjectTokenReceiptReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.RemoteTaskTokenReceiptService>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedProjectTokenUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.Tokens.TokenAggregationService>();
 // Central step-call dispatch: the concrete Claude runner is wrapped by the
@@ -918,6 +920,19 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("CommitMetadataBackfill", ex);
+}
+
+// One-time repair of recent in-repository remote deliveries. Immutable result
+// envelopes provide the exact base..result range; durable CLI logs provide the
+// token receipt. This runs before the superseded-generation sweep so newly
+// restored generations participate in the same conservative classification.
+try
+{
+    app.Services.GetRequiredService<RemoteDeliveryAttributionSweep>().RunOnce();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RemoteDeliveryAttributionSweep", ex);
 }
 
 // One-time, conservative repair of historical rebase/steer generations. The

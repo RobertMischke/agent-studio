@@ -6,10 +6,12 @@
 > is the knowledge-collection point for this area. This document is the
 > system-of-record plan and migration record.
 
-> **Status (2026-08-09):** Project and task-card surfaces read a deduplicated
+> **Status (2026-08-11):** Project and task-card surfaces read a deduplicated
 > union of the historical token bus and durable `task.json.tokenSummary`
 > receipts. The bus remains the historical source, while task receipts are the
-> current source for remote runner calls. Project summary, heatmap, and pipeline
+> current source for remote runner calls. Accepted remote log batches parse
+> terminal CLI usage frames into that receipt, and completion replays the
+> durable log idempotently as a safety net. Project summary, heatmap, and pipeline
 > cost responses include the newest successfully read usage timestamp and
 > report partial or unavailable sources instead of presenting an unexplained
 > zero. The legacy services (`TokenSummaryService`,
@@ -53,12 +55,16 @@ It did make a direct lane-folder-only fallback insufficient. The receipt reader
 therefore supports both layouts and enumerates every bucket, including later
 buckets such as `tasks/002`.
 
-The repair deliberately changes the read side instead of recreating the lost
-bus write at remote completion:
+The repair keeps remote usage out of the historical bus and gives it a durable
+producer plus hybrid read path:
 
 - `task.json.tokenSummary` is already the durable token receipt used by current
   task-card token chips. It retains per-call timestamps, participants, models,
   and token dimensions.
+- Successful remote log ingestion parses typed terminal usage frames into the
+  receipt. Completion replays the bounded durable log tail, deduplicated at the
+  persisted millisecond precision, so a lost live projection or completion
+  retry cannot double count a call.
 - Historical bus entries remain in the aggregate. Receipt calls are merged by
   task, timestamp, and token dimensions with multiset deduplication, so an
   overlap does not count twice and the pre-July lifetime is retained.
@@ -261,9 +267,9 @@ split. CLI pages are extendable by adding another page key and model mapping.
   `Dollars` field on the bus response.
 - **CLI quota** (`/api/cli/quota`). Different source (subscription window),
   different cadence, different consumer.
-- **Rewriting historical bus files or task receipts.** The hybrid reader keeps
-  both immutable sources in place and merges them at read time. No destructive
-  backfill is needed.
+- **Rewriting historical bus files.** The hybrid reader keeps bus history in
+  place. A bounded startup sweep may create missing task receipts from durable
+  CLI logs, but it never mutates historical bus entries.
 
 ## Reference — file paths
 
@@ -272,6 +278,7 @@ split. CLI pages are extendable by adding another page key and model mapping.
 | `backend/Features/Tokens/ITokenAggregator.cs` | Canonical interface |
 | `backend/Features/Tokens/TokenAggregationService.cs` | Canonical consumer implementation |
 | `backend/Features/Tokens/ProjectTokenReceiptReader.cs` | Reads both task layouts, converts receipts, and deduplicates overlap with history |
+| `backend/Features/Tokens/RemoteTaskTokenReceiptService.cs` | Produces and idempotently reconstructs remote task receipts from typed CLI usage frames |
 | `backend/Features/Bus/BusAggregationCache.cs` | In-memory rollup over historical `logs/bus/*.jsonl` |
 | `backend/Features/Bus/AgentMessageBusBridge.cs` | Legacy/local producer side: `EmitTokenUsageAsync` / `EmitTokenUsageRichAsync` |
 | `backend/Features/AdHoc/AdHocClaudeInvoker.cs` | Ad-hoc-call recorder; **also fires `EmitTokenUsageAsync` after Phase 2** |

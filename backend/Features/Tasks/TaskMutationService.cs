@@ -197,6 +197,24 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Persists the durable per-task token receipt produced from remote CLI
+    /// output. Remote execution does not pass through the in-process message-bus
+    /// emitter, so task.json is the authoritative current-run receipt consumed
+    /// by the hybrid token reader.
+    /// </summary>
+    public bool SetTaskTokenSummaryOnFolder(string folderPath, TaskTokenSummary summary)
+    {
+        if (!Directory.Exists(folderPath)
+            || !File.Exists(Path.Combine(folderPath, "task.json")))
+        {
+            return false;
+        }
+
+        TaskJsonFile.UpdateField(folderPath, "tokenSummary", summary, _logger);
+        return Updated();
+    }
+
     public bool SetJobCommit(string jobId, TaskCommitInfo commit, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
