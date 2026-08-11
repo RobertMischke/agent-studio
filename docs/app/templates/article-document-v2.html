@@ -113,6 +113,7 @@
     .lede { margin: 0; color: var(--article-muted); font-size: 1.18rem; line-height: 1.6; }
     .meta { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 20px; color: var(--article-faint); font-size: 0.78rem; }
     .meta b { color: var(--article-muted); font-weight: 650; }
+    .article-page-links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 18px; font: 0.78rem/1.5 var(--article-sans); }
     a { color: var(--article-link); text-underline-offset: 0.16em; }
     a:focus-visible { outline: 2px solid var(--article-link); outline-offset: 3px; border-radius: 2px; }
     code {
@@ -312,6 +313,12 @@
     <h1>{{title}}</h1>
     <p class="lede">{{summary}}</p>
     <div class="meta"><span><b>Pattern</b> {{pattern}}</span><span><b>Status</b> {{status}}</span><span><b>Phase</b> {{phase}}</span></div>
+    <template data-article-example="multipage-links">
+      <nav class="article-page-links" aria-label="Dossier pages">
+        <a href="../index.html">Overview</a>
+        <a href="sibling-page.html">Sibling page</a>
+      </nav>
+    </template>
   </header>
 
   <section data-document-section="alternatives">
