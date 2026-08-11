@@ -1,0 +1,41 @@
+<section class="review-queue"
+         [attr.data-tone]="snapshot()?.isStagnant ? 'warn' : null"
+         data-testid="auto-review-queue-telemetry"
+         aria-label="Review Plane queue telemetry">
+  <header class="review-queue__head">
+    <strong>Review Plane</strong>
+    @if (stateLabel(); as state) {
+      <span class="review-queue__state" data-testid="auto-review-queue-state">{{ state }}</span>
+    }
+    <span>Global post-processing queue across projects. FIFO order is unchanged.</span>
+  </header>
+
+  @if (snapshot(); as queue) {
+    <div class="review-queue__metrics">
+      <div class="review-queue__metric" data-testid="auto-review-queue-depth">
+        <span>Queue depth</span>
+        <strong>{{ queue.queueDepth }}</strong>
+        <small>{{ queue.activeReviews }} active</small>
+      </div>
+      <div class="review-queue__metric" data-testid="auto-review-queue-drain-rate">
+        <span>Drain rate</span>
+        <strong>{{ queue.drainRatePerHour | number:'1.0-2' }}/h</strong>
+        <small>{{ queue.completedReviewsInRateWindow }} in {{ queue.rateWindowMinutes }} min</small>
+      </div>
+      <div class="review-queue__metric" data-testid="auto-review-queue-median-duration">
+        <span>Median duration</span>
+        <strong>{{ medianLabel() }}</strong>
+        <small>{{ queue.reviewDurationSampleCount }} reviews in {{ queue.durationWindowMinutes / 60 | number:'1.0-0' }} h</small>
+      </div>
+      <div class="review-queue__metric review-queue__metric--context">
+        <span>Last drain</span>
+        <strong>{{ queue.lastDrainAt ? (queue.lastDrainAt | date:'short') : 'Not recorded' }}</strong>
+        <small>Observed {{ queue.observedAt | date:'shortTime' }}</small>
+      </div>
+    </div>
+  } @else {
+    <p class="review-queue__empty">
+      {{ unavailable() ? 'Review queue telemetry is temporarily unavailable.' : 'Loading Review Plane telemetry…' }}
+    </p>
+  }
+</section>

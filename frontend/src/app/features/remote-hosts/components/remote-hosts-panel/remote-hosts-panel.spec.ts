@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RemoteHostsPanelComponent } from './remote-hosts-panel';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
+import { AutoReviewQueueTelemetryStore } from '../../../../services/auto-review-queue-telemetry.store';
 
 /**
  * Render-path test: the panel seeds its registry on init and renders one card
@@ -25,6 +26,15 @@ describe('RemoteHostsPanelComponent', () => {
     }).compileComponents();
 
     const fixture = TestBed.createComponent(RemoteHostsPanelComponent);
+    TestBed.inject(AutoReviewQueueTelemetryStore).status.set({
+      queueDepth: 40, activeReviews: 4, outstandingReviews: 44,
+      completedReviewsInRateWindow: 9, drainRatePerHour: 9,
+      medianReviewDurationSeconds: 750, reviewDurationSampleCount: 21,
+      oldestQueuedAt: '2026-08-11T16:00:00Z', lastDrainAt: '2026-08-11T17:55:00Z',
+      observedAt: '2026-08-11T18:00:00Z', rateWindowMinutes: 60,
+      durationWindowMinutes: 1440, stagnantThresholdMinutes: 30,
+      isStagnant: false, stagnantSince: null,
+    });
     fixture.detectChanges();
     const el: HTMLElement = fixture.nativeElement;
 
@@ -40,6 +50,8 @@ describe('RemoteHostsPanelComponent', () => {
     // Summary total equals the number of rendered cards (R3).
     const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
     expect(summary).toContain(String(cards.length));
+    expect(el.querySelector('[data-testid="auto-review-queue-depth"]')?.textContent)
+      .toContain('40');
 
     const setupButton = el.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
     setupButton.click();

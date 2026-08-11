@@ -456,6 +456,46 @@ lower the value if load, memory, or I/O pressure persists. A Coding change sets
 the local bootstrap/fallback ceiling; the Task Server remains authoritative for
 its centrally versioned live capacity.
 
+#### Review queue telemetry and adaptive parallelism proposal
+
+The authority exposes global Review Plane health at
+`GET /api/v1/management/auto-review-queue`. Queue depth counts claimable review
+attempts, including expired leases, while `activeReviews` counts live leases.
+Drain rate is the number of accepted Pass or ProductFailure reports in the
+configured rolling window, normalized per hour. Infrastructure retries and
+superseded reports do not advance drain progress. Median duration measures
+lease acquisition to accepted report over the duration window. These reads do
+not change the existing `created_at, attempt_number` FIFO claim order.
+
+The default monitor samples every 30 seconds. If claimable work remains and no
+accepted draining report advances the drain marker for 30 minutes, it emits the
+structured `auto-review-queue-stagnant` warning and the persistent workspace
+alarm. It repeats at most every 30 minutes and emits a recovery transition when
+progress resumes.
+
+An adaptive controller should remain a separate root-owned host operation. It
+must use only the sanctioned helper above and preserve an operator-selected
+floor, currently four Review slots. The proposed policy is:
+
+1. Treat telemetry older than two observation intervals, missing host load, an
+   unhealthy Review capability, or an outstanding helper failure as fail-closed.
+2. When queue depth stays at least 12 for 10 minutes and Review is using its
+   current ceiling, raise by one slot. Queue depth at least 24 may move directly
+   to the sanctioned ceiling of 6 when host load and memory remain healthy.
+3. Do not raise a zero-active stagnant queue. Alarm for operator diagnosis
+   because capacity is not the demonstrated constraint.
+4. When queue depth and active reviews both remain zero for 30 minutes, lower
+   one slot at a time toward the operator-selected floor.
+5. Allow at most one successful restart in 15 minutes, back off a failed helper
+   invocation for 60 minutes, and record the old value, new value, telemetry
+   observation, and helper audit result.
+6. Before automatic actuation, bound or clear stale persisted report replay
+   debt. A large `report-pending` inventory can make every otherwise loss-free
+   restart noisy even though live detached workers are adopted safely.
+
+This changes Review service capacity only. It introduces no project weight,
+project reservation, or queue priority.
+
 Recommended per-CLI headless defaults (verify against your installed version):
 
 When both CLIs are installed, keep both provider-specific binary variables even

@@ -1,0 +1,9 @@
+:host {
+  --notify-warning-tint: color-mix(
+    in srgb,
+    var(--notify-warning-icon-fg) 10%,
+    var(--notify-surface-bg)
+  );
+
+  display: block;
+}

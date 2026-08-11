@@ -19,6 +19,10 @@ public sealed class TaskServerOptions
     public int InvariantReconciliationSeconds { get; set; } = 30;
     public int InventoryGraceSeconds { get; set; } = 120;
     public int MaximumEventPayloadBytes { get; set; } = 256 * 1024;
+    public int AutoReviewQueueTelemetryIntervalSeconds { get; set; } = 30;
+    public int AutoReviewQueueRateWindowMinutes { get; set; } = 60;
+    public int AutoReviewQueueDurationWindowMinutes { get; set; } = 24 * 60;
+    public int AutoReviewQueueStagnantThresholdMinutes { get; set; } = 30;
     public bool RequireAuthentication { get; set; }
     public string? StudioBearerToken { get; set; }
     public string? RunnerBearerToken { get; set; }

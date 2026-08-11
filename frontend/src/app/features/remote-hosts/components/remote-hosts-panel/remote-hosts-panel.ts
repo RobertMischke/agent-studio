@@ -15,6 +15,8 @@ import {
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
+import { AutoReviewQueueTelemetryStore } from '../../../../services/auto-review-queue-telemetry.store';
+import { ReviewQueueTelemetryComponent } from '../review-queue-telemetry/review-queue-telemetry';
 
 /**
  * Execution Hosts settings page (AGT-1921).
@@ -31,7 +33,12 @@ import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent, AddHostWizardComponent, RunnerSetupDialogComponent],
+  imports: [
+    RemoteHostCardComponent,
+    AddHostWizardComponent,
+    ReviewQueueTelemetryComponent,
+    RunnerSetupDialogComponent,
+  ],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,11 +46,14 @@ import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-
 export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
   private readonly tasks = inject(TaskService);
+  private readonly queueTelemetry = inject(AutoReviewQueueTelemetryStore);
 
   readonly hosts = this.service.hosts;
   readonly loading = this.service.loading;
   readonly error = this.service.error;
   readonly identityDiagnostics = this.service.identityDiagnostics;
+  readonly reviewQueue = this.queueTelemetry.status;
+  readonly reviewQueueUnavailable = this.queueTelemetry.unavailable;
   readonly wizardOpen = signal(false);
   readonly setupHost = signal<RemoteHost | null>(null);
   readonly pendingConfirmation = signal<{ kind: 'retire' | 'delete'; host: RemoteHost } | null>(null);
@@ -78,14 +88,19 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.service.ensureLoaded();
+    this.queueTelemetry.subscribe();
     this.tickHandle = setInterval(() => this.now.set(Date.now()), 30_000);
   }
 
   ngOnDestroy(): void {
     if (this.tickHandle) clearInterval(this.tickHandle);
+    this.queueTelemetry.release();
   }
 
-  reload(): void { this.service.reload(); }
+  reload(): void {
+    this.service.reload();
+    this.queueTelemetry.refresh();
+  }
 
   boardSlots(host: RemoteHost): number {
     const truth = this.boardRunningTruth();

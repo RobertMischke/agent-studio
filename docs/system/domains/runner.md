@@ -224,6 +224,19 @@ state.
   `RUNNER_MAX_PARALLELISM` values from 1 through 6, updates an EnvironmentFile
   loaded by that unit, restarts only the mapped unit, proves the value through
   `/proc/<MainPID>/environ`, and journals or rolls back the result.
+- `contracts/TaskServer.Contracts/AutoReviewQueueTelemetryContracts.cs`,
+  `TaskServerReviewStore.GetAutoReviewQueueTelemetryAsync`, and the monolith
+  compatibility projection in `AttemptAuthorityService`: one pure Review Plane
+  queue-health policy. `GET /api/v1/management/auto-review-queue` reports
+  claimable queue depth, live leased reviews, accepted Pass/ProductFailure drain
+  rate, and median acquired-to-reported duration. Infrastructure retries and
+  superseded reports do not advance drain progress. The query is observational
+  only. Review claim order remains FIFO by attempt creation time.
+- `task-server/AutoReviewQueueTelemetryMonitor.cs` and the compatibility
+  `AutoReviewQueueTelemetryWatchdog`: a 30-second queue-health observation loop.
+  Claimable work with no accepted draining report for the configured threshold
+  emits `auto-review-queue-stagnant`, repeats every 30 minutes while acute, and
+  emits a recovery transition once draining resumes.
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store

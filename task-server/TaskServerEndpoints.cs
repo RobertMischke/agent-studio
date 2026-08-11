@@ -444,6 +444,8 @@ public static class TaskServerEndpoints
             => await InvokeAsync(() => store.GetInvariantRegistryAsync(ct)));
         management.MapGet("/remote-hosts", async (TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListRunnerCapabilitySnapshotsAsync(ct)));
+        management.MapGet("/auto-review-queue", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.GetAutoReviewQueueTelemetryAsync(ct)));
         management.MapPost("/remote-hosts/{hostId}/operator-drain", async (
             HttpContext context,
             string hostId,

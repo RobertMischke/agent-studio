@@ -17,6 +17,39 @@ public sealed class RemoteReviewAuthorityTests
     private const string RepositoryUrl = "https://example.invalid/product.git";
 
     [Fact]
+    public async Task Review_queue_telemetry_tracks_claimable_active_and_drained_work()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReviewSubjectAsync(store);
+
+        var queued = await store.GetAutoReviewQueueTelemetryAsync(default);
+        Assert.Equal(1, queued.QueueDepth);
+        Assert.Equal(0, queued.ActiveReviews);
+        Assert.Equal(1, queued.OutstandingReviews);
+
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var active = await store.GetAutoReviewQueueTelemetryAsync(default);
+        Assert.Equal(0, active.QueueDepth);
+        Assert.Equal(1, active.ActiveReviews);
+
+        await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            PassingReport(claim),
+            "review-a",
+            default);
+        var drained = await store.GetAutoReviewQueueTelemetryAsync(default);
+        Assert.Equal(0, drained.OutstandingReviews);
+        Assert.Equal(1, drained.CompletedReviewsInRateWindow);
+        Assert.Equal(1, drained.ReviewDurationSampleCount);
+        Assert.NotNull(drained.MedianReviewDurationSeconds);
+        Assert.NotNull(drained.LastDrainAt);
+    }
+
+    [Fact]
     public async Task Stored_review_subject_limits_dotnet_test_cpu_before_it_becomes_immutable()
     {
         using var temp = new TempDirectory();

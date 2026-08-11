@@ -59,6 +59,10 @@
     </section>
   }
 
+  <app-review-queue-telemetry
+    [snapshot]="reviewQueue()"
+    [unavailable]="reviewQueueUnavailable()" />
+
   @if (total() === 0 && !loading()) {
     <div class="rh__empty" data-testid="remote-hosts-empty">
       No execution hosts registered yet. This local machine and remote runners

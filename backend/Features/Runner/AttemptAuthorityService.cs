@@ -961,6 +961,52 @@ public sealed class AttemptAuthorityService
         lock (_gate) return FindReview(attemptId) is { } review ? ToDto(review) : null;
     }
 
+    /// <summary>
+    /// Compatibility projection for a monolith-owned Review Plane. The
+    /// standalone Task Server reads the same facts from SQLite and applies the
+    /// shared telemetry policy independently.
+    /// </summary>
+    public AgentStudio.TaskServer.Contracts.AutoReviewQueueTelemetrySnapshot
+        GetAutoReviewQueueTelemetry(
+            DateTime nowUtc,
+            TimeSpan rateWindow,
+            TimeSpan durationWindow,
+            TimeSpan stagnantThreshold)
+    {
+        List<AgentStudio.TaskServer.Contracts.AutoReviewQueueAttemptFact> facts;
+        lock (_gate)
+        {
+            var current = _state.CurrentReviewByTask.Values
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var historyWindow = rateWindow > durationWindow ? rateWindow : durationWindow;
+            if (stagnantThreshold > historyWindow) historyWindow = stagnantThreshold;
+            var historyCutoff = nowUtc.ToUniversalTime() - historyWindow;
+            facts = _state.ReviewAttempts
+                .Where(review => current.Contains(review.AttemptId)
+                                 || review.TerminalAt >= historyCutoff)
+                .Select(review =>
+                    new AgentStudio.TaskServer.Contracts.AutoReviewQueueAttemptFact(
+                        CreatedAt: review.CreatedAt,
+                        AcquiredAt: review.Lease?.AcquiredAt,
+                        ExpiresAt: review.Lease?.ExpiresAt,
+                        ReportedAt: review.TerminalAt,
+                        Open: current.Contains(review.AttemptId) && !Terminal(review.State),
+                        ProcessUnknown: false,
+                        CountsAsDrain: review.Outcome is ReviewTerminalOutcome.Pass
+                            or ReviewTerminalOutcome.ProductFailure,
+                        Superseded: review.State == AttemptLifecycleState.Superseded
+                                    || review.Outcome == ReviewTerminalOutcome.Superseded))
+                .ToList();
+        }
+
+        return AgentStudio.TaskServer.Contracts.AutoReviewQueueTelemetryPolicy.Evaluate(
+            nowUtc,
+            rateWindow,
+            durationWindow,
+            stagnantThreshold,
+            facts);
+    }
+
     public AttemptAuthorityProjection GetTaskProjection(string taskKey, bool includeArchived = false)
     {
         var key = Normalize(taskKey);

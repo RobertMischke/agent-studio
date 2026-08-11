@@ -43,6 +43,7 @@ builder.Services.AddSingleton<LegacyMigrationService>();
 builder.Services.AddSingleton<IResultRefDeleter, GitResultRefDeleter>();
 builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();
 builder.Services.AddHostedService<ResultRefGcHostedService>();
+builder.Services.AddHostedService<AutoReviewQueueTelemetryMonitor>();
 
 var configuredUrl = builder.Configuration["LISTEN_URL"]
                     ?? builder.Configuration[$"{TaskServerOptions.SectionName}:ListenUrl"];

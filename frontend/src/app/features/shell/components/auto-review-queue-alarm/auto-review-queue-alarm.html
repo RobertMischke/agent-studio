@@ -1,0 +1,17 @@
+@if (visible() && snapshot(); as queue) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="auto-review-queue-stagnation-banner">
+    <strong data-testid="notice-bar-headline">
+      Post-processing has not drained for {{ queue.stagnantThresholdMinutes }} minutes.
+    </strong>
+    <span class="notification__detail" data-testid="notice-bar-detail">
+      <span class="notification__number">{{ queue.queueDepth }}</span>
+      {{ queue.queueDepth === 1 ? 'review is' : 'reviews are' }} waiting;
+      current drain rate is
+      <span class="notification__number">{{ queue.drainRatePerHour }}</span> per hour.
+    </span>
+  </app-notification>
+}

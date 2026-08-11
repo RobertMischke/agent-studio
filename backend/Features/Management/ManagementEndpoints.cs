@@ -27,6 +27,15 @@ public static class ManagementEndpoints
             if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
             return Results.Ok(registry.ListCapabilitySnapshots());
         });
+        group.MapGet("/auto-review-queue", (
+            HttpContext context,
+            AgentStudio.Runner.AutoReviewQueueTelemetryWatchdog watchdog,
+            IConfiguration configuration) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
+            return Results.Ok(watchdog.Refresh());
+        });
         group.MapPost("/remote-hosts/provider-auth", async (
             HttpContext context,
             ProviderAuthProvisioningRequest request,

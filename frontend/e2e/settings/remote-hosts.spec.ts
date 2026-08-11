@@ -54,6 +54,23 @@ async function stubBackgroundApis(page: Page) {
       runnerActiveGateCount: 0, runnerGateCapacity: 4 },
   ]));
   await page.route('**/api/v1/management/remote-hosts', json([]));
+  await page.route('**/api/v1/management/auto-review-queue', json({
+    queueDepth: 40,
+    activeReviews: 4,
+    outstandingReviews: 44,
+    completedReviewsInRateWindow: 9,
+    drainRatePerHour: 9,
+    medianReviewDurationSeconds: 750,
+    reviewDurationSampleCount: 21,
+    oldestQueuedAt: '2026-08-11T16:00:00Z',
+    lastDrainAt: '2026-08-11T17:55:00Z',
+    observedAt: '2026-08-11T18:00:00Z',
+    rateWindowMinutes: 60,
+    durationWindowMinutes: 1440,
+    stagnantThresholdMinutes: 30,
+    isStagnant: false,
+    stagnantSince: null,
+  }));
   await page.route('**/api/clients/*/telemetry?window=14d', json({ clientId: 'mock', window: '14d', points: [{
     timestamp: now, cpuPercent: 7, load1: 0.1, load5: 0.1, load15: 0.1,
     memoryUsedBytes: 4_000_000_000, memoryTotalBytes: 16_000_000_000,
@@ -108,8 +125,57 @@ test.describe('Execution Hosts settings section', () => {
 
     // Header total equals the number of visible cards (R3 sum invariant).
     await expect(page.getByTestId('remote-hosts-summary')).toContainText(String(count));
+    await expect(page.getByTestId('auto-review-queue-depth')).toContainText('40');
+    await expect(page.getByTestId('auto-review-queue-drain-rate')).toContainText('9/h');
+    await expect(page.getByTestId('auto-review-queue-median-duration')).toContainText('12.5 min');
+
+    await setTheme(page, 'light');
+    await page.getByTestId('auto-review-queue-telemetry').screenshot({
+      path: `${SHOT_DIR}/review-queue-telemetry-light--mocked.png`,
+    });
+    await setTheme(page, 'dark');
+    await page.getByTestId('auto-review-queue-telemetry').screenshot({
+      path: `${SHOT_DIR}/review-queue-telemetry-dark--mocked.png`,
+    });
 
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
+  });
+
+  test('stagnant Review Plane queue raises the persistent operator alarm', async ({ page }) => {
+    await page.unroute('**/api/v1/management/auto-review-queue');
+    await page.route('**/api/v1/management/auto-review-queue', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        queueDepth: 40,
+        activeReviews: 4,
+        outstandingReviews: 44,
+        completedReviewsInRateWindow: 0,
+        drainRatePerHour: 0,
+        medianReviewDurationSeconds: 750,
+        reviewDurationSampleCount: 21,
+        oldestQueuedAt: '2026-08-11T16:00:00Z',
+        lastDrainAt: '2026-08-11T16:30:00Z',
+        observedAt: '2026-08-11T18:00:00Z',
+        rateWindowMinutes: 60,
+        durationWindowMinutes: 1440,
+        stagnantThresholdMinutes: 30,
+        isStagnant: true,
+        stagnantSince: '2026-08-11T16:30:00Z',
+      }),
+    }));
+    await page.reload();
+    await dismissDevErrorDialog(page);
+
+    const alarm = page.getByTestId('auto-review-queue-stagnation-banner');
+    await expect(alarm).toBeVisible();
+    await expect(alarm).toContainText('40 reviews are waiting');
+    await expect(alarm).toContainText('0 per hour');
+
+    await setTheme(page, 'light');
+    await alarm.screenshot({ path: `${SHOT_DIR}/review-queue-alarm-light--mocked.png` });
+    await setTheme(page, 'dark');
+    await alarm.screenshot({ path: `${SHOT_DIR}/review-queue-alarm-dark--mocked.png` });
   });
 
   test('shows a corrupt identity with its restore path in both themes', async ({ page }) => {

@@ -79,6 +79,8 @@ public sealed partial class TaskServerStore
                 ON review_attempts(status, created_at);
             CREATE INDEX IF NOT EXISTS ix_review_attempts_subject
                 ON review_attempts(subject_id, attempt_number);
+            CREATE INDEX IF NOT EXISTS ix_review_attempts_reported
+                ON review_attempts(reported_at);
             """, ct);
         await AddColumnIfMissingAsync(connection, "review_attempts", "port_base", "INTEGER", ct);
     }
@@ -673,6 +675,74 @@ public sealed partial class TaskServerStore
             """, ("$attempt", attemptId));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadReviewAttempt(reader) : null;
+    }
+
+    /// <summary>
+    /// Reads queue and terminal facts from the authoritative review tables and
+    /// applies the shared rolling telemetry policy. This is a read-only query;
+    /// claim order remains FIFO by review-attempt creation time.
+    /// </summary>
+    public async Task<AutoReviewQueueTelemetrySnapshot> GetAutoReviewQueueTelemetryAsync(
+        CancellationToken ct)
+    {
+        var now = UtcNow;
+        var rateWindow = TimeSpan.FromMinutes(Math.Clamp(
+            _options.AutoReviewQueueRateWindowMinutes, 1, 24 * 60));
+        var durationWindow = TimeSpan.FromMinutes(Math.Clamp(
+            _options.AutoReviewQueueDurationWindowMinutes, 1, 30 * 24 * 60));
+        var stagnantThreshold = TimeSpan.FromMinutes(Math.Clamp(
+            _options.AutoReviewQueueStagnantThresholdMinutes, 1, 24 * 60));
+        var historyWindow = rateWindow > durationWindow ? rateWindow : durationWindow;
+        if (stagnantThreshold > historyWindow) historyWindow = stagnantThreshold;
+        var historyCutoff = now - historyWindow;
+        var facts = new List<AutoReviewQueueAttemptFact>();
+
+        await using var connection = await OpenReadyAsync(ct);
+        await using var command = Command(connection, """
+            SELECT a.status, a.created_at, a.acquired_at, a.expires_at,
+                   a.reported_at, a.outcome, t.state
+              FROM review_attempts a
+              LEFT JOIN tasks t ON t.id = a.task_id
+             WHERE a.status IN ('queued', 'leased', 'process-unknown')
+                OR (a.reported_at IS NOT NULL AND a.reported_at >= $cutoff)
+             ORDER BY a.created_at, a.attempt_number;
+            """, ("$cutoff", Iso(historyCutoff)));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var status = reader.GetString(0);
+            var open = (status is "queued" or "leased" or "process-unknown")
+                       && !reader.IsDBNull(6)
+                       && string.Equals(
+                           reader.GetString(6),
+                           "4-auto-review",
+                           StringComparison.Ordinal);
+            facts.Add(new AutoReviewQueueAttemptFact(
+                CreatedAt: Parse(reader.GetString(1)),
+                AcquiredAt: reader.IsDBNull(2) ? null : Parse(reader.GetString(2)),
+                ExpiresAt: reader.IsDBNull(3) ? null : Parse(reader.GetString(3)),
+                ReportedAt: reader.IsDBNull(4) ? null : Parse(reader.GetString(4)),
+                Open: open,
+                ProcessUnknown: string.Equals(
+                    status,
+                    "process-unknown",
+                    StringComparison.Ordinal),
+                CountsAsDrain: !reader.IsDBNull(5)
+                               && reader.GetString(5) is "Pass" or "ProductFailure",
+                Superseded: string.Equals(status, "superseded", StringComparison.Ordinal)
+                            || (!reader.IsDBNull(5)
+                                && string.Equals(
+                                    reader.GetString(5),
+                                    "Superseded",
+                                    StringComparison.OrdinalIgnoreCase))));
+        }
+
+        return AutoReviewQueueTelemetryPolicy.Evaluate(
+            now,
+            rateWindow,
+            durationWindow,
+            stagnantThreshold,
+            facts);
     }
 
     private static void ValidateReviewSubjectRequest(CreateReviewSubjectRequest request)
