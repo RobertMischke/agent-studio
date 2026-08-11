@@ -46,6 +46,11 @@ function overview(items: WorkbenchOverviewItem[], projectName: string | null = n
 }
 
 describe('WorkbenchOverviewComponent', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    history.replaceState(null, '', '/#/workbenches');
+  });
+
   it('renders tracking items in the current queue and keeps discarded and documented history separate', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchOverviewComponent],
@@ -74,6 +79,7 @@ describe('WorkbenchOverviewComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain('Dossiers');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid^="workbench-overview-sort-"]').length).toBe(5);
 
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-decision-pending"]')?.textContent)
       .toContain('3 open');

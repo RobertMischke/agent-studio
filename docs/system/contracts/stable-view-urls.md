@@ -14,8 +14,10 @@ that origin.
 | Task or epic card | `/?task=AGT-1234` | Public task key |
 | All Projects Board | `/#/board` | Global workspace scope |
 | Activity Feed | `/#/feed` | Global workspace scope |
+| Dossier overview | `/#/workbenches[?dossier=<encoded-view-state>]` | Global workspace scope plus optional view state |
 | Project Hub overview | `/#/projects/PROJ-002` | Immutable project registry id |
 | Project Hub rail | `/#/projects/PROJ-002/<rail-key>` | Project id plus documented rail key |
+| Project Dossier overview | `/#/projects/PROJ-002/workbenches[?dossier=<encoded-view-state>]` | Project id plus optional view state |
 | Project Wiki page | `/#/projects/PROJ-002/wiki?page=concepts%2Foverview.md` | Project id plus repository-relative page path |
 | Project Wiki folder | `/#/projects/PROJ-002/wiki?folder=concepts` | Project id plus repository-relative folder path |
 | Workspace settings home | `/#/workspace/settings` | Global route |
@@ -27,6 +29,14 @@ use the shorter form. Current Project Hub rail keys are the `key` values in
 `frontend/src/app/features/project-detail/components/project-shell/project-shell.config.ts`.
 Common examples are `project-urls`, `deployment`, `git`, `wiki`, `pipeline`,
 `workflow`, `prompts`, and `settings`.
+
+Dossier overview state uses one route-local `dossier` query value so it cannot
+collide with sibling hash segments. Its decoded payload is a query string with
+optional `q`, `sort`, and `dir` fields. Supported sort values are `status`,
+`updatedAt`, `project`, `key`, and `openDecisions`; direction is `asc` or
+`desc`. The default decision-first order omits `sort` and `dir`. A URL carrying
+`dossier` wins over browser session state. Without it, each global or project
+scope restores its own session state and writes that state back into the URL.
 
 Opening a project also opens the existing Orchestrator Chat push-side-sheet by
 default, after the project route resolves. This does not create a `/chat` route:
@@ -51,6 +61,7 @@ https://studio.example.net/?task=AGT-1234
 https://studio.example.net/#/projects/PROJ-002
 https://studio.example.net/#/projects/PROJ-002/pipeline
 https://studio.example.net/#/projects/PROJ-002/wiki?page=concepts%2Frouting.md
+https://studio.example.net/#/workbenches?dossier=q%3Drouting%26sort%3DupdatedAt%26dir%3Ddesc
 ```
 
 Do not put a filesystem `watchPath`, storage slug, display name, tab order, or
