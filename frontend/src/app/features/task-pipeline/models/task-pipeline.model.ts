@@ -182,6 +182,8 @@ export interface PipelineRunTokenUsage {
   totalCostUsd: number;
   anyModelUnknown: boolean;
   pricingGaps?: PipelinePricingGap[];
+  /** False when this visible session run has no attributable token telemetry. */
+  tokenUsageAvailable?: boolean;
 }
 
 /**
@@ -198,6 +200,8 @@ export interface PipelineModelUsageSummary {
   anyModelUnknown: boolean;
   unpricedRuns?: number;
   pricingGaps?: PipelinePricingGap[];
+  /** Visible session runs for which no token telemetry was recorded. */
+  missingTokenRuns?: number;
 }
 
 /** Per-project override resolved for one step (from project-settings.json). */

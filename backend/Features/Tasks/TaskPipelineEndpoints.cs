@@ -49,11 +49,12 @@ public static class TaskPipelineEndpoints
             var taskTokens = FindTaskTokens(
                 tokens.WorkspacePerJob(info.ProjectName, info.WatchPath),
                 info);
+            var sessionEvents = sessions.ReadSessionEvents(info.Id, info.WatchPath);
             var projected = RemotePipelineExecutionProjection.Project(
                 pipelineLog.Read(info.FolderPath),
                 pipeline,
                 info,
-                sessions.ReadSessionEvents(info.Id, info.WatchPath),
+                sessionEvents,
                 timeline.ReadAll(info.FolderPath),
                 taskTokens);
             var record = projected.Execution;
@@ -61,10 +62,12 @@ public static class TaskPipelineEndpoints
             // retain their recorded step usage. Enrich only the response copy
             // with per-aspect concern detail for the Overview tooltip.
             var cost = PipelineCostCalculator.SummarizeWithLedger(record, projected.LedgerCalls);
-            // Per-model tokens, per run plus a grand total over all runs, off
-            // the raw record (includes previousAttempts) for the Overview
-            // "RUNS - tokens by model" surface.
-            var tokensByModel = PipelineCostCalculator.SummarizeByModel(record);
+            // The visible RUNS rows come from session events, so their token
+            // total must use the same run boundaries. Canonical task-ledger
+            // calls are attributed into those windows; a run without a call
+            // stays explicitly missing instead of silently becoming zero.
+            var tokensByModel = PipelineCostCalculator.SummarizeByModel(
+                record, sessionEvents, taskTokens);
             var execution = AspectConcernReader.Enrich(record, info.FolderPath);
 
             var resultFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

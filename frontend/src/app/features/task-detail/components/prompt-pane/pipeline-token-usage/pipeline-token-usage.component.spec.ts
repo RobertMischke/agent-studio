@@ -38,6 +38,7 @@ function run(attempt: number, current: boolean, models: PipelineModelTokenUsage[
     totalTokens: models.reduce((a, m) => a + m.totalTokens, 0),
     totalCostUsd: models.reduce((a, m) => a + m.costUsd, 0),
     anyModelUnknown: models.some((m) => m.totalTokens > 0 && !m.modelKnown),
+    tokenUsageAvailable: true,
   };
 }
 
@@ -197,6 +198,65 @@ describe('PipelineTokenUsageComponent', () => {
     const total = one(root(fixture), 'pipeline-token-usage-grand-total-cost');
     expect(total?.textContent).toContain('$2.00');
     expect(total?.textContent).toContain('incomplete (1 run without price)');
+  });
+
+  it('shows a recorded partial sum and names runs with missing token telemetry', () => {
+    const recorded = model('gpt-5.6-sol', 600_000, 5.5);
+    const summary: PipelineModelUsageSummary = {
+      runs: [
+        run(1, false, [recorded]),
+        { ...run(2, true, []), tokenUsageAvailable: false },
+      ],
+      totalByModel: [recorded],
+      totalTokens: 600_000,
+      totalCostUsd: 5.5,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+      missingTokenRuns: 1,
+    };
+
+    const fixture = setup(summary);
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-tokens')?.textContent)
+      .toContain('600.0k');
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .toContain('$5.50');
+    expect(one(root(fixture), 'pipeline-token-usage-missing-runs')?.textContent)
+      .toContain('incomplete (1 run without usage)');
+    expect(all(root(fixture), 'pipeline-token-usage-run-cost')[0]?.textContent)
+      .toContain('no usage data');
+  });
+
+  it('never renders silent zero totals when every visible run lacks telemetry', () => {
+    const missingRuns = Array.from({ length: 6 }, (_, index) => ({
+      ...run(index + 1, index === 5, []),
+      tokenUsageAvailable: false,
+    }));
+    const summary: PipelineModelUsageSummary = {
+      runs: missingRuns,
+      totalByModel: [],
+      totalTokens: 0,
+      totalCostUsd: 0,
+      anyModelUnknown: false,
+      unpricedRuns: 0,
+      pricingGaps: [],
+      missingTokenRuns: 6,
+    };
+
+    const fixture = setup(summary);
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-tokens')?.textContent?.trim())
+      .toBe('-');
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .toContain('no usage data');
+    expect(one(root(fixture), 'pipeline-token-usage-grand-total-cost')?.textContent)
+      .not.toContain('$0.00');
+    expect(one(root(fixture), 'pipeline-token-usage-missing-runs')?.textContent)
+      .toContain('incomplete (6 runs without usage)');
+
+    fixture.componentInstance.toggleSummary();
+    fixture.detectChanges();
+    expect(one(root(fixture), 'pipeline-token-usage-empty')?.textContent)
+      .toContain('Token usage was not recorded');
   });
 
   it('keeps a real zero-dollar value when the run consumed no tokens', () => {
