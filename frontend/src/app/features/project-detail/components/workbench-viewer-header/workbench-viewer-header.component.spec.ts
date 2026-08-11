@@ -10,6 +10,7 @@ import type { WorkbenchDocument } from '../../../../models/project-docs.model';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { NotificationService } from '../../../../services/notification.service';
 import {
+  dossierHasImplementationEntry,
   implementationStatusFor,
   WorkbenchViewerHeaderComponent,
 } from './workbench-viewer-header.component';
@@ -37,6 +38,16 @@ const DOCUMENT: WorkbenchDocument = {
 };
 
 describe('WorkbenchViewerHeaderComponent', () => {
+  it('recognizes implementation entries only inside the canonical append-only log', () => {
+    const start = '<!-- agent-studio:implementation-log:start -->';
+    const end = '<!-- agent-studio:implementation-log:end -->';
+
+    expect(dossierHasImplementationEntry(`${start}<li data-implementation-entry=""></li>${end}`))
+      .toBe(true);
+    expect(dossierHasImplementationEntry(`<code>data-implementation-entry</code>${start}${end}`))
+      .toBe(false);
+  });
+
   it('derives implementation only between the first started card and all-terminal state', () => {
     const status = (key: string, lane: string | null, exists = true): TaskReferenceStatus => ({
       key,
@@ -56,15 +67,23 @@ describe('WorkbenchViewerHeaderComponent', () => {
     expect(implementationStatusFor('decided', [
       status('AGT-1', '6-completed'),
       status('AGT-2', '7-archive'),
-    ])).toBeNull();
+    ], true)).toBeNull();
     expect(implementationStatusFor('decided', [
       status('AGT-ORIGIN', '6-completed'),
       status('AGT-SLICE', '2-ready'),
     ])).toBeNull();
     expect(implementationStatusFor('decided', [
+      status('AGT-ORIGIN', '6-completed'),
+      status('AGT-SLICE', '2-ready'),
+    ], true)).toBe('In implementation');
+    expect(implementationStatusFor('decided', [
       status('AGT-1', '6-completed'),
       status('AGT-404', null, false),
     ])).toBeNull();
+    expect(implementationStatusFor('decided', [
+      status('AGT-1', '6-completed'),
+      status('AGT-404', null, false),
+    ], true)).toBe('In implementation');
     expect(implementationStatusFor('decided', [
       status('AGT-1', '3-progress'),
       status('AGT-404', null, false),

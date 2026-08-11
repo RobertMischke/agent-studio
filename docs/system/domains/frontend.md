@@ -222,9 +222,11 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   `sourceTaskKeys`, `relatedTaskKeys`, and decision receipts retained as
   compatibility bridges. The compact viewer head shows every resolved card as
   a live lane dot. While a decision-pending or decided Workbench has at least
-  one reference beyond Ready and not every reference is terminal, it also shows
-  the derived `In implementation` summary marker. This is a live read-model
-  marker and does not add a descriptor lifecycle state.
+  one non-terminal reference beyond Ready, it shows the derived
+  `In implementation` summary marker. The first append-only implementation-log
+  entry keeps that marker visible between slices until every reference is
+  terminal. This is a live read-model marker and does not add a descriptor
+  lifecycle state.
   Once every referenced card is in `6-completed` or `7-archive`, the catalogue
   projects a quiet `Ready to document` suggestion in the viewer header and list
   surfaces. `POST /api/projects/{projectName}/workbenches/{id}/document`
