@@ -811,7 +811,9 @@ operator changes cause the step to fail before its writer runs.
   isolated worktree, permits a diff only inside one
   `docs/<slug>/` directory, and never merges that task branch.
   Dossier placement publishes `workbench.json` plus `index.html` through the
-  managed project-artifact commit boundary. Concept review checks alternatives,
+  managed project-artifact commit boundary. Later refresh cards may add
+  descriptor-registered HTML under `pages/`; the entrypoint remains the
+  concept-review and decision authority. Concept review checks alternatives,
   recommendation, evidence, open decisions, implementation-card source data,
   the own-card `sourceTaskKeys` entry, `status=decision-pending`, and the dossier
   path in both `results/deliverables.md` and `status.md`. New scaffolds use the

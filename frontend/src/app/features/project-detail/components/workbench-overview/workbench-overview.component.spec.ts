@@ -39,7 +39,8 @@ function overview(items: WorkbenchOverviewItem[], projectName: string | null = n
   return {
     projectName,
     count: items.length,
-    currentCount: items.filter(entry => ['active', 'decision-pending', 'decided'].includes(entry.workbench.status)).length,
+    currentCount: items.filter(entry =>
+      ['active', 'decision-pending', 'decided', 'living-standard'].includes(entry.workbench.status)).length,
     historyCount: items.filter(entry => ['archived', 'documented'].includes(entry.workbench.status)).length,
     items,
   };
@@ -71,6 +72,7 @@ describe('WorkbenchOverviewComponent', () => {
     };
     http.expectOne('/api/workbenches').flush(overview([
       pending,
+      item('standard', 'living-standard'),
       item('active', 'active'),
       tracking,
       item('discarded', 'archived'),
@@ -91,6 +93,8 @@ describe('WorkbenchOverviewComponent', () => {
       .toBe('concept');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('active');
+    expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
+      .toContain('Living standard');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-active"]')?.textContent)
       .toContain('Ready to document');
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-overview-discarded-list"]')).toBeNull();
