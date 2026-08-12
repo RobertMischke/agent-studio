@@ -59,6 +59,8 @@ export interface PipelineStepExecution {
   /** Effective route source: policy, policy-economy, or task-override. */
   selectionSource?: string | null;
   estimatedSavingsPercent?: number | null;
+  /** Host and fenced lease that actually executed this step. */
+  executionLocation?: PipelineStepExecutionLocation | null;
   status: PipelineStepStatus;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -76,6 +78,18 @@ export interface PipelineStepExecution {
    * Drives the tooltip on the CONCERNS pill in the Overview pipeline.
    */
   verdictSummary?: string | null;
+}
+
+export interface PipelineStepExecutionLocation {
+  executionKind: 'local' | 'remote';
+  hostId?: string | null;
+  executorId?: string | null;
+  instanceId?: string | null;
+  leaseId?: string | null;
+  fence?: number | null;
+  attemptId?: string | null;
+  resourceNamespace?: string | null;
+  workspaceIdentity?: string | null;
 }
 
 /** The persisted execution record (null when the job never ran a pipeline). */

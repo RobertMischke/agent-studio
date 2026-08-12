@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-11
+Version: 2026-08-12
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -169,7 +169,12 @@ pipeline view.
   visibility-only and never admits, cancels, or reorders a gate.
 - `runner/RemoteReviewWorkspace.cs` and
   `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
-  verification. Test commands marked `CompareToBaseline` compare their parsed
+  verification and model-assisted review. Tool commands and bounded Aspect or
+  code-grade commands share the same ReviewAttempt lease, capacity admission,
+  immutable worktree, dependency cache, fence, and report. Agent commands run
+  through CAR in read-only mode and return CLI/model/thinking, token usage, and
+  command timestamps with the ordinary command evidence. Test commands marked
+  `CompareToBaseline` compare their parsed
   failing-test set with the merge-base on the plan's integration ref. The
   parser recognizes .NET, Jest, Karma, Vitest, native Node test, and npm
   lifecycle output, normalizes ANSI-decorated names and volatile Jest file
@@ -365,6 +370,34 @@ pipeline view.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
   pipeline presentation.
 
+## Step placement matrix
+
+This is the current placement contract after AGT-2635. It is the repository-side
+delivery toward the AGT-W18 Remote Gate target and the accepted Remote-Ready
+line in ADR-0059. The canonical architecture sources remain the
+[distributed Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md),
+the [remote gate target](../../operations/remote-gate-zielbild/index.html), and
+the [remote Task Server/local Studio split](../../operations/remote-task-server-local-studio.md).
+The historical Remote-Ready kickoff was consolidated into those current-state
+documents.
+The key rule is ownership, not process proximity: Studio is a human surface,
+Task Server owns durable authority and leases, and a Runner executes worktree
+work.
+
+| Step class | Before AGT-2635: why it was local | Current placement | Local-only boundary and reason |
+| --- | --- | --- | --- |
+| Tool | Post-processing was called from `ReviewDecisionOrchestrator` and assumed the Studio checkout, task folder, host shell, and locally installed dotnet/npm/Angular tools. Only the SSH build/test gate had a remote bridge and its own npm cache. | Repository-read-only build, test, lint, and exact-subject verification are Review plan commands on the Runner. They use the Review lease/capacity admission, task Result-SHA worktree, dependency/npm caches, and normal report evidence. | Task-folder or project-control mutations such as Dossier bookkeeping, task spawning, wiki maintenance, lane changes, integration serialization, and push release remain Task Server/control-plane work. They require the authoritative task store or release queue, not merely a checkout. |
+| Aspect | The four aspect prompts were composed from Studio task files and invoked through Studio-local one-shot CLIs, so provider login and path access were implicitly Studio-owned. | Requirement fit, code quality, documentation impact, and tests/evidence are model-assisted Review commands on the Runner's immutable task worktree. Prompt rendering remains canonical, while execution requires advertised CLI execution and provider-auth capabilities. | A sight or UI probe that depends on the live Studio browser session, Studio-only URL, display server, or operator interaction stays on Studio. It must not be disguised as a portable source review. |
+| Decision support | `post-code-review-grade` used the Studio one-shot CLI and local diff/result paths. The remote projection then collapsed the whole Review report into one decision row. | The read-only quality-grade call runs on the Review Executor with the same configured model/thinking route. Its grade is reporting evidence and does not turn a C/D grade into a transport failure. The Runner also derives the Review report outcome from Tool and Aspect verdicts. | The final lane/integration decision is not an executor concern. Task Server or Orchestrator Engine applies the fenced report to durable state because only that control plane owns lane and release authority. |
+| Gate | Build/test could run through the legacy SSH remote-gate bridge, but ordinary pipeline rows still represented most gates as Studio-local calls and did not expose per-step host truth. | Build/test and other repository-verification gates execute as fenced Review commands on the Runner. Baseline comparison, dependency preparation, npm cache, immutable SHA proof, retry evidence, and resource namespace remain identical to the established remote-gate path. | Studio UI/sight gates remain local for the browser-session reason above. Merge/publication authorization remains control-plane owned; a future remote mutation executor must still receive an explicit fenced gate subject rather than direct workspace access. |
+
+Every executed step carries an `executionLocation`. Local writers stamp the
+Studio/control-plane host. Remote report projection stamps `remote`, host,
+executor, instance, lease, fence, ReviewAttempt, resource namespace, and hashed
+workspace identity. The Overview pipeline timeline renders the concise
+`Local · host` or `Remote · host` label and keeps the remaining authority facts
+in its tooltip. Pending or structurally skipped steps have no invented host.
+
 ## Invariants
 
 - Pipeline settings are resolved from the card before enablement, ordering,
@@ -374,14 +407,18 @@ pipeline view.
   use the lightweight planning chain and never inherit migrated coding
   overrides. Concept retains its dedicated document-first catalogue.
 - The task pipeline endpoint projects local and remote lifecycle facts at read
-  time. A remote claim/completion becomes CORE work, a Review Plane grade
-  becomes the DECISION verdict, and recorded integration gates remain TOOL
-  steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
-  structurally omits are `Skipped` with an explicit remote/not-applicable
-  reason and are projected as `Not applicable` in the Overview. `Not run` is
-  reserved for a step the current attempt genuinely never reached. Remote token
-  totals, historical list-price estimates, and call counts come from the same
-  token ledger as the Task tab.
+  time. A remote claim/completion becomes CORE work. Candidate Review command
+  evidence maps Tool, Aspect, and decision-support commands back to their
+  catalogue step ids with per-step host/lease attribution. The Review Plane
+  outcome becomes the final DECISION verdict, and recorded integration gates
+  remain TOOL steps. Local-only PRE, DRIFT, and review steps that the remote
+  route structurally omits are `Skipped` with an explicit
+  remote/not-applicable reason and are projected as `Not applicable` in the
+  Overview. `Not run` is reserved for a step the current attempt genuinely
+  never reached. Remote token totals, historical list-price estimates, and
+  call counts come from the same token ledger as the Task tab; model-assisted
+  Review commands additionally retain their per-command usage in report
+  evidence.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project

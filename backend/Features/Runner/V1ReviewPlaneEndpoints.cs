@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentStudio.Pipeline;
+using AgentStudio.Review;
 using AgentStudio.Security;
 using AgentStudio.Tasks;
 using Contract = AgentStudio.TaskServer.Contracts;
@@ -195,6 +196,8 @@ public static class V1ReviewPlaneEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
+            AspectRunnerService aspectRunner,
+            CodeReviewStepService codeReview,
             HumanReviewEscalation escalation,
             TaskMutationService mutations,
             TimelineLog timeline,
@@ -272,7 +275,7 @@ public static class V1ReviewPlaneEndpoints
                 return AttemptError(claimed);
 
             var review = claimed.ReviewAttempt;
-            var subject = ToSubject(review, scanner, projects, settings, out var subjectTask, out var baseline);
+            var subject = ToSubject(review, scanner, projects, settings, aspectRunner, codeReview, out var subjectTask, out var baseline);
             CorrectOutdatedIntegrationBranch(
                 subjectTask,
                 baseline,
@@ -336,6 +339,8 @@ public static class V1ReviewPlaneEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
+            AspectRunnerService aspectRunner,
+            CodeReviewStepService codeReview,
             TaskTransitionService transitions,
             HumanReviewEscalation escalation,
             RemoteDeliveryIntegrationCoordinator remoteIntegration,
@@ -479,6 +484,8 @@ public static class V1ReviewPlaneEndpoints
                                             scanner,
                                             projects,
                                             settings,
+                                            aspectRunner,
+                                            codeReview,
                                             out _,
                                             out _).Plan;
                 var integrationDecision = RemoteDeliveryIntegrationPolicy.Decide(
@@ -748,6 +755,8 @@ public static class V1ReviewPlaneEndpoints
         TaskScannerService scanner,
         AgentStudio.Registry.ProjectRegistry projects,
         AgentStudio.Projects.ProjectSettingsService settings,
+        AspectRunnerService aspectRunner,
+        CodeReviewStepService codeReview,
         out TaskInfo? subjectTask,
         out ReviewBaselineBranchDecision? baseline)
     {
@@ -762,7 +771,12 @@ public static class V1ReviewPlaneEndpoints
         baseline = task is null ? null : ResolveBaselineBranch(task, project, settings);
         var integrationRef = baseline?.IntegrationRef;
         var plan = review.Subject.Plan
-                   ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
+                   ?? AddRemoteAspectSteps(
+                       FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef),
+                       task,
+                       settings,
+                       aspectRunner,
+                       codeReview);
         // The plan is frozen with the subject, so a retry inherits whatever ref
         // the first attempt was handed. AGT-2220 replayed a stale
         // refs/heads/main through four attempts that way. Re-stamping the ref at
@@ -873,8 +887,11 @@ public static class V1ReviewPlaneEndpoints
                 // "<unparsed failure in verify-2>" ProductFailure (subject).
                 // Build/test verify commands get the full clamp window instead;
                 // the runner-side hard clamp (7200s) stays the ceiling.
+                var pipelineStepId = command.Kind == VerifyCommandKind.Lint
+                    ? PipelineCatalogue.LintScssStepId
+                    : PipelineCatalogue.BuildTestGateStepId;
                 return new Contract.ReviewCommandDto(
-                    $"verify-{index + 1}",
+                    $"{pipelineStepId}:{index + 1}",
                     command.Kind == VerifyCommandKind.Lint ? "lint" : "build-tests",
                     "sh",
                     ["-lc", shellCommand],
@@ -895,6 +912,144 @@ public static class V1ReviewPlaneEndpoints
             IntegrationRef: integrationRef,
             Preparation: preparation,
             PreserveGlobs: profile?.PreserveGlobs);
+    }
+
+    private static Contract.ReviewPlanDto AddRemoteAspectSteps(
+        Contract.ReviewPlanDto plan,
+        TaskInfo? task,
+        AgentStudio.Projects.ProjectSettingsService settingsService,
+        AspectRunnerService aspectRunner,
+        CodeReviewStepService codeReview)
+    {
+        if (task is null || plan.Commands.Any(command =>
+                string.Equals(command.ExecutionKind, "agent", StringComparison.OrdinalIgnoreCase)))
+            return plan;
+
+        var settings = PipelineTypeSettings.ForTask(settingsService.Get(task.ProjectName), task);
+        var condition = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = false,
+            TaskType = task.TaskType,
+            Tags = task.Tags,
+        };
+        var promptPath = Path.Combine(task.FolderPath, "prompt.md");
+        var logPath = TaskPaths.CliOutputLog(task.FolderPath);
+        var statusPath = Path.Combine(task.FolderPath, "status.md");
+        var inputs = new AspectRunInputs(
+            task.ProjectName,
+            task.Id,
+            task.Title,
+            task.FolderPath,
+            ReadBounded(promptPath, 4_000, tail: false),
+            ReadBounded(logPath, 6_000, tail: true),
+            $"Inspect the immutable review worktree. Compare HEAD with {plan.IntegrationRef ?? "the repository merge base"}; do not infer delivery from Studio-host paths.",
+            ReadBounded(statusPath, 4_000, tail: false))
+        {
+            ResultsInventory = ResultsInventory.Render(task.FolderPath),
+            CardMode = ReviewCardMode.Describe(task.Mode),
+        };
+
+        var commands = plan.Commands.ToList();
+        foreach (var definition in AspectRunnerService.Catalogue.Values)
+        {
+            var stepId = $"aspect-{definition.Id}";
+            var step = PipelineCatalogue.ForTask(task).AllSteps.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, stepId, StringComparison.OrdinalIgnoreCase));
+            if (step is null || !PipelineStepConfigResolver.ShouldRun(settings, step, condition))
+                continue;
+            var model = PipelineStepConfigResolver.ResolveModel(
+                settings,
+                step,
+                PipelineStepModelDefaults.SupportModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(settings, step)
+                      ?? PipelineStepModelDefaults.DefaultCli;
+            var thinking = PipelineStepConfigResolver.ResolveThinkingLevel(
+                settings,
+                step,
+                cli,
+                model,
+                PipelineStepModelDefaults.SupportThinkingLevel);
+            var prompt = aspectRunner.BuildRemotePrompt(
+                definition.Id,
+                inputs,
+                model,
+                PipelineStepConfigResolver.ResolvePrompt(settings, step.Id));
+            commands.Add(new Contract.ReviewCommandDto(
+                stepId,
+                definition.Id,
+                "agent",
+                [],
+                TimeoutSeconds: 1800,
+                ExecutionKind: "agent",
+                CliType: cli,
+                Model: model,
+                ThinkingLevel: thinking,
+                Prompt: prompt));
+        }
+
+
+        var gradeStep = PipelineCatalogue.ForTask(task).AllSteps.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, PipelineCatalogue.CodeReviewGradeStepId, StringComparison.OrdinalIgnoreCase));
+        if (gradeStep is not null
+            && PipelineStepConfigResolver.ShouldRun(settings, gradeStep, condition))
+        {
+            var model = PipelineStepConfigResolver.ResolveModel(
+                settings,
+                gradeStep,
+                PipelineStepModelDefaults.QualityModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(settings, gradeStep)
+                      ?? PipelineStepModelDefaults.DefaultCli;
+            var thinking = PipelineStepConfigResolver.ResolveThinkingLevel(
+                settings,
+                gradeStep,
+                cli,
+                model,
+                PipelineStepModelDefaults.QualityThinkingLevel);
+            var request = new CodeReviewStepRequest(
+                task.ProjectName,
+                task.Id,
+                task.Title,
+                task.FolderPath,
+                inputs.TaskBody,
+                $"Inspect the immutable review worktree and compare HEAD with {plan.IntegrationRef ?? "the repository merge base"}.",
+                cli,
+                model)
+            {
+                Mode = CodeReviewMode.Grade,
+                ThinkingLevel = thinking,
+                ResultsInventory = inputs.ResultsInventory,
+                CardMode = inputs.CardMode,
+            };
+            commands.Add(new Contract.ReviewCommandDto(
+                PipelineCatalogue.CodeReviewGradeStepId,
+                "code-review-grade",
+                "agent",
+                [],
+                TimeoutSeconds: 1800,
+                ExecutionKind: "agent",
+                CliType: cli,
+                Model: model,
+                ThinkingLevel: thinking,
+                Prompt: codeReview.BuildRemotePrompt(request)));
+        }
+
+        return plan with
+        {
+            Commands = commands,
+            RequiredAspects = commands.Select(command => command.Aspect)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+        };
+    }
+
+    private static string ReadBounded(string path, int limit, bool tail)
+    {
+        if (!File.Exists(path)) return string.Empty;
+        var value = File.ReadAllText(path);
+        if (value.Length <= limit) return value;
+        return tail ? value[^limit..] : value[..limit];
     }
 
     /// <summary>

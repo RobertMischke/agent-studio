@@ -120,6 +120,9 @@ interface PipelineRowVm {
   attentionRequired: boolean;
   /** Remote Review Plane explanation when this is its projected decision row. */
   remoteReviewDetail: string | null;
+  /** Truthful host label from the recorded step evidence. */
+  executionLocationLabel: string | null;
+  executionLocationTooltip: string | null;
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
@@ -925,6 +928,20 @@ export class OverviewPaneComponent {
       const attentionRequired = step.id === 'post-build-test-gate' && status === 'skipped';
       const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
       const costTooltip = buildPipelineStepCostTooltip(label, c ?? null);
+      const location = e?.executionLocation ?? null;
+      const executionLocationLabel = location
+        ? `${location.executionKind === 'remote' ? 'Remote' : 'Local'} · ${location.hostId ?? location.executorId ?? 'unknown host'}`
+        : null;
+      const executionLocationTooltip = location
+        ? [
+            `Execution: ${location.executionKind}`,
+            location.hostId ? `Host: ${location.hostId}` : null,
+            location.executorId ? `Executor: ${location.executorId}` : null,
+            location.leaseId ? `Lease: ${location.leaseId}` : null,
+            location.fence != null ? `Fence: ${location.fence}` : null,
+            location.attemptId ? `Review attempt: ${location.attemptId}` : null,
+          ].filter((value): value is string => value != null).join('\n')
+        : null;
       const phase = pipelinePhaseForKind(step.kind);
       const inputTokens = c?.inputTokens ?? e?.inputTokens ?? 0;
       const outputTokens = c?.outputTokens ?? e?.outputTokens ?? 0;
@@ -962,6 +979,8 @@ export class OverviewPaneComponent {
         remoteReviewDetail: e?.reason?.startsWith('Remote Review Plane verdict')
           ? e.reason
           : null,
+        executionLocationLabel,
+        executionLocationTooltip,
         model,
         thinkingLevel,
         cliType,

@@ -287,7 +287,17 @@ public sealed class PipelineExecutionLog
                 return;
             }
 
-            stepResult = stepResult with { Attempt = current.Attempt };
+            stepResult = stepResult with
+            {
+                Attempt = current.Attempt,
+                ExecutionLocation = stepResult.ExecutionLocation
+                    ?? new PipelineStepExecutionLocation
+                    {
+                        ExecutionKind = "local",
+                        HostId = Environment.MachineName,
+                        ExecutorId = "studio-control-plane",
+                    },
+            };
 
             var updatedSteps = new List<PipelineStepExecution>(current.Steps.Count);
             var replaced = false;

@@ -28,6 +28,33 @@ public sealed class RunnerCapabilityProbeTests
     public void Provider_identity_is_stable_across_binary_paths(string binary, string expected)
         => Assert.Equal(expected, RunnerCapabilityProbe.Provider(binary));
 
+    [Fact]
+    public void Remote_review_agent_selects_the_binary_for_the_planned_provider()
+    {
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            CliBin = "/opt/claude-primary",
+            ClaudeCliBin = "/opt/claude-secondary",
+            CodexCliBin = "/opt/codex",
+            CliArgs = "",
+        };
+
+        Assert.Equal(
+            "/opt/codex",
+            RemoteReviewAgentExecutor.ResolveBinary(options, AgentCliProcess.CodexCli));
+        Assert.Equal(
+            "/opt/claude-primary",
+            RemoteReviewAgentExecutor.ResolveBinary(options, AgentCliProcess.ClaudeCli));
+    }
+
     [Theory]
     [InlineData(
         "remote: refusing to allow a Personal Access Token to create or update workflow `.github/workflows/release.yml` without `workflow` scope",

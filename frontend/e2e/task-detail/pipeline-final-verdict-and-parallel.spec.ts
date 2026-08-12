@@ -112,7 +112,20 @@ function pipelineAcceptedFinalVerdict() {
       steps: [
         execStep('pre-loop-guard', 'pre', 'passed'),
         execStep('core-agent-run', 'core', 'passed'),
-        execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('aspect-requirement-fit', 'aspect', 'passed', {
+          verdict: 'pass',
+          executionLocation: {
+            executionKind: 'remote',
+            hostId: 'runner-w18-02',
+            executorKind: 'remote-review-runner',
+            executorInstanceId: 'review-runner-02',
+            leaseId: 'lease-fixture-19',
+            fence: 19,
+            attemptId: 'attempt-fixture-19',
+            resourceNamespace: 'review/fixture/19',
+            workspaceIdentity: 'sha256:fixture',
+          },
+        }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-tests-and-evidence', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('post-lint-scss', 'tool', 'passed'),
@@ -337,6 +350,12 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(parallelNotes).toHaveCount(3);
     await expect(parallelNotes.first()).toHaveText('∥');
     await expect(parallelNotes.first()).toHaveAttribute('aria-label', 'Parallel review pool');
+
+    const remoteLocation = page
+      .locator('[data-step-id="aspect-requirement-fit"]')
+      .getByTestId('overview-pipeline-step-location');
+    await expect(remoteLocation).toHaveText('Remote · runner-w18-02');
+    await expect(remoteLocation).toHaveAttribute('data-execution-kind', 'remote');
 
     // The orchestrator decision is its own, clearly separated final-verdict row.
     // Its compact icon marker keeps the full kind available to assistive tech.

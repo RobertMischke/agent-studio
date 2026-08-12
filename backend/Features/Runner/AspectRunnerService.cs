@@ -462,6 +462,27 @@ public sealed class AspectRunnerService
         }
     }
 
+    /// <summary>
+    /// Render the same bounded aspect prompt for a Remote Review plan. The
+    /// runner executes it read-only in the exact-subject worktree; keeping the
+    /// rendering here prevents local and remote review semantics from drifting.
+    /// </summary>
+    internal string BuildRemotePrompt(
+        string aspectId,
+        AspectRunInputs inputs,
+        string model,
+        string? promptOverride)
+    {
+        if (!Catalogue.TryGetValue(aspectId, out var definition))
+            throw new ArgumentException($"Unknown aspect '{aspectId}'.", nameof(aspectId));
+        return !string.IsNullOrWhiteSpace(promptOverride)
+            ? _prompts.UseProjectOverride(
+                definition.PromptTemplate,
+                promptOverride!,
+                new PromptCallContext(inputs.Project, $"aspect-{aspectId}", model))
+            : BuildAspectPrompt(definition, inputs, model);
+    }
+
     private static string BuildInlineFallbackPrompt(AspectDefinition def, AspectRunInputs inputs)
     {
         var sb = new StringBuilder();

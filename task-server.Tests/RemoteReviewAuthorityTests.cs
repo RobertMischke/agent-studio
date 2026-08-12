@@ -192,6 +192,46 @@ public sealed class RemoteReviewAuthorityTests
     }
 
     [Fact]
+    public async Task Quality_grade_is_decision_support_and_does_not_change_a_passing_review_outcome()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var plan = new ReviewPlanDto(
+            [
+                new ReviewCommandDto("verify", "build-tests", "review-tool", ["build-tests"]),
+                new ReviewCommandDto(
+                    "post-code-review-grade",
+                    "code-review-grade",
+                    "review-tool",
+                    ["grade"]),
+            ],
+            ["build-tests", "code-review-grade"]);
+        await SeedReviewSubjectAsync(store, plan: plan);
+        await RegisterReviewerAsync(store, "review-a", "review-instance-a", "review-host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "review-instance-a"), "review-a", default);
+        var passing = PassingReport(claim);
+        var gradeD = passing with
+        {
+            Verdicts = passing.Verdicts.Select(verdict =>
+                string.Equals(verdict.Aspect, "code-review-grade", StringComparison.OrdinalIgnoreCase)
+                    ? verdict with
+                    {
+                        Status = "block",
+                        Classification = "CodeReviewGrade:D",
+                        Summary = "Substantial changes required.",
+                    }
+                    : verdict).ToArray(),
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, gradeD, "review-a", default);
+
+        Assert.Equal("Pass", report.Outcome);
+    }
+
+    [Fact]
     public async Task Cleanup_does_not_reopen_an_operator_lane_move_or_leave_review_authority_active()
     {
         using var temp = new TempDirectory();

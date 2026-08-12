@@ -445,6 +445,12 @@
                 [promptMarkdown]="promptMarkdown() ?? null"
                 [tooltip]="agentRunTooltip()" />
             }
+            @if (row.executionLocationLabel) {
+              <span class="ov-pl-step__location"
+                    [attr.data-execution-kind]="row.executionLocationLabel.startsWith('Remote') ? 'remote' : 'local'"
+                    [cacTooltip]="row.executionLocationTooltip"
+                    data-testid="overview-pipeline-step-location">{{ row.executionLocationLabel }}</span>
+            }
             @if (row.model) {
               <span class="ov-pl-step__model"
                     [class.ov-pl-step__model--resolved]="row.modelIsResolved"

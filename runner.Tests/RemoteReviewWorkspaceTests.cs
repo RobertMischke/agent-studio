@@ -54,6 +54,59 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         },
     };
 
+    [Fact]
+    public void Remote_agent_step_output_parses_codex_verdict_and_usage()
+    {
+        var process = new ProcessResult(
+            0,
+            "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Looks good.\\n[[ASPECT_VERDICT: status=pass; summary=Verified.]]\"}}\n" +
+            "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":120,\"output_tokens\":30,\"cached_input_tokens\":10}}",
+            string.Empty);
+
+        var parsed = RemoteAgentStepOutput.Parse(process, "codex", "gpt-5.4-mini");
+
+        Assert.Contains("ASPECT_VERDICT", parsed.Reply, StringComparison.Ordinal);
+        Assert.Equal("gpt-5.4-mini", parsed.Usage?.Model);
+        Assert.Equal(120, parsed.Usage?.InputTokens);
+        Assert.Equal(10, parsed.Usage?.CacheReadTokens);
+    }
+
+    [Fact]
+    public void Remote_agent_step_output_parses_claude_verdict_and_usage()
+    {
+        var process = new ProcessResult(
+            0,
+            """{"result":"[[ASPECT_VERDICT: status=concerns; summary=Check docs.]]","model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":12,"cache_read_input_tokens":3}}""",
+            string.Empty);
+
+        var parsed = RemoteAgentStepOutput.Parse(process, "claude", "claude-sonnet-5");
+
+        Assert.Contains("status=concerns", parsed.Reply, StringComparison.Ordinal);
+        Assert.Equal(50, parsed.Usage?.InputTokens);
+        Assert.Equal(12, parsed.Usage?.OutputTokens);
+    }
+
+    [Fact]
+    public void Remote_quality_grade_is_projected_as_decision_support_verdict()
+    {
+        var command = new ReviewCommandDto(
+            "post-code-review-grade",
+            "code-review-grade",
+            "agent",
+            [],
+            ExecutionKind: "agent");
+        var process = new ProcessResult(
+            0,
+            "Review complete.\n[[CODE_REVIEW_GRADE: grade=D; summary=Substantial changes required.]]",
+            string.Empty);
+
+        var verdict = RemoteReviewWorkspace.ParseVerdict(command, process);
+
+        Assert.Equal("block", verdict.Status);
+        Assert.Equal("CodeReviewGrade:D", verdict.Classification);
+        Assert.Equal("Substantial changes required.", verdict.Summary);
+    }
+
     [Theory]
     [MemberData(nameof(NodeFailureFixtures))]
     public void Parsed_test_failures_understands_node_test_runner_output(
