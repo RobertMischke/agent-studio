@@ -426,13 +426,20 @@ The installed helper currently accepts one variable only:
 
 The helper selects only an approved file that the target unit actually loads,
 requires `root:agent` mode `0640`, replaces the value atomically, and restarts
-only the mapped role unit. It then reads the new main process environment from
-`/proc/<MainPID>/environ`. A restart or process-environment mismatch restores
-the previous file and retries the old configuration. Every accepted change
-writes an `authpriv.notice` journal record tagged `agent-runner-deploy` with the
-role, variable, old value, new value, unit, PID, and result. The sudoers policy
-independently enumerates both roles and every integer from 1 through 6. It does
-not permit another variable, unit, path, or argument shape.
+only the mapped role unit. Systemd applies `EnvironmentFile=` values after
+`Environment=` values, so the selected role file's
+`RUNNER_MAX_PARALLELISM` value overrides a default such as
+`Environment=RUNNER_MAX_PARALLELISM=2` in the main unit. After restart, the
+helper waits up to 30 seconds for the unit to be active with a nonzero MainPID
+that differs from the pre-restart MainPID. Only then does it read
+`/proc/<MainPID>/environ`, which avoids selecting either the old daemon or a
+detached worker preserved by `KillMode=process`. A restart, handoff timeout, or
+process-environment mismatch restores the previous file and retries the old
+configuration. Every accepted change writes an `authpriv.notice` journal
+record tagged `agent-runner-deploy` with the role, variable, old value, new
+value, unit, PID, and result. The sudoers policy independently enumerates both
+roles and every integer from 1 through 6. It does not permit another variable,
+unit, path, or argument shape.
 
 Set Review to four slots and prove the effective process value without reading
 any credential file:
