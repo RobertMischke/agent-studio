@@ -143,6 +143,21 @@ export interface HostTelemetrySeries {
   findings: readonly HostTelemetryFinding[];
 }
 
+export type HostExecutionPlaneRole = 'coding' | 'review';
+
+/** Latest role-local runner observation on one physical execution host. */
+export interface HostExecutionPlaneTelemetry {
+  role: HostExecutionPlaneRole;
+  runnerId: string;
+  name: string;
+  lastSeenAt: string;
+  observedAt: string | null;
+  activeSlots: number;
+  maxParallelism: number | null;
+  load1: number | null;
+  cpuCores: number;
+}
+
 /** Latest route observation piggybacked on the host telemetry advertisement. */
 export interface TaskServerConnectionTelemetry {
   status: 'unknown' | 'reachable' | 'unreachable';
@@ -192,9 +207,13 @@ export interface RemoteHostCapabilityHealth {
 export interface TaskServerTelemetrySnapshot {
   observedAt: string;
   cpuPercent: number | null;
+  load1?: number | null;
+  load5?: number | null;
+  load15?: number | null;
   memoryUsedBytes: number | null;
   memoryTotalBytes: number | null;
   cpuCores: number;
+  activeSlots?: number;
   diskFreeBytes?: number | null;
   diskTotalBytes?: number | null;
   taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';
@@ -259,6 +278,8 @@ export interface RemoteHost {
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
   telemetry?: HostTelemetrySeries | null;
+  /** Coding and Review daemons folded onto this physical host by hostId. */
+  executionPlanes?: readonly HostExecutionPlaneTelemetry[];
   /** Process-local route observation; capability freshness remains the remote alarm. */
   taskServerConnection?: TaskServerConnectionTelemetry | null;
   /** Freshness of the client/daemon projection requested for this mount. */

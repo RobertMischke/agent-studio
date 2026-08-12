@@ -3,9 +3,12 @@ import { Injectable, inject, signal } from '@angular/core';
 import type { ClientSummary } from '../../../models/task.model';
 import type {
   HostActionKind,
+  HostExecutionPlaneRole,
+  HostExecutionPlaneTelemetry,
   HostRampStrategy,
   HostTelemetrySeries,
   RemoteHost,
+  RemoteHostCapabilityHealth,
   TaskServerTelemetrySnapshot,
   TaskServerRunnerCapabilitySnapshot,
 } from '../models/remote-host.model';
@@ -163,15 +166,19 @@ export class RemoteHostsService {
         const now = Date.now();
         this.hosts.update(hosts => {
           const projected = [...hosts];
-          for (const snapshot of snapshots ?? []) {
-            const index = projected.findIndex(host =>
-              host.clientId === snapshot.runnerId || host.id === snapshot.runnerId);
+          for (const group of groupRunnerSnapshots(snapshots ?? [])) {
+            const primary = group.find(snapshot => runnerPlaneRole(snapshot) === 'coding') ?? group[0];
+            const primaryIndex = projected.findIndex(host =>
+              host.clientId === primary.runnerId || host.id === primary.runnerId);
+            const index = primaryIndex >= 0 ? primaryIndex : projected.findIndex(host =>
+              host.capacityHostId === primary.hostId
+              || group.some(snapshot => host.clientId === snapshot.runnerId || host.id === snapshot.runnerId));
             const current = index >= 0 ? projected[index] : {
-              id: snapshot.runnerId,
-              name: snapshot.name,
+              id: primary.runnerId,
+              name: primary.name,
               role: 'remote' as const,
               address: null,
-              clientId: snapshot.runnerId,
+              clientId: primary.runnerId,
               status: 'offline' as const,
               os: 'Remote runner',
               lastHeartbeatAt: null,
@@ -180,14 +187,22 @@ export class RemoteHostsService {
               cliQuotas: [],
               stats: null,
             };
-            const lastSeenMs = Date.parse(snapshot.lastSeenAt);
+            const latestSeenAt = group
+              .map(snapshot => snapshot.lastSeenAt)
+              .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+            const lastSeenMs = Date.parse(latestSeenAt);
             const heartbeatFresh = Number.isFinite(lastSeenMs)
               && now - lastSeenMs <= RemoteHostsService.DEGRADED_CLIENT_MS;
-            const capabilityDegraded = snapshot.capabilities.some(capability =>
+            const capabilities = group.flatMap(snapshot => snapshot.capabilities);
+            const capabilityDegraded = capabilities.some(capability =>
               !capability.isFresh || capability.healthState !== 'healthy' || capability.advertisedStatus !== 'ready');
-            const hostDraining = snapshot.hostAdmission.admissionState !== 'open';
-            const telemetryAt = snapshot.telemetry ? Date.parse(snapshot.telemetry.observedAt) : Number.NaN;
-            const telemetryFresh = snapshot.telemetry && Number.isFinite(telemetryAt)
+            const hostDraining = group.some(snapshot => snapshot.hostAdmission.admissionState !== 'open');
+            const telemetrySnapshot = group
+              .filter(snapshot => snapshot.telemetry)
+              .sort((a, b) => Date.parse(b.telemetry!.observedAt) - Date.parse(a.telemetry!.observedAt))[0];
+            const telemetry = telemetrySnapshot?.telemetry ?? null;
+            const telemetryAt = telemetry ? Date.parse(telemetry.observedAt) : Number.NaN;
+            const telemetryFresh = telemetry && Number.isFinite(telemetryAt)
               && now - telemetryAt <= RemoteHostsService.DEGRADED_CLIENT_MS
               && heartbeatFresh;
             const status = current.identityFileError
@@ -197,11 +212,11 @@ export class RemoteHostsService {
               : !heartbeatFresh
                 ? current.status
                 : capabilityDegraded ? 'degraded' : current.status === 'offline' ? 'online' : current.status;
-            const stats = telemetryFresh && snapshot.telemetry
-              ? telemetryStats(snapshot.telemetry)
+            const stats = telemetryFresh && telemetry
+              ? telemetryStats(telemetry)
               : status === 'offline' ? null : current.stats;
-            const gitPush = snapshot.capabilities.find(capability => capability.key === 'git:push');
-            const gitWorkflowPush = snapshot.capabilities.find(
+            const gitPush = capabilities.find(capability => capability.key === 'git:push');
+            const gitWorkflowPush = capabilities.find(
               capability => capability.key === 'git:workflow-push',
             );
             const gitPushStatus = gitPush && gitPush.advertisedStatus !== 'ready'
@@ -213,41 +228,57 @@ export class RemoteHostsService {
                   : current.gitPushStatus;
             const next: RemoteHost = {
               ...current,
-              name: snapshot.name,
+              name: primary.name,
               status,
-              lastHeartbeatAt: snapshot.lastSeenAt,
-              capabilityHealth: snapshot.capabilities,
-              capabilities: snapshot.capabilities.map(capability =>
-                capability.version ? `${capability.key} ${capability.version}` : capability.key),
+              lastHeartbeatAt: latestSeenAt,
+              capabilityHealth: uniqueCapabilities(capabilities),
+              capabilities: [...new Set(capabilities.map(capability =>
+                capability.version ? `${capability.key} ${capability.version}` : capability.key))],
               gitPushStatus,
               gitPushDetail: gitWorkflowPush?.detail ?? gitPush?.detail ?? current.gitPushDetail,
               gitPushCheckedAt:
                 gitWorkflowPush?.advertisedAt ?? gitPush?.advertisedAt ?? current.gitPushCheckedAt,
-              hostAdmission: snapshot.hostAdmission,
-              capacityHostId: snapshot.hostId,
-              runtimeCapacity: snapshot.runtimeCapacity ?? current.runtimeCapacity ?? null,
+              hostAdmission: group.find(snapshot => snapshot.hostAdmission.admissionState !== 'open')?.hostAdmission
+                ?? primary.hostAdmission,
+              capacityHostId: primary.hostId,
+              runtimeCapacity: primary.runtimeCapacity
+                ?? group.find(snapshot => snapshot.runtimeCapacity)?.runtimeCapacity
+                ?? current.runtimeCapacity
+                ?? null,
               effectiveMaxParallelism:
-                snapshot.effectiveMaxParallelism !== undefined
-                  ? snapshot.effectiveMaxParallelism
+                primary.effectiveMaxParallelism !== undefined
+                  ? primary.effectiveMaxParallelism
                   : current.effectiveMaxParallelism ?? null,
               runtimeCapacityAppliedAt:
-                snapshot.runtimeCapacityAppliedAt !== undefined
-                  ? snapshot.runtimeCapacityAppliedAt
+                primary.runtimeCapacityAppliedAt !== undefined
+                  ? primary.runtimeCapacityAppliedAt
                   : current.runtimeCapacityAppliedAt ?? null,
               runtimeCapacityAppliedVersion:
-                snapshot.runtimeCapacityAppliedVersion !== undefined
-                  ? snapshot.runtimeCapacityAppliedVersion
+                primary.runtimeCapacityAppliedVersion !== undefined
+                  ? primary.runtimeCapacityAppliedVersion
                   : current.runtimeCapacityAppliedVersion ?? null,
-              projectPolicy: snapshot.projectPolicy !== undefined
-                ? snapshot.projectPolicy
+              projectPolicy: primary.projectPolicy !== undefined
+                ? primary.projectPolicy
                 : current.projectPolicy ?? null,
-              taskServerConnection: snapshot.telemetry
-                ? taskServerConnection(snapshot.telemetry)
+              taskServerConnection: telemetry
+                ? taskServerConnection(telemetry)
                 : current.taskServerConnection ?? null,
+              executionPlanes: group.map(toExecutionPlane),
               stats,
             };
+            const retainedIndex = index >= 0 ? index : projected.length;
             if (index >= 0) projected[index] = next;
             else projected.push(next);
+            const runnerIds = new Set(group.map(snapshot => snapshot.runnerId));
+            for (let candidate = projected.length - 1; candidate >= 0; candidate--) {
+              if (candidate === retainedIndex) continue;
+              const host = projected[candidate];
+              if (host.capacityHostId === primary.hostId
+                  || runnerIds.has(host.id)
+                  || (host.clientId !== null && runnerIds.has(host.clientId))) {
+                projected.splice(candidate, 1);
+              }
+            }
           }
           return projected;
         });
@@ -493,7 +524,11 @@ export class RemoteHostsService {
     this.patch(id, (host) => ({ ...host, busyAction: kind }));
 
     this.http.post<ClientSummary>(url, {}).subscribe({
-      next: () => { this.log('action-applied', { kind, hostId: id }); this.reload(); },
+      next: () => {
+        this.patch(id, host => ({ ...host, busyAction: null }));
+        this.log('action-applied', { kind, hostId: id });
+        this.reload();
+      },
       error: error => this.actionFailed(id, error),
     });
   }
@@ -527,6 +562,47 @@ function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<Rem
     diskTotalGb: (telemetry.diskTotalBytes ?? 0) / 1024 / 1024 / 1024,
     diskFreeGb: (telemetry.diskFreeBytes ?? 0) / 1024 / 1024 / 1024,
   };
+}
+
+function groupRunnerSnapshots(
+  snapshots: readonly TaskServerRunnerCapabilitySnapshot[],
+): TaskServerRunnerCapabilitySnapshot[][] {
+  const groups = new Map<string, TaskServerRunnerCapabilitySnapshot[]>();
+  for (const snapshot of snapshots) {
+    const group = groups.get(snapshot.hostId) ?? [];
+    group.push(snapshot);
+    groups.set(snapshot.hostId, group);
+  }
+  return [...groups.values()];
+}
+
+function runnerPlaneRole(snapshot: TaskServerRunnerCapabilitySnapshot): HostExecutionPlaneRole {
+  return snapshot.capabilities.some(capability =>
+    capability.key === 'executor:review' || capability.key === 'review-executor')
+    ? 'review'
+    : 'coding';
+}
+
+function toExecutionPlane(snapshot: TaskServerRunnerCapabilitySnapshot): HostExecutionPlaneTelemetry {
+  return {
+    role: runnerPlaneRole(snapshot),
+    runnerId: snapshot.runnerId,
+    name: snapshot.name,
+    lastSeenAt: snapshot.lastSeenAt,
+    observedAt: snapshot.telemetry?.observedAt ?? null,
+    activeSlots: Math.max(0, snapshot.telemetry?.activeSlots ?? 0),
+    maxParallelism: snapshot.effectiveMaxParallelism ?? snapshot.runtimeCapacity?.maxParallelism ?? null,
+    load1: snapshot.telemetry?.load1 ?? null,
+    cpuCores: snapshot.telemetry?.cpuCores ?? 0,
+  };
+}
+
+function uniqueCapabilities(
+  capabilities: readonly RemoteHostCapabilityHealth[],
+): RemoteHostCapabilityHealth[] {
+  const byKey = new Map<string, RemoteHostCapabilityHealth>();
+  for (const capability of capabilities) byKey.set(capability.key, capability);
+  return [...byKey.values()];
 }
 
 function taskServerConnection(

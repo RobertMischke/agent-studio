@@ -15,6 +15,11 @@ describe('formatRunningLabel', () => {
   ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
     expect(formatRunningLabel(local, remote)).toBe(expected);
   });
+
+  it('keeps Review-plane work visible when no coding runner is active', () => {
+    expect(formatRunningLabel(0, 0, 4)).toBe('4 review');
+    expect(formatRunningLabel(1, 2, 4)).toBe('1 local · 2 remote · 4 review');
+  });
 });
 
 /**

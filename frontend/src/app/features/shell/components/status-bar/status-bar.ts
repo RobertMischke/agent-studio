@@ -22,6 +22,7 @@ import {
 import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
+  freshExecutionPlaneSlots,
   freshRemoteTelemetrySlots,
   RemoteHostsService,
 } from '../../../remote-hosts';
@@ -36,10 +37,12 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
 
-export function formatRunningLabel(local: number, remote: number): string {
-  if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
-  if (local > 0) return `${local} local`;
-  if (remote > 0) return `${remote} remote`;
+export function formatRunningLabel(local: number, remote: number, review = 0): string {
+  const parts: string[] = [];
+  if (local > 0) parts.push(`${local} local`);
+  if (remote > 0) parts.push(`${remote} remote`);
+  if (review > 0) parts.push(`${review} review`);
+  if (parts.length > 0) return parts.join(' · ');
   return 'no runners';
 }
 
@@ -94,9 +97,12 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
   readonly runningCount = computed(() => this.runningTruth().total);
+  readonly reviewSlots = computed(() =>
+    freshExecutionPlaneSlots(this.remoteHosts.hosts(), 'review') ?? 0);
+  readonly totalActivityCount = computed(() => this.runningCount() + this.reviewSlots());
   readonly runningLabel = computed(() => {
     const truth = this.runningTruth();
-    return formatRunningLabel(truth.local, truth.remote);
+    return formatRunningLabel(truth.local, truth.remote, this.reviewSlots());
   });
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
@@ -144,7 +150,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   runningTooltip(): string {
     const truth = this.runningTruth();
-    const execution = `Running ${truth.total} - ${truth.local} local / ${truth.remote} remote.`;
+    const execution = `Coding runs ${truth.total} - ${truth.local} local / ${truth.remote} remote. `
+      + `Review plane ${this.reviewSlots()} active ${this.reviewSlots() === 1 ? 'slot' : 'slots'}.`;
     const telemetrySlots = this.remoteTelemetrySlots();
     const comparison = telemetrySlots === null
       ? ' Fresh remote slot telemetry is unavailable.'
@@ -156,7 +163,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
     const loadDetail = `Execution host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
       + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active execution `
-      + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
+      + `${load.activeSlots === 1 ? 'slot' : 'slots'} `
+      + `(${load.codingSlots} coding / ${load.reviewSlots} review).`;
     if (load.correlation === 'load-without-runs') {
       return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }

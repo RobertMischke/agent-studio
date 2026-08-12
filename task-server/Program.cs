@@ -39,10 +39,12 @@ builder.Services.AddSingleton<IResultFinalizationSummaryGenerator, ApplicationRe
 builder.Services.AddSingleton<TaskServerStore>();
 builder.Services.AddSingleton<RuntimeCapacitySettingsService>();
 builder.Services.AddSingleton<HostProjectPolicyService>();
+builder.Services.AddSingleton<ReviewQueueTelemetryWatchdog>();
 builder.Services.AddSingleton<LegacyMigrationService>();
 builder.Services.AddSingleton<IResultRefDeleter, GitResultRefDeleter>();
 builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();
 builder.Services.AddHostedService<ResultRefGcHostedService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewQueueTelemetryWatchdog>());
 
 var configuredUrl = builder.Configuration["LISTEN_URL"]
                     ?? builder.Configuration[$"{TaskServerOptions.SectionName}:ListenUrl"];

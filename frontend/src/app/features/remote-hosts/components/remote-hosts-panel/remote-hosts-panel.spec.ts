@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RemoteHostsPanelComponent } from './remote-hosts-panel';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
+import { ReviewQueueTelemetryStore } from '../../../../services/review-queue-telemetry.store';
 
 /**
  * Render-path test: the panel seeds its registry on init and renders one card
@@ -87,6 +88,35 @@ describe('RemoteHostsPanelComponent', () => {
 
     expect(diagnostic?.textContent).toContain('identity file corrupt: agent-runner-01.json');
     expect(diagnostic?.textContent).toContain('POST /api/clients/register');
+    fixture.destroy();
+  });
+
+  it('renders queue depth, drain rate, and median review duration', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteHostsPanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const reviewQueue = TestBed.inject(ReviewQueueTelemetryStore);
+    reviewQueue.snapshot.set({
+      observedAt: '2026-08-11T22:00:00Z', queueDepth: 40, waitingDepth: 36,
+      activeReviews: 4, drainRatePerHour: 3.5, drainWindowMinutes: 60,
+      medianReviewDurationSeconds: 1_200, durationWindowHours: 24,
+      durationSampleCount: 20, lastDrainAt: '2026-08-11T21:55:00Z',
+      oldestWaitingAt: '2026-08-11T20:00:00Z', stagnant: false,
+      stagnationThresholdMinutes: 30, stagnantForMinutes: 0,
+    });
+
+    const fixture = TestBed.createComponent(RemoteHostsPanelComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="remote-hosts-review-depth"]')?.textContent).toContain('40');
+    expect(el.querySelector('[data-testid="remote-hosts-review-drain"]')?.textContent).toContain('3.5/h');
+    expect(el.querySelector('[data-testid="remote-hosts-review-duration"]')?.textContent).toContain('20 min');
     fixture.destroy();
   });
 });
