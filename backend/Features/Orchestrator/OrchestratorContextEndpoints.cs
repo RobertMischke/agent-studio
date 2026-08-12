@@ -23,6 +23,11 @@ public static class OrchestratorContextEndpoints
             string taskKey,
             OrchestratorContextDigestService digests,
             CancellationToken ct) => Build($"task:{projectId}/{taskKey}", false, digests, ct));
+        group.MapGet("/dossier:{projectId}/{dossierId}", (
+            string projectId,
+            string dossierId,
+            OrchestratorContextDigestService digests,
+            CancellationToken ct) => Build($"dossier:{projectId}/{dossierId}", false, digests, ct));
 
         group.MapPost("/global/refresh", (
             OrchestratorContextDigestService digests,
@@ -36,6 +41,11 @@ public static class OrchestratorContextEndpoints
             string taskKey,
             OrchestratorContextDigestService digests,
             CancellationToken ct) => Build($"task:{projectId}/{taskKey}", true, digests, ct));
+        group.MapPost("/dossier:{projectId}/{dossierId}/refresh", (
+            string projectId,
+            string dossierId,
+            OrchestratorContextDigestService digests,
+            CancellationToken ct) => Build($"dossier:{projectId}/{dossierId}", true, digests, ct));
     }
 
     private static async Task<IResult> Build(

@@ -203,10 +203,12 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(page.getByTestId('orch-context-header'))
       .toHaveAttribute('data-context-key', `task:${PROJECT}/AGT-1933`);
 
-    const picker = page.getByTestId('orch-side-sheet-project-combo');
-    await picker.click();
-    await page.getByTestId(`orch-side-sheet-project-combo-option-${PROJECT}`).click();
+    await page.getByTestId(`chat-switcher-row-project:${PROJECT}`)
+      .getByRole('button')
+      .first()
+      .click();
 
+    await page.getByTestId('orch-context-badge').click();
     await expect(page.getByTestId('orch-context-header'))
       .toHaveAttribute('data-context-key', `project:${PROJECT}`);
   });
@@ -218,7 +220,7 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     const badge = page.getByTestId('orch-context-badge');
     await expect(badge).toBeVisible();
     await expect(badge).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByTestId('orch-context-count')).toHaveText('3');
+    await expect(page.getByTestId('orch-context-count')).toHaveText('2');
     await expect(page.getByTestId('orch-context-menu')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-pin')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-settings')).toHaveCount(0);
@@ -244,7 +246,7 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
 
     const header = page.getByTestId('orch-context-header');
     await expect(header).toBeVisible();
-    await expect(header).toHaveAttribute('data-scope', 'board');
+    await expect(header).toHaveAttribute('data-scope', 'project');
     await expect(header).toHaveAttribute('data-context-key', `project:${PROJECT}`);
     await expect(page.getByTestId('orch-context-scope')).toHaveText('Project context');
     await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
@@ -280,20 +282,18 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     const pinBtn = page.getByTestId('orch-side-sheet-pin');
     await expect(pinBtn).toContainText('Pin context');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
 
     await page.screenshot({
       path: 'screenshots/orchestrator-side-sheet-pin/following--mocked.png',
       fullPage: false,
     });
 
-    // Pin: header enters the pinned state, the picker locks.
+    // Pin: the header enters the pinned state.
     await pinBtn.click();
     await expect(header).toHaveAttribute('data-pinned', 'true');
     await expect(page.getByTestId('orch-context-pin')).toContainText('Pinned');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'true');
     await expect(pinBtn).toContainText('Follow navigation');
-    await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeDisabled();
 
     await page.screenshot({
       path: 'screenshots/orchestrator-side-sheet-pin/pinned--mocked.png',
@@ -304,6 +304,5 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await pinBtn.click();
     await expect(header).not.toHaveAttribute('data-pinned', 'true');
     await expect(page.getByTestId('orch-context-pin')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
   });
 });

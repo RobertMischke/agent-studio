@@ -59,11 +59,13 @@ page head, action bar, and chat context.
 
 ## Chat context decision
 
-Page identity is embedded in the existing project chat as
+Ordinary page identity is embedded in the existing project chat as
 `navigationContext`. It does not introduce a `page:` form of
-`OrchestratorContextKey`.
+`OrchestratorContextKey`. A registered Dossier is the explicit exception: its
+Workbench identity selects `dossier:<PROJECT>/<DOSSIER-ID>` and owns a separate
+durable transcript.
 
-This is the simpler contract because a page is the operator's current
+This is the simpler contract because an ordinary page is the operator's current
 navigation detail, not a separate durable conversation owner. Project chat
 history therefore remains continuous while each first send from a new page
 carries:

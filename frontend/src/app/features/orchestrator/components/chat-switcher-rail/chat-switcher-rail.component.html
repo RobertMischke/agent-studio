@@ -1,12 +1,14 @@
 <section class="context-list" data-testid="chat-context-list">
   <div id="chat-context-groups" class="context-list__groups" data-testid="chat-context-groups">
-    @for (group of [{ label: 'Global', rows: globalRows() }, { label: 'Projects', rows: projectRows() }, { label: 'Tasks', rows: taskRows() }]; track group.label) {
+    @for (group of [{ label: 'Project', rows: projectRows() }, { label: 'Tasks', rows: taskRows() }, { label: 'Dossiers', rows: dossierRows() }]; track group.label) {
       @if (group.rows.length > 0) {
         <section class="context-list__group">
           <h3>{{ group.label }}</h3>
           @for (row of group.rows; track row.contextKey) {
             <div class="context-list__row"
                  [class.context-list__row--active]="row.contextKey === activeContextKey()"
+                 [attr.aria-current]="row.contextKey === activeContextKey() ? 'true' : null"
+                 [attr.data-context-kind]="row.kind"
                  [attr.data-testid]="'chat-switcher-row-' + row.contextKey">
               <button type="button" class="context-list__name" (click)="select(row.contextKey)">
                 <span class="context-list__presence"

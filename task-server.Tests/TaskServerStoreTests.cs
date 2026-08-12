@@ -81,7 +81,7 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
-    public async Task Version_ten_adds_durable_result_finalization_state()
+    public async Task Version_ten_adds_durable_result_finalization_state_and_reaches_current_schema()
     {
         using var temp = new TempDirectory();
         var first = Store(temp.Path);
@@ -113,7 +113,88 @@ public sealed class TaskServerStoreTests
             """;
         Assert.Equal(1L, (long)(await table.ExecuteScalarAsync())!);
         table.CommandText = "SELECT value FROM meta WHERE key = 'schema_version';";
-        Assert.Equal("11", (string)(await table.ExecuteScalarAsync())!);
+        Assert.Equal(
+            TaskServerStore.CurrentSchemaVersion.ToString(),
+            (string)(await table.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
+    public async Task Version_twelve_adds_Dossier_context_columns_without_losing_existing_contexts()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var workspace = await first.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Migration"), "test", default);
+        var project = await first.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Migration", "MIG"),
+            "test",
+            default);
+        var task = await first.CreateTaskAsync(
+            project.ProjectId,
+            new CreateTaskRequest("Existing context", State: "2-ready"),
+            "test",
+            default);
+        await first.EnsureOrchestratorContextAsync(project.ProjectId, task.TaskId, "test", default);
+
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={first.DatabasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA foreign_keys=OFF;";
+            await command.ExecuteNonQueryAsync();
+            command.CommandText = """
+                BEGIN IMMEDIATE;
+                CREATE TABLE orchestrator_contexts_v11(
+                    context_key TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK(kind IN ('project', 'task')),
+                    project_id TEXT NOT NULL REFERENCES projects(id),
+                    task_id TEXT REFERENCES tasks(id),
+                    summary TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    hidden_at TEXT,
+                    CHECK((kind = 'project' AND task_id IS NULL) OR (kind = 'task' AND task_id IS NOT NULL))
+                );
+                INSERT INTO orchestrator_contexts_v11(
+                    context_key, kind, project_id, task_id, summary, created_at, updated_at, hidden_at)
+                SELECT context_key, kind, project_id, task_id, summary, created_at, updated_at, hidden_at
+                  FROM orchestrator_contexts;
+                DROP TABLE orchestrator_contexts;
+                ALTER TABLE orchestrator_contexts_v11 RENAME TO orchestrator_contexts;
+                CREATE INDEX ix_orchestrator_contexts_project_visible
+                    ON orchestrator_contexts(project_id, hidden_at, updated_at);
+                DELETE FROM schema_migrations WHERE version = 12;
+                UPDATE meta SET value = '11' WHERE key = 'schema_version';
+                COMMIT;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var upgraded = Store(temp.Path);
+        await upgraded.InitializeAsync();
+
+        var contexts = await upgraded.ListOrchestratorContextsAsync(false, default);
+        Assert.Contains(contexts, context => context.ContextKey == "project:Migration");
+        Assert.Contains(contexts, context => context.ContextKey == $"task:Migration/{task.TaskKey}");
+        var dossier = await upgraded.EnsureOrchestratorContextAsync(
+            project.ProjectId,
+            null,
+            "test",
+            default,
+            new OrchestratorDossierContext("routing", "MIG-W1", "Routing", "active"));
+        Assert.Equal("dossier:Migration/routing", dossier.ContextKey);
+
+        await using var upgradedConnection = new SqliteConnection(
+            $"Data Source={upgraded.DatabasePath};Pooling=False");
+        await upgradedConnection.OpenAsync();
+        await using var column = upgradedConnection.CreateCommand();
+        column.CommandText = """
+            SELECT count(*) FROM pragma_table_info('orchestrator_contexts')
+             WHERE name IN ('dossier_id', 'dossier_key', 'dossier_title', 'dossier_state');
+            """;
+        Assert.Equal(4L, (long)(await column.ExecuteScalarAsync())!);
     }
 
     [Fact]

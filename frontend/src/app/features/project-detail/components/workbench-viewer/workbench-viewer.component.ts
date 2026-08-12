@@ -35,6 +35,8 @@ import {
   normalizeWorkbenchDecisionResponses,
 } from '../../../../services/workbench-decision-markup.util';
 import { WorkbenchDecisionDraftStore } from '../../state/workbench-decision-draft.store';
+import { PageContextService } from '../../../../services/page-context.service';
+import { pageContextKey, pageExcerpt, type PageContext } from '../../../../models/page-context.model';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
@@ -60,6 +62,7 @@ export class WorkbenchViewerComponent {
   private readonly http = inject(HttpClient);
   private readonly hub = inject(JobsHubClient);
   private readonly decisionDrafts = inject(WorkbenchDecisionDraftStore);
+  private readonly pageContext = inject(PageContextService);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
   private requestGeneration = 0;
 
@@ -94,6 +97,20 @@ export class WorkbenchViewerComponent {
       const id = this.workbenchId();
       this.maximized.set(false);
       this.loadDocument(project, id);
+    });
+    effect((onCleanup) => {
+      const document = this.document();
+      if (!document) return;
+      const context: PageContext = {
+        projectName: this.projectName(),
+        relPath: document.workbench.entryPath,
+        title: document.workbench.title,
+        pageType: 'workbench',
+        excerpt: pageExcerpt(document.html, document.workbench.summary),
+      };
+      const key = pageContextKey(context);
+      this.pageContext.activate(context);
+      onCleanup(() => this.pageContext.clear(key));
     });
     effect(() => {
       const event = this.hub.workbenchEvent();

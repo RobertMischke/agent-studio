@@ -31,17 +31,34 @@ describe('OrchestratorContextHeaderComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="orch-context-header"]')).toBeNull();
   });
 
-  it('renders project + Board scope when no task is open', async () => {
+  it('renders the project chat when no task or Dossier is open', async () => {
     const fixture = await makeFixture();
     fixture.componentRef.setInput('project', 'demo-project');
     fixture.detectChanges();
     expect(text(fixture, 'orch-context-project')).toContain('demo-project');
-    expect(text(fixture, 'orch-context-board')).toBe('Board');
+    expect(text(fixture, 'orch-context-board')).toBe('Project chat');
     // No task, no lane, no run -> the meta row is absent.
     expect(fixture.nativeElement.querySelector('[data-testid="orch-context-lane"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="orch-context-run"]')).toBeNull();
     const header = fixture.nativeElement.querySelector('[data-testid="orch-context-header"]');
-    expect(header.getAttribute('data-scope')).toBe('board');
+    expect(header.getAttribute('data-scope')).toBe('project');
+  });
+
+  it('renders the Dossier identity and lifecycle from the bound chat context', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('project', 'demo-project');
+    fixture.componentRef.setInput('dossierKey', 'AGT-W34');
+    fixture.componentRef.setInput('dossierTitle', 'Routing context');
+    fixture.componentRef.setInput('dossierState', 'in-review');
+    fixture.componentRef.setInput('contextKey', 'dossier:demo-project/routing');
+    fixture.detectChanges();
+
+    expect(text(fixture, 'orch-context-dossier')).toContain('AGT-W34');
+    expect(text(fixture, 'orch-context-lane')).toBe('In review');
+    const header = fixture.nativeElement.querySelector('[data-testid="orch-context-header"]');
+    expect(header.getAttribute('data-scope')).toBe('dossier');
+    expect(header.getAttribute('data-context-key')).toBe('dossier:demo-project/routing');
+    expect(fixture.nativeElement.querySelector('[data-testid="orch-context-board"]')).toBeNull();
   });
 
   it('renders task key + title + lane label when a task is in scope', async () => {

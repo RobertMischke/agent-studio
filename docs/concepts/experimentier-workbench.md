@@ -351,12 +351,12 @@ iframe policy.
 ## 6. Chat is the orchestrator
 
 Opening a Dossier does not create a new chatbot, model owner, or peer project
-session. The right column is the existing resizable project Orchestrator Chat
+session. The right column is the existing resizable Orchestrator Chat
 described in [Persistent Orchestrator Chat](./orchestrator-chat.md) and
 [Orchestrator in-app](orchestrator-in-app.md).
 
-The canonical context stays `project:<PROJ-ID>`. The Dossier is a pinned
-context attachment containing:
+The Dossier owns the canonical context
+`dossier:<PROJ-ID>/<DOSSIER-ID>`. It carries:
 
 - workbench id, title, path, branch, revision, status, and phase;
 - a bounded text description derived from the descriptor;
@@ -364,14 +364,14 @@ context attachment containing:
 - batched status for referenced task keys;
 - explicit freshness and validation failures.
 
-This preserves one project orchestrator and one durable project conversation.
-Dossier open/close and decision events can appear as compact transcript
-anchors. Every anchored turn records the Dossier id and entrypoint fingerprint
-or Git revision it actually saw. The smaller first version deliberately shares
-the project transcript across Dossiers. A future
-`workbench:<PROJ-ID>/<WB-ID>` transcript key is a larger registry, routing,
-storage, and digest contract, not a cosmetic UI change; it still must not create
-a second canonical project brain.
+This preserves one project orchestrator while giving each Dossier a durable,
+isolated conversation. Its first open starts with no turns, later opens resume
+the same transcript, and project monitoring or another Dossier's history never
+appears in it. Dossier open/close and decision events can appear as compact
+transcript anchors only inside that Dossier context. Every anchored turn
+records the Dossier id and entrypoint fingerprint or Git revision it actually
+saw. The context is retained when the Dossier becomes archived or documented,
+but is hidden from the current list, matching task archive semantics.
 
 Chat can explain, compare options, change presentation-only selections through
 typed host tools, and prepare a task draft. Source edits still use an explicit
@@ -489,7 +489,7 @@ The first useful read-only cut is medium.
 |---|---|---|---|
 | **WB-1: Folder contract and current Explorer list** | M | Validate `docs/<theme>/<id>/index.html + workbench.json`, expose a bounded lazy list, and add the collapsible project row. | Current count reconciles to visible children; invalid entries are explicit; decided/archive history is reachable; no viewer or mutation. |
 | **WB-2: Dossier viewer and isolation** | L | Open a tab with branch/revision provenance, a script-capable opaque-origin sandbox, strict CSP, static Wiki fallback, and the tiny presentation event bridge. | Static and interactive fixtures work in both themes and at narrow width; malicious bridge/network/navigation fixtures fail; no chat or task creation. |
-| **WB-3: Canonical orchestrator attachment** | M/L | Reuse the project chat side sheet and attach the bounded Dossier digest plus current selection. Add compact open/close anchors. | The context inspector shows path and revision; no cross-project leakage; no new canonical session key; source editing remains out of scope. |
+| **WB-3: Canonical orchestrator attachment** | M/L | Reuse the chat side sheet with a first-class Dossier context and attach the bounded Dossier digest plus current selection. Add compact open/close anchors. | The context inspector shows path and revision; first open is empty; return resumes; no cross-project or cross-context leakage; source editing remains out of scope. |
 | **WB-4: Host-owned task editor, decision spawn, and receipt** | L | Add the user-driven task draft editor and Build/Archive previews in trusted host chrome, including field validation, explicit confirmation, shared validated task creation, idempotent operation handling, manifest transition, planning-ledger recording, and AGT-2050 receipts. | Generated and chat-prepared values remain editable; neither chat nor iframe can confirm; retry cannot duplicate a card; failed partial completion is visible and repairable; a source planning task receives both `relatedTo` and a `SpawnedTaskLedger` record. |
 | **WB-5: Curated migration pilot** | M | Promote a small named set such as pipeline workbench, project-state exploration, and app survey; document provenance and leave other mockups untouched. | Each promoted item has one live source, valid metadata, and an explicit owner; incompatible storage/network assumptions are reported; no bulk heuristic migration. |
 
@@ -563,8 +563,8 @@ The resulting changes are part of this concept:
   Wiki sandbox;
 - feature decisions have a visible pending/failed state and deterministic retry
   path instead of assuming two stores update atomically;
-- the MVP uses the canonical project transcript and states that per-Dossier
-  transcript continuity would be a larger context-key extension;
+- the delivered context-key extension gives each Dossier its own canonical
+  transcript without creating another model owner;
 - WB-2 is rated large and security-sensitive, and the complete family is an
   Epic rather than a single feature card;
 - WB-4 is rated large, records planning-owned spawns in the existing ledger, and

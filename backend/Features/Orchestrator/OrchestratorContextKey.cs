@@ -5,8 +5,9 @@ namespace AgentStudio.Orchestrator;
 
 /// <summary>
 /// Canonical context key for one orchestrator session (multichat concept,
-/// AGT-1917 Phase 1). Three shapes exist: <c>global</c>,
-/// <c>project:&lt;PROJ-ID&gt;</c> and <c>task:&lt;PROJ-ID&gt;/&lt;TASK-KEY&gt;</c>.
+/// AGT-1917 Phase 1). Four shapes exist: <c>global</c>,
+/// <c>project:&lt;PROJ-ID&gt;</c>, <c>task:&lt;PROJ-ID&gt;/&lt;TASK-KEY&gt;</c>, and
+/// <c>dossier:&lt;PROJ-ID&gt;/&lt;DOSSIER-ID&gt;</c>.
 ///
 /// <para>
 /// The key doubles as the registry folder name after <see cref="Encode"/>,
@@ -21,11 +22,12 @@ public sealed class OrchestratorContextKey : IEquatable<OrchestratorContextKey>
     public const string GlobalKind = "global";
     public const string ProjectKind = "project";
     public const string TaskKind = "task";
+    public const string DossierKind = "dossier";
 
     /// <summary>The canonical string form, e.g. <c>task:AGT/AGT-1917</c>.</summary>
     public string Value { get; }
 
-    /// <summary>One of <see cref="GlobalKind"/> / <see cref="ProjectKind"/> / <see cref="TaskKind"/>.</summary>
+    /// <summary>One of the canonical global, project, task, or Dossier kinds.</summary>
     public string Kind { get; }
 
     /// <summary>Project id for project / task contexts; null for global.</summary>
@@ -34,15 +36,24 @@ public sealed class OrchestratorContextKey : IEquatable<OrchestratorContextKey>
     /// <summary>Task key for task contexts; null otherwise.</summary>
     public string? TaskKey { get; }
 
-    /// <summary>The singleton key for the app-wide orchestrator session.</summary>
-    public static readonly OrchestratorContextKey Global = new(GlobalKind, GlobalKind, null, null);
+    /// <summary>Stable repository Dossier id for Dossier contexts; null otherwise.</summary>
+    public string? DossierId { get; }
 
-    private OrchestratorContextKey(string value, string kind, string? projectId, string? taskKey)
+    /// <summary>The singleton key for the app-wide orchestrator session.</summary>
+    public static readonly OrchestratorContextKey Global = new(GlobalKind, GlobalKind, null, null, null);
+
+    private OrchestratorContextKey(
+        string value,
+        string kind,
+        string? projectId,
+        string? taskKey,
+        string? dossierId)
     {
         Value = value;
         Kind = kind;
         ProjectId = projectId;
         TaskKey = taskKey;
+        DossierId = dossierId;
     }
 
     public bool IsGlobal => Kind == GlobalKind;
@@ -86,7 +97,7 @@ public sealed class OrchestratorContextKey : IEquatable<OrchestratorContextKey>
         {
             var id = raw[projectPrefix.Length..];
             if (!IsValidIdPart(id)) return false;
-            key = new OrchestratorContextKey(raw, ProjectKind, id, null);
+            key = new OrchestratorContextKey(raw, ProjectKind, id, null, null);
             return true;
         }
 
@@ -99,7 +110,20 @@ public sealed class OrchestratorContextKey : IEquatable<OrchestratorContextKey>
             var projectId = rest[..slash];
             var taskKey = rest[(slash + 1)..];
             if (!IsValidIdPart(projectId) || !IsValidIdPart(taskKey)) return false;
-            key = new OrchestratorContextKey(raw, TaskKind, projectId, taskKey);
+            key = new OrchestratorContextKey(raw, TaskKind, projectId, taskKey, null);
+            return true;
+        }
+
+        const string dossierPrefix = DossierKind + ":";
+        if (raw.StartsWith(dossierPrefix, StringComparison.Ordinal))
+        {
+            var rest = raw[dossierPrefix.Length..];
+            var slash = rest.IndexOf('/');
+            if (slash < 0) return false;
+            var projectId = rest[..slash];
+            var dossierId = rest[(slash + 1)..];
+            if (!IsValidIdPart(projectId) || !IsValidIdPart(dossierId)) return false;
+            key = new OrchestratorContextKey(raw, DossierKind, projectId, null, dossierId);
             return true;
         }
 

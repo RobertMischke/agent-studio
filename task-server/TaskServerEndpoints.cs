@@ -64,6 +64,15 @@ public static class TaskServerEndpoints
             CancellationToken ct)
             => await InvokeAsync(() => store.EnsureOrchestratorContextAsync(
                 projectIdentity, taskIdentity, Actor(context), ct)));
+        orchestratorContexts.MapPut("/projects/{projectIdentity}/dossiers/{dossierId}", async (
+            HttpContext context,
+            string projectIdentity,
+            string dossierId,
+            OrchestratorDossierContext request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.EnsureOrchestratorContextAsync(
+                projectIdentity, null, Actor(context), ct, request with { DossierId = dossierId })));
         orchestratorContexts.MapGet("/projects/{projectIdentity}/turns", async (
             HttpContext context,
             string projectIdentity,
@@ -81,6 +90,19 @@ public static class TaskServerEndpoints
             CancellationToken ct)
             => await InvokeAsync(() => store.ReadOrchestratorContextAsync(
                 projectIdentity, taskIdentity, limit ?? 500, Actor(context), ct)));
+        orchestratorContexts.MapGet("/projects/{projectIdentity}/dossiers/{dossierId}/turns", async (
+            HttpContext context,
+            string projectIdentity,
+            string dossierId,
+            string? dossierKey,
+            string? dossierTitle,
+            string? lifecycleState,
+            int? limit,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ReadOrchestratorContextAsync(
+                projectIdentity, null, limit ?? 500, Actor(context), ct,
+                DossierContext(dossierId, dossierKey, dossierTitle, lifecycleState))));
         orchestratorContexts.MapPost("/projects/{projectIdentity}/turns", async (
             HttpContext context,
             string projectIdentity,
@@ -98,6 +120,20 @@ public static class TaskServerEndpoints
             CancellationToken ct)
             => await InvokeAsync(() => store.AppendOrchestratorContextTurnAsync(
                 projectIdentity, taskIdentity, request, Actor(context), ct), StatusCodes.Status201Created));
+        orchestratorContexts.MapPost("/projects/{projectIdentity}/dossiers/{dossierId}/turns", async (
+            HttpContext context,
+            string projectIdentity,
+            string dossierId,
+            string? dossierKey,
+            string? dossierTitle,
+            string? lifecycleState,
+            AppendOrchestratorContextTurnRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.AppendOrchestratorContextTurnAsync(
+                projectIdentity, null, request, Actor(context), ct,
+                DossierContext(dossierId, dossierKey, dossierTitle, lifecycleState)),
+                StatusCodes.Status201Created));
         orchestratorContexts.MapPost("/projects/{projectIdentity}/legacy-import", async (
             HttpContext context,
             string projectIdentity,
@@ -106,6 +142,17 @@ public static class TaskServerEndpoints
             CancellationToken ct)
             => await InvokeAsync(() => store.ImportLegacyOrchestratorChatAsync(
                 projectIdentity, request, Actor(context), ct)));
+
+        static OrchestratorDossierContext DossierContext(
+            string dossierId,
+            string? dossierKey,
+            string? dossierTitle,
+            string? lifecycleState)
+            => new(
+                dossierId,
+                dossierKey,
+                string.IsNullOrWhiteSpace(dossierTitle) ? dossierKey ?? dossierId : dossierTitle,
+                string.IsNullOrWhiteSpace(lifecycleState) ? "unknown" : lifecycleState);
 
         var hosts = api.MapGroup("/hosts");
         hosts.MapGet("/{hostId}/runtime-capacity", async (

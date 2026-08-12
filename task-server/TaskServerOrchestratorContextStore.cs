@@ -31,12 +31,13 @@ public sealed partial class TaskServerStore
                    COALESCE((SELECT sum(turn.cache_read_tokens) FROM orchestrator_context_turns turn
                      WHERE turn.context_key = c.context_key), 0),
                    COALESCE((SELECT sum(turn.cache_creation_tokens) FROM orchestrator_context_turns turn
-                     WHERE turn.context_key = c.context_key), 0)
+                     WHERE turn.context_key = c.context_key), 0),
+                   c.dossier_id, c.dossier_key, c.dossier_title, c.dossier_state
               FROM orchestrator_contexts c
               JOIN projects p ON p.id = c.project_id
               LEFT JOIN tasks t ON t.id = c.task_id
              WHERE $include_hidden = 1 OR c.hidden_at IS NULL
-             ORDER BY CASE c.kind WHEN 'project' THEN 0 ELSE 1 END,
+             ORDER BY CASE c.kind WHEN 'project' THEN 0 WHEN 'task' THEN 1 ELSE 2 END,
                       COALESCE(NULLIF(c.updated_at, ''), c.created_at) DESC,
                       c.context_key;
             """, ("$include_hidden", includeHidden ? 1 : 0));
@@ -49,14 +50,15 @@ public sealed partial class TaskServerStore
         string projectIdentity,
         string? taskIdentity,
         string actorId,
-        CancellationToken ct)
+        CancellationToken ct,
+        OrchestratorDossierContext? dossier = null)
     {
         RequireWritable();
         OrchestratorContextDto? result = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var target = await ResolveOrchestratorContextTargetAsync(
-                connection, transaction, projectIdentity, taskIdentity, ct);
+                connection, transaction, projectIdentity, taskIdentity, dossier, ct);
             result = await EnsureOrchestratorContextAsync(
                 connection, transaction, target, actorId, ct);
         }, ct);
@@ -68,10 +70,11 @@ public sealed partial class TaskServerStore
         string? taskIdentity,
         int limit,
         string actorId,
-        CancellationToken ct)
+        CancellationToken ct,
+        OrchestratorDossierContext? dossier = null)
     {
         var context = await EnsureOrchestratorContextAsync(
-            projectIdentity, taskIdentity, actorId, ct);
+            projectIdentity, taskIdentity, actorId, ct, dossier);
         var boundedLimit = Math.Clamp(limit, 1, 1000);
         await using var connection = await OpenReadyAsync(ct);
         var turns = new List<OrchestratorContextTurnDto>();
@@ -100,7 +103,8 @@ public sealed partial class TaskServerStore
         string? taskIdentity,
         AppendOrchestratorContextTurnRequest request,
         string actorId,
-        CancellationToken ct)
+        CancellationToken ct,
+        OrchestratorDossierContext? dossier = null)
     {
         RequireWritable();
         ValidateOrchestratorContextTurn(request.Turn);
@@ -108,7 +112,7 @@ public sealed partial class TaskServerStore
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var target = await ResolveOrchestratorContextTargetAsync(
-                connection, transaction, projectIdentity, taskIdentity, ct);
+                connection, transaction, projectIdentity, taskIdentity, dossier, ct);
             var context = await EnsureOrchestratorContextAsync(
                 connection, transaction, target, actorId, ct);
             var canonicalTurn = request.Turn with
@@ -262,6 +266,7 @@ public sealed partial class TaskServerStore
         SqliteTransaction transaction,
         string projectIdentity,
         string? taskIdentity,
+        OrchestratorDossierContext? dossier,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(projectIdentity))
@@ -285,10 +290,33 @@ public sealed partial class TaskServerStore
         if (projectId is null || projectName is null)
             throw new KeyNotFoundException($"Project '{projectIdentity}' was not found.");
 
+        if (dossier is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(taskIdentity))
+                throw new ArgumentException("Task and Dossier identities cannot be combined.");
+            var dossierId = dossier.DossierId.Trim();
+            if (string.IsNullOrWhiteSpace(dossierId)
+                || dossierId.Contains('/')
+                || dossierId.Contains('\\'))
+                throw new ArgumentException("Dossier identity must be one non-empty route segment.");
+            var title = string.IsNullOrWhiteSpace(dossier.DossierTitle)
+                ? dossier.DossierKey?.Trim() ?? dossierId
+                : dossier.DossierTitle.Trim();
+            var state = string.IsNullOrWhiteSpace(dossier.LifecycleState)
+                ? "unknown"
+                : dossier.LifecycleState.Trim().ToLowerInvariant();
+            return new OrchestratorContextTarget(
+                $"dossier:{projectName}/{dossierId}", OrchestratorContextKinds.Dossier,
+                projectId, projectName, null, null, dossierId,
+                string.IsNullOrWhiteSpace(dossier.DossierKey) ? null : dossier.DossierKey.Trim(),
+                title, state, title, state);
+        }
+
         if (string.IsNullOrWhiteSpace(taskIdentity))
             return new OrchestratorContextTarget(
                 $"project:{projectName}", OrchestratorContextKinds.Project,
-                projectId, projectName, null, null, $"Project chat for {projectName}", null);
+                projectId, projectName, null, null, null, null, null, null,
+                $"Project chat for {projectName}", null);
 
         string? taskId = null;
         string? taskKey = null;
@@ -315,7 +343,7 @@ public sealed partial class TaskServerStore
                 $"Task '{taskIdentity}' was not found in project '{projectIdentity}'.");
         return new OrchestratorContextTarget(
             $"task:{projectName}/{taskKey}", OrchestratorContextKinds.Task,
-            projectId, projectName, taskId, taskKey,
+            projectId, projectName, taskId, taskKey, null, null, null, null,
             string.IsNullOrWhiteSpace(taskTitle) ? taskKey : taskTitle!, taskState);
     }
 
@@ -327,23 +355,34 @@ public sealed partial class TaskServerStore
         CancellationToken ct)
     {
         var now = UtcNow;
-        var hiddenAt = OrchestratorContextVisibilityPolicy.IsHidden(target.Kind, target.TaskState)
+        var hiddenAt = OrchestratorContextVisibilityPolicy.IsHidden(target.Kind, target.LifecycleState)
             ? now
             : (DateTime?)null;
         await ExecuteAsync(connection, """
             INSERT INTO orchestrator_contexts(
-                context_key, kind, project_id, task_id, summary,
+                context_key, kind, project_id, task_id,
+                dossier_id, dossier_key, dossier_title, dossier_state, summary,
                 created_at, updated_at, hidden_at)
-            VALUES ($key, $kind, $project, $task, $summary, $now, $now, $hidden)
+            VALUES ($key, $kind, $project, $task,
+                    $dossier_id, $dossier_key, $dossier_title, $dossier_state,
+                    $summary, $now, $now, $hidden)
             ON CONFLICT(context_key) DO UPDATE SET
                 project_id = excluded.project_id,
                 task_id = excluded.task_id,
+                dossier_id = excluded.dossier_id,
+                dossier_key = excluded.dossier_key,
+                dossier_title = excluded.dossier_title,
+                dossier_state = excluded.dossier_state,
                 hidden_at = excluded.hidden_at;
             """, ct, transaction,
             ("$key", target.ContextKey),
             ("$kind", target.Kind),
             ("$project", target.ProjectId),
             ("$task", target.TaskId),
+            ("$dossier_id", target.DossierId),
+            ("$dossier_key", target.DossierKey),
+            ("$dossier_title", target.DossierTitle),
+            ("$dossier_state", target.DossierState),
             ("$summary", target.InitialSummary),
             ("$now", Iso(now)),
             ("$hidden", hiddenAt is null ? null : Iso(hiddenAt.Value)));
@@ -352,7 +391,8 @@ public sealed partial class TaskServerStore
             SELECT c.context_key, c.kind, c.project_id, p.name, c.task_id, t.task_key,
                    c.summary, c.created_at, c.updated_at, c.hidden_at,
                    (SELECT count(*) FROM orchestrator_context_turns turn WHERE turn.context_key = c.context_key),
-                   NULL, 0, 0, 0, 0
+                   NULL, 0, 0, 0, 0,
+                   c.dossier_id, c.dossier_key, c.dossier_title, c.dossier_state
               FROM orchestrator_contexts c
               JOIN projects p ON p.id = c.project_id
               LEFT JOIN tasks t ON t.id = c.task_id
@@ -377,7 +417,11 @@ public sealed partial class TaskServerStore
             reader.IsDBNull(9) ? null : Parse(reader.GetString(9)),
             reader.GetInt64(10),
             reader.IsDBNull(11) ? null : reader.GetString(11),
-            reader.GetInt64(12), reader.GetInt64(13), reader.GetInt64(14), reader.GetInt64(15));
+            reader.GetInt64(12), reader.GetInt64(13), reader.GetInt64(14), reader.GetInt64(15),
+            reader.IsDBNull(16) ? null : reader.GetString(16),
+            reader.IsDBNull(17) ? null : reader.GetString(17),
+            reader.IsDBNull(18) ? null : reader.GetString(18),
+            reader.IsDBNull(19) ? null : reader.GetString(19));
 
     private static OrchestratorContextTurnDto ReadOrchestratorContextTurn(SqliteDataReader reader)
     {
@@ -436,6 +480,10 @@ public sealed partial class TaskServerStore
         string ProjectName,
         string? TaskId,
         string? TaskKey,
+        string? DossierId,
+        string? DossierKey,
+        string? DossierTitle,
+        string? DossierState,
         string InitialSummary,
-        string? TaskState);
+        string? LifecycleState);
 }

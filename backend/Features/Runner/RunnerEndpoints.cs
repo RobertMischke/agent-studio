@@ -349,9 +349,16 @@ public static class RunnerEndpoints
                 return Results.BadRequest(new { error = "Invalid orchestrator context key." });
             var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == key.ProjectId);
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{key.ProjectId}'" });
-            var turns = await chatService.ReadAsync(key.ProjectId!, entry.Path, key, 1000, ct);
-            var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
-            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, turns, executionContext });
+            try
+            {
+                var turns = await chatService.ReadAsync(key.ProjectId!, entry.Path, key, 1000, ct);
+                var executionContext = chatService.ResolveExecutionContext(key.ProjectId!, entry.Path);
+                return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, turns, executionContext });
+            }
+            catch (KeyNotFoundException exception)
+            {
+                return Results.NotFound(new { error = exception.Message });
+            }
         }
 
         static async Task<IResult> SendContextChat(
@@ -379,6 +386,10 @@ public static class RunnerEndpoints
             {
                 return Results.BadRequest(new { code = exception.Code, error = exception.Message });
             }
+            catch (KeyNotFoundException exception)
+            {
+                return Results.NotFound(new { error = exception.Message });
+            }
         }
 
         runnerGroup.MapGet("/project:{projectId}/orchestrator-chat",
@@ -387,6 +398,9 @@ public static class RunnerEndpoints
         runnerGroup.MapGet("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 ReadContextChat($"task:{projectId}/{taskKey}", scanner, chatService, ct));
+        runnerGroup.MapGet("/dossier:{projectId}/{dossierId}/orchestrator-chat",
+            (string projectId, string dossierId, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                ReadContextChat($"dossier:{projectId}/{dossierId}", scanner, chatService, ct));
 
         runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
             (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
@@ -394,6 +408,9 @@ public static class RunnerEndpoints
         runnerGroup.MapPost("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
                 SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));
+        runnerGroup.MapPost("/dossier:{projectId}/{dossierId}/orchestrator-chat",
+            (string projectId, string dossierId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                SendContextChat($"dossier:{projectId}/{dossierId}", req, ctx, scanner, chatService, ct));
 
         // Image upload + serving for the orchestrator chat composer.
         // Files land under <watchPath>/.orchestrator/chat-attachments/.

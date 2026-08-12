@@ -56,7 +56,7 @@ describe('OrchestratorChatHistoryComponent', () => {
     return { fixture, tasks, hub };
   }
 
-  it('groups permanent project contexts before current task contexts and shows summaries', () => {
+  it('groups project, task, and Dossier contexts and shows their summaries', () => {
     const { fixture } = mount([
       context({
         contextKey: 'task:Agent Studio/AGT-2577',
@@ -66,14 +66,27 @@ describe('OrchestratorChatHistoryComponent', () => {
         updatedAt: '2026-08-10T10:00:00Z',
       }),
       context({}),
+      context({
+        contextKey: 'dossier:Agent Studio/routing',
+        kind: 'dossier',
+        taskKey: null,
+        dossierId: 'routing',
+        dossierKey: 'AGT-W34',
+        dossierTitle: 'Routing context',
+        dossierState: 'active',
+        summary: 'Dossier-only conversation.',
+      }),
     ]);
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelectorAll('[data-testid="chat-history-project-list"] [data-testid="chat-history-row"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-testid="chat-history-task-list"] [data-testid="chat-history-row"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-testid="chat-history-dossier-list"] [data-testid="chat-history-row"]')).toHaveLength(1);
     expect(host.textContent).toContain('Build the central Chat History view.');
     expect(host.textContent).toContain('1 project context');
     expect(host.textContent).toContain('1 task context');
+    expect(host.textContent).toContain('1 Dossier context');
+    expect(host.textContent).toContain('AGT-W34');
   });
 
   it('emits the stable context key when a row opens chat', () => {

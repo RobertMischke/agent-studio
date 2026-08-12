@@ -19,7 +19,8 @@ public sealed record OrchestratorConversationScope(
     string Kind,
     string ContextKey,
     string ProjectId,
-    string? TaskKey = null);
+    string? TaskKey = null,
+    string? DossierId = null);
 
 public sealed record OrchestratorActiveSurface(
     string Kind,
@@ -139,14 +140,20 @@ public static class OrchestratorContextEnvelopePolicy
         string projectName,
         OrchestratorContextKey? routeContext)
     {
-        var taskKey = routeContext?.Kind == OrchestratorContextKey.TaskKind
-            ? routeContext.TaskKey
-            : null;
-        var kind = string.IsNullOrWhiteSpace(taskKey) ? "project" : "task";
-        var contextKey = kind == "task"
-            ? $"task:{projectName}/{taskKey}"
-            : $"project:{projectName}";
-        return new OrchestratorConversationScope(kind, contextKey, projectName, taskKey);
+        var taskKey = routeContext?.Kind == OrchestratorContextKey.TaskKind ? routeContext.TaskKey : null;
+        var dossierId = routeContext?.Kind == OrchestratorContextKey.DossierKind ? routeContext.DossierId : null;
+        var kind = !string.IsNullOrWhiteSpace(taskKey)
+            ? OrchestratorContextKey.TaskKind
+            : !string.IsNullOrWhiteSpace(dossierId)
+                ? OrchestratorContextKey.DossierKind
+                : OrchestratorContextKey.ProjectKind;
+        var contextKey = kind switch
+        {
+            OrchestratorContextKey.TaskKind => $"task:{projectName}/{taskKey}",
+            OrchestratorContextKey.DossierKind => $"dossier:{projectName}/{dossierId}",
+            _ => $"project:{projectName}",
+        };
+        return new OrchestratorConversationScope(kind, contextKey, projectName, taskKey, dossierId);
     }
 
     private static void ValidateSuppliedScope(
@@ -156,6 +163,7 @@ public static class OrchestratorContextEnvelopePolicy
         if (!string.Equals(expected.Kind, supplied.Kind, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(expected.ProjectId, supplied.ProjectId, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(expected.TaskKey, supplied.TaskKey, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(expected.DossierId, supplied.DossierId, StringComparison.Ordinal)
             || !string.Equals(expected.ContextKey, supplied.ContextKey, StringComparison.OrdinalIgnoreCase))
             throw new OrchestratorContextEnvelopeException(
                 "context-scope-mismatch",
