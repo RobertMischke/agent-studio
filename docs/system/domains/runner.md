@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-04
+Version: 2026-08-12
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -203,14 +203,22 @@ state.
   worktree teardown. An incomplete or absent acknowledgement retains the
   worktree. A genuine summary failure is allowed through so the marked
   `TaskTransitionService` scaffold remains the honest terminal backstop.
-- `runner/ReviewStateStore.cs`, `runner/DurableReviewProcess.cs`,
-  `runner/RemoteReviewDaemon.cs`, and `runner/RemoteReviewExecutor.cs`: durable
+- `runner/ReviewStateStore.cs`, `runner/ReviewSlotReconciler.cs`,
+  `runner/DurableReviewProcess.cs`, `runner/RemoteReviewDaemon.cs`, and
+  `runner/RemoteReviewExecutor.cs`: durable
   Remote Review handoff. The daemon persists the immutable ReviewAttempt,
   subject, lease/fence, workspace, phase, and worker PID generation below
   `RUNNER_STATE_DIR/reviews`. The detached worker persists command checkpoints
-  and terminal evidence. A replacement adopts only a positively matched PID
-  start time and workspace cwd, renews the original lease instance, and submits
-  the deterministic `review-report:<attempt>:<fence>` terminal key. Report
+  and terminal evidence. At startup and once per minute, the daemon reconciles
+  every record that is not already active. A record consumes a slot only when
+  its PID start time and workspace cwd match, or when the Task Server still
+  reports the exact unexpired attempt, fence, executor, and host lease. Records
+  without either proof are marked cleaned and deleted; transient authority
+  lookup failures retain the record without consuming a slot. A 24-hour safety
+  limit also deletes any record that has no live PID, at startup or during the
+  periodic reconciliation, and journals the purge count. A replacement adopts
+  a positively matched PID, renews the original lease instance, and submits the
+  deterministic `review-report:<attempt>:<fence>` terminal key. Report
   delivery retains the completed evidence and retries transport failures,
   ambiguous responses, HTTP 408/429, and ordinary 5xx responses with bounded
   backoff. A missing task (404 or legacy `task-not-found` 503), superseded
@@ -219,9 +227,11 @@ state.
   deleted, or retained as visible `terminal-cleanup-pending` state if cleanup
   cannot complete. The daemon journals total persisted slots, pending report
   count, oldest pending-report age, and terminal-cleanup count at startup and
-  once per minute. Compatibility report projection uses the archive-inclusive
-  task snapshot so a late idempotent report can record evidence without
-  reopening an archived card.
+  once per minute. Successful local workspace removal deletes the slot record
+  on Pass, ProductFailure, and ReviewInfra exit paths even when the cleanup
+  acknowledgement cannot be delivered. Compatibility report projection uses
+  the archive-inclusive task snapshot so a late idempotent report can record
+  evidence without reopening an archived card.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive

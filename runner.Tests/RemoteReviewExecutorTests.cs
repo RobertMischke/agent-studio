@@ -152,6 +152,31 @@ public sealed class RemoteReviewExecutorTests : IDisposable
         Assert.Empty(state.LoadAll());
     }
 
+    [Fact]
+    public async Task Product_failure_exit_deletes_the_cleaned_slot_record()
+    {
+        var handler = new ReportSequenceHandler(reportOutcome: "ProductFailure");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = Options();
+        using var client = new TaskServerClient(
+            http,
+            options.RunnerId,
+            usesDurableTaskServer: true,
+            options: options);
+        var logs = new List<string>();
+        var state = new ReviewStateStore(options.StateDir);
+        var slot = await CreateCompletedSlotAsync(state);
+
+        var exitCode = await new RemoteReviewExecutor(options, client, state, logs.Add)
+            .ReattachAsync(slot, CancellationToken.None);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(state.LoadAll());
+        Assert.Contains(logs, line =>
+            line.Contains("review slot state deleted", StringComparison.Ordinal)
+            && line.Contains("terminalOutcome=ProductFailure", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.ServiceUnavailable, "task-not-found", "TaskNotFound")]
     [InlineData(HttpStatusCode.NotFound, "not-found", "TaskNotFound")]
@@ -409,7 +434,8 @@ public sealed class RemoteReviewExecutorTests : IDisposable
     private sealed class ReportSequenceHandler(
         int transientFailures = 0,
         HttpStatusCode? terminalStatus = null,
-        string? terminalCode = null) : HttpMessageHandler
+        string? terminalCode = null,
+        string reportOutcome = "Pass") : HttpMessageHandler
     {
         public int ReportAttempts { get; private set; }
         public int CleanupAttempts { get; private set; }
@@ -430,7 +456,7 @@ public sealed class RemoteReviewExecutorTests : IDisposable
                     "report-1",
                     "attempt-1",
                     "subject-1",
-                    "Pass",
+                    reportOutcome,
                     null,
                     "review passed",
                     new string('c', 64),

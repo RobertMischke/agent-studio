@@ -30,11 +30,13 @@ public sealed class RemoteReviewDaemon
         shutdown = daemonStop.Token;
         var state = new ReviewStateStore(_options.StateDir);
         var persistedAtStartup = state.LoadAll();
+        var reconciler = new ReviewSlotReconciler(state, _client.GetReviewAttemptAsync);
         var active = new List<(Task<int> Run, string AttemptId, string ResourceNamespace)>();
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var telemetry = new HostTelemetrySampler();
         HostTelemetrySample? latestTelemetry = null;
         var nextSlotHygieneLog = DateTime.MinValue;
+        var nextSlotReconciliation = DateTime.MinValue;
 
         void LogSlotHygiene(bool force = false)
         {
@@ -67,6 +69,53 @@ public sealed class RemoteReviewDaemon
             }
         }
 
+        void StartContinuations(ReviewSlotReconciliation reconciliation, string scope)
+        {
+            foreach (var continuation in reconciliation.Continuations)
+            {
+                var slot = continuation.Slot;
+                var executor = new RemoteReviewExecutor(_options, _client, state, _log);
+                if (continuation.Kind == ReviewSlotContinuationKind.Reattach)
+                {
+                    _log(
+                        $"persisted review accepted attempt={slot.AttemptId} " +
+                        $"fence={slot.Claim.Lease!.Fence} verification={continuation.Reason}");
+                    active.Add((
+                        executor.ReattachAsync(slot, shutdown),
+                        slot.AttemptId,
+                        slot.Claim.Lease.ResourceNamespace));
+                }
+                else
+                {
+                    _log(
+                        $"persisted review has valid lease but no live worker " +
+                        $"attempt={slot.AttemptId} fence={slot.Claim.Lease!.Fence}; " +
+                        $"settling restart loss: {continuation.Reason}");
+                    active.Add((
+                        executor.ReportNonAdoptableAsync(
+                            slot,
+                            continuation.Reason,
+                            shutdown),
+                        slot.AttemptId,
+                        slot.Claim.Lease.ResourceNamespace));
+                }
+            }
+
+            if (scope == "startup"
+                || reconciliation.Purged > 0
+                || reconciliation.Deferred > 0
+                || reconciliation.Continuations.Count > 0)
+            {
+                _log(reconciliation.JournalLine(scope));
+            }
+            if (scope == "startup" || reconciliation.AgedPurged > 0)
+            {
+                _log(reconciliation.AgingJournalLine(
+                    scope,
+                    ReviewSlotReconciler.MaximumDormantAge));
+            }
+        }
+
         try
         {
             await WithServerRetryAsync(
@@ -76,37 +125,18 @@ public sealed class RemoteReviewDaemon
                 () => Math.Max(active.Count, persistedAtStartup.Count),
                 shutdown);
 
-        foreach (var persisted in persistedAtStartup)
-        {
-            var slot = await RecoverLaunchingIdentityAsync(persisted, state, shutdown);
-            var completed = DurableReviewProcess.HasCompleted(slot);
-            var live = DurableReviewProcess.VerifyLive(slot, out var verification);
-            var executor = new RemoteReviewExecutor(_options, _client, state, _log);
-            if (completed || live)
-            {
-                _log(
-                    $"persisted review accepted attempt={slot.AttemptId} " +
-                    $"fence={slot.Claim.Lease!.Fence} " +
-                    $"verification={(completed ? "durable result ready" : verification)}");
-                active.Add((
-                    executor.ReattachAsync(slot, shutdown),
-                    slot.AttemptId,
-                    slot.Claim.Lease!.ResourceNamespace));
-            }
-            else
-            {
-                active.Add((
-                    executor.ReportNonAdoptableAsync(slot, verification, shutdown),
-                    slot.AttemptId,
-                    slot.Claim.Lease!.ResourceNamespace));
-            }
-        }
+        var startupReconciliation = await reconciler.ReconcileAsync(
+            new HashSet<string>(StringComparer.Ordinal),
+            DateTime.UtcNow,
+            shutdown);
+        StartContinuations(startupReconciliation, "startup");
         if (active.Count > 0)
         {
             _log(
                 $"recovering {active.Count} persisted review slot(s) before replacement claims; " +
                 "load admission applies only to fresh slots");
         }
+        nextSlotReconciliation = DateTime.UtcNow.AddMinutes(1);
         idleWatchdog.RecordActiveSlots(active.Count);
         LogSlotHygiene(force: true);
 
@@ -165,6 +195,17 @@ public sealed class RemoteReviewDaemon
 
             try
             {
+                if (DateTime.UtcNow >= nextSlotReconciliation)
+                {
+                    var reconciliation = await reconciler.ReconcileAsync(
+                        active.Select(slot => slot.AttemptId)
+                            .ToHashSet(StringComparer.Ordinal),
+                        DateTime.UtcNow,
+                        shutdown);
+                    StartContinuations(reconciliation, "periodic");
+                    nextSlotReconciliation = DateTime.UtcNow.AddMinutes(1);
+                    idleWatchdog.RecordActiveSlots(active.Count);
+                }
                 if (DateTime.UtcNow >= nextRetentionSweep)
                 {
                     try
@@ -420,27 +461,6 @@ public sealed class RemoteReviewDaemon
                 await Task.Delay(delay, shutdown);
             }
         }
-    }
-
-    private static async Task<PersistedReviewSlot> RecoverLaunchingIdentityAsync(
-        PersistedReviewSlot slot,
-        ReviewStateStore state,
-        CancellationToken shutdown)
-    {
-        if (slot.ProcessId is not null || DurableReviewProcess.HasCompleted(slot))
-            return slot;
-        var attempts = string.Equals(slot.Phase, "launching", StringComparison.Ordinal)
-            ? 20
-            : 1;
-        var reason = "no persisted review process identity";
-        for (var attempt = 0; attempt < attempts; attempt++)
-        {
-            if (DurableReviewProcess.TryRecoverIdentity(slot, out var recovered, out reason))
-                return state.Save(recovered with { Phase = "running" });
-            if (attempt + 1 < attempts)
-                await Task.Delay(TimeSpan.FromMilliseconds(250), shutdown);
-        }
-        return state.Save(slot with { AdoptionFailure = reason });
     }
 
     private static async Task DelayThroughShutdown(
