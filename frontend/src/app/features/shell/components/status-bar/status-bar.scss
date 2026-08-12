@@ -166,7 +166,8 @@ app-status-bar {
 }
 
 .statusbar__item[data-signal-tone='hot'] .statusbar__icon,
-.statusbar__item[data-signal-tone='mismatch'] .statusbar__icon {
+.statusbar__item[data-signal-tone='mismatch'] .statusbar__icon,
+.statusbar__item[data-signal-tone='attention'] .statusbar__icon {
   color: var(--severity-warn);
 }
 

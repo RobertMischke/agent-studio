@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatRunningLabel, reconcileReviewActiveSlots, StatusBarComponent } from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -14,6 +14,24 @@ describe('formatRunningLabel', () => {
     { local: 0, remote: 0, expected: 'no runners' },
   ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
     expect(formatRunningLabel(local, remote)).toBe(expected);
+  });
+
+  it('keeps Review-plane work visible when no coding runner is active', () => {
+    expect(formatRunningLabel(0, 0, 4)).toBe('4 review active');
+    expect(formatRunningLabel(1, 2, 4)).toBe('1 local · 2 remote · 4 review active');
+  });
+
+  it('renders waiting Review work as explicit zero-active attention truth', () => {
+    expect(formatRunningLabel(0, 0, 0, 36)).toBe('0 review active · 36 waiting');
+    expect(formatRunningLabel(1, 0, 0, 36)).toBe('1 local · 0 review active · 36 waiting');
+  });
+});
+
+describe('reconcileReviewActiveSlots', () => {
+  it('keeps durable Review authority visible when host slot telemetry is stale', () => {
+    expect(reconcileReviewActiveSlots(null, 4)).toBe(4);
+    expect(reconcileReviewActiveSlots(0, 4)).toBe(4);
+    expect(reconcileReviewActiveSlots(4, 3)).toBe(4);
   });
 });
 

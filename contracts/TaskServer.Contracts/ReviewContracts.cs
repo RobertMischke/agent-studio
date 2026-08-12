@@ -301,3 +301,110 @@ public sealed record ReviewCleanupResponse(
     string AttemptId,
     DateTime CleanedAt,
     bool RetryScheduled);
+
+/// <summary>One terminal review used to calculate queue throughput and latency.</summary>
+public sealed record ReviewCompletionSampleDto(
+    DateTime CompletedAt,
+    double DurationSeconds);
+
+/// <summary>
+/// Global Remote Review queue health. Queue depth is the Auto Review lane;
+/// waiting depth is the subset that still needs a review worker rather than a
+/// downstream orchestration decision.
+/// </summary>
+public sealed record ReviewQueueTelemetryDto(
+    DateTime ObservedAt,
+    int QueueDepth,
+    int WaitingDepth,
+    int ActiveReviews,
+    double DrainRatePerHour,
+    int DrainWindowMinutes,
+    double? MedianReviewDurationSeconds,
+    int DurationWindowHours,
+    int DurationSampleCount,
+    DateTime? LastDrainAt,
+    DateTime? OldestWaitingAt,
+    bool Stagnant,
+    int StagnationThresholdMinutes,
+    int StagnantForMinutes);
+
+/// <summary>Pure queue-health policy shared by both Task Server mounts.</summary>
+public static class ReviewQueueTelemetryPolicy
+{
+    public static ReviewQueueTelemetryDto Evaluate(
+        DateTime nowUtc,
+        int queueDepth,
+        int waitingDepth,
+        int activeReviews,
+        DateTime? oldestWaitingAt,
+        DateTime? lastDrainAt,
+        IEnumerable<ReviewCompletionSampleDto> completions,
+        TimeSpan drainWindow,
+        TimeSpan durationWindow,
+        TimeSpan stagnationThreshold)
+    {
+        var now = nowUtc.ToUniversalTime();
+        drainWindow = Positive(drainWindow, TimeSpan.FromHours(1));
+        durationWindow = Positive(durationWindow, TimeSpan.FromHours(24));
+        stagnationThreshold = Positive(stagnationThreshold, TimeSpan.FromMinutes(30));
+
+        var valid = completions
+            .Where(sample => sample.DurationSeconds >= 0
+                             && double.IsFinite(sample.DurationSeconds)
+                             && sample.CompletedAt.ToUniversalTime() <= now)
+            .Select(sample => sample with { CompletedAt = sample.CompletedAt.ToUniversalTime() })
+            .ToList();
+        var drainCount = valid.Count(sample => sample.CompletedAt >= now - drainWindow);
+        var durationSamples = valid
+            .Where(sample => sample.CompletedAt >= now - durationWindow)
+            .Select(sample => sample.DurationSeconds)
+            .Order()
+            .ToArray();
+        var median = Median(durationSamples);
+
+        var oldest = NormalizePast(oldestWaitingAt, now);
+        var lastDrain = NormalizePast(lastDrainAt, now);
+        var progressAnchor = oldest;
+        if (lastDrain is { } drain && (progressAnchor is null || drain > progressAnchor))
+            progressAnchor = drain;
+        var stagnantFor = waitingDepth > 0 && progressAnchor is { } anchor
+            ? now - anchor
+            : TimeSpan.Zero;
+        var stagnant = waitingDepth > 0
+                       && progressAnchor is not null
+                       && stagnantFor >= stagnationThreshold;
+
+        return new ReviewQueueTelemetryDto(
+            now,
+            Math.Max(0, queueDepth),
+            Math.Max(0, waitingDepth),
+            Math.Max(0, activeReviews),
+            Math.Round(drainCount / drainWindow.TotalHours, 2),
+            Math.Max(1, (int)Math.Round(drainWindow.TotalMinutes)),
+            median is null ? null : Math.Round(median.Value, 2),
+            Math.Max(1, (int)Math.Round(durationWindow.TotalHours)),
+            durationSamples.Length,
+            lastDrain,
+            oldest,
+            stagnant,
+            Math.Max(1, (int)Math.Round(stagnationThreshold.TotalMinutes)),
+            stagnant ? Math.Max(0, (int)Math.Floor(stagnantFor.TotalMinutes)) : 0);
+    }
+
+    private static TimeSpan Positive(TimeSpan value, TimeSpan fallback)
+        => value > TimeSpan.Zero ? value : fallback;
+
+    private static DateTime? NormalizePast(DateTime? value, DateTime now)
+        => value is { } present && present.ToUniversalTime() <= now
+            ? present.ToUniversalTime()
+            : null;
+
+    private static double? Median(IReadOnlyList<double> sorted)
+    {
+        if (sorted.Count == 0) return null;
+        var middle = sorted.Count / 2;
+        return sorted.Count % 2 == 1
+            ? sorted[middle]
+            : (sorted[middle - 1] + sorted[middle]) / 2d;
+    }
+}
