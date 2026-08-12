@@ -345,6 +345,11 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   summary. It does not own project onboarding or a project-source catalogue.
   Legacy CLI-admin and usage links resolve to the CLI Management section at
   `#/workspace/settings/caps`.
+- The Execution Hosts destination at `#/workspace/settings/execution-hosts`
+  uses one sortable table row per host for status, occupied and total slots,
+  load, activity, release, and lifecycle actions. A persisted row disclosure
+  keeps identity, connection, capability, authentication, capacity, lease, and
+  telemetry internals out of the primary operator scan path.
 - The System prompts destination is the prompt registry and observability
   surface. Its overview groups runtime-step, orchestrator, drift, and framing
   templates, explains application and project pipeline override precedence, and

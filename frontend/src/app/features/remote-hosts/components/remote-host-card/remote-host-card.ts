@@ -43,16 +43,17 @@ interface Meter {
 }
 
 /**
- * One execution location in the Remote-Hosts list (AGT-1921): heartbeat status,
- * role, capabilities, system vitals (RAM / CPU / Disk meters), per-CLI quota
- * chips, and the Re-Probe / Drain / Retire actions.
+ * One execution location in the Remote-Hosts table (AGT-1921 / AGT-2629): one
+ * compact primary row followed by an optional detail row. The parent owns and
+ * persists disclosure state so sorting never loses an operator's open rows.
  *
  * Status is encoded with a dot + a badge, and acute states (degraded / offline)
- * additionally wash the whole card with a warn / error tint - never a left
+ * additionally wash the affected row with a warn / error tint, never a left
  * accent bar (style-guide R1). History (retired / draining) renders calm (R4).
  */
 @Component({
-  selector: 'app-remote-host-card',
+  // eslint-disable-next-line @angular-eslint/component-selector -- A native tbody keeps valid table and accessibility semantics.
+  selector: 'tbody[appRemoteHostCard]',
   standalone: true,
   imports: [
     DatePipe,
@@ -65,7 +66,12 @@ interface Meter {
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
-  host: { '[attr.data-tone]': 'tone()', '[attr.data-host]': 'host().id' },
+  host: {
+    'data-testid': 'remote-host-card',
+    '[attr.data-tone]': 'tone()',
+    '[attr.data-host]': 'host().id',
+    '[attr.data-retired]': 'retired()',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RemoteHostCardComponent {
@@ -78,12 +84,14 @@ export class RemoteHostCardComponent {
    * the active-slot total always reconcile.
    */
   readonly projectSlots = input<readonly HostProjectSlots[]>([]);
+  readonly expanded = input(false);
   /** Injected clock so the relative heartbeat label ticks without a per-card timer. */
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();
   readonly capacityChange = output<RuntimeCapacityChange>();
   readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly setup = output<RemoteHost>();
+  readonly expandedChange = output<boolean>();
 
   readonly liveLoading = computed(() => this.host().liveDataState === 'loading');
   readonly liveError = computed(() => this.host().liveDataState === 'error');
@@ -185,6 +193,26 @@ export class RemoteHostCardComponent {
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
   readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
+  readonly slotTotal = computed(() => {
+    const host = this.host();
+    if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
+    if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
+      return host.effectiveMaxParallelism;
+    }
+    if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
+      return host.activeTaskCount + host.availableSlots;
+    }
+    return null;
+  });
+  readonly occupiedSlots = computed(() => this.boardActiveSlots());
+  readonly loadPct = computed(() => {
+    if (this.liveLoading() || this.liveError() || this.stale()) return null;
+    const load = this.host().stats?.cpuLoadPct;
+    return load === null || load === undefined ? null : Math.round(clampPct(load));
+  });
+  readonly loadLabel = computed(() => this.loadPct() === null ? 'Not reported' : `${this.loadPct()}%`);
+  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || 'Not reported');
+  readonly detailId = computed(() => `remote-host-detail-${this.host().id.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
 
   latestAuthTransition(badge: ProviderAuthBadge) {
     return badge.history.at(-1) ?? null;
@@ -193,6 +221,10 @@ export class RemoteHostCardComponent {
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }
   quotaTone(pct: number | null): MeterTone { return meterTone(pct); }
+
+  toggleExpanded(): void {
+    this.expandedChange.emit(!this.expanded());
+  }
 
   emit(kind: HostActionKind): void {
     if (this.host().busyAction) return;

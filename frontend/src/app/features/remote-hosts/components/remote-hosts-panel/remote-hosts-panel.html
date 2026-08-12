@@ -3,9 +3,7 @@
     <div class="rh__intro">
       <h2 class="rh__title">Execution Hosts</h2>
       <p class="rh__subtitle">
-        Every CLI execution host in one place - this local machine and each
-        remote runner - with heartbeat status, capabilities, system vitals, and
-        per-CLI quota. Re-Probe, Drain, or Retire a host from its row.
+        Local and remote execution capacity, current health, and lifecycle controls.
       </p>
     </div>
     <div class="rh__actions">
@@ -66,34 +64,61 @@
     </div>
   }
 
-  <div class="rh__list" data-testid="remote-hosts-active">
-    @for (host of activeHosts(); track host.id) {
-      <app-remote-host-card
-        [host]="host"
-        [now]="now()"
-        [boardActiveSlots]="boardSlots(host)"
-        [projectSlots]="projectSlots(host)"
-        (action)="onAction($event)"
-        (capacityChange)="onCapacityChange($event)"
-        (projectPolicyChange)="onProjectPolicyChange($event)"
-        (setup)="openSetup($event)" />
-    }
-  </div>
-
-  @if (retiredHosts().length) {
-    <details class="rh__retired" data-testid="remote-hosts-retired">
-      <summary>Retired clients ({{ retiredHosts().length }})</summary>
-      <p>Retired clients stay visible for history. Revive re-enables the identity; permanent deletion is a separate irreversible step.</p>
-      <div class="rh__list">
-        @for (host of retiredHosts(); track host.id) {
-          <app-remote-host-card
+  @if (hosts().length) {
+    <div class="rh__table-wrap" data-testid="remote-hosts-active">
+      <table class="rh__table" data-testid="remote-hosts-table">
+        <caption>Execution hosts and their current operating state</caption>
+        <thead>
+          <tr>
+            <th [attr.aria-sort]="ariaSort('name')">
+              <button type="button" data-testid="remote-host-sort-name" (click)="sort('name')">
+                Name <span aria-hidden="true">{{ sortIndicator('name') }}</span>
+              </button>
+            </th>
+            <th [attr.aria-sort]="ariaSort('status')">
+              <button type="button" data-testid="remote-host-sort-status" (click)="sort('status')">
+                Status <span aria-hidden="true">{{ sortIndicator('status') }}</span>
+              </button>
+            </th>
+            <th [attr.aria-sort]="ariaSort('slots')">
+              <button type="button" data-testid="remote-host-sort-slots" (click)="sort('slots')">
+                Slots <span aria-hidden="true">{{ sortIndicator('slots') }}</span>
+              </button>
+            </th>
+            <th [attr.aria-sort]="ariaSort('load')">
+              <button type="button" data-testid="remote-host-sort-load" (click)="sort('load')">
+                Load <span aria-hidden="true">{{ sortIndicator('load') }}</span>
+              </button>
+            </th>
+            <th [attr.aria-sort]="ariaSort('activity')">
+              <button type="button" data-testid="remote-host-sort-activity" (click)="sort('activity')">
+                Last activity <span aria-hidden="true">{{ sortIndicator('activity') }}</span>
+              </button>
+            </th>
+            <th [attr.aria-sort]="ariaSort('release')">
+              <button type="button" data-testid="remote-host-sort-release" (click)="sort('release')">
+                Release <span aria-hidden="true">{{ sortIndicator('release') }}</span>
+              </button>
+            </th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        @for (host of sortedHosts(); track host.id) {
+          <tbody appRemoteHostCard
             [host]="host"
             [now]="now()"
             [boardActiveSlots]="boardSlots(host)"
-            (action)="onAction($event)" />
+            [projectSlots]="projectSlots(host)"
+            [expanded]="isExpanded(host.id)"
+            (expandedChange)="setExpanded(host.id, $event)"
+            (action)="onAction($event)"
+            (capacityChange)="onCapacityChange($event)"
+            (projectPolicyChange)="onProjectPolicyChange($event)"
+            (setup)="openSetup($event)">
+          </tbody>
         }
-      </div>
-    </details>
+      </table>
+    </div>
   }
 
   @if (wizardOpen()) {
