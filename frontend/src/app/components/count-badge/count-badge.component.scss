@@ -4,14 +4,18 @@
  * horizontal padding + min-width keep single- and multi-digit counts
  * optically centred (no lopsided "9" vs "127").
  */
+app-count-badge {
+  display: var(--studio-count-badge-display, inline);
+}
+
 .count-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  min-width: 18px;
+  min-width: var(--studio-count-badge-min-width, 18px);
   height: 14px;
-  padding: 0 6px;
+  padding: 0 var(--studio-count-badge-inline-padding, 6px);
   background: var(--studio-surface-muted);
   color: var(--studio-text-muted);
   border-radius: 7px;

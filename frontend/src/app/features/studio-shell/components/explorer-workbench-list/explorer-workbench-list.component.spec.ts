@@ -93,8 +93,12 @@ describe('ExplorerWorkbenchListComponent', () => {
     expect(pending?.textContent).toContain('3 open');
     expect(pending?.textContent).not.toContain('DEM-PENDING');
     expect(pending?.querySelector('.studio-workbench-topic__meta')).toBeNull();
-    expect(root.querySelector('[data-testid="studio-explorer-workbench-status-Demo-pending"]')
-      ?.getAttribute('data-status')).toBe('decision-pending');
+    const pendingStatus = root.querySelector(
+      '[data-testid="studio-explorer-workbench-status-Demo-pending"]',
+    );
+    expect(pendingStatus?.getAttribute('data-status')).toBe('decision-pending');
+    expect(pendingStatus?.textContent?.trim()).toBe('3 open');
+    expect(pending?.querySelectorAll('[data-status]')).toHaveLength(1);
     expect(root.querySelector('[data-testid="studio-explorer-workbench-history-Demo"]')
       ?.getAttribute('aria-expanded')).toBe('false');
     expect(root.querySelector('[data-testid="studio-explorer-workbench-Demo-documented"]')).toBeNull();

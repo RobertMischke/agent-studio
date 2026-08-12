@@ -6,7 +6,7 @@
     <span class="studio-workbench-history__label">{{ group.label }}</span>
     @for (workbench of group.items; track workbench.id) {
       <span #workbenchTopic class="studio-workbench-history__topic-host">
-        <app-tree-row
+        <app-tree-row class="studio-workbench-history__entry-row"
           level="child"
           [glyph]="patternIcon(workbench)"
           [label]="workbench.title"

@@ -29,8 +29,13 @@
     </span>
   } @else if (glyphChar(); as gc) {
     <span class="tree-row__glyph"
-          [style.background]="glyphColor()"
-          aria-hidden="true">{{ gc }}</span>
+          [style.background]="glyphColor()">
+      <span aria-hidden="true">{{ gc }}</span>
+      <span class="tree-row__glyph-overlay"
+            [attr.data-testid]="testid() ? testid() + '-glyph-overlay' : null">
+        <ng-content select="[glyphOverlay]"></ng-content>
+      </span>
+    </span>
   } @else if (reserveGlyph()) {
     <span class="tree-row__glyph-icon tree-row__glyph-icon--placeholder" aria-hidden="true"></span>
   }

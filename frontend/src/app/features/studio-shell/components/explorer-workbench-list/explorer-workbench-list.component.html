@@ -27,7 +27,7 @@
       <span class="studio-workbench-topics__state">Loading…</span>
     } @else {
       @for (group of currentGroups(); track group.id) {
-        <app-tree-row level="child"
+        <app-tree-row class="studio-workbench-group-row" level="child"
                       [chevron]="groupExpanded(group.id) ? 'expanded' : 'collapsed'"
                       [label]="group.label"
                       [count]="group.items.length > 0 ? group.items.length : null"
@@ -39,7 +39,7 @@
                [attr.data-testid]="'studio-explorer-workbench-group-items-' + projectName() + '-' + group.id">
             @for (workbench of group.items; track workbench.id) {
               <span #workbenchTopic class="studio-workbench-topic-host">
-                <app-tree-row
+                <app-tree-row class="studio-workbench-entry-row"
                   level="child"
                   [glyph]="patternIcon(workbench)"
                   [label]="workbench.title"
@@ -51,11 +51,16 @@
                   [tooltipTestId]="'studio-explorer-workbench-tooltip-' + projectName() + '-' + workbench.id"
                   [testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
                   (selectRequest)="openWorkbench.emit(workbench)">
-                  <i class="studio-workbench-status-dot" aria-hidden="true"
-                     [attr.data-status]="workbench.status"
-                     [attr.data-testid]="'studio-explorer-workbench-status-' + projectName() + '-' + workbench.id"></i>
                   @if (openCount(workbench) > 0) {
-                    <span class="studio-workbench-topic__status">{{ openCount(workbench) }} open</span>
+                    <span class="studio-workbench-topic__status"
+                          [attr.data-status]="workbench.status"
+                          [attr.data-testid]="'studio-explorer-workbench-status-' + projectName() + '-' + workbench.id">
+                      {{ openCount(workbench) }} open
+                    </span>
+                  } @else {
+                    <i class="studio-workbench-status-dot" aria-hidden="true"
+                       [attr.data-status]="workbench.status"
+                       [attr.data-testid]="'studio-explorer-workbench-status-' + projectName() + '-' + workbench.id"></i>
                   }
                 </app-tree-row>
               </span>
@@ -66,7 +71,7 @@
         }
       }
 
-      <app-tree-row level="child"
+      <app-tree-row class="studio-workbench-group-row" level="child"
                     [chevron]="groupExpanded('history') ? 'expanded' : 'collapsed'"
                     label="History"
                     [count]="historyItems().length > 0 ? historyItems().length : null"

@@ -63,6 +63,13 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
     contentType: 'application/json',
     body: JSON.stringify({ pending: [] }),
   }));
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+    }),
+  }));
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => {
     localStorage.removeItem('atp.studio.explorerSections');
@@ -107,7 +114,17 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
 
   const pendingRow = page.getByTestId(`studio-explorer-workbench-${projectName}-${pending!.id}`);
   const pendingBox = await pendingRow.boundingBox();
-  expect(pendingBox?.height).toBe(30);
+  expect(pendingBox?.height).toBe(24);
+  const needsDecisionBox = await needsDecision.boundingBox();
+  expect(needsDecisionBox?.height).toBe(24);
+  const groupChevronBox = await needsDecision.getByLabel('Collapse').boundingBox();
+  const pendingGlyphBox = await page.getByTestId(
+    `studio-explorer-workbench-${projectName}-${pending!.id}-glyph`,
+  ).boundingBox();
+  expect(groupChevronBox).toBeTruthy();
+  expect(pendingGlyphBox).toBeTruthy();
+  expect(Math.abs(groupChevronBox!.x - pendingGlyphBox!.x)).toBeLessThanOrEqual(1);
+  expect(await pendingRow.evaluate(row => getComputedStyle(row).whiteSpace)).toBe('nowrap');
   await pendingRow.hover();
   const pendingTooltip = page.getByTestId(
     `studio-explorer-workbench-tooltip-${projectName}-${pending!.id}`,
@@ -129,7 +146,7 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
   expect(sidebarBox).toBeTruthy();
   expect(rowBox!.y).toBeGreaterThanOrEqual(sidebarBox!.y);
   expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(sidebarBox!.y + sidebarBox!.height);
-  expect(rowBox!.height).toBe(30);
+  expect(rowBox!.height).toBe(24);
 
   const implementationItems = catalogue!.items
     .filter(item => item.status === 'active' || item.status === 'decided');
@@ -141,7 +158,7 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
     const iconBox = await page.getByTestId(
       `studio-explorer-workbench-${projectName}-${item.id}-glyph`,
     ).boundingBox();
-    expect(box?.height).toBe(30);
+    expect(box?.height).toBe(24);
     if (iconBox) iconPositions.push(iconBox.x);
   }
   expect(new Set(iconPositions.map(value => Math.round(value))).size).toBe(1);
@@ -149,13 +166,16 @@ test('Dossier navigation focuses one catalogue path, persists disclosures, and c
   const projectNameNode = page.getByTestId(`studio-explorer-project-${projectName}-name`);
   const projectNameFits = await projectNameNode.evaluate(node => node.scrollWidth <= node.clientWidth);
   expect(projectNameFits).toBe(true);
+  const projectOverlay = page.getByTestId(`studio-explorer-project-${projectName}-glyph-overlay`);
+  await expect(projectOverlay.getByTestId(`studio-explorer-project-auto-pickup-${projectName}`))
+    .toHaveCount(1);
+  await expect(page.getByTestId(`studio-explorer-project-hub-link-${projectName}`)).toBeHidden();
   await page.mouse.move(700, 300);
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await page.screenshot({
+    await page.getByTestId('studio-sidebar').screenshot({
       path: evidencePath(testInfo, `workspace-tree-after-narrow-${theme}--real.png`),
-      fullPage: true,
     });
   }
 
