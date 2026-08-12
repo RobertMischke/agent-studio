@@ -66,13 +66,17 @@ public sealed record SteerPendingRecord
 
 public sealed record UiIterationReviewContract
 {
-    [JsonPropertyName("contractVersion")] public int ContractVersion { get; init; } = 1;
+    [JsonPropertyName("contractVersion")] public int ContractVersion { get; init; } = 2;
     [JsonPropertyName("pipelineId")] public string PipelineId { get; init; } = Pipeline.PipelineCatalogue.UiPipelineId;
     [JsonPropertyName("iteration")] public int Iteration { get; init; }
     [JsonPropertyName("maxIterations")] public int MaxIterations { get; init; }
     [JsonPropertyName("capReached")] public bool CapReached { get; init; }
     [JsonPropertyName("artifactPaths")] public IReadOnlyList<string> ArtifactPaths { get; init; } = [];
     [JsonPropertyName("changeDescriptionPath")] public string ChangeDescriptionPath { get; init; } = string.Empty;
+    [JsonPropertyName("visualQaStatus")] public string? VisualQaStatus { get; init; }
+    [JsonPropertyName("visualQaVerdictPath")] public string? VisualQaVerdictPath { get; init; }
+    [JsonPropertyName("visualQaDefects")] public IReadOnlyList<VisualQaDefect> VisualQaDefects { get; init; } = [];
+    [JsonPropertyName("visualQaAutoRetryUsed")] public bool VisualQaAutoRetryUsed { get; init; }
 }
 
 /// <summary>

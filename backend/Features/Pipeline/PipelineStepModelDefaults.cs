@@ -57,6 +57,9 @@ public static class PipelineStepModelDefaults
             step.Id, PipelineCatalogue.PostAbortReviewStepId, StringComparison.OrdinalIgnoreCase)
             => SupportModel,
         StepKind.Orchestrator when string.Equals(
+            step.Id, PipelineCatalogue.UiVisualVerdictStepId, StringComparison.OrdinalIgnoreCase)
+            => SupportModel,
+        StepKind.Orchestrator when string.Equals(
             step.Id, PipelineCatalogue.TaskSpawnerStepId, StringComparison.OrdinalIgnoreCase)
             => QualityModel,
         _ => null,

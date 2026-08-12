@@ -1,7 +1,8 @@
 # UI Task Iteration Pipeline Contract
 
-Status: implemented mechanics for UI Task Pipeline Part 1. The Human Gate UI
-and its finish/feedback controls belong to Part 2.
+Status: implemented UI iteration evidence, automated visual QA, and the durable
+Human Gate hand-off. The Human Gate UI and its finish/feedback controls belong
+to Part 2.
 
 ## Routing
 
@@ -18,17 +19,20 @@ Read-only planning and research tasks always keep the read-only pipeline. A
 project can set `PipelineSteps["pre-ui-pipeline-routing"].maxIterations` from 1
 through 10. The default is 4.
 
-The UI pipeline has a normal pre bracket and core agent run, followed by two
+The UI pipeline has a normal pre bracket and core agent run, followed by four
 mandatory dependent steps:
 
 ```text
 core-agent-run
   -> post-ui-iteration-artifact
+  -> post-ui-visual-capture
+  -> post-ui-visual-verdict
   -> post-ui-human-review-gate
 ```
 
-The two post steps cannot be disabled. This keeps visual evidence and human
-review as invariants even when other project steps are reordered or overridden.
+The four post steps cannot be disabled. This keeps visual evidence, automated
+inspection, and human review as invariants even when other project steps are
+reordered or overridden.
 
 ## Per-iteration result
 
@@ -53,6 +57,49 @@ not enter review. The runner issues one bounded evidence-only continuation for
 the same iteration. A second failure escalates through the normal system funnel
 to `5e-escalated` with category `ui-iteration-cap`.
 
+## Automated visual QA
+
+After the iteration evidence gate passes, AGT cards whose authoritative change
+set touches `frontend/` run the visual QA pair. If changed-file provenance is
+unavailable on an already selected UI pipeline card, the pair runs fail-closed.
+Other card key families and authoritative backend-only change sets do not enter
+this first slice.
+
+`post-ui-visual-capture` starts the Angular app from the exact delivered
+checkout with production configuration and a proxy to the current authority
+backend. This is the stable-equivalent runtime shape without starting a second
+backend. Routes come from explicit URLs in the card, known changed-component
+mappings, and the stable task-detail fallback. At most four 1440 by 1000
+headless Playwright captures are written under:
+
+```text
+results/ui-iteration-NNN/visual-qa/round-RRR/
+  capture.json
+  capture.log
+  <route>--real.png
+  verdict.json
+  verdict.md
+  model-response.txt
+```
+
+`post-ui-visual-verdict` attaches those screenshots to a Codex multimodal
+one-shot. Its policy default is `gpt-5.4-mini` with `high` reasoning, the
+bounded supporting-call tier in the model routing policy. Projects may use the
+normal per-step override, but may not disable the gate. The reviewer returns
+strict JSON with `acceptable` or `clear-defect` plus named visible defects from
+the bounded categories `truncation`, `misalignment`, `placeholder-noise`,
+`design-token-violation`, `overlap`, `overflow`, `unreadable`, and
+`broken-layout`. Invalid JSON, missing screenshots, or an unavailable reviewer
+is not interpreted as acceptable and is escalated with its receipt.
+
+A first `clear-defect` result appends the exact defect list to the card prompt
+through `TaskMutationService.AppendContinuationNote` and starts one Continue
+round before the Human Gate is written. The binding action is pure code in
+`VisualQaPolicy`; the model cannot grant itself another attempt. Prior use is
+counted from durable `verdict.json` receipts, so a backend restart does not
+reset the budget. A repeated clear defect after that one steer enters Human
+Review with the screenshots, verdict, and named defects attached.
+
 ## Part 2 Human Gate hand-off
 
 After a complete iteration, the runner briefly stamps phase
@@ -69,20 +116,27 @@ The stable marker shape is:
   "question": "Review the visual result and choose finish or provide feedback for the next iteration.",
   "cliType": "codex",
   "uiIterationReview": {
-    "contractVersion": 1,
+    "contractVersion": 2,
     "pipelineId": "ui-iteration-task-pipeline",
     "iteration": 2,
     "maxIterations": 4,
     "capReached": false,
-    "artifactPaths": ["ui-iteration-002/after.png"],
-    "changeDescriptionPath": "ui-iteration-002/changes.md"
+    "artifactPaths": [
+      "ui-iteration-002/after.png",
+      "ui-iteration-002/visual-qa/round-002/01-task-detail--real.png"
+    ],
+    "changeDescriptionPath": "ui-iteration-002/changes.md",
+    "visualQaStatus": "acceptable",
+    "visualQaVerdictPath": "ui-iteration-002/visual-qa/round-002/verdict.json",
+    "visualQaDefects": [],
+    "visualQaAutoRetryUsed": true
   }
 }
 ```
 
 All paths in `uiIterationReview` are relative to `results/`. Part 2 must:
 
-- treat `kind == "ui-iteration-review"` and `contractVersion == 1` as the
+- treat `kind == "ui-iteration-review"` and `contractVersion == 2` as the
   consumer discriminator;
 - present the listed artifacts and change description;
 - complete the task when the human chooses finish;

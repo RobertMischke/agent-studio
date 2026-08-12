@@ -35,6 +35,22 @@ public sealed class CodexOneShotTests
     }
 
     [Fact]
+    public void BuildStartInfo_InlineImagePaths_AreAttachedBeforeStdinPrompt()
+    {
+        var request = new CliOneShotRequest("codex", "gpt-5.4-mini", "inspect");
+        var startInfo = CodexOneShot.BuildStartInfo(
+            "codex",
+            request,
+            ["/tmp/before.png", "/tmp/after.png"]);
+
+        var args = startInfo.ArgumentList.ToArray();
+        Assert.Equal(2, args.Count(arg => arg == "--image"));
+        Assert.Contains("/tmp/before.png", args);
+        Assert.Contains("/tmp/after.png", args);
+        Assert.Equal("-", args[^1]);
+    }
+
+    [Fact]
     public void ParseOutput_ExtractsFinalReplyAndSparkUsage()
     {
         const string stdout = """

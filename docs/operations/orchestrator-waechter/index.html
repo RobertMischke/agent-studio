@@ -822,7 +822,36 @@
   <li><b>AGT-2579:</b> <b>All activity</b> is the chronological default; Problem and Decision remain explicit filters over the same stream.</li>
 </ul>
 
-<h2 id="decision"><span class="no">§9</span>Decision request</h2>
+<!-- agent-studio:implementation-section:start -->
+<h2 id="implementation-state"><span class="no">§8a</span>Implementation state: visual guardian</h2>
+<p><b>AGT-2654 adds the first productive Watcher function.</b> UI delivery is now a pre-human problem sensor: after deterministic iteration evidence passes, the runner boots the exact delivered checkout in a stable-equivalent Angular configuration, derives affected routes from card metadata and changed components, and captures headless Playwright screenshots. A bounded multimodal verdict labels the pixels <code>acceptable</code> or <code>clear-defect</code> and names visible truncation, misalignment, placeholder noise, design-token violations, overlap, overflow, unreadable content, or a broken layout.</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Implemented now</th><th>Watcher destination</th></tr></thead>
+  <tbody>
+    <tr><td><b>Mechanical sensor</b></td><td>AGT plus <code>frontend/</code> admission, exact-worktree app boot, route selection, screenshot and capture manifest.</td><td>Keep this close to the runner because it owns the repository and runtime evidence.</td></tr>
+    <tr><td><b>Bounded classifier</b></td><td>Mini/high reads a compact screenshot pack and returns strict JSON. Pure policy, not the model, owns the lane action.</td><td>This is the cheap first-pass sensor described by the model policy, not general Watcher diagnosis.</td></tr>
+    <tr><td><b>A1 rescue</b></td><td>One precise defect-list steer is appended through the existing continuation boundary before any human sees the card. Durable receipts prevent restart from replenishing the attempt.</td><td>This is the dossier's existing A1 precise-steer and policy-requeue authority applied to a new trigger class.</td></tr>
+    <tr><td><b>Problem escalation</b></td><td>A repeated clear defect, capture failure, or unparseable verdict reaches Human Review with screenshots, named defects, model route, and verdict receipt.</td><td>When the global Watcher case store lands, consume this exhausted receipt as a Problem card. Ambiguous or repeated cases receive the dossier's Sol/medium strong analysis floor, one call per evidence fingerprint.</td></tr>
+  </tbody>
+</table>
+
+<h3>Concept contract</h3>
+<ol>
+  <li><b>Observe pixels after gates.</b> Visual QA does not replace build, test, accessibility, or human product judgment. It catches only clear visible breakage after deterministic evidence exists.</li>
+  <li><b>Steer once before exposure.</b> The first clear defect produces one named, evidence-linked correction round. No model output can increase that budget.</li>
+  <li><b>Escalate with proof.</b> Exhaustion and unavailable inspection never become acceptance. The Human Gate receives the complete screenshot set and durable receipts.</li>
+  <li><b>Promote to a Watcher trigger.</b> W0 should add <code>visual-qa-clear-defect</code> and <code>visual-qa-unavailable</code> trigger schemas keyed by task, review epoch, iteration, and evidence fingerprint. W1 consumes exhausted receipts. W2 reserves strong analysis for contradictory or repeated problem cards.</li>
+  <li><b>Measure before widening autonomy.</b> Track false-clear-defect rate, human reversals, retry repair rate, capture availability, tokens, and time-to-human. Route expansion and new defect categories require reviewed evidence, not prompt-only growth.</li>
+</ol>
+
+<h3>Delivered slices</h3>
+<ul>
+<!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2654" data-delivered-at="2026-08-12" data-slice="visual-guardian-first-slice"><b>Visual guardian first slice.</b> Added mandatory visual capture and multimodal verdict stages to the UI pipeline for AGT frontend deliveries, versioned the Human Gate evidence contract, implemented one restart-safe automatic defect steer, registered its loop breaker, and produced a browser plus model before/after evidence case.</li>
+<!-- agent-studio:implementation-log:end -->
+</ul>
+<!-- agent-studio:implementation-section:end --><h2 id="decision"><span class="no">§9</span>Decision request</h2>
 <div class="box warn">
   <h4>Requested operator decision</h4>
   <ol>

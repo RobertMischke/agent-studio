@@ -122,6 +122,10 @@ internal static class PromptUsageCatalog
         {
             new PromptUsageRef("PostAbortReviewStepService", "BuildPrompt", "Verdict step after a non-clean run end."),
         },
+        ["visual-qa-review.md"] = new[]
+        {
+            new PromptUsageRef("VisualQaService", "BuildPrompt", "Multimodal clear-defect verdict before the UI human gate."),
+        },
         ["orchestrator-review-decision.md"] = new[]
         {
             new PromptUsageRef("ReviewDecisionOrchestrator", "BuildPrompt", "Primary auto-review verdict prompt."),

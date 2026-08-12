@@ -117,6 +117,8 @@ public static class PipelineStepConfigResolver
            && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.DossierMaintenanceStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiIterationArtifactStepId, StringComparison.Ordinal)
+           && !string.Equals(step.Id, PipelineCatalogue.UiVisualCaptureStepId, StringComparison.Ordinal)
+           && !string.Equals(step.Id, PipelineCatalogue.UiVisualVerdictStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiHumanReviewGateStepId, StringComparison.Ordinal);
 
     /// <summary>Resolve and clamp the UI iteration cap from the named routing step.</summary>

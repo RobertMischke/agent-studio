@@ -47,6 +47,8 @@ public static class PipelineCatalogue
     public const string UiPipelineId = "ui-iteration-task-pipeline";
     public const string UiPipelineRoutingStepId = "pre-ui-pipeline-routing";
     public const string UiIterationArtifactStepId = "post-ui-iteration-artifact";
+    public const string UiVisualCaptureStepId = "post-ui-visual-capture";
+    public const string UiVisualVerdictStepId = "post-ui-visual-verdict";
     public const string UiHumanReviewGateStepId = "post-ui-human-review-gate";
     public const string ConceptWorkbenchPlacementStepId = "post-concept-workbench-placement";
     public const string ConceptReviewStepId = "post-concept-review";
@@ -908,7 +910,7 @@ public static class PipelineCatalogue
         {
             Id = UiPipelineId,
             DisplayName = "UI iteration task pipeline",
-            Version = 1,
+            Version = 2,
             Pre =
             [
                 .. StandardPipeline.Pre.Select(step => step with { }),
@@ -942,11 +944,31 @@ public static class PipelineCatalogue
                 },
                 new PipelineStep
                 {
+                    Id = UiVisualCaptureStepId,
+                    DisplayName = "Stable-equivalent visual capture",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [UiIterationArtifactStepId],
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = UiVisualVerdictStepId,
+                    DisplayName = "Multimodal visual verdict",
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [UiVisualCaptureStepId],
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
                     Id = UiHumanReviewGateStepId,
                     DisplayName = "Human iteration review",
                     Kind = StepKind.Orchestrator,
                     RunMode = StepRunMode.Sequential,
-                    DependsOn = [UiIterationArtifactStepId],
+                    DependsOn = [UiVisualVerdictStepId],
                     Idempotent = true,
                     DefaultEnabled = true,
                 },

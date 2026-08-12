@@ -89,8 +89,8 @@ public sealed record CliOneShotRequest(
     /// message envelope to stdin containing <see cref="Prompt"/> as a text
     /// content block followed by one image content block per entry. The
     /// model sees the images in the same turn as the text - no Read tool
-    /// call required. Capability is Claude-only; other CLIs ignore this
-    /// field today and fall back to text-only stdin.
+    /// call required. Claude uses stream JSON; Codex materializes bounded
+    /// temporary files and supplies repeated <c>--image</c> arguments.
     /// </summary>
     public IReadOnlyList<CliOneShotImage>? InlineImages { get; init; }
 

@@ -137,6 +137,8 @@ public class TaskFolderAccessIsolationTest
                 "Adapts the external task clean-home store; failed-start cleanup never targets the job-folder tree.",
             ["backend/Features/Cli/Execution/CliWorkingMemoryService.cs"] =
                 "Deletes a CLI's own working-memory state under its config home (guarded by a known-state whitelist), not lane folders.",
+            ["backend/Features/Cli/Routing/OneShot/CodexOneShot.cs"] =
+                "Deletes only the per-call OS temp directory created for bounded multimodal image arguments, never task storage.",
 
             // Wiki git-ops (2026-06-10): physical folder move/delete inside the
             // project's CODE repo docs/ tree (git-backed wiki reorganisation),
