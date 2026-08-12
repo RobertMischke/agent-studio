@@ -33,6 +33,43 @@
     <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
   </div>
 
+  <section class="rh__review-queue"
+           data-testid="remote-hosts-review-queue"
+           aria-label="Auto Review queue telemetry">
+    <div class="rh__review-head">
+      <div>
+        <h3>Auto Review queue</h3>
+        <p>Global post-processing health from durable ReviewAttempt authority.</p>
+      </div>
+      @if (reviewQueue()?.stagnant) {
+        <span class="rh__review-alarm" data-testid="remote-hosts-review-queue-alarm">No drain progress</span>
+      }
+    </div>
+    @if (reviewQueue(); as queue) {
+      <div class="rh__review-metrics">
+        <article>
+          <span>Queue depth</span>
+          <strong data-testid="remote-hosts-review-depth">{{ queue.queueDepth }}</strong>
+          <small>{{ queue.waitingDepth }} waiting · {{ queue.activeReviews }} active</small>
+        </article>
+        <article>
+          <span>Drain rate</span>
+          <strong data-testid="remote-hosts-review-drain">{{ queue.drainRatePerHour }}/h</strong>
+          <small>Trailing {{ queue.drainWindowMinutes }} minutes</small>
+        </article>
+        <article>
+          <span>Median duration</span>
+          <strong data-testid="remote-hosts-review-duration">{{ reviewDuration(queue.medianReviewDurationSeconds) }}</strong>
+          <small>{{ queue.durationSampleCount }} reviews · {{ queue.durationWindowHours }} h window</small>
+        </article>
+      </div>
+    } @else {
+      <p class="rh__review-unavailable">
+        {{ reviewQueueLoading() ? 'Loading Review queue telemetry…' : 'Review queue telemetry is unavailable.' }}
+      </p>
+    }
+  </section>
+
   @if (error(); as err) {
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }
