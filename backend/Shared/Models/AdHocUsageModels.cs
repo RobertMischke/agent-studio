@@ -114,4 +114,11 @@ public sealed record AdHocUsageByModel(
     long CacheReadTokens,
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
-    bool ModelPriced);
+    bool ModelPriced)
+{
+    /// <summary>Oldest telemetry entry folded into this model bucket.</summary>
+    public DateTime? FirstRecordedAt { get; init; }
+
+    /// <summary>Newest telemetry entry folded into this model bucket.</summary>
+    public DateTime? LastRecordedAt { get; init; }
+}

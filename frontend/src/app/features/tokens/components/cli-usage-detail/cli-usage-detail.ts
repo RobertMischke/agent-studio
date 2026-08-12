@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { recordedUsageRange } from '../../utils/recorded-usage-range';
 
 interface SparkPoint {
   label: string;
@@ -35,6 +36,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 /**
@@ -100,6 +103,10 @@ export class CliUsageDetailComponent {
         estimatedApiCostUsd: p.estimatedApiCostUsd,
       }))
       .sort((a, b) => b.totalTokens - a.totalTokens);
+  });
+
+  readonly workspaceRecordedRangeLabel = computed(() => {
+    return this.rangeLabel(this.tokens()?.byModel ?? []);
   });
 
   /** Mirror of the shell's `toProjectSlug` so testids/deep-links line up. */
@@ -176,6 +183,10 @@ export class CliUsageDetailComponent {
       .slice(0, 5);
   }
 
+  recordedRangeLabelFor(cliType: CliType): string {
+    return this.rangeLabel(this.modelRowsFor(cliType));
+  }
+
   sourceRowsFor(cliType: CliType) {
     if (cliType !== 'claude') return [];
     return (this.adhoc()?.bySource ?? []).slice(0, 5);
@@ -231,5 +242,9 @@ export class CliUsageDetailComponent {
       default:
         return false;
     }
+  }
+
+  private rangeLabel(entries: readonly { firstRecordedAt?: string | null; lastRecordedAt?: string | null }[]): string {
+    return recordedUsageRange(entries)?.label ?? 'Recording dates unavailable for legacy telemetry';
   }
 }

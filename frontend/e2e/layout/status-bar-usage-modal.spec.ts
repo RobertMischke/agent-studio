@@ -25,6 +25,7 @@ import { setTheme } from '../helpers/theme';
  */
 
 const SCREENSHOT_DIR = process.env.STATUS_BAR_RESULTS_DIR?.trim() || 'test-results';
+const SCREENSHOT_PHASE = process.env.USAGE_SCREENSHOT_PHASE?.trim() || 'after';
 const CLIS = ['copilot', 'claude', 'codex'] as const;
 
 test.describe('Status bar usage modal', () => {
@@ -120,6 +121,9 @@ test.describe('Status bar usage modal', () => {
   });
 
   test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page }) => {
+    await page.route('**/api/auth/status', route => route.fulfill({
+      json: { profile: 'local', bootstrapRequired: false, authenticated: true, user: null },
+    }));
     await page.route('**/api/cli/quota**', async route => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
@@ -157,12 +161,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-08-03T10:00:00Z', lastRecordedAt: '2026-08-11T17:42:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-08-01T08:15:00Z', lastRecordedAt: '2026-08-09T15:30:00Z',
           },
         ],
         byProject: [],
@@ -201,21 +207,30 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
+    await page.getByTestId('error-dialog-close').click({ timeout: 2_000 }).catch(() => {});
     await page.getByTestId('hquota-card-codex').click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    const period = modal.getByTestId('cli-usage-modal-recorded-period');
+    await expect(period).toHaveText('Since Aug 1, 2026 · As of Aug 11, 2026, 5:42 PM UTC');
+    await expect(modal.getByText('Telemetry by model. Independent of the active quota windows above.')).toBeVisible();
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
+    if (SCREENSHOT_PHASE === 'before') {
+      await period.evaluate(element => element.remove());
+      await modal.getByTestId('cli-usage-modal-scope-note').evaluate(element => {
+        element.textContent = 'Lifetime telemetry by model. Independent of the active quota windows above.';
+      });
+    }
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-period-${SCREENSHOT_PHASE}-light--mocked.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-period-${SCREENSHOT_PHASE}-dark--mocked.png` });
   });
 });

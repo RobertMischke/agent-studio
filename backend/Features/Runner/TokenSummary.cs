@@ -43,7 +43,14 @@ public sealed record TokenSummaryByModel(
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
     bool ModelPriced,
-    bool ModelInCatalog);
+    bool ModelInCatalog)
+{
+    /// <summary>Oldest telemetry entry folded into this model bucket.</summary>
+    public DateTime? FirstRecordedAt { get; init; }
+
+    /// <summary>Newest telemetry entry folded into this model bucket.</summary>
+    public DateTime? LastRecordedAt { get; init; }
+}
 
 public class TokenSummaryService
 {
@@ -316,6 +323,8 @@ public class TokenSummaryService
                 bucket.Cost += m.EstimatedApiCostUsd;
                 if (!m.ModelPriced) bucket.AnyUnpriced = true;
                 if (!m.ModelInCatalog) bucket.AnyUnknownModel = true;
+                bucket.FirstRecordedAt = Min(bucket.FirstRecordedAt, m.FirstRecordedAt);
+                bucket.LastRecordedAt = Max(bucket.LastRecordedAt, m.LastRecordedAt);
             }
         }
 
@@ -330,7 +339,11 @@ public class TokenSummaryService
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
                 ModelPriced: !b.AnyUnpriced,
-                ModelInCatalog: !b.AnyUnknownModel))
+                ModelInCatalog: !b.AnyUnknownModel)
+            {
+                FirstRecordedAt = b.FirstRecordedAt,
+                LastRecordedAt = b.LastRecordedAt,
+            })
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -424,6 +437,8 @@ public class TokenSummaryService
             if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
             if (entryCost.Status == TokenEconomy.PriceStatus.UnknownModel)
                 bucket.AnyUnknownModel = true;
+            bucket.FirstRecordedAt = Min(bucket.FirstRecordedAt, entry.Ts);
+            bucket.LastRecordedAt = Max(bucket.LastRecordedAt, entry.Ts);
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -442,7 +457,11 @@ public class TokenSummaryService
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
                 ModelPriced: !bucket.AnyUnpriced,
-                ModelInCatalog: !bucket.AnyUnknownModel));
+                ModelInCatalog: !bucket.AnyUnknownModel)
+            {
+                FirstRecordedAt = bucket.FirstRecordedAt,
+                LastRecordedAt = bucket.LastRecordedAt,
+            });
         }
 
         return new TokenSummary(
@@ -472,6 +491,8 @@ public class TokenSummaryService
         public decimal Cost;
         public bool AnyUnpriced;
         public bool AnyUnknownModel;
+        public DateTime? FirstRecordedAt;
+        public DateTime? LastRecordedAt;
         public ModelBucket(string model) : this(model, model)
         {
         }
@@ -482,4 +503,10 @@ public class TokenSummaryService
             DisplayModel = displayModel;
         }
     }
+
+    private static DateTime? Min(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate < current ? candidate : current;
+
+    private static DateTime? Max(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate > current ? candidate : current;
 }

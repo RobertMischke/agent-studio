@@ -11,7 +11,7 @@ Imports via `from './features/tokens'`. See [`index.ts`](./index.ts).
 - `TokenSummaryBlockComponent` — per-project rollup block (totals + per-model breakdown + cost projections); embedded in the orchestrator-feed and the legacy project-detail.
 - `WorkspaceTokenTimelineComponent` — the timeline, now embedded as the "Token usage" section of the Workspace-settings home (status-bar "Settings" entry + `#/workspace/tokens` deep-link).
 - `UsageHoverPanelComponent` — hosts the status-bar quota strip; clicking a CLI card opens that CLI's own `CliUsageModalComponent` (one modal per CLI, no grouped view).
-- `CliUsageModalComponent` — per-CLI usage detail modal (all quota windows + that CLI's top models); its "Manage usage caps" footer opens the CLI-Management panel.
+- `CliUsageModalComponent` - per-CLI usage detail modal (all quota windows + that CLI's top models); the model panel derives its `Since` / `As of` range from the visible model buckets, and its "Manage usage caps" footer opens the CLI-Management panel.
 
 **Types**:
 
@@ -23,4 +23,5 @@ Imports via `from './features/tokens'`. See [`index.ts`](./index.ts).
 ## Notable
 
 - Numbers come straight from the JSONL logs (per-turn token usage) — they're authoritative, not estimates.
+- Lifetime model buckets carry `firstRecordedAt` and `lastRecordedAt`; UI periods use those telemetry boundaries rather than fetch time or configuration.
 - The workspace timeline overlay open/close lives in `features/shell/state/workspace-overlays.service.ts`.

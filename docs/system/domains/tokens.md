@@ -12,7 +12,10 @@
 > current source for remote runner calls. Project summary, heatmap, and pipeline
 > cost responses include the newest successfully read usage timestamp and
 > report partial or unavailable sources instead of presenting an unexplained
-> zero. The legacy services (`TokenSummaryService`,
+> zero. Workspace and ad-hoc lifetime model buckets expose their oldest and
+> newest folded telemetry timestamps. The Usage surfaces derive their visible
+> `Since` and `As of` bounds from those model buckets, never from configuration
+> or the aggregate fetch time. The legacy services (`TokenSummaryService`,
 > `WorkspaceTokensTimelineService`, `ProjectTokenUsageService`) retain the pure
 > fold helpers used by the canonical readers and parity fixtures. Each surface ships
 > with a Phase-5 parity test
@@ -81,10 +84,10 @@ receipt writer at remote completion:
 
 | # | Service | Source file | Reads | Produces | Consumed by |
 |---|---------|-------------|-------|----------|-------------|
-| 1 | `AdHocUsageService` (read path) over `AdHocUsageRecorder` | `backend/Features/AdHoc/AdHocUsageService.cs`, `AdHocUsageRecorder.cs` | `adhoc-usage.jsonl` (workspace-wide) | Per-source / per-day / per-model rollup of one-shot Haiku calls | `GET /api/adhoc/usage` — ad-hoc usage chart in the status-bar modal |
+| 1 | `AdHocUsageService` (read path) over `AdHocUsageRecorder` | `backend/Features/AdHoc/AdHocUsageService.cs`, `AdHocUsageRecorder.cs` | `adhoc-usage.jsonl` (workspace-wide) | Per-source / per-day / per-model rollup of one-shot Haiku calls; model buckets include first/last recorded timestamps | `GET /api/adhoc/usage` - ad-hoc usage chart in the status-bar modal |
 | 2 | `ProjectTokenUsageService` | `backend/Features/Runner/ProjectTokenUsageService.cs` | Historical token bus + durable task token receipts | Lifetime/24h summary with Job/Supporting/Orchestrator split; per-day × per-job heatmap; expensive-jobs top-N; per-job drill-down with deltas | `GET /api/projects/{project}/token-usage/*`: Project-Detail Token-Usage panel |
 | 3 | `WorkspaceTokensTimelineService` | `backend/Features/Runner/WorkspaceTokensTimelineService.cs` | `orchestrator.jsonl` for *every* watched project | (project × time-bucket) cells with priced dollars | `GET /api/workspace/tokens` — `#/workspace/tokens` stacked timeline |
-| 4 | `TokenSummaryService` + `TokenSummary` | `backend/Features/Runner/TokenSummary.cs` | Historical token bus + durable task token receipts for canonical project/card reads | Per-project lifetime totals + per-model split + estimated dollars; aggregate across all projects | Project-card last-usage, status-bar usage modal, `TaskEndpointHelpers.WithRuntime` per-job rollups |
+| 4 | `TokenSummaryService` + `TokenSummary` | `backend/Features/Runner/TokenSummary.cs` | Historical token bus + durable task token receipts for canonical project/card reads | Per-project lifetime totals + per-model split + estimated dollars; per-model first/last recorded timestamps; aggregate across all projects | Project-card last-usage, status-bar usage modal, `TaskEndpointHelpers.WithRuntime` per-job rollups |
 | 5 | `BusAggregationCache` (the canonical one) | `backend/Features/Bus/BusAggregationCache.cs` | `logs/bus/*.jsonl` via `AgentMessageBusStore` | `byModel` / `byParticipant` / `byDay` totals plus context-window and latency awareness | `GET /api/bus/{project}/token-aggregate` |
 
 Three of these (#2, #3, #4) read the *same* file (`orchestrator.jsonl`) and

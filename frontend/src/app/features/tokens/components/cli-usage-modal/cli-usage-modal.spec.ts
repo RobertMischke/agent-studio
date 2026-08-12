@@ -151,12 +151,14 @@ describe('CliUsageModalComponent', () => {
           inputTokens: 39_646_031, outputTokens: 97_412,
           cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstRecordedAt: '2026-08-03T10:00:00Z', lastRecordedAt: '2026-08-11T17:42:00Z',
         },
         {
           model: 'GPT-5.5', calls: 8,
           inputTokens: 10_782_081, outputTokens: 66_760,
           cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstRecordedAt: '2026-08-01T08:15:00Z', lastRecordedAt: '2026-08-09T15:30:00Z',
         },
       ],
       byProject: [],
@@ -197,6 +199,7 @@ describe('CliUsageModalComponent', () => {
     expect(component.modelRows().map(r => r.model)).toEqual(['gpt-5.6-sol', 'GPT-5.5']);
     expect(component.modelRows().every(r => r.source === 'project runtime')).toBe(true);
     expect(component.totals().tokens).toBe(50_592_284);
+    expect(component.recordedRangeLabel()).toBe('Since Aug 1, 2026 · As of Aug 11, 2026, 5:42 PM UTC');
   });
 
   it('still returns "n/a" when a window carries no usable number at all', async () => {
