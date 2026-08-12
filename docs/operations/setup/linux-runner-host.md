@@ -132,13 +132,19 @@ from the Studio checkout:
     -RemotePort 15031 `
     -TaskServerPort 5031 `
     -IntervalMinutes 5
+.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -IntervalMinutes 1
 ```
 
 The keeper probes `/healthz` from the Linux host, removes only the matching dead
-forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
-host can initiate the SSH connection, prefer the host-owned `autossh` plus
-systemd form in the linked tunnel runbook because it starts before an
-interactive Windows logon.
+forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. The
+separate watchdog detects a runner-side zombie listener, clears it after two
+failed one-minute probes, and restarts the keeper. Both scheduled tasks use an
+S4U principal so they survive interactive session cleanup. If the host can
+initiate the SSH connection, prefer the host-owned `autossh` plus systemd form
+in the linked tunnel runbook.
 
 Treat either tunnel form as an interim local-profile topology. Once an
 authenticated private Task Server URL is available to the host, point
