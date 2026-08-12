@@ -812,6 +812,7 @@ public static class LeaseEndpoints
                     IdempotencyKey: claimKey)
                 {
                     ClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
+                    LeaseInstanceId = req.CapabilityInstanceId,
                 });
                 if (!acquire.Granted || acquire.Lease is null)
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
@@ -920,6 +921,7 @@ public static class LeaseEndpoints
                     RepositoryUrl: repository.RepositoryUrl,
                     DefaultBranch: repository.DefaultBranch,
                     TaskKind: candidate.Kind,
+                    LeaseInstanceId: req.CapabilityInstanceId,
                     RunSpec: runSpec), admission.ReasonCode));
             }
             finally

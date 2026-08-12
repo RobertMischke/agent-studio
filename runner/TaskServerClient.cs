@@ -36,6 +36,8 @@ public sealed class TaskServerClient : IDisposable
     private readonly SemaphoreSlim _hostProtocolGate = new(1, 1);
     private readonly ConcurrentDictionary<string, Contract.WorkPermitAcceptanceDto> _hostAcceptedWork =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Contract.RunnerAttemptAdoption> _registrationAdoptions =
+        new(StringComparer.Ordinal);
     private readonly TaskCompletionSource<long> _hostReportReady =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _lastHostReportSequence;
@@ -168,7 +170,11 @@ public sealed class TaskServerClient : IDisposable
     /// Returns the adopted client id (falls back to the provisional id on an empty
     /// reply so a misconfigured open-auth server still gets a stable header).
     /// </summary>
-    public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
+    public async Task<string> RegisterAsync(
+        string displayName,
+        string kind,
+        CancellationToken ct,
+        IReadOnlyList<Contract.RunnerActiveAttempt>? activeAttempts = null)
     {
         if (_useV1 || _supportsCapabilityAdvertisement)
         {
@@ -209,7 +215,9 @@ public sealed class TaskServerClient : IDisposable
                 HostOrchestratorMaximum: _supportsHostOrchestrator
                     ? Contract.HostOrchestratorContract.MaximumSupported
                     : null,
-                BootstrapMaxParallelism: options.HostMaxParallelism);
+                BootstrapMaxParallelism: options.HostMaxParallelism,
+                ActiveAttempts: activeAttempts,
+                AttemptLeaseTtlSeconds: options.TtlSeconds);
             try
             {
                 var registered = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
@@ -217,6 +225,8 @@ public sealed class TaskServerClient : IDisposable
                     $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
                     request,
                     ct);
+                foreach (var adoption in registered?.AttemptAdoptions ?? [])
+                    _registrationAdoptions[adoption.AttemptId] = adoption;
                 AdoptRuntimeCapacity(registered?.RuntimeCapacity);
                 SetClientId(runnerId);
                 if (_useV1)
@@ -287,6 +297,45 @@ public sealed class TaskServerClient : IDisposable
         if (!string.IsNullOrWhiteSpace(resp?.Id))
             SetClientId(resp!.Id);
         return resp?.Id ?? string.Empty;
+    }
+
+    internal async Task<bool> ReRegisterAttemptAsync(
+        Contract.RunnerActiveAttempt attempt,
+        CancellationToken ct)
+    {
+        if (_options is null || (!_useV1 && !_supportsCapabilityAdvertisement))
+            return false;
+        _registrationAdoptions.TryRemove(attempt.AttemptId, out _);
+        _ = await RegisterAsync(
+            _options.RunnerName,
+            _options.Role == "review" ? "review-executor" : "service",
+            ct,
+            [attempt]);
+        return _registrationAdoptions.TryGetValue(attempt.AttemptId, out var adoption)
+               && string.Equals(adoption.Status, "adopted", StringComparison.Ordinal);
+    }
+
+    internal Contract.RunnerActiveAttempt CodingAttemptFor(RunLeaseInfoDto lease)
+    {
+        if (_v1Leases.TryGetValue(lease.TaskKey, out var authority))
+        {
+            return new Contract.RunnerActiveAttempt(
+                Contract.RunnerAttemptKinds.Coding,
+                authority.RunId,
+                lease.TaskKey,
+                authority.Lease.LeaseId,
+                authority.Lease.FencingToken,
+                authority.Lease.AuthorityEpoch,
+                authority.InstanceId);
+        }
+        return new Contract.RunnerActiveAttempt(
+            Contract.RunnerAttemptKinds.Coding,
+            lease.AttemptId ?? lease.LeaseId,
+            lease.TaskKey,
+            lease.LeaseId,
+            lease.FencingToken,
+            lease.AuthorityEpoch,
+            RunnerInstanceId);
     }
 
     private TaskServerException InvalidConfiguredIdentity(string reason, string detail)

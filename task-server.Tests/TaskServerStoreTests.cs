@@ -260,6 +260,59 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Restart_registration_re_adopts_coding_attempt_and_accepts_completion()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(first);
+        await first.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await first.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"), "runner-a", default);
+
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var registered = await restarted.RegisterRunnerAsync(
+            "runner-a",
+            Runner("replacement-instance") with
+            {
+                ActiveAttempts =
+                [
+                    new RunnerActiveAttempt(
+                        RunnerAttemptKinds.Coding,
+                        claim.Run!.RunId,
+                        task.TaskKey,
+                        claim.Lease!.LeaseId,
+                        claim.Lease.Fence,
+                        LeaseInstanceId: claim.Lease.InstanceId),
+                ],
+            },
+            "runner-a",
+            default);
+
+        Assert.Equal("adopted", Assert.Single(registered.AttemptAdoptions!).Status);
+        Assert.Equal(1, Assert.Single(
+            await restarted.ListRunnerCapabilitySnapshotsAsync(default),
+            snapshot => snapshot.RunnerId == "runner-a").Telemetry!.ActiveSlots);
+        var completed = await restarted.CompleteRunAsync(
+            claim.Run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                claim.Lease.InstanceId,
+                claim.Lease.LeaseId,
+                claim.Lease.Fence,
+                "blocked",
+                IdempotencyKey: $"completion:{claim.Run.RunId}:after-restart",
+                Sequence: 1),
+            "runner-a",
+            default);
+
+        Assert.Equal("blocked", completed.Status);
+        Assert.Equal("4-auto-review", (await restarted.GetTaskAsync(
+            project.ProjectId, task.TaskKey, default))!.State);
+    }
+
+    [Fact]
     public async Task Backup_restore_preserves_resources_events_artifacts_audit_identity_and_fences()
     {
         await TempDirectory.RunAsync(async temp =>

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AgentRunner;
+using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -157,6 +158,59 @@ public sealed class DurableLeaseAuthorityTests
         Assert.Equal(newExpiry.AddSeconds(-30), current.StopBeforeUtc);
     }
 
+    [Fact]
+    public async Task Unknown_attempt_renewal_re_registers_exact_authority_before_declaring_lease_loss()
+    {
+        using var temp = new TempDirectory();
+        var now = new DateTime(2026, 8, 11, 20, 0, 0, DateTimeKind.Utc);
+        var options = Options(temp.Path);
+        var lease = Lease(now, now.AddMinutes(15)) with
+        {
+            AttemptId = "run-active",
+            AuthorityEpoch = 3,
+        };
+        var handler = new RestartedServerHandler(lease, now);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        using var client = new TaskServerClient(
+            http,
+            options.RunnerId,
+            usesDurableTaskServer: true,
+            options: options,
+            runnerInstanceId: "replacement-daemon");
+        client.RestoreRunAuthority(
+            lease.TaskKey,
+            lease.AttemptId,
+            "original-lease-instance",
+            lease);
+        using var stop = new CancellationTokenSource();
+        var logs = new List<string>();
+        var heartbeat = new LeaseHeartbeat(
+            client,
+            options,
+            lease,
+            logs.Add,
+            (_, _) =>
+            {
+                stop.Cancel();
+                return Task.CompletedTask;
+            });
+
+        await heartbeat.RunAsync(stop, CancellationToken.None);
+
+        Assert.False(heartbeat.LeaseLost);
+        Assert.Equal(
+            [
+                "/api/v1/runs/run-active/lease/renew",
+                "/api/v1/runners/autonomy-runner",
+                "/api/v1/runs/run-active/lease/renew",
+            ],
+            handler.Paths);
+        Assert.Contains("\"attemptId\":\"run-active\"", handler.RegistrationBody);
+        Assert.Contains("\"leaseInstanceId\":\"original-lease-instance\"", handler.RegistrationBody);
+        Assert.Contains(logs, line => line.Contains(
+            "lease authority re-adopted", StringComparison.Ordinal));
+    }
+
     private static RunnerOptions Options(string root) => new()
     {
         ServerUrl = "http://localhost",
@@ -213,6 +267,71 @@ public sealed class DurableLeaseAuthorityTests
                 Content = new StringContent(payload, Encoding.UTF8, "application/json"),
             });
         }
+    }
+
+    private sealed class RestartedServerHandler(
+        RunLeaseInfoDto renewed,
+        DateTime now) : HttpMessageHandler
+    {
+        private int _renewCalls;
+        public List<string> Paths { get; } = [];
+        public string RegistrationBody { get; private set; } = string.Empty;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            Paths.Add(path);
+            if (request.Method == HttpMethod.Put)
+            {
+                RegistrationBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                var registered = new RunnerDto(
+                    renewed.RunnerId,
+                    renewed.RunnerName,
+                    renewed.Hostname,
+                    "replacement-daemon",
+                    "1.0.0",
+                    TaskServerProtocol.Current,
+                    "active",
+                    now,
+                    now,
+                    AttemptAdoptions:
+                    [
+                        new RunnerAttemptAdoption(
+                            RunnerAttemptKinds.Coding,
+                            renewed.AttemptId!,
+                            renewed.TaskKey,
+                            "adopted",
+                            now.AddMinutes(15)),
+                    ]);
+                return Json(HttpStatusCode.OK, registered);
+            }
+            if (Interlocked.Increment(ref _renewCalls) == 1)
+                return Json(HttpStatusCode.Conflict, new ApiError(
+                    "unknown-attempt", "Task Server restarted."));
+            return Json(HttpStatusCode.OK, new LeaseResponse(
+                "renewed",
+                new LeaseDto(
+                    renewed.LeaseId,
+                    renewed.AttemptId!,
+                    renewed.TaskKey,
+                    renewed.RunnerId,
+                    "original-lease-instance",
+                    renewed.FencingToken,
+                    renewed.AcquiredAt,
+                    now.AddMinutes(15),
+                    "active")));
+        }
+
+        private static HttpResponseMessage Json<T>(HttpStatusCode status, T value)
+            => new(status)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(value),
+                    Encoding.UTF8,
+                    "application/json"),
+            };
     }
 
     private sealed class TempDirectory : IDisposable

@@ -30,7 +30,8 @@ public sealed class AutoReviewStatusSnapshot
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Read-only view used by the API endpoint.</summary>
-    public AutoReviewStatusView Read()
+    public AutoReviewStatusView Read(
+        IReadOnlyList<AutoReviewActivityView>? durableActiveJobs = null)
     {
         lock (_lock)
         {
@@ -38,6 +39,12 @@ public sealed class AutoReviewStatusSnapshot
             var escalationRate = decisionCount == 0 ? 0 : (double)_escalate / decisionCount;
             var escalationRateAlert = decisionCount >= _escalationRateMinimumDecisions
                 && escalationRate > _escalationRateAlertThreshold;
+            var activeJobs = new Dictionary<string, AutoReviewActivityView>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var activity in durableActiveJobs ?? [])
+                activeJobs[ActivityKey(activity.Project, activity.JobId)] = activity;
+            foreach (var activity in _activeJobs.Values)
+                activeJobs[ActivityKey(activity.Project, activity.JobId)] = activity;
             return new AutoReviewStatusView(
                 LastTickAt: _lastTickAt == DateTime.MinValue ? null : _lastTickAt,
                 Accept: _accept,
@@ -51,7 +58,7 @@ public sealed class AutoReviewStatusSnapshot
                 EscalationRateAlert: escalationRateAlert,
                 CurrentJob: _currentJob,
                 CurrentProject: _currentProject,
-                ActiveJobs: _activeJobs.Values
+                ActiveJobs: activeJobs.Values
                     .OrderBy(activity => activity.StartedAt)
                     .ToList());
         }

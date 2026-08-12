@@ -61,6 +61,159 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Registration_re_adopts_expired_coding_and_review_leases_without_changing_fences()
+    {
+        var now = new DateTime(2026, 8, 11, 20, 0, 0, DateTimeKind.Utc);
+        var first = NewService(() => now);
+        var run = first.AcquireRun(
+            "AGT-1", "PROJ-1", null, "coding-runner", "host-a", 30, "coding-claim",
+            clientId: "coding-runner", leaseInstanceId: "coding-instance").RunAttempt!;
+        var completed = first.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId, run.LastFence, run.AuthorityEpoch, "coding-complete"),
+            Outcome = "done",
+            ResultSha = "sha-a",
+        });
+        Assert.True(completed.Accepted);
+        var review = first.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1", "PROJ-1", "sha-a", run.AttemptId,
+            "requirements", "policy", [], "review-create")).ReviewAttempt!;
+        var claimedReview = first.ClaimReview(
+            review.AttemptId,
+            "review-runner",
+            "host-a",
+            30,
+            "review-claim",
+            "review-instance").ReviewAttempt!;
+
+        var coding = first.AcquireRun(
+            "AGT-2", "PROJ-1", null, "coding-runner", "host-a", 30, "coding-claim-2",
+            clientId: "coding-runner", leaseInstanceId: "coding-instance").RunAttempt!;
+        now = now.AddMinutes(2);
+        var restarted = NewService(() => now);
+
+        var codingAdoption = Assert.Single(restarted.ReAdoptRunnerAttempts(
+            "coding-runner",
+            "host-a",
+            "coding-instance",
+            [new AgentStudio.TaskServer.Contracts.RunnerActiveAttempt(
+                AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Coding,
+                coding.AttemptId,
+                coding.TaskKey,
+                coding.Lease!.LeaseId,
+                coding.LastFence,
+                coding.AuthorityEpoch,
+                "coding-instance")],
+            120));
+        var reviewAdoption = Assert.Single(restarted.ReAdoptRunnerAttempts(
+            "review-runner",
+            "host-a",
+            "replacement-instance",
+            [new AgentStudio.TaskServer.Contracts.RunnerActiveAttempt(
+                AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Review,
+                claimedReview.AttemptId,
+                claimedReview.TaskKey,
+                claimedReview.Lease!.LeaseId,
+                claimedReview.LastFence,
+                claimedReview.AuthorityEpoch,
+                "review-instance")],
+            120));
+
+        Assert.Equal("adopted", codingAdoption.Status);
+        Assert.Equal("adopted", reviewAdoption.Status);
+        Assert.Equal(coding.LastFence, restarted.GetRun(coding.AttemptId)!.LastFence);
+        Assert.Equal(claimedReview.LastFence, restarted.GetReview(claimedReview.AttemptId)!.LastFence);
+        Assert.True(restarted.GetRun(coding.AttemptId)!.Lease!.ExpiresAt > now);
+        Assert.True(restarted.GetReview(claimedReview.AttemptId)!.Lease!.ExpiresAt > now);
+
+        Assert.Equal(AttemptWriteStatus.Accepted, restarted.SettleReview(
+            new SettleReviewAttemptRequest(
+                new AttemptWriteReference(
+                    claimedReview.AttemptId,
+                    claimedReview.LastFence,
+                    claimedReview.AuthorityEpoch,
+                    "report-after-restart"),
+                "sha-a",
+                ReviewTerminalOutcome.Pass)).Status);
+        Assert.Equal(AttemptWriteStatus.Accepted, restarted.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                coding.AttemptId,
+                coding.LastFence,
+                coding.AuthorityEpoch,
+                "coding-report-after-restart"),
+            Outcome = "done",
+            ResultSha = "sha-b",
+        }).Status);
+    }
+
+    [Fact]
+    public void Registration_cannot_re_adopt_a_stale_fence_or_wrong_lease_instance()
+    {
+        var now = new DateTime(2026, 8, 11, 20, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var claimed = service.ClaimReview(
+            review.AttemptId,
+            "review-runner",
+            "host-a",
+            30,
+            "review-claim",
+            "review-instance").ReviewAttempt!;
+        var coding = service.AcquireRun(
+            "AGT-2", "PROJ-1", null, "coding-runner", "host-a", 30, "coding-claim",
+            clientId: "coding-runner", leaseInstanceId: "coding-instance").RunAttempt!;
+        now = now.AddMinutes(2);
+
+        var staleFence = Assert.Single(service.ReAdoptRunnerAttempts(
+            "review-runner",
+            "host-a",
+            "review-instance",
+            [new AgentStudio.TaskServer.Contracts.RunnerActiveAttempt(
+                AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Review,
+                claimed.AttemptId,
+                claimed.TaskKey,
+                claimed.Lease!.LeaseId,
+                claimed.LastFence + 1,
+                claimed.AuthorityEpoch,
+                "review-instance")],
+            120));
+        var wrongLeaseInstance = Assert.Single(service.ReAdoptRunnerAttempts(
+            "review-runner",
+            "host-a",
+            "replacement-instance",
+            [new AgentStudio.TaskServer.Contracts.RunnerActiveAttempt(
+                AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Review,
+                claimed.AttemptId,
+                claimed.TaskKey,
+                claimed.Lease!.LeaseId,
+                claimed.LastFence,
+                claimed.AuthorityEpoch,
+                "wrong-lease-instance")],
+            120));
+        var wrongCodingLeaseInstance = Assert.Single(service.ReAdoptRunnerAttempts(
+            "coding-runner",
+            "host-a",
+            "replacement-instance",
+            [new AgentStudio.TaskServer.Contracts.RunnerActiveAttempt(
+                AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Coding,
+                coding.AttemptId,
+                coding.TaskKey,
+                coding.Lease!.LeaseId,
+                coding.LastFence,
+                coding.AuthorityEpoch,
+                "wrong-lease-instance")],
+            120));
+
+        Assert.Equal("stale-authority", staleFence.Status);
+        Assert.Equal("stale-authority", wrongLeaseInstance.Status);
+        Assert.Equal("stale-authority", wrongCodingLeaseInstance.Status);
+        Assert.True(service.GetReview(claimed.AttemptId)!.Lease!.ExpiresAt <= now);
+        Assert.True(service.GetRun(coding.AttemptId)!.Lease!.ExpiresAt <= now);
+    }
+
+    [Fact]
     public void Takeover_raises_persisted_fence_and_rejects_stale_or_duplicate_writes_deterministically()
     {
         var now = new DateTime(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);

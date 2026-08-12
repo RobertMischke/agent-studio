@@ -192,6 +192,14 @@ state.
   and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
   one-shot remains for diagnostics. It owns no task state. Its Git writes to
   origin are generation-scoped salvage and immutable result refs described below.
+  Every coding and review registration reports the exact fenced attempts whose
+  detached process generation or durable terminal result is still positively
+  present on the host. A restarted Task Server compares attempt, task, lease,
+  fence, epoch, executor, host, and original lease instance against its durable
+  authority record before extending the lease. Registration also publishes the
+  accepted active-slot count immediately. A renewal that first encounters the
+  restarted server retries this exact registration once before treating a
+  404/409 as lease loss; a stale or superseded authority still fails closed.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
 - `runner/RemoteTaskRunner.cs` and
@@ -289,6 +297,12 @@ state.
   persistence restores the last durable snapshot before the error escapes, so
   the live process cannot retain a fence, epoch, or attempt that restart would
   forget.
+  Server restart recovery is cooperative rather than a takeover: durable leased
+  records may be re-adopted after expiry only when the runner supplies every
+  unchanged authority field. Re-adoption preserves the attempt and fence,
+  reopens renewal and final-write delivery, restores the coding runner badge,
+  and projects leased ReviewAttempts back into Auto Review activity. Omitted,
+  mismatched, terminal, or superseded records are never reopened.
 - `orchestrator-engine/`: the separate API-only flow executor. Its bounded
   ReviewDecision, Council, PostProcessing, GateDispatch, and CompletionJudge
   loops claim server-owned orchestration runs through
@@ -542,6 +556,15 @@ state.
   classification `ExecutorRestarted`, the completed-command count and duration,
   the failed process proof, and the retry reason. DB lease presence alone is
   never process-liveness evidence. systemd must use `KillMode=process`.
+- A Task Server restart is also not an attempt boundary. The server reloads the
+  persisted RunAttempt and ReviewAttempt ledger; the surviving runner includes
+  positively proven active slots in its next registration and the server
+  extends only the exact matching leases. The registration acknowledgement
+  includes one typed adoption result per reported attempt, and the server emits
+  fresh active-slot telemetry from the accepted set. Coding and review terminal
+  deliveries therefore continue under their original attempt, fence, epoch,
+  lease, and lease instance instead of receiving a false unknown-attempt or
+  Superseded response.
 - A failed lease renewal consumes the last server-issued authority window. The
   default requested window is 15 minutes, with a durable stop-before boundary
   one renewal interval before expiry. The standalone Runner persists that

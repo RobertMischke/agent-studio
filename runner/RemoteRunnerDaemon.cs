@@ -86,6 +86,11 @@ public sealed class RemoteRunnerDaemon
         shutdown = daemonStop.Token;
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var state = new RunnerStateStore(_options.StateDir);
+        Task<string> RegisterAsync(CancellationToken ct) => _client.RegisterAsync(
+            _options.RunnerName,
+            "service",
+            ct,
+            RunnerActiveAttemptReporter.Coding(state.LoadAll()));
         var hostJournal = new HostOrchestratorJournal(
             Path.Combine(_options.StateDir, "host-orchestrator.json"));
         var persistedAtStartup = state.LoadAll();
@@ -100,7 +105,7 @@ public sealed class RemoteRunnerDaemon
 
         var clientId = await WithServerRetryAsync(
             "runner registration",
-            () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
+            () => RegisterAsync(shutdown),
             connectivity,
             () => 0,
             shutdown);
@@ -301,7 +306,7 @@ public sealed class RemoteRunnerDaemon
             },
             async ct =>
             {
-                _ = await _client.RegisterAsync(_options.RunnerName, "service", ct);
+                _ = await RegisterAsync(ct);
             },
             connectivity,
             () => active.Count,
@@ -382,7 +387,7 @@ public sealed class RemoteRunnerDaemon
                             ct),
                         async ct =>
                         {
-                            _ = await _client.RegisterAsync(_options.RunnerName, "service", ct);
+                            _ = await RegisterAsync(ct);
                         },
                         connectivity,
                         () => active.Count,
