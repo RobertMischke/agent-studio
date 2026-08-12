@@ -13,6 +13,8 @@ param(
 
     [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'AgentTaskboard\tunnel-keeper'),
 
+    [string] $SshRunnerPath = (Join-Path $PSScriptRoot 'run-tunnel-ssh.ps1'),
+
     [ValidateRange(10, 180)]
     [int] $RecoveryWaitSeconds = 45
 )
@@ -107,12 +109,21 @@ function Stop-MatchingForwards {
 }
 
 try {
-    $ownsMutex = $mutex.WaitOne(0)
+    try {
+        $ownsMutex = $mutex.WaitOne(0)
+    }
+    catch [Threading.AbandonedMutexException] {
+        # Stop-ScheduledTask can terminate a previous repair while it owns the
+        # mutex. WaitOne grants this process ownership when it reports the
+        # abandoned mutex, so continue and release it normally in finally.
+        $ownsMutex = $true
+    }
     if (-not $ownsMutex) { exit 0 }
 
     New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
     $script:sshPath = (Get-Command $SshExecutable -ErrorAction Stop).Source
     $script:sshProcessName = [IO.Path]::GetFileName($script:sshPath)
+    $sshRunner = (Resolve-Path -LiteralPath $SshRunnerPath).Path
 
     if (Test-TaskServerRoute) {
         Write-KeeperState -Status 'healthy' -Message 'Remote functional probe returned the expected sentinel.'
@@ -128,16 +139,22 @@ try {
         -Message "Functional probe failed; stopped $stopped matching forward process(es) and started a replacement." `
         -RepairAttempts $attempts
 
+    $powerShell = (Get-Command 'powershell.exe' -ErrorAction Stop).Source
+    $quotedRunner = '"{0}"' -f ($sshRunner -replace '"', '""')
+    $quotedStateDirectory = '"{0}"' -f ($StateDirectory -replace '"', '""')
+    $quotedSshPath = '"{0}"' -f ($script:sshPath -replace '"', '""')
     $arguments = @(
-        '-N', '-T',
-        '-o', 'BatchMode=yes',
-        '-o', 'ExitOnForwardFailure=yes',
-        '-o', 'ServerAliveInterval=30',
-        '-o', 'ServerAliveCountMax=3',
-        '-R', $forward,
-        $SshTarget
-    )
-    Start-Process -FilePath $script:sshPath -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', $quotedRunner,
+        '-SshTarget', $SshTarget,
+        '-RemotePort', $RemotePort,
+        '-TaskServerPort', $TaskServerPort,
+        '-SshExecutable', $quotedSshPath,
+        '-StateDirectory', $quotedStateDirectory
+    ) -join ' '
+    Start-Process -FilePath $powerShell -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 
     $deadline = [DateTime]::UtcNow.AddSeconds($RecoveryWaitSeconds)
     do {

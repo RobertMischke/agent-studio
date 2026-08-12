@@ -6,30 +6,46 @@ param(
     [ValidateRange(1, 65535)]
     [int] $RemotePort = 15031,
 
-    [ValidateRange(1, 65535)]
-    [int] $TaskServerPort = 5031,
+    [ValidateRange(1, 10)]
+    [int] $IntervalMinutes = 1,
 
-    [ValidateRange(1, 60)]
-    [int] $IntervalMinutes = 5,
+    [string] $TaskName = 'AgentRunner-TunnelWatchdog',
 
-    [string] $TaskName = 'AgentRunner-TunnelKeeper',
+    [string] $KeeperTaskName = 'AgentRunner-TunnelKeeper',
 
-    [string] $KeeperPath = (Join-Path $PSScriptRoot 'tunnel-keeper.ps1')
+    [string] $DevspaceDirectory = '',
+
+    [string] $WatchdogPath = (Join-Path $PSScriptRoot 'tunnel-watchdog.ps1')
 )
 
 $ErrorActionPreference = 'Stop'
-$keeper = (Resolve-Path -LiteralPath $KeeperPath).Path
+$watchdog = (Resolve-Path -LiteralPath $WatchdogPath).Path
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+if ([string]::IsNullOrWhiteSpace($DevspaceDirectory)) {
+    $DevspaceDirectory = Split-Path -Parent $repositoryRoot
+}
+$devspace = (Resolve-Path -LiteralPath $DevspaceDirectory).Path
 $powerShell = (Get-Command 'powershell.exe' -ErrorAction Stop).Source
 $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$quotedKeeper = '"{0}"' -f ($keeper -replace '"', '""')
+
+if (-not (Get-ScheduledTask -TaskName $KeeperTaskName -ErrorAction SilentlyContinue)) {
+    throw "Keeper task '$KeeperTaskName' does not exist. Register the keeper before the watchdog."
+}
+
+function Quote-TaskArgument {
+    param([Parameter(Mandatory)] [string] $Value)
+    return '"{0}"' -f ($Value -replace '"', '""')
+}
+
 $arguments = @(
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy', 'Bypass',
-    '-File', $quotedKeeper,
+    '-File', (Quote-TaskArgument $watchdog),
     '-SshTarget', $SshTarget,
     '-RemotePort', $RemotePort,
-    '-TaskServerPort', $TaskServerPort
+    '-KeeperTaskName', (Quote-TaskArgument $KeeperTaskName),
+    '-DevspaceDirectory', (Quote-TaskArgument $devspace)
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
@@ -47,12 +63,12 @@ $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -RestartCount 3 `
     -RestartInterval (New-TimeSpan -Minutes 1) `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 4)
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
 
-if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel keeper scheduled task')) {
+if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel watchdog scheduled task')) {
     Register-ScheduledTask `
         -TaskName $TaskName `
-        -Description 'Functionally probes and repairs the private Agent Host reverse tunnel.' `
+        -Description 'Probes the reverse tunnel each minute, clears a stale remote listener, and restarts the keeper.' `
         -Action $action `
         -Trigger $trigger `
         -Principal $principal `
@@ -61,3 +77,4 @@ if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel keeper sch
     Start-ScheduledTask -TaskName $TaskName
     Get-ScheduledTask -TaskName $TaskName
 }
+
