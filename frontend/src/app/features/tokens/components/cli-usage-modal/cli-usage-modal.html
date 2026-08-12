@@ -56,7 +56,12 @@
 
     <section class="cum__panel">
       <div class="cum__panel-head">
-        <h5 class="cum__panel-title">Recorded model usage</h5>
+        <div class="cum__panel-copy">
+          <h5 class="cum__panel-title">Recorded model usage</h5>
+          @if (usagePeriod(); as period) {
+            <p class="cum__period" data-testid="cli-usage-modal-period">{{ period }}</p>
+          }
+        </div>
         <div class="cum__totals">
           <span class="cum__total">
             <span class="cum__total-label">Tokens</span>
@@ -69,7 +74,7 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      <p class="cum__scope-note">Lifetime telemetry by model, independent of the active quota windows above.</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

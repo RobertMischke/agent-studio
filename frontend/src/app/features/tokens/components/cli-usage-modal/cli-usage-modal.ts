@@ -7,6 +7,7 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
+import { formatUsagePeriod } from '../../utils/usage-period';
 
 interface ModelUsageRow {
   model: string;
@@ -20,6 +21,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstActivity: string | null;
+  lastActivity: string | null;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -140,16 +143,31 @@ export class CliUsageModalComponent {
     const rows: ModelUsageRow[] = [];
     for (const m of this.tokens()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      const row = { ...m, source: 'project runtime', cacheIncludedInInput: cli === 'codex' };
+      const row = {
+        ...m,
+        source: 'project runtime',
+        cacheIncludedInInput: cli === 'codex',
+        firstActivity: m.firstActivity ?? null,
+        lastActivity: m.lastActivity ?? null,
+      };
       if (this.totalTokens(row) > 0) rows.push(row);
     }
     for (const m of this.adhoc()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      const row = { ...m, source: 'ad-hoc', cacheIncludedInInput: cli === 'codex' };
+      const row = {
+        ...m,
+        source: 'ad-hoc',
+        cacheIncludedInInput: cli === 'codex',
+        firstActivity: m.firstActivity ?? null,
+        lastActivity: m.lastActivity ?? null,
+      };
       if (this.totalTokens(row) > 0) rows.push(row);
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
   });
+
+  /** Data-derived bounds for exactly the model rows included in the totals. */
+  readonly usagePeriod = computed(() => formatUsagePeriod(this.modelRows()));
 
   limitText(window: QuotaWindow): string {
     if (window.used !== null && window.limit !== null) {

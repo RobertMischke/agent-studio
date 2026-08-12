@@ -277,6 +277,15 @@ export class ProjectTokenUsagePanelComponent {
     return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
   }
 
+  formatDate(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+    }).format(d);
+  }
+
   shortDay(day: string): string {
     // Day strings are YYYY-MM-DD; render MM-DD to keep the heatmap tight.
     if (day.length >= 10) return day.slice(5);

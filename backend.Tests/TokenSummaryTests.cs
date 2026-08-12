@@ -106,6 +106,38 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_ByModelCarriesDataDerivedActivityBounds()
+    {
+        var first = new DateTime(2026, 8, 1, 7, 15, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 19, 42, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            Entry("gpt-5.6-sol", 1_000, 100) with { Ts = last },
+            Entry("gpt-5.6-sol", 2_000, 200) with { Ts = first },
+        };
+
+        var model = Assert.Single(TokenSummaryService.Summarize("Demo", entries).ByModel);
+
+        Assert.Equal(first, model.FirstActivity);
+        Assert.Equal(last, model.LastActivity);
+    }
+
+    [Fact]
+    public void AggregateSummaries_PreservesWorkspaceWideModelActivityBounds()
+    {
+        var first = new DateTime(2026, 7, 21, 6, 0, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 20, 30, 0, DateTimeKind.Utc);
+        var earlier = TokenSummaryService.Summarize("A", [Entry("gpt-5.6-sol", 1_000, 100) with { Ts = first }]);
+        var later = TokenSummaryService.Summarize("B", [Entry("gpt-5.6-sol", 2_000, 200) with { Ts = last }]);
+
+        var aggregate = TokenSummaryService.AggregateSummaries([("A", earlier), ("B", later)]);
+        var model = Assert.Single(aggregate.ByModel);
+
+        Assert.Equal(first, model.FirstActivity);
+        Assert.Equal(last, model.LastActivity);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with

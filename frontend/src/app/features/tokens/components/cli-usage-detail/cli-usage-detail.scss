@@ -55,8 +55,15 @@
 .cud__cli-head p,
 .cud__trend-head span,
 .cud__muted,
-.cud__empty {
+.cud__empty,
+.cud__period {
   color: var(--studio-fg-dim);
+}
+
+.cud__period {
+  margin: calc(var(--studio-spacing-2) * -1) 0 var(--studio-spacing-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .cud__sub,

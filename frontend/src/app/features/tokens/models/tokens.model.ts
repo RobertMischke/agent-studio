@@ -45,6 +45,9 @@ export interface TokenSummaryByModel {
   modelPriced: boolean;
   /** False only when the model id is absent from the pinned price catalog. */
   modelInCatalog?: boolean;
+  /** Earliest and latest telemetry entries folded into this model bucket. */
+  firstActivity?: string | null;
+  lastActivity?: string | null;
 }
 
 export interface TokenSummaryByProject {
@@ -150,6 +153,9 @@ export interface AdHocUsageByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  /** Earliest and latest telemetry entries folded into this model bucket. */
+  firstActivity?: string | null;
+  lastActivity?: string | null;
 }
 
 /**

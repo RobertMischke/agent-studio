@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
-import { setTheme } from '../helpers/theme';
+import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 /**
  * The bottom status-bar's quota strip now follows a single model:
@@ -119,7 +119,8 @@ test.describe('Status bar usage modal', () => {
     await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   });
 
-  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page }) => {
+  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
     await page.route('**/api/cli/quota**', async route => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
@@ -157,12 +158,16 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstActivity: '2026-08-01T07:15:00Z',
+            lastActivity: '2026-08-11T19:42:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstActivity: '2026-07-21T06:00:00Z',
+            lastActivity: '2026-08-10T15:30:00Z',
           },
         ],
         byProject: [],
@@ -201,21 +206,36 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
+    const leaveRecoveryUncommitted = page.getByRole('button', { name: 'Leave all uncommitted' });
+    if (await leaveRecoveryUncommitted.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false)) {
+      await leaveRecoveryUncommitted.click();
+    }
+    await dismissDevErrorDialog(page);
     await page.getByTestId('hquota-card-codex').click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByText('Lifetime telemetry by model, independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-period')).toHaveText('Since 21 Jul 2026 · as of 11 Aug 2026, 19:42 UTC');
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
-    await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
-    await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    // Before evidence is an explicit composite: same deterministic response
+    // and rendered modal, with only the newly added period row hidden.
+    const period = modal.getByTestId('cli-usage-modal-period');
+    await period.evaluate(element => { (element as HTMLElement).style.display = 'none'; });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-period-before-${theme}--composite.png` });
+    }
+    await period.evaluate(element => { (element as HTMLElement).style.removeProperty('display'); });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-period-after-${theme}--mocked.png` });
+    }
   });
 });

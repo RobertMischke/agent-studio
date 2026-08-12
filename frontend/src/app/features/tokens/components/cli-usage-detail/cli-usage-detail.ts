@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { formatUsagePeriod } from '../../utils/usage-period';
 
 interface SparkPoint {
   label: string;
@@ -35,6 +36,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstActivity: string | null;
+  lastActivity: string | null;
 }
 
 /**
@@ -155,6 +158,8 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        firstActivity: m.firstActivity ?? null,
+        lastActivity: m.lastActivity ?? null,
       });
     }
     for (const m of this.adhoc()?.byModel ?? []) {
@@ -169,12 +174,20 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        firstActivity: m.firstActivity ?? null,
+        lastActivity: m.lastActivity ?? null,
       });
     }
     return rows
       .sort((a, b) => this.totalTokens(b) - this.totalTokens(a))
       .slice(0, 5);
   }
+
+  usagePeriodFor(cliType: CliType): string | null {
+    return formatUsagePeriod(this.modelRowsFor(cliType));
+  }
+
+  workspaceUsagePeriod(): string | null { return formatUsagePeriod(this.tokens()?.byModel ?? []); }
 
   sourceRowsFor(cliType: CliType) {
     if (cliType !== 'claude') return [];

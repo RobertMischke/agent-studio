@@ -43,7 +43,9 @@ public sealed record TokenSummaryByModel(
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
     bool ModelPriced,
-    bool ModelInCatalog);
+    bool ModelInCatalog,
+    DateTime? FirstActivity = null,
+    DateTime? LastActivity = null);
 
 public class TokenSummaryService
 {
@@ -316,6 +318,8 @@ public class TokenSummaryService
                 bucket.Cost += m.EstimatedApiCostUsd;
                 if (!m.ModelPriced) bucket.AnyUnpriced = true;
                 if (!m.ModelInCatalog) bucket.AnyUnknownModel = true;
+                bucket.IncludeActivity(m.FirstActivity);
+                bucket.IncludeActivity(m.LastActivity);
             }
         }
 
@@ -330,7 +334,9 @@ public class TokenSummaryService
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
                 ModelPriced: !b.AnyUnpriced,
-                ModelInCatalog: !b.AnyUnknownModel))
+                ModelInCatalog: !b.AnyUnknownModel,
+                FirstActivity: b.FirstActivity,
+                LastActivity: b.LastActivity))
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -424,6 +430,7 @@ public class TokenSummaryService
             if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
             if (entryCost.Status == TokenEconomy.PriceStatus.UnknownModel)
                 bucket.AnyUnknownModel = true;
+            bucket.IncludeActivity(entry.Ts);
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -442,7 +449,9 @@ public class TokenSummaryService
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
                 ModelPriced: !bucket.AnyUnpriced,
-                ModelInCatalog: !bucket.AnyUnknownModel));
+                ModelInCatalog: !bucket.AnyUnknownModel,
+                FirstActivity: bucket.FirstActivity,
+                LastActivity: bucket.LastActivity));
         }
 
         return new TokenSummary(
@@ -472,6 +481,8 @@ public class TokenSummaryService
         public decimal Cost;
         public bool AnyUnpriced;
         public bool AnyUnknownModel;
+        public DateTime? FirstActivity;
+        public DateTime? LastActivity;
         public ModelBucket(string model) : this(model, model)
         {
         }
@@ -480,6 +491,14 @@ public class TokenSummaryService
         {
             Model = model;
             DisplayModel = displayModel;
+        }
+
+        public void IncludeActivity(DateTime? timestamp)
+        {
+            if (timestamp is not DateTime value) return;
+            var utc = value.ToUniversalTime();
+            if (FirstActivity is null || utc < FirstActivity) FirstActivity = utc;
+            if (LastActivity is null || utc > LastActivity) LastActivity = utc;
         }
     }
 }
