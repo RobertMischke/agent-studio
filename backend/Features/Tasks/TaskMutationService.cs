@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Runner;
 
 namespace AgentStudio.Tasks;
 
@@ -402,6 +403,70 @@ public class TaskMutationService
         }
 
         return WriteCommitState(folderPath, union, allowEmptyReplacement: true);
+    }
+
+    /// <summary>
+    /// Replaces one remote attempt's token rows while preserving receipts from
+    /// earlier attempts. The attempt-scoped participant id makes completion
+    /// replay idempotent and keeps continuation costs visible.
+    /// </summary>
+    public bool SetRemoteTokenSummaryOnFolder(
+        string folderPath,
+        string runAttemptId,
+        TaskTokenSummary attemptSummary)
+    {
+        if (!Directory.Exists(folderPath) || string.IsNullOrWhiteSpace(runAttemptId)) return false;
+        try
+        {
+            TaskTokenSummary? persisted = null;
+            var taskJsonPath = Path.Combine(folderPath, "task.json");
+            using (var document = JsonDocument.Parse(File.ReadAllText(taskJsonPath)))
+            {
+                if (document.RootElement.TryGetProperty("tokenSummary", out var tokenSummary)
+                    && tokenSummary.ValueKind == JsonValueKind.Object)
+                {
+                    persisted = tokenSummary.Deserialize<TaskTokenSummary>(TaskJsonFile.ReadOpts);
+                }
+            }
+
+            var participant = $"agent:remote-runner:{runAttemptId}";
+            var entries = (persisted?.Entries ?? [])
+                .Where(entry => !string.Equals(entry.ParticipantId, participant, StringComparison.Ordinal))
+                .Concat((attemptSummary.Entries ?? []).Select(entry => entry with
+                {
+                    ParticipantId = participant,
+                }))
+                .OrderBy(entry => entry.Ts)
+                .ToList();
+            if (entries.Count == 0) return false;
+
+            var summary = new TaskTokenSummary
+            {
+                Calls = entries.Count,
+                InputTokens = entries.Sum(entry => entry.InputTokens),
+                OutputTokens = entries.Sum(entry => entry.OutputTokens),
+                CacheReadTokens = entries.Sum(entry => entry.CacheReadTokens),
+                CacheCreationTokens = entries.Sum(entry => entry.CacheCreationTokens),
+                TotalTokens = entries.Sum(entry => entry.InputTokens + entry.OutputTokens
+                    + entry.CacheReadTokens + entry.CacheCreationTokens),
+                EstimatedApiCostUsd = entries.Sum(entry => entry.EstimatedApiCostUsd),
+                AllModelsPriced = entries.All(entry => entry.ModelPriced),
+                LastModel = entries
+                    .Where(entry => TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
+                                    && !string.IsNullOrWhiteSpace(entry.Model))
+                    .OrderBy(entry => entry.Ts)
+                    .LastOrDefault()?.Model,
+                LastUpdate = entries.Max(entry => entry.Ts),
+                Entries = entries,
+            };
+            TaskJsonFile.UpdateFieldOrThrow(folderPath, "tokenSummary", summary);
+            return Updated();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist remote token receipt in {Folder}", folderPath);
+            return false;
+        }
     }
 
     /// <summary>

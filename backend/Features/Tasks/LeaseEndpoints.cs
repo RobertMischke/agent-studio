@@ -981,6 +981,7 @@ public static class LeaseEndpoints
             WorkspaceArtifactCommitService artifactCommits,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
             TaskMutationService mutations,
+            RemoteTokenReceiptService tokenReceipts,
             GitService git,
             TaskStateMachine states,
             OrchestratorChatLog chatLog,
@@ -1173,6 +1174,15 @@ public static class LeaseEndpoints
                     req.TaskKey,
                     attemptId);
             }
+            var tokenReceipt = tokenReceipts.PersistFromLog(task, attemptId, req.RunnerId);
+            if (!tokenReceipt.Persisted && !string.IsNullOrWhiteSpace(tokenReceipt.Warning))
+            {
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                    "remote-token-receipt task={TaskKey} attempt={AttemptId} warning={Warning}",
+                    req.TaskKey,
+                    attemptId,
+                    tokenReceipt.Warning);
+            }
             RemoteDeliveryFailureDecision? deliveryFailure = null;
             if (envelopeDecision.ShouldFailDelivery)
             {
@@ -1254,6 +1264,7 @@ public static class LeaseEndpoints
                         deliveryBranch,
                         resultSha,
                         req.IntegrationBranch,
+                        req.BaseSha,
                         ct);
                     // AGT-2494: the top-ranked claim is contradicted by the
                     // repository, so let the repository name the ref instead of
@@ -1281,6 +1292,7 @@ public static class LeaseEndpoints
                                 deliveryBranch,
                                 resultSha,
                                 req.IntegrationBranch,
+                                req.BaseSha,
                                 ct);
                         }
                     }
@@ -1772,6 +1784,7 @@ public static class LeaseEndpoints
                                  ?? git.ResolveRepoRootForWatchPath(task.WatchPath)
                                  ?? string.Empty,
                     ResultSha = run.ResultSha!,
+                    BaseSha = run.ResultEnvelope?.BaseSha ?? req.BaseSha,
                     AttemptChainId = req.AttemptChainId!,
                     Executor = req.RunnerId,
                     LeaseId = req.LeaseId,

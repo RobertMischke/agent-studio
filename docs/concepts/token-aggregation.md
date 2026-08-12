@@ -241,6 +241,12 @@ For an operator or an LLM instance working in this area, the rules of the road:
 Append new findings about the token-aggregation area here, newest on top. Keep
 each entry short: date, what was learned, and a pointer to the code/commit/task.
 
+- **2026-08-12 (AGT-2624).** Receipt discovery was working, but remote
+  completion never wrote `task.json.tokenSummary`; recent TE/CAC cards therefore
+  had no current source to discover. `RemoteTokenReceiptService` now folds the
+  matching fenced session's provider usage frames into an attempt-scoped,
+  replay-safe receipt. `RemoteCompletionAttributionSweep` repairs recent remote
+  cards from their durable logs alongside the exact BaseSha commit repair.
 - **2026-08-11 (AGT-2626).** The task-detail pipeline counted visible RUNS
   from `session-events.jsonl` but built token totals from pipeline attempts.
   Those are different lifecycles, so six CLI runs could appear beside one

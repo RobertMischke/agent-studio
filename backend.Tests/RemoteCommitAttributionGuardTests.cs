@@ -213,6 +213,28 @@ public sealed class RemoteCommitAttributionGuardTests
             Assert.Equal(baseSha, range.MergeBaseSha);
             Assert.Equal(tip, range.TipSha);
             Assert.Equal([first, tip], range.Commits.Select(commit => commit.Sha));
+
+            // TE/CAC release tasks can fast-forward main themselves before the
+            // remote completion reaches Agent Studio. A live merge-base then is
+            // the result itself and the legacy range collapses to zero commits.
+            RunGit(repo, "push -q origin HEAD:main");
+            var collapsed = git.InspectRemoteDeliveryCommitRange(
+                repo,
+                "runner/agent-runner-01/AGT-2389",
+                tip,
+                "refs/heads/main");
+            Assert.True(collapsed.Success, collapsed.Warning);
+            Assert.Empty(collapsed.Commits);
+
+            var exactEnvelopeRange = git.InspectRemoteDeliveryCommitRange(
+                repo,
+                "runner/agent-runner-01/AGT-2389",
+                tip,
+                "refs/heads/main",
+                baseSha);
+            Assert.True(exactEnvelopeRange.Success, exactEnvelopeRange.Warning);
+            Assert.Equal(baseSha, exactEnvelopeRange.MergeBaseSha);
+            Assert.Equal([first, tip], exactEnvelopeRange.Commits.Select(commit => commit.Sha));
         }
         finally
         {

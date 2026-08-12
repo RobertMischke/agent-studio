@@ -10,7 +10,7 @@ namespace AgentStudio.Pipeline;
 /// </summary>
 public sealed record ReviewSubjectRecord
 {
-    public int Version { get; init; } = 2;
+    public int Version { get; init; } = 3;
     public string TaskKey { get; init; } = "";
     /// <summary>
     /// RunAttempt that settled the immutable delivery represented by this
@@ -21,6 +21,12 @@ public sealed record ReviewSubjectRecord
     public string Project { get; init; } = "";
     public string Repository { get; init; } = "";
     public string ResultSha { get; init; } = "";
+    /// <summary>
+    /// Immutable checkout base captured when the source RunAttempt was leased.
+    /// It remains the attribution boundary even when the integration branch
+    /// already contains <see cref="ResultSha"/> by completion time.
+    /// </summary>
+    public string? BaseSha { get; init; }
     public string AttemptChainId { get; init; } = "";
     public string Executor { get; init; } = "";
     public string LeaseId { get; init; } = "";

@@ -2,6 +2,7 @@ extern alias Runner;
 
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using System.Diagnostics;
@@ -447,6 +448,207 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(
             0,
             factory.Services.GetRequiredService<TaskTransitionService>().ResultScaffoldCreatedCount);
+    }
+
+    [Fact]
+    public async Task In_repo_main_delivery_projects_receive_commits_tokens_and_sha_bound_test_evidence()
+    {
+        const string teKey = "TE-41";
+        var origin = await SeedOriginAsync();
+        var repo = Path.Combine(_workspace, "token-economy-repo");
+        await GitAsync(_workspace, "clone", origin, repo);
+        await GitAsync(repo, "checkout", "-b", "main", "origin/main");
+        await GitAsync(repo, "config", "user.email", "test@example.invalid");
+        await GitAsync(repo, "config", "user.name", "Test");
+        var baseSha = (await GitAsync(repo, "rev-parse", "HEAD")).StdOut.Trim();
+        await File.WriteAllTextAsync(Path.Combine(repo, "release.txt"), "v0.3.2");
+        await GitAsync(repo, "add", "--all");
+        await GitAsync(repo, "commit", "-m", "fix(TE-41): publish v0.3.2");
+        var resultSha = (await GitAsync(repo, "rev-parse", "HEAD")).StdOut.Trim();
+        // Reproduce TE: the task itself publishes main before completion.
+        await GitAsync(repo, "push", "origin", "HEAD:main");
+
+        var teWatchPath = Path.Combine(repo, ".orchestrator", "jobs");
+        var progressFolder = Path.Combine(teWatchPath, "tasks", "000", teKey);
+        Directory.CreateDirectory(progressFolder);
+        await File.WriteAllTextAsync(Path.Combine(progressFolder, "task.json"), JsonSerializer.Serialize(new
+        {
+            id = teKey,
+            key = teKey,
+            title = "Release token economy",
+            state = TaskStates.Progress,
+            order = 1,
+            agent = "codex",
+            kind = TaskKinds.Task,
+            cliType = "codex",
+            model = "gpt-5.6-codex",
+            provenance = new
+            {
+                branch = "task/TE-41",
+                @base = (string?)null,
+                transitions = new[]
+                {
+                    new
+                    {
+                        lane = TaskStates.Progress,
+                        atUtc = DateTime.UtcNow,
+                        workBranchHead = baseSha,
+                    },
+                },
+            },
+        }));
+        await File.WriteAllTextAsync(Path.Combine(progressFolder, "prompt.md"), "Release and verify.");
+        await File.WriteAllTextAsync(Path.Combine(progressFolder, "status.md"), "Result: pending.");
+
+        using var factory = BuildFactory(
+            repositoryPath: repo,
+            primaryProjectName: "Token Economy",
+            primaryWatchPath: teWatchPath);
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync("Token Economy", "service", CancellationToken.None);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(teKey, RunnerId, "Token Economy", "hetzner-test", 4242, "codex"),
+            CancellationToken.None);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        var immutableRef = Contract.FencedGitRefs.ImmutableResult(
+            lease.Lease!.AttemptId!,
+            lease.Lease.FencingToken,
+            resultSha);
+        await GitAsync(repo, "push", "origin", $"{resultSha}:{immutableRef}");
+        var inspectedRange = factory.Services.GetRequiredService<GitService>()
+            .InspectRemoteDeliveryCommitRange(
+                repo,
+                immutableRef,
+                resultSha,
+                "refs/heads/main",
+                baseSha);
+        Assert.True(inspectedRange.Success, inspectedRange.Warning);
+        Assert.Equal(resultSha, Assert.Single(inspectedRange.Commits).Sha);
+        var usageFrame = JsonSerializer.Serialize(new
+        {
+            type = "turn.completed",
+            usage = new
+            {
+                input_tokens = 1200,
+                cached_input_tokens = 800,
+                output_tokens = 300,
+                reasoning_output_tokens = 100,
+            },
+        });
+        await client.IngestLogsAsync(new RLogIngest(teKey,
+        [
+            new RCliLine(DateTime.UtcNow, "stdout", usageFrame),
+            new RCliLine(DateTime.UtcNow, "stdout", "[[TASK_DONE]]"),
+        ],
+            RunnerId: lease.Lease.RunnerId,
+            LeaseId: lease.Lease.LeaseId,
+            FencingToken: lease.Lease.FencingToken,
+            AttemptId: lease.Lease.AttemptId,
+            Fence: lease.Lease.FencingToken,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "te-41-log"), CancellationToken.None);
+
+        var postSteps = Path.Combine(progressFolder, "post-steps");
+        Directory.CreateDirectory(postSteps);
+        await File.WriteAllTextAsync(
+            Path.Combine(postSteps, "build-test-gate-1.log"),
+            "verdict=Ok exit=0 signal=n/a durationMs=1000\n"
+            + "gateId=post-build-test-gate failureKind=None failureFingerprint=n/a\n"
+            + "gateRunId=te-gate startedAtUtc=2026-08-11T14:30:00Z completedAtUtc=2026-08-11T14:31:00Z\n"
+            + $"repository=token-economy expectedSha={resultSha} testedSha={resultSha}\n"
+            + "reason=All selected commands passed.\n");
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            teKey,
+            lease.Lease.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: "Token Economy",
+            ExitCode: 0,
+            ResultSha: resultSha,
+            AttemptChainId: lease.Lease.LeaseId,
+            Repository: origin,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "te-41-completion",
+            BaseSha: baseSha,
+            ImmutableResultRef: immutableRef,
+            ArtifactManifestDigest: new string('a', 64),
+            IntegrationBranch: "refs/heads/main"), CancellationToken.None);
+
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = progressFolder;
+        var scanner = factory.Services.GetRequiredService<TaskScannerService>();
+        var task = scanner.FindJob(teKey, teWatchPath);
+        Assert.NotNull(task);
+        Assert.Equal(resultSha, Assert.Single(task!.Commits).Sha);
+
+        using var taskJson = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(moved, "task.json")));
+        var tokenSummary = taskJson.RootElement.GetProperty("tokenSummary");
+        Assert.Equal(1, tokenSummary.GetProperty("Calls").GetInt32());
+        Assert.Equal(1200, tokenSummary.GetProperty("InputTokens").GetInt64());
+        Assert.Equal(300, tokenSummary.GetProperty("OutputTokens").GetInt64());
+        Assert.Equal(800, tokenSummary.GetProperty("CacheReadTokens").GetInt64());
+
+        var evidence = factory.Services
+            .GetRequiredService<TestRunService>()
+            .BuildLookup([task])[task.TaskKey];
+        Assert.Equal("proven", evidence.EvidenceState);
+        Assert.Equal("perfect", evidence.MatchQuality);
+        Assert.Equal(resultSha, Assert.Single(evidence.Sources).Commit);
+
+        // Reproduce the historical TE-41 card, then prove the bounded boot
+        // sweep restores both receipts from its fenced review subject and log.
+        var jsonPath = Path.Combine(moved, "task.json");
+        var historical = JsonNode.Parse(await File.ReadAllTextAsync(jsonPath))!.AsObject();
+        historical["commits"] = new JsonArray();
+        historical["commit"] = null;
+        historical["tokenSummary"] = null;
+        await File.WriteAllTextAsync(jsonPath, historical.ToJsonString(new JsonSerializerOptions
+        {
+            WriteIndented = true,
+        }));
+        var legacySubject = ReviewSubjectStore.Read(moved);
+        Assert.NotNull(legacySubject);
+        ReviewSubjectStore.Write(moved, legacySubject! with
+        {
+            Version = 2,
+            BaseSha = null,
+        });
+        scanner.InvalidateCache();
+        var historicalTask = scanner.FindJob(teKey, teWatchPath);
+        Assert.Contains(baseSha, RemoteCompletionAttributionSweep.BaseCandidates(
+            historicalTask!,
+            ReviewSubjectStore.Read(moved)!));
+        var sweep = new RemoteCompletionAttributionSweep(
+            scanner,
+            factory.Services.GetRequiredService<GitService>(),
+            factory.Services.GetRequiredService<TaskMutationService>(),
+            factory.Services.GetRequiredService<RemoteTokenReceiptService>(),
+            Path.Combine(_workspace, "te-backfill-report.json"),
+            DateTimeOffset.UtcNow,
+            NullLogger<RemoteCompletionAttributionSweep>.Instance);
+
+        var report = sweep.RunOnce();
+
+        Assert.Equal(1, report.RepairedCommitTasks);
+        Assert.Equal(1, report.RepairedTokenTasks);
+        Assert.Equal(0, report.UnresolvedTasks);
+        var repaired = scanner.FindJob(teKey, teWatchPath);
+        Assert.Equal(resultSha, Assert.Single(repaired!.Commits).Sha);
+        using var repairedJson = JsonDocument.Parse(await File.ReadAllTextAsync(jsonPath));
+        Assert.Equal(2300, repairedJson.RootElement
+            .GetProperty("tokenSummary")
+            .GetProperty("TotalTokens")
+            .GetInt64());
+        var repairedEvidence = factory.Services
+            .GetRequiredService<TestRunService>()
+            .BuildLookup([repaired])[repaired.TaskKey];
+        Assert.Equal("proven", repairedEvidence.EvidenceState);
     }
 
     [Fact]
@@ -2548,7 +2750,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         string? additionalWatchPath = null,
         ICliOneShot? summaryOneShot = null,
         string? repositoryPath = null,
-        string? primaryProjectName = null) =>
+        string? primaryProjectName = null,
+        string? primaryWatchPath = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -2559,7 +2762,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     {
                         ["TaskRepository"] = _workspace,
                         ["WatchPaths:0:Name"] = primaryProjectName ?? ProjectName,
-                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:Path"] = primaryWatchPath ?? _watchPath,
                         ["WatchPaths:0:RootPath"] = repositoryPath ?? _watchPath,
                         ["WatchPaths:0:RepositoryPath"] = repositoryPath ?? _watchPath,
                         ["ReviewDecisionOrchestrator:Enabled"] = "false",
