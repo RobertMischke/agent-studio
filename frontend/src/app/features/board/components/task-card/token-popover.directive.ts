@@ -74,7 +74,7 @@ export class TokenPopoverDirective implements OnDestroy {
     pop.addEventListener('focusout', this.scheduleCloseBound);
     this.positionRef?.dispose();
     this.positionRef = this.overlayPortal.watchConnectedPosition(this.host, pop, {
-      preferredPlacement: 'above',
+      preferredPlacement: 'right',
       alignment: 'end',
       gap: TokenPopoverDirective.GAP,
       viewportPadding: TokenPopoverDirective.VIEWPORT_PAD,

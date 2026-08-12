@@ -158,6 +158,12 @@ public class TokenSummaryService
                 Ts = entry.Ts,
                 Model = displayModel,
                 ParticipantId = entry.ParticipantId,
+                Source = entry.Topic,
+                RunId = entry.RunId,
+                UsageType = TaskTokenUsageTypes.Classify(
+                    entry.ParticipantId,
+                    entry.Topic,
+                    entry.TokenUsageType),
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
@@ -183,7 +189,8 @@ public class TokenSummaryService
                 AllModelsPriced = !b.AnyUnpriced,
                 LastModel = b.LastAgentModel ?? b.LastAnyModel,
                 LastUpdate = b.LastUpdate,
-                Entries = b.Entries.OrderBy(e => e.Ts).ToList()
+                Entries = b.Entries.OrderBy(e => e.Ts).ToList(),
+                ByType = BuildByType(b.Entries),
             };
         }
         return result;
@@ -207,10 +214,37 @@ public class TokenSummaryService
         {
             LastModel = string.IsNullOrWhiteSpace(summary.LastModel) && hasAgentFallbackRow ? fallback : summary.LastModel,
             Entries = entries,
+            ByType = BuildByType(entries),
             EstimatedApiCostUsd = entries.Sum(e => e.EstimatedApiCostUsd),
             AllModelsPriced = entries.Count > 0 && entries.All(e => e.ModelPriced),
         };
     }
+
+    private static List<TaskTokenUsageByType> BuildByType(
+        IReadOnlyList<TaskTokenCall> entries)
+        => entries
+            .GroupBy(
+                entry => TaskTokenUsageTypes.Classify(
+                    entry.ParticipantId,
+                    entry.Source,
+                    entry.UsageType),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => new TaskTokenUsageByType
+            {
+                UsageType = group.Key,
+                Calls = group.Count(),
+                InputTokens = group.Sum(entry => entry.InputTokens),
+                OutputTokens = group.Sum(entry => entry.OutputTokens),
+                CacheReadTokens = group.Sum(entry => entry.CacheReadTokens),
+                CacheCreationTokens = group.Sum(entry => entry.CacheCreationTokens),
+                TotalTokens = group.Sum(entry => entry.InputTokens + entry.OutputTokens
+                    + entry.CacheReadTokens + entry.CacheCreationTokens),
+                EstimatedApiCostUsd = group.Sum(entry => entry.EstimatedApiCostUsd),
+                AllModelsPriced = group.All(entry => entry.ModelPriced),
+            })
+            .OrderBy(group => TaskTokenUsageTypes.SortOrder(group.UsageType))
+            .ThenBy(group => group.UsageType, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private static TaskTokenCall Reprice(TaskTokenCall entry, string? modelId)
     {

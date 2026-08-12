@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('[data-testid="token-cost-total"]')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Historical list-price estimate');
 
     fixture.destroy();
   });
@@ -1559,6 +1559,9 @@ describe('buildTokenBubble', () => {
           outputTokens: 200,
           cacheReadTokens: 1000,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.07,
+          modelPriced: true,
+          usageType: 'coding-run',
         },
         {
           ts: '2026-06-09T08:05:00Z',
@@ -1568,12 +1571,20 @@ describe('buildTokenBubble', () => {
           outputTokens: 100,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.02,
+          modelPriced: true,
+          usageType: 'gate',
         },
       ],
     });
 
     expect(bubble?.model).toBe('GPT-5 Codex');
     expect(bubble?.costTooltip).toContain('Estimated cost: $0.09');
+    expect(bubble?.costLabel).toBe('$0.09');
+    expect(bubble?.typeGroups.map((group) => [group.id, group.total, group.costLabel])).toEqual([
+      ['coding-run', 3200, '$0.07'],
+      ['gate', 1100, '$0.02'],
+    ]);
     expect(bubble?.entries.map((entry) => entry.model)).toEqual([
       'GPT-5 Codex',
       'Claude Haiku 4.5',

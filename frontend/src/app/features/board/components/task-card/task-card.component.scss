@@ -1400,7 +1400,7 @@
       color: var(--studio-fg-dim);
     }
     .task-card__token-bubble:focus-visible {
-      outline: 2px solid #7dd3fc;
+      outline: 2px solid var(--studio-tooltip-link);
       outline-offset: 2px;
     }
     .task-card__token-bars {
@@ -1435,85 +1435,11 @@
       color: color-mix(in srgb, var(--studio-accent-3-strong) 82%, var(--studio-fg-dim));
     }
     .task-card__token-bubble--mauve {
-      color: color-mix(in srgb, #c084fc 78%, var(--studio-fg-dim));
+      color: color-mix(in srgb, var(--studio-accent-4-strong) 78%, var(--studio-fg-dim));
     }
     .task-card__token-bubble--peach {
-      color: color-mix(in srgb, #fb923c 76%, var(--studio-fg-dim));
+      color: color-mix(in srgb, var(--studio-accent-6-strong) 76%, var(--studio-fg-dim));
     }
-
-    /* TokenPopoverDirective portals this element to the central body overlay
-       root, escaping the card's overflow:hidden + content-visibility paint
-       containment and the lane scroll container. */
-    .task-card__token-popover {
-      position: fixed;
-      inset: auto;
-      margin: 0;
-      z-index: var(--studio-z-overlay-panel);
-      min-width: 240px;
-      max-width: 320px;
-      max-height: 60vh;
-      overflow: auto;
-      padding: 10px 12px;
-      border-radius: 8px;
-      background: var(--studio-tooltip-bg);
-      border: 1px solid var(--studio-tooltip-border);
-      box-shadow: var(--elevation-tooltip);
-      backdrop-filter: blur(6px) saturate(120%);
-      -webkit-backdrop-filter: blur(6px) saturate(120%);
-      color: var(--studio-tooltip-fg);
-      text-align: left;
-    }
-    .task-card__token-popover-title {
-      display: block;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--studio-tooltip-fg-dim);
-      margin-bottom: 6px;
-    }
-    .task-card__token-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-    }
-    .task-card__token-table th {
-      text-align: left;
-      font-weight: 500;
-      color: var(--studio-tooltip-fg-dim);
-      padding: 2px 8px 2px 0;
-    }
-    .task-card__token-table td {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-      color: var(--studio-tooltip-fg-strong);
-      padding: 2px 0;
-    }
-    .task-card__token-total-row th,
-    .task-card__token-total-row td {
-      border-top: 1px solid var(--studio-tooltip-border);
-      padding-top: 4px;
-      font-weight: 700;
-    }
-    .task-card__token-runs-title {
-      margin-top: 8px;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--studio-tooltip-fg-dim);
-    }
-    .task-card__token-table--runs th,
-    .task-card__token-table--runs td {
-      font-size: 10px;
-      padding: 2px 6px 2px 0;
-    }
-    .task-card__token-link {
-      display: inline-block;
-      margin-top: 8px;
-      font-size: 11px;
-      color: var(--studio-tooltip-link);
-      text-decoration: none;
-    }
-    .task-card__token-link:hover { text-decoration: underline; }
 
     /* Compact-card mode: collapse the card to a single dense row showing
        only what is needed to find a task by name. CLI icon + project

@@ -1,6 +1,6 @@
 # Token pricing
 
-> **Status (2026-08-10):** Live on exactly pinned `TokenEconomy` 0.3.1,
+> **Status (2026-08-12):** Live on exactly pinned `TokenEconomy` 0.3.1,
 > including historical prices for the GPT-5.6 family. Studio contains no model
 > rates.
 
@@ -68,6 +68,12 @@ The shared adapter feeds:
 - ad-hoc/supporting usage summaries.
 - prompt-registry call history, where the rendered prompt's estimated input
   tokens are priced at the event timestamp and grouped by content hash.
+
+The board task token popover preserves each call timestamp and displays that
+call's historically resolved cost. Its total and usage-type groups sum those
+per-call amounts, so an older run is never repriced at a newer catalog rate.
+The visible footnote stays compact; its tooltip owns the full list-price and
+CLI-subscription caveat.
 
 These surfaces may aggregate resolved costs, but an aggregate containing an
 unpriced call remains explicitly marked unavailable or incomplete according to

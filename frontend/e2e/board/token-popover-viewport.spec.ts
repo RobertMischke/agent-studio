@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { dismissDevErrorDialog } from '../helpers/theme';
 
 /**
  * Token-popover open/close + viewport regression (ASS-1700).
@@ -81,6 +82,11 @@ const GROUPED = {
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
+  await page.route('**/api/auth/status**', (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
   await page.route('**/api/watch-paths**', (route) =>
@@ -146,12 +152,13 @@ test.describe('Token popover open/close + viewport (ASS-1700)', () => {
     //    permanently-open, clipped panel).
     const popover = page.locator('[data-testid="task-card-token-popover"]');
     await expect(popover).toBeHidden();
+    await dismissDevErrorDialog(page);
 
     // Capture the resting board (no panel hanging open).
     await page.screenshot({ path: 'test-results/token-popover-default-hidden.png' });
 
     // 2. Hover the trigger -> popover opens, portaled to the body overlay root.
-    await bubble.hover();
+    await bubble.hover({ force: true });
     await expect(popover).toBeVisible({ timeout: 3_000 });
     const overlayRoot = page.locator('[data-testid="studio-overlay-root"]');
     await expect(overlayRoot.locator('[data-testid="task-card-token-popover"]')).toBeVisible();

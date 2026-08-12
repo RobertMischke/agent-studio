@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 /**
  * Job-card token bubble.
@@ -19,7 +20,7 @@ import { mkdirSync } from 'node:fs';
  */
 
 const SHOTS = process.env.JOB_RESULTS_DIR
-  ? `${process.env.JOB_RESULTS_DIR}/token-popover-model`
+  ? process.env.JOB_RESULTS_DIR
   : 'screenshots/token-bubble';
 
 interface JobInfoStub {
@@ -56,10 +57,27 @@ interface JobInfoStub {
     entries: {
       ts: string;
       model: string | null;
+      participantId?: string | null;
+      source?: string | null;
+      runId?: string | null;
+      usageType?: string | null;
       inputTokens: number;
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
+      estimatedApiCostUsd?: number;
+      modelPriced?: boolean;
+    }[];
+    byType?: {
+      usageType: string;
+      calls: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      totalTokens: number;
+      estimatedApiCostUsd: number;
+      allModelsPriced: boolean;
     }[];
   };
 }
@@ -252,10 +270,14 @@ test.describe('Token bubble on job cards', () => {
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
-        ]
+          { ts: '2026-05-05T08:00:00Z', runId: 'coding-1', usageType: 'coding-run', source: 'codex-turn', participantId: 'agent:codex', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.65, modelPriced: true },
+          { ts: '2026-05-05T08:15:00Z', runId: 'review-1', usageType: 'review-run', source: 'code-review-step', participantId: 'support:quality', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.25, modelPriced: true },
+          { ts: '2026-05-05T08:30:00Z', runId: 'coding-2', usageType: 'coding-run', source: 'codex-turn', participantId: 'agent:codex', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.35, modelPriced: true }
+        ],
+        byType: [
+          { usageType: 'coding-run', calls: 2, inputTokens: 80_000, outputTokens: 12_000, cacheReadTokens: 170_000, cacheCreationTokens: 8_000, totalTokens: 270_000, estimatedApiCostUsd: 1.00, allModelsPriced: true },
+          { usageType: 'review-run', calls: 1, inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, totalTokens: 130_000, estimatedApiCostUsd: 0.25, allModelsPriced: true },
+        ],
       }
     });
     await stubGroupedJobs(page, [noisyJob]);
@@ -288,9 +310,19 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
     await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
+    await expect(popover.getByTestId('token-cost-total')).toHaveText('$1.25');
+    await expect(popover.getByTestId('token-cost-tooltip')).toHaveText('Historical list-price estimate · Details');
+    await expect(popover.getByTestId('token-type-breakdown').locator('[data-usage-type="coding-run"]')).toContainText('270k');
+    await expect(popover.getByTestId('token-type-breakdown').locator('[data-usage-type="coding-run"]')).toContainText('$1.00');
+    await expect(popover.getByTestId('token-type-breakdown').locator('[data-usage-type="review-run"]')).toContainText('130k');
+    await expect(popover.getByTestId('token-type-breakdown').locator('[data-usage-type="review-run"]')).toContainText('$0.25');
     await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
+    await expect(popover.locator('.task-card__token-table--runs')).toContainText('$0.65');
+    await expect(popover.getByTestId('token-run-source')).toHaveText([
+      'codex-turn',
+      'code-review-step',
+      'codex-turn',
+    ]);
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 
     // Anti-clipping contract: the directive lifts the panel into the
@@ -306,7 +338,18 @@ test.describe('Token bubble on job cards', () => {
 
     // Screenshot evidence: bubble + overlay popover in the viewport.
     mkdirSync(SHOTS, { recursive: true });
-    await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
+    await setTheme(page, 'light');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
+    await dismissDevErrorDialog(page);
+    await bubble.focus();
+    await expect(popover).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/token-usage-popover-after--mocked.png`, fullPage: false });
+    await setTheme(page, 'dark');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+    await dismissDevErrorDialog(page);
+    await bubble.focus();
+    await expect(popover).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/token-usage-popover-after-dark--mocked.png`, fullPage: false });
   });
 
   test('tier escalates with spend', async ({ page }) => {

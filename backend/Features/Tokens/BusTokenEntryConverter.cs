@@ -41,6 +41,7 @@ internal static class BusTokenEntryConverter
             Summary = m.Summary ?? string.Empty,
             JobId = m.JobId,
             ParticipantId = includeParticipant ? m.ParticipantId : null,
+            RunId = m.RunId,
             TokenUsage = usage,
         };
     }

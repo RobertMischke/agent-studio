@@ -34,6 +34,8 @@ public record TaskTokenSummary
     public DateTime? LastUpdate { get; init; }
     /// <summary>Per-call rows for the popover, oldest first.</summary>
     public List<TaskTokenCall> Entries { get; init; } = [];
+    /// <summary>Per-type totals derived from the same visible calls as <see cref="Entries"/>.</summary>
+    public List<TaskTokenUsageByType> ByType { get; init; } = [];
 }
 
 /// <summary>
@@ -46,6 +48,12 @@ public record TaskTokenCall
     public string? Model { get; init; }
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
+    /// <summary>Stable source topic or pipeline step id carried by the usage record.</summary>
+    public string? Source { get; init; }
+    /// <summary>Stable run correlation id when the producing record supplied one.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Stable usage category derived from participant and source context.</summary>
+    public string? UsageType { get; init; }
     public long InputTokens { get; init; }
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
@@ -54,6 +62,20 @@ public record TaskTokenCall
     public decimal EstimatedApiCostUsd { get; init; }
     /// <summary>Whether the price catalog resolved the model at <see cref="Ts"/>.</summary>
     public bool ModelPriced { get; init; }
+}
+
+/// <summary>One task's token and dated-cost subtotal for a stable usage category.</summary>
+public record TaskTokenUsageByType
+{
+    public string UsageType { get; init; } = "other";
+    public int Calls { get; init; }
+    public long InputTokens { get; init; }
+    public long OutputTokens { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheCreationTokens { get; init; }
+    public long TotalTokens { get; init; }
+    public decimal EstimatedApiCostUsd { get; init; }
+    public bool AllModelsPriced { get; init; }
 }
 
 /// <summary>

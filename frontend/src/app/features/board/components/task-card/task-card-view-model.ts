@@ -9,7 +9,7 @@ import { shouldShowFailureToast } from '../../../task-detail/services/run-outcom
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 import { isTaskRunActive } from '../../../../services/run-activity.util';
-import { buildTokenCostTooltip } from '../../../tokens';
+import { buildTokenCostTooltip, formatTokenCostDisplay } from '../../../tokens';
 
 export interface TaskTypeChip {
   kind: string;
@@ -25,11 +25,29 @@ export interface TaskTokenBubble {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  costLabel: string;
   costTooltip: string;
   model: string | null;
   lastUpdate: string | null;
+  calls: number;
   tier: 'neutral' | 'blue' | 'mauve' | 'peach';
-  entries: { ts: string; tsLabel: string; model: string | null; total: number }[];
+  typeGroups: {
+    id: string;
+    label: string;
+    calls: number;
+    total: number;
+    costLabel: string;
+  }[];
+  entries: {
+    id: string;
+    ts: string;
+    tsLabel: string;
+    model: string | null;
+    typeLabel: string;
+    source: string | null;
+    total: number;
+    costLabel: string;
+  }[];
 }
 
 const FILE_LIST_MAX = 12;
@@ -242,12 +260,36 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     : total >= 500_000 ? 'mauve'
       : total >= 50_000 ? 'blue'
         : 'neutral';
-  const entries = (tokenSummary.entries ?? []).map((entry) => ({
+  const sourceEntries = tokenSummary.entries ?? [];
+  const entries = sourceEntries.map((entry, index) => ({
+    id: entry.runId || `${entry.ts}-${entry.usageType || entry.participantId || entry.model || 'usage'}-${index}`,
     ts: entry.ts,
     tsLabel: formatShortTime(entry.ts),
     model: entry.model,
+    typeLabel: tokenUsageTypeLabel(entry.usageType || inferTokenUsageType(entry.participantId, entry.source)),
+    source: entry.source?.trim() || null,
     total: (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0),
+    costLabel: tokenCostLabel(
+      entry.estimatedApiCostUsd,
+      (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0),
+      entry.modelPriced === true,
+    ),
   }));
+  const typeGroups = (tokenSummary.byType?.length
+    ? tokenSummary.byType
+    : groupTokenEntriesByType(sourceEntries))
+    .map((group) => ({
+      id: group.usageType,
+      label: tokenUsageTypeLabel(group.usageType),
+      calls: group.calls,
+      total: group.totalTokens,
+      costLabel: tokenCostLabel(
+        group.estimatedApiCostUsd,
+        group.totalTokens,
+        group.allModelsPriced === true,
+      ),
+    }));
+  const unpricedRuns = sourceEntries.filter((entry) => entry.modelPriced === false).length;
   return {
     label: formatTokens(total),
     total,
@@ -255,12 +297,84 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     output,
     cacheRead,
     cacheWrite,
-    costTooltip: buildTokenCostTooltip({ costUsd: tokenSummary.estimatedApiCostUsd, priceKnown: tokenSummary.allModelsPriced === true }),
+    costLabel: tokenCostLabel(tokenSummary.estimatedApiCostUsd, total, tokenSummary.allModelsPriced === true),
+    costTooltip: buildTokenCostTooltip({
+      costUsd: tokenSummary.estimatedApiCostUsd,
+      priceKnown: tokenSummary.allModelsPriced === true,
+      totalTokens: total,
+      unpricedRuns,
+    }),
     model: tokenSummary.lastModel ?? null,
     lastUpdate: tokenSummary.lastUpdate ? formatShortTime(tokenSummary.lastUpdate) : null,
+    calls: tokenSummary.calls ?? entries.length,
     tier,
+    typeGroups,
     entries,
   };
+}
+
+function tokenCostLabel(costUsd: number | null | undefined, totalTokens: number, priceKnown: boolean): string {
+  if (!priceKnown && (!Number.isFinite(costUsd) || costUsd === 0)) return 'No price';
+  const value = formatTokenCostDisplay({
+    costUsd,
+    totalTokens,
+    unpricedRuns: priceKnown ? 0 : 1,
+  });
+  return priceKnown ? value : `${value} partial`;
+}
+
+function tokenUsageTypeLabel(usageType: string | null | undefined): string {
+  switch (usageType?.trim().toLowerCase()) {
+    case 'coding-run': return 'Coding run';
+    case 'review-run': return 'Review run';
+    case 'gate': return 'Gate';
+    case 'enrichment': return 'Enrichment';
+    case 'supporting-run': return 'Supporting run';
+    default: return 'Other';
+  }
+}
+
+function inferTokenUsageType(participantId?: string | null, source?: string | null): string {
+  const topic = source?.trim().toLowerCase() ?? '';
+  if (['review', 'drift', 'grading', 'aspect'].some((marker) => topic.includes(marker))) return 'review-run';
+  if (['enrich', 'summary-generation', 'title-generation', 'task-spawner', 'commit-message']
+    .some((marker) => topic.includes(marker))) return 'enrichment';
+  if (['gate', 'qualification', 'orchestrator-decision', 'agent-needs-input', 'soft-reasoning']
+    .some((marker) => topic.includes(marker))) return 'gate';
+  if (participantId?.toLowerCase().startsWith('agent:')) return 'coding-run';
+  if (participantId?.toLowerCase().startsWith('orchestrator:')) return 'gate';
+  if (participantId?.toLowerCase().startsWith('support:')) return 'supporting-run';
+  return 'other';
+}
+
+function groupTokenEntriesByType(entries: NonNullable<TaskInfo['tokenSummary']>['entries']) {
+  const groups = new Map<string, {
+    usageType: string;
+    calls: number;
+    totalTokens: number;
+    estimatedApiCostUsd: number;
+    allModelsPriced: boolean;
+  }>();
+  for (const entry of entries) {
+    const usageType = entry.usageType || inferTokenUsageType(entry.participantId, entry.source);
+    const current = groups.get(usageType) ?? {
+      usageType,
+      calls: 0,
+      totalTokens: 0,
+      estimatedApiCostUsd: 0,
+      allModelsPriced: true,
+    };
+    current.calls += 1;
+    current.totalTokens += (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0)
+      + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0);
+    current.estimatedApiCostUsd += entry.estimatedApiCostUsd ?? 0;
+    current.allModelsPriced &&= entry.modelPriced === true;
+    groups.set(usageType, current);
+  }
+  const order = ['coding-run', 'review-run', 'gate', 'enrichment', 'supporting-run', 'other'];
+  return [...groups.values()].sort((left, right) =>
+    order.indexOf(left.usageType) - order.indexOf(right.usageType)
+    || left.usageType.localeCompare(right.usageType));
 }
 
 /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */

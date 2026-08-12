@@ -33,12 +33,13 @@ public class TokenSummaryTests
         long output,
         DateTime ts,
         string jobId = "job-a",
-        string? participantId = null)
+        string? participantId = null,
+        string topic = "test-token")
         => new()
         {
             Ts = ts,
             Kind = OrchestratorLogKinds.Decision,
-            Topic = "test-token",
+            Topic = topic,
             Summary = "test job entry",
             JobId = jobId,
             ParticipantId = participantId,
@@ -242,6 +243,52 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void SummarizePerJob_GroupsVisibleCallsByTheirRecordedWorkType()
+    {
+        var at = new DateTime(2026, 7, 23, 8, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("claude-opus-4-7", 1_000, 100, at,
+                participantId: "agent:claude", topic: "claude-turn"),
+            JobEntry("claude-haiku-4-5", 2_000, 200, at.AddMinutes(1),
+                participantId: "support:quality", topic: "code-review-step"),
+            JobEntry("claude-haiku-4-5", 3_000, 300, at.AddMinutes(2),
+                participantId: "orchestrator:Demo", topic: "post-build-test-gate"),
+            JobEntry("claude-haiku-4-5", 4_000, 400, at.AddMinutes(3),
+                participantId: "support:prompt", topic: "prompt-enrichment"),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.Equal(summary.TotalTokens, summary.ByType.Sum(group => group.TotalTokens));
+        Assert.Equal(summary.EstimatedApiCostUsd,
+            summary.ByType.Sum(group => group.EstimatedApiCostUsd));
+        Assert.Collection(
+            summary.ByType,
+            group => Assert.Equal(TaskTokenUsageTypes.CodingRun, group.UsageType),
+            group => Assert.Equal(TaskTokenUsageTypes.ReviewRun, group.UsageType),
+            group => Assert.Equal(TaskTokenUsageTypes.Gate, group.UsageType),
+            group => Assert.Equal(TaskTokenUsageTypes.Enrichment, group.UsageType));
+        Assert.Equal(TaskTokenUsageTypes.ReviewRun, summary.Entries[1].UsageType);
+        Assert.Equal("code-review-step", summary.Entries[1].Source);
+    }
+
+    [Theory]
+    [InlineData("agent:codex", "codex-turn", TaskTokenUsageTypes.CodingRun)]
+    [InlineData("support:quality", "review-decision", TaskTokenUsageTypes.ReviewRun)]
+    [InlineData("orchestrator:Demo", "agent-needs-input", TaskTokenUsageTypes.Gate)]
+    [InlineData("support:prompt", "prompt-enrichment", TaskTokenUsageTypes.Enrichment)]
+    [InlineData("support:misc", "custom", TaskTokenUsageTypes.SupportingRun)]
+    [InlineData(null, null, TaskTokenUsageTypes.Other)]
+    public void TaskTokenUsageTypes_ClassifiesParticipantAndSourceContext(
+        string? participantId,
+        string? source,
+        string expected)
+    {
+        Assert.Equal(expected, TaskTokenUsageTypes.Classify(participantId, source));
     }
 
     [Fact]

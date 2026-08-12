@@ -6,7 +6,7 @@
 > is the knowledge-collection point for this area. This document is the
 > system-of-record plan and migration record.
 
-> **Status (2026-08-09):** Project and task-card surfaces read a deduplicated
+> **Status (2026-08-12):** Project and task-card surfaces read a deduplicated
 > union of the historical token bus and durable `task.json.tokenSummary`
 > receipts. The bus remains the historical source, while task receipts are the
 > current source for remote runner calls. Project summary, heatmap, and pipeline
@@ -58,7 +58,11 @@ bus write at remote completion:
 
 - `task.json.tokenSummary` is already the durable token receipt used by current
   task-card token chips. It retains per-call timestamps, participants, models,
-  and token dimensions.
+  run ids, source topics, token dimensions, and historically resolved costs.
+  The task response also groups the exact calls into coding run, review run,
+  gate, enrichment, supporting run, and other categories. Classification uses
+  an explicit persisted usage type first, then the source topic and participant
+  role, without introducing a second pricing table.
 - Historical bus entries remain in the aggregate. Receipt calls are merged by
   task, timestamp, and token dimensions with multiset deduplication, so an
   overlap does not count twice and the pre-July lifetime is retained.

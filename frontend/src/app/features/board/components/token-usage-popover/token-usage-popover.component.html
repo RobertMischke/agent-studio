@@ -1,0 +1,85 @@
+<span class="token-popover"
+      role="tooltip"
+      data-token-popover
+      hidden
+      data-testid="task-card-token-popover">
+  <span class="token-popover__title">Token usage</span>
+  <span class="token-popover__meta">
+    {{ usage().calls }} {{ usage().calls === 1 ? 'event' : 'events' }}
+    @if (usage().model) { · Latest <span data-testid="token-row-model">{{ usage().model }}</span> }
+    @if (usage().lastUpdate) { · <span data-testid="token-row-last-update">{{ usage().lastUpdate }}</span> }
+  </span>
+
+  <div class="token-popover__summary" aria-label="Total token usage and estimated cost">
+    <span class="token-popover__summary-label">Tokens</span>
+    <span class="token-popover__summary-label">Cost</span>
+    <strong data-testid="token-row-total">{{ formatTokens(usage().total) }}</strong>
+    <strong data-testid="token-cost-total">{{ usage().costLabel }}</strong>
+  </div>
+
+  <span class="token-popover__section-title">Breakdown</span>
+  <table class="token-popover__table token-popover__table--breakdown">
+    <tbody>
+      <tr><th>Input</th><td data-testid="token-row-input">{{ formatTokens(usage().input) }}</td></tr>
+      <tr><th>Output</th><td data-testid="token-row-output">{{ formatTokens(usage().output) }}</td></tr>
+      <tr><th>Cache read</th><td data-testid="token-row-cache-read">{{ formatTokens(usage().cacheRead) }}</td></tr>
+      <tr><th>Cache write</th><td data-testid="token-row-cache-write">{{ formatTokens(usage().cacheWrite) }}</td></tr>
+    </tbody>
+  </table>
+
+  @if (usage().typeGroups.length > 0) {
+    <span class="token-popover__section-title">By type</span>
+    <table class="token-popover__table" data-testid="token-type-breakdown">
+      <thead>
+        <tr><th>Type</th><th>Events</th><th>Tokens</th><th>Cost</th></tr>
+      </thead>
+      <tbody>
+        @for (group of usage().typeGroups; track group.id) {
+          <tr [attr.data-usage-type]="group.id">
+            <td>{{ group.label }}</td>
+            <td>{{ group.calls }}</td>
+            <td>{{ formatTokens(group.total) }}</td>
+            <td>{{ group.costLabel }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (usage().entries.length > 0) {
+    <span class="token-popover__section-title">Runs</span>
+    <table class="token-popover__table token-popover__table--runs task-card__token-table--runs">
+      <thead>
+        <tr><th>When</th><th>Run context</th><th>Tokens</th><th>Cost</th></tr>
+      </thead>
+      <tbody>
+        @for (row of usage().entries; track row.id) {
+          <tr>
+            <td>{{ row.tsLabel }}</td>
+            <td>
+              <span class="token-popover__run-type">{{ row.typeLabel }}</span>
+              <span class="token-popover__run-meta">
+                {{ row.model || 'Unknown model' }}
+                @if (row.source) { · <span data-testid="token-run-source">{{ row.source }}</span> }
+              </span>
+            </td>
+            <td>{{ formatTokens(row.total) }}</td>
+            <td>{{ row.costLabel }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <span class="token-popover__footnote"
+        data-testid="token-cost-tooltip"
+        [cacTooltip]="usage().costTooltip">
+    Historical list-price estimate · Details
+  </span>
+  <a class="token-popover__link"
+     href="/workspace/tokens"
+     data-testid="token-popover-timeline-link"
+     (click)="$event.stopPropagation()">
+    View workspace timeline
+  </a>
+</span>
