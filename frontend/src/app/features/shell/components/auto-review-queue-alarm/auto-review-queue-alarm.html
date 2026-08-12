@@ -1,0 +1,12 @@
+@if (snapshot(); as queue) {
+  @if (queue.stagnant) {
+    <app-notification
+      kind="warning"
+      layout="banner"
+      ariaLive="polite"
+      testid="auto-review-queue-stagnation-alarm">
+      <strong data-testid="notice-bar-headline">Auto Review has not drained for <span class="notification__number">{{ queue.stagnantForMinutes }}</span> minutes.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ queue.waitingDepth }}</span> waiting · <span class="notification__number">{{ queue.activeReviews }}</span> active · drain rate <span class="notification__number">{{ queue.drainRatePerHour }}</span>/h. Open Execution Hosts to inspect the Review plane.</span>
+    </app-notification>
+  }
+}

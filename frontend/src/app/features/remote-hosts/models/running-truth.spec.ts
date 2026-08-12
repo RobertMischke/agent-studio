@@ -5,6 +5,7 @@ import {
   boardProjectSlotsForHost,
   boardRemoteSlotsForHost,
   deriveBoardRunningTruth,
+  freshExecutionPlaneCapacity,
   freshHostTelemetry,
   freshRemoteTelemetrySlots,
 } from './running-truth';
@@ -193,5 +194,40 @@ describe('running truth', () => {
     ]);
 
     expect(truth).toMatchObject({ local: 0, remote: 1, total: 1 });
+  });
+
+  it('sums fresh plane ceilings only when every fresh plane reports capacity', () => {
+    const observedAt = '2026-08-15T08:00:00Z';
+    const now = Date.parse(observedAt);
+    const first = host(2, observedAt);
+    first.executionPlanes = [{
+      role: 'coding',
+      runnerId: 'runner-1',
+      name: 'Runner 1',
+      lastSeenAt: observedAt,
+      observedAt,
+      activeSlots: 2,
+      maxParallelism: 4,
+      load1: 1,
+      cpuCores: 4,
+    }];
+    const second = host(1, observedAt);
+    second.id = 'runner-2';
+    second.clientId = 'runner-2';
+    second.executionPlanes = [{
+      role: 'coding',
+      runnerId: 'runner-2',
+      name: 'Runner 2',
+      lastSeenAt: observedAt,
+      observedAt,
+      activeSlots: 1,
+      maxParallelism: 4,
+      load1: 1,
+      cpuCores: 4,
+    }];
+
+    expect(freshExecutionPlaneCapacity([first, second], 'coding', now)).toBe(8);
+    second.executionPlanes = [{ ...second.executionPlanes[0], maxParallelism: null }];
+    expect(freshExecutionPlaneCapacity([first, second], 'coding', now)).toBeNull();
   });
 });

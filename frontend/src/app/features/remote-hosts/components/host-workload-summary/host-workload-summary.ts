@@ -11,9 +11,11 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HostWorkloadSummaryComponent {
-  readonly runSlots = input.required<string>();
-  readonly runSlotsStale = input(false);
-  readonly runSlotsDiverge = input(false);
-  readonly runSlotsTooltip = input('');
+  readonly codingSlots = input.required<string>();
+  readonly codingSlotsStale = input(false);
+  readonly codingSlotsDiverge = input(false);
+  readonly codingSlotsTooltip = input('');
+  readonly reviewSlots = input.required<string>();
+  readonly reviewSlotsStale = input(false);
   readonly gateWork = input.required<string>();
 }

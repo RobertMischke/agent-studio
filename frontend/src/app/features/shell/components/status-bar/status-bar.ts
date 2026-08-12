@@ -22,6 +22,8 @@ import {
 import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
+  freshExecutionPlaneCapacity,
+  freshExecutionPlaneSlots,
   freshRemoteTelemetrySlots,
   RemoteHostsService,
 } from '../../../remote-hosts';
@@ -30,17 +32,62 @@ import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.compone
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad } from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import { ReviewQueueTelemetryStore } from '../../../../services/review-queue-telemetry.store';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
 
-export function formatRunningLabel(local: number, remote: number): string {
-  if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
-  if (local > 0) return `${local} local`;
-  if (remote > 0) return `${remote} remote`;
+export function formatRunningLabel(
+  local: number,
+  remote: number,
+  reviewActive = 0,
+  reviewWaiting = 0,
+): string {
+  const parts: string[] = [];
+  if (local > 0) parts.push(`${local} local`);
+  if (remote > 0) parts.push(`${remote} remote`);
+  if (reviewActive > 0) parts.push(`${reviewActive} review active`);
+  if (reviewWaiting > 0) {
+    if (reviewActive === 0) parts.push('0 review active');
+    parts.push(`${reviewWaiting} waiting`);
+  }
+  if (parts.length > 0) return parts.join(' · ');
   return 'no runners';
+}
+
+export function reconcileReviewActiveSlots(
+  hostSlots: number | null,
+  authoritySlots: number | null,
+): number {
+  return Math.max(0, hostSlots ?? 0, authoritySlots ?? 0);
+}
+
+export function formatPlaneActivityLabel(
+  codingActive: number,
+  codingCapacity: number | null,
+  reviewActive: number,
+  reviewCapacity: number | null,
+  reviewWaiting: number,
+  loadRatio: number | null,
+): string {
+  const capacity = (value: number | null) => value === null ? '?' : value;
+  const parts = [
+    `Coding ${Math.max(0, codingActive)}/${capacity(codingCapacity)}`,
+    `Review ${Math.max(0, reviewActive)}/${capacity(reviewCapacity)}`,
+  ];
+  if (reviewWaiting > 0) parts.push(`${reviewWaiting} waiting`);
+  if (loadRatio !== null && Number.isFinite(loadRatio)) {
+    parts.push(`Load ${Math.max(0, Math.round(loadRatio * 100))}%`);
+  } else {
+    const available = (codingCapacity ?? 0) + (reviewCapacity ?? 0);
+    if (available > 0) {
+      const active = Math.max(0, codingActive) + Math.max(0, reviewActive);
+      parts.push(`Busy ${Math.round(active / available * 100)}%`);
+    }
+  }
+  return parts.join(' · ');
 }
 
 @Component({
@@ -56,6 +103,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
+  private readonly reviewTelemetry = inject(ReviewQueueTelemetryStore);
   private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
 
   readonly projectNames = input<string[]>([]);
@@ -95,10 +143,29 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
   readonly runningCount = computed(() => this.runningTruth().total);
-  readonly runningLabel = computed(() => {
-    const truth = this.runningTruth();
-    return formatRunningLabel(truth.local, truth.remote);
-  });
+  readonly codingSlots = computed(() => Math.max(
+    this.runningCount(),
+    freshExecutionPlaneSlots(this.remoteHosts.hosts(), 'coding') ?? 0,
+  ));
+  readonly codingCapacity = computed(() =>
+    freshExecutionPlaneCapacity(this.remoteHosts.hosts(), 'coding'));
+  readonly reviewSlots = computed(() => reconcileReviewActiveSlots(
+    freshExecutionPlaneSlots(this.remoteHosts.hosts(), 'review'),
+    this.reviewTelemetry.snapshot()?.activeReviews ?? null,
+  ));
+  readonly reviewWaiting = computed(() => this.reviewTelemetry.snapshot()?.waitingDepth ?? 0);
+  readonly reviewCapacity = computed(() =>
+    freshExecutionPlaneCapacity(this.remoteHosts.hosts(), 'review'));
+  readonly reviewAttention = computed(() => this.reviewWaiting() > 0 && this.reviewSlots() === 0);
+  readonly totalActivityCount = computed(() => this.runningCount() + this.reviewSlots());
+  readonly runningLabel = computed(() => formatPlaneActivityLabel(
+    this.codingSlots(),
+    this.codingCapacity(),
+    this.reviewSlots(),
+    this.reviewCapacity(),
+    this.reviewWaiting(),
+    this.hostLoad()?.ratio ?? null,
+  ));
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
   readonly runningSourcesDiverge = computed(() => {
@@ -108,6 +175,12 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
+  readonly runningSignalTone = computed(() =>
+    this.reviewAttention() ? 'attention' as const : this.hostLoad()?.tone ?? 'unknown');
+  readonly runningSignalCorrelation = computed(() =>
+    this.reviewAttention()
+      ? 'review-waiting-without-active'
+      : this.hostLoad()?.correlation ?? 'unknown');
 
   readonly autoCount = computed(() => {
     const status = this.jobService.runnerStatus();
@@ -133,8 +206,12 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.remoteHosts.refresh();
+    this.reviewTelemetry.refresh();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => this.remoteHosts.refresh(),
+      () => {
+        this.remoteHosts.refresh();
+        this.reviewTelemetry.refresh();
+      },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -151,7 +228,12 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   runningTooltip(): string {
     const truth = this.runningTruth();
-    const execution = `Running ${truth.total} - ${truth.local} local / ${truth.remote} remote.`;
+    const execution = `Coding runs ${truth.total} - ${truth.local} local / ${truth.remote} remote. `
+      + `Review plane ${this.reviewSlots()} active ${this.reviewSlots() === 1 ? 'slot' : 'slots'} `
+      + `and ${this.reviewWaiting()} waiting ${this.reviewWaiting() === 1 ? 'card' : 'cards'}.`;
+    const reviewConsistency = this.reviewAttention()
+      ? ' Attention: the Review queue has waiting cards but no active Review slot. Consistency hint: inspect Review admission and runner health.'
+      : '';
     const telemetrySlots = this.remoteTelemetrySlots();
     const comparison = telemetrySlots === null
       ? ' Fresh remote slot telemetry is unavailable.'
@@ -159,18 +241,19 @@ export class StatusBarComponent implements OnInit, OnDestroy {
         ? ` Warning: Board leases report ${truth.remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
         : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
-    if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
+    if (!load) return `Open execution hosts. ${execution}${reviewConsistency}${comparison} Execution host load is unavailable.`;
 
     const loadDetail = `Execution host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
       + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active execution `
-      + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
+      + `${load.activeSlots === 1 ? 'slot' : 'slots'} `
+      + `(${load.codingSlots} coding / ${load.reviewSlots} review).`;
     if (load.correlation === 'load-without-runs') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+      return `Open execution hosts. ${execution}${reviewConsistency}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }
     if (load.correlation === 'runs-without-load') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+      return `Open execution hosts. ${execution}${reviewConsistency}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
     }
-    return `Open execution hosts. ${execution}${comparison} ${loadDetail}`;
+    return `Open execution hosts. ${execution}${reviewConsistency}${comparison} ${loadDetail}`;
   }
 
   autoTooltip(): string {

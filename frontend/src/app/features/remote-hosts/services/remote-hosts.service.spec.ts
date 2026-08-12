@@ -354,6 +354,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({ clientId: 'agent-runner-01', window: '14d', points: [], findings: [] });
     http.expectOne('/api/v1/management/remote-hosts').flush([]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('draining');
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBeNull();
     http.verify();
   });
 
@@ -662,6 +663,61 @@ describe('RemoteHostsService client registry hydration', () => {
       availableSlots: 3,
       busyAction: null,
     });
+    http.verify();
+  });
+
+  it('folds Coding and Review runner identities onto one physical host with role-local slots', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+    const hostAdmission = {
+      hostId: 'host-a', admissionState: 'open', automaticDrainReason: null,
+      automaticDrainAt: null, operatorDrainReason: null, operatorDrainAt: null,
+    } as const;
+    const capability = (key: string) => ({
+      key, category: 'executor', advertisedStatus: 'ready', healthState: 'healthy',
+      advertisedAt: now, freshUntil: now, isFresh: true, consecutiveFailures: 0,
+      affectedClaims: [], recoveryHistory: [],
+    } as const);
+    const snapshot = (runnerId: string, key: string, activeSlots: number) => ({
+      runnerId, name: runnerId, hostId: 'host-a', instanceId: `${runnerId}:1`,
+      runnerVersion: '1.0.0', protocolVersion: 3, status: 'active',
+      registeredAt: now, lastSeenAt: now, hostAdmission,
+      capabilities: [capability(key)],
+      telemetry: {
+        observedAt: now, cpuPercent: 80, load1: 8.4, memoryUsedBytes: 4_000,
+        memoryTotalBytes: 8_000, cpuCores: 12, activeSlots,
+      },
+    });
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+      registeredAt: now, lastSeenAt: now,
+    }, {
+      id: 'agent-runner-01-review', displayName: 'agent-runner-01-review', kind: 'service',
+      registeredAt: now, lastSeenAt: now,
+    }]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/clients/agent-runner-01-review/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01-review', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/v1/management/remote-hosts').flush([
+      snapshot('agent-runner-01', 'executor:coding', 1),
+      snapshot('agent-runner-01-review', 'executor:review', 4),
+    ]);
+
+    const physicalHosts = svc.hosts().filter(host => host.capacityHostId === 'host-a');
+    expect(physicalHosts).toHaveLength(1);
+    expect(physicalHosts[0].executionPlanes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'coding', activeSlots: 1 }),
+      expect.objectContaining({ role: 'review', activeSlots: 4 }),
+    ]));
     http.verify();
   });
 
