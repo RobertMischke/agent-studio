@@ -790,6 +790,26 @@ public sealed class TaskServerClient : IDisposable
                ct)
            ?? throw new TaskServerException(500, "Empty review lease renewal response.");
 
+    public async Task<Contract.ReviewAttemptDto?> GetReviewAttemptAsync(
+        string attemptId,
+        CancellationToken ct)
+    {
+        using var response = await _http.GetAsync(
+            $"/api/v1/reviews/attempts/{Uri.EscapeDataString(attemptId)}",
+            ct);
+        var detail = await response.Content.ReadAsStringAsync(ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new TaskServerException(
+                (int)response.StatusCode,
+                $"Review attempt lookup failed: {Trim(detail)}",
+                TryReadApiErrorCode(detail));
+        }
+        return JsonSerializer.Deserialize<Contract.ReviewAttemptDto>(detail, Json)
+               ?? throw new TaskServerException(500, "Empty review attempt response.");
+    }
+
     public async Task<Contract.ReviewReportDto> ReportReviewAsync(
         string attemptId,
         Contract.ReviewReportRequest request,

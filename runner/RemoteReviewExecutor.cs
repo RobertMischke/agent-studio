@@ -452,7 +452,13 @@ public sealed class RemoteReviewExecutor
         {
             _log($"review cleanup report rejected attempt={attempt.AttemptId}: {exception.Message}");
         }
-        if (removed) _state.Delete(slot);
+        if (removed)
+        {
+            _state.Delete(slot);
+            _log(
+                $"review slot state deleted attempt={attempt.AttemptId} " +
+                $"terminalOutcome={report.Outcome}");
+        }
 
         return report.Outcome == "Pass" ? 0 : report.Outcome == "ProductFailure" ? 2 : 3;
     }
@@ -491,7 +497,12 @@ public sealed class RemoteReviewExecutor
             $"ageSeconds={Math.Max(0, age.TotalSeconds):0} " +
             $"cleanup={(removed ? "removed" : "pending")}");
         if (removed)
+        {
             _state.Delete(slot);
+            _log(
+                $"review slot state deleted attempt={slot.AttemptId} " +
+                $"terminalOutcome={classification}");
+        }
         else
             _state.Save(slot with { Phase = "terminal-cleanup-pending" });
         return 3;
