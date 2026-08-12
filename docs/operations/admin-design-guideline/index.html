@@ -287,6 +287,7 @@
         <li><a href="#adoption">05 · Adoption contract</a></li>
         <li><a href="#open-decisions">06 · Open decision</a></li>
         <li><a href="#applied-surfaces">09 · Applied surfaces</a></li>
+        <li><a href="#lane-header-dos-donts">10 · Lane headers</a></li>
       </ul>
     </nav>
   </header>
@@ -395,6 +396,13 @@
           <p>A push side panel MUST use its own semantic background level and a neutral hairline or shell elevation at the resizable boundary. This is a shell edge, not a boxed card or a status accent. Its normal header MUST remain one fixed-height row: context type and name take the flexible space, while status, panel access, and Close keep one shared control height. Execution details belong with status, not in the context title. Only the context name and secondary status copy may ellipsize, and their complete values MUST remain accessible. A jump-to-latest control belongs in a reserved transcript-control row immediately above and below the stacking layer of the composer. It MUST never float over message text.</p>
         </div>
       </article>
+      <article class="rule">
+        <div class="rule-id">ADM-12</div>
+        <div>
+          <h4>Compact headers protect identity first</h4>
+          <p>A lane or comparable compact header MUST use one UI font family and one vertical centerline. The name is primary at 13 px and 600 weight. Count and operational summary are secondary at 11 px, with tabular figures. The name receives flexible width before trailing decoration. At narrow component widths, summary prose MUST switch to compact notation such as <code>0/10</code>, with the complete meaning available in an accessible tooltip. Optional decoration collapses next; name ellipsis is the last resort.</p>
+        </div>
+      </article>
     </div>
 
     <h3>Decision provenance</h3>
@@ -411,6 +419,7 @@
           <tr><td>ADM-09</td><td>Light and dark change semantic tokens, not structure or behavior.</td><td>Style-guide hard rule R5.</td></tr>
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
           <tr><td>ADM-11</td><td>Push panels use a distinct shell layer, one fixed header row, and collision-free transcript controls.</td><td>AGT-2613 and operator evidence from 11.08.</td></tr>
+          <tr><td>ADM-12</td><td>Compact headers use one type hierarchy and centerline, protect the name before decoration, and abbreviate secondary status before truncating identity.</td><td>AGT-2642 name-first tree rows and AGT-2644 operator evidence from 11.08.</td></tr>
         </tbody>
       </table>
     </div>
@@ -652,7 +661,7 @@
 
     <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
       <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
-      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-11 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-12 to the new or changed surface and its immediate family.</p></div>
       <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
       <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
     </div>
@@ -877,7 +886,21 @@
     </div>
   </section>
 
-  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, and AGT-2579.</footer>
+  <section id="lane-header-dos-donts" data-concept-section="decision-log">
+    <h2><span class="section-no">10</span>Lane header Dos &amp; Don&apos;ts</h2>
+    <p>This append-only record responds to the 11 August 2026 Post Processing lane capture. It extends the name-first rule established for tree entries in AGT-2642 to every board lane and project through the shared lane-header component.</p>
+
+    <div class="spec-grid" aria-label="Lane header Dos and Don'ts">
+      <article class="spec"><h4>Do: use one type system</h4><p>Use the local UI family throughout the header. Render the lane name with the primary size and weight; render counts and active/waiting status with the secondary size and tabular figures.</p></article>
+      <article class="spec"><h4>Don&apos;t: mix text registers</h4><p>Do not combine a sans-serif lane name, a differently sized count, monospace status prose, and serif text icons. Icons may use the canonical icon system or inherit the header family.</p></article>
+      <article class="spec"><h4>Do: share one centerline</h4><p>Keep avatar, name, count, status, and icon controls in one flex row with vertical centering. A text metric or button box must not create a second baseline.</p></article>
+      <article class="spec"><h4>Don&apos;t: protect decoration first</h4><p>Do not let fixed trailing metadata reduce the lane name to an initial fragment. The name owns flexible width; optional decoration compacts or disappears before identity truncates.</p></article>
+      <article class="spec"><h4>Do: respond to lane width</h4><p>Use a component container breakpoint. Change <q>0 active / 10 waiting</q> to <q>0/10</q> when the lane is narrow and preserve the full wording in the accessible tooltip.</p></article>
+      <article class="spec"><h4>Don&apos;t: wrap the normal header</h4><p>Do not stack count, status, or controls into another row. Keep the ordinary state on one line; use ellipsis only after compaction and optional-decoration rules have run.</p></article>
+    </div>
+  </section>
+
+  <footer>Prepared 10 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2642, and AGT-2644.</footer>
 </main>
 </body>
 </html>

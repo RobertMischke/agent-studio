@@ -34,9 +34,8 @@ import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
 import { BoardDragStateService } from '../../state/board-drag-state.service';
 
-/** ASS-1727: page size for the Archive lane's lazy-load / "load more". */
+/** ASS-1727: Archive pagination and typed-filter debounce. */
 const ARCHIVE_PAGE_SIZE = 50;
-/** Debounce before a typed Archive filter term hits the endpoint. */
 const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 
 @Component({
@@ -77,12 +76,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly projectScope = input<string | null>(null);
   /** Current runner mode for the auto project, drives the chip's on/off look. */
   readonly autoMode = input<string>('manual');
-  /**
-   * Full runner-status snapshot for the lane's auto project. Drives the
-   * In-Progress lane's three-pill status cluster (RUNNING / mode / Q:N).
-   * Null when the lane is not project-scoped (e.g. board scoped to "All
-   * projects" with mixed projects in the lane).
-   */
+  /** Project runner snapshot behind the In-Progress status cluster. */
   readonly runnerStatus = input<ProjectRunnerStatus | null>(null);
   /**
    * Live wall-clock tick used so the RUNNING pill's duration string
