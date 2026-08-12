@@ -1206,7 +1206,7 @@
             <div>
               <h4>Outcome</h4>
               <ul>
-                <li>Opening a project reveals its project chat in the existing resizable side sheet by default while the selected project surface remains visible.</li>
+                <li>Opening Board or Project Overview from an empty editor may reveal project chat by default. Existing tab context and ordinary route navigation preserve the side sheet's saved posture.</li>
                 <li>Make Chat the primary action on Welcome and project entry surfaces. Preserve a direct Board action and the current status-bar toggle.</li>
                 <li>Add one visible preference, “Open project Chat on project entry”, with the default and rationale inline. Persist the operator's later choice.</li>
                 <li>Do not autofocus on passive restore. An explicit Open Chat action may focus the composer.</li>
@@ -1216,7 +1216,7 @@
               <h4>Acceptance and evidence</h4>
               <ul>
                 <li>Every configured project can open and answer from its correct checkout, including projects without legacy <code>rootPath</code>.</li>
-                <li>Project switch changes scope, transcript, context receipt, and execution identity atomically with no foreign-project flash.</li>
+                <li>When the sheet is open, project or page navigation changes the next-message scope, transcript, context receipt, and execution identity atomically with no foreign-project flash. In-flight turns remain bound to their send-time context.</li>
                 <li>Playwright covers first visit, saved preference, project switching, task deep link, light/dark, narrow viewport, and keyboard focus.</li>
                 <li>No new global chat window, no overlay regression, and no hidden task mutation from project Q&amp;A.</li>
               </ul>

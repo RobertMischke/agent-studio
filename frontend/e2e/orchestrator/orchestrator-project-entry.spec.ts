@@ -23,6 +23,11 @@ const EMPTY_GROUPED = {
   escalated: [], completed: [], archive: [],
 };
 
+const GROUPED_WITH_TASK = {
+  ...EMPTY_GROUPED,
+  ready: [TASK],
+};
+
 function json(route: Route, body: unknown) {
   return route.fulfill({
     status: 200,
@@ -114,7 +119,11 @@ function taskDetail() {
   };
 }
 
-async function installRoutes(page: Page, requestedChatContexts: string[] = []): Promise<void> {
+async function installRoutes(
+  page: Page,
+  requestedChatContexts: string[] = [],
+  contextSessions: () => readonly Record<string, unknown>[] = () => [],
+): Promise<void> {
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -147,7 +156,7 @@ async function installRoutes(page: Page, requestedChatContexts: string[] = []): 
         projects: [workspaceProject(ALPHA), workspaceProject(BETA)],
       }]);
     }
-    if (path === '/api/tasks/grouped') return json(route, EMPTY_GROUPED);
+    if (path === '/api/tasks/grouped') return json(route, GROUPED_WITH_TASK);
     if (path === '/api/tasks/archive') return json(route, { items: [], total: 0, offset: 0, limit: 50, hasMore: false });
     if (path === `/api/tasks/${TASK.key}` || path === `/api/tasks/${TASK.id}`) return json(route, taskDetail());
     if (path === '/api/tasks' || path === '/api/projects') return json(route, []);
@@ -158,7 +167,9 @@ async function installRoutes(page: Page, requestedChatContexts: string[] = []): 
         pending: 0, currentJob: null, currentProject: null, activeJobs: [],
       });
     }
-    if (path === '/api/orchestrator/sessions') return json(route, { sessions: [] });
+    if (path === '/api/orchestrator/sessions') return json(route, { sessions: contextSessions() });
+    if (path === '/api/runner/orchestrator-feed') return json(route, { entries: [] });
+    if (/\/api\/projects\/[^/]+\/workbenches$/.test(path)) return json(route, { items: [] });
     if (path.startsWith('/api/orchestrator/context/')) {
       const contextKey = path.slice('/api/orchestrator/context/'.length);
       return json(route, {
@@ -198,6 +209,52 @@ async function installRoutes(page: Page, requestedChatContexts: string[] = []): 
     if (path === '/api/tags' || path === '/api/clients' || path === '/api/clients/'
       || path === '/api/git/summary' || path === '/api/v1/management/remote-hosts'
       || path.startsWith('/api/bus/')) return json(route, []);
+
+    if (/\/api\/tasks\/[^/]+\/output$/.test(path)) return json(route, []);
+    if (/\/api\/tasks\/[^/]+\/timeline$/.test(path)) return json(route, []);
+    if (/\/api\/tasks\/[^/]+\/dependents$/.test(path)) return json(route, []);
+    if (/\/api\/tasks\/[^/]+\/code-review\/list$/.test(path)) return json(route, { entries: [] });
+    if (/\/api\/tasks\/[^/]+\/artifacts$/.test(path)) return json(route, { jobId: TASK.id, files: [] });
+    if (/\/api\/tasks\/[^/]+\/provenance$/.test(path)) return json(route, null);
+    if (/\/api\/tasks\/[^/]+\/session-events$/.test(path)) {
+      return json(route, { events: [], sessionChain: [], currentSessionId: null });
+    }
+    if (/\/api\/tasks\/[^/]+\/agent-work-summary$/.test(path)) {
+      return json(route, {
+        calls: 0, recovered: false, toolCalls: 0, toolCounts: [],
+        startedAt: null, lastTouchAt: null, currentSessionId: null,
+      });
+    }
+    if (/\/api\/tasks\/[^/]+\/plan$/.test(path)) {
+      return json(route, {
+        hasPlan: false, source: null, snapshotCount: 0, activeItemId: null,
+        softEstimateMedian: null, items: [], unassignedSubActions: [],
+      });
+    }
+    if (/\/api\/tasks\/[^/]+\/runs$/.test(path)) {
+      return json(route, {
+        runCount: 0, firstStartedAt: null, lastActivityAt: null,
+        hasActiveRun: false, runs: [], promptEntries: [],
+      });
+    }
+    if (/\/api\/tasks\/[^/]+\/pipeline$/.test(path)) {
+      return json(route, {
+        pipeline: { id: 'fixture', displayName: 'Fixture', version: 1, pre: [], core: [], post: [], allSteps: [] },
+        execution: null,
+        cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+        tokensByModel: null,
+        config: {},
+      });
+    }
+    if (/\/api\/tasks\/[^/]+\/step-prompts$/.test(path)) return json(route, { prompts: [] });
+    if (/\/api\/tasks\/[^/]+\/screenshots$/.test(path)) return json(route, { jobId: TASK.id, screenshots: [] });
+    if (/\/api\/tasks\/[^/]+\/regression-radar$/.test(path)) {
+      return json(route, {
+        overallStatus: 'Intended', intendedCount: 0, atRiskCount: 0, driftCount: 0,
+        totalSpecChanges: 0, baselineSha: null, headSha: null, entries: [], taskGroups: [],
+        error: null, generatedAt: '2026-08-11T18:00:00Z', durationMs: 0,
+      });
+    }
 
     const project = path.includes(encodeURIComponent(BETA.name)) || path.includes(BETA.name)
       ? BETA : ALPHA;
@@ -246,8 +303,11 @@ async function seedBrowserState(
   page: Page,
   preference: '1' | '0' | null,
   staleProject?: string,
+  panelOpen: '1' | '0' | null = null,
+  panelWidth?: number,
+  emptyTabs = false,
 ): Promise<void> {
-  await page.addInitScript(({ savedPreference, persistedProject }) => {
+  await page.addInitScript(({ savedPreference, persistedProject, savedPanelOpen, savedPanelWidth, persistEmptyTabs }) => {
     if (sessionStorage.getItem('project-entry-fixture-seeded')) return;
     sessionStorage.setItem('project-entry-fixture-seeded', '1');
     if (savedPreference === null) {
@@ -256,103 +316,153 @@ async function seedBrowserState(
       localStorage.setItem('atp.studio.openProjectChatOnEntry.v1', savedPreference);
     }
     localStorage.setItem('atp.studio.theme', 'light');
-    if (persistedProject) {
+    if (savedPanelOpen === null) sessionStorage.removeItem('atp.studio.orchestratorOpen.v1');
+    else sessionStorage.setItem('atp.studio.orchestratorOpen.v1', savedPanelOpen);
+    if (savedPanelWidth) localStorage.setItem('atp.studio.orchestratorWidth', String(savedPanelWidth));
+    if (persistEmptyTabs) {
+      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [], activeKey: null }));
+    } else if (persistedProject) {
       localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
         v: 1,
         tabs: [{ kind: 'board', projectName: persistedProject }],
         activeKey: `board:${persistedProject}`,
       }));
     }
-  }, { savedPreference: preference, persistedProject: staleProject ?? null });
+  }, {
+    savedPreference: preference,
+    persistedProject: staleProject ?? null,
+    savedPanelOpen: panelOpen,
+    savedPanelWidth: panelWidth ?? null,
+    persistEmptyTabs: emptyTabs,
+  });
 }
 
-test.describe('Orchestrator Chat standard project entry', () => {
+async function expectPanelClosed(page: Page): Promise<void> {
+  await expect(page.getByTestId('orch-side-sheet-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('orch-side-sheet-resize')).toHaveCount(0);
+}
+
+async function dismissTransientChrome(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await page.mouse.move(900, 500);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+}
+
+test.describe('Orchestrator Chat shell posture and activity', () => {
   test.setTimeout(120_000);
 
-  test('opens the canonical project route in its project context without a foreign flash or focus steal', async ({ page }, testInfo) => {
-    const requestedChatContexts: string[] = [];
-    await installRoutes(page, requestedChatContexts);
+  test('does not auto-open while navigating with an existing tab context', async ({ page }, testInfo) => {
+    await installRoutes(page);
     await seedBrowserState(page, null, BETA.name);
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await page.goto(`/#/projects/${ALPHA.id}`, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(ALPHA.name);
-    await expect(page.getByTestId('chat-input')).not.toBeFocused();
-    await expect.poll(() => [...requestedChatContexts]).toContain(`project:${ALPHA.name}`);
-    expect(requestedChatContexts).not.toContain(`project:${BETA.name}`);
+    await expectPanelClosed(page);
     await expect.poll(() => new URL(page.url()).hash).toBe(`#/projects/${ALPHA.id}`);
-
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await page.screenshot({
-        path: evidencePath(testInfo, `project-entry-wide-${theme}--mocked.png`),
-        fullPage: false,
-      });
-    }
 
     await page.getByTestId('studio-project-picker-trigger')
       .getByText(ALPHA.name, { exact: true })
       .click();
     await page.getByTestId(`studio-project-picker-item-${BETA.name}`).click();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(BETA.name);
-    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(BETA.name);
-    await expect.poll(() => [...requestedChatContexts]).toContain(`project:${BETA.name}`);
-
-    await page.setViewportSize({ width: 430, height: 844 });
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-      await page.screenshot({
-        path: evidencePath(testInfo, `project-entry-narrow-${theme}--mocked.png`),
-        fullPage: false,
-      });
-    }
+    await expectPanelClosed(page);
+    await dismissTransientChrome(page);
+    await page.screenshot({
+      path: evidencePath(testInfo, 'orchestrator-navigation-stays-closed--mocked.png'),
+      fullPage: false,
+    });
   });
 
-  test('persists the visible opt-out while Board and status-bar entry remain available', async ({ page }, testInfo) => {
+  test('uses the S5 standard entry only when no editor tab is open', async ({ page }) => {
     await installRoutes(page);
-    await seedBrowserState(page, '1');
-    await page.goto('/#/workspace/settings/appearance', { waitUntil: 'domcontentloaded' });
+    await seedBrowserState(page, '1', undefined, null, undefined, true);
+    await page.goto(`/#/projects/${ALPHA.id}`, { waitUntil: 'domcontentloaded' });
 
-    const preference = page.getByRole('group', { name: 'Open project Chat on project entry' });
-    await expect(preference).toBeVisible();
-    await expect(page.getByTestId('settings-project-chat-entry-open')).toHaveAttribute('aria-pressed', 'true');
-    await page.getByTestId('settings-project-chat-entry-closed').click();
-    await expect(page.getByTestId('settings-project-chat-entry-closed')).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('atp.studio.openProjectChatOnEntry.v1'))).toBe('0');
+    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(ALPHA.name);
+    await expect(page.getByTestId('chat-input')).not.toBeFocused();
+  });
+
+  test('persists open, closed, and width while the next-message context follows navigation', async ({ page }, testInfo) => {
+    const requestedChatContexts: string[] = [];
+    await installRoutes(page, requestedChatContexts);
+    await seedBrowserState(page, '1', ALPHA.name, '1', 720);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/#/projects/${ALPHA.id}/board`, { waitUntil: 'domcontentloaded' });
+
+    const sheetHost = page.locator('app-orchestrator-side-sheet');
+    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+    await expect(sheetHost).toHaveCSS('width', '720px');
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(ALPHA.name);
+    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+    await expect(sheetHost).toHaveCSS('width', '720px');
+
+    await page.evaluate(taskKey => { window.location.hash = `#/tasks/${taskKey}`; }, TASK.key);
+    await expect(page.getByTestId('studio-task')).toBeVisible();
+    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
+    await expect(page.getByTestId('chat-composer-context-detail')).toHaveText(TASK.key);
+    await expect.poll(() => [...requestedChatContexts]).toContain(`task:${ALPHA.name}/${TASK.key}`);
+
+    await page.getByTestId('orch-side-sheet-toggle').click();
+    await expectPanelClosed(page);
+    await page.evaluate(projectId => { window.location.hash = `#/projects/${projectId}`; }, BETA.id);
+    await expect(page.getByTestId('project-shell-panel-overview')).toBeVisible();
+    await expectPanelClosed(page);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expectPanelClosed(page);
+
+    await setTheme(page, 'dark');
+    await dismissTransientChrome(page);
     await page.screenshot({
-      path: evidencePath(testInfo, 'project-entry-preference-light--mocked.png'),
+      path: evidencePath(testInfo, 'orchestrator-persisted-closed-dark--mocked.png'),
+      fullPage: false,
+    });
+  });
+
+  test('marks active chats in the shell and central context list, then clears the signal', async ({ page }, testInfo) => {
+    let runtimeStatus: 'active' | 'idle' = 'active';
+    const sessions = () => [{
+      contextKey: `project:${ALPHA.name}`,
+      kind: 'project',
+      projectId: ALPHA.name,
+      taskKey: null,
+      updatedAt: '2026-08-11T18:00:00Z',
+      model: 'gpt-5',
+      cumulativeInputTokens: 1200,
+      cumulativeOutputTokens: 220,
+      cumulativeCacheReadTokens: 0,
+      cumulativeCacheCreationTokens: 0,
+      runtimeStatus,
+      queuePosition: 0,
+      summary: 'Checking navigation state',
+    }];
+    await installRoutes(page, [], sessions);
+    await seedBrowserState(page, '1', BETA.name);
+    await page.goto('/#/chat-history', { waitUntil: 'domcontentloaded' });
+
+    const access = page.getByTestId('orch-side-sheet-toggle');
+    const row = page.locator(`[data-testid="chat-history-row"][data-context-key="project:${ALPHA.name}"]`);
+    await expect(access).toContainText('1 active');
+    await expect(access).toHaveAttribute('data-pulsing', 'true');
+    await expect(row).toHaveAttribute('data-runtime-status', 'active');
+    await expect(row.getByTestId('chat-history-runtime-status')).toContainText('Running');
+    await dismissTransientChrome(page);
+    await page.screenshot({
+      path: evidencePath(testInfo, 'orchestrator-active-chat-visible--mocked.png'),
       fullPage: false,
     });
 
-    await page.getByTestId('studio-project-picker-trigger')
-      .getByText('All projects', { exact: true })
-      .click();
-    await page.getByTestId(`studio-project-picker-item-${ALPHA.name}`).click();
-    await expect(page.getByTestId(`studio-tab-board:${ALPHA.name}`)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
-
-    await page.getByTestId('orch-side-sheet-toggle').click();
-    await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet-project-select')).toHaveValue(ALPHA.name);
-
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId(`studio-tab-board:${ALPHA.name}`)).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
-  });
-
-  test('does not open the project side sheet over a task deep link', async ({ page }) => {
-    await installRoutes(page);
-    await seedBrowserState(page, '1', BETA.name);
-    await page.goto(`/#/tasks/${TASK.key}`, { waitUntil: 'domcontentloaded' });
-
-    await expect(page.getByTestId('studio-task')).toBeVisible();
-    await expect(page.getByTestId('inspector-tab-activity')).toBeVisible();
-    await expect(page.getByTestId('orch-side-sheet')).toBeHidden();
-    await expect.poll(() => new URL(page.url()).hash).toBe(`#/tasks/${TASK.key}`);
+    runtimeStatus = 'idle';
+    await page.getByTestId('chat-history-refresh').click();
+    await expect(row).toHaveAttribute('data-runtime-status', 'idle');
+    await expect(row.getByTestId('chat-history-runtime-status')).toHaveCount(0);
+    await expect(access).not.toContainText('active', { timeout: 10_000 });
+    await expect(access).toHaveAttribute('data-pulsing', 'false');
   });
 });

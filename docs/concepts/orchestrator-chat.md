@@ -20,20 +20,20 @@ The pattern is clear: the user's feeling that a session is "still open" does not
 
 ## Product Shape
 
-The app exposes **Orchestrator Chat** as the standard project-level entry. A
-project opens its existing selected surface and the resizable Chat side sheet
-together, with the permanent project context already selected. Chat remains a
-push-layout surface that can be pinned or hidden; it is not a new full-screen
-route and does not replace the Board, Project Hub, status-bar toggle, or other
-existing entries.
+The app exposes **Orchestrator Chat** as an always-available project-level
+surface. Chat remains a resizable push-layout side sheet that can be pinned or
+hidden; it is not a new full-screen route and does not replace the Board,
+Project Hub, status-bar toggle, or other existing entries. Its open/closed
+posture and width survive navigation and reload. Ordinary navigation never
+opens it.
 
 The per-user **Open project Chat on project entry** preference defaults to
-Open. Its saved opt-out keeps Chat closed on later project entries while all
-explicit entry points remain available. Route hydration completes before the
-sheet opens, so a persisted tab cannot briefly load another project's
-transcript. Passive restore never moves keyboard focus into the composer.
-Task routes keep their task surface and Activity tab unchanged and do not
-trigger the project-entry behavior.
+Open, but applies only to an explicit Board or Project Overview entry when the
+shell has no active editor tab. It is not evaluated for tab switches, task
+routes, Dossiers, Wiki pages, or other ordinary navigation.
+Its saved opt-out disables that one standard-entry exception while every
+explicit Chat control remains available. Passive restore never moves keyboard
+focus into the composer.
 
 The chat has two scopes:
 
@@ -191,6 +191,13 @@ moving between the board and a task in the same project swaps the visible
 transcript even though the project is unchanged. When no context key is
 derivable it falls back to the per-project route, keeping the board identical.
 
+Navigation changes the next-message context, not an in-flight turn. Send
+snapshots the context key and typed envelope before attachment work begins. A
+reply that completes after the user navigates remains attached to that original
+managed context and cannot overwrite the newly visible transcript. The new
+context's composer remains available while the earlier context continues in
+the background.
+
 The side sheet owns one non-windowed vertical scroll container for its live
 transcript. Orchestrator rows mix short turns, multi-line Markdown, badges, and
 status rows, so replacing off-screen rows with one fixed-height estimate makes
@@ -295,6 +302,11 @@ registry into Global, Projects, and Tasks. Rows expose the central short
 summary, runtime state, local unread state, and cumulative token usage. Clicking a row name changes the chat
 context without moving the workspace. The separate arrow navigates to that
 context's all-project board, project board, or task tab.
+
+Active and queued contexts are acute current state. They use a visible status
+dot and label in both the side-sheet list and the central Chat History view.
+The status-bar Chat entry also shows a pulsing active count while any reply
+remains outstanding, including when the side sheet is closed.
 
 The rail reads `GET /api/orchestrator/sessions`. The context row, summary, and
 durable usage come from the selected context store; its runtime badge is a snapshot of the

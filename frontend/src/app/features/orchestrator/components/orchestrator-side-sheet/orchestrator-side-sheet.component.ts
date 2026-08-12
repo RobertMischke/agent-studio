@@ -43,6 +43,7 @@ import { OrchestratorJumpLatestComponent } from '../orchestrator-jump-latest/orc
 import { OrchestratorContextReceiptComponent } from '../orchestrator-context-receipt/orchestrator-context-receipt.component';
 import { OrchestratorContextPickerComponent } from '../orchestrator-context-picker/orchestrator-context-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
+import { OrchestratorChatActivityService } from '../../state/orchestrator-chat-activity.service';
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
 import {
@@ -97,8 +98,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly composerModel = inject(OrchestratorComposerModelService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
-  /** Prevent a persisted tab from opening Chat before a copied route resolves. */
-  readonly projectEntryReady = input(true);
+  /** One-shot shell event for an explicit project entry from an empty editor. */
+  readonly projectEntryRevision = input(0);
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /**
    * Canonical active-tab context, derived by Studio and rendered through
@@ -152,16 +153,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly openSettings = output<void>();
   readonly navigateToContext = output<string>();
 
-  readonly open = signal(false);
-
-  /** Persisted resize state for the panel — see OrchestratorPanelStateService. */
+  /** Persisted open/closed and resize state for the panel. */
   private readonly panelState = inject(OrchestratorPanelStateService);
+  readonly chatActivity = inject(OrchestratorChatActivityService);
   private readonly uiPreferences = inject(UiPreferencesService);
+  readonly open = this.panelState.open;
   readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
   readonly selectedContextKey = signal<string | null>(null);
   private readonly selectedContextNavigationKey = signal<string | null>(null);
   readonly contextSessions = signal<OrchestratorContextSession[]>([]);
+  readonly activeChatCount = computed(() =>
+    this.chatActivity.workingContextKeys(this.contextSessions()).size);
   readonly contextMenuOpen = signal(false);
   readonly contextDigestState = inject(OrchestratorContextDigestService);
   private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
@@ -308,7 +311,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly latestContextReceipt = computed(() =>
     [...this.turns()].reverse().find(turn => turn.role === 'orchestrator' && turn.contextReceipt)?.contextReceipt ?? null);
   readonly loading = signal(false);
-  readonly sending = signal(false);
+  readonly sending = computed(() => {
+    const key = this.contextKey();
+    return key ? this.chatActivity.pendingContextKeys().has(key) : false;
+  });
   readonly errorMsg = signal<string | null>(null);
   readonly executionContext = signal<ChatExecutionContext | null>(null);
   /** Project scope may explicitly omit context once. Task scope is mandatory. */
@@ -380,7 +386,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   private pollTimer: VisibleIntervalHandle | null = null;
-  private lastProjectEntry: string | null = null;
+  private contextPollTimer: VisibleIntervalHandle | null = null;
+  private previousProjectEntryRevision = 0;
+  private pendingStandardProjectEntry = false;
   private contextSessionsLoading = false;
 
   /** Canonical next-gen transcript consumed by `<cac-conversation-view>`. */
@@ -473,24 +481,27 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       });
     });
 
-    // Project-level navigation is the standard Chat entry. Wait until route
-    // hydration has won over persisted tabs, then align the context before the
-    // panel becomes visible. Task tabs keep their separate Chat surface.
+    // S5's standard entry is a one-shot shell event, not a derivation from the
+    // current route. This distinction preserves the operator's panel posture
+    // through all ordinary project, task, Dossier, and Wiki navigation.
     effect(() => {
-      const ready = this.projectEntryReady();
+      const entryRevision = this.projectEntryRevision();
       const context = this.composerContext();
       const openOnEntry = this.uiPreferences.openProjectChatOnEntry();
       untracked(() => {
-        if (!ready) return;
-        const project = context?.project && !context.taskKey ? context.project : null;
-        if (!project) {
-          this.lastProjectEntry = null;
-          return;
+        if (entryRevision !== this.previousProjectEntryRevision) {
+          this.previousProjectEntryRevision = entryRevision;
+          this.pendingStandardProjectEntry = true;
         }
-        if (project === this.lastProjectEntry) return;
-        this.lastProjectEntry = project;
-        if (!openOnEntry || this.pinned()) return;
-        this.setActiveProject(project);
+        if (!this.pendingStandardProjectEntry || !context) return;
+        this.pendingStandardProjectEntry = false;
+
+        const eligibleSurface = context.surface === 'Board'
+          || context.surface === 'Overview'
+          || context.surface === 'Project Overview';
+        if (!eligibleSurface || !context.project || !openOnEntry || this.pinned()) return;
+        if (!this.projects().includes(context.project)) return;
+        this.setActiveProject(context.project);
         this.show();
       });
     });
@@ -535,6 +546,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.refresh(true);
       }
     }, 30_000);
+    // Active and queued managed turns remain visible even while the panel is
+    // closed. SignalR refreshes the central history, while this bounded poll
+    // is the convergence fallback for the always-present shell indicator.
+    this.contextPollTimer = setVisibleInterval(() => {
+      this.refreshContextSessions();
+    }, 2_000);
 
     this.maybeSeedDemoEvents();
     this.refreshContextSessions();
@@ -558,12 +575,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.pollTimer != null) clearVisibleInterval(this.pollTimer);
     this.pollTimer = null;
+    if (this.contextPollTimer != null) clearVisibleInterval(this.contextPollTimer);
+    this.contextPollTimer = null;
   }
 
-  show(): void { this.open.set(true); }
+  show(): void { this.panelState.setOpen(true); }
   hide(): void {
     this.contextMenuOpen.set(false);
-    this.open.set(false);
+    this.panelState.setOpen(false);
   }
   toggleContextMenu(): void {
     this.contextMenuOpen.update(open => !open);
@@ -749,6 +768,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     if (!silent) this.loading.set(true);
     this.readChat(key).subscribe({
       next: (resp) => {
+        if (this.contextKey() !== key) return;
         this.turns.set(resp.turns ?? []);
         this.executionContext.set(resp.executionContext ?? null);
         this.errorMsg.set(null);
@@ -759,6 +779,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (!silent) this.loading.set(false);
       },
       error: (err) => {
+        if (this.contextKey() !== key) return;
         const message = orchestratorContextErrorMessage(err, 'Failed to load orchestrator chat');
         this.errorMsg.set(message);
         if (!silent) this.loading.set(false);
@@ -794,6 +815,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobState: this.effectiveJobState(),
       page: this.pageContext(),
     };
+    const contextIncludedSnapshot = navigationSnapshot.kind === 'task' || !this.contextDismissed();
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
 
@@ -831,7 +853,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       localAttachments: localBlobs.length > 0 ? localBlobs : undefined
     };
     this.localTurns.update((curr) => [...curr, localTurn]);
-    this.sending.set(true);
+    this.chatActivity.start(contextKey);
     const lazy = await import('./orchestrator-side-sheet.lazy');
 
     // Upload each pasted/dropped image first so the chat message can
@@ -862,19 +884,20 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         });
       }
     } catch (err) {
-      this.sending.set(false);
+      this.chatActivity.finish(contextKey);
       const message = (err as { message?: string })?.message ?? 'Attachment upload failed';
-      this.localTurns.update((curr) =>
-        curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
-      );
+      if (this.contextKey() === contextKey) {
+        this.localTurns.update((curr) =>
+          curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
+        );
+      }
       return;
     }
 
     // Task scope is attached to every turn. Project scope is also attached by
     // default, with one explicit one-message exclusion available in the menu.
     const taskScope = navigationSnapshot.kind === 'task';
-    const shouldShipContext = taskScope || !this.contextDismissed();
-    const contextPayload = shouldShipContext
+    const contextPayload = contextIncludedSnapshot
       ? buildChatNavigationContext({
           activeJobId: navigationSnapshot.jobId,
           activeTaskKey: navigationSnapshot.taskKey,
@@ -905,10 +928,16 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const send$ = this.jobService.sendOrchestratorChatByContext(contextKey, sendBody);
     send$.subscribe({
       next: (response) => {
-        if (response.executionContext) this.executionContext.set(response.executionContext);
-        if (!taskScope && this.contextDismissed()) this.contextDismissed.set(false);
-        this.contextAttachments.set([]);
-        this.sending.set(false);
+        const contextStillVisible = this.contextKey() === contextKey;
+        if (contextStillVisible && response.executionContext) {
+          this.executionContext.set(response.executionContext);
+        }
+        if (contextStillVisible && !taskScope && !contextIncludedSnapshot) {
+          this.contextDismissed.set(false);
+        }
+        if (contextStillVisible) this.contextAttachments.set([]);
+        this.chatActivity.finish(contextKey);
+        this.refreshContextSessions();
         // Pre-decode the persisted attachment URL(s) so the upcoming swap
         // from the local blob bubble to the server turn uses byte-identical
         // pixels from the browser image cache (no fetch on swap = no
@@ -923,26 +952,31 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // cached image and the user perceives no swap.
         this.readChat(contextKey).subscribe({
           next: async (resp) => {
-            this.turns.set(resp.turns ?? []);
-            this.errorMsg.set(null);
+            if (this.contextKey() === contextKey) {
+              this.turns.set(resp.turns ?? []);
+              this.errorMsg.set(null);
+            }
             await preloads;
-            this.localTurns.set([]);
+            if (this.contextKey() === contextKey) this.localTurns.set([]);
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           },
           error: () => {
             // Fallback: clear local turn anyway so the user is not stuck
             // looking at a pending bubble forever.
-            this.localTurns.set([]);
+            if (this.contextKey() === contextKey) this.localTurns.set([]);
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           }
         });
       },
       error: (err) => {
-        this.sending.set(false);
+        this.chatActivity.finish(contextKey);
+        this.refreshContextSessions();
         const message = orchestratorContextErrorMessage(err, 'Failed to send');
-        this.localTurns.update((curr) =>
-          curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
-        );
+        if (this.contextKey() === contextKey) {
+          this.localTurns.update((curr) =>
+            curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
+          );
+        }
       }
     });
   }

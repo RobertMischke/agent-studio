@@ -65,4 +65,18 @@ describe('ChatSwitcherRailComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="chat-switcher-row-project:Alpha"]'))
       .toHaveLength(1);
   });
+
+  it('uses an acute working marker only while a reply is outstanding', () => {
+    fixture.componentRef.setInput('pendingContextKeys', new Set(['task:Alpha/A-1']));
+    fixture.detectChanges();
+    const row = fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]');
+
+    expect(row.classList).toContain('context-list__row--working');
+    expect(row.getAttribute('data-runtime-status')).toBe('pending');
+    expect(row.textContent).toContain('waiting');
+
+    fixture.componentRef.setInput('pendingContextKeys', new Set());
+    fixture.detectChanges();
+    expect(row.classList).not.toContain('context-list__row--working');
+  });
 });

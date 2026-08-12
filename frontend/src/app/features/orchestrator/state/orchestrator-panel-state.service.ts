@@ -1,9 +1,10 @@
 import { Injectable, signal } from '@angular/core';
 
 /**
- * Persists the orchestrator side-sheet panel width across reloads. Parallel
- * to {@link StudioPanelStateService} which does the same for the left
- * sidebar.
+ * Persists the orchestrator side-sheet posture across navigation and reloads.
+ * Width is a durable layout preference; visibility is session-scoped so a
+ * project or task route cannot silently override the operator's current
+ * open/closed choice.
  *
  * Why a service rather than a component-local signal: the width is layout-
  * level state — the studio-shell's overall geometry has to know about it
@@ -13,7 +14,8 @@ import { Injectable, signal } from '@angular/core';
  */
 @Injectable({ providedIn: 'root' })
 export class OrchestratorPanelStateService {
-  private static readonly STORAGE_KEY = 'atp.studio.orchestratorWidth';
+  private static readonly WIDTH_STORAGE_KEY = 'atp.studio.orchestratorWidth';
+  private static readonly OPEN_STORAGE_KEY = 'atp.studio.orchestratorOpen.v1';
   // Defaults match the previous static `:host(.is-open) { width: min(640px,
   // 96vw) }` cap so existing screenshots / Playwright runs continue to
   // resolve to 640 px at common viewports.
@@ -26,14 +28,26 @@ export class OrchestratorPanelStateService {
   private static readonly MAX_ABS = 1100;
 
   private readonly _width = signal<number>(this.readInitial());
+  private readonly _open = signal<boolean>(this.readInitialOpen());
 
   readonly width = this._width.asReadonly();
+  readonly open = this._open.asReadonly();
+
+  setOpen(open: boolean): void {
+    this._open.set(open);
+    try {
+      sessionStorage.setItem(OrchestratorPanelStateService.OPEN_STORAGE_KEY, open ? '1' : '0');
+    } catch {
+      // Session storage is optional. The live signal still preserves posture
+      // for the lifetime of this application instance.
+    }
+  }
 
   setWidth(px: number): void {
     const clamped = this.clamp(px);
     this._width.set(clamped);
     try {
-      localStorage.setItem(OrchestratorPanelStateService.STORAGE_KEY, String(clamped));
+      localStorage.setItem(OrchestratorPanelStateService.WIDTH_STORAGE_KEY, String(clamped));
     } catch {
       // localStorage may throw in private mode or storage-full scenarios.
       // The in-memory signal still tracks the latest value for this session.
@@ -53,13 +67,21 @@ export class OrchestratorPanelStateService {
 
   private readInitial(): number {
     try {
-      const raw = localStorage.getItem(OrchestratorPanelStateService.STORAGE_KEY);
+      const raw = localStorage.getItem(OrchestratorPanelStateService.WIDTH_STORAGE_KEY);
       if (!raw) return OrchestratorPanelStateService.DEFAULT;
       const parsed = parseInt(raw, 10);
       if (!Number.isFinite(parsed)) return OrchestratorPanelStateService.DEFAULT;
       return this.clamp(parsed);
     } catch {
       return OrchestratorPanelStateService.DEFAULT;
+    }
+  }
+
+  private readInitialOpen(): boolean {
+    try {
+      return sessionStorage.getItem(OrchestratorPanelStateService.OPEN_STORAGE_KEY) === '1';
+    } catch {
+      return false;
     }
   }
 }

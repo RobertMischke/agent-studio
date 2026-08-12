@@ -62,10 +62,13 @@ orthogonal sibling hash segment. Active board expressions render as removable
 chips, and a board route without that sibling segment restores the unfiltered
 view. Workspace Settings sections use the same
 `#/workspace/settings[/<section>]` path convention; older loose token and
-screenshot routes remain migration inputs. After project route hydration, the
-default-on user preference opens the existing Orchestrator Chat push-side-sheet
-in the resolved project context without changing the URL or moving keyboard
-focus. Task routes are excluded. The full schema, transient-state boundary,
+screenshot routes remain migration inputs. Orchestrator Chat visibility and
+width are browser state that normal navigation never overrides. The default-on
+project-entry preference applies only when an explicit Board or Project
+Overview entry replaces an empty editor; task and other deep routes are
+excluded. When the sheet is open, its next-message context follows the active
+surface while in-flight turns retain their captured context key. The full
+schema, transient-state boundary,
 route map, and visual ownership diagram are in
 [Studio Route Restoration](../../concepts/studio-route-restoration.md).
 

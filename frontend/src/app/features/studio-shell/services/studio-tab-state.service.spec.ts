@@ -67,6 +67,18 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('signals the S5 entry only for a project surface opened from an empty editor', () => {
+    svc.closeAll();
+    svc.open({ kind: 'task', taskKey: 'task-a' });
+    expect(svc.emptyProjectEntryRevision()).toBe(0);
+
+    svc.closeAll();
+    svc.open({ kind: 'board', projectName: 'Alpha' });
+    expect(svc.emptyProjectEntryRevision()).toBe(1);
+    svc.open({ kind: 'hub', projectName: 'Beta', section: 'overview' });
+    expect(svc.emptyProjectEntryRevision()).toBe(1);
+  });
+
   it('keeps the workspace Feed as one persistent editor tab', () => {
     const tab: StudioTab = { kind: 'feed' };
     svc.open(tab);

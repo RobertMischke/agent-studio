@@ -107,4 +107,15 @@ describe('OrchestratorChatHistoryComponent', () => {
     expect(fixture.componentInstance.contexts()).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Live update arrived.');
   });
+
+  it('marks a running context as active current state', () => {
+    const { fixture } = mount([context({ runtimeStatus: 'active' })]);
+    const host = fixture.nativeElement as HTMLElement;
+    const row = host.querySelector<HTMLElement>('[data-testid="chat-history-row"]')!;
+
+    expect(row.classList).toContain('chat-history__row--working');
+    expect(row.dataset['runtimeStatus']).toBe('active');
+    expect(host.querySelector('[data-testid="chat-history-active-count"]')?.textContent).toContain('1');
+    expect(host.querySelector('[data-testid="chat-history-runtime-status"]')?.textContent).toContain('Running');
+  });
 });

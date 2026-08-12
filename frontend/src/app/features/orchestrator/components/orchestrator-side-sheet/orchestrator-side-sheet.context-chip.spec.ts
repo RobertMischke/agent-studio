@@ -4,12 +4,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
 
 describe('OrchestratorSideSheetComponent context badge and menu', () => {
+  beforeEach(() => sessionStorage.removeItem('atp.studio.orchestratorOpen.v1'));
+
   async function makeFixture() {
     await TestBed.configureTestingModule({
       imports: [OrchestratorSideSheetComponent],

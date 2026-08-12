@@ -106,6 +106,7 @@
           [tasks]="jobService.jobs()"
           [activeContextKey]="contextKey()"
           [unreadContextKeys]="unreadContextKeys()"
+          [pendingContextKeys]="chatActivity.pendingContextKeys()"
           (contextSelected)="selectChatContext($event)"
           (locationRequested)="onNavigateToContext($event)" />
       </section>

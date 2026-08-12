@@ -39,9 +39,11 @@
                         testid="status-bar-usage"
                         [active]="usageOpen()"
                         (activated)="toggleUsage.emit()" />
-    <app-statusbar-item icon="bot"      label="Orchestrator"      tooltip="Orchestrator chat"
+    <app-statusbar-item icon="bot"      [label]="orchestratorLabel()" [tooltip]="orchestratorTooltip()"
                         testid="orch-side-sheet-toggle"
                         [active]="orchestratorOpen()"
+                        [pulsing]="orchestratorActiveChatCount() > 0"
+                        [signalTone]="orchestratorActiveChatCount() > 0 ? 'working' : null"
                         (activated)="toggleOrchestrator.emit()" />
     <app-statusbar-item icon="activity" label="Feed"              tooltip="Activity across all projects"
                         testid="status-bar-feed"
