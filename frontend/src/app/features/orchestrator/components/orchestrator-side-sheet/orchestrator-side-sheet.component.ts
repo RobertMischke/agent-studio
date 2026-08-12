@@ -58,6 +58,8 @@ import {
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
 import { buildContextChipPresentation } from '../../composer-location-context';
 import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { OrchestratorTaskProgressComponent } from '../orchestrator-task-progress/orchestrator-task-progress.component';
 
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
@@ -77,7 +79,8 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
     OrchestratorContextPickerComponent,
     ChatSwitcherRailComponent,
     OrchestratorPanelHeaderComponent,
-    OrchestratorJumpLatestComponent
+    OrchestratorJumpLatestComponent,
+    OrchestratorTaskProgressComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
@@ -164,6 +167,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly contextSessions = signal<OrchestratorContextSession[]>([]);
   readonly contextMenuOpen = signal(false);
   readonly contextDigestState = inject(OrchestratorContextDigestService);
+  private readonly hub = inject(JobsHubClient);
   private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
 
   /** Total selectable scopes represented by the header context badge. */
@@ -405,6 +409,23 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
+    // A planUpdated push is a cheap refresh hint. Re-read only the visible
+    // matching task digest so the progress block updates without waiting for
+    // polling or for the operator to ask a question.
+    effect(() => {
+      const event = this.hub.planUpdatedEvent();
+      const key = this.contextKey();
+      const jobId = this.effectiveJobId();
+      const jobKey = this.effectiveJobKey();
+      const open = this.open();
+      if (!event || !key || !open || this.contextKind() !== 'task') return;
+      const target = event.jobId.trim().toLowerCase();
+      const matches = [jobId, jobKey]
+        .filter((value): value is string => !!value)
+        .some(value => target === value.toLowerCase() || target.endsWith(`::${value.toLowerCase()}`));
+      if (matches) untracked(() => this.contextDigestState.load(key, false));
+    });
+
     // Session rows can outlive the navigation scope that selected them. The
     // resolver falls back synchronously; this effect also clears stale picker
     // state so subsequent interactions remain on the current navigation key.

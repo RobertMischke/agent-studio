@@ -83,4 +83,39 @@ public sealed class OrchestratorTaskPromptContextComposerTests
 
         Assert.Equal("QS-54", identity);
     }
+
+    [Fact]
+    public void Compose_IncludesTheCurrentAgentPlanAsQueryableTaskContext()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "orchestrator-plan-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(folder, "logs"));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(folder, "logs", "plan-snapshots.jsonl"),
+                """{"ts":"2026-08-11T10:00:00Z","seq":1,"source":"codex/todo_list","items":[{"id":"inspect","title":"Inspect Activity","status":"done"},{"id":"integrate","title":"Integrate progress","status":"active"},{"id":"verify","title":"Run tests","status":"pending"}]}""" + Environment.NewLine);
+            var detail = new TaskDetail
+            {
+                Info = new TaskInfo
+                {
+                    Id = "AGT-2641",
+                    Key = "AGT-2641",
+                    Title = "Live TODO list",
+                    State = "3-progress",
+                    FolderPath = folder,
+                },
+            };
+
+            var composed = OrchestratorTaskPromptContextComposer.Compose(detail);
+
+            Assert.Contains("current agent plan", composed.IncludedBlocks);
+            Assert.Contains("CURRENT AGENT PLAN", composed.PromptBlock);
+            Assert.Contains("Progress: 1/3 complete", composed.PromptBlock);
+            Assert.Contains("[active] Integrate progress", composed.PromptBlock);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 }

@@ -120,6 +120,11 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
     }
   }
 
+  /** True when a push event targets the task currently owned by this poller. */
+  protected isCurrentJob(jobId: string): boolean {
+    return this.currentJob?.id.toLowerCase() === jobId.trim().toLowerCase();
+  }
+
   stop(): void {
     this.currentKey = '';
     this.currentJob = null;

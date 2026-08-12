@@ -39,7 +39,7 @@ Metadata fields:
 
 | Field | Meaning |
 |---|---|
-| `scenario` | Parity scenario id from the plan (`P1` through `P23`). |
+| `scenario` | Parity scenario id from the plan (`P1` through `P24`). |
 | `title` | One-line human description. |
 | `schemaVersion` | Capture contract version. Currently `1`. |
 | `cli` | `claude` or `codex`, whose frame vocabulary this is. |
@@ -105,8 +105,9 @@ malformed fixture) and never comes from a fixture.
 | **P9** self-crash | `p9-self-crash.{claude,codex}.fixture` | Non-zero exit with a provider failure frame (`result subtype=error_during_execution` / `turn.failed`) → `CliCrash`. Worded deliberately free of quota/auth/model vocabulary so the diagnostic regexes cannot steal the case. |
 | **P22** rate limit | `p22-rate-limit-{camel,snake}.claude.fixture`, `p22-rate-limit.codex.fixture` | Claude's `rate_limit_event` in both casings (CAR-E tolerance), including an ISO-8601 `resets_at` and a stringified boolean. The frame is informational: the run still ends `[[TASK_DONE]]`. Codex has no such frame — its limit arrives as a terminal `turn.failed` that today classifies as `QuotaExceeded` → `WaitForCapabilityRecovery`; recorded so the CAR path cannot quietly downgrade it to a plain crash. |
 | **P23** protocol novelty | `p23-unknown-frame.{claude,codex}.fixture` | Synthetic unknown-frame probes appended to each real-version folder. Normal completion remains authoritative, while the frame produces `runner.protocol.unknown-frame` with scrubbed per-type and total counters. |
+| **P24** native TODO list | `p24-todo-list.codex.fixture` | Codex `item.started` / `item.updated` snapshots with `item.type=todo_list`. Boolean completion becomes the normalized done/active/pending plan state while the final terminal outcome remains authoritative. |
 
-`runner.Tests/ParityFixtureTests` pins P1 through P5, P9, P22, and P23 and checks that
+`runner.Tests/ParityFixtureTests` pins P1 through P5, P9, and P22 through P24 and checks that
 every fixture in the folder is well formed. `BackendLocalExecutionEngineParityTests`
 and `RemoteWorkerEngineParityTests` provide the paired executable harnesses.
 

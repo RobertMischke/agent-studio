@@ -3483,82 +3483,14 @@ public class ProjectRunner
     /// </summary>
     private void AppendPlanSnapshotLog(string jobKey, CliRunEvent.PlanUpdated evt)
     {
-        if (evt.Items.Count == 0) return;
-
         var jobFolder = TaskKeyToFolderPath(jobKey);
         if (jobFolder == null) return;
-        var logsDir = System.IO.Path.Combine(jobFolder, "logs");
-        try { System.IO.Directory.CreateDirectory(logsDir); } catch { return; }
-        var path = System.IO.Path.Combine(logsDir, "plan-snapshots.jsonl");
-
-        // Enforce single-active: keep the first 'active', demote the rest.
-        var seenActive = false;
-        var items = new List<object>(evt.Items.Count);
-        var signature = new System.Text.StringBuilder();
-        foreach (var it in evt.Items)
+        if (PlanSnapshotLog.Append(jobFolder, evt, DateTime.UtcNow))
         {
-            var status = it.Status;
-            if (status == "active")
-            {
-                if (seenActive) status = "pending";
-                else seenActive = true;
-            }
-            items.Add(new { id = it.Id, title = it.Title, status });
-            signature.Append(it.Id).Append('=').Append(status).Append(';');
+            _logger.LogInformation(
+                "plan-snapshot source={Source} items={ItemCount} for {TaskKey}",
+                evt.Source, evt.Items.Count, jobKey);
         }
-        var sig = signature.ToString();
-
-        // Dedup against the last snapshot to keep the file noise-free.
-        int seq = 1;
-        try
-        {
-            if (System.IO.File.Exists(path))
-            {
-                string? lastLine = null;
-                foreach (var raw in System.IO.File.ReadAllLines(path))
-                {
-                    if (string.IsNullOrWhiteSpace(raw)) continue;
-                    seq++;
-                    lastLine = raw;
-                }
-                if (lastLine != null && SnapshotSignature(lastLine) == sig) return; // unchanged plan
-            }
-        }
-        catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: fall through with seq=1; a torn file should not block a write"); /* fall through with seq=1; a torn file should not block a write */ }
-
-        var record = new { ts = DateTime.UtcNow, seq, source = evt.Source, items };
-        var json = System.Text.Json.JsonSerializer.Serialize(record);
-        try { System.IO.File.AppendAllText(path, json + Environment.NewLine); }
-        catch { return; }
-
-        _logger.LogInformation(
-            "plan-snapshot seq={Seq} source={Source} items={ItemCount} for {TaskKey}",
-            seq, evt.Source, evt.Items.Count, jobKey);
-    }
-
-    /// <summary>
-    /// Recompute the id=status;... signature of a persisted snapshot line so
-    /// <see cref="AppendPlanSnapshotLog"/> can dedup against it without trusting
-    /// a serialized field. Returns empty string for an unparseable line so a
-    /// torn record never matches a real one.
-    /// </summary>
-    private static string SnapshotSignature(string jsonLine)
-    {
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(jsonLine.TrimStart('﻿'));
-            if (!doc.RootElement.TryGetProperty("items", out var items) ||
-                items.ValueKind != System.Text.Json.JsonValueKind.Array) return string.Empty;
-            var sb = new System.Text.StringBuilder();
-            foreach (var it in items.EnumerateArray())
-            {
-                var id = it.TryGetProperty("id", out var i) ? i.GetString() : null;
-                var status = it.TryGetProperty("status", out var s) ? s.GetString() : null;
-                sb.Append(id).Append('=').Append(status).Append(';');
-            }
-            return sb.ToString();
-        }
-        catch { return string.Empty; }
     }
 
     /// <summary>

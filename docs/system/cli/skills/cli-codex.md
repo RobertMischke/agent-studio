@@ -113,7 +113,8 @@ a Codex run reads as cleanly as a Claude run in the Activity Log.
 | `{"type":"turn.started"}` | *(suppressed)* | — |
 | `{"type":"turn.completed","usage":{…}}` | `● Turn completed (tokens: <input+output>)` | stdout |
 | `{"type":"turn.failed","error":{"message":…}}` | `● Turn failed: <reason>` | stderr |
-| `{"type":"item.started",…}` | *(suppressed — `item.completed` renders the same item)* | — |
+| `item.started` / `item.updated` with nested `todo_list` | `Todo [done/active/pending] …` full snapshot | stdout |
+| other `{"type":"item.started",…}` / `item.updated` | *(suppressed because `item.completed` renders the same item)* | none |
 | `item.completed` `agent_message` | model text, multi-line split | stdout |
 | `item.completed` `reasoning` | *(suppressed, like Claude's `thinking`)* | — |
 | `item.completed` `command_execution` / `command_call` / `local_shell_call` | `● Run <cmd>` | stderr iff `exit_code != 0` |

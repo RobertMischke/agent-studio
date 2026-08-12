@@ -28,6 +28,7 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
         "turn.started",
         "turn.completed",
         "turn.failed",
+        "item.updated",
         "session_meta",
         "rate_limits",
     };
@@ -43,6 +44,7 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
         "web_search",
         "update_plan",
         "todo",
+        "todo_list",
     };
 
     private readonly Dictionary<string, long> _byFrameType = new(StringComparer.Ordinal);
@@ -104,7 +106,7 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
         if (CodexFrameTypes.Contains(frameType)) return true;
         var separator = frameType.IndexOf('/');
         return separator > 0
-               && frameType[..separator] is "item.started" or "item.completed"
+               && frameType[..separator] is "item.started" or "item.updated" or "item.completed"
                && CodexItemTypes.Contains(frameType[(separator + 1)..]);
     }
 
@@ -130,7 +132,7 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
 
             var root = document.RootElement;
             frameType = Text(root, "type") ?? "<missing-type>";
-            if (frameType is "item.started" or "item.completed"
+            if (frameType is "item.started" or "item.updated" or "item.completed"
                 && root.TryGetProperty("item", out var item)
                 && item.ValueKind == JsonValueKind.Object
                 && Text(item, "type") is { } itemType)

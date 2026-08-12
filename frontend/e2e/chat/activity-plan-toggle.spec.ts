@@ -1,60 +1,49 @@
-import { expect, Page, test } from '@playwright/test';
-import * as path from 'path';
+import { mkdirSync } from 'node:fs';
+import * as path from 'node:path';
+import type { Page } from '@playwright/test';
+import { expect, test } from '../fixtures/dev-backend';
 
 /**
- * Task-detail Activity tab: the Plan / CLI sub-view toggle
- * (ASS-677..682). The Activity panel used to hang the task-plan strip above a
- * [Conversation] [Trace] switch. It is now a single segmented pill toggle:
- *
- *   - [Plan] appears only when the agent has emitted a usable plan, and is the
- *     default sub-view when present.
- *   - [CLI] is always present and renders the CLI conversation/output view.
- *   - [Trace], [Debug], and [Copy] live in the Activity overflow menu.
- *
- * The spec drives the live frontend (proxied to a real backend) but pins the
- * two pieces of evidence the behaviour keys off — the per-job `output` buffer
- * (so the panel is in its "has output" branch) and the per-job `plan` (so the
- * Plan tab is deterministically present or absent). Everything else (detail,
- * runs, board) is served by the backend the frontend proxies to.
- *
- * Screenshots land under JOB_RESULTS_DIR/plan-toggle when the orchestrator
- * sets it, else test-results/ (scratch).
+ * Native Codex TODO_LIST proof. The same plan snapshot renders as one living
+ * Activity checklist and as the visible task-context progress block in the
+ * orchestrator side sheet. Raw provider frames remain available in Trace.
  */
-
-const SHOTS_DIR = process.env.PLAN_TOGGLE_SHOTS?.trim()
-  || path.resolve(__dirname, '../../test-results/plan-toggle');
-
-const TARGET = { id: 'activity-toolbar-fixture', watchPath: 'C:/fixtures/activity-toolbar' };
+const SHOTS_DIR = path.resolve(
+  process.env.JOB_RESULTS_DIR?.trim() || path.resolve(__dirname, '../../test-results/todo-list'),
+);
+const TARGET = {
+  id: 'activity-toolbar-fixture',
+  key: 'AGT-2641',
+  watchPath: 'C:/fixtures/activity-toolbar',
+  project: 'fixture',
+};
 
 interface OutLine { timestamp: string; stream: string; text: string; }
 
 function buildOutputBuffer(): OutLine[] {
-  const t0 = Date.now() - 6 * 60 * 1000;
-  const t = (s: number) => new Date(t0 + s * 1000).toISOString();
+  const t0 = Date.now() - 60_000;
+  const t = (seconds: number) => new Date(t0 + seconds * 1000).toISOString();
   return [
-    { timestamp: t(0), stream: 'user', text: 'Restructure the Activity tab so the plan is its own panel.' },
-    { timestamp: t(3), stream: 'stdout', text: '* Read protocol-pane.component.html' },
-    { timestamp: t(5), stream: 'stdout', text: '* Edit protocol-pane.component.ts' },
-    { timestamp: t(8), stream: 'stdout', text: 'Wired the [Plan] [Conversation] [Trace] toggle.' },
-    { timestamp: t(10), stream: 'stdout', text: '[[TASK_DONE]]' },
+    { timestamp: t(0), stream: 'stdout', text: '{"type":"item.started","item":{"type":"todo_list","items":[{"text":"Inspect the Activity projection","completed":false},{"text":"Integrate live task progress","completed":false},{"text":"Run the verification suite","completed":false}]}}' },
+    { timestamp: t(2), stream: 'stdout', text: '* Read protocol-pane.component.ts' },
+    { timestamp: t(5), stream: 'stdout', text: '{"type":"item.updated","item":{"type":"todo_list","items":[{"text":"Inspect the Activity projection","completed":true},{"text":"Integrate live task progress","completed":false},{"text":"Run the verification suite","completed":false}]}}' },
+    { timestamp: t(8), stream: 'stdout', text: 'The live projection now uses the current snapshot.' },
   ];
 }
 
-function buildPlan(present: boolean) {
-  if (!present) {
-    return { hasPlan: false, source: null, snapshotCount: 0, activeItemId: null, softEstimateMedian: null, items: [], unassignedSubActions: [] };
-  }
-  const ts = new Date(Date.now() - 4 * 60 * 1000).toISOString();
+function buildPlan() {
+  const updatedAt = new Date(Date.now() - 52_000).toISOString();
   return {
     hasPlan: true,
-    source: 'claude',
-    snapshotCount: 3,
-    activeItemId: 'i2',
-    softEstimateMedian: 2,
+    source: 'codex/todo_list',
+    snapshotCount: 2,
+    updatedAt,
+    activeItemId: 'integrate',
+    softEstimateMedian: null,
     items: [
-      { id: 'i1', title: 'Make the plan its own panel', status: 'done', subActionCount: 2, subActions: [{ ts, tool: 'Edit', label: 'protocol-pane.component.ts' }] },
-      { id: 'i2', title: 'Default to Plan when a plan exists', status: 'active', subActionCount: 1, subActions: [{ ts, tool: 'Edit', label: 'protocol-pane.component.html' }] },
-      { id: 'i3', title: 'Add the toggle spec', status: 'pending', subActionCount: 0, subActions: [] },
+      { id: 'inspect', title: 'Inspect the Activity projection', status: 'done', subActionCount: 1, subActions: [] },
+      { id: 'integrate', title: 'Integrate live task progress', status: 'active', subActionCount: 2, subActions: [] },
+      { id: 'verify', title: 'Run the verification suite', status: 'pending', subActionCount: 0, subActions: [] },
     ],
     unassignedSubActions: [],
   };
@@ -64,35 +53,41 @@ function detail() {
   return {
     info: {
       id: TARGET.id,
-      taskKey: `ASS-E2E-${TARGET.id}`,
-      displayKey: 'ASS-E2E',
-      title: 'Activity toolbar fixture',
-      state: '5-human-review',
+      key: TARGET.key,
+      taskKey: TARGET.key,
+      displayKey: TARGET.key,
+      title: 'Native TODO list integration',
+      state: '3-progress',
       order: 1,
       agent: 'codex',
       cliType: 'codex',
       model: 'gpt-5',
       watchPath: TARGET.watchPath,
-      projectName: 'fixture',
-      folderPath: `${TARGET.watchPath}/.orchestrator/jobs/5-human-review/${TARGET.id}`,
-      createdAt: '2026-06-09T08:00:00.000Z',
-      lastActivity: '2026-06-09T08:05:00.000Z',
+      projectName: TARGET.project,
+      folderPath: `${TARGET.watchPath}/.orchestrator/jobs/3-progress/${TARGET.id}`,
+      createdAt: '2026-08-11T08:00:00.000Z',
+      lastActivity: '2026-08-11T08:05:00.000Z',
       sessionName: null,
       useOwnSession: null,
       lastUsage: null,
-      execution: null,
+      execution: {
+        status: 'running',
+        startedAt: '2026-08-11T08:04:00.000Z',
+        model: 'gpt-5',
+        cliType: 'codex',
+      },
       commit: null,
       commits: [],
-      codeActivityDetected: false,
+      codeActivityDetected: true,
       summaryState: null,
-      taskType: 'bug',
+      taskType: 'feature',
       tags: [],
       references: { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] },
     },
-    promptMarkdown: 'Fixture prompt.',
+    promptMarkdown: 'Integrate the native Codex TODO list.',
     promptHistory: [],
     titleHistory: [],
-    statusMarkdown: '## Status\n\nWaiting for review.',
+    statusMarkdown: null,
     contextUsage: null,
     log: [],
     summaryState: null,
@@ -100,175 +95,178 @@ function detail() {
   };
 }
 
-async function installRoutes(page: Page, planPresent: boolean): Promise<void> {
-  const esc = encodeURIComponent(TARGET.id);
-  const output = JSON.stringify(buildOutputBuffer());
-  const plan = JSON.stringify(buildPlan(planPresent));
-  await page.route('**/api/**', (route) =>
+async function installRoutes(page: Page): Promise<void> {
+  const encodedId = encodeURIComponent(TARGET.id);
+  const plan = buildPlan();
+  await page.route('**/api/**', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-  await page.route('**/api/tasks/grouped**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        backlog: [],
-        preparation: [],
-        orchestratorPrep: [],
-        ready: [],
-        progress: [],
-        failedPickup: [],
-        codeNotComplete: [],
-        autoReview: [],
-        humanReview: [detail().info],
-        review: [],
-        completed: [],
-        archive: [],
-      }),
-    }));
-  await page.route('**/api/watch-paths**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([{ name: 'fixture', path: TARGET.watchPath, rootPath: TARGET.watchPath }]),
-    }));
-  await page.route('**/api/cli/quota**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ snapshots: [], ttlSeconds: 600 }),
-    }));
-  await page.route('**/api/runner/status**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ projects: { fixture: { projectName: 'fixture', mode: 'manual', activeJobId: null, activeExecution: null, queuedJobIds: [] } } }),
-    }));
-  await page.route(`**/api/tasks/${esc}/output**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: output }));
-  await page.route(`**/api/tasks/${esc}/output**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: output }));
-  await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
-  await page.route(`**/api/tasks/${esc}/pipeline**`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ pipeline: { pre: [], core: [], post: [], allSteps: [] }, execution: null, executions: [], config: {}, cost: null }),
-    }));
-  await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
-  await page.route(`**/api/tasks/${esc}/runs**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));
-  await page.route(`**/api/tasks/${esc}/session-events**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }));
-  await page.route(`**/api/tasks/${esc}/claude-session**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
-  await page.route(`**/api/tasks/${esc}?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail()) }));
+  await page.route('**/healthz**', route => route.fulfill({ status: 200, body: 'Healthy' }));
+  await page.route('**/api/auth/status**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+  }));
+  await page.route('**/api/crash-recovery/pending**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ pending: [] }),
+  }));
+  await page.route('**/api/projects/*/workbenches**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ projectName: TARGET.project, items: [] }),
+  }));
+  await page.route('**/api/tasks/reference-status**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: '[]',
+  }));
+  await page.route('**/api/tasks/grouped**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      backlog: [], preparation: [], orchestratorPrep: [], ready: [],
+      progress: [detail().info], failedPickup: [], codeNotComplete: [],
+      autoReview: [], humanReview: [], review: [], completed: [], archive: [],
+    }),
+  }));
+  await page.route('**/api/watch-paths**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ name: TARGET.project, path: TARGET.watchPath, rootPath: TARGET.watchPath }]),
+  }));
+  await page.route('**/api/runner/status**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      projects: {
+        [TARGET.project]: {
+          projectName: TARGET.project,
+          mode: 'manual',
+          activeJobId: TARGET.id,
+          activeExecution: detail().info.execution,
+          queuedJobIds: [],
+        },
+      },
+    }),
+  }));
+  await page.route('**/api/cli/quota**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ snapshots: [], ttlSeconds: 600 }),
+  }));
+  await page.route(`**/api/tasks/${encodedId}/output**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(buildOutputBuffer()),
+  }));
+  await page.route(`**/api/tasks/${encodedId}/plan**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(plan),
+  }));
+  await page.route(`**/api/tasks/${encodedId}/pipeline**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ pipeline: { pre: [], core: [], post: [], allSteps: [] }, execution: null, executions: [], config: {}, cost: null }),
+  }));
+  await page.route(`**/api/tasks/${encodedId}/runs**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ runs: [] }),
+  }));
+  await page.route(`**/api/tasks/${encodedId}/session-events**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ events: [], sessionChain: [] }),
+  }));
+  await page.route(`**/api/tasks/${encodedId}/claude-session**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: 'null',
+  }));
+  await page.route(`**/api/tasks/${encodedId}?**`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(detail()),
+  }));
+  await page.route('**/api/orchestrator/sessions**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ sessions: [] }),
+  }));
+  await page.route('**/api/orchestrator/context/**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      contextKey: `task:${TARGET.project}/${TARGET.key}`,
+      capturedAt: new Date().toISOString(),
+      digest: 'task focus: AGT-2641; progress run active',
+      sources: [],
+      taskPlan: plan,
+    }),
+  }));
+  await page.route('**/api/runner/**/orchestrator-chat**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ project: TARGET.project, turns: [] }),
+  }));
 }
 
-async function setFlag(page: Page, on: boolean): Promise<void> {
-  // `nextGenChat` is default-ON now: a missing key reads as opt-in, so the
-  // off-state must be written explicitly as '0' (mirrors writeExplicit in
-  // FeatureFlagsService) rather than removing the key.
-  await page.addInitScript((enable) => {
-    localStorage.setItem('atp.flag.nextGenChat', enable ? '1' : '0');
-  }, on);
+async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+  await page.evaluate(value => {
+    localStorage.setItem('atp.studio.theme', value);
+    document.documentElement.setAttribute('data-studio-theme', value);
+  }, theme);
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
 }
 
-async function openActivity(page: Page, job: { id: string; watchPath: string }): Promise<void> {
+test('TODO_LIST is one live Activity checklist and visible orchestrator context in both themes', async ({ page, devBackend: _ }) => {
+  mkdirSync(SHOTS_DIR, { recursive: true });
+  await page.addInitScript(() => {
+    localStorage.setItem('atp.flag.nextGenChat', '1');
+    localStorage.setItem('atp.studio.theme', 'light');
+  });
+  await installRoutes(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
-  const activityTab = page.getByTestId('inspector-tab-activity');
-  await expect(activityTab).toBeVisible({ timeout: 20_000 });
-  await activityTab.click();
-}
+  await page.goto(`/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`);
+  await page.getByTestId('inspector-tab-activity').click();
 
-test.describe('Activity tab compact view switcher', () => {
-  test('plan present (flag off): Plan is the only first-class tab', async ({ page }) => {
-    await setFlag(page, false);
-    await installRoutes(page, true);
-    await openActivity(page, TARGET);
+  const checklist = page.getByTestId('conversation-plan-update');
+  await expect(checklist).toHaveCount(1);
+  await expect(page.getByTestId('plan-progress')).toHaveText('1/3');
+  await expect(checklist.locator('[data-status="completed"]')).toContainText('Inspect the Activity projection');
+  await expect(checklist.locator('[data-status="in_progress"]')).toContainText('Integrate live task progress');
+  await expect(checklist.locator('[data-status="pending"]')).toContainText('Run the verification suite');
+  await expect(page.getByTestId('activity-view-tab-plan')).toHaveCount(0);
+  await expect(page.getByTestId('activity-panel').getByTestId('conversation-view'))
+    .not.toContainText('"type":"item.updated"');
 
-    const planTab = page.getByTestId('activity-view-tab-plan');
-    await expect(planTab).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
-    // Trace is no longer a primary tab.
-    await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
-    // The old Conversation test id was retired in favour of the user-facing CLI label.
-    await expect(page.getByTestId('activity-view-tab-conversation')).toHaveCount(0);
-    // Plan is the default sub-view when a plan exists.
-    await expect(planTab).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('plan-strip')).toBeVisible();
-    await expect(page.getByTestId('plan-item').first()).toBeVisible();
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await page.getByTestId('activity-panel').screenshot({
+      path: path.join(SHOTS_DIR, `todo-list-activity-${theme}.png`),
+    });
+  }
 
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'plan-default-flag-off--mocked.png'), fullPage: false });
-  });
+  await page.getByTestId('activity-toolbar-menu').click();
+  await page.getByTestId('activity-toolbar-menu-item-trace').click();
+  await expect(page.getByTestId('activity-log-trace')).toContainText('Codex item.updated todo_list');
+  await page.getByTestId('next-gen-chat-trace-back').click();
+  await expect(checklist).toHaveCount(1);
 
-  test('Trace overflow action hides the plan; Plan switch brings it back', async ({ page }) => {
-    await setFlag(page, false);
-    await installRoutes(page, true);
-    await openActivity(page, TARGET);
+  if (await page.locator('app-orchestrator-side-sheet.is-open').count() === 0) {
+    await page.getByTestId('orch-side-sheet-toggle').click();
+  }
+  const progress = page.getByTestId('orchestrator-task-progress');
+  await expect(progress).toBeVisible();
+  await expect(page.getByTestId('orchestrator-task-progress-count')).toContainText('1/3 complete');
+  await expect(progress.locator('[data-status="active"]')).toContainText('Integrate live task progress');
 
-    await expect(page.getByTestId('plan-strip')).toBeVisible({ timeout: 15_000 });
-
-    // Switch to Trace from the overflow menu: the raw activity-log body shows, the plan hides.
-    await page.getByTestId('activity-toolbar-menu').click();
-    const traceItem = page.getByTestId('activity-toolbar-menu-item-trace');
-    await expect(traceItem).toBeVisible();
-    await expect(page.getByTestId('activity-toolbar-menu-item-debug')).toContainText('Debug');
-    await expect(page.getByTestId('activity-toolbar-menu-item-conversation')).toContainText('Agent events');
-    await expect(page.getByTestId('activity-toolbar-menu-item-copy')).toContainText('Copy');
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'toolbar-menu-open--mocked.png'), fullPage: false });
-    await traceItem.click();
-    await expect(page.getByTestId('activity-log-body')).toBeVisible();
-    await expect(page.getByTestId('activity-log-trace')).toBeVisible();
-    await expect(page.getByTestId('plan-strip')).toHaveCount(0);
-    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
-
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'trace-after-switch--mocked.png'), fullPage: false });
-
-    // Back to Plan.
-    await page.getByTestId('activity-view-tab-plan').click();
-    await expect(page.getByTestId('plan-strip')).toBeVisible();
-    await expect(page.getByTestId('activity-log-body')).toHaveCount(0);
-  });
-
-  test('no plan (flag off): event body renders without an empty single-tab toggle', async ({ page }) => {
-    await setFlag(page, false);
-    await installRoutes(page, false);
-    await openActivity(page, TARGET);
-
-    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
-    await expect(page.getByTestId('activity-log-body')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('activity-log-conversation')).toBeVisible();
-    await expect(page.getByTestId('activity-view-tab-plan')).toHaveCount(0);
-    await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
-    await expect(page.getByTestId('plan-strip')).toHaveCount(0);
-
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'no-plan-events--mocked.png'), fullPage: false });
-  });
-
-  test('Agent events live in the context menu and render in both themes', async ({ page }) => {
-    await setFlag(page, true);
-    await installRoutes(page, false);
-    await openActivity(page, TARGET);
-
-    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
-    await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
-    await page.getByTestId('activity-toolbar-menu').click();
-    const eventsItem = page.getByTestId('activity-toolbar-menu-item-conversation');
-    await expect(eventsItem).toBeVisible();
-    await expect(eventsItem).toContainText('Agent events');
-    await eventsItem.click();
-    await expect(page.getByTestId('conversation-view')).toBeVisible({ timeout: 15_000 });
-
-    for (const theme of ['dark', 'light'] as const) {
-      await page.evaluate((value) => {
-        document.documentElement.dataset['studioTheme'] = value;
-        localStorage.setItem('atp.studio.theme', value);
-      }, theme);
-      await page.screenshot({ path: path.join(SHOTS_DIR, `agent-events-${theme}--mocked.png`), fullPage: false });
-    }
-  });
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await page.getByTestId('orch-side-sheet').screenshot({
+      path: path.join(SHOTS_DIR, `todo-list-orchestrator-${theme}.png`),
+    });
+  }
 });

@@ -81,6 +81,7 @@ public sealed class PlanReaderTests : IDisposable
         Assert.True(view.HasPlan);
         Assert.Equal("claude/TodoWrite", view.Source);
         Assert.Equal(3, view.SnapshotCount);
+        Assert.Equal(new DateTime(2026, 5, 31, 10, 0, 7, DateTimeKind.Utc), view.UpdatedAt);
         Assert.Equal(2, view.Items.Count);
 
         var a = view.Items.Single(i => i.Id == "aaaa1111");
@@ -183,5 +184,23 @@ public sealed class PlanReaderTests : IDisposable
         var view = PlanReader.Read(Info());
         Assert.True(view.HasPlan);
         Assert.Equal(1, view.Items.Single().SubActionCount);
+    }
+
+    [Fact]
+    public void NativeCodexTodoListSnapshotsUseSharedPersistenceAndDeduplicate()
+    {
+        const string first = """{"type":"item.started","item":{"type":"todo_list","items":[{"text":"Inspect","completed":false},{"text":"Verify","completed":false}]}}""";
+        const string second = """{"type":"item.updated","item":{"type":"todo_list","items":[{"text":"Inspect","completed":true},{"text":"Verify","completed":false}]}}""";
+        Assert.True(CodexTodoListFrameParser.TryParse(first, out var firstPlan));
+        Assert.True(CodexTodoListFrameParser.TryParse(second, out var secondPlan));
+
+        Assert.True(PlanSnapshotLog.Append(_root, firstPlan, new DateTime(2026, 8, 11, 10, 0, 0, DateTimeKind.Utc)));
+        Assert.False(PlanSnapshotLog.Append(_root, firstPlan, new DateTime(2026, 8, 11, 10, 0, 1, DateTimeKind.Utc)));
+        Assert.True(PlanSnapshotLog.Append(_root, secondPlan, new DateTime(2026, 8, 11, 10, 0, 2, DateTimeKind.Utc)));
+
+        var view = PlanReader.Read(Info());
+        Assert.Equal("codex/todo_list", view.Source);
+        Assert.Equal(2, view.SnapshotCount);
+        Assert.Equal(["done", "active"], view.Items.Select(item => item.Status));
     }
 }

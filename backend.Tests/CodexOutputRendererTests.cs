@@ -116,6 +116,32 @@ public class CodexOutputRendererTests
     }
 
     [Fact]
+    public void TodoListStarted_RendersTheCompleteNormalizedChecklist()
+    {
+        var lines = Render("""{"type":"item.started","item":{"type":"todo_list","items":[{"text":"Inspect Activity","completed":false},{"text":"Run tests","completed":false}]}}""");
+
+        var line = Assert.Single(lines);
+        Assert.Equal("Todo [active] Inspect Activity; [pending] Run tests", line.Text);
+        Assert.DoesNotContain("todo_list", line.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TodoListUpdated_RendersCompletedAndCurrentItems()
+    {
+        var lines = Render("""{"type":"item.updated","item":{"type":"todo_list","items":[{"text":"Inspect Activity","completed":true},{"text":"Run tests","completed":false}]}}""");
+
+        Assert.Equal("Todo [done] Inspect Activity; [active] Run tests", Assert.Single(lines).Text);
+    }
+
+    [Fact]
+    public void NonTodoItemUpdated_IsSuppressed()
+    {
+        var lines = Render("""{"type":"item.updated","item":{"type":"command_execution","command":"dotnet test"}}""");
+
+        Assert.Empty(lines);
+    }
+
+    [Fact]
     public void ItemCompleted_AgentMessage_SplitsMultiLineText()
     {
         var lines = Render("""{"type":"item.completed","item":{"type":"agent_message","text":"Hello\nWorld"}}""");

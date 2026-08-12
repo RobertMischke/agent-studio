@@ -9,6 +9,8 @@ export interface TaskPlanView {
   hasPlan: boolean;
   source: string | null;
   snapshotCount: number;
+  /** Timestamp of the latest complete snapshot. Older servers may omit it. */
+  updatedAt?: string | null;
   activeItemId: string | null;
   /** Median sub-action count across already-done items; null below two samples. */
   softEstimateMedian: number | null;

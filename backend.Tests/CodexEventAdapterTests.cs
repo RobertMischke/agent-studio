@@ -124,6 +124,24 @@ public class CodexEventAdapterTests
     }
 
     [Fact]
+    public void ItemUpdatedTodoList_EmitsPlanUpdatedWithoutUnknownFallback()
+    {
+        const string frame = """
+        {"type":"item.updated","item":{"type":"todo_list","items":[
+          {"text":"Inspect Activity","completed":true},
+          {"text":"Integrate progress","completed":false},
+          {"text":"Run tests","completed":false}]}}
+        """;
+
+        var events = BuiltInCliBehaviors.MapCodexFrame(frame, Jk).ToList();
+        var plan = Assert.Single(events.OfType<CliRunEvent.PlanUpdated>());
+        Assert.DoesNotContain(events, evt => evt is CliRunEvent.Unknown);
+        Assert.Equal("codex/todo_list", plan.Source);
+        Assert.Equal(["done", "active", "pending"], plan.Items.Select(item => item.Status));
+        Assert.Equal("Integrate progress", plan.Items[1].Title);
+    }
+
+    [Fact]
     public void UpdatePlanContentAlias_IsAcceptedAsStepTitle()
     {
         const string frame = """

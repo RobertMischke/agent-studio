@@ -54,6 +54,15 @@ public sealed class CliProtocolNoveltyTests
     }
 
     [Fact]
+    public void Native_codex_todo_list_updates_are_part_of_the_known_frame_corpus()
+    {
+        var tracker = new CliProtocolNoveltyTracker("codex");
+        const string frame = """{"type":"item.updated","item":{"type":"todo_list","items":[{"text":"Run tests","completed":false}]}}""";
+
+        Assert.False(tracker.TryObserveFrame(frame, out _));
+    }
+
+    [Fact]
     public void V1_event_classification_uses_the_protocol_novelty_kind()
     {
         var marker = new ProtocolNoveltyTelemetry(

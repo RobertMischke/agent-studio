@@ -122,11 +122,20 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
                 yield break;
             }
             case "item.started":
-                // Suppress: item.completed renders the same item; emitting both
-                // would double every tool line in the Activity Log.
+            case "item.updated":
+                // todo_list is a full plan snapshot and each update must reach
+                // the semantic Activity projection. Other started/updated item
+                // frames stay suppressed to avoid duplicate tool rows.
+                if (CodexTodoListFrameParser.TryParse(raw.Text, out var livePlan))
+                    yield return raw with { Text = CodexTodoListFrameParser.RenderMarker(livePlan) };
                 yield break;
             case "item.completed":
             {
+                if (CodexTodoListFrameParser.TryParse(raw.Text, out var finalPlan))
+                {
+                    yield return raw with { Text = CodexTodoListFrameParser.RenderMarker(finalPlan) };
+                    yield break;
+                }
                 foreach (var line in RenderItem(raw, root))
                     yield return line;
                 yield break;

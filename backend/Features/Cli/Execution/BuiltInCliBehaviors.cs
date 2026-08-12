@@ -953,6 +953,14 @@ internal static class BuiltInCliBehaviors
     internal static IEnumerable<CliRunEvent> MapCodexFrame(string text, string jobKey)
     {
         var events = CodexEventAdapter.Map(text, jobKey).ToList();
+        if (CodexTodoListFrameParser.TryParse(text, out var todoList))
+        {
+            // CodingAgentRunner versions predating Codex's todo_list family
+            // surface item.updated as Unknown. Keep any useful typed events,
+            // discard only that raw fallback, and add the semantic snapshot.
+            events.RemoveAll(evt => evt is CliRunEvent.Unknown);
+            if (!events.OfType<CliRunEvent.PlanUpdated>().Any()) events.Add(todoList);
+        }
         var command = TryExtractCommandExecution(text);
         if (command?.ExitCode is not int exitCode || exitCode == 0) return events;
 

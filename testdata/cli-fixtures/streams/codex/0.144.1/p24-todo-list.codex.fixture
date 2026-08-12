@@ -1,0 +1,8 @@
+#! {"schemaVersion":1,"scenario":"P24","title":"native todo_list snapshots update a live checklist","cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-08-11","scrubbed":true}
+{"type":"thread.started","thread_id":"019dee99-1142-7ee2-9e94-35be499af124"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the current Activity projection","completed":false},{"text":"Integrate live task progress","completed":false},{"text":"Run the verification suite","completed":false}]}}
+{"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the current Activity projection","completed":true},{"text":"Integrate live task progress","completed":false},{"text":"Run the verification suite","completed":false}]}}
+{"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the current Activity projection","completed":true},{"text":"Integrate live task progress","completed":true},{"text":"Run the verification suite","completed":false}]}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"The live checklist and task context are ready.\n[[TASK_DONE]]"}}
+{"type":"turn.completed","usage":{"input_tokens":2450,"cached_input_tokens":1600,"output_tokens":280}}

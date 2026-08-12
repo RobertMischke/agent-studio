@@ -168,6 +168,14 @@ public sealed class ParityFixtureTests
                 ExecutionOutcomeKind.SuccessfulCompletion,
                 ExecutionRecoveryAction.RetryHandoff
             },
+            {
+                "p24-todo-list.codex.fixture",
+                RunOutcomeKind.Done,
+                null,
+                "4-auto-review",
+                ExecutionOutcomeKind.SuccessfulCompletion,
+                ExecutionRecoveryAction.RetryHandoff
+            },
         };
 
     [Theory]
@@ -342,6 +350,22 @@ public sealed class ParityFixtureTests
         }
 
         Assert.True(problems.Count == 0, string.Join("\n  ", problems));
+    }
+
+    [Fact]
+    public void P24_records_started_and_updated_native_todo_list_snapshots()
+    {
+        var fixture = CliFixture.Load("p24-todo-list.codex.fixture");
+        var frames = fixture.StdOut
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => JsonDocument.Parse(line).RootElement.Clone())
+            .ToList();
+
+        Assert.Contains(frames, frame => frame.GetProperty("type").GetString() == "item.started"
+            && frame.GetProperty("item").GetProperty("type").GetString() == "todo_list");
+        Assert.Equal(2, frames.Count(frame => frame.GetProperty("type").GetString() == "item.updated"
+            && frame.GetProperty("item").GetProperty("type").GetString() == "todo_list"));
+        Assert.Equal(RunOutcomeKind.Done, SentinelScanner.Scan(fixture.StdOut).Kind);
     }
 
     /// <summary>

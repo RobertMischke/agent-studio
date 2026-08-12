@@ -105,6 +105,7 @@ internal static class PlanReader
             HasPlan = true,
             Source = latest.Source,
             SnapshotCount = snapshots.Count,
+            UpdatedAt = latest.Ts,
             ActiveItemId = activeItemId,
             SoftEstimateMedian = median,
             Items = items,

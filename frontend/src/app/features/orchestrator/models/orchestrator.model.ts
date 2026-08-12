@@ -1,3 +1,5 @@
+import type { TaskPlanView } from '../../plan-strip/plan.model';
+
 /**
  * Cycle 9 orchestrator feature models. Lifted out of `models/job.model.ts`
  * per ADR-0034. Re-exported from the legacy file so existing imports
@@ -119,6 +121,8 @@ export interface OrchestratorContextDigest {
   capturedAt: string;
   digest: string;
   sources: OrchestratorContextDigestSource[];
+  /** Current native agent plan for task scope; absent for project/global scope. */
+  taskPlan?: TaskPlanView | null;
 }
 
 /**

@@ -86,6 +86,13 @@ public sealed class TaskHubBroadcaster
 
     private void OnBulkChanged() => Send("jobsBulkChanged");
 
+    /// <summary>
+    /// Nudge task-detail and orchestrator clients after a remote runner has
+    /// durably appended a new plan snapshot.
+    /// </summary>
+    public void PlanUpdated(TaskInfo task, string cliType)
+        => SendProject(task.ProjectName, "planUpdated", task.Id, cliType);
+
     private void BroadcastInfo(string method, TaskChangeEvent e)
     {
         // Resolve the canonical TaskInfo so the client can merge the row in

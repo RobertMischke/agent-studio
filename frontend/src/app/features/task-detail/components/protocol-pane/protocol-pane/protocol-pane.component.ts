@@ -34,7 +34,6 @@ import { RunTimelinePollService } from '../../../../polling/services/run-timelin
 import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
 import { ScreenshotsPollService } from '../../../../polling/services/screenshots-poll.service';
 import { PlanPollService } from '../../../../polling/services/plan-poll.service';
-import { PlanStripComponent } from '../../../../plan-strip/plan-strip.component';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { RunTimelineComponent } from '../run-timeline/run-timeline.component';
 import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.component';
@@ -70,11 +69,11 @@ import { projectStructuredActivityContent } from '../structured-activity-project
 import { TaskInspectorTabComponent } from '../task-inspector-tab/task-inspector-tab.component';
 import { DecisionSurfaceComponent } from '../../decision-surface/decision-surface.component';
 import { TaskArtifactLinksDirective } from '../../task-artifact-links/task-artifact-links.directive';
+import { withLivePlanSnapshot, withoutRawCodexTodoListFrames } from '../activity-plan-projection';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
-import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
@@ -85,10 +84,10 @@ export type InspectorTab = 'task' | 'activity' | 'protocol';
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the compact
  * CLI conversation/output renderer, or the raw Trace (legacy activity-log view).
- * Trace is reached from the Activity overflow menu; the primary segmented
- * toggle stays intentionally small: Plan | CLI.
+ * Trace is reached from the Activity overflow menu. The semantic conversation
+ * remains the primary view, including the live plan checklist.
  */
-export type ActivityView = 'plan' | 'conversation' | 'trace';
+export type ActivityView = 'conversation' | 'trace';
 
 /**
  * Transient interim-summary result shown while a job is running. Generated
@@ -115,7 +114,6 @@ interface InterimSummaryState {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ActivityLogViewComponent,
-    PlanStripComponent,
     ConversationViewComponent,
     RunTimelineComponent,
     RunGitViewerComponent,
@@ -693,41 +691,16 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly activityMenuAnchor = signal<HTMLElement | null>(null);
   readonly activityDebugEnabled = signal(false);
 
-  /** True once a usable task plan exists - mirrors `PlanStripComponent.visible`. */
-  readonly planAvailable = computed<boolean>(() => {
-    const p = this.plan();
-    return !!p && p.hasPlan && p.items.length > 0;
-  });
-
   /** The compact CLI sub-view is always available; next-gen chat is only its preferred renderer. */
   readonly conversationAvailable = computed<boolean>(() => true);
   readonly nextGenConversationEnabled = computed<boolean>(() => this.featureFlags.nextGenChat());
 
   /** Sub-view shown when the user has not picked one explicitly. */
-  readonly defaultActivityView = computed<ActivityView>(() => {
-    if (this.planAvailable()) return 'plan';
-    return 'conversation';
-  });
+  readonly defaultActivityView = computed<ActivityView>(() => 'conversation');
 
   /** Effective Activity sub-view: the user's pick if still valid, else the default. */
   readonly activityView = computed<ActivityView>(() => {
-    const picked = this.activityViewOverride();
-    if (picked === 'plan' && !this.planAvailable()) return this.defaultActivityView();
-    return picked ?? this.defaultActivityView();
-  });
-
-  readonly activityPrimaryTabs = computed<PaneTabDef[]>(() => {
-    const tabs: PaneTabDef[] = [];
-    if (this.planAvailable()) {
-      tabs.push({ id: 'plan', label: 'Plan', testid: 'activity-view-tab-plan' });
-    }
-    return tabs;
-  });
-
-  readonly activityPrimaryTabId = computed<string>(() => {
-    const view = this.activityView();
-    if (view === 'plan') return 'plan';
-    return 'conversation';
+    return this.activityViewOverride() ?? this.defaultActivityView();
   });
 
   readonly activityMenuItems = computed<readonly MenuItem[]>(() => [
@@ -757,14 +730,6 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   setActivityView(view: ActivityView): void {
     this.activityViewOverride.set(view);
-  }
-
-  onActivityPrimaryTabChange(id: string): void {
-    if (id === 'plan') {
-      this.setActivityView('plan');
-    } else if (id === 'conversation' || id === 'cli') {
-      this.setActivityView('conversation');
-    }
   }
 
   openActivityMenu(event: MouseEvent): void {
@@ -809,8 +774,8 @@ export class ProtocolPaneComponent implements OnDestroy {
    */
   readonly baseNextGenChatEvents = computed<ConversationEvent[]>(() => {
     if (!this.featureFlags.nextGenChat()) return [];
-    const filtered = this.filteredCliOutput();
-    if (filtered.length === 0 && !this.runTimeline() && !this.screenshots().length) {
+    const filtered = withoutRawCodexTodoListFrames(this.filteredCliOutput());
+    if (filtered.length === 0 && !this.runTimeline() && !this.screenshots().length && !this.plan()?.hasPlan) {
       return [];
     }
     const info = this.detail().info;
@@ -855,7 +820,11 @@ export class ProtocolPaneComponent implements OnDestroy {
         fallbackWorktreeRoot: info.executionLocation?.worktreePath,
       },
     );
-    return mergeReplayEvents(presented, replay.timelineEvents);
+    return withLivePlanSnapshot(
+      mergeReplayEvents(presented, replay.timelineEvents),
+      this.plan(),
+      info.id,
+    );
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {
@@ -936,32 +905,11 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   private activityCopyText(): string {
     switch (this.activityView()) {
-      case 'plan':
-        return this.planCopyText();
       case 'trace':
         return this.traceCopyText();
       default:
         return this.cliCopyText();
     }
-  }
-
-  private planCopyText(): string {
-    const p = this.plan();
-    if (!p || !p.hasPlan || p.items.length === 0) return '';
-    const lines = [`Task plan (${p.source || 'plan'})`];
-    for (const item of p.items) {
-      lines.push(`[${item.status}] ${item.title}`);
-      for (const sub of item.subActions) {
-        lines.push(`  - ${sub.tool}: ${sub.label ?? sub.tool}`);
-      }
-    }
-    if (p.unassignedSubActions.length > 0) {
-      lines.push('Before plan');
-      for (const sub of p.unassignedSubActions) {
-        lines.push(`  - ${sub.tool}: ${sub.label ?? sub.tool}`);
-      }
-    }
-    return lines.join('\n');
   }
 
   private cliCopyText(): string {

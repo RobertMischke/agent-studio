@@ -82,6 +82,7 @@ public sealed class OrchestratorContextDigestService
         var watcher = ReadWatcherHealth();
         var decisions = ReadDecisions(projectNames);
         var ownershipMappings = ReadOwnershipMappings(projectNames);
+        var taskPlan = focusTask == null ? null : PlanReader.Read(focusTask);
 
         var data = new OrchestratorContextDigestData(
             context,
@@ -100,7 +101,8 @@ public sealed class OrchestratorContextDigestService
             context.Value,
             capturedAt,
             RenderDigest(data),
-            BuildSourceStatuses(data));
+            BuildSourceStatuses(data),
+            taskPlan);
 
         _logger.LogInformation(
             "orchestrator_context_digest_built contextKey={ContextKey} forceQuotaRefresh={ForceQuotaRefresh} durationMs={DurationMs} scopedTasks={ScopedTasks} projects={Projects}",
@@ -588,7 +590,8 @@ public sealed record OrchestratorContextDigestResponse(
     string ContextKey,
     DateTime CapturedAt,
     string Digest,
-    IReadOnlyList<OrchestratorDigestSourceStatus> Sources);
+    IReadOnlyList<OrchestratorDigestSourceStatus> Sources,
+    TaskPlanView? TaskPlan = null);
 
 /// <summary>Freshness and degradation metadata for one digest section.</summary>
 public sealed record OrchestratorDigestSourceStatus(

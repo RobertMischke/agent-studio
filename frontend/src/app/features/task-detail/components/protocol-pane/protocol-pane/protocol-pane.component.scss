@@ -882,18 +882,6 @@
 }
 
 /*
- * Plan toggle in the Activity toolbar. The pane-tabs `pill`
- * variant owns the chrome; this host keeps it flush with the overflow actions
- * so the toolbar reads as one row.
- */
-.activity-view-toggle {
-  display: inline-flex;
-  margin: 0;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-/*
  * Activity rows render at their real height. Keep the conversation in normal
  * flow so `.pane__body` remains the one scroll owner; the shared Follow
  * directive resolves that ancestor and leaves its scrollTop unchanged after
@@ -967,4 +955,39 @@ cac-conversation-view {
   .conv__row--system-status[data-category='runner'] .status-row__text {
     color: inherit;
   }
+
+  /* The event and item ids stay stable across snapshots. When a status
+     attribute changes, briefly tint the whole item to expose the delta. */
+  .conv__row--plan .plan__item[data-status='pending'] {
+    animation: activity-plan-delta-pending 1.1s ease-out;
+  }
+
+  .conv__row--plan .plan__item[data-status='in_progress'] {
+    animation: activity-plan-delta-active 1.1s ease-out;
+  }
+
+  .conv__row--plan .plan__item[data-status='completed'] {
+    animation: activity-plan-delta-done 1.1s ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .conv__row--plan .plan__item {
+      animation: none;
+    }
+  }
+}
+
+@keyframes activity-plan-delta-pending {
+  from { background: color-mix(in srgb, var(--studio-fg) 8%, transparent); }
+  to { background: transparent; }
+}
+
+@keyframes activity-plan-delta-active {
+  from { background: color-mix(in srgb, var(--studio-accent) 18%, transparent); }
+  to { background: transparent; }
+}
+
+@keyframes activity-plan-delta-done {
+  from { background: color-mix(in srgb, var(--studio-accent-success) 18%, transparent); }
+  to { background: transparent; }
 }

@@ -1,0 +1,36 @@
+@if (visible()) {
+  <section class="task-progress"
+           data-testid="orchestrator-task-progress"
+           aria-labelledby="orchestrator-task-progress-title">
+    <header class="task-progress__header">
+      <div class="task-progress__title-line">
+        <h3 id="orchestrator-task-progress-title">Agent progress</h3>
+        @if (isRunning()) {
+          <span class="task-progress__live"><span aria-hidden="true"></span>Live</span>
+        }
+      </div>
+      <span class="task-progress__count" data-testid="orchestrator-task-progress-count">
+        {{ doneCount() }}/{{ plan()!.items.length }} complete
+      </span>
+    </header>
+
+    <div class="task-progress__bar"
+         role="progressbar"
+         aria-label="Agent plan progress"
+         [attr.aria-valuenow]="doneCount()"
+         aria-valuemin="0"
+         [attr.aria-valuemax]="plan()!.items.length">
+      <span [style.width.%]="progressPercent()"></span>
+    </div>
+
+    <ul class="task-progress__items">
+      @for (item of plan()!.items; track item.id) {
+        <li [attr.data-status]="item.status" data-testid="orchestrator-task-progress-item">
+          <span class="task-progress__glyph" aria-hidden="true">{{ glyph(item.status) }}</span>
+          <span class="task-progress__label">{{ item.title }}</span>
+          <span class="task-progress__status">{{ statusLabel(item.status) }}</span>
+        </li>
+      }
+    </ul>
+  </section>
+}

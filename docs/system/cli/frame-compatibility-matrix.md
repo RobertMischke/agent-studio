@@ -42,7 +42,7 @@ The remote Agent Host processes a line in this order:
 | Agent Host CLI selection | Only `claude` and `codex` use the remote CAR worker. | A new remote CLI must add an explicit vocabulary and capture baseline. Unknown configured names fail validation. |
 | CAR callbacks | CAR 0.7.0 emits its typed callback before the matching raw-output callback. | Callback order is pinned by bridge tests. Host novelty detection uses the raw line so adapter classification cannot hide drift. |
 | Claude frames | Known top-level types are `system`, `assistant`, `user`, `result`, and `rate_limit_event`. | Any other structured type produces a novelty event even if the run later completes. |
-| Codex frames | Known top-level types are `thread.started`, `turn.started`, `turn.completed`, `turn.failed`, `session_meta`, `rate_limits`, `item.started`, and `item.completed`. Known nested item types are `agent_message`, `reasoning`, `command_execution`, `command_call`, `local_shell_call`, `file_change`, `web_search`, `update_plan`, and `todo`. | A new top-level type or nested `item.type` produces a novelty event. |
+| Codex frames | Known top-level types are `thread.started`, `turn.started`, `turn.completed`, `turn.failed`, `session_meta`, `rate_limits`, `item.started`, `item.updated`, and `item.completed`. Known nested item types are `agent_message`, `reasoning`, `command_execution`, `command_call`, `local_shell_call`, `file_change`, `web_search`, `update_plan`, `todo`, and `todo_list`. | A new top-level type or nested `item.type` produces a novelty event. Native `todo_list` frames carry a full checklist snapshot; completed entries become `done`, the first open entry becomes `active`, and later open entries remain `pending`. |
 | Provider terminal extraction | Completion types are `result`, `turn.completed`, and `response.completed`; failure types include `error`, `turn.failed`, and `response.failed`. Codex final text comes from `item.completed/agent_message`. | Exact type matching is replayed for every captured CLI version. An unknown frame does not become terminal evidence by accident. |
 | Sentinel extraction | The last terminal sentinel in final assistant output wins. Raw stdout is used only when no structured final assistant text exists. | Tool arguments that merely contain a sentinel cannot override the actual final response. Fixture P1 through P5 pin this boundary. |
 | Outcome classification | Explicit blocker, quota/auth/config failures, provider completion, crash facts, and delivery state are combined by `execution-outcome/v1`. | Direct matrix tests and the replay corpus pin both the outcome and recovery action. |
@@ -55,7 +55,7 @@ The remote Agent Host processes a line in this order:
 | CLI and version | Observed stream vocabulary | Terminal and quota behavior | Replay coverage |
 |---|---|---|---|
 | Claude Code 2.1.202 | `system/init`, `assistant`, `user`, `result`, and informational `rate_limit_event`; the rate-limit payload occurs with camel-case and snake-case fields. | `result` supplies completion or provider failure. Informational rate-limit frames do not override a later successful terminal. | P1 Done, P2 NoOp, P3 Blocked, P4 NeedsInput, P5 provider completion without sentinel, P9 crash, P22 rate-limit casing, P23 unknown frame. Plaintext P1 and P5 preserve the former launch form. |
-| Codex 0.144.1 | `thread.started`, `turn.*`, `item.*`, and legacy `session_meta`; assistant output is `item.completed/agent_message`. | `turn.completed` is terminal completion. The recorded quota case is a terminal `turn.failed`, so it derives `QuotaExceeded` and `WaitForCapabilityRecovery`. | P1 Done, P2 NoOp, P3 Blocked, P4 NeedsInput, P5 provider completion without sentinel, P9 crash, P22 quota, P23 unknown nested item. |
+| Codex 0.144.1 | `thread.started`, `turn.*`, `item.*`, and legacy `session_meta`; assistant output is `item.completed/agent_message`. `item.started` and `item.updated` with nested `todo_list` contain the agent's current plan. | `turn.completed` is terminal completion. The recorded quota case is a terminal `turn.failed`, so it derives `QuotaExceeded` and `WaitForCapabilityRecovery`. TODO snapshots are progress evidence only and never override terminal evidence. | P1 Done, P2 NoOp, P3 Blocked, P4 NeedsInput, P5 provider completion without sentinel, P9 crash, P22 quota, P23 unknown nested item, P24 native TODO list. |
 | Antigravity, persisted as `gemini` | Studio-only legacy `agentapi` protocol. | Not executed by the remote Agent Host. | No runner semantic baseline. A versioned capture is required before remote support. |
 | Copilot | Integration removed. | No active outcome contract. | Historical only; do not add new fixtures. |
 
@@ -78,8 +78,8 @@ Unknown structured frames must never be silently swallowed. The runner emits
 one typed telemetry record for every occurrence with:
 
 - CLI and CAR adapter version
-- scrubbed top-level type, or `item.started/<item-type>` /
-  `item.completed/<item-type>` for Codex
+- scrubbed top-level type, or `item.started/<item-type>`,
+  `item.updated/<item-type>`, or `item.completed/<item-type>` for Codex
 - per-type occurrence and total unknown-frame counters for that run
 - SHA-256 of the complete provider line
 
@@ -103,6 +103,11 @@ This is one vocabulary at two layers:
 | Runner in Agent Studio | Provider semantics, terminal evidence, typed outcomes, recovery, delivery verification, and novelty telemetry |
 | [CAC](../architecture/project-map.md#cac-coding-agent-chat) | Rendering the same captured frames into chat and tool-call presentation |
 
+Only Codex currently emits the `todo_list` frame family. CLIs without a native
+plan frame continue normally with no checklist or task-progress block; absence
+of that optional evidence is not protocol drift and does not affect outcome
+classification.
+
 The parallel CAC fixture-rendering matrix should index these paths rather than
 copy or rewrite the captures. Rendering-specific expected output may live in
 CAC, but provider bytes and version metadata remain shared.
@@ -121,4 +126,3 @@ CAC, but provider bytes and version metadata remain shared.
    exposes those paths.
 5. Update this matrix and the CAC rendering matrix against the same fixture
    identity.
-

@@ -16,6 +16,7 @@ public sealed class OrchestratorTaskPromptContextComposer
     internal const int PromptTokenLimit = 1_800;
     internal const int StatusTokenLimit = 1_800;
     internal const int RunOutcomeTokenLimit = 256;
+    internal const int PlanTokenLimit = 512;
     private const int EstimatedCharactersPerToken = 4;
 
     private readonly TaskScannerService _scanner;
@@ -92,6 +93,19 @@ public sealed class OrchestratorTaskPromptContextComposer
             blocks.Add(RenderBoundedBlock("status.md", detail.StatusMarkdown, StatusTokenLimit));
         }
 
+        if (!string.IsNullOrWhiteSpace(info.FolderPath))
+        {
+            var plan = PlanReader.Read(info);
+            if (plan.HasPlan && plan.Items.Count > 0)
+            {
+                included.Add("current agent plan");
+                blocks.Add(RenderBoundedBlock(
+                    "CURRENT AGENT PLAN",
+                    RenderCurrentPlan(plan),
+                    PlanTokenLimit));
+            }
+        }
+
         included.Add("last run outcome");
         blocks.Add(RenderBoundedBlock(
             "LAST RUN OUTCOME",
@@ -125,6 +139,17 @@ public sealed class OrchestratorTaskPromptContextComposer
             ? normalized[..Math.Max(0, characterLimit - 20)].TrimEnd() + "\n[content truncated]"
             : normalized;
         return $"--- {label} (limit: {tokenLimit.ToString(CultureInfo.InvariantCulture)} estimated tokens; truncated: {(truncated ? "yes" : "no")}) ---\n{bounded}\n--- END {label} ---";
+    }
+
+    internal static string RenderCurrentPlan(TaskPlanView plan)
+    {
+        var done = plan.Items.Count(item => item.Status == "done");
+        var lines = new List<string>
+        {
+            $"Progress: {done.ToString(CultureInfo.InvariantCulture)}/{plan.Items.Count.ToString(CultureInfo.InvariantCulture)} complete"
+        };
+        lines.AddRange(plan.Items.Select(item => $"[{item.Status}] {item.Title}"));
+        return string.Join("\n", lines);
     }
 
     private static string RenderLastRunOutcome(TaskInfo info)

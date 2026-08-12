@@ -256,6 +256,8 @@ public record TaskPlanView
     public string? Source { get; init; }
     /// <summary>Number of plan snapshots observed for this job.</summary>
     public int SnapshotCount { get; init; }
+    /// <summary>Timestamp of the latest complete plan snapshot.</summary>
+    public DateTime? UpdatedAt { get; init; }
     /// <summary>Id of the single item currently <c>active</c>, or null when none is.</summary>
     public string? ActiveItemId { get; init; }
     /// <summary>Median sub-action count of already-<c>done</c> siblings; null below two samples (no estimate band drawn).</summary>
