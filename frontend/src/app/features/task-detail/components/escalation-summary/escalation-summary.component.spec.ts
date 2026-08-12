@@ -205,6 +205,57 @@ describe('EscalationSummaryComponent', () => {
     expect(el.querySelector('[data-testid="escalation-delivery"]')).toBeNull();
     expect(el.querySelector('[data-testid="escalation-essence"]')?.textContent).toContain('0 open findings');
   });
+
+  it('renders one readable pending segment when integration and release use main', () => {
+    const base = detail();
+    const sameTarget = {
+      ...base,
+      info: {
+        ...base.info,
+        integration: { status: 'pending', integrationBranch: 'main' },
+        mergeSignal: {
+          ...base.info.mergeSignal,
+          inIntegration: false,
+          inRelease: false,
+          integrationBranch: 'main',
+          releaseBranch: 'main',
+          integrationSha: null,
+          releaseSha: null,
+        },
+      },
+    } as TaskDetail;
+    const el: HTMLElement = mount({ reviews: [], detail: sameTarget }).nativeElement;
+    const segments = el.querySelectorAll('[data-testid="escalation-merge-segment"]');
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0].textContent?.trim()).toBe('main · pending');
+    expect(segments[0].getAttribute('data-state')).toBe('pending');
+    expect(el.querySelector('[data-testid="escalation-essence-merge"]')?.getAttribute('aria-label')).toBe(
+      'Merge status: not in main',
+    );
+  });
+
+  it('renders one readable merged segment for a same-target branch', () => {
+    const base = detail();
+    const sameTarget = {
+      ...base,
+      info: {
+        ...base.info,
+        integration: { status: 'integrated', integrationBranch: 'main', sha: 'b2ed3f4' },
+        mergeSignal: {
+          ...base.info.mergeSignal,
+          integrationBranch: 'main',
+          releaseBranch: 'main',
+        },
+      },
+    } as TaskDetail;
+    const el: HTMLElement = mount({ reviews: [], detail: sameTarget }).nativeElement;
+    const segments = el.querySelectorAll('[data-testid="escalation-merge-segment"]');
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0].textContent?.trim()).toBe('main ✓ merged');
+    expect(segments[0].getAttribute('data-state')).toBe('merged');
+  });
 });
 
 describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {

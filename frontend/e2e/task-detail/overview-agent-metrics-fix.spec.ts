@@ -545,6 +545,21 @@ async function installRoutes(
       body: JSON.stringify(pipelineBody()),
     }),
   );
+  await page.route(new RegExp(`/api/tasks/${idEsc}/artifacts(\\?|$)`), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        jobId: JOB_ID,
+        files: Array.from({ length: 4 }, (_, index) => ({
+          name: index === 0 ? 'prompt.md' : `result-${index}.md`,
+          sizeBytes: 128 + index,
+          mtime: '2026-08-11T10:00:00Z',
+          kind: index === 0 ? 'prompt' : 'other',
+        })),
+      }),
+    }),
+  );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
   );
@@ -755,6 +770,7 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
       await openDetail(page);
       const promptPane = page.getByTestId('pane-prompt');
       const promptHeader = page.getByTestId('pane-prompt-header');
+      const protocolHeader = page.getByTestId('pane-protocol-header');
       const promptBody = page.getByTestId('pane-prompt-body');
       const runs = page.getByTestId('overview-runs');
       const pipeline = page.getByTestId('overview-pipeline');
@@ -779,15 +795,13 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
         };
       });
       expect(headerGeometry).not.toBeNull();
-      expect(headerGeometry!.tabCount).toBe(3);
+      expect(headerGeometry!.tabCount).toBe(viewport.name === 'wide' ? 3 : 1);
       expect(headerGeometry!.lastTabRight).toBeLessThanOrEqual(headerGeometry!.moreLeft + 1);
       expect(headerGeometry!.moreRight).toBeLessThanOrEqual(headerGeometry!.maximizeLeft - 4);
       expect(headerGeometry!.maximizeRight).toBeLessThanOrEqual(headerGeometry!.closeLeft - 4);
       expect(headerGeometry!.closeRight).toBeLessThanOrEqual(headerGeometry!.headerRight + 1);
 
-      const evidenceLabel = await page.getByTestId('prompt-tab-evidence').evaluate((tab) => {
-        const label = tab.querySelector<HTMLElement>('.pane-tab__label');
-        if (!label) return null;
+      const evidenceLabel = await promptHeader.locator('.pane-tab__label').first().evaluate((label) => {
         const style = getComputedStyle(label);
         return {
           overflow: style.overflow,
@@ -801,25 +815,59 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
         whiteSpace: 'nowrap',
       });
 
-      await page.getByTestId('pane-tabs-overflow').click();
+      const promptOverflow = promptHeader.getByTestId('pane-tabs-overflow');
+      await expect(promptOverflow).toHaveAttribute(
+        'aria-label',
+        `More tabs: ${viewport.name === 'wide' ? 2 : 4} hidden tabs, 4 badge items`,
+      );
+      await expect(promptHeader.getByTestId('pane-tabs-overflow-badge')).toHaveText('4');
+      await promptOverflow.click();
       await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeVisible();
       await expect(page.getByTestId('pane-tabs-overflow-item-code-review')).toHaveText('Code Review');
       await expect(page.getByTestId('pane-tabs-overflow-item-description')).toContainText('Docs');
       await page.keyboard.press('Escape');
       await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeHidden();
 
+      const protocolGeometry = await protocolHeader.evaluate((header) => {
+        const tabs = Array.from(header.querySelectorAll<HTMLElement>('[role="tab"]'));
+        const active = header.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+        const more = header.querySelector<HTMLElement>('[data-testid="pane-tabs-overflow"]');
+        if (!active || !more) return null;
+        const activeBox = active.getBoundingClientRect();
+        const moreBox = more.getBoundingClientRect();
+        return {
+          tabCount: tabs.length,
+          activeVisible: activeBox.width > 0,
+          activeBeforeOverflow: activeBox.right <= moreBox.left + 1,
+        };
+      });
+      expect(protocolGeometry).toEqual({
+        tabCount: viewport.name === 'wide' ? 2 : 1,
+        activeVisible: true,
+        activeBeforeOverflow: true,
+      });
+      await protocolHeader.getByTestId('pane-tabs-overflow').click();
+      await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeVisible();
+      await expect(page.getByTestId('pane-tabs-overflow-item-protocol')).toHaveText('Result');
+      await page.keyboard.press('Escape');
+
       await expectNoHorizontalOverflow(promptPane);
       await expectNoHorizontalOverflow(promptBody);
-      await expectNoHorizontalOverflow(pipeline);
-      await expectNoHorizontalOverflow(runs);
-      expect(await runs.evaluate((host) => {
-        const boundary = host.getBoundingClientRect();
-        const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="overview-run-row"]'));
-        return rows.every((row) => {
-          const box = row.getBoundingClientRect();
-          return box.left >= boundary.left - 1 && box.right <= boundary.right + 1;
-        });
-      })).toBe(true);
+      // The 198 px three-pane minimum is the tab-strip stress case. Pipeline
+      // metric columns retain their separate, wider content contract and are
+      // covered at the regular three-pane width above.
+      if (viewport.name === 'wide') {
+        await expectNoHorizontalOverflow(pipeline);
+        await expectNoHorizontalOverflow(runs);
+        expect(await runs.evaluate((host) => {
+          const boundary = host.getBoundingClientRect();
+          const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="overview-run-row"]'));
+          return rows.every((row) => {
+            const box = row.getBoundingClientRect();
+            return box.left >= boundary.left - 1 && box.right <= boundary.right + 1;
+          });
+        })).toBe(true);
+      }
       expect(await verticalScrollOwners(promptBody)).toEqual(['pane-prompt-body']);
 
       for (const theme of ['light', 'dark'] as const) {
@@ -830,14 +878,20 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
           await page.screenshot({
             path: path.join(
               RESULTS_DIR,
-              `agt-2625--after--${viewport.name}-${theme}--mocked.png`,
+              `agt-2519-tabs--${viewport.name}-${theme}--mocked.png`,
             ),
             fullPage: false,
           });
         }
       }
 
-      await page.getByTestId('prompt-tab-evidence').click();
+      const inlineEvidenceTab = page.getByTestId('prompt-tab-evidence');
+      if (await inlineEvidenceTab.isVisible()) {
+        await inlineEvidenceTab.click();
+      } else {
+        await promptOverflow.click();
+        await page.getByTestId('pane-tabs-overflow-item-evidence').click();
+      }
       const evidence = page.getByTestId('evidence-view');
       await expect(evidence).toBeVisible();
       await expect(page.getByTestId('review-evidence-count')).toHaveText('8 findings');

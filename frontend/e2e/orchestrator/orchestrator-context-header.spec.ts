@@ -639,8 +639,8 @@ test.describe('Orchestrator context header · where am I', () => {
   for (const variant of [
     { name: 'wide-light', width: 1440, panelWidth: 640, theme: 'light' as const },
     { name: 'wide-dark', width: 1440, panelWidth: 640, theme: 'dark' as const },
-    { name: 'narrow-light', width: 900, panelWidth: 420, theme: 'light' as const },
-    { name: 'narrow-dark', width: 900, panelWidth: 420, theme: 'dark' as const },
+    { name: 'narrow-light', width: 900, panelWidth: 360, theme: 'light' as const },
+    { name: 'narrow-dark', width: 900, panelWidth: 360, theme: 'dark' as const },
   ]) {
     test(`AGT-2613 keeps the panel frame and header collision-free in ${variant.name}`, async ({
       page,
@@ -719,13 +719,16 @@ test.describe('Orchestrator context header · where am I', () => {
       await ensureSideSheetOpen();
       const header = page.getByTestId('orch-panel-header');
       const contextName = page.getByTestId('orch-panel-context-name');
-      const chats = page.getByTestId('orch-context-badge');
-      const close = sheet.getByTestId('sidesheet-close');
       await expect(header).toBeVisible();
       await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Project');
       await expect(contextName).toHaveText(LONG_CONTEXT_PROJECT);
       await expect(page.getByTestId('orch-execution-host')).toHaveText('agent-runner-01');
       await expect(page.getByTestId('orch-execution-revision')).toHaveText('· develop@01234567');
+      await expect(page.getByTestId('orch-execution-context')).toHaveAttribute(
+        'title',
+        /HEAD: 0123456789abcdef0123456789abcdef01234567/,
+      );
+      await expect(page.getByTestId('orch-execution-ref')).toHaveCSS('text-overflow', 'ellipsis');
 
       const scroller = page.getByTestId('conversation-view');
       await expect(
@@ -743,6 +746,8 @@ test.describe('Orchestrator context header · where am I', () => {
         const sheet = document.querySelector<HTMLElement>('[data-testid="orch-side-sheet"]')!;
         const editor = document.querySelector<HTMLElement>('app-studio-shell .studio-editor')!;
         const sharedHeader = sheet.querySelector<HTMLElement>('.sidesheet__header')!;
+        const panelHeader = sheet.querySelector<HTMLElement>('[data-testid="orch-panel-header"]')!;
+        const identity = sheet.querySelector<HTMLElement>('[data-testid="orch-panel-context-identity"]')!;
         const chats = sheet.querySelector<HTMLElement>('[data-testid="orch-context-badge"]')!;
         const close = sheet.querySelector<HTMLElement>('[data-testid="sidesheet-close"]')!;
         const jump = sheet.querySelector<HTMLElement>('[data-testid="orchestrator-jump-latest"]')!;
@@ -783,6 +788,7 @@ test.describe('Orchestrator context header · where am I', () => {
           sheet: rect(sheet),
           editor: rect(editor),
           header: rect(sharedHeader),
+          identity: rect(identity),
           chats: rect(chats),
           close: rect(close),
           jump: rect(jump),
@@ -791,6 +797,7 @@ test.describe('Orchestrator context header · where am I', () => {
           borderLeftWidth: sheetStyle.borderLeftWidth,
           panelBackground: sheetStyle.backgroundColor,
           editorBackground: getComputedStyle(editor).backgroundColor,
+          panelFits: panelHeader.scrollWidth <= panelHeader.clientWidth + 1,
         };
       });
       expect(geometry.borderLeftWidth).toBe('1px');
@@ -798,6 +805,8 @@ test.describe('Orchestrator context header · where am I', () => {
       expect(geometry.panelBackground).not.toBe(geometry.editorBackground);
       expect(geometry.editor.right).toBeLessThanOrEqual(geometry.sheet.left + 1);
       expect(geometry.header.height).toBe(36);
+      expect(geometry.panelFits).toBe(true);
+      expect(geometry.identity.right).toBeLessThanOrEqual(geometry.chats.left + 1);
       expect(geometry.chats.height).toBe(28);
       expect(geometry.close.height).toBe(28);
       expect(geometry.jump.bottom).toBeLessThanOrEqual(geometry.composer.top);
