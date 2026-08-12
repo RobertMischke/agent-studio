@@ -25,39 +25,14 @@
        */
       min-width: 220px;
       flex: 1 1 220px;
+      container: lane / inline-size;
       display: flex;
       flex-direction: column;
       gap: var(--studio-card-list-gap);
       transition: outline 0.15s;
-      /*
-       * CSS containment: scrolling a single lane's body or polling a
-       * single lane's live child updates must not
-       * trigger layout/paint work in sibling lanes. The "layout" scope
-       * keeps descendants' size/position changes from invalidating
-       * ancestors; the "paint" scope clips the column's painting to
-       * its own border box. The "inline-size" scope is the fix for the
-       * ready-lane-width regression: without it, the column's
-       * intrinsic min-content (driven by white-space:nowrap content
-       * like a running execution
-       * card's badges) propagated up through the lane-group's
-       * min-content and pushed lanes in heavier groups visibly wider
-       * than lanes in lighter groups, breaking the equal-width
-       * contract and surfacing a phantom horizontal scrollbar. With
-       * inline-size containment the column's width is determined by
-       * flex layout alone (min-width + flex-basis + container-share),
-       * and inner content lays out within that width instead of
-       * widening the column. Overflow inside the column is handled by
-       * per-element overflow:hidden + ellipsis already in the header
-       * and card chips.
-       *
-       * The default style/size scopes are intentionally left
-       * untouched so descendant counters and viewport units still
-       * resolve.
-       *
-       * This is also the perf intervention that brings the long-task
-       * budget during a dense-board 5 s scroll below the 50 ms
-       * acceptance criterion in the lane-overlap regression spec.
-       */
+      /* Inline-size containment keeps nowrap content from widening a lane;
+         layout/paint containment isolates polling and scrolling work. The
+         named container also drives header compaction from actual lane width. */
       contain: inline-size layout paint;
     }
     /* Drag-over signal: outline ring only. We deliberately do NOT tint the
@@ -75,26 +50,15 @@
       gap: var(--studio-spacing-2);
       padding-bottom: var(--studio-spacing-4);
       border-bottom: 1px solid var(--studio-border, rgba(255,255,255,0.06));
-      /*
-       * Clip header content to the column. With min-width: 200 on
-       * .column the header's natural fixed-size children (icon, count,
-       * Archive-all, collapse) sum close to 170px, leaving little room
-       * for the title. Without this clamp the trailing collapse button
-       * overflows into the neighbouring lane and intercepts pointer
-       * events meant for that lane (caught by kanban-lane-grouping
-       * spec). Pair with min-width: 0 + ellipsis on the title so it
-       * shrinks instead.
-       */
+      font-family: var(--studio-lane-header-font, var(--font-ui));
+      font-size: var(--studio-lane-header-secondary-size);
+      line-height: 1;
       min-width: 0;
       overflow: hidden;
     }
-    // Every direct header child sits on one centred line (the header itself is
-    // `display:flex; align-items:center`). Each chip/glyph carries
-    // `line-height:1` and an explicit inline-flex box so its own text metrics
-    // can't lift it off the shared centre-line — the "number sitting too high"
-    // bug came from the count pill relying on inline baseline metrics next to
-    // the taller emoji icon. Numbers use tabular-nums so the count width is
-    // stable digit-to-digit.
+    // One flex centerline keeps the avatar, type, metrics, and controls aligned.
+    // The name owns flexible width; narrow containers compact or remove
+    // optional decoration before the title reaches its ellipsis.
     .column__icon {
       font-size: 18px;
       line-height: 1;
@@ -104,11 +68,11 @@
     }
     .column__title {
       margin: 0;
-      font-size: 14px;
+      font-size: var(--studio-lane-header-primary-size);
       line-height: 1;
       font-weight: 600;
       color: var(--studio-fg, #e2e8f0);
-      flex: 1 1 0;
+      flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -124,7 +88,7 @@
       background: rgba(255,255,255,0.08);
       border-radius: 10px;
       padding: 0 8px;
-      font-size: 12px;
+      font-size: var(--studio-lane-header-secondary-size);
       line-height: 1;
       font-variant-numeric: tabular-nums;
       color: var(--studio-fg-dim, #94a3b8);
@@ -136,7 +100,7 @@
       flex-shrink: 0;
       display: inline-flex;
       align-items: center;
-      font-size: 13px;
+      font-size: var(--studio-lane-header-secondary-size);
       line-height: 1;
       color: var(--studio-fg-dim, #94a3b8);
       cursor: default;
@@ -300,6 +264,7 @@
       padding: 3px 8px;
       border-radius: 8px;
       cursor: pointer;
+      font-family: inherit;
       font-size: 11px;
       font-weight: 500;
       white-space: nowrap;
@@ -349,6 +314,7 @@
       padding: 0;
       border-radius: 6px;
       cursor: pointer;
+      font-family: inherit;
       font-size: 14px;
       line-height: 1;
       display: grid;
@@ -359,6 +325,18 @@
       background: rgba(255,255,255,0.10);
       border-color: rgba(255,255,255,0.18);
       color: var(--studio-fg, #e2e8f0);
+    }
+    @container lane (max-width: 260px) {
+      .column__header { gap: var(--studio-spacing-1); }
+      .column__title { min-width: 72px; }
+      .column__count {
+        height: 18px;
+        min-width: 18px;
+        padding-inline: var(--studio-spacing-1);
+      }
+      .column__sort-indicator { display: none; }
+      app-info-button { display: none; }
+      .column__collapse { width: 18px; height: 18px; }
     }
     /*
      * Collapsed-lane rail. Same vertical rhythm as a full column so the
@@ -626,7 +604,7 @@
       border: 1px solid var(--studio-border, rgba(255,255,255,0.10));
       background: transparent;
       color: var(--studio-fg-dim, rgba(255,255,255,0.55));
-      font-size: 10.5px;
+      font-size: var(--studio-lane-header-secondary-size);
       font-weight: 600;
       letter-spacing: 0.04em;
       text-transform: uppercase;
