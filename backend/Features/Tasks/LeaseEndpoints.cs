@@ -980,6 +980,8 @@ public static class LeaseEndpoints
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
+            AspectRunnerService aspectRunner,
+            AgentStudio.Review.CodeReviewStepService codeReview,
             TaskMutationService mutations,
             GitService git,
             TaskStateMachine states,
@@ -1356,6 +1358,20 @@ public static class LeaseEndpoints
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
                 var run = settled.RunAttempt!;
+                var integrationRef = ReviewBaselineBranchPolicy.Decide(
+                    task.IntegrationBranch,
+                    projectSettings.Get(task.ProjectName).IntegrationBranch,
+                    repositoryDefaultBranch: null).IntegrationRef;
+                var reviewPlan = V1ReviewPlaneEndpoints.AddRemoteAspectSteps(
+                    V1ReviewPlaneEndpoints.FallbackPlan(
+                        git.ResolveRepoRootForWatchPath(task.WatchPath),
+                        task.ProjectName,
+                        projectSettings,
+                        integrationRef),
+                    task,
+                    projectSettings,
+                    aspectRunner,
+                    codeReview);
                 reviewAttemptRequest = new CreateReviewAttemptRequest(
                     req.TaskKey,
                     run.RepositoryId,
@@ -1366,7 +1382,8 @@ public static class LeaseEndpoints
                     run.EvidenceDigests,
                     $"review-subject:{run.AttemptId}:{run.ResultSha}",
                     RepositoryUrl: req.Repository,
-                    ResultRef: deliveryBranch);
+                    ResultRef: deliveryBranch,
+                    Plan: reviewPlan);
             }
 
             if (!isEpicPlanning

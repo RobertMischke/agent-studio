@@ -1,4 +1,6 @@
 using System.Text;
+using AgentStudio.Runner;
+using AgentStudio.TaskServer.Contracts;
 
 using Xunit;
 
@@ -6,6 +8,122 @@ namespace AgentStudio.Tests;
 
 public sealed class RemotePipelineExecutionProjectionTests
 {
+    [Fact]
+    public async Task Project_RemoteReviewCommands_MapToolAspectAndFencedExecutionLocation()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "remote-pipeline-steps-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var started = Utc(8, 11);
+            var tool = Command(
+                $"{PipelineCatalogue.BuildTestGateStepId}:1",
+                "build-tests",
+                started,
+                started.AddMinutes(2));
+            var aspect = Command(
+                "aspect-code-quality",
+                "code-quality",
+                started.AddMinutes(2),
+                started.AddMinutes(3)) with
+            {
+                ExecutionKind = "agent",
+                CliType = "codex",
+                Model = "gpt-5.4-mini",
+                ThinkingLevel = "high",
+                TokenUsage = new ReviewTokenUsageDto("gpt-5.4-mini", 120, 30, 10),
+            };
+            var grade = Command(
+                PipelineCatalogue.CodeReviewGradeStepId,
+                "code-review-grade",
+                started.AddMinutes(3),
+                started.AddMinutes(4)) with
+            {
+                ExecutionKind = "agent",
+                CliType = "codex",
+                Model = "gpt-5.5",
+                ThinkingLevel = "high",
+                TokenUsage = new ReviewTokenUsageDto("gpt-5.5", 200, 50),
+            };
+            var report = new ReviewReportRequest(
+                "review-executor-1",
+                "instance-1",
+                "lease-1",
+                17,
+                "report-key",
+                "Pass",
+                null,
+                "Remote tool and aspect steps passed.",
+                new ReviewWorkspaceProofDto(
+                    "repo", new string('a', 40), new string('a', 40), new string('b', 40),
+                    false, false, "workspace-1", "review-attempt-1-f17"),
+                new ReviewEnvironmentDto(
+                    "runner-host-1", "review-executor-1", "instance-1", "linux", "x64", "10.0",
+                    new Dictionary<string, string>(),
+                    new Dictionary<string, string>()),
+                [tool, aspect, grade],
+                [],
+                [new ReviewVerdictDto("build-tests", "pass", "command", "Build passed."),
+                 new ReviewVerdictDto("code-quality", "pass", "semantic", "Quality passed."),
+                 new ReviewVerdictDto("code-review-grade", "block", "CodeReviewGrade:D", "Substantial changes required.")]);
+            await RemoteReviewReportEvidence.WriteAsync(
+                folder,
+                "attempt-1",
+                "subject-1",
+                report,
+                new string('c', 64),
+                Utc(8, 15),
+                default);
+
+            var projected = RemotePipelineExecutionProjection.Project(
+                null,
+                PipelineCatalogue.Standard,
+                new TaskInfo
+                {
+                    Id = "remote-step-task",
+                    ProjectName = "Agent Taskboard",
+                    FolderPath = folder,
+                    CreatedAt = Utc(8, 0),
+                    State = TaskStates.Completed,
+                },
+                [new SessionEvent { Ts = Utc(8, 0), Kind = "start", Cli = "remote-runner" }],
+                [new TimelineEvent
+                {
+                    Ts = Utc(8, 10),
+                    Kind = TimelineEventKinds.AgentRunFinished,
+                    Summary = "remote run done",
+                    Details = new Dictionary<string, string>
+                    {
+                        ["cli"] = "remote-runner",
+                        ["status"] = "done",
+                    },
+                }],
+                null);
+
+            var gate = Step(projected.Execution!, PipelineCatalogue.BuildTestGateStepId);
+            Assert.Equal(PipelineStepStatus.Passed, gate.Status);
+            Assert.Equal("runner-host-1", gate.ExecutionLocation?.HostId);
+            Assert.Equal("lease-1", gate.ExecutionLocation?.LeaseId);
+            Assert.Equal(17, gate.ExecutionLocation?.Fence);
+
+            var quality = Step(projected.Execution!, "aspect-code-quality");
+            Assert.Equal(PipelineStepStatus.Passed, quality.Status);
+            Assert.Equal("pass", quality.Verdict);
+            Assert.Equal("gpt-5.4-mini", quality.Model);
+            Assert.Equal(120, quality.InputTokens);
+            Assert.Equal("remote", quality.ExecutionLocation?.ExecutionKind);
+
+            var qualityGrade = Step(projected.Execution!, PipelineCatalogue.CodeReviewGradeStepId);
+            Assert.Equal(PipelineStepStatus.Failed, qualityGrade.Status);
+            Assert.Equal("d", qualityGrade.Verdict);
+            Assert.Equal("runner-host-1", qualityGrade.ExecutionLocation?.HostId);
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+
     [Fact]
     public void Project_RemoteLifecycle_MapsCoreReviewSkipsAndLedgerWithoutWritingParallelState()
     {
@@ -291,6 +409,26 @@ public sealed class RemotePipelineExecutionProjectionTests
             step.StepId,
             id,
             StringComparison.OrdinalIgnoreCase));
+
+    private static ReviewCommandEvidenceDto Command(
+        string stepId,
+        string aspect,
+        DateTime started,
+        DateTime finished)
+        => new(
+            stepId,
+            aspect,
+            "sh",
+            ["-lc", "true"],
+            new string('a', 40),
+            new string('a', 40),
+            new string('b', 40),
+            started,
+            finished,
+            0,
+            null,
+            new string('c', 64),
+            new string('d', 64));
 
     private static TaskTokenCall Call(
         DateTime at,

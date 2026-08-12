@@ -197,7 +197,7 @@ public sealed class RemoteReviewWorkspace
                 var execution = await RunCommandAsync(command, RepositoryPath, ct);
                 if (MissingToolchain(execution.Process))
                 {
-                    commands.Add(await AddCommandEvidenceAsync(
+                    var unavailableEvidence = await AddCommandEvidenceAsync(
                         command.StepId,
                         command.Aspect,
                         command.FileName,
@@ -217,7 +217,8 @@ public sealed class RemoteReviewWorkspace
                         dependencyCacheHit: false,
                         dependencyCache: null,
                         artifacts,
-                        ct));
+                        ct);
+                    commands.Add(WithExecutionMetadata(unavailableEvidence, command, execution));
                     SaveCaches(candidateCache);
                     throw await InfrastructureFailureAsync(
                         "ToolUnavailable",
@@ -252,7 +253,7 @@ public sealed class RemoteReviewWorkspace
                         execution = await RunCommandAsync(command, RepositoryPath, ct);
                         if (MissingToolchain(execution.Process))
                         {
-                            commands.Add(await AddCommandEvidenceAsync(
+                            var unavailableEvidence = await AddCommandEvidenceAsync(
                                 command.StepId,
                                 command.Aspect,
                                 command.FileName,
@@ -272,7 +273,8 @@ public sealed class RemoteReviewWorkspace
                                 dependencyCacheHit: false,
                                 dependencyCache: null,
                                 artifacts,
-                                ct));
+                                ct);
+                            commands.Add(WithExecutionMetadata(unavailableEvidence, command, execution));
                             SaveCaches(candidateCache);
                             throw await InfrastructureFailureAsync(
                                 "ToolUnavailable",
@@ -288,7 +290,7 @@ public sealed class RemoteReviewWorkspace
                     }
                 }
 
-                commands.Add(await AddCommandEvidenceAsync(
+                var commandEvidence = await AddCommandEvidenceAsync(
                     command.StepId,
                     command.Aspect,
                     command.FileName,
@@ -308,7 +310,12 @@ public sealed class RemoteReviewWorkspace
                     dependencyCacheHit: false,
                     dependencyCache: null,
                     artifacts,
-                    ct));
+                    ct,
+                    includeSuccessfulContent: string.Equals(
+                        command.ExecutionKind,
+                        "agent",
+                        StringComparison.OrdinalIgnoreCase));
+                commands.Add(WithExecutionMetadata(commandEvidence, command, execution));
                 verdicts.Add(comparison is null
                     ? ParseVerdict(command, execution.Process)
                     : BaselineVerdict(command, comparison));
@@ -333,7 +340,8 @@ public sealed class RemoteReviewWorkspace
 
         var proof = await CurrentProofAsync(ct);
         var outcome = verdicts.Any(verdict =>
-            verdict.Status is "block" or "concerns" or "fail")
+            !string.Equals(verdict.Aspect, "code-review-grade", StringComparison.OrdinalIgnoreCase)
+            && verdict.Status is "block" or "concerns" or "fail")
             ? "ProductFailure"
             : "Pass";
         return new ReviewExecutionEvidence(outcome, proof, commands, artifacts, verdicts);
@@ -344,14 +352,41 @@ public sealed class RemoteReviewWorkspace
         string workingDirectory,
         CancellationToken ct,
         IReadOnlyDictionary<string, string?>? environment = null)
-        => await RunCommandAsync(
-            command.StepId,
-            command.FileName,
-            command.Arguments,
-            command.TimeoutSeconds,
+        => string.Equals(command.ExecutionKind, "agent", StringComparison.OrdinalIgnoreCase)
+            ? await RunAgentCommandAsync(command, workingDirectory, ct, environment)
+            : await RunCommandAsync(
+                command.StepId,
+                command.FileName,
+                command.Arguments,
+                command.TimeoutSeconds,
+                workingDirectory,
+                ct,
+                environment);
+
+    private async Task<CommandExecution> RunAgentCommandAsync(
+        ReviewCommandDto command,
+        string workingDirectory,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string?>? environment)
+        => await RemoteReviewAgentExecutor.RunAsync(
+            _options,
+            command,
             workingDirectory,
-            ct,
-            environment);
+            Path.Combine(AttemptRoot, "agent-steps"),
+            ct);
+
+    private static ReviewCommandEvidenceDto WithExecutionMetadata(
+        ReviewCommandEvidenceDto evidence,
+        ReviewCommandDto command,
+        CommandExecution execution)
+        => evidence with
+        {
+            ExecutionKind = command.ExecutionKind,
+            CliType = execution.CliType ?? command.CliType,
+            Model = execution.Model ?? command.Model,
+            ThinkingLevel = command.ThinkingLevel,
+            TokenUsage = execution.TokenUsage,
+        };
 
     private async Task<CommandExecution> RunCommandAsync(
         string stepId,
@@ -565,11 +600,12 @@ public sealed class RemoteReviewWorkspace
         bool dependencyCacheHit,
         IReadOnlyList<ReviewDependencyCacheEvidenceDto>? dependencyCache,
         ICollection<ReviewArtifactEvidenceDto> artifacts,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool includeSuccessfulContent = false)
     {
         var stdoutName = ArtifactName(workspaceRole, stepId, "stdout");
         var stderrName = ArtifactName(workspaceRole, stepId, "stderr");
-        var includeContent = !process.Success || signal is not null;
+        var includeContent = !process.Success || signal is not null || includeSuccessfulContent;
         var stdout = await WriteArtifactAsync(stdoutName, process.StdOut, includeContent, ct);
         var stderr = await WriteArtifactAsync(stderrName, process.StdErr, includeContent, ct);
         artifacts.Add(stdout);
@@ -1028,7 +1064,12 @@ public sealed class RemoteReviewWorkspace
             ["git"] = ExecutableIdentity("git"),
         };
         foreach (var command in _subject.Plan.Commands)
-            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
+        {
+            var executable = command.FileName;
+            if (string.Equals(command.ExecutionKind, "agent", StringComparison.OrdinalIgnoreCase))
+                executable = RemoteReviewAgentExecutor.CommandBinary(_options, command);
+            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(executable);
+        }
         foreach (var command in _subject.Plan.Preparation ?? [])
             toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
         return new ReviewEnvironmentDto(
@@ -1178,8 +1219,25 @@ public sealed class RemoteReviewWorkspace
             HashText(Path.GetFullPath(AttemptRoot)),
             _lease.ResourceNamespace);
 
-    private static ReviewVerdictDto ParseVerdict(ReviewCommandDto command, ProcessResult result)
+    internal static ReviewVerdictDto ParseVerdict(ReviewCommandDto command, ProcessResult result)
     {
+        var gradeMarker = result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .LastOrDefault(line => line.Contains("[[CODE_REVIEW_GRADE:", StringComparison.Ordinal));
+        if (gradeMarker is not null)
+        {
+            var grade = Field(gradeMarker, "grade")?.ToUpperInvariant() ?? "C";
+            var status = grade switch
+            {
+                "A" or "B" => "pass",
+                "D" => "block",
+                _ => "concerns",
+            };
+            return new ReviewVerdictDto(
+                command.Aspect,
+                status,
+                $"CodeReviewGrade:{grade}",
+                Field(gradeMarker, "summary") ?? $"Remote quality grade {grade}.");
+        }
         var marker = result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .LastOrDefault(line => line.Contains("[[ASPECT_VERDICT:", StringComparison.Ordinal));
         if (marker is not null)
@@ -1464,7 +1522,10 @@ internal sealed record CommandExecution(
     ProcessResult Process,
     DateTime StartedAt,
     DateTime FinishedAt,
-    string? Signal);
+    string? Signal,
+    ReviewTokenUsageDto? TokenUsage = null,
+    string? CliType = null,
+    string? Model = null);
 
 internal sealed record BaselineCacheEntry(
     int ParserVersion,

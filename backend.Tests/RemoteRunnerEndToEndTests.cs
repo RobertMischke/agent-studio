@@ -3622,6 +3622,21 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(claim.Lease!.Fence > 0);
         Assert.True(claim.Lease.AuthorityEpoch > 0);
         Assert.Equal(resultSha, claim.Subject!.ExpectedResultSha);
+        Assert.Contains(
+            claim.Subject.Plan.Commands,
+            command => command.StepId == "aspect-code-quality"
+                       && command.ExecutionKind == "agent"
+                       && command.Prompt?.Contains("immutable review worktree", StringComparison.Ordinal) == true);
+        Assert.Contains(
+            claim.Subject.Plan.Commands,
+            command => command.StepId == PipelineCatalogue.CodeReviewGradeStepId
+                       && command.ExecutionKind == "agent");
+        var frozenPlan = factory.Services.GetRequiredService<AttemptAuthorityService>()
+            .GetReview(claim.Attempt.AttemptId)!.Subject.Plan;
+        Assert.NotNull(frozenPlan);
+        Assert.Equal(
+            JsonSerializer.Serialize(claim.Subject.Plan),
+            JsonSerializer.Serialize(frozenPlan));
 
         var renewed = await reviewClient.RenewReviewLeaseAsync(
             claim.Attempt.AttemptId,

@@ -453,6 +453,14 @@ public sealed partial class TaskServerStore
         if (subject.Plan.RequiredAspects.Any(aspect =>
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence"))
             requirements.Add(ReviewCapabilities.SemanticReview);
+        foreach (var command in subject.Plan.Commands.Where(command =>
+                     string.Equals(command.ExecutionKind, "agent", StringComparison.OrdinalIgnoreCase)))
+        {
+            var cli = command.CliType?.Trim().ToLowerInvariant();
+            if (cli is not ("codex" or "claude")) continue;
+            requirements.Add(CapabilityProtocol.CliExecution(cli));
+            requirements.Add(CapabilityProtocol.ProviderAuthentication(cli));
+        }
         return requirements.Order(StringComparer.Ordinal).ToArray();
     }
 
@@ -852,7 +860,9 @@ public sealed partial class TaskServerStore
                    || command.NewFailures.Count > 0;
         });
         if (commandFailures
-            || request.Verdicts.Any(verdict => verdict.Status is "concerns" or "block" or "fail"))
+            || request.Verdicts.Any(verdict =>
+                !string.Equals(verdict.Aspect, "code-review-grade", StringComparison.OrdinalIgnoreCase)
+                && verdict.Status is "concerns" or "block" or "fail"))
             return ("ProductFailure", request.FailureClassification ?? "ReviewFinding");
         if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal))
             return ("ReviewInfra", string.IsNullOrWhiteSpace(request.FailureClassification)
@@ -1415,6 +1425,15 @@ public sealed partial class TaskServerStore
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence")
             && !executor.Capabilities.Contains(ReviewCapabilities.SemanticReview))
             return false;
+        foreach (var command in subject.Plan.Commands.Where(command =>
+                     string.Equals(command.ExecutionKind, "agent", StringComparison.OrdinalIgnoreCase)))
+        {
+            var cli = command.CliType?.Trim().ToLowerInvariant();
+            if (cli is not ("codex" or "claude")) return false;
+            if (!executor.Capabilities.Contains(CapabilityProtocol.CliExecution(cli))
+                || !executor.Capabilities.Contains(CapabilityProtocol.ProviderAuthentication(cli)))
+                return false;
+        }
         return true;
     }
 
