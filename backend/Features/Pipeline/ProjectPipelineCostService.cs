@@ -307,15 +307,16 @@ public sealed class ProjectPipelineCostService
     public static int ResolveDays(int requested) =>
         requested <= 0 ? DefaultDays : Math.Min(requested, MaxDays);
 
-    // Stable render order: core run first, then the model-driven aspects,
-    // deterministic tool steps, the orchestrator decision, and finally any
-    // generic module step.
+    // Stable render order: core run first, then analyses and model-driven
+    // aspects, deterministic tool steps, the orchestrator decision, and
+    // finally any generic module step.
     private static readonly StepKind[] KindOrder =
-        [StepKind.Core, StepKind.Aspect, StepKind.Tool, StepKind.Orchestrator, StepKind.Drift, StepKind.Module];
+        [StepKind.Core, StepKind.Analysis, StepKind.Aspect, StepKind.Tool, StepKind.Orchestrator, StepKind.Drift, StepKind.Module];
 
     private static string KindKey(StepKind kind) => kind switch
     {
         StepKind.Core => "core",
+        StepKind.Analysis => "analysis",
         StepKind.Aspect => "aspect",
         StepKind.Tool => "tool",
         StepKind.Orchestrator => "orchestrator",

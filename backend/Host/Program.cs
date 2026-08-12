@@ -529,6 +529,8 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IQualityStudioAnalysisStepRunner,
+    AgentStudio.Pipeline.QualityStudioAnalysisStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthDetector>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineHealthSensor>(sp =>

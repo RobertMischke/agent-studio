@@ -1508,3 +1508,57 @@ switch ship together.
 **Amendment (2026-08-11).** Immediate integration into a repository with both `develop` and `main` has one fixed lineage: merge and gate the delivery on `develop`, then run the release gate on that exact develop merge commit and fast-forward `main`. A raw delivery fence is never a release source in this topology. The path fails before merging when existing history does not make `main` an ancestor of `develop`; it does not create a convergence merge or rewrite history. Deferred publication applies the same order to origin and stops before `main` when the `develop` push fails. A successful prerequisite push is not a terminal receipt, so restart recovery repeats the full ordered publication after a crash window. Main-only repositories retain their existing single-target behavior.
 
 **Amendment (2026-08-11, integration before acceptance).** The canonical Remote order is delivery, settled Review/build gate, integration, Human Review, then acceptance. This applies to every Remote coding project and executor; no project-name flag limits it to AGT, and `RemoteExecutionEnabled` controls dispatch rather than post-delivery integration. A failed delivery gate or immediate integration attempt is persisted visibly before Human Review and is not retried by acceptance. Acceptance validates current-attempt lineage and Git ancestry, then moves an already integrated card without changing Git or the merge-step receipt. An unintegrated card remains in Human Review with `IntegrationFailed`; explicit operator override is the only coding exception. `AcceptedIntegrationWorker` and `AcceptedIntegrationBackstopHostedService` remain only to recover a durable `integrating` transaction written by an older backend process. Local coding retains its existing order of local integration before Auto Review, while report-only, concept, Epic, and other no-code/no-branch modes do not integrate. Remote Review infrastructure retries remain in Auto Review. A configured `pull-request` strategy and any gate, conflict, lineage, or publication failure are explicit non-normal states with visible evidence, never acceptance-time integration. The dual-line `develop` then exact-SHA release-to-`main` rule above remains mandatory.
+
+---
+
+## ADR-0068 - Quality Studio analyses are standard in-process pipeline steps (2026-08-12)
+
+**Decision.** Agent Studio represents Quality Studio checks as distinct,
+default-on `Analysis` pipeline steps and invokes the version-pinned
+`AgentOrchestrator.CodeQuality` package in the server process. Card convention
+selects the relevant axes, project pipeline settings may override step
+enablement, and `.quality/rules.json` in the reviewed repository is the only
+rule-level override. Quality Studio HTTP remains a UI boundary and is not used
+for pipeline execution.
+
+**Context.** Quality checks were previously split between generic tool steps,
+model aspects, and optional external adapters. That shape hid which quality
+axis ran, made findings hard to correlate with stable rule identities, and
+would have added a network and authentication boundary to server-side analysis.
+QS-74 established the portable finding/evidence contract. Verification of the
+QS-88 delivery found an HTTP/UI preview seam, not the server-side analysis
+package selected here. QS-90 established stable named rules and
+repository-owned overrides, and QS-91 established the in-process analysis
+facade.
+
+**Non-goals.**
+
+- No per-card rule switches, environment-specific policy, or central rule
+  override store.
+- No duplicated QS rule wording or implementation in Agent Studio.
+- No synchronous callback to the Quality Studio UI. Later ingestion may be
+  asynchronous.
+- No automatic push block for an unfixed security finding in the current
+  policy. The finding remains durable and visible.
+- No claim that every catalogue axis is implemented by the first slice. A
+  planned row is explicit until its package analysis exists.
+
+**Reasoning style.** Keep execution close to the immutable repository subject,
+but keep ownership separated. Quality Studio owns analysis and finding
+contracts; Agent Studio owns card classification, step scheduling, fences,
+evidence retention, retry policy, and lanes. Prefer versioned repository truth
+over deployment state.
+
+**Implementation pointers.** Catalogue and metadata:
+[`backend/Features/Pipeline/PipelineCatalogue.cs`](../../../../backend/Features/Pipeline/PipelineCatalogue.cs)
+and
+[`backend/Shared/Models/PipelineModels.cs`](../../../../backend/Shared/Models/PipelineModels.cs).
+Policy and first runner:
+[`backend/Features/Pipeline/QualityStudio/`](../../../../backend/Features/Pipeline/QualityStudio/).
+Steered retry integration:
+[`backend/Features/Runner/ReviewDecisionOrchestrator.cs`](../../../../backend/Features/Runner/ReviewDecisionOrchestrator.cs).
+Evidence contract:
+[`docs/system/contracts/filesystem.md`](../../contracts/filesystem.md).
+
+**Status.** Accepted. The Angular named-rule pass is the first executable slice;
+the remaining named axes are visible planned catalogue entries.

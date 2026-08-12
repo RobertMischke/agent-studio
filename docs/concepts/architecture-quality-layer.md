@@ -267,7 +267,7 @@ Project Hub preserves the causal vocabulary already exposed by the
 | Build/test/completion gate | One task/run | Yes, under its existing policy. | Linked evidence; never recomputed by Project Hub. |
 | Review aspect, including code quality | One task/run | Advisory or policy input according to the pipeline. | Linked from runs/grades with source attribution. |
 | Lintable hard rule | A source change | Yes when already wired to a lint/review gate. | Guide classification plus latest evidence. |
-| Analysis finding | Project/task/time window | No automatic mutation in v1. | Run-inventory detail and possible explicit follow-up. |
+| Analysis finding | Project/task/time window | A named task-pipeline analysis may block only when its catalogue policy says so. Security findings are currently non-blocking. | Review evidence with provider, rule id, provenance, and possible bounded steer/retry. |
 | Component grade | One component at one revision | No. | Triage/trend signal with coverage and staleness. |
 | Lane decision | One task | Yes; owned by task workflow. | Reference only, never a quality score. |
 

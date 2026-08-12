@@ -69,6 +69,27 @@ public sealed record PipelineStep
     /// an activation rule.
     /// </summary>
     public string? Framework { get; init; }
+    /// <summary>
+    /// Named analysis exposed by an in-process quality provider. Null means the
+    /// step is not a quality-analysis step.
+    /// </summary>
+    public string? AnalysisName { get; init; }
+    /// <summary>
+    /// Stable quality axis used for policy and evidence grouping, for example
+    /// <c>static-rules</c>, <c>visual</c>, or <c>security</c>.
+    /// </summary>
+    public string? AnalysisAxis { get; init; }
+    /// <summary>
+    /// Package or library that implements <see cref="AnalysisName"/>. Analysis
+    /// hosts consume this in process; it is not an HTTP endpoint.
+    /// </summary>
+    public string? AnalysisProvider { get; init; }
+    /// <summary>
+    /// Whether unresolved findings from this analysis may stop delivery. This
+    /// is provider-neutral policy. Security is currently evidence-only, so its
+    /// catalogue step sets this to false.
+    /// </summary>
+    public bool BlockingFindings { get; init; } = true;
     public int? TimeoutMs { get; init; }
     /// <summary>
     /// When true, the step is safe to re-run after a partial failure.
@@ -157,6 +178,13 @@ public enum StepKind
     /// <c>DriftPostStepRunner</c>.
     /// </summary>
     Drift,
+    /// <summary>
+    /// In-process quality analysis that emits structured findings and
+    /// provenance. Analysis steps are distinct from shell tools and model
+    /// aspects even when a provider internally uses either technique.
+    /// Appended to preserve the numeric values of persisted legacy kinds.
+    /// </summary>
+    Analysis,
 }
 
 public enum StepRunMode

@@ -194,6 +194,7 @@ public static class ProjectSettingsEndpoints
 
             static string PhaseForPostStep(PipelineStep step)
             {
+                if (step.Kind == StepKind.Analysis) return "analysis";
                 if (step.Kind == StepKind.Aspect) return "aspect";
                 if (step.Kind == StepKind.Tool) return "tool";
                 if (step.Kind == StepKind.Drift) return "drift";
@@ -222,6 +223,10 @@ public static class ProjectSettingsEndpoints
                     pipelineId,
                     displayName = s.DisplayName,
                     kind = s.Kind.ToString(),
+                    analysisName = s.AnalysisName,
+                    analysisAxis = s.AnalysisAxis,
+                    analysisProvider = s.AnalysisProvider,
+                    blockingFindings = s.BlockingFindings,
                     appliesTo = s.AppliesTo,
                     applicable = ProjectStackDetector.Applies(s.AppliesTo, detectedStacks),
                     effectiveExecution = execution,

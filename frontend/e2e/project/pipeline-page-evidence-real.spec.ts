@@ -18,6 +18,12 @@ interface PipelineCatalogueResponse {
   detectedStacks?: string[];
   steps: {
     id: string;
+    kind?: string;
+    phase?: string;
+    analysisName?: string;
+    analysisAxis?: string;
+    analysisProvider?: string;
+    blockingFindings?: boolean;
     appliesTo?: string;
     applicable?: boolean;
     effectiveExecution?: {
@@ -102,10 +108,26 @@ test('pipeline page (real): reworked panel renders against the live backend', as
     workingSubdir: 'frontend',
     command: 'npx stylelint "src/**/*.scss"',
   });
+  const angularAnalysis = catalogue.steps.find(step => step.id === 'post-analysis-qs-angular-rules');
+  expect(angularAnalysis).toMatchObject({
+    kind: 'Analysis',
+    phase: 'analysis',
+    analysisName: 'quality-rules',
+    analysisAxis: 'static-rules',
+    analysisProvider: 'quality-studio',
+    blockingFindings: true,
+    appliesTo: 'angular',
+    applicable: true,
+  });
+  expect(catalogue.steps.find(step => step.id === 'post-analysis-qs-security'))
+    .toMatchObject({ analysisAxis: 'security', blockingFindings: false });
 
   await page.setViewportSize({ width: 1440, height: 2400 });
 
-  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  await page.goto(`/#/projects/${projectSlug}/pipeline`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  });
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
 
   const section = page.getByTestId('project-detail-pipeline');
@@ -124,31 +146,33 @@ test('pipeline page (real): reworked panel renders against the live backend', as
     'core-agent-run',
     'post-orchestrator-review',
     'post-build-test-gate',
+    'post-analysis-qs-angular-rules',
     'aspect-requirement-fit',
   ];
-  const geometry: { kindX: number; kindWidth: number; nameX: number; infoX: number; toggleX: number }[] = [];
+  const geometry: { kindX: number; kindWidth: number; nameX: number; infoX: number; stateRight: number }[] = [];
   for (const stepId of representativeSteps) {
+    const stepRow = page.getByTestId(`pipeline-step-row-${stepId}`);
     const kind = page.getByTestId(`pipeline-step-kind-${stepId}`);
     const name = page.getByTestId(`pipeline-step-name-${stepId}`);
     const info = page.getByTestId(`pipeline-step-info-${stepId}`);
-    const toggle = page.getByTestId(`pipeline-step-enabled-${stepId}`);
+    const state = stepRow.locator('app-pipeline-step-row-state');
     await expect(kind).toBeVisible();
     await expect(name).toBeVisible();
     await expect(info).toBeVisible();
-    await expect(toggle).toBeVisible();
-    const [kindBox, nameBox, infoBox, toggleBox] = await Promise.all([
-      kind.boundingBox(), name.boundingBox(), info.boundingBox(), toggle.boundingBox(),
+    await expect(state).toBeVisible();
+    const [kindBox, nameBox, infoBox, stateBox] = await Promise.all([
+      kind.boundingBox(), name.boundingBox(), info.boundingBox(), state.boundingBox(),
     ]);
     expect(kindBox).not.toBeNull();
     expect(nameBox).not.toBeNull();
     expect(infoBox).not.toBeNull();
-    expect(toggleBox).not.toBeNull();
+    expect(stateBox).not.toBeNull();
     geometry.push({
       kindX: kindBox!.x,
       kindWidth: kindBox!.width,
       nameX: nameBox!.x,
       infoX: infoBox!.x,
-      toggleX: toggleBox!.x,
+      stateRight: stateBox!.x + stateBox!.width,
     });
   }
   const baseline = geometry[0];
@@ -157,7 +181,7 @@ test('pipeline page (real): reworked panel renders against the live backend', as
     expect(Math.abs(row.kindWidth - baseline.kindWidth)).toBeLessThanOrEqual(1);
     expect(Math.abs(row.nameX - baseline.nameX)).toBeLessThanOrEqual(1);
     expect(Math.abs(row.infoX - baseline.infoX)).toBeLessThanOrEqual(1);
-    expect(Math.abs(row.toggleX - baseline.toggleX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(row.stateRight - baseline.stateRight)).toBeLessThanOrEqual(1);
     expect(row.kindX).toBeLessThan(row.nameX);
   }
 
@@ -168,6 +192,17 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   expect(kindLabels.every(label => label.trim().length === 3)).toBe(true);
   await expect(page.getByTestId('pipeline-step-kind-post-orchestrator-review')).toHaveText('ORC');
   await expect(page.getByTestId('pipeline-step-kind-post-build-test-gate')).toHaveText('TOO');
+  await expect(page.getByTestId('pipeline-step-kind-post-analysis-qs-angular-rules')).toHaveText('ANA');
+  await expect(page.getByTestId('pipeline-step-row-post-analysis-qs-angular-rules'))
+    .toHaveAttribute('data-kind', 'analysis');
+  const analysisGroup = page.getByTestId('pipeline-group-analysis');
+  await expect(analysisGroup).toBeVisible();
+  await expect(analysisGroup.locator('[data-testid^="pipeline-step-row-post-analysis-qs-"]'))
+    .toHaveCount(7);
+  await analysisGroup.scrollIntoViewIfNeeded();
+  await analysisGroup.screenshot({
+    path: path.join(SCREENSHOT_DIR, 'quality-studio-analysis-steps--real.png'),
+  });
   await expect(page.getByTestId('pipeline-step-tokens-post-build-test-gate')).toHaveCount(0);
   const toolRow = page.getByTestId('pipeline-step-row-post-build-test-gate');
   await toolRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
@@ -177,7 +212,7 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   const stylelintRow = page.getByTestId('pipeline-step-row-post-lint-scss');
   await expect(stylelintRow).toBeVisible();
   await expect(stylelintRow).toHaveAttribute('data-applicable', 'true');
-  await expect(page.getByTestId('pipeline-step-stack-post-lint-scss')).toHaveText('angular');
+  await expect(page.getByTestId('pipeline-step-framework-post-lint-scss')).toHaveText('angular');
   await stylelintRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(page.getByTestId('pipeline-step-commands-post-lint-scss'))
     .toContainText('cd frontend && npx stylelint "src/**/*.scss"');
@@ -201,4 +236,39 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   await setTheme(page, 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-after-dark--real.png') });
+});
+
+test('quality studio analysis catalogue (real): distinct axes render from the live backend', async ({ page, devBackend }) => {
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
+  expect(pathsResponse.ok).toBe(true);
+  const paths = await pathsResponse.json() as WatchPath[];
+  const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
+  expect(preferred).toBeTruthy();
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/#/projects/${slugFor(preferred.name)}/pipeline`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
+  const analysisGroup = page.getByTestId('pipeline-group-analysis');
+  await analysisGroup.evaluate(element => { (element as HTMLDetailsElement).open = true; });
+  await expect(analysisGroup.locator('[data-testid^="pipeline-step-row-post-analysis-qs-"]'))
+    .toHaveCount(7);
+  await expect(page.getByTestId('pipeline-step-row-post-analysis-qs-angular-rules'))
+    .toHaveAttribute('data-kind', 'analysis');
+  await expect(page.getByTestId('pipeline-step-row-post-analysis-qs-security'))
+    .toHaveAttribute('data-kind', 'analysis');
+
+  await setTheme(page, 'light');
+  await analysisGroup.screenshot({
+    path: path.join(SCREENSHOT_DIR, 'quality-studio-analysis-steps-light--real.png'),
+  });
+  await setTheme(page, 'dark');
+  const darkAnalysisGroup = page.getByTestId('pipeline-group-analysis');
+  await darkAnalysisGroup.evaluate(element => { (element as HTMLDetailsElement).open = true; });
+  await darkAnalysisGroup.screenshot({
+    path: path.join(SCREENSHOT_DIR, 'quality-studio-analysis-steps-dark--real.png'),
+  });
 });

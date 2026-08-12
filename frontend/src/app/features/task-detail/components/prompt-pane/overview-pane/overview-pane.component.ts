@@ -417,6 +417,7 @@ const PIPELINE_STEP_EXPLANATIONS: Record<string, string> = {
 const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   module:       'A deterministic pre-processing step that runs before the agent.',
   core:         'The core CLI agent run for this task.',
+  analysis:     'An in-process Quality Studio analysis that emits structured findings and evidence.',
   aspect:       'A read-only review aspect that runs in parallel after the agent finishes.',
   orchestrator: 'An orchestrator decision step that aggregates verdicts and chooses the next move.',
   tool:         'A deterministic tooling step that runs after the agent finishes.',

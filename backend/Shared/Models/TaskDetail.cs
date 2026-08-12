@@ -52,6 +52,8 @@ public record TaskDetail
 public record ReviewEvidenceEntry
 {
     public string Id { get; init; } = "";
+    /// <summary>Stable provider-owned rule id, for example <c>QS-NG-002</c>.</summary>
+    public string? RuleId { get; init; }
     /// <summary>One of <see cref="ReviewEvidenceSources"/>. Unknown values are normalized to <c>other</c>.</summary>
     public string Source { get; init; } = ReviewEvidenceSources.Other;
     /// <summary>One of <see cref="ReviewEvidenceSeverities"/>. Unknown values are normalized to <c>info</c>.</summary>
@@ -78,13 +80,14 @@ public record ReviewEvidenceEntry
 /// </summary>
 public static class ReviewEvidenceSources
 {
+    public const string QualityStudio = "quality-studio";
     public const string SecurityAudit = "security-audit";
     public const string CodeReview = "code-review";
     public const string TaskCheck = "task-check";
     public const string HumanNote = "human-note";
     public const string Other = "other";
 
-    public static readonly string[] All = [SecurityAudit, CodeReview, TaskCheck, HumanNote, Other];
+    public static readonly string[] All = [QualityStudio, SecurityAudit, CodeReview, TaskCheck, HumanNote, Other];
 
     public static string Normalize(string? value)
     {

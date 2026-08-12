@@ -215,6 +215,24 @@ public static class PipelineCatalogue
     /// <see cref="BuildTestGateRunner"/>.
     /// </summary>
     public const string BuildTestGateStepId = "post-build-test-gate";
+    public const string QualityAngularRulesStepId = "post-analysis-qs-angular-rules";
+    public const string QualityDotNetRulesStepId = "post-analysis-qs-dotnet-rules";
+    public const string QualityModelReviewStepId = "post-analysis-qs-model-review";
+    public const string QualityVisualStepId = "post-analysis-qs-visual";
+    public const string QualitySecurityStepId = "post-analysis-qs-security";
+    public const string QualityRedundancyStepId = "post-analysis-qs-redundancy";
+    public const string QualityConsistencyStepId = "post-analysis-qs-consistency";
+
+    public static readonly string[] QualityAnalysisStepIds =
+    {
+        QualityAngularRulesStepId,
+        QualityDotNetRulesStepId,
+        QualityModelReviewStepId,
+        QualityVisualStepId,
+        QualitySecurityStepId,
+        QualityRedundancyStepId,
+        QualityConsistencyStepId,
+    };
     /// <summary>
     /// Deterministic delivery gate for cards linked to a Dossier through
     /// <c>references.workbenches</c> or the descriptor's
@@ -515,6 +533,7 @@ public static class PipelineCatalogue
                     Kind = StepKind.Aspect,
                     RunMode = StepRunMode.Parallel,
                     Idempotent = true,
+                    DependsOn = [QualityAngularRulesStepId],
                 });
                 continue;
             }
@@ -526,6 +545,7 @@ public static class PipelineCatalogue
                 RunMode = StepRunMode.Parallel,
                 Idempotent = true,
                 PromptTemplate = def.PromptTemplate,
+                DependsOn = [QualityAngularRulesStepId],
             });
         }
 
@@ -633,6 +653,7 @@ public static class PipelineCatalogue
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
                 },
+                .. BuildQualityStudioAnalysisSteps(),
                 .. aspects,
                 new PipelineStep
                 {
@@ -942,13 +963,19 @@ public static class PipelineCatalogue
                     Idempotent = true,
                     DefaultEnabled = true,
                 },
+                .. StandardPipeline.Post
+                    .Where(step => step.Kind == StepKind.Analysis)
+                    .Select(step => step with
+                    {
+                        DependsOn = [UiIterationArtifactStepId],
+                    }),
                 new PipelineStep
                 {
                     Id = UiVisualCaptureStepId,
                     DisplayName = "Stable-equivalent visual capture",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
-                    DependsOn = [UiIterationArtifactStepId],
+                    DependsOn = [UiIterationArtifactStepId, QualityAngularRulesStepId],
                     Idempotent = true,
                     DefaultEnabled = true,
                 },
@@ -1006,4 +1033,67 @@ public static class PipelineCatalogue
             };
         }
     }
+
+    private static IEnumerable<PipelineStep> BuildQualityStudioAnalysisSteps()
+    {
+        yield return new PipelineStep
+        {
+            Id = QualityAngularRulesStepId,
+            DisplayName = "Quality Studio: Angular rules",
+            Kind = StepKind.Analysis,
+            RunMode = StepRunMode.Sequential,
+            AppliesTo = PipelineStepStacks.Angular,
+            Framework = "angular",
+            AnalysisProvider = "quality-studio",
+            AnalysisName = "quality-rules",
+            AnalysisAxis = "static-rules",
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+        };
+
+        yield return PlannedQualityAnalysis(
+            QualityDotNetRulesStepId, "Quality Studio: C# rules", "quality-rules",
+            "static-rules", PipelineStepStacks.DotNet, framework: "dotnet");
+        yield return PlannedQualityAnalysis(
+            QualityModelReviewStepId, "Quality Studio: model review", "model-review",
+            "model-review", PipelineStepStacks.Any);
+        yield return PlannedQualityAnalysis(
+            QualityVisualStepId, "Quality Studio: visual quality", "visual-quality",
+            "visual", PipelineStepStacks.Angular, framework: "angular");
+        yield return PlannedQualityAnalysis(
+            QualitySecurityStepId, "Quality Studio: security", "gitleaks",
+            "security", PipelineStepStacks.DotNet, blockingFindings: false);
+        yield return PlannedQualityAnalysis(
+            QualityRedundancyStepId, "Quality Studio: redundancy", "redundancy",
+            "redundancy", PipelineStepStacks.Any);
+        yield return PlannedQualityAnalysis(
+            QualityConsistencyStepId, "Quality Studio: consistency", "consistency",
+            "consistency", PipelineStepStacks.Any);
+    }
+
+    private static PipelineStep PlannedQualityAnalysis(
+        string id,
+        string displayName,
+        string analysisName,
+        string axis,
+        string appliesTo,
+        string? framework = null,
+        bool blockingFindings = true) => new()
+    {
+        Id = id,
+        DisplayName = displayName,
+        Kind = StepKind.Analysis,
+        RunMode = StepRunMode.Sequential,
+        AppliesTo = appliesTo,
+        Framework = framework,
+        AnalysisProvider = "quality-studio",
+        AnalysisName = analysisName,
+        AnalysisAxis = axis,
+        BlockingFindings = blockingFindings,
+        DependsOn = [BuildTestGateStepId],
+        Idempotent = true,
+        DefaultEnabled = true,
+        Stub = true,
+    };
 }

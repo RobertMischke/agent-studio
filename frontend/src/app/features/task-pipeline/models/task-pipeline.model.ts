@@ -5,7 +5,7 @@
  * enums as camelCase strings via the global `JsonStringEnumConverter`).
  */
 
-export type StepKind = 'module' | 'core' | 'aspect' | 'orchestrator' | 'tool' | 'drift';
+export type StepKind = 'module' | 'core' | 'analysis' | 'aspect' | 'orchestrator' | 'tool' | 'drift';
 export type StepRunMode = 'sequential' | 'parallel';
 export type PipelineStepStatus =
   | 'pending'
@@ -21,6 +21,13 @@ export interface PipelineStep {
   id: string;
   displayName: string;
   kind: StepKind;
+  /** Named Quality Studio analysis, present only for analysis steps. */
+  analysisName?: string | null;
+  /** Quality axis represented by this step, e.g. static-rules or security. */
+  analysisAxis?: string | null;
+  analysisProvider?: string | null;
+  /** False for evidence-only axes such as the initial security policy. */
+  blockingFindings?: boolean;
   runMode: StepRunMode;
   dependsOn: string[];
   model?: string | null;
@@ -266,6 +273,11 @@ export interface PipelineCatalogueStep {
   pipelineId?: string | null;
   displayName: string;
   kind: StepKind;
+  /** Quality Studio package analysis and axis metadata for analysis rows. */
+  analysisName?: string | null;
+  analysisAxis?: string | null;
+  analysisProvider?: string | null;
+  blockingFindings?: boolean;
   appliesTo?: 'angular' | 'dotnet' | 'node' | 'any';
   applicable?: boolean;
   effectiveExecution?: EffectivePipelineStepExecution;

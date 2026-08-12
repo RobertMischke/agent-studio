@@ -50,6 +50,24 @@ pipeline view.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
   concept, and UI pipeline definitions, step ids, default ordering, step run
   modes, and display names.
+- `backend/Features/Pipeline/QualityStudio/`: the standard Quality Studio
+  analysis layer. The catalogue exposes distinct static-rule, model-review,
+  visual, security, redundancy, and consistency axes as `StepKind.Analysis`.
+  Card convention selects Angular rules plus visual analysis for frontend
+  changes, C# rules plus security for backend changes, and the common semantic
+  axes for source changes. Existing per-project `PipelineSteps` settings can
+  override step enablement; cards and environment variables cannot. Rule
+  selection and severity overrides come only from the reviewed repository's
+  versioned `.quality/rules.json` file.
+  `QualityStudioAnalysisStepRunner` implements the first slice after the
+  build/test gate and before aspects by invoking the
+  `AgentOrchestrator.CodeQuality` package in process with repository writes
+  disabled. It stores the transport-neutral result under
+  `results/quality-studio/`, appends findings carrying exact QS rule ids to
+  `results/review-evidence.jsonl`, and sends unresolved Angular rule findings
+  through the bounded automatic reissue path. The HTTP API is not on this
+  execution path. Security findings are recorded but remain non-blocking until
+  a later policy explicitly changes remediation ownership.
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly

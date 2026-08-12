@@ -99,6 +99,7 @@ internal static class ReviewEvidenceLog
         return new ReviewEvidenceEntry
         {
             Id = id!,
+            RuleId = ReadString(doc, "ruleId"),
             Source = ReviewEvidenceSources.Normalize(ReadString(doc, "source")),
             Severity = ReviewEvidenceSeverities.Normalize(ReadString(doc, "severity")),
             Title = title!,

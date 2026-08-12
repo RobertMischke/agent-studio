@@ -181,6 +181,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
+    private readonly AgentStudio.Pipeline.IQualityStudioAnalysisStepRunner? _qualityStudioAnalysis;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
     // The opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782). Optional so
@@ -264,7 +265,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
         PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
         AttemptAuthorityService? attemptAuthority = null,
-        DossierMaintenanceService? dossierMaintenance = null)
+        DossierMaintenanceService? dossierMaintenance = null,
+        AgentStudio.Pipeline.IQualityStudioAnalysisStepRunner? qualityStudioAnalysis = null)
     {
         _scanner = scanner;
         _taskAccess = taskAccess;
@@ -282,6 +284,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _pipelineLog = pipelineLog;
         _lintScssRunner = lintScssRunner;
         _buildTestGateRunner = buildTestGateRunner;
+        _qualityStudioAnalysis = qualityStudioAnalysis;
         _wikiMaintenance = wikiMaintenance;
         _wikiLearnings = wikiLearnings;
         _timeline = timeline;
@@ -2250,6 +2253,40 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        var qualityResult = await RunQualityStudioAngularRulesStepAsync(entry, current, ct);
+        if (qualityResult is { Verdict: AgentStudio.Pipeline.QualityStudioAnalysisVerdict.Findings })
+        {
+            var findings = qualityResult.Findings.Select(finding =>
+            {
+                var location = finding.Locations.FirstOrDefault();
+                var reference = location?.Range is null
+                    ? location?.Path
+                    : $"{location.Path}:{location.Range.Start.Line}";
+                return $"[{finding.RuleId}] {reference}: {finding.Title}. {finding.Recommendation}";
+            }).ToList();
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            await HandleCompletionGateAsync(workspace, entry, pending, current, new CompletionGate.Decision
+            {
+                Action = priorReissues >= ConfiguredMaxReissues()
+                    ? CompletionGate.CompletionGateAction.Escalate
+                    : CompletionGate.CompletionGateAction.Reissue,
+                Findings = findings,
+                Reason = qualityResult.Reason,
+            }, ct);
+            return;
+        }
+
+        if (qualityResult is { Verdict: AgentStudio.Pipeline.QualityStudioAnalysisVerdict.Unavailable })
+        {
+            await HandleCompletionGateAsync(workspace, entry, pending, current, new CompletionGate.Decision
+            {
+                Action = CompletionGate.CompletionGateAction.Escalate,
+                Findings = [$"Quality Studio analysis unavailable: {qualityResult.Reason}"],
+                Reason = "The required Quality Studio Angular analysis could not run in process.",
+            }, ct);
+            return;
+        }
+
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
@@ -3678,6 +3715,78 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.Id);
             return null;
         }
+    }
+
+    private async Task<AgentStudio.Pipeline.QualityStudioAnalysisStepResult?> RunQualityStudioAngularRulesStepAsync(
+        WatchPathEntry entry,
+        TaskInfo current,
+        CancellationToken cancellationToken)
+    {
+        if (_qualityStudioAnalysis is null) return null;
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
+        var step = PipelineCatalogue.Standard.Post.Single(candidate =>
+            string.Equals(candidate.Id, PipelineCatalogue.QualityAngularRulesStepId, StringComparison.Ordinal));
+        if (!PipelineStepConfigResolver.ShouldRun(settings, step, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = current.TaskType,
+                Tags = current.Tags,
+            }))
+        {
+            RecordQualityStudioAngularRulesStep(
+                current.FolderPath,
+                PipelineStepStatus.Skipped,
+                0,
+                "disabled",
+                "The project disabled this analysis step.");
+            return null;
+        }
+
+        var result = await _qualityStudioAnalysis.RunAngularRulesAsync(
+            new AgentStudio.Pipeline.QualityStudioAnalysisStepRequest(
+                ResolveBuildTestGateRepositoryPath(entry),
+                current.FolderPath,
+                ResolveLatestRunChangedFiles(current, entry.Path),
+                RunIndex: _pipelineLog?.Read(current.FolderPath)?.Attempt),
+            cancellationToken);
+        var status = result.Verdict switch
+        {
+            AgentStudio.Pipeline.QualityStudioAnalysisVerdict.Pass => PipelineStepStatus.Passed,
+            AgentStudio.Pipeline.QualityStudioAnalysisVerdict.Findings => PipelineStepStatus.Failed,
+            AgentStudio.Pipeline.QualityStudioAnalysisVerdict.NotApplicable => PipelineStepStatus.NotApplicable,
+            _ => PipelineStepStatus.Failed,
+        };
+        RecordQualityStudioAngularRulesStep(
+            current.FolderPath,
+            status,
+            result.DurationMs,
+            result.Verdict.ToString().ToLowerInvariant(),
+            result.Reason);
+        return result;
+    }
+
+    private void RecordQualityStudioAngularRulesStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdict,
+        string reason)
+    {
+        if (_pipelineLog is null) return;
+        var completedAt = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.QualityAngularRulesStepId,
+            Kind = StepKind.Analysis,
+            Status = status,
+            StartedAt = completedAt - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = completedAt,
+            DurationMs = durationMs,
+            Verdict = verdict,
+            Reason = reason,
+        });
     }
 
     private void RunWikiTaskCrossReferenceStep(WatchPathEntry entry, TaskInfo current)
