@@ -425,14 +425,26 @@ The installed helper currently accepts one variable only:
 | `review` | `agent-runner-review.service` | `/etc/agent-runner/runner-review.env` | `/etc/agent-runner/review.env` | `RUNNER_MAX_PARALLELISM=1..6` |
 
 The helper selects only an approved file that the target unit actually loads,
-requires `root:agent` mode `0640`, replaces the value atomically, and restarts
-only the mapped role unit. It then reads the new main process environment from
-`/proc/<MainPID>/environ`. A restart or process-environment mismatch restores
-the previous file and retries the old configuration. Every accepted change
-writes an `authpriv.notice` journal record tagged `agent-runner-deploy` with the
-role, variable, old value, new value, unit, PID, and result. The sudoers policy
-independently enumerates both roles and every integer from 1 through 6. It does
-not permit another variable, unit, path, or argument shape.
+requires `root:agent` mode `0640`, and asserts that no later loaded
+`EnvironmentFile` defines the managed variable. systemd applies
+`EnvironmentFile` values after values declared with `Environment=` and applies
+multiple environment files in their listed order. Therefore a role file such
+as `/etc/agent-runner/runner-review.env` overrides a main-unit
+`Environment=RUNNER_MAX_PARALLELISM=2` declaration. The static declaration can
+still appear in `systemctl show --property=Environment`; the effective process
+value is the value in `/proc/<MainPID>/environ`.
+
+The helper replaces the role value atomically and records the pre-restart main
+PID before restarting only the mapped role unit. It then waits up to 30 seconds
+for the unit to be active with a nonzero, different `MainPID` before reading
+that process environment. Surviving detached workers under `KillMode=process`
+are not candidates for this proof. A restart, new-main-PID timeout, or process
+environment mismatch restores the previous file and retries the old
+configuration. Every accepted change writes an `authpriv.notice` journal
+record tagged `agent-runner-deploy` with the role, variable, old value, new
+value, unit, previous PID, new PID, and result. The sudoers policy independently
+enumerates both roles and every integer from 1 through 6. It does not permit
+another variable, unit, path, or argument shape.
 
 Set Review to four slots and prove the effective process value without reading
 any credential file:

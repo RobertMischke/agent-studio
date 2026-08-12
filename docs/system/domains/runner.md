@@ -240,8 +240,12 @@ state.
   and role-configuration boundary. Release promotion retains its fixed
   no-argument ingress. Role configuration accepts only Coding or Review
   `RUNNER_MAX_PARALLELISM` values from 1 through 6, updates an EnvironmentFile
-  loaded by that unit, restarts only the mapped unit, proves the value through
-  `/proc/<MainPID>/environ`, and journals or rolls back the result.
+  loaded by that unit, verifies that no later EnvironmentFile overrides the
+  managed variable, and restarts only the mapped unit. It waits for an active,
+  nonzero MainPID that differs from the pre-restart daemon before proving the
+  value through `/proc/<MainPID>/environ`, so detached workers retained by
+  `KillMode=process` cannot be mistaken for the replacement daemon. It then
+  journals or rolls back the result.
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store

@@ -172,9 +172,11 @@ public sealed class RunnerServiceUnitTests
         var migration = File.ReadAllText(
             Path.Combine(RepoRoot(), "scripts", "harden-agent-runner-host.sh"));
 
-        Assert.Contains("source \"$config_policy\"", helper);
+        Assert.Contains("source \"$selected_config_policy\"", helper);
         Assert.Contains("mv -fT -- \"$candidate_file\" \"$config_env_file\"", helper);
         Assert.Contains("systemctl restart \"$AGENT_RUNNER_CONFIG_UNIT\"", helper);
+        Assert.Contains("wait_for_new_main_pid", helper);
+        Assert.Contains("unit_environment_file_is_authoritative", helper);
         Assert.Contains("/proc/$main_pid/environ", helper);
         Assert.Contains("result=$result", helper);
         Assert.Contains("rollback_config", helper);
@@ -182,6 +184,179 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("installed_policy", migration);
         Assert.Contains("visudo -c", migration);
         Assert.Contains("for privileged_group in sudo docker", migration);
+    }
+
+    [SkippableTheory]
+    [InlineData("6", "5")]
+    [InlineData("5", "6")]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
+    [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
+    public void Agent_runner_config_change_waits_for_new_main_pid_while_detached_worker_survives(
+        string oldValue,
+        string requestedValue)
+    {
+        PlatformGate.LinuxOnly("the helper proves the replacement daemon through /proc/<MainPID>/environ");
+        PlatformGate.RequiresPosixShell();
+
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var policy = Path.Combine(root, "config-policy");
+            var sharedEnvironment = Path.Combine(root, "runner.env");
+            var roleEnvironment = Path.Combine(root, "runner-review.env");
+            var laterEnvironment = Path.Combine(root, "later.env");
+            var stateFile = Path.Combine(root, "main-pid-observation-count");
+            var restartFile = Path.Combine(root, "restart-count");
+            var auditLog = Path.Combine(root, "audit.log");
+            var pgrepMarker = Path.Combine(root, "pgrep-was-called");
+
+            File.WriteAllText(
+                policy,
+                """
+                agent_runner_resolve_config() {
+                  AGENT_RUNNER_CONFIG_UNIT="agent-runner-review.service"
+                  AGENT_RUNNER_CONFIG_PRIMARY_ENV="$TEST_ROLE_ENV"
+                  AGENT_RUNNER_CONFIG_FALLBACK_ENV="$TEST_MISSING_ENV"
+                  AGENT_RUNNER_CONFIG_VARIABLE="$2"
+                  AGENT_RUNNER_CONFIG_VALUE="$3"
+                }
+                """);
+            File.WriteAllText(sharedEnvironment, "RUNNER_MAX_PARALLELISM=2\n");
+            File.WriteAllText(roleEnvironment, $"RUNNER_MAX_PARALLELISM={oldValue}\n");
+            File.WriteAllText(laterEnvironment, "RUNNER_MAX_PARALLELISM=4\n");
+            File.WriteAllText(stateFile, "0\n");
+            File.WriteAllText(restartFile, "0\n");
+
+            var result = RunPosixShell(
+                """
+                set -euo pipefail
+                source "$1"
+                policy="$2"
+                shared_env="$3"
+                role_env="$4"
+                later_env="$5"
+                state_file="$6"
+                restart_file="$7"
+                audit_log="$8"
+                pgrep_marker="$9"
+                old_value="${10}"
+                requested_value="${11}"
+
+                env "RUNNER_MAX_PARALLELISM=$old_value" sleep 30 &
+                old_main_pid=$!
+                env "RUNNER_MAX_PARALLELISM=$old_value" sleep 30 &
+                detached_worker_pid=$!
+                env "RUNNER_MAX_PARALLELISM=$requested_value" sleep 30 &
+                new_main_pid=$!
+                cleanup() {
+                  kill "$old_main_pid" "$detached_worker_pid" "$new_main_pid" 2>/dev/null || true
+                  wait "$old_main_pid" "$detached_worker_pid" "$new_main_pid" 2>/dev/null || true
+                }
+                trap cleanup EXIT
+
+                stat() {
+                  if [[ "$1" == "-c" && "$2" == "%U:%G:%a" ]]; then
+                    case "$3" in
+                      "$policy") printf 'root:root:755\n'; return 0 ;;
+                      "$role_env") printf 'root:agent:640\n'; return 0 ;;
+                    esac
+                  fi
+                  command stat "$@"
+                }
+                chown() { :; }
+                logger() { printf '%s\n' "$*" >>"$audit_log"; }
+                pgrep() {
+                  printf 'called\n' >"$pgrep_marker"
+                  printf '%s\n' "$detached_worker_pid"
+                }
+                systemctl() {
+                  case "$1:${2:-}" in
+                    cat:*)
+                      printf '%s\n' \
+                        '[Service]' \
+                        'Environment=RUNNER_MAX_PARALLELISM=2' \
+                        "EnvironmentFile=$role_env" \
+                        'KillMode=process'
+                      ;;
+                    restart:*)
+                      local restart_count
+                      restart_count="$(<"$restart_file")"
+                      printf '%s\n' "$((restart_count + 1))" >"$restart_file"
+                      kill "$old_main_pid" 2>/dev/null || true
+                      ;;
+                    show:--property=EnvironmentFiles)
+                      printf '%s (ignore_errors=no)\n' "$shared_env" "$role_env"
+                      ;;
+                    show:--property=MainPID)
+                      printf '%s\n' "$old_main_pid"
+                      ;;
+                    show:--property=KillMode)
+                      printf 'process\n'
+                      ;;
+                    show:--property=ActiveState)
+                      local observation_count
+                      observation_count="$(<"$state_file")"
+                      observation_count=$((observation_count + 1))
+                      printf '%s\n' "$observation_count" >"$state_file"
+                      case "$observation_count" in
+                        1) printf 'ActiveState=active\nMainPID=%s\n' "$old_main_pid" ;;
+                        2) printf 'ActiveState=activating\nMainPID=0\n' ;;
+                        *) printf 'ActiveState=active\nMainPID=%s\n' "$new_main_pid" ;;
+                      esac
+                      ;;
+                    *)
+                      printf 'unexpected systemctl invocation: %s\n' "$*" >&2
+                      return 90
+                      ;;
+                  esac
+                }
+
+                [[ "$(systemctl show --property=KillMode --value agent-runner-review.service)" == "process" ]]
+                ! unit_environment_file_is_authoritative \
+                  "$(printf '%s (ignore_errors=no)\n' "$role_env" "$later_env")" \
+                  "$role_env" \
+                  RUNNER_MAX_PARALLELISM
+
+                export TEST_ROLE_ENV="$role_env"
+                export TEST_MISSING_ENV="$role_env.missing"
+                configure_role review RUNNER_MAX_PARALLELISM "$requested_value" "$policy"
+                # configure_role owns the executable helper's EXIT trap. Restore
+                # the harness cleanup after its successful sourced invocation.
+                trap cleanup EXIT
+
+                grep -Fxq "RUNNER_MAX_PARALLELISM=$requested_value" "$role_env"
+                grep -Fq 'result=applied' "$audit_log"
+                grep -Eq 'previous-pid=[0-9]+,new-pid=[0-9]+' "$audit_log"
+                [[ "$(<"$restart_file")" == "1" ]]
+                [[ "$(<"$state_file")" -ge 3 ]]
+                [[ ! -e "$pgrep_marker" ]]
+                kill -0 "$detached_worker_pid"
+                tr '\0' '\n' <"/proc/$new_main_pid/environ" |
+                  grep -Fxq "RUNNER_MAX_PARALLELISM=$requested_value"
+                """,
+                Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-deploy"),
+                policy,
+                sharedEnvironment,
+                roleEnvironment,
+                laterEnvironment,
+                stateFile,
+                restartFile,
+                auditLog,
+                pgrepMarker,
+                oldValue,
+                requestedValue);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"config helper regression exited {result.ExitCode}: {result.StandardError.Trim()}");
+            Assert.Contains("configured role=review", result.StandardOutput);
+            Assert.Contains($"value={requestedValue}", result.StandardOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [SkippableTheory]
@@ -396,6 +571,31 @@ public sealed class RunnerServiceUnitTests
                 Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-config-policy")));
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
+
+        using var process = Process.Start(start)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, standardOutput, standardError);
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError) RunPosixShell(
+        string script,
+        params string[] arguments)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = PosixShell.RequirePath(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add(script);
+        start.ArgumentList.Add("agent-runner-config-regression");
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(Path.IsPathRooted(argument) ? PosixShell.ToShellPath(argument) : argument);
 
         using var process = Process.Start(start)!;
         var standardOutput = process.StandardOutput.ReadToEnd();
