@@ -388,6 +388,10 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(host.textContent ?? '').not.toContain('Last tick:');
     expect(host.querySelector('[data-testid="lane-post-processing-summary"]')?.textContent)
       .toContain('0 active / 0 waiting');
+    expect(host.querySelector('[data-testid="lane-post-processing-summary-full"]')?.textContent?.trim())
+      .toBe('0 active / 0 waiting');
+    expect(host.querySelector('[data-testid="lane-post-processing-summary-compact"]')?.textContent?.trim())
+      .toBe('0/0');
   });
 
   // AGT-2020: Delete moved off the hover trash button into the card context

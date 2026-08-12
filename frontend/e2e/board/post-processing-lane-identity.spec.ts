@@ -7,6 +7,7 @@ const WATCH_PATH = 'C:/fixtures/post-processing-identity';
 const SHOTS = process.env.JOB_RESULTS_DIR
   ? `${process.env.JOB_RESULTS_DIR}/post-processing-lane`
   : 'screenshots/post-processing-lane';
+const HEADER_CAPTURE_PHASE = process.env.LANE_HEADER_CAPTURE_PHASE ?? 'after';
 
 interface JobInfoStub {
   id: string;
@@ -440,6 +441,80 @@ test.describe('Post Processing lane identity', () => {
     await expect(activeCard.getByTestId('task-card-post-processing-activity')).toContainText('waiting 15m');
     await expect(activeCard.getByTestId('task-card-post-processing-activity'))
       .toHaveAttribute('data-activity-state', 'waiting');
+  });
+
+  test('keeps the lane name primary and aligns secondary header facts on one line', async ({ page }) => {
+    const waitingJobs = Array.from({ length: 10 }, (_, index) => jobInfo({
+      id: `waiting-review-${index + 1}`,
+      title: `Waiting review ${index + 1}`,
+      order: index + 1,
+      phase: 'awaiting-review',
+    }));
+    const status: AutoReviewStatusStub = {
+      lastTickAt: '2026-08-11T12:00:00Z',
+      accept: 0,
+      reissue: 0,
+      escalate: 0,
+      aspectsRun: 0,
+      pending: waitingJobs.length,
+      currentJob: null,
+      currentProject: null,
+      activeJobs: [],
+    };
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await seedBoardTab(page);
+    await installRoutes(page, waitingJobs, status);
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const lane = page.getByTestId('lane-4-auto-review');
+    const title = lane.getByRole('heading', { name: 'Post Processing' });
+    const count = lane.getByTestId('lane-count-4-auto-review');
+    const summary = lane.getByTestId('lane-post-processing-summary');
+    await expect(lane).toBeVisible();
+    await expect(summary).toHaveAttribute('data-active-count', '0');
+    await expect(summary).toHaveAttribute('data-waiting-count', '10');
+    await dismissRuntimeErrorOverlay(page);
+
+    mkdirSync(SHOTS, { recursive: true });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await lane.screenshot({
+        path: `${SHOTS}/AGT-2644--lane-header-${HEADER_CAPTURE_PHASE}-${theme}--mocked.png`,
+      });
+    }
+
+    await expect(summary.getByTestId('lane-post-processing-summary-full')).toBeHidden();
+    await expect(summary.getByTestId('lane-post-processing-summary-compact')).toHaveText('0/10');
+
+    const metrics = await Promise.all([
+      lane.getByTestId('lane-header-avatar-4-auto-review'),
+      title,
+      count,
+      summary,
+      page.getByTestId('info-button-lane-4-auto-review'),
+      lane.getByTestId('lane-collapse-4-auto-review'),
+    ].map(locator => locator.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        center: rect.top + rect.height / 2,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        width: rect.width,
+      };
+    })));
+
+    expect(Math.max(...metrics.map(metric => metric.center)) - Math.min(...metrics.map(metric => metric.center)))
+      .toBeLessThanOrEqual(1);
+    expect(new Set(metrics.slice(1, 4).map(metric => metric.fontFamily)).size).toBe(1);
+    expect(metrics[1].fontSize).toBe('13px');
+    expect(metrics[2].fontSize).toBe('11px');
+    expect(metrics[3].fontSize).toBe('11px');
+    expect(metrics[1].width).toBeGreaterThanOrEqual(72);
+
+    await summary.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('0 active post-processing tasks, 10 waiting');
   });
 
   test('shows a timed loop-waiting phase without claiming a runner slot', async ({ page }) => {

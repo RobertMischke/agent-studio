@@ -422,6 +422,9 @@
   // ---------------------------------------------------------------------------
   --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --studio-lane-header-font: var(--font-ui);
+  --studio-lane-header-primary-size: 13px;
+  --studio-lane-header-secondary-size: 11px;
 
   // ---------------------------------------------------------------------------
   // Spacing scale — 4px base, Material-aligned.
