@@ -65,6 +65,22 @@
   font-size: 12px;
 }
 
+.cud__panel-heading {
+  margin-bottom: 8px;
+}
+
+.cud__panel-heading h5 {
+  margin-bottom: 0;
+}
+
+.cud__period {
+  margin-top: 3px !important;
+  color: var(--studio-fg-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
 .cud__actions { gap: 8px; }
 
 .cud__button,

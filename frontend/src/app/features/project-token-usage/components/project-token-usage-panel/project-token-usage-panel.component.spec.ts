@@ -250,11 +250,11 @@ describe('ProjectTokenUsagePanelComponent (freshness)', () => {
       last7dOrchestratorTokens: 0,
       last7dCalls: 1,
       firstActivity: '2026-08-09T10:00:00Z',
-      lastActivity: '2026-08-09T10:00:00Z',
+      lastActivity: '2026-08-09T10:30:00Z',
       fetchedAt: '2026-08-09T10:01:00Z',
       freshness: {
         status: 'partial',
-        asOf: '2026-08-09T10:00:00Z',
+        asOf: '2026-08-09T10:30:00Z',
         warning: 'The task receipt source could not be read.',
         sources: ['historical-token-bus'],
       },
@@ -265,7 +265,9 @@ describe('ProjectTokenUsagePanelComponent (freshness)', () => {
 
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="token-usage-as-of"]')?.textContent)
-      .toContain('2026-08-09 10:00 UTC');
+      .toContain('Recorded since 2026-08-09 10:00 UTC');
+    expect(host.querySelector('[data-testid="token-usage-as-of"]')?.textContent)
+      .toContain('as of 2026-08-09 10:30 UTC');
     expect(host.querySelector('[data-testid="token-usage-source-warning"]')?.textContent)
       .toContain('may be incomplete');
   });

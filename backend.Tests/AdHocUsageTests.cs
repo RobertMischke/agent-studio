@@ -80,6 +80,11 @@ public class AdHocUsageTests
         Assert.Equal("2026-05-01", agg.ByDay[1].Date);
         Assert.Equal(1, agg.ByDay[0].Calls);
         Assert.Equal(2, agg.ByDay[1].Calls);
+        Assert.Equal(day1, agg.OldestRecordedAt);
+        Assert.Equal(day2, agg.NewestRecordedAt);
+        var model = Assert.Single(agg.ByModel);
+        Assert.Equal(day1, model.OldestRecordedAt);
+        Assert.Equal(day2, model.NewestRecordedAt);
     }
 
     [Fact]
@@ -103,6 +108,8 @@ public class AdHocUsageTests
         Assert.Empty(agg.BySource);
         Assert.Empty(agg.ByDay);
         Assert.False(agg.AllModelsPriced);
+        Assert.Null(agg.OldestRecordedAt);
+        Assert.Null(agg.NewestRecordedAt);
     }
 
     [Fact]

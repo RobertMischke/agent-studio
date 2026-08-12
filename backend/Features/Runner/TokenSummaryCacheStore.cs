@@ -29,6 +29,8 @@ public sealed record TokenSummaryAggregate(
     bool AllModelsPriced,
     IReadOnlyList<TokenSummaryByModel> ByModel,
     IReadOnlyList<TokenSummaryByProject> ByProject,
+    DateTime? OldestRecordedAt,
+    DateTime? NewestRecordedAt,
     string FetchedAt,
     string Disclaimer);
 

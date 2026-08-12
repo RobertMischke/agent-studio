@@ -64,6 +64,7 @@ public sealed class AdHocUsageService
         int totalCalls = 0;
         decimal totalCost = 0;
         bool allPriced = records.Count > 0;
+        DateTime? oldestRecordedAt = null, newestRecordedAt = null;
 
         var bySource = new Dictionary<string, Bucket>(StringComparer.Ordinal);
         var byModel = new Dictionary<string, Bucket>(StringComparer.OrdinalIgnoreCase);
@@ -72,6 +73,8 @@ public sealed class AdHocUsageService
         foreach (var r in records)
         {
             totalCalls++;
+            oldestRecordedAt = Earlier(oldestRecordedAt, r.Ts);
+            newestRecordedAt = Later(newestRecordedAt, r.Ts);
             totalIn += r.InputTokens;
             totalOut += r.OutputTokens;
             totalCacheR += r.CacheReadTokens;
@@ -129,7 +132,9 @@ public sealed class AdHocUsageService
                     CacheReadTokens: kv.Value.CacheRead,
                     CacheCreationTokens: kv.Value.CacheCreate,
                     EstimatedApiCostUsd: kv.Value.Cost,
-                    ModelPriced: priced);
+                    ModelPriced: priced,
+                    OldestRecordedAt: kv.Value.OldestRecordedAt,
+                    NewestRecordedAt: kv.Value.NewestRecordedAt);
             })
             .ToList();
 
@@ -147,6 +152,8 @@ public sealed class AdHocUsageService
             LogPath: logPath,
             LogSizeBytes: logSizeBytes,
             LogModifiedAt: logModifiedAt,
+            OldestRecordedAt: oldestRecordedAt,
+            NewestRecordedAt: newestRecordedAt,
             Disclaimer: DefaultDisclaimer);
     }
 
@@ -164,7 +171,15 @@ public sealed class AdHocUsageService
         b.CacheRead += r.CacheReadTokens;
         b.CacheCreate += r.CacheCreationTokens;
         b.Cost += cost.Total;
+        b.OldestRecordedAt = Earlier(b.OldestRecordedAt, r.Ts);
+        b.NewestRecordedAt = Later(b.NewestRecordedAt, r.Ts);
     }
+
+    private static DateTime? Earlier(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate < current ? candidate : current;
+
+    private static DateTime? Later(DateTime? current, DateTime? candidate)
+        => candidate is null ? current : current is null || candidate > current ? candidate : current;
 
     private sealed class Bucket
     {
@@ -175,5 +190,7 @@ public sealed class AdHocUsageService
         public long CacheRead;
         public long CacheCreate;
         public decimal Cost;
+        public DateTime? OldestRecordedAt;
+        public DateTime? NewestRecordedAt;
     }
 }

@@ -120,6 +120,8 @@ public sealed class AdHocUsageBusParityTests : IDisposable
         Assert.Equal(a.CacheCreationTokens,    b.CacheCreationTokens);
         Assert.Equal(a.EstimatedApiCostUsd,    b.EstimatedApiCostUsd);
         Assert.Equal(a.AllModelsPriced,        b.AllModelsPriced);
+        Assert.Equal(a.OldestRecordedAt,       b.OldestRecordedAt);
+        Assert.Equal(a.NewestRecordedAt,       b.NewestRecordedAt);
 
         AssertSourceListEqual(a.BySource, b.BySource);
         AssertDayListEqual(a.ByDay,       b.ByDay);
@@ -169,6 +171,8 @@ public sealed class AdHocUsageBusParityTests : IDisposable
             Assert.Equal(x[i].CacheCreationTokens,   y[i].CacheCreationTokens);
             Assert.Equal(x[i].EstimatedApiCostUsd,   y[i].EstimatedApiCostUsd);
             Assert.Equal(x[i].ModelPriced,           y[i].ModelPriced);
+            Assert.Equal(x[i].OldestRecordedAt,      y[i].OldestRecordedAt);
+            Assert.Equal(x[i].NewestRecordedAt,      y[i].NewestRecordedAt);
         }
     }
 

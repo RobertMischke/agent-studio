@@ -75,6 +75,8 @@ describe('TokenSummaryBlockComponent (smoke)', () => {
         estimatedApiCostUsd: 0,
         allModelsPriced: false,
         unknownModelCount: 1,
+        oldestRecordedAt: '2026-07-11T09:00:00Z',
+        newestRecordedAt: '2026-08-12T05:42:00Z',
         byModel: [{
           model: 'future-model', calls: 1, inputTokens: 1_000, outputTokens: 100,
           cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0,
@@ -90,6 +92,8 @@ describe('TokenSummaryBlockComponent (smoke)', () => {
     expect(badge?.textContent).toContain('1 model without price data');
     expect(fixture.nativeElement.querySelector('[data-testid="token-summary-cost"]')?.textContent)
       .toContain('Unknown');
+    expect(fixture.nativeElement.querySelector('[data-testid="token-summary-period"]')?.textContent)
+      .toContain('Since 11 Jul 2026 · as of 12 Aug 2026, 05:42 UTC');
 
     fixture.destroy();
     TestBed.inject(HttpTestingController).verify();

@@ -7,6 +7,9 @@
       } @else {
         <span class="tok-sum__sub">No orchestrator activity yet.</span>
       }
+      @if (usagePeriod(); as period) {
+        <span class="tok-sum__sub" data-testid="token-summary-period">{{ period }}</span>
+      }
       @if ((s.unknownModelCount ?? 0) > 0) {
         <span class="studio-pill studio-pill--warn"
               data-testid="token-summary-pricing-drift"

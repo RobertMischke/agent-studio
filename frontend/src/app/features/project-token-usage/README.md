@@ -19,4 +19,5 @@ Imports via `from './features/project-token-usage'`. See [`index.ts`](./index.ts
 ## Notable
 
 - The category split (`job` / `supporting` / `orchestrator`) follows `taxonomy.md` — supporting calls are summary generation, orchestrator calls are manager-style chats.
+- The summary header pairs the first recorded activity with the latest data timestamp so lifetime totals have explicit temporal context.
 - E2E perf budget: mounting + heatmap interactions stay under 200 ms cumulative (`e2e/project-token-usage-panel.spec.ts`).

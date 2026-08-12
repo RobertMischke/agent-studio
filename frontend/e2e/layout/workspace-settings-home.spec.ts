@@ -48,9 +48,10 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/runner/token-summary-aggregate*', json({
     projects: 2, orchestratorEntries: 21, orchestratorLlmCalls: 21,
     totalInputTokens: 510000, totalOutputTokens: 94000, totalCacheReadTokens: 180000, totalCacheCreationTokens: 22000,
+    oldestRecordedAt: '2026-07-11T08:15:00Z', newestRecordedAt: '2026-08-12T05:42:00Z',
     estimatedApiCostUsd: 2.4, allModelsPriced: true, byModel: [
-      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true },
-      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true },
+      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true, oldestRecordedAt: '2026-07-11T08:15:00Z', newestRecordedAt: '2026-08-12T05:42:00Z' },
+      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true, oldestRecordedAt: '2026-07-13T10:00:00Z', newestRecordedAt: '2026-08-11T19:42:00Z' },
     ], byProject: [],
     fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
   }));
@@ -257,7 +258,7 @@ test.describe('Workspace settings home (Dach)', () => {
     }
 
     await page.getByTestId('token-usage-nav-codex').click();
-    await expect(page).toHaveURL(/#\/workspace\/tokens\/codex$/);
+    await expect(page).toHaveURL(/#\/workspace\/settings\/tokens\/codex$/);
     await expect(page.getByTestId('cli-window-analysis-codex')).toContainText('Codex usage windows');
     await page.getByTestId('cli-window-period-7d').click();
     await expect(page.getByTestId('cli-window-period-7d')).toHaveAttribute('aria-pressed', 'true');
@@ -266,6 +267,8 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(page.getByTestId('workspace-token-timeline')).toBeVisible();
     await expect(page.getByTestId('token-usage-detail')).toBeVisible();
     await expect(page.getByTestId('cli-usage-detail-trend')).toBeVisible();
+    await expect(page.getByTestId('cli-usage-detail-period'))
+      .toHaveText('Since 11 Jul 2026 · as of 12 Aug 2026, 05:42 UTC');
     await expect(page.getByTestId('cli-usage-detail-headroom')).toHaveCount(0);
     await expect(page.getByTestId('cli-usage-detail-cli-claude')).toHaveCount(0);
   });

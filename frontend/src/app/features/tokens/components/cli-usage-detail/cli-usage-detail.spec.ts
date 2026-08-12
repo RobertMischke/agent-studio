@@ -73,4 +73,30 @@ describe('CliUsageDetailComponent (smoke)', () => {
     fixture.componentInstance.openProjectSettings.emit('Agent Taskboard');
     expect(emitted).toBe('Agent Taskboard');
   });
+
+  it('labels workspace totals with their telemetry period', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CliUsageDetailComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CliUsageDetailComponent);
+    fixture.componentRef.setInput('tokens', {
+      totalInputTokens: 100,
+      totalOutputTokens: 20,
+      totalCacheReadTokens: 0,
+      totalCacheCreationTokens: 0,
+      estimatedApiCostUsd: 0.01,
+      byProject: [],
+      byModel: [],
+      oldestRecordedAt: '2026-07-11T08:15:00Z',
+      newestRecordedAt: '2026-08-12T05:42:00Z',
+      disclaimer: '',
+    } as never);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.tokenPeriod())
+      .toBe('Since 11 Jul 2026 · as of 12 Aug 2026, 05:42 UTC');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="cli-usage-detail-period"]')?.textContent)
+      .toContain('Since 11 Jul 2026 · as of 12 Aug 2026, 05:42 UTC');
+  });
 });

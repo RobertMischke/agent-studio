@@ -245,6 +245,8 @@ public sealed class TokenSummaryBusParityTests : IDisposable
         Assert.Equal(a.TotalCacheCreationTokens,        b.TotalCacheCreationTokens);
         Assert.Equal(a.EstimatedApiCostUsd,             b.EstimatedApiCostUsd);
         Assert.Equal(a.AllModelsPriced,                 b.AllModelsPriced);
+        Assert.Equal(a.OldestRecordedAt,                b.OldestRecordedAt);
+        Assert.Equal(a.NewestRecordedAt,                b.NewestRecordedAt);
 
         Assert.Equal(a.ByModel.Count, b.ByModel.Count);
         for (var i = 0; i < a.ByModel.Count; i++)
@@ -257,6 +259,8 @@ public sealed class TokenSummaryBusParityTests : IDisposable
             Assert.Equal(a.ByModel[i].CacheCreationTokens,   b.ByModel[i].CacheCreationTokens);
             Assert.Equal(a.ByModel[i].EstimatedApiCostUsd,   b.ByModel[i].EstimatedApiCostUsd);
             Assert.Equal(a.ByModel[i].ModelPriced,           b.ByModel[i].ModelPriced);
+            Assert.Equal(a.ByModel[i].OldestRecordedAt,      b.ByModel[i].OldestRecordedAt);
+            Assert.Equal(a.ByModel[i].NewestRecordedAt,      b.ByModel[i].NewestRecordedAt);
         }
     }
 

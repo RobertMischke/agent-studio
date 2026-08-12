@@ -4,12 +4,8 @@ import { ConceptHelpComponent } from '../../../../components/concept-help/concep
 import type { QuotaWindow } from '../../../../features/quota';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
-import type {
-  AdHocUsageAggregate,
-  TokenSummaryAggregate,
-  TokenTimeline,
-  WorkspaceExpensiveJob,
-} from '../../models/tokens.model';
+import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenSummaryByModel, TokenTimeline, WorkspaceExpensiveJob } from '../../models/tokens.model';
+import { formatUsageTelemetryPeriod } from '../../usage-time-range.util';
 
 interface SparkPoint {
   label: string;
@@ -25,17 +21,7 @@ interface ProjectUsageRow {
   estimatedApiCostUsd: number;
 }
 
-interface ModelUsageRow {
-  model: string;
-  source: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-  modelPriced: boolean;
-}
+type ModelUsageRow = TokenSummaryByModel & { source: string };
 
 /**
  * Full CLI-usage detail surface: routing headroom, token trend, per-CLI
@@ -76,6 +62,8 @@ export class CliUsageDetailComponent {
   readonly expensiveJobs = input<WorkspaceExpensiveJob[]>([]);
   readonly refreshing = input<Record<string, boolean>>({});
   readonly refreshingAll = input(false);
+
+  readonly tokenPeriod = computed(() => formatUsageTelemetryPeriod(this.tokens() ? [this.tokens()!] : []));
 
   readonly refreshAll = output<Event>();
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
@@ -142,6 +130,16 @@ export class CliUsageDetailComponent {
   }
 
   modelRowsFor(cliType: CliType): ModelUsageRow[] {
+    return this.allModelRowsFor(cliType)
+      .sort((a, b) => this.totalTokens(b) - this.totalTokens(a))
+      .slice(0, 5);
+  }
+
+  usagePeriodFor(cliType: CliType): string | null {
+    return formatUsageTelemetryPeriod(this.allModelRowsFor(cliType));
+  }
+
+  private allModelRowsFor(cliType: CliType): ModelUsageRow[] {
     const rows: ModelUsageRow[] = [];
     for (const m of this.tokens()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cliType)) continue;
@@ -155,6 +153,8 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        oldestRecordedAt: m.oldestRecordedAt,
+        newestRecordedAt: m.newestRecordedAt,
       });
     }
     for (const m of this.adhoc()?.byModel ?? []) {
@@ -169,11 +169,11 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        oldestRecordedAt: m.oldestRecordedAt,
+        newestRecordedAt: m.newestRecordedAt,
       });
     }
-    return rows
-      .sort((a, b) => this.totalTokens(b) - this.totalTokens(a))
-      .slice(0, 5);
+    return rows;
   }
 
   sourceRowsFor(cliType: CliType) {

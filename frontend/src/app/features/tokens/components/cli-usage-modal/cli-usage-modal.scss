@@ -32,6 +32,18 @@
   text-transform: uppercase;
 }
 
+.cum__panel-heading {
+  min-width: 0;
+}
+
+.cum__period {
+  margin: 4px 0 0;
+  color: var(--studio-fg-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
 // Plan badge — the subscription tier surfaced next to the windows head.
 .cum__plan {
   font-size: 10px;

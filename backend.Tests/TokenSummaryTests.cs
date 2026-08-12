@@ -59,6 +59,8 @@ public class TokenSummaryTests
         Assert.Equal(0L, s.TotalInputTokens);
         Assert.Equal(0m, s.EstimatedApiCostUsd);
         Assert.Empty(s.ByModel);
+        Assert.Null(s.OldestRecordedAt);
+        Assert.Null(s.NewestRecordedAt);
     }
 
     [Fact]
@@ -197,6 +199,30 @@ public class TokenSummaryTests
         var s = TokenSummaryService.Summarize("Demo", Array.Empty<OrchestratorLogEntry>());
         Assert.Contains("subscription", s.Disclaimer, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("comparison", s.Disclaimer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Summarize_DerivesTelemetryBoundsFromUsageEntries()
+    {
+        var oldest = new DateTime(2026, 7, 11, 8, 15, 0, DateTimeKind.Utc);
+        var newest = new DateTime(2026, 8, 12, 5, 42, 0, DateTimeKind.Utc);
+        var summary = TokenSummaryService.Summarize("Demo", [
+            Entry("gpt-5-codex", 1_000, 100) with { Ts = newest },
+            new OrchestratorLogEntry { Ts = oldest.AddDays(-10), Summary = "no token usage" },
+            Entry("gpt-5-codex", 2_000, 200) with { Ts = oldest },
+        ]);
+
+        Assert.Equal(oldest, summary.OldestRecordedAt);
+        Assert.Equal(newest, summary.NewestRecordedAt);
+        var model = Assert.Single(summary.ByModel);
+        Assert.Equal(oldest, model.OldestRecordedAt);
+        Assert.Equal(newest, model.NewestRecordedAt);
+
+        var aggregate = TokenSummaryService.AggregateSummaries([("Demo", summary)]);
+        Assert.Equal(oldest, aggregate.OldestRecordedAt);
+        Assert.Equal(newest, aggregate.NewestRecordedAt);
+        Assert.Equal(oldest, Assert.Single(aggregate.ByModel).OldestRecordedAt);
+        Assert.Equal(newest, Assert.Single(aggregate.ByModel).NewestRecordedAt);
     }
 
     [Fact]

@@ -45,6 +45,8 @@ export interface TokenSummaryByModel {
   modelPriced: boolean;
   /** False only when the model id is absent from the pinned price catalog. */
   modelInCatalog?: boolean;
+  oldestRecordedAt?: string | null;
+  newestRecordedAt?: string | null;
 }
 
 export interface TokenSummaryByProject {
@@ -69,6 +71,8 @@ export interface TokenSummary {
   allModelsPriced: boolean;
   /** Distinct actively used model ids absent from the pinned price catalog. */
   unknownModelCount?: number;
+  oldestRecordedAt?: string | null;
+  newestRecordedAt?: string | null;
   byModel: TokenSummaryByModel[];
   disclaimer: string;
 }
@@ -91,6 +95,8 @@ export interface TokenSummaryAggregate {
   allModelsPriced: boolean;
   byModel: TokenSummaryByModel[];
   byProject: TokenSummaryByProject[];
+  oldestRecordedAt?: string | null;
+  newestRecordedAt?: string | null;
   fetchedAt: string;
   disclaimer: string;
 }
@@ -118,6 +124,8 @@ export interface AdHocUsageAggregate {
   logPath: string;
   logSizeBytes: number;
   logModifiedAt: string | null;
+  oldestRecordedAt?: string | null;
+  newestRecordedAt?: string | null;
   disclaimer: string;
 }
 
@@ -150,6 +158,8 @@ export interface AdHocUsageByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  oldestRecordedAt?: string | null;
+  newestRecordedAt?: string | null;
 }
 
 /**

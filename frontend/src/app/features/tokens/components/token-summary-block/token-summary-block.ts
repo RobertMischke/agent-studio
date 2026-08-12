@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import type { TokenSummary } from '../../../../features/tokens';
 import { TaskService } from '../../../../services/task.service';
 import { TokensApiService } from '../../../../features/tokens';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
 import type { TokenSummaryByModel } from '../../models/tokens.model';
+import { formatUsageTelemetryPeriod } from '../../usage-time-range.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
@@ -39,6 +40,10 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
 
   private readonly jobService = inject(TaskService);
   readonly summary = signal<TokenSummary | null>(null);
+  readonly usagePeriod = computed(() => {
+    const summary = this.summary();
+    return summary == null ? null : formatUsageTelemetryPeriod([summary]);
+  });
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   ngOnInit(): void {

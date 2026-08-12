@@ -83,6 +83,8 @@ public sealed record AdHocUsageAggregate(
     string LogPath,
     long LogSizeBytes,
     DateTime? LogModifiedAt,
+    DateTime? OldestRecordedAt,
+    DateTime? NewestRecordedAt,
     string Disclaimer);
 
 public sealed record AdHocUsageBySource(
@@ -114,4 +116,6 @@ public sealed record AdHocUsageByModel(
     long CacheReadTokens,
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
-    bool ModelPriced);
+    bool ModelPriced,
+    DateTime? OldestRecordedAt,
+    DateTime? NewestRecordedAt);

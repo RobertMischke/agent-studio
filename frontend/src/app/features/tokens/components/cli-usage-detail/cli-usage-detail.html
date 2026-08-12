@@ -51,7 +51,12 @@
 
   <section class="cud__trend" data-testid="cli-usage-detail-trend">
     <div class="cud__trend-head">
-      <h4>Token trend</h4>
+      <div>
+        <h4>Token trend</h4>
+        @if (tokenPeriod(); as period) {
+          <p class="cud__period" data-testid="cli-usage-detail-period">{{ period }}</p>
+        }
+      </div>
       @if (tokens(); as t) {
         <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
       }
@@ -157,7 +162,12 @@
           </div>
 
           <div class="cud__panel">
-            <h5>Top models</h5>
+            <div class="cud__panel-heading">
+              <h5>Top models</h5>
+              @if (usagePeriodFor(row.cliType); as period) {
+                <p class="cud__period">{{ period }}</p>
+              }
+            </div>
             @if (modelRowsFor(row.cliType).length === 0) {
               <p class="cud__empty">No model usage attributed.</p>
             } @else {
@@ -211,7 +221,6 @@
       </section>
     }
   </div>
-
   }
 
   <section class="cud__jobs" data-testid="cli-usage-detail-top-jobs">

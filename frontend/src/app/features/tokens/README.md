@@ -23,4 +23,5 @@ Imports via `from './features/tokens'`. See [`index.ts`](./index.ts).
 ## Notable
 
 - Numbers come straight from the JSONL logs (per-turn token usage) — they're authoritative, not estimates.
+- Recorded totals show the first and latest telemetry timestamps. Usage labels do not substitute the API response time for an actual recording timestamp.
 - The workspace timeline overlay open/close lives in `features/shell/state/workspace-overlays.service.ts`.
