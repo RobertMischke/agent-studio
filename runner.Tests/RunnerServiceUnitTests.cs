@@ -179,9 +179,34 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("result=$result", helper);
         Assert.Contains("rollback_config", helper);
         Assert.Contains("EnvironmentFiles", helper);
+        Assert.Contains("previous_main_pid", helper);
+        Assert.Contains("--property=ActiveState --property=MainPID", helper);
+        Assert.Contains("new-main-pid-timeout", helper);
+        Assert.DoesNotContain("pgrep", helper);
         Assert.Contains("installed_policy", migration);
         Assert.Contains("visudo -c", migration);
         Assert.Contains("for privileged_group in sudo docker", migration);
+    }
+
+    [SkippableFact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
+    [Trait(PlatformGate.TraitName, PlatformGate.Linux)]
+    public void Agent_runner_config_restart_uses_new_main_pid_and_role_environment_file_precedence()
+    {
+        PlatformGate.LinuxOnly("the config proof reads /proc/<pid>/environ");
+
+        var result = RunShellScript(
+            "runner.Tests/Fixtures/agent-runner-deploy-restart-race.sh",
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-deploy"));
+
+        Assert.True(result.ExitCode == 0, result.StandardError);
+        Assert.Contains("first-post-restart-state=active old-main-pid", result.StandardOutput);
+        Assert.Contains("legacy-single-read-result=process-environment-mismatch", result.StandardOutput);
+        Assert.Contains("detached-worker-alive-after-restart=true", result.StandardOutput);
+        Assert.Contains("main-unit-default-RUNNER_MAX_PARALLELISM=2", result.StandardOutput);
+        Assert.Contains("role-EnvironmentFile-RUNNER_MAX_PARALLELISM=6", result.StandardOutput);
+        Assert.Contains("effective-RUNNER_MAX_PARALLELISM=6", result.StandardOutput);
     }
 
     [SkippableTheory]
@@ -396,6 +421,29 @@ public sealed class RunnerServiceUnitTests
                 Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-config-policy")));
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
+
+        using var process = Process.Start(start)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, standardOutput, standardError);
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError) RunShellScript(
+        string relativePath,
+        params string[] arguments)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = PosixShell.RequirePath(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add(PosixShell.ToShellPath(Path.Combine(RepoRoot(), relativePath)));
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(Path.IsPathRooted(argument) ? PosixShell.ToShellPath(argument) : argument);
 
         using var process = Process.Start(start)!;
         var standardOutput = process.StandardOutput.ReadToEnd();

@@ -15,6 +15,8 @@ readonly compatibility_link="/opt/agent-runner"
 readonly legacy_backup="/opt/agent-runner.pre-hardening"
 readonly config_policy="/usr/local/libexec/agent-runner-config-policy"
 readonly maximum_release_bytes=$((1024 * 1024 * 1024))
+readonly main_pid_wait_seconds=30
+readonly main_pid_poll_seconds=0.2
 
 die() {
   printf 'agent-runner-deploy: %s\n' "$*" >&2
@@ -34,6 +36,49 @@ unit_loads_environment_file() {
   local expected_path="$2"
 
   awk '{ print $1 }' <<<"$environment_files" | grep -Fxq -- "$expected_path"
+}
+
+read_process_environment_value() {
+  local main_pid="$1"
+  local variable="$2"
+
+  tr '\0' '\n' <"/proc/$main_pid/environ" \
+    | awk -F= -v key="$variable" '$1 == key { print substr($0, index($0, "=") + 1) }'
+}
+
+wait_for_new_main_pid() {
+  local unit="$1"
+  local previous_main_pid="$2"
+  local timeout_seconds="${3:-$main_pid_wait_seconds}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local unit_state
+  local active_state
+  local observed_main_pid
+
+  while true; do
+    if unit_state="$(systemctl show --property=ActiveState --property=MainPID "$unit" 2>/dev/null)"; then
+      active_state="$(awk -F= '$1 == "ActiveState" { print $2 }' <<<"$unit_state")"
+      observed_main_pid="$(awk -F= '$1 == "MainPID" { print $2 }' <<<"$unit_state")"
+      if [[ "$active_state" == "active" \
+          && "$observed_main_pid" =~ ^[1-9][0-9]*$ \
+          && "$observed_main_pid" != "$previous_main_pid" ]]; then
+        printf '%s\n' "$observed_main_pid"
+        return 0
+      fi
+    fi
+
+    ((SECONDS < deadline)) || return 1
+    sleep "$main_pid_poll_seconds"
+  done
+}
+
+restart_unit_and_wait_for_new_main_pid() {
+  local unit="$1"
+  local previous_main_pid="$2"
+  local timeout_seconds="${3:-$main_pid_wait_seconds}"
+
+  systemctl restart "$unit" >/dev/null || return 10
+  wait_for_new_main_pid "$unit" "$previous_main_pid" "$timeout_seconds" || return 11
 }
 
 rollback_config() {
@@ -66,6 +111,10 @@ configure_role() {
     || die "role unit is not installed: $AGENT_RUNNER_CONFIG_UNIT"
   local unit_environment_files
   unit_environment_files="$(systemctl show --property=EnvironmentFiles --value "$AGENT_RUNNER_CONFIG_UNIT")"
+  # systemd applies EnvironmentFile values after Environment= values. A role
+  # file such as runner-review.env therefore overrides the main unit's
+  # RUNNER_MAX_PARALLELISM=2 default. The loaded-file check here establishes
+  # the source, and the new-MainPID /proc check below proves the effective value.
   if [[ -f "$AGENT_RUNNER_CONFIG_PRIMARY_ENV" ]] \
       && unit_loads_environment_file "$unit_environment_files" "$AGENT_RUNNER_CONFIG_PRIMARY_ENV"; then
     config_env_file="$AGENT_RUNNER_CONFIG_PRIMARY_ENV"
@@ -89,6 +138,13 @@ configure_role() {
     || die "role EnvironmentFile contains duplicate $AGENT_RUNNER_CONFIG_VARIABLE entries"
   old_value="$(awk -F= -v key="$AGENT_RUNNER_CONFIG_VARIABLE" '$1 == key { print substr($0, index($0, "=") + 1) }' "$config_env_file")"
   old_value="${old_value:-unset}"
+
+  local previous_main_pid
+  if ! previous_main_pid="$(systemctl show --property=MainPID --value "$AGENT_RUNNER_CONFIG_UNIT")"; then
+    die "could not query the role unit MainPID before restart: $AGENT_RUNNER_CONFIG_UNIT"
+  fi
+  [[ "$previous_main_pid" =~ ^[0-9]+$ ]] \
+    || die "role unit returned an invalid MainPID before restart: $AGENT_RUNNER_CONFIG_UNIT"
 
   candidate_file="$(mktemp "$config_directory/.agent-runner-config.candidate.XXXXXX")"
   rollback_file="$(mktemp "$config_directory/.agent-runner-config.rollback.XXXXXX")"
@@ -116,21 +172,22 @@ configure_role() {
   mv -fT -- "$candidate_file" "$config_env_file"
   candidate_file=""
 
-  if ! systemctl restart "$AGENT_RUNNER_CONFIG_UNIT"; then
-    rollback_config "unit-restart-failed"
-  fi
-  if ! systemctl is-active --quiet "$AGENT_RUNNER_CONFIG_UNIT"; then
-    rollback_config "unit-not-active"
-  fi
-
   local main_pid
   local process_value
-  if ! main_pid="$(systemctl show --property=MainPID --value "$AGENT_RUNNER_CONFIG_UNIT")"; then
-    rollback_config "main-pid-query-failed"
+  local restart_result
+  if main_pid="$(restart_unit_and_wait_for_new_main_pid \
+      "$AGENT_RUNNER_CONFIG_UNIT" "$previous_main_pid")"; then
+    restart_result=0
+  else
+    restart_result="$?"
   fi
-  [[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || rollback_config "main-pid-missing"
-  if ! process_value="$(tr '\0' '\n' <"/proc/$main_pid/environ" \
-      | awk -F= -v key="$AGENT_RUNNER_CONFIG_VARIABLE" '$1 == key { print substr($0, index($0, "=") + 1) }')"; then
+  case "$restart_result" in
+    0) ;;
+    10) rollback_config "unit-restart-failed" ;;
+    *) rollback_config "new-main-pid-timeout" ;;
+  esac
+  if ! process_value="$(read_process_environment_value \
+      "$main_pid" "$AGENT_RUNNER_CONFIG_VARIABLE")"; then
     rollback_config "process-environment-read-failed"
   fi
   [[ "$process_value" == "$AGENT_RUNNER_CONFIG_VALUE" ]] \
@@ -220,21 +277,27 @@ promote_release() {
   printf 'agent-runner-deploy: restart agent-runner.service and agent-runner-review.service to activate it\n'
 }
 
-[[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"
-command -v flock >/dev/null || die "flock is required"
-command -v stat >/dev/null || die "stat is required"
-install -d -o root -g root -m 0755 "$deploy_root"
-exec 9>"$deploy_root/.deploy.lock"
-flock -n 9 || die "another release promotion or configuration update is already running"
+main() {
+  [[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"
+  command -v flock >/dev/null || die "flock is required"
+  command -v stat >/dev/null || die "stat is required"
+  install -d -o root -g root -m 0755 "$deploy_root"
+  exec 9>"$deploy_root/.deploy.lock"
+  flock -n 9 || die "another release promotion or configuration update is already running"
 
-case "$#:${1:-}" in
-  0:)
-    promote_release
-    ;;
-  4:config)
-    configure_role "$2" "$3" "$4"
-    ;;
-  *)
-    die "usage: agent-runner-deploy [config <coding|review> RUNNER_MAX_PARALLELISM <1-6>]"
-    ;;
-esac
+  case "$#:${1:-}" in
+    0:)
+      promote_release
+      ;;
+    4:config)
+      configure_role "$2" "$3" "$4"
+      ;;
+    *)
+      die "usage: agent-runner-deploy [config <coding|review> RUNNER_MAX_PARALLELISM <1-6>]"
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
