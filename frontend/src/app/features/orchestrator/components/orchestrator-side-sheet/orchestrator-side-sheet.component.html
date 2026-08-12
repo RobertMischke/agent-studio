@@ -24,6 +24,16 @@
     [active]="sending() || activeRun() !== null"
     (chatsToggle)="toggleContextMenu()" />
 
+  @if (contextKind() === 'task' && effectiveJobKey(); as taskKey) {
+    <div class="sheet__task-context-note"
+         role="note"
+         data-testid="orch-task-context-note">
+      <span class="sheet__task-context-dot" aria-hidden="true"></span>
+      <span>Questions automatically refer to <strong>{{ taskKey }}</strong>.</span>
+      <span class="sheet__task-context-effect">Answers do not start, pause, or continue the task agent.</span>
+    </div>
+  }
+
   <main class="sheet__workspace">
     @if (contextMenuOpen()) {
       <section id="orch-context-menu"

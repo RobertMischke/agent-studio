@@ -15,7 +15,7 @@ import { setTheme } from '../helpers/theme';
  * routing end-to-end.
  *
  * Two host integrations are covered:
- *   1. Task Chat workbench → "🐞 Verbose Debug" button in the protocol pane.
+ *   1. Task detail → Verbose Debug action in the Orchestrator side sheet.
  *   2. Project side sheet header bug button when a task tab is in scope.
  *
  * Screenshots land under JOB_RESULTS_DIR during orchestrated task runs so

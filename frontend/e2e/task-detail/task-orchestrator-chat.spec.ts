@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 const TASK_ID = 'task-orchestrator-chat-fixture';
-const TASK_KEY = 'AGT-2574';
+const TASK_KEY = 'AGT-2577';
 const PROJECT = 'Agent Studio';
 const WATCH_PATH = '/tmp/task-orchestrator-chat';
 const CONTEXT_KEY = `task:${PROJECT}/${TASK_KEY}`;
@@ -28,7 +28,7 @@ const TASK_INFO = {
   taskKey: `${WATCH_PATH}::${TASK_ID}`,
   key: TASK_KEY,
   displayKey: TASK_KEY,
-  title: 'Add Task Chat',
+  title: 'Keep task conversations in the Orchestrator side sheet',
   state: '2-ready',
   order: 1,
   agent: 'codex',
@@ -50,7 +50,7 @@ const TASK_INFO = {
 
 const TASK_DETAIL = {
   info: TASK_INFO,
-  promptMarkdown: '# Task Chat fixture\n\nKeep the Activity transcript unchanged.',
+  promptMarkdown: '# Orchestrator task context fixture\n\nKeep the Activity transcript unchanged.',
   statusMarkdown: null,
   log: [],
   promptHistory: [],
@@ -156,20 +156,29 @@ async function installRoutes(
     if (pathname === '/api/cli/quota') return json(route, { snapshots: [], ttlSeconds: 600 });
     if (pathname === '/api/environment') return json(route, { isDev: false, devTools: {} });
     if (pathname === '/api/orchestrator/sessions') return json(route, { sessions: [] });
+    if (pathname === `/api/orchestrator/context/${CONTEXT_KEY}`) {
+      return json(route, {
+        contextKey: CONTEXT_KEY,
+        capturedAt: '2026-08-11T10:00:00Z',
+        digest: `${TASK_KEY} task context`,
+        sources: [],
+      });
+    }
     if (/\/api\/projects\/[^/]+\/workbenches$/.test(pathname)) {
       return json(route, { items: [] });
     }
     if (/\/api\/cli\/[^/]+\/models$/.test(pathname)) {
-      return json(route, { models: [], source: 'task-chat-e2e' });
+      return json(route, { models: [], source: 'task-context-sidesheet-e2e' });
     }
     return json(route, []);
   });
 }
 
-async function capturePane(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+async function captureWorkspace(page: Page, testInfo: TestInfo, name: string): Promise<void> {
   mkdirSync(evidenceDir, { recursive: true });
-  const screenshot = await page.getByTestId('pane-protocol').screenshot({
+  const screenshot = await page.screenshot({
     path: path.join(evidenceDir, `${name}--mocked.png`),
+    fullPage: false,
   });
   await testInfo.attach(`${name}--mocked.png`, {
     body: screenshot,
@@ -177,7 +186,7 @@ async function capturePane(page: Page, testInfo: TestInfo, name: string): Promis
   });
 }
 
-test('Task Chat keeps Activity separate and sends implicit context without task-agent mutations', async (
+test('Task detail uses the Orchestrator side sheet for task context without a Chat tab', async (
   { page },
   testInfo,
 ) => {
@@ -194,9 +203,10 @@ test('Task Chat keeps Activity separate and sends implicit context without task-
   await page.goto(`/?job=${TASK_ID}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
 
   const activityTab = page.getByTestId('inspector-tab-activity');
-  const chatTab = page.getByTestId('inspector-tab-chat');
   await expect(activityTab).toBeVisible({ timeout: 15_000 });
-  await expect(chatTab).toBeVisible();
+  await expect(page.getByTestId('inspector-tab-chat')).toHaveCount(0);
+  await expect(page.getByTestId('inspector-tab-task')).toBeVisible();
+  await expect(page.getByTestId('inspector-tab-protocol')).toBeVisible();
   await dismissDevErrorDialog(page);
   await expect(page.getByTestId('activity-chat-compose')).toBeVisible();
 
@@ -206,28 +216,33 @@ test('Task Chat keeps Activity separate and sends implicit context without task-
       decodeURIComponent(new URL(request.url()).pathname),
     ),
   );
-  await chatTab.click();
+  await page.getByTestId('orch-side-sheet-toggle').click();
   const openedRequest = await transcriptRequest;
   expect(decodeURIComponent(openedRequest.url())).toContain(CONTEXT_KEY);
 
-  const taskChat = page.getByTestId('task-chat');
-  await expect(taskChat).toBeVisible();
-  await expect(taskChat.getByTestId('task-chat-boundary')).toContainText(
+  const sideSheet = page.getByTestId('orch-side-sheet');
+  await expect(sideSheet).toBeVisible();
+  await expect(sideSheet.getByTestId('orch-panel-context-type')).toHaveText('Task');
+  await expect(sideSheet.getByTestId('orch-panel-context-name')).toContainText(TASK_KEY);
+  await expect(sideSheet.getByTestId('orch-task-context-note')).toContainText(
     `Questions automatically refer to ${TASK_KEY}.`,
   );
-  await expect(page.getByTestId('activity-chat-compose')).toHaveCount(0);
+  await expect(sideSheet.getByTestId('orch-task-context-note')).toContainText(
+    'Answers do not start, pause, or continue the task agent.',
+  );
+  await expect(page.getByTestId('activity-chat-compose')).toBeVisible();
 
-  await taskChat.getByTestId('chat-input').fill('What is the current verification status?');
-  await taskChat.getByTestId('chat-send').click();
+  await sideSheet.getByTestId('chat-input').fill('What is the current verification status?');
+  await sideSheet.getByTestId('chat-send').click();
   await expect.poll(() => chatPosts.length).toBe(1);
-  await expect(taskChat).toContainText(`This answer is scoped to ${TASK_KEY}.`);
+  await expect(sideSheet).toContainText(`This answer is scoped to ${TASK_KEY}.`);
 
   const requestBody = chatPosts[0].body;
   expect(requestBody['navigationContext']).toMatchObject({
     currentPage: 'task-detail',
     currentTaskId: TASK_ID,
     currentTaskKey: TASK_KEY,
-    observedSurface: 'Task Chat',
+    observedSurface: 'Agent Studio Orchestrator chat',
   });
   expect(requestBody['contextEnvelope']).toMatchObject({
     scope: { kind: 'task', contextKey: CONTEXT_KEY, projectId: PROJECT, taskKey: TASK_KEY },
@@ -237,7 +252,7 @@ test('Task Chat keeps Activity separate and sends implicit context without task-
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
 
   await setTheme(page, 'light');
-  await capturePane(page, testInfo, 'task-orchestrator-chat-light');
+  await captureWorkspace(page, testInfo, 'task-context-sidesheet-light');
   await setTheme(page, 'dark');
-  await capturePane(page, testInfo, 'task-orchestrator-chat-dark');
+  await captureWorkspace(page, testInfo, 'task-context-sidesheet-dark');
 });

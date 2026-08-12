@@ -20,7 +20,7 @@ import { outcomeIssueExplanation } from './protocol-pane-view-model';
  * stable across template tweaks.
  */
 describe('ProtocolPaneComponent (smoke)', () => {
-  it('exposes only the simple task-chat inputs and send output', () => {
+  it('exposes only the simple Activity composer inputs and send output', () => {
     type RemovedControlApi =
       | 'continueMode'
       | 'continueModeChange'
