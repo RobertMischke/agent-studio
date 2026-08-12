@@ -95,8 +95,8 @@ internal static class RemoteReviewReportEvidence
         }
         else
         {
-            text.AppendLine("| Phase | Workspace | Step | Command | Exit | Budget | Output | Errors |");
-            text.AppendLine("| --- | --- | --- | --- | ---: | --- | --- | --- |");
+            text.AppendLine("| Phase | Workspace | Step | Location | Host / executor | Command | Exit | Budget | Output | Errors |");
+            text.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- |");
             foreach (var command in request.Commands)
             {
                 var budget = command.Budget is null
@@ -105,6 +105,8 @@ internal static class RemoteReviewReportEvidence
                       (command.Budget.Violated ? " (violated)" : "");
                 text.AppendLine(
                     $"| {Cell(command.Phase)} | {Cell(command.WorkspaceRole)} | {Cell(command.StepId)} | " +
+                    $"{Cell(command.ExecutionLocation)} | " +
+                    $"{Cell($"{command.HostId ?? request.Environment.HostId} / {command.ExecutorId ?? request.ExecutorId}")} | " +
                     $"`{Cell(CommandLine(command))}` | {Cell(command.ExitCode?.ToString() ?? command.Signal ?? "n/a")} | " +
                     $"{Cell(budget)} | {ArtifactLink("stdout", command.StdoutSha256, artifactFiles)} | " +
                     $"{ArtifactLink("stderr", command.StderrSha256, artifactFiles)} |");
@@ -160,7 +162,9 @@ internal static class RemoteReviewReportEvidence
             : $"{label} `{digest[..Math.Min(12, digest.Length)]}`";
 
     private static string CommandLine(Contract.ReviewCommandEvidenceDto command)
-        => string.Join(' ', new[] { command.FileName }.Concat(command.Arguments));
+        => Contract.ReviewCommandKinds.IsAgent(command.ExecutionKind)
+            ? $"{command.FileName} read-only ({command.Model ?? "default model"})"
+            : string.Join(' ', new[] { command.FileName }.Concat(command.Arguments));
 
     private static string SafeFilePart(string value)
         => new(value.Select(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_').ToArray());

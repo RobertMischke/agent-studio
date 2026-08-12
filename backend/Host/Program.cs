@@ -574,6 +574,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService
 // post-task-spawner pipeline-step enable flag).
 builder.Services.AddSingleton<AgentStudio.Pipeline.TaskSpawnerPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
+builder.Services.AddSingleton<RemoteReviewPlanBuilder>();
+builder.Services.AddSingleton<RemotePipelineReviewEvidenceProjector>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();

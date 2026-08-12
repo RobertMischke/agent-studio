@@ -980,6 +980,7 @@ public static class LeaseEndpoints
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
             AgentStudio.Projects.ProjectSettingsService projectSettings,
+            RemoteReviewPlanBuilder remoteReviewPlans,
             TaskMutationService mutations,
             GitService git,
             TaskStateMachine states,
@@ -1356,6 +1357,12 @@ public static class LeaseEndpoints
                 var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
                 var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
                 var run = settled.RunAttempt!;
+                var taskProjectSettings = projectSettings.Get(task.ProjectName);
+                var repositoryPath = git.ResolveRepoRootForWatchPath(task.WatchPath);
+                var integrationRef = ReviewBaselineBranchPolicy.Decide(
+                    task.IntegrationBranch ?? req.IntegrationBranch,
+                    taskProjectSettings.IntegrationBranch,
+                    repositoryDefaultBranch: null).IntegrationRef;
                 reviewAttemptRequest = new CreateReviewAttemptRequest(
                     req.TaskKey,
                     run.RepositoryId,
@@ -1366,7 +1373,12 @@ public static class LeaseEndpoints
                     run.EvidenceDigests,
                     $"review-subject:{run.AttemptId}:{run.ResultSha}",
                     RepositoryUrl: req.Repository,
-                    ResultRef: deliveryBranch);
+                    ResultRef: deliveryBranch,
+                    Plan: remoteReviewPlans.Build(
+                        task,
+                        repositoryPath,
+                        taskProjectSettings,
+                        integrationRef));
             }
 
             if (!isEpicPlanning

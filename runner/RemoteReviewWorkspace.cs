@@ -19,6 +19,7 @@ public sealed class RemoteReviewWorkspace
     private readonly ReviewSubjectDto _subject;
     private readonly ReviewLeaseDto _lease;
     private readonly Action<string> _log;
+    private readonly RemoteReviewAgentCommandRunner _agentCommands;
     private string? _initialTree;
     private string? _baselineSha;
     private bool _dirtyBefore;
@@ -42,6 +43,13 @@ public sealed class RemoteReviewWorkspace
         HomePath = Path.Combine(AttemptRoot, "home");
         BaselineCacheRoot = Path.Combine(root, ".baseline-cache");
         DependencyCacheRoot = Path.Combine(root, ".dependency-cache");
+        _agentCommands = new RemoteReviewAgentCommandRunner(
+            options,
+            lease,
+            RepositoryPath,
+            ArtifactPath,
+            HomePath,
+            log);
     }
 
     public string AttemptRoot { get; }
@@ -194,8 +202,11 @@ public sealed class RemoteReviewWorkspace
                     throw new ReviewInfrastructureException(
                         "CommandSubjectMismatch",
                         $"Step '{command.StepId}' would run at '{headBefore}', not '{_subject.ExpectedResultSha}'.");
-                var execution = await RunCommandAsync(command, RepositoryPath, ct);
-                if (MissingToolchain(execution.Process))
+                var execution = ReviewCommandKinds.IsAgent(command.ExecutionKind)
+                    ? await _agentCommands.RunAsync(command, ct)
+                    : await RunCommandAsync(command, RepositoryPath, ct);
+                if (MissingToolchain(execution.Process)
+                    || AgentCommandUnavailable(command, execution.Process))
                 {
                     commands.Add(await AddCommandEvidenceAsync(
                         command.StepId,
@@ -217,7 +228,9 @@ public sealed class RemoteReviewWorkspace
                         dependencyCacheHit: false,
                         dependencyCache: null,
                         artifacts,
-                        ct));
+                        ct,
+                        command,
+                        execution.AgentUsage));
                     SaveCaches(candidateCache);
                     throw await InfrastructureFailureAsync(
                         "ToolUnavailable",
@@ -308,7 +321,9 @@ public sealed class RemoteReviewWorkspace
                     dependencyCacheHit: false,
                     dependencyCache: null,
                     artifacts,
-                    ct));
+                    ct,
+                    command,
+                    execution.AgentUsage));
                 verdicts.Add(comparison is null
                     ? ParseVerdict(command, execution.Process)
                     : BaselineVerdict(command, comparison));
@@ -565,11 +580,15 @@ public sealed class RemoteReviewWorkspace
         bool dependencyCacheHit,
         IReadOnlyList<ReviewDependencyCacheEvidenceDto>? dependencyCache,
         ICollection<ReviewArtifactEvidenceDto> artifacts,
-        CancellationToken ct)
+        CancellationToken ct,
+        ReviewCommandDto? plannedCommand = null,
+        RemoteAgentUsage? agentUsage = null)
     {
         var stdoutName = ArtifactName(workspaceRole, stepId, "stdout");
         var stderrName = ArtifactName(workspaceRole, stepId, "stderr");
-        var includeContent = !process.Success || signal is not null;
+        var includeContent = !process.Success
+                             || signal is not null
+                             || ReviewCommandKinds.IsAgent(plannedCommand?.ExecutionKind);
         var stdout = await WriteArtifactAsync(stdoutName, process.StdOut, includeContent, ct);
         var stderr = await WriteArtifactAsync(stderrName, process.StdErr, includeContent, ct);
         artifacts.Add(stdout);
@@ -604,7 +623,18 @@ public sealed class RemoteReviewWorkspace
                 consumed,
                 signal == "timeout" || consumed > limit),
             dependencyCacheHit,
-            dependencyCache);
+            dependencyCache,
+            plannedCommand?.ExecutionKind ?? ReviewCommandKinds.Tool,
+            "remote",
+            _lease.ExecutorId,
+            _lease.HostId,
+            _lease.AttemptId,
+            plannedCommand?.Model,
+            plannedCommand?.ThinkingLevel,
+            agentUsage?.InputTokens ?? 0,
+            agentUsage?.OutputTokens ?? 0,
+            agentUsage?.CacheReadTokens ?? 0,
+            agentUsage?.CacheCreationTokens ?? 0);
     }
 
     private async Task<ReviewArtifactEvidenceDto> WriteArtifactAsync(
@@ -1028,7 +1058,8 @@ public sealed class RemoteReviewWorkspace
             ["git"] = ExecutableIdentity("git"),
         };
         foreach (var command in _subject.Plan.Commands)
-            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
+            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(
+                _agentCommands.PlannedExecutable(command));
         foreach (var command in _subject.Plan.Preparation ?? [])
             toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
         return new ReviewEnvironmentDto(
@@ -1396,6 +1427,11 @@ public sealed class RemoteReviewWorkspace
         return null;
     }
 
+    private static bool AgentCommandUnavailable(ReviewCommandDto command, ProcessResult result)
+        => ReviewCommandKinds.IsAgent(command.ExecutionKind)
+           && !result.Success
+           && !result.StdOut.Contains("[[ASPECT_VERDICT:", StringComparison.Ordinal);
+
     private static string HashText(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
@@ -1464,7 +1500,15 @@ internal sealed record CommandExecution(
     ProcessResult Process,
     DateTime StartedAt,
     DateTime FinishedAt,
-    string? Signal);
+    string? Signal,
+    RemoteAgentUsage? AgentUsage = null);
+
+internal sealed record RemoteAgentUsage(
+    string Model,
+    long InputTokens,
+    long OutputTokens,
+    long CacheReadTokens,
+    long CacheCreationTokens);
 
 internal sealed record BaselineCacheEntry(
     int ParserVersion,

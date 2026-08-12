@@ -43,6 +43,7 @@ using RDurableAgentProcess = Runner::AgentRunner.DurableAgentProcess;
 using RRemoteCompletionResponse = Runner::AgentRunner.RemoteRunCompletionResponse;
 using RReviewDaemon = Runner::AgentRunner.RemoteReviewDaemon;
 using RReviewStateStore = Runner::AgentRunner.ReviewStateStore;
+using RReviewWorkspace = Runner::AgentRunner.RemoteReviewWorkspace;
 
 namespace AgentStudio.Tests;
 
@@ -3008,6 +3009,179 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Review_host_runs_tool_and_agent_aspect_end_to_end_with_honest_step_location()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        const string reviewRunnerId = "review-runner-pipeline-parity";
+        var origin = await SeedOriginAsync();
+        var resultSha = (await GitAsync(origin, "rev-parse", "refs/heads/main")).StdOut.Trim();
+        var fakeCodex = Path.Combine(_workspace, "fake-review-codex.sh");
+        await File.WriteAllTextAsync(fakeCodex, """
+            #!/bin/sh
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"Exact subject reviewed.\n[[ASPECT_VERDICT: status=pass; summary=Remote code quality aspect passed.]]"}}'
+            printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":34,"output_tokens":9,"cached_input_tokens":7}}'
+            """);
+        File.SetUnixFileMode(
+            fakeCodex,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        SeedTask(
+            TaskStates.AutoReview,
+            TaskKey,
+            "Run the remote pipeline",
+            "Execute one tool gate and one semantic aspect on the review host.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        var authority = factory.Services.GetRequiredService<AttemptAuthorityService>();
+        var repositoryId = Contract.RepositoryIdentityContract.FromUrl(origin)!;
+        var run = authority.AcquireRun(
+            TaskKey,
+            repositoryId,
+            null,
+            RunnerId,
+            "coding-host",
+            120,
+            "remote-pipeline-run").RunAttempt!;
+        var completed = authority.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId,
+                run.LastFence,
+                run.AuthorityEpoch,
+                "remote-pipeline-run-complete"),
+            Outcome = "done",
+            ResultSha = resultSha,
+            Reason = null,
+            ResultEnvelope = new Contract.ImmutableResultEnvelope(
+                repositoryId,
+                run.AttemptId,
+                resultSha,
+                resultSha,
+                "refs/heads/main",
+                null,
+                new string('c', 64),
+                RepositoryUrl: origin),
+        });
+        Assert.True(completed.Accepted);
+        var task = factory.Services.GetRequiredService<TaskScannerService>()
+            .FindJob(TaskKey, _watchPath)!;
+        var remotePlan = factory.Services.GetRequiredService<RemoteReviewPlanBuilder>()
+            .Build(task, repositoryPath: null, projectSettings: null, "refs/heads/main");
+        Assert.Contains(remotePlan.Commands, command =>
+            command.ExecutionKind == Contract.ReviewCommandKinds.Tool);
+        Assert.Contains(remotePlan.Commands, command =>
+            command.ExecutionKind == Contract.ReviewCommandKinds.AgentAspect
+            && command.StepId == "aspect-code-quality");
+        var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            TaskKey,
+            repositoryId,
+            resultSha,
+            run.AttemptId,
+            "requirements",
+            "remote-pipeline-policy",
+            [],
+            "remote-pipeline-review-create",
+            RepositoryUrl: origin,
+            ResultRef: "refs/heads/main",
+            Plan: remotePlan));
+        Assert.True(created.Accepted);
+
+        var options = ReviewRunnerOptions(
+            reviewRunnerId,
+            claimMaxLoadPerCore: double.MaxValue,
+            codexCliBin: fakeCodex);
+        using var client = new RClient(
+            http,
+            reviewRunnerId,
+            usesDurableTaskServer: true,
+            options: options,
+            runnerInstanceId: "review-host:pipeline-parity");
+        await client.EnsureCompatibleAsync(CancellationToken.None);
+        await client.RegisterAsync(
+            "pipeline parity review host",
+            "review-executor",
+            CancellationToken.None);
+        var claim = await client.ClaimReviewAsync(
+            new Contract.ReviewClaimRequest(
+                reviewRunnerId,
+                "review-host:pipeline-parity",
+                120,
+                AvailableSlots: 1),
+            CancellationToken.None);
+        Assert.Equal("claimed", claim.Status);
+
+        var workspace = new RReviewWorkspace(
+            options,
+            claim.Subject!,
+            claim.Lease!,
+            _ => { });
+        await workspace.PrepareAsync(client, CancellationToken.None);
+        var evidence = await workspace.ExecutePlanAsync(CancellationToken.None);
+        var report = await client.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            new Contract.ReviewReportRequest(
+                claim.Lease!.ExecutorId,
+                claim.Lease.InstanceId,
+                claim.Lease.LeaseId,
+                claim.Lease.Fence,
+                "remote-pipeline-review-report",
+                evidence.Outcome,
+                null,
+                "Remote tool and aspect steps passed.",
+                evidence.Workspace,
+                workspace.EnvironmentEvidence(),
+                evidence.Commands,
+                evidence.Artifacts,
+                evidence.Verdicts,
+                claim.Lease.AuthorityEpoch),
+            CancellationToken.None);
+        Assert.Equal("Pass", report.Outcome);
+
+        var humanFolder = Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey);
+        Assert.True(Directory.Exists(humanFolder));
+
+        var pipeline = factory.Services.GetRequiredService<PipelineExecutionLog>().Read(humanFolder)!;
+        var tool = Assert.Single(pipeline.Steps, step =>
+            step.StepId == PipelineCatalogue.BuildTestGateStepId);
+        var aspect = Assert.Single(pipeline.Steps, step =>
+            step.StepId == "aspect-code-quality");
+        Assert.Equal("remote", tool.ExecutionLocation);
+        Assert.Equal("remote", aspect.ExecutionLocation);
+        Assert.Equal("review-host", aspect.ExecutionHostId);
+        Assert.Equal(reviewRunnerId, aspect.ExecutionExecutorId);
+        Assert.Equal(created.ReviewAttempt!.AttemptId, aspect.ExecutionAttemptId);
+        Assert.Equal(34, aspect.InputTokens);
+        Assert.True(File.Exists(Path.Combine(humanFolder, "aspect-code-quality.md")));
+        Assert.True(File.Exists(Path.Combine(humanFolder, "aspect-code-quality.json")));
+
+        var timeline = factory.Services.GetRequiredService<TimelineLog>().ReadAll(humanFolder);
+        var remoteSteps = timeline.Where(item =>
+                item.Kind == TimelineEventKinds.PostStepFinished
+                && item.RunId == created.ReviewAttempt.AttemptId)
+            .ToArray();
+        Assert.Contains(remoteSteps, item =>
+            item.Details?["pipelineStepId"] == PipelineCatalogue.BuildTestGateStepId);
+        Assert.Contains(remoteSteps, item =>
+            item.Details?["stepId"] == "aspect-code-quality");
+        Assert.All(remoteSteps, item => Assert.Equal("remote", item.Details?["executionLocation"]));
+        Assert.All(remoteSteps, item => Assert.Equal("review-host", item.Details?["hostId"]));
+
+        Assert.True(await workspace.CleanupAsync());
+        var cleanup = await client.CleanupReviewAsync(
+            claim.Attempt.AttemptId,
+            new Contract.ReviewCleanupRequest(
+                claim.Lease.ExecutorId,
+                claim.Lease.InstanceId,
+                claim.Lease.LeaseId,
+                claim.Lease.Fence,
+                "remote-pipeline-review-cleanup",
+                WorkspaceRemoved: true,
+                AuthorityEpoch: claim.Lease.AuthorityEpoch),
+            CancellationToken.None);
+        Assert.Equal("cleaned", cleanup.Status);
+    }
+
+    [Fact]
     public async Task Review_daemon_restart_adopts_in_flight_worker_without_repeating_completed_commands()
     {
         const string reviewRunnerId = "review-runner-restart";
@@ -3285,7 +3459,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     private ROptions ReviewRunnerOptions(
         string runnerId,
         int hostMaxParallelism = 1,
-        double claimMaxLoadPerCore = 1.5) => new()
+        double claimMaxLoadPerCore = 1.5,
+        string? codexCliBin = null) => new()
     {
         ServerUrl = "http://in-process",
         RunnerId = runnerId,
@@ -3299,6 +3474,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         BaseBranch = "main",
         CliBin = "unused",
         CliArgs = string.Empty,
+        CodexCliBin = codexCliBin ?? "codex",
         TtlSeconds = 120,
         HeartbeatSeconds = 1,
         RunTimeoutSeconds = 30,

@@ -244,6 +244,14 @@ public sealed record PipelineStepExecution
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
     public long CacheCreationTokens { get; init; }
+    /// <summary>Physical placement reported by the executor, for example local or remote.</summary>
+    public string? ExecutionLocation { get; init; }
+    /// <summary>Runner host that executed the step when placement is remote.</summary>
+    public string? ExecutionHostId { get; init; }
+    /// <summary>Leased executor identity that executed the step.</summary>
+    public string? ExecutionExecutorId { get; init; }
+    /// <summary>Fenced attempt that owns the remote step evidence.</summary>
+    public string? ExecutionAttemptId { get; init; }
     /// <summary>
     /// Human-readable attribution for the token counts, e.g.
     /// <c>AGENT (CLI FOOTER) / reported</c>. Null when no token usage was

@@ -12,6 +12,15 @@ public static class ReviewCapabilities
     public const string DependencyPreparation = "review:dependency-preparation";
 }
 
+public static class ReviewCommandKinds
+{
+    public const string Tool = "tool";
+    public const string AgentAspect = "agent-aspect";
+
+    public static bool IsAgent(string? value)
+        => string.Equals(value, AgentAspect, StringComparison.OrdinalIgnoreCase);
+}
+
 public sealed record ReviewDependencyScopeDto(
     string WorkingSubdir,
     IReadOnlyList<string> Lockfiles);
@@ -31,7 +40,12 @@ public sealed record ReviewCommandDto(
     IReadOnlyList<string> Arguments,
     bool Required = true,
     int TimeoutSeconds = 1800,
-    bool CompareToBaseline = false);
+    bool CompareToBaseline = false,
+    string ExecutionKind = ReviewCommandKinds.Tool,
+    string? Prompt = null,
+    string? CliType = null,
+    string? Model = null,
+    string? ThinkingLevel = null);
 
 public sealed record ReviewPlanDto(
     IReadOnlyList<ReviewCommandDto> Commands,
@@ -150,7 +164,18 @@ public sealed record ReviewCommandEvidenceDto(
     string WorkspaceRole = "candidate",
     ReviewCommandBudgetEvidenceDto? Budget = null,
     bool DependencyCacheHit = false,
-    IReadOnlyList<ReviewDependencyCacheEvidenceDto>? DependencyCache = null);
+    IReadOnlyList<ReviewDependencyCacheEvidenceDto>? DependencyCache = null,
+    string ExecutionKind = ReviewCommandKinds.Tool,
+    string ExecutionLocation = "remote",
+    string? ExecutorId = null,
+    string? HostId = null,
+    string? AttemptId = null,
+    string? Model = null,
+    string? ThinkingLevel = null,
+    long InputTokens = 0,
+    long OutputTokens = 0,
+    long CacheReadTokens = 0,
+    long CacheCreationTokens = 0);
 
 public sealed record ReviewCommandBudgetEvidenceDto(
     string Name,

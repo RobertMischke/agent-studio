@@ -79,6 +79,10 @@ internal static class RunnerCapabilityProbe
         }
         else
         {
+            AddCodingCliCapabilities(
+                list,
+                options,
+                providerAuth ?? ProviderAuthProbe.Shared);
             list.Add(Capability(CapabilityProtocol.Vision, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));
@@ -141,6 +145,23 @@ internal static class RunnerCapabilityProbe
         .Concat(options.RequiredCapabilities)
         .Distinct(StringComparer.Ordinal)
         .ToArray();
+
+    public static IReadOnlyList<string> ReviewRegistrationCapabilities(RunnerOptions options)
+        => ReviewRequirements(options)
+            .Concat(new[]
+            {
+                ReviewCapabilities.ReviewExecutor,
+                ReviewCapabilities.GitMaterialization,
+                ReviewCapabilities.SourceBundleMaterialization,
+                ReviewCapabilities.VisionReview,
+            })
+            .Concat(CodingCliBinaries(options).SelectMany(item => new[]
+            {
+                CapabilityProtocol.CliExecution(item.CliType),
+                CapabilityProtocol.ProviderAuthentication(item.CliType),
+            }))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     public static HostTelemetrySnapshotDto? Telemetry(HostTelemetrySample? sample)
         => sample is null

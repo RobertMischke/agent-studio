@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-11
+Version: 2026-08-12
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -169,7 +169,11 @@ pipeline view.
   visibility-only and never admits, cancels, or reorders a gate.
 - `runner/RemoteReviewWorkspace.cs` and
   `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
-  verification. Test commands marked `CompareToBaseline` compare their parsed
+  verification. A frozen command is either a deterministic tool command or a
+  read-only semantic aspect call. Agent calls use the configured CLI, model,
+  and thinking level only when the Review Host advertises matching CLI and
+  provider-authentication capabilities. Test commands marked
+  `CompareToBaseline` compare their parsed
   failing-test set with the merge-base on the plan's integration ref. The
   parser recognizes .NET, Jest, Karma, Vitest, native Node test, and npm
   lifecycle output, normalizes ANSI-decorated names and volatile Jest file
@@ -177,6 +181,12 @@ pipeline view.
   Baseline results are single-flight cached by repository, baseline SHA, and
   command hash. Only failures still new after one subject retry block the
   review.
+- `backend/Features/Runner/RemoteReviewPlanBuilder.cs` freezes the effective
+  build profile and enabled pipeline aspects into the immutable ReviewSubject.
+  `backend/Features/Runner/RemotePipelineReviewEvidenceProjector.cs` projects
+  accepted, fenced command evidence back into the ordinary
+  `pipeline-execution.json`, aspect Markdown/JSON, file provenance, and
+  timeline contracts. The projection does not execute work or decide a lane.
 - `backend/Features/Runner/ReviewBaselineBranchPolicy.cs`: which integration
   line the baseline merge-base is taken from. Project truth outranks the card:
   configured project integration branch, then the registered checkout's
@@ -374,14 +384,15 @@ pipeline view.
   use the lightweight planning chain and never inherit migrated coding
   overrides. Concept retains its dedicated document-first catalogue.
 - The task pipeline endpoint projects local and remote lifecycle facts at read
-  time. A remote claim/completion becomes CORE work, a Review Plane grade
-  becomes the DECISION verdict, and recorded integration gates remain TOOL
-  steps. Local-only PRE, ASPECT, DRIFT, and review steps that the remote route
-  structurally omits are `Skipped` with an explicit remote/not-applicable
-  reason and are projected as `Not applicable` in the Overview. `Not run` is
-  reserved for a step the current attempt genuinely never reached. Remote token
-  totals, historical list-price estimates, and call counts come from the same
-  token ledger as the Task tab.
+  time. A remote claim/completion becomes CORE work. Accepted Review Plane
+  command evidence becomes the corresponding TOOL or ASPECT execution, and its
+  grade becomes the DECISION verdict. Recorded integration gates remain TOOL
+  steps. PRE, DRIFT, task-store mutation, and Studio-seat probes that the remote
+  route structurally omits are `Skipped` with an explicit
+  remote/not-applicable reason and are projected as `Not applicable` in the
+  Overview. `Not run` is reserved for a step the current attempt genuinely
+  never reached. Remote token totals, historical list-price estimates, and call
+  counts come from the same token ledger as the Task tab.
 - Test execution has three stable levels: `continuous` runs the configured
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
@@ -545,6 +556,41 @@ pipeline view.
   and previews the fresh enabled chain. Without an active step or queue
   position, active-lane cards report the newest recorded activity time and
   explicitly flag ten minutes of silence as a possible hang.
+
+### Execution placement matrix
+
+The Remote-Ready direction is that execution follows the immutable subject to
+an eligible Agent Host. It does not grant that host Task Server write authority.
+This is the current application of the
+[Remote-Ready line](../../concepts/review-pipeline-health/decision-history.md)
+and the exact-subject, per-step placement contract in
+[Runner provenance](../../concepts/completion-review-and-remote-runner-stability.html#provenance).
+
+| Step class | Current placement for a canonical Remote task | Remote-capable? | Boundary and reason |
+|---|---|---|---|
+| Deterministic repository tools, including restore, build, test, lint, and subject inspection | Agent Host, in the ReviewAttempt task worktree at the exact Result-SHA | Yes, default for the frozen Remote Review plan | They need the repository, declared toolchain, and host caches, not Studio state. Admission uses the existing Review Executor capacity, capability, lease, fence, and resource namespace. Missing CLI or toolchain is infrastructure failure, never a local fallback or product verdict. |
+| Semantic aspects (`aspect-*`) | Agent Host, in the same exact-subject ReviewAttempt workspace | Yes, default when the aspect is enabled | The plan freezes prompt, CLI, model, and thinking level before claim. The Host must advertise matching CLI and provider-authentication capabilities. Execution is read-only and clean-context; the accepted report produces the same `aspect-*.md`, `aspect-*.json`, file provenance, status, tokens, and verdict as local execution. |
+| Decision assistance | Evidence generation runs on the Agent Host; orchestration synthesis and the binding decision remain in the control plane | Split | Repository-reading evidence belongs with the exact subject and is reported through the fenced ReviewAttempt. Combining all evidence, applying retry budgets, requesting reissue/escalation, and changing a lane require the canonical task history and Task Server authority. These operations must not run in a disposable repository worker. This is a control-plane boundary, not a requirement that the control plane remain on the Studio workstation. |
+| Review build/test gate | Agent Host through the current ReviewAttempt adapter | Yes, current bridge to parity | Command evidence is attributed per step even though the durable attempt is still review-shaped. This reuses the proven exact-SHA workspace, dependency/npm cache, capability, lease, timeout, and report path. It removes Studio-host execution from canonical Remote review without weakening W18's target. |
+| Integration and release gates (`pre-develop`, `pre-main`) | Integration owner; command bodies may use the existing remote gate transport | Yes, migration still bounded by W18 | The tested subject is an integration commit created inside the serialized merge/rollback boundary, not the original task Result-SHA. Until the dedicated gate lifecycle exists, the integration owner must retain transaction ordering and rollback authority. The approved [W18 Remote Gate target architecture](../../operations/remote-gate-zielbild/index.html) remains a dedicated `GateSubject`/`GateAttempt` claim, not permanent embedding in ReviewAttempt and not silent in-process fallback. |
+| Task/project mutation tools, including managed docs/wiki writes, task spawning, commits, integration, push, and lane mutation | Task Server or platform-owned integration boundary | No as an ordinary repository step | They need canonical task/project paths, append-only ledgers, global serialization, API authorization, or platform-owned Git durability. An Agent Host may return evidence or a recommendation, but it cannot write the task namespace or perform the side effect from its disposable review worktree. |
+| PRE qualification/enrichment and cross-project DRIFT checks | Control plane | Not in the Remote Review worktree | PRE freezes policy and task context before dispatch. DRIFT reads designated-topic and cross-project state and may lead to centrally deduplicated follow-up work. Neither is an exact-subject repository review command. |
+| Studio-owned UI probes and operator-desktop evidence | Studio seat | No | They depend on the locally supervised stable browser, loopback Studio origin, Windows-native dev seat, or operator-visible desktop session. Headless browser tests that can declare an immutable repository subject, browser/toolchain capability, and self-contained artifacts are ordinary remote tools; a probe of the Studio seat itself is not. |
+
+The current ReviewAttempt adapter is intentionally narrower than the W18
+destination. It provides Remote parity now for review-shaped deterministic
+tools and semantic aspects. W18 still separates deterministic gate lifecycle
+into a first-class claimable GateAttempt so gate queueing, retries, cleanup, and
+terminal infrastructure state are independently visible and do not consume
+review identity indefinitely.
+
+Every remotely executed command records `executionLocation=remote`, Host,
+Executor, ReviewAttempt, lease/fence-derived authority, start/finish time, exact
+SHA/tree, and, for model calls, model, thinking level, and token usage. The
+pipeline row stores the same placement fields. Timeline start and finish events
+repeat the actual location and identity for operator inspection. Legacy rows
+without placement remain unknown; the UI must never infer `local` merely from a
+missing active lease.
 
 ### Post-step lifecycle and ownership
 
