@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
@@ -2752,7 +2753,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         ICliOneShot? summaryOneShot = null,
         string? repositoryPath = null,
         string? primaryProjectName = null,
-        string? primaryWatchPath = null) =>
+        string? primaryWatchPath = null,
+        Func<DateTime>? authorityNow = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -2767,6 +2769,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         ["WatchPaths:0:RootPath"] = repositoryPath ?? _watchPath,
                         ["WatchPaths:0:RepositoryPath"] = repositoryPath ?? _watchPath,
                         ["ReviewDecisionOrchestrator:Enabled"] = "false",
+                        ["Runner:RunLiveness:Enabled"] = authorityNow is null ? null : "false",
                         ["Runner:RemoteRequeue:GraceSeconds"] =
                             remoteRequeueGraceSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     };
@@ -2780,7 +2783,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     }
                     cfg.AddInMemoryCollection(values);
                 });
-                if (writer is not null || summaryOneShot is not null)
+                if (writer is not null || summaryOneShot is not null || authorityNow is not null)
                 {
                     b.ConfigureTestServices(services =>
                     {
@@ -2790,6 +2793,15 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         {
                             services.AddSingleton(
                                 new CliOneShotRegistry([summaryOneShot]));
+                        }
+                        if (authorityNow is not null)
+                        {
+                            services.RemoveAll<AttemptAuthorityService>();
+                            services.AddSingleton(sp => new AttemptAuthorityService(
+                                sp.GetRequiredService<IConfiguration>(),
+                                sp.GetRequiredService<ILogger<AttemptAuthorityService>>(),
+                                authorityNow,
+                                sp.GetRequiredService<IAtomicJsonFileWriter>()));
                         }
                     });
                 }
@@ -3537,6 +3549,222 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(ReviewTerminalOutcome.Pass, terminal.Outcome);
         Assert.Equal(originalFence, terminal.LastFence);
         Assert.Single(terminal.Reports);
+    }
+
+    [Fact]
+    public async Task Backend_restart_during_active_review_is_re_adopted_and_report_lands()
+    {
+        const string reviewRunnerId = "review-runner-server-restart";
+        const string reviewInstance = "review-host:server-restart";
+        var now = DateTime.UtcNow;
+        SeedTask(
+            TaskStates.AutoReview,
+            TaskKey,
+            "Review survives backend restart",
+            "Report the review after authority is re-adopted.");
+
+        Contract.ReviewClaimResponse claim;
+        using (var firstFactory = BuildFactory(authorityNow: () => now))
+        using (var firstHttp = firstFactory.CreateClient())
+        {
+            var authority = firstFactory.Services.GetRequiredService<AttemptAuthorityService>();
+            var run = authority.AcquireRun(
+                TaskKey,
+                "PROJ-RESTART",
+                null,
+                RunnerId,
+                "coding-host",
+                30,
+                "review-restart-source").RunAttempt!;
+            Assert.True(authority.SettleRun(new SettleRunAttemptRequest
+            {
+                Write = new AttemptWriteReference(
+                    run.AttemptId,
+                    run.LastFence,
+                    run.AuthorityEpoch,
+                    "review-restart-source-complete"),
+                Outcome = "done",
+                ResultSha = "589c462f589c462f589c462f589c462f589c462f",
+                ResultEnvelope = new Contract.ImmutableResultEnvelope(
+                    "PROJ-RESTART",
+                    run.AttemptId,
+                    "4136f00d4136f00d4136f00d4136f00d4136f00d",
+                    "589c462f589c462f589c462f589c462f589c462f",
+                    "refs/heads/restart-review-result",
+                    null,
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            }).Accepted);
+            Assert.True(authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                TaskKey,
+                "PROJ-RESTART",
+                "589c462f589c462f589c462f589c462f589c462f",
+                run.AttemptId,
+                "requirements",
+                "policy",
+                [],
+                "review-restart-create")).Accepted);
+
+            await RegisterReviewExecutorAsync(firstHttp, reviewRunnerId, reviewInstance);
+            var claimed = await firstHttp.PostAsJsonAsync(
+                $"/api/v1/runners/{reviewRunnerId}/review-claims",
+                new Contract.ReviewClaimRequest(
+                    reviewRunnerId,
+                    reviewInstance,
+                    30,
+                    AvailableSlots: 1));
+            claimed.EnsureSuccessStatusCode();
+            claim = (await claimed.Content.ReadFromJsonAsync<Contract.ReviewClaimResponse>())!;
+            Assert.Equal("claimed", claim.Status);
+        }
+
+        now = now.AddMinutes(2);
+        using var restartedFactory = BuildFactory(authorityNow: () => now);
+        using var restartedHttp = restartedFactory.CreateClient();
+        restartedHttp.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        var registration = await restartedHttp.PutAsJsonAsync(
+            $"/api/v1/runners/{reviewRunnerId}",
+            new Contract.RegisterRunnerRequest(
+                reviewRunnerId,
+                "review-host",
+                reviewInstance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [
+                    Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.BaselineComparison,
+                    Contract.ReviewCapabilities.DependencyPreparation,
+                    Contract.ReviewCapabilities.GitMaterialization,
+                    Contract.ReviewCapabilities.SemanticReview,
+                ],
+                ActiveAttempts:
+                [
+                    new Contract.RunnerActiveAttempt(
+                        Contract.RunnerAttemptKinds.Review,
+                        claim.Attempt!.AttemptId,
+                        claim.Attempt.TaskId,
+                        claim.Lease!.LeaseId,
+                        claim.Lease.Fence,
+                        claim.Lease.AuthorityEpoch,
+                        claim.Lease.InstanceId),
+                ],
+                AttemptLeaseTtlSeconds: 900));
+        registration.EnsureSuccessStatusCode();
+        var registered = await registration.Content.ReadFromJsonAsync<Contract.RunnerDto>();
+        Assert.Equal("adopted", Assert.Single(registered!.AttemptAdoptions!).Status);
+        var reviewHosts = await restartedHttp.GetFromJsonAsync<
+            IReadOnlyList<Contract.RunnerCapabilitySnapshotDto>>(
+            "/api/v1/management/remote-hosts");
+        Assert.Equal(1, Assert.Single(reviewHosts!, host =>
+            host.RunnerId == reviewRunnerId).Telemetry!.ActiveSlots);
+
+        var boardStatus = await restartedHttp.GetFromJsonAsync<AutoReviewStatusView>(
+            "/api/auto-review/status");
+        Assert.Contains(boardStatus!.ActiveJobs, activity =>
+            activity.Project == ProjectName && activity.JobId == TaskKey);
+
+        var report = await restartedHttp.PostAsJsonAsync(
+            $"/api/v1/reviews/attempts/{claim.Attempt.AttemptId}/report",
+            InfrastructureReport(
+                claim,
+                reviewRunnerId,
+                reviewInstance,
+                "review-report-after-server-restart"));
+        report.EnsureSuccessStatusCode();
+        var terminal = restartedFactory.Services
+            .GetRequiredService<AttemptAuthorityService>()
+            .GetReview(claim.Attempt.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Failed, terminal.State);
+        Assert.Single(terminal.Reports);
+    }
+
+    [Fact]
+    public async Task Backend_restart_during_coding_run_is_re_adopted_and_completion_lands()
+    {
+        const string codingInstance = "coding-host:server-restart";
+        var now = DateTime.UtcNow;
+        SeedTask(
+            TaskStates.Progress,
+            TaskKey,
+            "Coding survives backend restart",
+            "Complete after authority is re-adopted.");
+
+        RunAttemptDto run;
+        using (var firstFactory = BuildFactory(authorityNow: () => now))
+        {
+            _ = firstFactory.CreateClient();
+            run = firstFactory.Services.GetRequiredService<AttemptAuthorityService>().AcquireRun(
+                TaskKey,
+                "PROJ-RESTART",
+                null,
+                RunnerId,
+                "coding-host",
+                30,
+                "coding-restart-claim",
+                clientId: RunnerId,
+                leaseInstanceId: codingInstance).RunAttempt!;
+        }
+
+        now = now.AddMinutes(2);
+        using var restartedFactory = BuildFactory(authorityNow: () => now);
+        using var restartedHttp = restartedFactory.CreateClient();
+        restartedHttp.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        var registration = await restartedHttp.PutAsJsonAsync(
+            $"/api/v1/runners/{RunnerId}",
+            new Contract.RegisterRunnerRequest(
+                ProjectName,
+                "coding-host",
+                codingInstance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.CodingExecutor],
+                ActiveAttempts:
+                [
+                    new Contract.RunnerActiveAttempt(
+                        Contract.RunnerAttemptKinds.Coding,
+                        run.AttemptId,
+                        run.TaskKey,
+                        run.Lease!.LeaseId,
+                        run.LastFence,
+                        run.AuthorityEpoch,
+                        codingInstance),
+                ],
+                AttemptLeaseTtlSeconds: 120));
+        registration.EnsureSuccessStatusCode();
+        var registered = await registration.Content.ReadFromJsonAsync<Contract.RunnerDto>();
+        Assert.Equal("adopted", Assert.Single(registered!.AttemptAdoptions!).Status);
+        var codingHosts = await restartedHttp.GetFromJsonAsync<
+            IReadOnlyList<Contract.RunnerCapabilitySnapshotDto>>(
+            "/api/v1/management/remote-hosts");
+        Assert.Equal(1, Assert.Single(codingHosts!, host =>
+            host.RunnerId == RunnerId).Telemetry!.ActiveSlots);
+        var runnerBadge = restartedFactory.Services
+            .GetRequiredService<TaskRunnerService>()
+            .ResolveRunnerBadge(TaskKey);
+        Assert.Equal(run.AttemptId, runnerBadge!.AttemptId);
+        Assert.Equal(RunnerId, runnerBadge.RunnerId);
+
+        var completion = await restartedHttp.PostAsJsonAsync(
+            "/api/runner/completion",
+            new RemoteRunCompletionRequest(
+                TaskKey,
+                run.Lease.LeaseId,
+                run.LastFence,
+                RunnerId,
+                "Blocked",
+                Reason: "controlled server-restart integration test",
+                GateItems:
+                [
+                    "worktree-blocked: controlled restart test retains the fenced worker authority.",
+                ],
+                AttemptId: run.AttemptId,
+                AuthorityEpoch: run.AuthorityEpoch,
+                IdempotencyKey: "coding-completion-after-server-restart"));
+        completion.EnsureSuccessStatusCode();
+        var terminal = restartedFactory.Services
+            .GetRequiredService<AttemptAuthorityService>()
+            .GetRun(run.AttemptId)!;
+        Assert.Equal(AttemptLifecycleState.Failed, terminal.State);
+        Assert.Equal("blocked", terminal.TerminalOutcome);
     }
 
     [Fact]

@@ -51,9 +51,32 @@ public static class ReviewDecisionsEndpoints
         // opinions instead of silently waving jobs through. Returns the
         // last completed tick's accept/reissue/escalate counts plus the
         // job currently under review (if any).
-        app.MapGet("/api/auto-review/status", (AutoReviewStatusSnapshot snapshot) =>
+        app.MapGet("/api/auto-review/status", (
+            AutoReviewStatusSnapshot snapshot,
+            AttemptAuthorityService authority,
+            TaskScannerService scanner) =>
         {
-            return Results.Ok(snapshot.Read());
+            var tasks = scanner.ScanAllJobs();
+            var durableActive = authority.ListActiveReviewAttempts()
+                .Select(review =>
+                {
+                    var task = tasks.FirstOrDefault(item =>
+                        string.Equals(item.TaskKey, review.TaskKey, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(item.Key, review.TaskKey, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(item.Id, review.TaskKey, StringComparison.OrdinalIgnoreCase));
+                    return task is not null
+                           && string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase)
+                        ? new AutoReviewActivityView(
+                            task.ProjectName,
+                            task.Id,
+                            AutoReviewActivitySteps.Processing,
+                            review.Lease?.AcquiredAt ?? review.CreatedAt)
+                        : null;
+                })
+                .Where(activity => activity is not null)
+                .Cast<AutoReviewActivityView>()
+                .ToList();
+            return Results.Ok(snapshot.Read(durableActive));
         });
     }
 }

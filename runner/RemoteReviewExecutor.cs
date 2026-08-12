@@ -95,7 +95,8 @@ public sealed class RemoteReviewExecutor
         var subject = slot.Claim.Subject!;
         var lease = slot.Claim.Lease!;
         using var heartbeatStop = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
-        var heartbeat = RenewLoopAsync(attempt.AttemptId, lease, heartbeatStop.Token);
+        var heartbeat = RenewLoopAsync(
+            attempt.AttemptId, attempt.TaskId, lease, heartbeatStop.Token);
         var workerStarted = slot.ProcessId is not null || DurableReviewProcess.HasCompleted(slot);
         try
         {
@@ -537,6 +538,7 @@ public sealed class RemoteReviewExecutor
 
     private async Task RenewLoopAsync(
         string attemptId,
+        string taskId,
         ReviewLeaseDto lease,
         CancellationToken stop)
     {
@@ -561,6 +563,31 @@ public sealed class RemoteReviewExecutor
             }
             catch (TaskServerException dead) when (dead.StatusCode is 404 or 409)
             {
+                try
+                {
+                    var reported = new RunnerActiveAttempt(
+                        RunnerAttemptKinds.Review,
+                        attemptId,
+                        taskId,
+                        lease.LeaseId,
+                        lease.Fence,
+                        lease.AuthorityEpoch,
+                        lease.InstanceId);
+                    if (await _client.ReRegisterAttemptAsync(reported, stop))
+                    {
+                        _log(
+                            $"review lease authority re-adopted attempt={attemptId} " +
+                            $"fence={lease.Fence} after HTTP {dead.StatusCode}");
+                        continue;
+                    }
+                }
+                catch (Exception registrationException) when (
+                    registrationException is not OperationCanceledException)
+                {
+                    _log(
+                        $"review lease re-adoption failed attempt={attemptId}: " +
+                        registrationException.Message);
+                }
                 _log(
                     $"review lease authority lost attempt={attemptId} ({dead.StatusCode}); " +
                     $"stopping heartbeat: {dead.Message}");
