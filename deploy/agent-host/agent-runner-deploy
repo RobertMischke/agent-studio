@@ -14,7 +14,12 @@ readonly current_link="$product_root/current"
 readonly compatibility_link="/opt/agent-runner"
 readonly legacy_backup="/opt/agent-runner.pre-hardening"
 readonly config_policy="/usr/local/libexec/agent-runner-config-policy"
+readonly deps_closure_validator="/usr/local/libexec/agent-runner-deps-closure"
 readonly maximum_release_bytes=$((1024 * 1024 * 1024))
+readonly maximum_deps_json_bytes=$((16 * 1024 * 1024))
+readonly smoke_timeout_seconds=10
+readonly restart_observation_seconds=15
+readonly -a release_units=(agent-runner.service agent-runner-review.service)
 
 die() {
   printf 'agent-runner-deploy: %s\n' "$*" >&2
@@ -150,10 +155,126 @@ configure_role() {
     "$main_pid"
 }
 
+current_release_id() {
+  local target
+  local release_id
+
+  [[ -L "$current_link" ]] || return 1
+  target="$(readlink -f -- "$current_link")" || return 1
+  [[ "$(dirname -- "$target")" == "$releases_root" ]] || return 1
+  release_id="$(basename -- "$target")"
+  [[ "$release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || return 1
+  printf '%s\n' "$release_id"
+}
+
+restart_count() {
+  local unit="$1"
+  local count
+
+  count="$(systemctl show --property=NRestarts --value "$unit")" || return 1
+  [[ "$count" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$count"
+}
+
+print_rollback_hint() {
+  local previous_release_id="$1"
+
+  if [[ -n "$previous_release_id" ]]; then
+    printf 'agent-runner-deploy: previous release: %s\n' "$previous_release_id" >&2
+    printf '%s\n' \
+      "agent-runner-deploy: rollback command: sudo ln -sfnT $releases_root/$previous_release_id $current_link && sudo systemctl restart ${release_units[*]}" >&2
+  else
+    printf 'agent-runner-deploy: no previous release was available for rollback\n' >&2
+  fi
+}
+
+post_restart_failure() {
+  local release_id="$1"
+  local previous_release_id="$2"
+  local detail="$3"
+
+  logger -p authpriv.notice -t agent-runner-deploy \
+    "action=release release=$release_id previous=${previous_release_id:-none} result=post-restart-failed detail=$detail" || true
+  print_rollback_hint "$previous_release_id"
+  die "post-restart service check failed: $detail"
+}
+
+restart_release_services() {
+  local release_id="$1"
+  local previous_release_id="$2"
+  shift 2
+  local -a before_restart_counts=("$@")
+  local -a observed_restart_counts=()
+  local unit
+  local unit_index
+  local count
+  local deadline
+
+  for unit_index in "${!release_units[@]}"; do
+    unit="${release_units[$unit_index]}"
+    if ! systemctl restart "$unit"; then
+      post_restart_failure "$release_id" "$previous_release_id" "unit-restart-failed:$unit"
+    fi
+  done
+
+  for unit_index in "${!release_units[@]}"; do
+    unit="${release_units[$unit_index]}"
+    if ! systemctl is-active --quiet "$unit"; then
+      post_restart_failure "$release_id" "$previous_release_id" "unit-not-active:$unit"
+    fi
+    if ! count="$(restart_count "$unit")"; then
+      post_restart_failure "$release_id" "$previous_release_id" "restart-counter-query-failed:$unit"
+    fi
+    if ((count > before_restart_counts[unit_index])); then
+      post_restart_failure "$release_id" "$previous_release_id" \
+        "restart-counter-increased:$unit:${before_restart_counts[$unit_index]}->$count"
+    fi
+    observed_restart_counts+=("$count")
+  done
+
+  deadline=$((SECONDS + restart_observation_seconds))
+  while ((SECONDS < deadline)); do
+    sleep 1
+    for unit_index in "${!release_units[@]}"; do
+      unit="${release_units[$unit_index]}"
+      if ! count="$(restart_count "$unit")"; then
+        post_restart_failure "$release_id" "$previous_release_id" "restart-counter-query-failed:$unit"
+      fi
+      if [[ "$count" != "${observed_restart_counts[$unit_index]}" ]]; then
+        post_restart_failure "$release_id" "$previous_release_id" \
+          "restart-counter-changed:$unit:${observed_restart_counts[$unit_index]}->$count"
+      fi
+      if ! systemctl is-active --quiet "$unit"; then
+        post_restart_failure "$release_id" "$previous_release_id" "unit-left-active-state:$unit"
+      fi
+    done
+  done
+}
+
 promote_release() {
   command -v find >/dev/null || die "find is required"
+  command -v readlink >/dev/null || die "readlink is required"
+  command -v runuser >/dev/null || die "runuser is required"
+  command -v systemctl >/dev/null || die "systemctl is required"
+  command -v timeout >/dev/null || die "timeout is required"
+  [[ -x /usr/bin/python3 ]] || die "/usr/bin/python3 is required"
   id "$service_user" >/dev/null 2>&1 || die "service account '$service_user' does not exist"
   getent group "$service_group" >/dev/null || die "service group '$service_group' does not exist"
+  [[ -f "$deps_closure_validator" && ! -L "$deps_closure_validator" && -x "$deps_closure_validator" ]] \
+    || die "dependency closure validator is missing or invalid: $deps_closure_validator"
+  [[ "$(stat -c '%U:%G:%a' "$deps_closure_validator")" == "root:root:755" ]] \
+    || die "dependency closure validator must be root:root mode 0755"
+
+  local previous_release_id=""
+  previous_release_id="$(current_release_id || true)"
+  local -a before_restart_counts=()
+  local unit
+  local count
+  for unit in "${release_units[@]}"; do
+    systemctl cat "$unit" >/dev/null || die "release unit is not installed: $unit"
+    count="$(restart_count "$unit")" || die "could not read restart counter for $unit"
+    before_restart_counts+=("$count")
+  done
 
   install -d -o root -g root -m 0755 "$deploy_root" "$accepted_root" "$product_root" "$releases_root"
   [[ -d "$incoming_root" ]] || die "staged release is missing: $incoming_root"
@@ -179,6 +300,12 @@ promote_release() {
   done
   [[ -x "$incoming_root/agent-host" ]] || die "agent-host is not executable"
 
+  local deps_json_bytes
+  deps_json_bytes="$(stat -c '%s' "$incoming_root/agent-host.deps.json")"
+  [[ "$deps_json_bytes" =~ ^[0-9]+$ ]] || die "could not measure agent-host.deps.json"
+  ((deps_json_bytes <= maximum_deps_json_bytes)) \
+    || die "agent-host.deps.json exceeds the 16 MiB safety limit"
+
   local release_bytes
   release_bytes="$(du -sb "$incoming_root" | awk '{print $1}')"
   [[ "$release_bytes" =~ ^[0-9]+$ ]] || die "could not measure staged release"
@@ -188,6 +315,9 @@ promote_release() {
   local accepted_release="$accepted_root/$release_id"
   [[ ! -e "$release_root" ]] || die "immutable release already exists: $release_root"
   [[ ! -e "$accepted_release" ]] || die "accepted upload already exists: $accepted_release"
+  if [[ -e "$compatibility_link" && ! -L "$compatibility_link" ]]; then
+    [[ ! -e "$legacy_backup" ]] || die "legacy compatibility backup already exists: $legacy_backup"
+  fi
 
   local staging_root="$releases_root/.staging.$release_id.$$"
   trap 'rm -rf --one-file-system -- "$staging_root"' EXIT
@@ -198,13 +328,39 @@ promote_release() {
   find "$staging_root" -type d -exec chmod 0755 {} +
   find "$staging_root" -type f -exec chmod 0644 {} +
   chmod 0755 "$staging_root/agent-host"
+
+  local closure_output
+  local closure_status
+  if closure_output="$(
+    "$deps_closure_validator" "$staging_root/agent-host.deps.json" "$staging_root" 2>&1
+  )"; then
+    :
+  else
+    closure_status=$?
+    die "dependency closure validation failed (exit $closure_status): ${closure_output:-no detail}"
+  fi
+
+  local smoke_output
+  local smoke_status
+  if smoke_output="$(
+    cd -- "$staging_root"
+    timeout --signal=TERM --kill-after=2s "${smoke_timeout_seconds}s" \
+      runuser -u "$service_user" -- \
+      env -i PATH="$PATH" ./agent-host --version 2>&1
+  )"; then
+    :
+  else
+    smoke_status=$?
+    smoke_output="${smoke_output//$'\n'/; }"
+    die "staged agent-host boot smoke check failed (exit $smoke_status): ${smoke_output:-no output}"
+  fi
+
   mv -- "$staging_root" "$release_root"
   trap - EXIT
 
   ln -sfnT "$release_root" "$current_link"
   chown -h root:root "$current_link"
   if [[ -e "$compatibility_link" && ! -L "$compatibility_link" ]]; then
-    [[ ! -e "$legacy_backup" ]] || die "legacy compatibility backup already exists: $legacy_backup"
     mv -- "$compatibility_link" "$legacy_backup"
   fi
   ln -sfnT "$current_link" "$compatibility_link"
@@ -214,10 +370,14 @@ promote_release() {
   chown -R root:root "$accepted_release"
   install -d -o "$service_user" -g "$service_group" -m 0750 "$incoming_root"
 
+  restart_release_services \
+    "$release_id" \
+    "$previous_release_id" \
+    "${before_restart_counts[@]}"
+
   logger -p authpriv.notice -t agent-runner-deploy \
-    "action=release release=$release_id source=$incoming_root target=$release_root result=promoted" || true
-  printf 'agent-runner-deploy: promoted release %s to %s\n' "$release_id" "$release_root"
-  printf 'agent-runner-deploy: restart agent-runner.service and agent-runner-review.service to activate it\n'
+    "action=release release=$release_id previous=${previous_release_id:-none} source=$incoming_root target=$release_root result=activated" || true
+  printf 'agent-runner-deploy: promoted and activated release %s at %s\n' "$release_id" "$release_root"
 }
 
 [[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"

@@ -70,7 +70,11 @@ jobs:
         run: npm audit --omit=dev --audit-level=critical
 
       - name: Test release shell contracts
-        run: bash scripts/release/release-scripts.test.sh
+        run: |
+          bash scripts/release/release-scripts.test.sh
+          python3 -m unittest discover \
+            -s deploy/agent-host/tests \
+            -p 'test_*.py'
 
       - name: Test .NET solution
         run: >-
