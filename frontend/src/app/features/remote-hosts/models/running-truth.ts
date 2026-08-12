@@ -1,6 +1,12 @@
 import type { TaskInfo } from '../../../models/task.model';
 import { deriveActiveTaskRun } from '../../../services/run-activity.util';
-import type { HostProjectSlots, HostTelemetryPoint, RemoteHost } from './remote-host.model';
+import type {
+  HostExecutionPlaneRole,
+  HostExecutionPlaneTelemetry,
+  HostProjectSlots,
+  HostTelemetryPoint,
+  RemoteHost,
+} from './remote-host.model';
 
 export const RUNNING_TELEMETRY_FRESH_MS = 5 * 60_000;
 
@@ -74,6 +80,23 @@ export function freshHostTelemetry(
   return point;
 }
 
+export function freshHostExecutionPlane(
+  host: RemoteHost,
+  role: HostExecutionPlaneRole,
+  nowMs = Date.now(),
+): HostExecutionPlaneTelemetry | null {
+  if (host.status === 'offline' || host.status === 'retired') return null;
+  const plane = host.executionPlanes?.find(candidate => candidate.role === role) ?? null;
+  if (!plane) return null;
+  const observedAt = plane.observedAt ? Date.parse(plane.observedAt) : Number.NaN;
+  const seenAt = Date.parse(plane.lastSeenAt);
+  if (!Number.isFinite(observedAt)
+    || !Number.isFinite(seenAt)
+    || nowMs - observedAt > RUNNING_TELEMETRY_FRESH_MS
+    || nowMs - seenAt > RUNNING_TELEMETRY_FRESH_MS) return null;
+  return plane;
+}
+
 export function boardRemoteSlotsForHost(truth: BoardRunningTruth, host: RemoteHost): number {
   const ids = new Set([host.id, host.clientId]);
   let count = 0;
@@ -116,4 +139,19 @@ export function freshRemoteTelemetrySlots(
     .filter((point): point is HostTelemetryPoint => point !== null);
   if (samples.length === 0) return null;
   return samples.reduce((sum, point) => sum + point.activeSlots, 0);
+}
+
+/** Fresh role-local slots, with legacy coding telemetry as a compatibility fallback. */
+export function freshExecutionPlaneSlots(
+  hosts: readonly RemoteHost[],
+  role: HostExecutionPlaneRole,
+  nowMs = Date.now(),
+): number | null {
+  const planes = hosts
+    .map(host => freshHostExecutionPlane(host, role, nowMs))
+    .filter((plane): plane is HostExecutionPlaneTelemetry => plane !== null);
+  if (planes.length > 0)
+    return planes.reduce((sum, plane) => sum + plane.activeSlots, 0);
+  if (role === 'review') return null;
+  return freshRemoteTelemetrySlots(hosts, nowMs);
 }

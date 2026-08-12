@@ -5,21 +5,29 @@
   </div>
   <div class="workloads__grid">
     <article class="workload"
-             [class.workload--stale]="runSlotsStale()"
-             data-testid="remote-host-run-pool">
-      <span class="workload__kind">RUN slots</span>
+             [class.workload--stale]="codingSlotsStale()"
+             data-testid="remote-host-run-pool"
+             data-plane="coding">
+      <span class="workload__kind">Coding slots</span>
       <strong>
-        {{ runSlots() }}
-        @if (runSlotsDiverge()) {
+        {{ codingSlots() }}
+        @if (codingSlotsDiverge()) {
           <span class="workload__warning"
                 data-testid="remote-host-running-divergence"
                 aria-label="Running sources disagree"
-                [appTooltip]="runSlotsTooltip()">
+                [appTooltip]="codingSlotsTooltip()">
             <app-studio-icon name="warn" [size]="12"></app-studio-icon>
           </span>
         }
       </strong>
-      <small>Daemon telemetry · coding and agent runs</small>
+      <small>Runner telemetry · coding and agent runs</small>
+    </article>
+    <article class="workload"
+             [class.workload--stale]="reviewSlotsStale()"
+             data-testid="remote-host-review-pool">
+      <span class="workload__kind">Review slots</span>
+      <strong>{{ reviewSlots() }}</strong>
+      <small>Review Runner telemetry · detached review workers</small>
     </article>
     <article class="workload" data-testid="remote-host-gate-pool">
       <span class="workload__kind">GATE work</span>
@@ -28,6 +36,6 @@
     </article>
   </div>
   <p class="workloads__explain" data-testid="remote-host-cpu-context">
-    CPU and host load include GATE work and other processes. GATE work does not consume a RUN slot.
+    CPU and host load cover the physical host once. Coding and Review slots explain role-local occupancy; GATE work does not consume a RUN slot in either pool.
   </p>
 </section>

@@ -427,6 +427,11 @@ builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton<RemoteDispatchRejectionStore>();
 builder.Services.AddSingleton<RemoteQueueStarvationWatchdog>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
+if (!TaskServerPlaneProxy.IsConfigured(builder.Configuration))
+{
+    builder.Services.AddSingleton<ReviewQueueTelemetryWatchdog>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewQueueTelemetryWatchdog>());
+}
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
     sp.GetRequiredService<AttemptAuthorityService>()));

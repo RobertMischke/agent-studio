@@ -335,6 +335,10 @@ public static class TaskServerEndpoints
             => await InvokeNullableAsync(() => store.GetArtifactContentAsync(runId, artifactId, ct)));
 
         var reviews = api.MapGroup("/reviews");
+        reviews.MapGet("/queue/telemetry", async (
+            ReviewQueueTelemetryWatchdog watchdog,
+            CancellationToken ct)
+            => await InvokeAsync(() => watchdog.RefreshAsync(ct)));
         reviews.MapPost("/subjects", async (
             HttpContext context, CreateReviewSubjectRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CreateReviewSubjectAsync(request, Actor(context), ct), StatusCodes.Status201Created));

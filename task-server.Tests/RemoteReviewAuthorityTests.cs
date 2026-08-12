@@ -40,6 +40,56 @@ public sealed class RemoteReviewAuthorityTests
     }
 
     [Fact]
+    public async Task Review_queue_telemetry_separates_lane_depth_waiting_and_active_work()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "review-instance-a", "review-host-a");
+
+        var queued = await store.GetReviewQueueTelemetryAsync(
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(24),
+            TimeSpan.FromMinutes(30),
+            default);
+        Assert.Equal(1, queued.QueueDepth);
+        Assert.Equal(1, queued.WaitingDepth);
+        Assert.Equal(0, queued.ActiveReviews);
+
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "review-instance-a"),
+            "review-a",
+            default);
+        var active = await store.GetReviewQueueTelemetryAsync(
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(24),
+            TimeSpan.FromMinutes(30),
+            default);
+        Assert.Equal(1, active.QueueDepth);
+        Assert.Equal(0, active.WaitingDepth);
+        Assert.Equal(1, active.ActiveReviews);
+
+        await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId,
+            PassingReport(claim),
+            "review-a",
+            default);
+        var reported = await store.GetReviewQueueTelemetryAsync(
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(24),
+            TimeSpan.FromMinutes(30),
+            default);
+        Assert.Equal(1, reported.QueueDepth);
+        Assert.Equal(0, reported.WaitingDepth);
+        Assert.Equal(0, reported.ActiveReviews);
+        Assert.Equal(1, reported.DurationSampleCount);
+        Assert.Equal(1, reported.DrainRatePerHour);
+        Assert.NotNull(reported.MedianReviewDurationSeconds);
+        Assert.NotNull(reported.LastDrainAt);
+    }
+
+    [Fact]
     public async Task Fenced_review_cleanup_queues_full_envelope_decision_and_reaches_human_review_idempotently()
     {
         using var temp = new TempDirectory();
