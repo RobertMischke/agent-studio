@@ -249,7 +249,7 @@ test('Feed main view: route, Activity icon, fresh-alert badge, windowing, live s
   const renderedEntries = page.getByTestId('orchestrator-feed-entry');
   await expect(renderedEntries).toHaveCount(100);
   await expect(page.getByTestId('feed-kind-all')).toHaveClass(/orch-feed__filter--active/);
-  await expect(page.getByTestId('orchestrator-feed')).toContainText('500 events · newest first');
+  await expect(page.getByTestId('orchestrator-feed')).toContainText('All projects · All activity · newest first');
   await expect(page.getByTestId('orchestrator-feed-load-older')).toContainText('100 older events');
   await expect(page.getByTestId('orchestrator-entry-task').first()).toHaveAttribute('aria-label', /Open task AGT-/);
 

@@ -12,9 +12,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BoardFiltersService } from '../../../../features/board';
+import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { TaskService } from '../../../../services/task.service';
-import { projectIdentity } from '../../../../services/project-identity.util';
-import { kvValueOf } from '../../../../services/url-hash.util';
 import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
@@ -39,13 +38,16 @@ export class OrchestratorFeedComponent {
 
   private readonly jobService = inject(TaskService);
   private readonly boardFilters = inject(BoardFiltersService);
+  private readonly projectLookup = inject(ProjectLookupService);
   readonly feedStore = inject(OrchestratorFeedStore);
   readonly entries = this.feedStore.entries;
   readonly loading = this.feedStore.loading;
   readonly error = this.feedStore.error;
   readonly kindFilter = signal<string>('all');
-  readonly projectFilter = signal<ReadonlySet<string>>(
-    new Set(readProjectFiltersFromHash(typeof window === 'undefined' ? '' : window.location.hash)),
+  readonly projectFilter = computed<ReadonlySet<string>>(() =>
+    this.boardFilters.hasExplicitProjectFilter()
+      ? this.boardFilters.activeProjects()
+      : new Set<string>()
   );
   readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
   readonly activeView = signal<'activity' | 'load'>('activity');
@@ -66,6 +68,16 @@ export class OrchestratorFeedComponent {
     { id: 'signal', label: 'Signal' },
   ];
 
+  readonly projectScopeLabel = computed(() => {
+    const projects = [...this.projectFilter()];
+    if (projects.length === 0) return 'All projects';
+    if (projects.length === 1) return projects[0];
+    return 'Selected projects';
+  });
+  readonly kindScopeLabel = computed(() =>
+    this.kindFilters.find(filter => filter.id === this.kindFilter())?.label ?? 'All activity'
+  );
+
   readonly projects = computed(() => [...new Set(this.entries().map(entry => entry.project || this.projectName()).filter(Boolean))].sort());
   readonly reversed = computed(() => [...this.entries()].sort((a, b) => newestFirst(a.ts, b.ts)));
   readonly projectEntries = computed(() => {
@@ -78,9 +90,6 @@ export class OrchestratorFeedComponent {
       filter === 'all' || (filter === 'signal' ? entry.kind !== 'observation' : entry.kind === filter)
     );
   });
-  readonly visibleProjectCount = computed(() =>
-    new Set(this.visibleEntries().map(entry => entry.project || this.projectName()).filter(Boolean)).size
-  );
   readonly windowedEntries = computed(() => this.historyWindow.slice(this.visibleEntries()));
   readonly dayGroups = computed(() => {
     const groups: { key: string; day: string; entries: OrchestratorLogEntry[] }[] = [];
@@ -158,7 +167,6 @@ export class OrchestratorFeedComponent {
   selectProject(project: string): void {
     const next = project === 'all' ? new Set<string>() : new Set([project]);
     this.historyWindow.reset(this.filterScope(next, this.kindFilter()));
-    this.projectFilter.set(next);
     if (project === 'all') this.boardFilters.clearProjectScope();
     else this.boardFilters.setExplicitSoleProject(project);
     this.selectedEntry.set(this.visibleEntries()[0] ?? null);
@@ -202,7 +210,7 @@ export class OrchestratorFeedComponent {
   }
 
   projectColor(project: string): string {
-    return projectIdentity(project).color;
+    return this.projectLookup.getProjectDisplay(project).color;
   }
 
   entryKey(entry: OrchestratorLogEntry): string {
@@ -252,27 +260,6 @@ export class OrchestratorFeedComponent {
   private filterScope(projects: ReadonlySet<string>, kind: string): string {
     return `${[...projects].sort().join(',')}\u0000${kind}`;
   }
-}
-
-function readProjectFiltersFromHash(hash: string): string[] {
-  const raw = kvValueOf(hash, 'filters');
-  if (raw == null) return [];
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    return [];
-  }
-  const projectSegment = decoded
-    .split(';')
-    .map(segment => segment.trim())
-    .find(segment => segment.startsWith('projects:'));
-  if (!projectSegment) return [];
-  return projectSegment
-    .slice('projects:'.length)
-    .split(',')
-    .map(project => project.trim())
-    .filter(Boolean);
 }
 
 function newestFirst(left: string, right: string): number {

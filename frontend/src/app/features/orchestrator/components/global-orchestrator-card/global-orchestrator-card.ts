@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import type { OrchestratorSession } from '../../models/orchestrator.model';
+import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 import { TaskService } from '../../../../services/task.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 
@@ -12,7 +13,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
   selector: 'app-global-orchestrator-card',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [ConceptHelpComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './global-orchestrator-card.html',
   styleUrl: './global-orchestrator-card.scss'
