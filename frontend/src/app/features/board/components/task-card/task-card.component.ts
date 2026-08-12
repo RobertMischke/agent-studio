@@ -36,7 +36,6 @@ import {
   resolveDependencyTarget,
   cardNeedsAttention,
   commitChainVariant,
-  formatTokens,
   EPIC_ASSIGN_PREFIX,
   EPIC_DETACH_ID,
   FILTER_DEPENDENTS_ID,
@@ -54,7 +53,7 @@ import { ExecutionLocationBadgeComponent } from '../../../../components/executio
 import { IntegrationStatusBadgeComponent } from '../../../../components/integration-status-badge/integration-status-badge.component';
 import { ReviewDecisionBadgesComponent } from '../review-decision-badges/review-decision-badges.component';
 import { TaskLiveStatusComponent } from '../../../../components/task-live-status/task-live-status.component';
-import { TokenPopoverDirective } from './token-popover.directive';
+import { TaskTokenPopoverComponent } from '../task-token-popover/task-token-popover.component';
 import { TaskCardQuotaWaitComponent } from '../task-card-quota-wait/task-card-quota-wait.component';
 import { taskCardNow } from './task-card-clock';
 import { NotificationService } from '../../../../services/notification.service';
@@ -77,7 +76,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TaskTokenPopoverComponent, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
@@ -346,9 +345,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   loopTooltip(al: AutoLoopSnapshot): string { return buildLoopTooltip(al); }
 
   pendingTooltip(pi: PendingIntent): string { return buildPendingTooltip(pi); }
-
-  /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */
-  formatTokens(n: number): string { return formatTokens(n); }
 
   /**
    * Token-bubble descriptor: returns null when the task has no recorded

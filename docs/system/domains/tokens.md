@@ -162,9 +162,9 @@ All four shims have landed in this order:
    stable tie-breakers in the same change so insertion-order differences
    between JSONL and bus paths can no longer leak into the output.
 2. **Landed.** `TokenSummaryService.Summarize` read path.
-   `BusBackedTokenSummaryReader` now queries every project-scoped
-   `kind=token-usage` message, including `agent:*` coding-run turns,
-   `support:*` supporting calls, and `orchestrator:*` decisions. It
+   `BusBackedTokenSummaryReader` now queries every project-scoped message that
+   carries token data, including `agent:*` coding-run turns, token-bearing
+   `support:*` reports, and `orchestrator:*` decisions. It
    converts each message into a transient `OrchestratorLogEntry` with the
    participant id preserved for runtime categorisation, then folds through
    the same pure `TokenSummaryService` helpers. The legacy parity entry
@@ -177,6 +177,9 @@ All four shims have landed in this order:
    helper both readers reuse. Regression tests:
    [`TokenSummaryBusParityTests`](../../../backend.Tests/TokenSummaryBusParityTests.cs)
    and [`TokenSummaryTests`](../../../backend.Tests/TokenSummaryTests.cs).
+   Per-job calls retain their bus topic and run id, then classify that context
+   into coding run, review run, gate, enrichment, orchestration, or other for
+   the board popover's token and dated-cost breakdown.
 3. **Landed.** `WorkspaceTokensTimelineService.Build` read path.
    `BusBackedWorkspaceTimelineReader` walks every supplied project, pulls
    the orchestrator-attributed token-usage messages, and feeds them

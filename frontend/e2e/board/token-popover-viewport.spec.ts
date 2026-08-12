@@ -81,6 +81,28 @@ const GROUPED = {
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+    }));
+  await page.route('**/api/tasks/archive**', (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ items: [], total: 0, offset: 0, limit: 50, hasMore: false }),
+    }));
+  await page.route('**/api/crash-recovery/pending', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pending: [] }) }));
+  await page.route('**/api/orchestrator/sessions', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessions: [] }) }));
+  await page.route('**/api/auto-review/status', (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ lastTickAt: null, accept: 0, reissue: 0, escalate: 0, aspectsRun: 0, pending: 0, currentJob: null, currentProject: null, activeJobs: [] }),
+    }));
+  await page.route('**/api/pipeline/accepted-integration-alert', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ active: false, stalledTaskCount: 0, items: [] }) }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
   await page.route('**/api/watch-paths**', (route) =>

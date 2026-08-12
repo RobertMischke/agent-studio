@@ -5,8 +5,8 @@ namespace AgentStudio.Tokens;
 /// <summary>
 /// Phase-4 bus-backed read path for the per-project token summary
 /// (lifetime totals + per-model split + estimated USD). Queries the bus
-/// for the project's <c>kind=token-usage</c> messages emitted by coding,
-/// supporting, and orchestrator participants, converts them into transient
+/// for the project's token-bearing messages emitted by coding, supporting,
+/// and orchestrator participants, converts them into transient
 /// <see cref="OrchestratorLogEntry"/> records, and folds them through the
 /// existing pure-function aggregator on <see cref="TokenSummaryService"/>.
 /// </summary>
@@ -39,7 +39,7 @@ public sealed class BusBackedTokenSummaryReader
     }
 
     /// <summary>
-    /// Read every project-scoped <c>kind=token-usage</c> message for
+    /// Read every project-scoped token-bearing message for
     /// <paramref name="projectName"/> and fold them into a
     /// <see cref="TokenSummary"/>. Returns an empty summary when the
     /// workspace root is not configured.

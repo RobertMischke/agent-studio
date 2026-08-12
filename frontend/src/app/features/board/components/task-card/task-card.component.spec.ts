@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('[data-testid="token-row-cost"]')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Dated list-price estimate');
 
     fixture.destroy();
   });
@@ -1555,19 +1555,31 @@ describe('buildTokenBubble', () => {
           ts: '2026-06-09T08:00:00Z',
           model: 'GPT-5 Codex',
           participantId: 'agent:codex',
+          runId: 'coding-1',
+          topic: 'codex-turn',
+          usageType: 'coding-run',
           inputTokens: 2000,
           outputTokens: 200,
           cacheReadTokens: 1000,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.07,
+          modelPriced: true,
+          priceValidFrom: '2026-06-01T00:00:00Z',
         },
         {
           ts: '2026-06-09T08:05:00Z',
           model: 'Claude Haiku 4.5',
           participantId: 'orchestrator:Test',
+          runId: 'review-1',
+          topic: 'orchestrator-review',
+          usageType: 'review-run',
           inputTokens: 1000,
           outputTokens: 100,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.02,
+          modelPriced: true,
+          priceValidFrom: '2026-06-01T00:00:00Z',
         },
       ],
     });
@@ -1578,6 +1590,40 @@ describe('buildTokenBubble', () => {
       'GPT-5 Codex',
       'Claude Haiku 4.5',
     ]);
+    expect(bubble?.byType.map((row) => [row.label, row.runs])).toEqual([
+      ['Coding run', 1],
+      ['Review run', 1],
+    ]);
+    expect(bubble?.entries[0].costLabel).toBe('$0.07');
+    expect(bubble?.entries[0].contextLabel).toBe('Core agent');
+  });
+
+  it('does not render missing cost data as zero dollars', () => {
+    const bubble = buildTokenBubble({
+      calls: 1,
+      inputTokens: 1000,
+      outputTokens: 100,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 1100,
+      allModelsPriced: true,
+      lastModel: 'Future model',
+      lastUpdate: '2026-06-09T08:05:00Z',
+      entries: [{
+        ts: '2026-06-09T08:05:00Z',
+        model: 'Future model',
+        usageType: 'coding-run',
+        inputTokens: 1000,
+        outputTokens: 100,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        modelPriced: true,
+      }],
+    });
+
+    expect(bubble?.costLabel).toBe('No price data');
+    expect(bubble?.entries[0].costLabel).toBe('No price data');
+    expect(bubble?.byType[0].costLabel).toBe('No price data');
   });
 });
 

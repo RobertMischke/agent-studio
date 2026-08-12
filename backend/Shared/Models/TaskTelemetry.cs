@@ -46,6 +46,12 @@ public record TaskTokenCall
     public string? Model { get; init; }
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
+    /// <summary>Stable CLI invocation id when the source event was bound to one run.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Pipeline or bus topic retained as the most precise available step context.</summary>
+    public string? Topic { get; init; }
+    /// <summary>Normalized grouping used by compact token surfaces.</summary>
+    public string UsageType { get; init; } = TaskTokenUsageTypes.Other;
     public long InputTokens { get; init; }
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
@@ -54,6 +60,20 @@ public record TaskTokenCall
     public decimal EstimatedApiCostUsd { get; init; }
     /// <summary>Whether the price catalog resolved the model at <see cref="Ts"/>.</summary>
     public bool ModelPriced { get; init; }
+    /// <summary>Effective date of the TokenEconomy catalog row selected for <see cref="Ts"/>.</summary>
+    public DateTime? PriceValidFrom { get; init; }
+    /// <summary>Provider source attached to the selected TokenEconomy catalog row.</summary>
+    public string? PriceSource { get; init; }
+}
+
+public static class TaskTokenUsageTypes
+{
+    public const string CodingRun = "coding-run";
+    public const string ReviewRun = "review-run";
+    public const string Gate = "gate";
+    public const string Enrichment = "enrichment";
+    public const string Orchestration = "orchestration";
+    public const string Other = "other";
 }
 
 /// <summary>

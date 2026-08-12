@@ -101,6 +101,13 @@ aggregate wording, and the explicit `no price data` fallback. Review rows,
 task-detail pipeline totals, project Pipeline `Tokens / 90d`, and board badges
 must use this helper instead of composing local tooltip strings.
 
+The board task popover receives the event timestamp and the TokenEconomy price
+basis selected for each call, including its effective date and source. Its total
+and per-type costs are sums of those dated call estimates. The compact panel
+keeps the caveat to one footnote and exposes the complete estimate text in a
+tooltip. A call without a catalog match remains `No price data` and makes its type
+and task aggregates explicitly incomplete instead of contributing `$0.00`.
+
 ## Verification
 
 `backend.Tests/TokenPricingTests.cs` pins the provider adapter to the

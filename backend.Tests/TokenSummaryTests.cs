@@ -33,15 +33,18 @@ public class TokenSummaryTests
         long output,
         DateTime ts,
         string jobId = "job-a",
-        string? participantId = null)
+        string? participantId = null,
+        string topic = "test-token",
+        string? runId = null)
         => new()
         {
             Ts = ts,
             Kind = OrchestratorLogKinds.Decision,
-            Topic = "test-token",
+            Topic = topic,
             Summary = "test job entry",
             JobId = jobId,
             ParticipantId = participantId,
+            RunId = runId,
             TokenUsage = new OrchestratorTokenUsage
             {
                 Model = model,
@@ -242,6 +245,27 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+        Assert.All(summary.Entries, entry => Assert.NotNull(entry.PriceValidFrom));
+    }
+
+    [Fact]
+    public void SummarizePerJob_RetainsRunAndStepContextForTypeBreakdown()
+    {
+        var at = new DateTime(2026, 7, 11, 8, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("claude-sonnet-4-6", 1_000, 100, at,
+                participantId: "agent:claude", topic: "claude-turn", runId: "run-2"),
+            JobEntry("claude-haiku-4-5", 500, 50, at.AddMinutes(2),
+                participantId: "support:quality", topic: "code-quality", runId: "review-2"),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.Equal(TaskTokenUsageTypes.CodingRun, summary.Entries[0].UsageType);
+        Assert.Equal("run-2", summary.Entries[0].RunId);
+        Assert.Equal("claude-turn", summary.Entries[0].Topic);
+        Assert.Equal(TaskTokenUsageTypes.ReviewRun, summary.Entries[1].UsageType);
     }
 
     [Fact]

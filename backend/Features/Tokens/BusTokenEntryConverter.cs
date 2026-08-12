@@ -3,8 +3,8 @@
 namespace AgentStudio.Tokens;
 
 /// <summary>
-/// Adapter that turns the Agent Message Bus's <c>kind=token-usage</c>
-/// messages into transient <see cref="OrchestratorLogEntry"/> records so
+/// Adapter that turns token-bearing Agent Message Bus messages into transient
+/// <see cref="OrchestratorLogEntry"/> records so
 /// the Phase-4 bus-backed readers can reuse the legacy pure-function
 /// folds verbatim. By converting and then reusing the existing math, the
 /// bus path cannot drift from <c>orchestrator.jsonl</c> on quantisation,
@@ -41,6 +41,7 @@ internal static class BusTokenEntryConverter
             Summary = m.Summary ?? string.Empty,
             JobId = m.JobId,
             ParticipantId = includeParticipant ? m.ParticipantId : null,
+            RunId = m.RunId,
             TokenUsage = usage,
         };
     }
@@ -74,8 +75,8 @@ internal static class BusTokenEntryConverter
     }
 
     /// <summary>
-    /// Pull every project-scoped <c>kind=token-usage</c> message, regardless
-    /// of participant, and retain the participant id on the transient entry.
+    /// Pull every project-scoped message carrying token data, regardless of
+    /// message kind or participant, and retain its execution context.
     /// Runtime token panels use this bus-native shape so coding-agent turns
     /// (<c>agent:*</c>) do not disappear behind orchestrator-only parity
     /// shims.
@@ -87,8 +88,9 @@ internal static class BusTokenEntryConverter
     {
         if (string.IsNullOrWhiteSpace(workspaceRoot) || string.IsNullOrWhiteSpace(projectName))
             return new List<OrchestratorLogEntry>();
-        var messages = store.Query(workspaceRoot, projectName, new AgentMessageQuery(
-            Kind: "token-usage"));
+        var messages = store.Query(workspaceRoot, projectName, new AgentMessageQuery())
+            .Where(message => message.Tokens is not null)
+            .ToList();
         var entries = new List<OrchestratorLogEntry>(messages.Count);
         foreach (var m in messages)
         {

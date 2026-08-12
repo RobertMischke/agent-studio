@@ -27,6 +27,7 @@ export type {
 } from './token-cost-tooltip.util';
 export type {
   TaskTokenCall,
+  TaskTokenUsageType,
   TaskTokenSummary,
   TokenSummaryByModel,
   TokenSummaryByProject,

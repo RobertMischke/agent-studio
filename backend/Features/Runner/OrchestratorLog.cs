@@ -137,6 +137,9 @@ public record OrchestratorLogEntry
     /// </summary>
     public string? ParticipantId { get; init; }
 
+    /// <summary>Stable CLI invocation id retained when projected from the message bus.</summary>
+    public string? RunId { get; init; }
+
     /// <summary>
     /// Token usage for this orchestrator action, when the orchestrator
     /// itself made an LLM call. Today most entries are written by the

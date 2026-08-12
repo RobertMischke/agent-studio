@@ -1,0 +1,86 @@
+@if (bubble(); as tb) {
+  <span class="task-card__token-wrap" appTokenPopover>
+    <button type="button"
+            class="task-card__token-bubble"
+            [class.task-card__token-bubble--neutral]="tb.tier === 'neutral'"
+            [class.task-card__token-bubble--blue]="tb.tier === 'blue'"
+            [class.task-card__token-bubble--mauve]="tb.tier === 'mauve'"
+            [class.task-card__token-bubble--peach]="tb.tier === 'peach'"
+            data-testid="task-card-token-bubble"
+            [attr.data-token-tier]="tb.tier"
+            [attr.data-token-total]="tb.total"
+            [attr.aria-label]="'Token usage: ' + tb.label + ' total tokens'"
+            (click)="$event.stopPropagation()">
+      <span class="task-card__token-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span class="task-card__token-label">{{ tb.label }}</span>
+    </button>
+
+    <span class="task-card__token-popover"
+          role="tooltip" data-token-popover hidden
+          data-testid="task-card-token-popover">
+      <span class="task-card__token-popover-title">Token usage</span>
+
+      <table class="task-card__token-table task-card__token-table--summary" aria-label="Token totals">
+        <tbody>
+          <tr><th>Input</th><td data-testid="token-row-input">{{ formatTokens(tb.input) }}</td></tr>
+          <tr><th>Output</th><td data-testid="token-row-output">{{ formatTokens(tb.output) }}</td></tr>
+          <tr><th>Cache read</th><td data-testid="token-row-cache-read">{{ formatTokens(tb.cacheRead) }}</td></tr>
+          <tr><th>Cache write</th><td data-testid="token-row-cache-write">{{ formatTokens(tb.cacheWrite) }}</td></tr>
+          <tr class="task-card__token-total-row">
+            <th>Total</th>
+            <td data-testid="token-row-total">{{ formatTokens(tb.total) }}</td>
+            <td data-testid="token-row-cost">{{ tb.costLabel }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      @if (tb.byType.length > 0) {
+        <span class="task-card__token-section-title">By type</span>
+        <table class="task-card__token-table task-card__token-table--types" aria-label="Token usage by type">
+          <thead><tr><th>Type</th><th>Runs</th><th>Tokens</th><th>Cost</th></tr></thead>
+          <tbody>
+            @for (row of tb.byType; track row.type) {
+              <tr data-testid="token-type-row">
+                <td>{{ row.label }}</td>
+                <td>{{ row.runs }}</td>
+                <td>{{ formatTokens(row.total) }}</td>
+                <td [cacTooltip]="row.costTooltip">{{ row.costLabel }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      @if (tb.entries.length > 0) {
+        <span class="task-card__token-section-title">Runs</span>
+        <table class="task-card__token-table task-card__token-table--runs" aria-label="Dated token usage by run">
+          <thead><tr><th>Date</th><th>Type</th><th>Model</th><th>Tokens</th><th>Cost</th></tr></thead>
+          <tbody>
+            @for (row of tb.entries; track row.id) {
+              <tr data-testid="token-run-row">
+                <td>{{ row.tsLabel }}</td>
+                <td [cacTooltip]="row.contextTooltip">
+                  <span class="task-card__token-type">{{ row.typeLabel }}</span>
+                  @if (row.contextLabel) { <span class="task-card__token-context">{{ row.contextLabel }}</span> }
+                </td>
+                <td>{{ row.model || '-' }}</td>
+                <td>{{ formatTokens(row.total) }}</td>
+                <td [cacTooltip]="row.costTooltip">{{ row.costLabel }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      <span class="task-card__token-footer">
+        <span class="task-card__token-footnote"
+              data-testid="token-cost-tooltip"
+              [cacTooltip]="tb.costTooltip">Dated list-price estimate</span>
+        <a class="task-card__token-link"
+           href="/workspace/tokens"
+           data-testid="token-popover-timeline-link"
+           (click)="$event.stopPropagation()">View timeline</a>
+      </span>
+    </span>
+  </span>
+}

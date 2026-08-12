@@ -234,6 +234,36 @@ public sealed class TokenSummaryBusParityTests : IDisposable
                 TotalMs: (long)(completedAt - requestedAt).TotalMilliseconds);
     }
 
+    [Fact]
+    public async Task InstanceSummarizePerJob_IncludesTokenBearingSupportingReports()
+    {
+        var (_, bridge, store) = BuildStack();
+        const string jobId = "job-supporting-report";
+        var createdAt = new DateTime(2026, 6, 9, 9, 0, 0, DateTimeKind.Utc);
+
+        await bridge.EmitSupportingAgentReportAsync(
+            project: ProjectName,
+            topic: "code-quality",
+            reportId: "review-1",
+            summary: "Review completed.",
+            severity: "Info",
+            parseStatus: "Structured",
+            markdownPath: "/tmp/review-1.md",
+            jobId: jobId,
+            tokens: new AgentMessageTokens(2_000, 200, 500, 0, "claude-haiku-4-5"),
+            createdAt: createdAt);
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
+            .Build();
+        var reader = new BusBackedTokenSummaryReader(store, config);
+
+        var call = Assert.Single(reader.SummarizePerJob(ProjectName)[jobId].Entries);
+        Assert.Equal("code-quality", call.Topic);
+        Assert.Equal(TaskTokenUsageTypes.ReviewRun, call.UsageType);
+        Assert.Equal(2_700, call.InputTokens + call.OutputTokens + call.CacheReadTokens);
+    }
+
     private static void AssertEquivalent(TokenSummary a, TokenSummary b)
     {
         Assert.Equal(a.Project,                         b.Project);

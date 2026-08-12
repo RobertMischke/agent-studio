@@ -60,6 +60,14 @@ interface JobInfoStub {
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
+      participantId?: string | null;
+      runId?: string | null;
+      topic?: string | null;
+      usageType?: string | null;
+      estimatedApiCostUsd?: number;
+      modelPriced?: boolean;
+      priceValidFrom?: string | null;
+      priceSource?: string | null;
     }[];
   };
 }
@@ -163,6 +171,29 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
         body: JSON.stringify({ isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }),
       });
     }
+    if (p === '/api/auto-review/status') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          lastTickAt: null, accept: 0, reissue: 0, escalate: 0, aspectsRun: 0,
+          pending: 0, currentJob: null, currentProject: null, activeJobs: [],
+        }),
+      });
+    }
+    if (p === '/api/pipeline/accepted-integration-alert') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ active: false, stalledTaskCount: 0, items: [] }),
+      });
+    }
+    if (p === '/api/v1/management/remote-hosts') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    }
+    if (p === '/api/tags' || p === '/api/workspaces' || p === '/api/projects' || p === '/api/git/summary') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    }
     if (p === '/api/projects/settings') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     }
@@ -185,6 +216,13 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
     if (p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
+    if (/^\/api\/clients\/[^/]+\/telemetry$/.test(p)) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ clientId: 'local-default', window: '14d', points: [], findings: [] }),
+      });
+    }
     if (p.startsWith('/api/clients')) {
       const list = [{
         id: 'local-default', displayName: 'Local Default', emoji: '🤖', colour: '#64748b', kind: 'human',
@@ -206,10 +244,8 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
     if (p.startsWith('/api/runner')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projects: {} }) });
     }
-    // Catch-all: empty array works for list endpoints, empty object for
-    // single-record. Use null to cover both shapes safely; consumers
-    // should fall back to defaults when the response is empty.
-    return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+    // Catch-all for single-record endpoints that are irrelevant to this proof.
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
 }
 
@@ -252,9 +288,9 @@ test.describe('Token bubble on job cards', () => {
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
+          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', participantId: 'agent:codex', runId: 'run-1', topic: 'codex-turn', usageType: 'coding-run', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.60, modelPriced: true, priceValidFrom: '2026-05-01T00:00:00Z', priceSource: 'OpenAI' },
+          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', participantId: 'support:code-quality', runId: 'review-1', topic: 'code-quality', usageType: 'review-run', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.20, modelPriced: true, priceValidFrom: '2026-04-15T00:00:00Z', priceSource: 'Anthropic' },
+          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', participantId: 'support:prompt', runId: 'enrich-1', topic: 'prompt-enrichment', usageType: 'enrichment', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.45, modelPriced: true, priceValidFrom: '2026-05-01T00:00:00Z', priceSource: 'OpenAI' }
         ]
       }
     });
@@ -287,9 +323,15 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-read')).toContainText('250k');
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
-    await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
+    await expect(popover.getByTestId('token-row-cost')).toContainText('$1.25');
+    await expect(popover.getByTestId('token-cost-tooltip')).toHaveText('Dated list-price estimate');
+    await expect(popover.getByTestId('token-type-row')).toHaveCount(3);
+    await expect(popover.getByTestId('token-type-row').nth(0)).toContainText('Coding run');
+    await expect(popover.getByTestId('token-type-row').nth(1)).toContainText('Review run');
+    await expect(popover.getByTestId('token-type-row').nth(2)).toContainText('Enrichment');
+    await expect(popover.getByTestId('token-run-row')).toHaveCount(3);
+    await expect(popover.getByTestId('token-run-row').nth(0)).toContainText('$0.60');
+    await expect(popover.getByTestId('token-run-row').nth(1)).toContainText('Code quality');
     await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 
@@ -306,7 +348,18 @@ test.describe('Token bubble on job cards', () => {
 
     // Screenshot evidence: bubble + overlay popover in the viewport.
     mkdirSync(SHOTS, { recursive: true });
-    await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset['studioTheme'] = value;
+        localStorage.setItem('atp.studio.theme', value);
+      }, theme);
+      await page.screenshot({
+        path: process.env.JOB_RESULTS_DIR
+          ? `${process.env.JOB_RESULTS_DIR}/token-popover-after--mocked-${theme}.png`
+          : `${SHOTS}/card-with-bubble-and-popover-${theme}.png`,
+        fullPage: false,
+      });
+    }
   });
 
   test('tier escalates with spend', async ({ page }) => {
