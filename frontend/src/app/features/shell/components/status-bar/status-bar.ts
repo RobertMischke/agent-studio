@@ -22,6 +22,7 @@ import {
 import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
+  freshExecutionPlaneSlots,
   freshRemoteTelemetrySlots,
   RemoteHostsService,
 } from '../../../remote-hosts';
@@ -30,16 +31,31 @@ import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.compone
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad } from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import { ReviewQueueTelemetryStore } from '../../../../services/review-queue-telemetry.store';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
 
-export function formatRunningLabel(local: number, remote: number): string {
-  if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
-  if (local > 0) return `${local} local`;
-  if (remote > 0) return `${remote} remote`;
+export function formatRunningLabel(
+  local: number,
+  remote: number,
+  review = 0,
+  reviewWaiting: number | null = null,
+): string {
+  const parts: string[] = [];
+  if (local > 0) parts.push(`${local} local`);
+  if (remote > 0) parts.push(`${remote} remote`);
+  if (reviewWaiting !== null) {
+    if (review > 0 || reviewWaiting > 0) {
+      parts.push(`${review} review active`);
+      parts.push(`${reviewWaiting} waiting`);
+    }
+  } else if (review > 0) {
+    parts.push(`${review} review`);
+  }
+  if (parts.length > 0) return parts.join(' · ');
   return 'no runners';
 }
 
@@ -56,6 +72,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
+  private readonly reviewTelemetry = inject(ReviewQueueTelemetryStore);
   private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
 
   readonly projectNames = input<string[]>([]);
@@ -95,9 +112,26 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
   readonly runningCount = computed(() => this.runningTruth().total);
+  readonly reviewQueue = this.reviewTelemetry.snapshot;
+  readonly reviewTelemetrySlots = computed(() =>
+    freshExecutionPlaneSlots(this.remoteHosts.hosts(), 'review'));
+  readonly reviewSlots = computed(() =>
+    this.reviewQueue()?.activeReviews ?? this.reviewTelemetrySlots() ?? 0);
+  readonly reviewWaiting = computed(() => this.reviewQueue()?.waitingDepth ?? null);
+  readonly reviewAttention = computed(() => {
+    const queue = this.reviewQueue();
+    return queue !== null && queue.waitingDepth > 0 && queue.activeReviews === 0;
+  });
+  readonly reviewSourcesDiverge = computed(() => {
+    const queue = this.reviewQueue();
+    const telemetry = this.reviewTelemetrySlots();
+    return queue !== null && telemetry !== null && queue.activeReviews !== telemetry;
+  });
+  readonly totalActivityCount = computed(() =>
+    this.runningCount() + this.reviewSlots() + (this.reviewWaiting() ?? 0));
   readonly runningLabel = computed(() => {
     const truth = this.runningTruth();
-    return formatRunningLabel(truth.local, truth.remote);
+    return formatRunningLabel(truth.local, truth.remote, this.reviewSlots(), this.reviewWaiting());
   });
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
@@ -105,9 +139,21 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     const telemetry = this.remoteTelemetrySlots();
     return telemetry !== null && telemetry !== this.runningTruth().remote;
   });
+  readonly statusWarning = computed(() =>
+    this.runningSourcesDiverge() || this.reviewSourcesDiverge() || this.reviewAttention());
+  readonly statusWarningLabel = computed(() => this.reviewAttention()
+    ? 'Review queue is waiting with no active workers'
+    : 'Running sources disagree');
 
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
+  readonly statusSignalTone = computed(() =>
+    this.statusWarning() ? 'mismatch' : this.hostLoad()?.tone ?? 'unknown');
+  readonly statusCorrelation = computed(() => this.reviewAttention()
+    ? 'review-waiting-no-active'
+    : this.reviewSourcesDiverge()
+      ? 'review-active-mismatch'
+      : this.hostLoad()?.correlation ?? 'unknown');
 
   readonly autoCount = computed(() => {
     const status = this.jobService.runnerStatus();
@@ -133,8 +179,12 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.remoteHosts.refresh();
+    this.reviewTelemetry.refresh();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => this.remoteHosts.refresh(),
+      () => {
+        this.remoteHosts.refresh();
+        this.reviewTelemetry.refresh();
+      },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -151,7 +201,14 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   runningTooltip(): string {
     const truth = this.runningTruth();
-    const execution = `Running ${truth.total} - ${truth.local} local / ${truth.remote} remote.`;
+    const execution = `Coding runs ${truth.total} - ${truth.local} local / ${truth.remote} remote. `
+      + `Review plane ${this.reviewSlots()} active ${this.reviewSlots() === 1 ? 'slot' : 'slots'} `
+      + `and ${this.reviewWaiting() ?? 'unknown'} waiting.`;
+    const reviewConsistency = this.reviewAttention()
+      ? ` Attention: consistency hint: ${this.reviewWaiting()} Review ${this.reviewWaiting() === 1 ? 'card is' : 'cards are'} waiting but the review plane reports 0 active workers.`
+      : this.reviewSourcesDiverge()
+        ? ` Warning: queue authority reports ${this.reviewSlots()} active reviews, but host telemetry reports ${this.reviewTelemetrySlots()} active review slots.`
+        : '';
     const telemetrySlots = this.remoteTelemetrySlots();
     const comparison = telemetrySlots === null
       ? ' Fresh remote slot telemetry is unavailable.'
@@ -159,18 +216,19 @@ export class StatusBarComponent implements OnInit, OnDestroy {
         ? ` Warning: Board leases report ${truth.remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
         : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
-    if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
+    if (!load) return `Open execution hosts. ${execution}${comparison}${reviewConsistency} Execution host load is unavailable.`;
 
     const loadDetail = `Execution host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
       + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active execution `
-      + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
+      + `${load.activeSlots === 1 ? 'slot' : 'slots'} `
+      + `(${load.codingSlots} coding / ${load.reviewSlots} review).`;
     if (load.correlation === 'load-without-runs') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+      return `Open execution hosts. ${execution}${comparison}${reviewConsistency} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }
     if (load.correlation === 'runs-without-load') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+      return `Open execution hosts. ${execution}${comparison}${reviewConsistency} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
     }
-    return `Open execution hosts. ${execution}${comparison} ${loadDetail}`;
+    return `Open execution hosts. ${execution}${comparison}${reviewConsistency} ${loadDetail}`;
   }
 
   autoTooltip(): string {

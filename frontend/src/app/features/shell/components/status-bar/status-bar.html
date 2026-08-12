@@ -2,12 +2,13 @@
   <div class="statusbar__group statusbar__group--left">
     <app-statusbar-item
       bullet="●"
-      [pulsing]="runningCount() > 0"
-      [signalTone]="hostLoad()?.tone ?? 'unknown'"
-      [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
+      [pulsing]="totalActivityCount() > 0"
+      [signalTone]="statusSignalTone()"
+      [signalCorrelation]="statusCorrelation()"
       [label]="runningLabel()"
       [tooltip]="runningTooltip()"
-      [warning]="runningSourcesDiverge()"
+      [warning]="statusWarning()"
+      [warningLabel]="statusWarningLabel()"
       testid="status-bar-running"
       (activated)="navigateToExecutionHosts()" />
     <app-statusbar-item

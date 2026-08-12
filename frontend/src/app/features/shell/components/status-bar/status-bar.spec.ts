@@ -15,6 +15,17 @@ describe('formatRunningLabel', () => {
   ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
     expect(formatRunningLabel(local, remote)).toBe(expected);
   });
+
+  it('keeps Review-plane work visible when no coding runner is active', () => {
+    expect(formatRunningLabel(0, 0, 4)).toBe('4 review');
+    expect(formatRunningLabel(1, 2, 4)).toBe('1 local · 2 remote · 4 review');
+  });
+
+  it('shows Review active and waiting counts when queue telemetry is available', () => {
+    expect(formatRunningLabel(0, 0, 0, 7)).toBe('0 review active · 7 waiting');
+    expect(formatRunningLabel(1, 0, 2, 5)).toBe('1 local · 2 review active · 5 waiting');
+    expect(formatRunningLabel(0, 0, 0, 0)).toBe('no runners');
+  });
 });
 
 /**

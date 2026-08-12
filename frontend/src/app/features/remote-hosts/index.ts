@@ -10,6 +10,8 @@ export { seedRemoteHosts } from './services/remote-hosts.seed';
 export {
   boardRemoteSlotsForHost,
   deriveBoardRunningTruth,
+  freshExecutionPlaneSlots,
+  freshHostExecutionPlane,
   freshHostTelemetry,
   freshRemoteTelemetrySlots,
   latestHostTelemetry,
@@ -28,6 +30,8 @@ export type {
   HostTelemetryPoint,
   HostTelemetryFinding,
   HostTelemetrySeries,
+  HostExecutionPlaneRole,
+  HostExecutionPlaneTelemetry,
   HostStatusTone,
   MeterTone,
 } from './models/remote-host.model';

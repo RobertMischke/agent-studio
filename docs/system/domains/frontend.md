@@ -316,8 +316,15 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
   cannot be confused. A fresh connected remote lease also drives the card's
-  CURRENT running copy and the status bar's separate local / remote totals;
-  a disconnected, expired, or recovering location remains an acute orphan
+  CURRENT running copy and the status bar's separate local / remote totals.
+  The same status-bar signal also includes fresh Review-plane slots from the
+  execution-host capability snapshots and active/waiting Review queue authority.
+  Its tooltip separates Coding and Review occupancy, and a physical host's load
+  is counted once, so elevated load with active reviews is not presented as an
+  unexplained-load hint. Waiting Review work with zero active reviews is always
+  an amber attention state with a consistency hint, never a silent normal zero.
+  A disconnected,
+  expired, or recovering location remains an acute orphan
   candidate. These consumers reuse the grouped-board and execution-location
   snapshots and do not add another polling path. The historical target is the
   ordered, immutable route
@@ -325,6 +332,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   task Overview and run/pipeline detail show actual placement per agent run and
   executed step, preserve A → B → A returns, and label missing legacy data as
   unknown rather than inferring local execution.
+- Execution Hosts folds separately enrolled Coding and Review Runner identities
+  by physical `hostId`. Each host card presents role-local Coding and Review
+  slot counts beside GATE work. The page also reads
+  `GET /api/v1/reviews/queue/telemetry` and presents Auto Review queue depth,
+  waiting/active split, trailing drain rate, median duration, and the acute
+  no-drain alarm. Comparable values use tabular numerals and retain the flat
+  admin-surface contract in both themes.
 - Project Settings starts with an editable **Project basics** section. It owns
   the workspace, display name, short code, project colour, repository checkout,
   CLI working directory, repository URL, and default coding CLI/model. It

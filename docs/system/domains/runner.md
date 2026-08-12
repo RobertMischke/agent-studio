@@ -245,6 +245,15 @@ state.
   integration. A retry of an already settled report remains admissible under
   its exact fence and idempotency key so post-settlement compatibility work can
   converge after a process restart.
+- `TaskServerReviewQueueTelemetry.cs` and the monolith compatibility
+  `ReviewQueueTelemetryWatchdog` expose `GET /api/v1/reviews/queue/telemetry`.
+  Queue depth is the count of cards in `4-auto-review`; waiting and leased
+  ReviewAttempts split that depth into waiting and active work. Drain rate is
+  the trailing count of non-infrastructure reports per hour, and median review
+  duration is measured from lease acquisition to accepted report. The watchdog
+  emits the rate-limited `auto-review-queue-stagnant` warning when waiting cards
+  have made no drain progress for the configured threshold, 30 minutes by
+  default, and emits a recovery event when progress resumes.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive
@@ -561,6 +570,11 @@ state.
   classification `ExecutorRestarted`, the completed-command count and duration,
   the failed process proof, and the retry reason. DB lease presence alone is
   never process-liveness evidence. systemd must use `KillMode=process`.
+  This loss-free handoff begins only after a detached worker identity exists.
+  A Review slot still in workspace preparation has no adoptable worker; planned
+  shutdown settles it as `ReviewInfra / ExecutorRestarted` and lets authority
+  retry it. Capacity automation therefore must not restart the Review unit
+  until admission is closed and every occupied slot is detached or terminal.
 - A Task Server restart is also not an attempt boundary. The server reloads the
   persisted RunAttempt and ReviewAttempt ledger; the surviving runner includes
   positively proven active slots in its next registration and the server
@@ -947,6 +961,12 @@ the stalled-progress verdict, and whether any returned card has rejection
 evidence. The board mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
+
+`ReviewQueueTelemetryWatchdog` applies the corresponding post-processing guard.
+It alarms only while at least one Auto Review card is waiting and neither the
+last accepted non-infrastructure report nor the oldest waiting card shows drain
+progress inside `ReviewQueueTelemetry:StagnationThresholdMinutes`. The queue
+remains global FIFO; this telemetry and alarm introduce no project ordering.
 
 ## Verification
 

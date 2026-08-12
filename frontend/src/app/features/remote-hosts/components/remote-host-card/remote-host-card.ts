@@ -30,7 +30,11 @@ import {
   type MeterTone,
   type RemoteHost,
 } from '../../models/remote-host.model';
-import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
+import {
+  freshHostExecutionPlane,
+  freshHostTelemetry,
+  latestHostTelemetry,
+} from '../../models/running-truth';
 import { providerAuthBadgesForHost, type ProviderAuthBadge } from '../../models/provider-auth.model';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
@@ -105,6 +109,14 @@ export class RemoteHostCardComponent {
   readonly stale = computed(() => !this.liveLoading() && hostIsStale(this.host().lastHeartbeatAt, this.now()));
   readonly latestTelemetry = computed(() => latestHostTelemetry(this.host()));
   readonly liveTelemetry = computed(() => freshHostTelemetry(this.host(), this.now()));
+  readonly codingPlane = computed(() =>
+    this.host().executionPlanes?.find(plane => plane.role === 'coding') ?? null);
+  readonly reviewPlane = computed(() =>
+    this.host().executionPlanes?.find(plane => plane.role === 'review') ?? null);
+  readonly liveCodingPlane = computed(() =>
+    freshHostExecutionPlane(this.host(), 'coding', this.now()));
+  readonly liveReviewPlane = computed(() =>
+    freshHostExecutionPlane(this.host(), 'review', this.now()));
   readonly telemetryStale = computed(() =>
     this.latestTelemetry() !== null && this.liveTelemetry() === null);
   readonly taskServerRouteLabel = computed(() => {
@@ -161,26 +173,43 @@ export class RemoteHostCardComponent {
     if (this.liveError()) return 'status unavailable';
     return this.stale() ? 'stopped' : (this.host().daemonState ?? 'running');
   });
-  readonly runSlotsLabel = computed(() => {
+  readonly codingSlotsLabel = computed(() => {
     if (this.liveLoading()) return 'Loading daemon telemetry…';
     if (this.liveError()) return 'Live count unavailable';
+    const plane = this.codingPlane();
+    if (plane) return this.liveCodingPlane()
+      ? `${plane.activeSlots} active${plane.maxParallelism ? ` · pool ${plane.maxParallelism}` : ''}`
+      : `${plane.activeSlots} active · stale`;
     const latest = this.latestTelemetry();
     if (!latest) return 'No slot telemetry';
     if (!this.liveTelemetry()) return `${latest.activeSlots} active · stale`;
     return `${latest.activeSlots} active`;
   });
+  readonly reviewSlotsLabel = computed(() => {
+    if (this.liveLoading()) return 'Loading daemon telemetry…';
+    if (this.liveError()) return 'Live count unavailable';
+    const plane = this.reviewPlane();
+    if (!plane) return 'Not reported';
+    return this.liveReviewPlane()
+      ? `${plane.activeSlots} active${plane.maxParallelism ? ` · pool ${plane.maxParallelism}` : ''}`
+      : `${plane.activeSlots} active · stale`;
+  });
+  readonly codingSlotsStale = computed(() =>
+    this.codingPlane() ? this.liveCodingPlane() === null : this.telemetryStale());
+  readonly reviewSlotsStale = computed(() =>
+    this.reviewPlane() !== null && this.liveReviewPlane() === null);
   readonly runSlotsDiverge = computed(() => {
-    const telemetry = this.liveTelemetry();
-    return telemetry !== null && telemetry.activeSlots !== this.boardActiveSlots();
+    const activeSlots = this.liveCodingPlane()?.activeSlots ?? this.liveTelemetry()?.activeSlots;
+    return activeSlots !== undefined && activeSlots !== this.boardActiveSlots();
   });
   readonly runSlotsTooltip = computed(() => {
-    const telemetry = this.liveTelemetry();
-    if (!telemetry) return 'Active-slot telemetry is stale or unavailable.';
+    const activeSlots = this.liveCodingPlane()?.activeSlots ?? this.liveTelemetry()?.activeSlots;
+    if (activeSlots === undefined) return 'Coding slot telemetry is stale or unavailable.';
     if (this.runSlotsDiverge()) {
       const boardSource = this.host().role === 'remote' ? 'live remote leases' : 'live local executions';
-      return `Sources disagree: telemetry reports ${telemetry.activeSlots} active slots; the board reports ${this.boardActiveSlots()} ${boardSource} for this host.`;
+      return `Sources disagree: Coding telemetry reports ${activeSlots} active slots; the board reports ${this.boardActiveSlots()} ${boardSource} for this host.`;
     }
-    return `Telemetry and board leases agree on ${telemetry.activeSlots} active ${telemetry.activeSlots === 1 ? 'slot' : 'slots'}.`;
+    return `Coding telemetry and board leases agree on ${activeSlots} active ${activeSlots === 1 ? 'slot' : 'slots'}.`;
   });
   readonly gateWorkLabel = computed(() => {
     if (this.liveLoading()) return 'Loading gate events…';
