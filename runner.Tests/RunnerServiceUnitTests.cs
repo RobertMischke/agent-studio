@@ -176,12 +176,29 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("mv -fT -- \"$candidate_file\" \"$config_env_file\"", helper);
         Assert.Contains("systemctl restart \"$AGENT_RUNNER_CONFIG_UNIT\"", helper);
         Assert.Contains("/proc/$main_pid/environ", helper);
+        Assert.Contains("wait_for_active_new_main_pid", helper);
+        Assert.Contains("previous_main_pid", helper);
+        Assert.DoesNotContain("pgrep", helper);
         Assert.Contains("result=$result", helper);
         Assert.Contains("rollback_config", helper);
         Assert.Contains("EnvironmentFiles", helper);
         Assert.Contains("installed_policy", migration);
         Assert.Contains("visudo -c", migration);
         Assert.Contains("for privileged_group in sudo docker", migration);
+    }
+
+    [SkippableFact]
+    public void Agent_runner_config_restart_uses_the_new_daemon_with_detached_workers_alive()
+    {
+        PlatformGate.RequiresPosixShell();
+
+        var result = RunConfigRestartRegression();
+
+        Assert.True(result.ExitCode == 0, result.StandardError);
+        Assert.Equal(
+            "previous=4100 detached-worker=4200 main=4300 " +
+            "unit-environment=2 environment-file=6 effective=6\n",
+            result.StandardOutput.ReplaceLineEndings("\n"));
     }
 
     [SkippableTheory]
@@ -396,6 +413,83 @@ public sealed class RunnerServiceUnitTests
                 Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-config-policy")));
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
+
+        using var process = Process.Start(start)!;
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, standardOutput, standardError);
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError) RunConfigRestartRegression()
+    {
+        const string script = """
+            source "$1"
+
+            previous_main_pid=4100
+            detached_worker_pid=4200
+            replacement_main_pid=4300
+            unit_environment_value=2
+            environment_file_value=6
+            active_check_count=0
+
+            unit_is_active() {
+              active_check_count=$((active_check_count + 1))
+              ((active_check_count > 1))
+            }
+
+            query_main_pid() {
+              case "$active_check_count" in
+                2) printf '%s\n' "$previous_main_pid" ;;
+                3) printf '0\n' ;;
+                *) printf '%s\n' "$replacement_main_pid" ;;
+              esac
+            }
+
+            sleep() {
+              :
+            }
+
+            read_process_environment_value() {
+              case "$1" in
+                "$detached_worker_pid") printf '%s\n' "$unit_environment_value" ;;
+                "$replacement_main_pid") printf '%s\n' "$environment_file_value" ;;
+                *) return 1 ;;
+              esac
+            }
+
+            main_pid="$(wait_for_active_new_main_pid \
+              agent-runner-review.service "$previous_main_pid")"
+            [[ "$main_pid" == "$replacement_main_pid" ]]
+            detached_worker_value="$(read_process_environment_value \
+              "$detached_worker_pid" RUNNER_MAX_PARALLELISM)"
+            [[ "$detached_worker_value" == "$unit_environment_value" ]]
+            effective_value="$(read_process_environment_value \
+              "$main_pid" RUNNER_MAX_PARALLELISM)"
+            [[ "$effective_value" == "$environment_file_value" ]]
+
+            printf 'previous=%s detached-worker=%s main=%s unit-environment=%s environment-file=%s effective=%s\n' \
+              "$previous_main_pid" \
+              "$detached_worker_pid" \
+              "$main_pid" \
+              "$unit_environment_value" \
+              "$environment_file_value" \
+              "$effective_value"
+            """;
+        var start = new ProcessStartInfo
+        {
+            FileName = PosixShell.RequirePath(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add(script);
+        start.ArgumentList.Add("agent-runner-config-restart-regression");
+        start.ArgumentList.Add(
+            PosixShell.ToShellPath(
+                Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-deploy")));
 
         using var process = Process.Start(start)!;
         var standardOutput = process.StandardOutput.ReadToEnd();

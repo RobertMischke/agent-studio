@@ -15,6 +15,8 @@ readonly compatibility_link="/opt/agent-runner"
 readonly legacy_backup="/opt/agent-runner.pre-hardening"
 readonly config_policy="/usr/local/libexec/agent-runner-config-policy"
 readonly maximum_release_bytes=$((1024 * 1024 * 1024))
+readonly config_restart_poll_attempts=150
+readonly config_restart_poll_interval_seconds="0.2"
 
 die() {
   printf 'agent-runner-deploy: %s\n' "$*" >&2
@@ -34,6 +36,47 @@ unit_loads_environment_file() {
   local expected_path="$2"
 
   awk '{ print $1 }' <<<"$environment_files" | grep -Fxq -- "$expected_path"
+}
+
+query_main_pid() {
+  local unit="$1"
+
+  systemctl show --property=MainPID --value "$unit"
+}
+
+unit_is_active() {
+  local unit="$1"
+
+  systemctl is-active --quiet "$unit"
+}
+
+wait_for_active_new_main_pid() {
+  local unit="$1"
+  local previous_main_pid="$2"
+  local attempt
+  local candidate_main_pid
+
+  for ((attempt = 1; attempt <= config_restart_poll_attempts; attempt++)); do
+    candidate_main_pid=""
+    if unit_is_active "$unit" \
+        && candidate_main_pid="$(query_main_pid "$unit")" \
+        && [[ "$candidate_main_pid" =~ ^[1-9][0-9]*$ ]] \
+        && [[ "$candidate_main_pid" != "$previous_main_pid" ]]; then
+      printf '%s\n' "$candidate_main_pid"
+      return 0
+    fi
+    sleep "$config_restart_poll_interval_seconds"
+  done
+
+  return 1
+}
+
+read_process_environment_value() {
+  local main_pid="$1"
+  local variable="$2"
+
+  tr '\0' '\n' <"/proc/$main_pid/environ" \
+    | awk -F= -v key="$variable" '$1 == key { print substr($0, index($0, "=") + 1) }'
 }
 
 rollback_config() {
@@ -116,21 +159,31 @@ configure_role() {
   mv -fT -- "$candidate_file" "$config_env_file"
   candidate_file=""
 
+  local previous_main_pid
+  if ! previous_main_pid="$(query_main_pid "$AGENT_RUNNER_CONFIG_UNIT")"; then
+    rollback_config "pre-restart-main-pid-query-failed"
+  fi
+  [[ "$previous_main_pid" =~ ^[0-9]+$ ]] \
+    || rollback_config "pre-restart-main-pid-invalid"
+
   if ! systemctl restart "$AGENT_RUNNER_CONFIG_UNIT"; then
     rollback_config "unit-restart-failed"
-  fi
-  if ! systemctl is-active --quiet "$AGENT_RUNNER_CONFIG_UNIT"; then
-    rollback_config "unit-not-active"
   fi
 
   local main_pid
   local process_value
-  if ! main_pid="$(systemctl show --property=MainPID --value "$AGENT_RUNNER_CONFIG_UNIT")"; then
-    rollback_config "main-pid-query-failed"
+  if ! main_pid="$(wait_for_active_new_main_pid \
+      "$AGENT_RUNNER_CONFIG_UNIT" "$previous_main_pid")"; then
+    if unit_is_active "$AGENT_RUNNER_CONFIG_UNIT"; then
+      rollback_config "new-main-pid-timeout"
+    fi
+    rollback_config "unit-not-active"
   fi
-  [[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || rollback_config "main-pid-missing"
-  if ! process_value="$(tr '\0' '\n' <"/proc/$main_pid/environ" \
-      | awk -F= -v key="$AGENT_RUNNER_CONFIG_VARIABLE" '$1 == key { print substr($0, index($0, "=") + 1) }')"; then
+  # systemd EnvironmentFile= assignments override Environment= assignments.
+  # Read the effective value from the new main daemon, never from a surviving
+  # detached worker left in the unit cgroup by KillMode=process.
+  if ! process_value="$(read_process_environment_value \
+      "$main_pid" "$AGENT_RUNNER_CONFIG_VARIABLE")"; then
     rollback_config "process-environment-read-failed"
   fi
   [[ "$process_value" == "$AGENT_RUNNER_CONFIG_VALUE" ]] \
@@ -220,21 +273,27 @@ promote_release() {
   printf 'agent-runner-deploy: restart agent-runner.service and agent-runner-review.service to activate it\n'
 }
 
-[[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"
-command -v flock >/dev/null || die "flock is required"
-command -v stat >/dev/null || die "stat is required"
-install -d -o root -g root -m 0755 "$deploy_root"
-exec 9>"$deploy_root/.deploy.lock"
-flock -n 9 || die "another release promotion or configuration update is already running"
+main() {
+  [[ "$EUID" -eq 0 ]] || die "must run as root through the approved sudo rule"
+  command -v flock >/dev/null || die "flock is required"
+  command -v stat >/dev/null || die "stat is required"
+  install -d -o root -g root -m 0755 "$deploy_root"
+  exec 9>"$deploy_root/.deploy.lock"
+  flock -n 9 || die "another release promotion or configuration update is already running"
 
-case "$#:${1:-}" in
-  0:)
-    promote_release
-    ;;
-  4:config)
-    configure_role "$2" "$3" "$4"
-    ;;
-  *)
-    die "usage: agent-runner-deploy [config <coding|review> RUNNER_MAX_PARALLELISM <1-6>]"
-    ;;
-esac
+  case "$#:${1:-}" in
+    0:)
+      promote_release
+      ;;
+    4:config)
+      configure_role "$2" "$3" "$4"
+      ;;
+    *)
+      die "usage: agent-runner-deploy [config <coding|review> RUNNER_MAX_PARALLELISM <1-6>]"
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
