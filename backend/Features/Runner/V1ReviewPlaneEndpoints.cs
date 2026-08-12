@@ -296,6 +296,10 @@ public static class V1ReviewPlaneEndpoints
                 lease));
         });
 
+        api.MapGet("/reviews/queue/telemetry", (
+            ReviewQueueTelemetryWatchdog watchdog) =>
+            Results.Ok(watchdog.Refresh()));
+
         api.MapGet("/reviews/attempts/{attemptId}", (
             string attemptId,
             AttemptAuthorityService authority) =>

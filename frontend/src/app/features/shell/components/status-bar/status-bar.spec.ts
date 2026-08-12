@@ -15,6 +15,15 @@ describe('formatRunningLabel', () => {
   ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
     expect(formatRunningLabel(local, remote)).toBe(expected);
   });
+
+  it('keeps Review-plane work visible when no coding runner is active', () => {
+    expect(formatRunningLabel(0, 0, 4)).toBe('review 4 active / 0 waiting');
+    expect(formatRunningLabel(1, 2, 4, 6)).toBe('1 local · 2 remote · review 4 active / 6 waiting');
+  });
+
+  it('never renders a silent normal zero while Review work is waiting', () => {
+    expect(formatRunningLabel(0, 0, 0, 8)).toBe('review 0 active / 8 waiting');
+  });
 });
 
 /**

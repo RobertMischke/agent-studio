@@ -179,10 +179,12 @@
               (projectPolicyChange)="projectPolicyChange.emit($event)" />
           }
           <app-host-workload-summary
-            [runSlots]="runSlotsLabel()"
-            [runSlotsStale]="telemetryStale() || stale() || liveError()"
-            [runSlotsDiverge]="runSlotsDiverge()"
-            [runSlotsTooltip]="runSlotsTooltip()"
+            [codingSlots]="codingSlotsLabel()"
+            [codingSlotsStale]="codingSlotsStale() || stale() || liveError()"
+            [codingSlotsDiverge]="runSlotsDiverge()"
+            [codingSlotsTooltip]="runSlotsTooltip()"
+            [reviewSlots]="reviewSlotsLabel()"
+            [reviewSlotsStale]="reviewSlotsStale() || stale() || liveError()"
             [gateWork]="gateWorkLabel()" />
           @if (failedProjectPreflights().length) {
             <div class="host__delivery-failures" data-testid="remote-host-project-preflight-failures">

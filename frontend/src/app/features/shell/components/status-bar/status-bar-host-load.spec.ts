@@ -64,6 +64,31 @@ describe('summarizeStatusBarHostLoad', () => {
     });
   });
 
+  it('attributes elevated host load to Review-plane slots without double-counting host load', () => {
+    const now = '2026-08-11T22:00:00.000Z';
+    const host = remoteHost(8.4, 12, 0, now);
+    host.executionPlanes = [
+      {
+        role: 'coding', runnerId: 'remote-1', name: 'remote-1', lastSeenAt: now,
+        observedAt: now, activeSlots: 0, maxParallelism: 2, load1: 8.4, cpuCores: 12,
+      },
+      {
+        role: 'review', runnerId: 'remote-1-review', name: 'remote-1-review', lastSeenAt: now,
+        observedAt: now, activeSlots: 4, maxParallelism: 6, load1: 8.4, cpuCores: 12,
+      },
+    ];
+
+    expect(summarizeStatusBarHostLoad([host], 0, Date.parse(now))).toMatchObject({
+      load1: 8.4,
+      cpuCores: 12,
+      activeSlots: 4,
+      codingSlots: 0,
+      reviewSlots: 4,
+      tone: 'working',
+      correlation: 'consistent',
+    });
+  });
+
   it('quietly flags reported runs with almost no host load', () => {
     expect(summarizeStatusBarHostLoad([remoteHost(0.2)], 2)).toMatchObject({
       tone: 'mismatch',

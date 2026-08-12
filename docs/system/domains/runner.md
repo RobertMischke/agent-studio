@@ -232,6 +232,15 @@ state.
   acknowledgement cannot be delivered. Compatibility report projection uses
   the archive-inclusive task snapshot so a late idempotent report can record
   evidence without reopening an archived card.
+- `TaskServerReviewQueueTelemetry.cs` and the monolith compatibility
+  `ReviewQueueTelemetryWatchdog` expose `GET /api/v1/reviews/queue/telemetry`.
+  Queue depth is the count of cards in `4-auto-review`; waiting and leased
+  ReviewAttempts split that depth into waiting and active work. Drain rate is
+  the trailing count of non-infrastructure reports per hour, and median review
+  duration is measured from lease acquisition to accepted report. The watchdog
+  emits the rate-limited `auto-review-queue-stagnant` warning when waiting cards
+  have made no drain progress for the configured threshold, 30 minutes by
+  default, and emits a recovery event when progress resumes.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive
@@ -487,13 +496,15 @@ state.
   the chain reaches a terminal lane and the pickup queue is empty, the normal
   revert applies.
 
-- Remote host capacity is reported as distinct workload classes. RUN occupancy
-  comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
-  sum is the configured host maximum). Remote SSH build/test GATE occupancy
-  comes from gate start/completion events and runs outside RUN slots. Host CPU
-  and load include both pools and unrelated processes, so neither is inferred
-  from lane membership or from CPU percentage. This keeps claim/lane drift
-  visible instead of silently folding it into a slot count.
+- Remote host capacity is reported as distinct workload classes. Coding and
+  Review identities publish role-local active slots in their capability
+  snapshots and are folded by physical `hostId`; CPU cores and load are counted
+  once from the freshest role snapshot. Remote SSH build/test GATE occupancy
+  comes from gate start/completion events and runs outside both slot pools.
+  Host CPU and load include both pools and unrelated processes, so neither is
+  inferred from lane membership or CPU percentage. This keeps claim/lane drift
+  visible without duplicating a shared host or misclassifying Review load as
+  unexplained load.
 
 - `RuntimeCapacitySettingsService` in the Task Server owns the versioned host
   ceiling, target load, and ramp strategy. The first Runner registration seeds
@@ -542,6 +553,11 @@ state.
   classification `ExecutorRestarted`, the completed-command count and duration,
   the failed process proof, and the retry reason. DB lease presence alone is
   never process-liveness evidence. systemd must use `KillMode=process`.
+  This loss-free handoff begins only after a detached worker identity exists.
+  A Review slot still in workspace preparation has no adoptable worker; planned
+  shutdown settles it as `ReviewInfra / ExecutorRestarted` and lets authority
+  retry it. Capacity automation therefore must not restart the Review unit
+  until admission is closed and every occupied slot is detached or terminal.
 - A failed lease renewal consumes the last server-issued authority window. The
   default requested window is 15 minutes, with a durable stop-before boundary
   one renewal interval before expiry. The standalone Runner persists that
@@ -919,6 +935,12 @@ the stalled-progress verdict, and whether any returned card has rejection
 evidence. The board mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
+
+`ReviewQueueTelemetryWatchdog` applies the corresponding post-processing guard.
+It alarms only while at least one Auto Review card is waiting and neither the
+last accepted non-infrastructure report nor the oldest waiting card shows drain
+progress inside `ReviewQueueTelemetry:StagnationThresholdMinutes`. The queue
+remains global FIFO; this telemetry and alarm introduce no project ordering.
 
 ## Verification
 

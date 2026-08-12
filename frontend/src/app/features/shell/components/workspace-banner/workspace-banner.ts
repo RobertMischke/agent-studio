@@ -4,6 +4,7 @@ import { NotificationService } from '../../../../services/notification.service';
 import type { NotificationKind } from '../../../../models/app-dialog.model';
 import { RemoteQueueStarvationBannerComponent } from '../remote-queue-starvation-banner/remote-queue-starvation-banner';
 import { AcceptedIntegrationAlertBannerComponent } from '../accepted-integration-alert-banner/accepted-integration-alert-banner';
+import { AutoReviewQueueAlarmComponent } from '../auto-review-queue-alarm/auto-review-queue-alarm';
 
 /**
  * F56: workspace auto-review verdicts now render as toasts in the unified
@@ -46,7 +47,11 @@ const BANNER_TOPICS: ReadonlySet<string> = new Set([
 @Component({
   selector: 'app-workspace-banner',
   standalone: true,
-  imports: [AcceptedIntegrationAlertBannerComponent, RemoteQueueStarvationBannerComponent],
+  imports: [
+    AcceptedIntegrationAlertBannerComponent,
+    AutoReviewQueueAlarmComponent,
+    RemoteQueueStarvationBannerComponent,
+  ],
   templateUrl: './workspace-banner.html',
   styleUrl: './workspace-banner.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

@@ -53,6 +53,22 @@ async function stubBackgroundApis(page: Page) {
     oldestEnteredLaneAt: null,
     items: [],
   }));
+  await page.route('**/api/v1/reviews/queue/telemetry', json({
+    observedAt: new Date().toISOString(),
+    queueDepth: 40,
+    waitingDepth: 36,
+    activeReviews: 4,
+    drainRatePerHour: 7.5,
+    drainWindowMinutes: 60,
+    medianReviewDurationSeconds: 1080,
+    durationWindowHours: 24,
+    durationSampleCount: 18,
+    lastDrainAt: new Date().toISOString(),
+    oldestWaitingAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+    stagnant: false,
+    stagnationThresholdMinutes: 30,
+    stagnantForMinutes: 20,
+  }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   const now = new Date().toISOString();
   await page.route('**/api/clients', json([
@@ -130,6 +146,9 @@ test.describe('Execution Hosts settings section', () => {
 
     // Header total equals the number of visible cards (R3 sum invariant).
     await expect(page.getByTestId('remote-hosts-summary')).toContainText(String(count));
+    await expect(page.getByTestId('remote-hosts-review-depth')).toHaveText('40');
+    await expect(page.getByTestId('remote-hosts-review-drain')).toHaveText('7.5/h');
+    await expect(page.getByTestId('remote-hosts-review-duration')).toHaveText('18 min');
 
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
   });

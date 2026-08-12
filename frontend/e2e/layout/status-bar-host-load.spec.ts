@@ -20,6 +20,8 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  reviewSlots = 0,
+  reviewWaiting = 0,
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -96,6 +98,25 @@ async function stubHostLoad(
     archive: [],
   }));
   await page.route('**/api/tasks', json([]));
+  await page.route('**/api/tasks/archive**', json({
+    items: [], total: 0, offset: 0, limit: 50, hasMore: false,
+  }));
+  await page.route('**/api/v1/reviews/queue/telemetry', json({
+    observedAt: now,
+    queueDepth: 0,
+    waitingDepth: reviewWaiting,
+    activeReviews: reviewSlots,
+    drainRatePerHour: 0,
+    drainWindowMinutes: 60,
+    medianReviewDurationSeconds: null,
+    durationWindowHours: 24,
+    durationSampleCount: 0,
+    lastDrainAt: null,
+    oldestWaitingAt: null,
+    stagnant: false,
+    stagnationThresholdMinutes: 30,
+    stagnantForMinutes: 0,
+  }));
   await page.route('**/api/runner/status', json({ projects: runnerProjects }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
@@ -148,7 +169,48 @@ async function stubHostLoad(
     }],
     findings: [],
   }));
-  await page.route('**/api/v1/management/remote-hosts', json([]));
+  const hostAdmission = {
+    hostId: 'host-a', admissionState: 'open', automaticDrainReason: null,
+    automaticDrainAt: null, operatorDrainReason: null, operatorDrainAt: null,
+  };
+  const capability = (key: string) => ({
+    key,
+    category: 'executor',
+    advertisedStatus: 'ready',
+    healthState: 'healthy',
+    advertisedAt: now,
+    freshUntil: new Date(Date.now() + 60_000).toISOString(),
+    isFresh: true,
+    consecutiveFailures: 0,
+    affectedClaims: [],
+    recoveryHistory: [],
+  });
+  const plane = (runnerId: string, key: string, activeSlots: number) => ({
+    runnerId,
+    name: runnerId,
+    hostId: 'host-a',
+    instanceId: `${runnerId}:1`,
+    runnerVersion: 'test',
+    protocolVersion: 3,
+    status: 'active',
+    registeredAt: now,
+    lastSeenAt: now,
+    hostAdmission,
+    capabilities: [capability(key)],
+    telemetry: {
+      observedAt: now,
+      cpuPercent: 68,
+      load1,
+      memoryUsedBytes: 24_000_000_000,
+      memoryTotalBytes: 64_000_000_000,
+      cpuCores: 12,
+      activeSlots,
+    },
+  });
+  await page.route('**/api/v1/management/remote-hosts', json(reviewSlots > 0 ? [
+    plane('agent-runner-01', 'executor:coding', telemetrySlots),
+    plane('agent-runner-01-review', 'executor:review', reviewSlots),
+  ] : []));
 }
 
 test.describe('Status bar execution-host load companion signal', () => {
@@ -215,6 +277,52 @@ test.describe('Status bar execution-host load companion signal', () => {
     await running.hover();
     await page.screenshot({
       path: join(RESULTS_DIR, 'status-bar-runners-none-light--mocked.png'),
+      fullPage: false,
+    });
+  });
+
+  test('Review slots explain elevated host load without a false inconsistency hint', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 0, 8.4, 4);
+    await page.goto('/');
+
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('review 4 active / 0 waiting');
+    await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
+    await running.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Review plane 4 active slots');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('(0 coding / 4 review)');
+    await expect(page.getByTestId('cac-tooltip')).not.toContainText('Quiet consistency hint');
+
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'status-bar-review-plane-dark--mocked.png'),
+      fullPage: false,
+    });
+  });
+
+  test('Review waiting with zero active slots is an amber attention state', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 0, 0.1, 0, 8);
+    await page.goto('/');
+
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('review 0 active / 8 waiting');
+    await expect(running).not.toContainText('no runners');
+    await expect(running).toHaveAttribute('data-signal-tone', 'hot');
+    await expect(running).toHaveAttribute(
+      'data-signal-correlation',
+      'review-waiting-without-active',
+    );
+    await running.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'Attention: 8 Auto Review cards are waiting while the Review plane reports 0 active slots.',
+    );
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'Consistency hint: waiting post-processing has no active Review worker.',
+    );
+
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'status-bar-review-waiting-attention-dark--mocked.png'),
       fullPage: false,
     });
   });
