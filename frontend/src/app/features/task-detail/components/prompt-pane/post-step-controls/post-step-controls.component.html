@@ -1,16 +1,15 @@
 @let state = activationView();
+@let scope = activationScope();
 <span class="post-step-controls" data-testid="overview-post-step-actions">
   <button type="button"
           class="post-step-controls__source"
           data-testid="overview-post-step-source"
           [attr.data-activation-state]="state.state"
           [attr.data-activation-source]="state.source"
-          [attr.aria-label]="state.state + ' from ' + state.source + ': ' + state.reason + ' Open settings.'"
-          [cacTooltip]="state.reason + ' Open the matching Project Pipeline row.'"
+          [attr.aria-label]="scope.description + ' Open settings.'"
+          [cacTooltip]="scope.description + ' Open the matching Project Pipeline row.'"
           (click)="openPipelineSettings()">
-    <span class="post-step-controls__state">{{ state.state }}</span>
-    <span aria-hidden="true">·</span>
-    <span>{{ state.source }}</span>
+    <span aria-hidden="true">{{ scope.code }}</span>
   </button>
 
   @if (supported()) {
