@@ -35,7 +35,48 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
-    public void Evaluate_PreservesPerCardRejectionForUnknownStarvationDiagnosis()
+    public void Evaluate_SuppressesAlarmWhileSerialQueueClaimsKeepProgressing()
+    {
+        var task = ReadyTask(90);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.False(snapshot.Active);
+        Assert.False(snapshot.ClaimProgressStalled);
+        Assert.Equal(Now.AddMinutes(-1), snapshot.LastSuccessfulClaimAt);
+        Assert.Empty(snapshot.Items);
+    }
+
+    [Theory]
+    [InlineData(29, false)]
+    [InlineData(30, true)]
+    public void Evaluate_DebouncesMissingClaimProgressUntilThreshold(
+        int lastClaimMinutesAgo,
+        bool expectedActive)
+    {
+        var task = ReadyTask(90);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo)]);
+
+        Assert.Equal(expectedActive, snapshot.Active);
+        Assert.Equal(expectedActive, snapshot.ClaimProgressStalled);
+        Assert.Equal(expectedActive ? 1 : 0, snapshot.WaitingTaskCount);
+    }
+
+    [Fact]
+    public void Evaluate_ActivatesForRecordedRejectionEvenWhileOtherClaimsProgress()
     {
         var rejection = new RemoteDispatchRejection
         {
@@ -45,7 +86,7 @@ public sealed class RemoteQueueStarvationPolicyTests
             Reason = "future admission rule refused the card",
             RejectedAtUtc = Now.AddMinutes(-4),
         };
-        var task = ReadyTask(40) with { RemoteDispatchRejection = rejection };
+        var task = ReadyTask(4) with { RemoteDispatchRejection = rejection };
 
         var snapshot = RemoteQueueStarvationPolicy.Evaluate(
             Now,
@@ -53,9 +94,11 @@ public sealed class RemoteQueueStarvationPolicyTests
             [task],
             _ => RemoteSettings(),
             TaskReferenceIndex.Build([task]),
-            [Runner(1, 0)]);
+            [Runner(1, 0, lastClaimMinutesAgo: 1)]);
 
         Assert.True(snapshot.Active);
+        Assert.False(snapshot.ClaimProgressStalled);
+        Assert.True(snapshot.HasRejections);
         Assert.Equal(rejection, Assert.Single(snapshot.Items).LastRejection);
     }
 
@@ -107,7 +150,10 @@ public sealed class RemoteQueueStarvationPolicyTests
         ExecutionLocation = "runner-01",
     };
 
-    private static ClientIdentity Runner(int availableSlots, int ageMinutes) => new()
+    private static ClientIdentity Runner(
+        int availableSlots,
+        int ageMinutes,
+        int? lastClaimMinutesAgo = null) => new()
     {
         Id = "runner-01",
         DisplayName = "Runner 01",
@@ -115,6 +161,9 @@ public sealed class RemoteQueueStarvationPolicyTests
         LastSeenAt = Now.AddMinutes(-ageMinutes),
         RunnerDaemonState = "running",
         RunnerAvailableSlots = availableSlots,
+        RunnerLastClaimAt = lastClaimMinutesAgo is { } minutes
+            ? Now.AddMinutes(-minutes)
+            : null,
     };
 
     private sealed class CapturingLogger : ILogger<RemoteQueueStarvationWatchdog>

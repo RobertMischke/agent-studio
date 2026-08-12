@@ -17,6 +17,9 @@ interface RemoteQueueStarvationSnapshot {
   waitingTaskCount: number;
   availableSlots: number;
   thresholdMinutes: number;
+  claimProgressStalled: boolean;
+  lastSuccessfulClaimAt: string | null;
+  hasRejections: boolean;
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -45,6 +48,9 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
     return snapshot.items.filter(item => visible.has(item.projectName.toLowerCase()));
   });
   readonly availableSlots = computed(() => this.snapshot()?.availableSlots ?? 0);
+  readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
+  readonly hasRejections = computed(() =>
+    this.visibleItems().some(item => item.lastRejection != null));
 
   ngOnInit(): void {
     this.refresh();
