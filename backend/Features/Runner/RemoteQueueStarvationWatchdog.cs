@@ -16,6 +16,9 @@ public sealed record RemoteQueueStarvationSnapshot
     public int WaitingTaskCount { get; init; }
     public int AvailableSlots { get; init; }
     public int ThresholdMinutes { get; init; }
+    public bool ClaimProgressStalled { get; init; }
+    public DateTime? LastSuccessfulClaimAt { get; init; }
+    public bool HasRejections { get; init; }
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -32,20 +35,27 @@ public static class RemoteQueueStarvationPolicy
         TaskReferenceIndex references,
         IEnumerable<ClientIdentity> runners)
     {
-        var availableSlots = runners
+        var liveRunners = runners
             .Where(runner => string.Equals(
                 runner.RunnerDaemonState,
                 "running",
                 StringComparison.OrdinalIgnoreCase))
             .Where(runner => runner.Kind != ClientIdentityKind.Retired)
-            .Where(runner => runner.DrainRequestedAt is null)
             .Where(runner => runner.LastSeenAt is { } lastSeen
                              && now - lastSeen.ToUniversalTime() <= TimeSpan.FromMinutes(2))
+            .ToList();
+        var availableSlots = liveRunners
+            .Where(runner => runner.DrainRequestedAt is null)
             .Sum(runner => Math.Max(0, runner.RunnerAvailableSlots ?? 0));
+        var lastSuccessfulClaimAt = liveRunners
+            .Where(runner => runner.RunnerLastClaimAt is not null)
+            .Select(runner => runner.RunnerLastClaimAt!.Value.ToUniversalTime())
+            .OrderByDescending(claimedAt => claimedAt)
+            .Cast<DateTime?>()
+            .FirstOrDefault();
 
-        var items = tasks
+        var eligibleTasks = tasks
             .Where(task => task.State == TaskStates.Ready && !task.Fixture)
-            .Where(task => now - task.EnteredLaneAt.ToUniversalTime() >= threshold)
             .Where(task =>
             {
                 var settings = projectSettings(task.ProjectName);
@@ -58,6 +68,20 @@ public static class RemoteQueueStarvationPolicy
                            || task.Phase == LifecyclePhases.IntakePassed)
                        && !references.EvaluateWaitsOn(task).Blocked;
             })
+            .ToList();
+        var oldestEligibleAt = eligibleTasks
+            .Select(task => task.EnteredLaneAt.ToUniversalTime())
+            .OrderBy(enteredAt => enteredAt)
+            .Cast<DateTime?>()
+            .FirstOrDefault();
+        var progressReferenceAt = lastSuccessfulClaimAt ?? oldestEligibleAt;
+        var claimProgressStalled = progressReferenceAt is { } referenceAt
+                                   && now - referenceAt >= threshold;
+
+        var items = eligibleTasks
+            .Where(task => task.RemoteDispatchRejection is not null
+                           || (claimProgressStalled
+                               && now - task.EnteredLaneAt.ToUniversalTime() >= threshold))
             .OrderBy(task => task.EnteredLaneAt)
             .Select(task => new RemoteQueueStarvationItem
             {
@@ -69,6 +93,7 @@ public static class RemoteQueueStarvationPolicy
                 LastRejection = task.RemoteDispatchRejection,
             })
             .ToList();
+        var hasRejections = items.Any(item => item.LastRejection is not null);
 
         return new RemoteQueueStarvationSnapshot
         {
@@ -76,6 +101,9 @@ public static class RemoteQueueStarvationPolicy
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
+            ClaimProgressStalled = claimProgressStalled,
+            LastSuccessfulClaimAt = lastSuccessfulClaimAt,
+            HasRejections = hasRejections,
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
@@ -199,10 +227,12 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             return;
 
         _logger.LogWarning(
-            "remote-ready-starvation waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} oldestEnteredLaneAt={OldestEnteredLaneAt}",
+            "remote-ready-starvation waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} oldestEnteredLaneAt={OldestEnteredLaneAt} lastSuccessfulClaimAt={LastSuccessfulClaimAt} rejectedTasks={RejectedTaskCount}",
             next.WaitingTaskCount,
             next.AvailableSlots,
-            next.OldestEnteredLaneAt);
+            next.OldestEnteredLaneAt,
+            next.LastSuccessfulClaimAt,
+            next.Items.Count(item => item.LastRejection is not null));
         _warningSignature = signature;
         _lastWarningAt = now;
     }
@@ -228,6 +258,7 @@ public static class RemoteQueueStarvationEndpoints
             {
                 Active = visibleItems.Count > 0 && snapshot.AvailableSlots > 0,
                 WaitingTaskCount = visibleItems.Count,
+                HasRejections = visibleItems.Any(item => item.LastRejection is not null),
                 OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
                 Items = visibleItems,
             });

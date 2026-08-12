@@ -896,12 +896,17 @@ generation cannot inherit it. Missing repository registration is also projected
 as a failed project preflight in Execution Hosts before a Runner polls.
 
 `RemoteQueueStarvationWatchdog` independently detects remotely routed Ready
-cards older than `RemoteQueueStarvation:ThresholdMinutes` (30 by default) while
-a live Runner reports free slots. It publishes
-`GET /api/runner/queue-starvation`, emits the rate-limited
-`remote-ready-starvation` warning event, and clears the acute signal when the
-queue or capacity condition recovers. This guard does not depend on recognizing
-the claim refusal reason.
+cards while a live Runner reports free slots. A durable claim rejection is
+acute evidence immediately. Without a rejection, a card must be older than
+`RemoteQueueStarvation:ThresholdMinutes` (30 by default) and the live Runner
+fleet's latest successful claim must also be at least that old. This claim
+progress window debounces normal serial queue processing, including snapshots
+between claim polls. The snapshot published by
+`GET /api/runner/queue-starvation` includes the latest successful claim time,
+the stalled-progress verdict, and whether any returned card has rejection
+evidence. The board mentions a latest rejection only when that evidence exists.
+The watchdog emits the rate-limited `remote-ready-starvation` warning event and
+clears the acute signal when claim progress, the queue, or capacity recovers.
 
 ## Verification
 

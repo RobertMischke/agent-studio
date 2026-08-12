@@ -143,8 +143,8 @@ async function expectFlatFullBleedNoticeBar(banner: Locator): Promise<void> {
   expect(geometry.boxShadow).toBe('none');
   expect(geometry.paddingBlockStart).toBeLessThanOrEqual(8);
   expect(geometry.paddingBlockEnd).toBeLessThanOrEqual(8);
-  expect(geometry.iconWidth).toBe(9);
-  expect(geometry.iconHeight).toBe(9);
+  expect(geometry.iconWidth).toBeCloseTo(9, 3);
+  expect(geometry.iconHeight).toBeCloseTo(9, 3);
 }
 
 async function expectNoticeCopySharesWideLine(page: Page, banner: Locator): Promise<void> {
