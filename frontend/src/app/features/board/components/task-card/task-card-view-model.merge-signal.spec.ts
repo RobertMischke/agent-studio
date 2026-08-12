@@ -163,6 +163,39 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
     expect(view.tooltip).toContain('Not in release');
   });
 
+  it('collapses identical integration and release targets into one pending segment', () => {
+    const view = buildMergeSignal(makeJob({
+      mergeSignal: signal({ integrationBranch: 'main', releaseBranch: 'main' }),
+    }))!;
+
+    expect(view.segments).toEqual([
+      expect.objectContaining({ label: 'main', merged: false, sha: null }),
+    ]);
+    expect(view.tooltip).toContain('Not yet in main');
+    expect(view.tooltip.match(/•/g)).toHaveLength(1);
+    expect(view.ariaLabel).toBe('Merge status: not in main');
+  });
+
+  it('uses either membership proof and preserves the SHA for one same-target segment', () => {
+    const view = buildMergeSignal(makeJob({
+      mergeSignal: signal({
+        inIntegration: true,
+        inRelease: true,
+        integrationBranch: 'main',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: 'ffee001',
+      }),
+      integration: integration({ integrationBranch: 'main' }),
+    }))!;
+
+    expect(view.segments).toEqual([
+      expect.objectContaining({ label: 'main', merged: true, sha: 'ffee001' }),
+    ]);
+    expect(view.tooltip).toContain('In main (ffee001)');
+    expect(view.ariaLabel).toBe('Merge status: in main');
+  });
+
   it('carries the branch name into the tooltip', () => {
     const view = buildMergeSignal(makeJob({ mergeSignal: signal({ branch: 'task/xyz' }) }))!;
     expect(view.branch).toBe('task/xyz');

@@ -22,6 +22,7 @@
                      ariaLabel="Task / Activity / Result"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
+                     [overflowAfter]="maximized() ? null : 2"
                      (tabChange)="onInspectorTabChange($event)" />
     </ng-container>
     <ng-container trailing>

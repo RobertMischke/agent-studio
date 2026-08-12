@@ -110,7 +110,7 @@ app-pane-tabs.pane-tabs-host--header {
  */
 .pane-tabs--header .pane-tab {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: min(var(--pane-tab-min-width), 100%);
   overflow: hidden;
   padding: 0 12px;
   height: 100%;
@@ -139,9 +139,11 @@ app-pane-tabs.pane-tabs-host--header {
 }
 
 .pane-tabs--header .pane-tab--overflow {
-  flex: 0 0 var(--studio-spacing-5);
+  flex: 0 0 auto;
   justify-content: center;
-  padding: 0;
+  gap: var(--studio-spacing-1);
+  min-width: var(--studio-spacing-5);
+  padding: 0 var(--studio-spacing-1);
   color: var(--studio-fg-muted);
 }
 

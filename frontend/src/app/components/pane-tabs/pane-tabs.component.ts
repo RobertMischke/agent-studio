@@ -101,6 +101,10 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   readonly overflowAfter = input<number | null>(null);
   /** Host width below which `overflowAfter` is applied. */
   readonly overflowBelow = input<number>(440);
+  /** Minimum readable width reserved for each inline tab. */
+  readonly minimumTabWidth = input<number>(72);
+  /** Width reserved for the overflow trigger, including its aggregate badge. */
+  readonly overflowButtonWidth = input<number>(48);
 
   readonly tabChange = output<string>();
   readonly overflowOpen = signal(false);
@@ -112,9 +116,23 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
     const requestedLimit = this.overflowAfter();
     const width = this.availableWidth();
     const compact = width === null || width < this.overflowBelow();
-    if (!compact || requestedLimit === null || requestedLimit >= tabs.length) return tabs;
+    const minimumTabWidth = Math.max(1, this.minimumTabWidth());
+    const allTabsFit = width === null || tabs.length * minimumTabWidth <= width;
+    const widthLimit = allTabsFit
+      ? tabs.length
+      : Math.max(
+          1,
+          Math.floor(
+            (Math.max(0, width ?? 0) - Math.max(0, this.overflowButtonWidth())) /
+              minimumTabWidth,
+          ),
+        );
+    const requestedWidthLimit = compact && requestedLimit !== null
+      ? Math.max(1, requestedLimit)
+      : tabs.length;
+    const limit = Math.min(tabs.length, widthLimit, requestedWidthLimit);
+    if (limit >= tabs.length) return tabs;
 
-    const limit = Math.max(1, requestedLimit);
     const visible = tabs.slice(0, limit);
     const active = tabs.find(tab => tab.id === this.activeTabId());
     if (!active || visible.some(tab => tab.id === active.id)) return visible;
@@ -137,6 +155,28 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
     })),
   );
 
+  readonly overflowBadgeTotal = computed<number | null>(() => {
+    let total = 0;
+    let hasNumericBadge = false;
+    for (const tab of this.overflowTabs()) {
+      if (tab.badge === null || tab.badge === undefined || tab.badge === '') continue;
+      const value = typeof tab.badge === 'number' ? tab.badge : Number(tab.badge);
+      if (!Number.isFinite(value) || value <= 0) continue;
+      total += value;
+      hasNumericBadge = true;
+    }
+    return hasNumericBadge ? total : null;
+  });
+
+  readonly overflowAriaLabel = computed(() => {
+    const hiddenCount = this.overflowTabs().length;
+    const badgeTotal = this.overflowBadgeTotal();
+    const badgeLabel = badgeTotal === null
+      ? ''
+      : `, ${badgeTotal} badge ${badgeTotal === 1 ? 'item' : 'items'}`;
+    return `More tabs: ${hiddenCount} hidden ${hiddenCount === 1 ? 'tab' : 'tabs'}${badgeLabel}`;
+  });
+
   readonly containerClass = computed(() => {
     const base = `pane-tabs pane-tabs--${this.variant()}`;
     const mod = this.listModifier();
@@ -148,7 +188,7 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver = new ResizeObserver(([entry]) => {
       if (!entry) return;
       this.availableWidth.set(entry.contentRect.width);
-      if (entry.contentRect.width >= this.overflowBelow()) this.closeOverflow();
+      if (this.overflowTabs().length === 0) this.closeOverflow();
     });
     this.resizeObserver.observe(this.host.nativeElement);
   }

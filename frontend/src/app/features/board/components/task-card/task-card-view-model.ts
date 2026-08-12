@@ -811,6 +811,8 @@ export interface MergeSignalView {
   branch: string | null;
   develop: MergeSignalSegment;
   main: MergeSignalSegment;
+  /** Display segments; identical integration and release targets collapse to one. */
+  segments: readonly MergeSignalSegment[];
   /** Plain-text tooltip: branch + merge-target status in Klartext. */
   tooltip: string;
   /** Compact aria label for screen readers ("in develop, not in main"). */
@@ -909,6 +911,14 @@ export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
     sha: mainSha,
   };
 
+  const sameTarget = integrationLabel.trim() === releaseLabel.trim();
+  const unifiedTarget: MergeSignalSegment = {
+    ...main,
+    merged: inDevelop || inMain,
+    sha: mainSha ?? developSha,
+  };
+  const segments = sameTarget ? [unifiedTarget] : [develop, main];
+
   const developLine = inDevelop
     ? developSha
       ? `In ${integrationLabel} since ${developSha}`
@@ -920,18 +930,23 @@ export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
       : `In ${releaseLabel}`
     : `Not in ${releaseLabel}`;
 
+  const unifiedLine = unifiedTarget.merged
+    ? unifiedTarget.sha
+      ? `In ${unifiedTarget.label} (${unifiedTarget.sha})`
+      : `In ${unifiedTarget.label}`
+    : `Not yet in ${unifiedTarget.label}`;
   const tooltip = [
     branch ? `Branch: ${branch}` : null,
     'Merge status:',
-    `• ${developLine}`,
-    `• ${mainLine}`,
-  ].filter((l): l is string => l !== null).join('\n');
+    ...(sameTarget ? [`• ${unifiedLine}`] : [`• ${developLine}`, `• ${mainLine}`]),
+  ].filter((line): line is string => line !== null).join('\n');
 
-  const ariaLabel =
-    `Merge status: ${inDevelop ? `in ${integrationLabel}` : `not in ${integrationLabel}`}, ` +
-    `${inMain ? `in ${releaseLabel}` : `not in ${releaseLabel}`}`;
+  const ariaLabel = sameTarget
+    ? `Merge status: ${unifiedTarget.merged ? 'in' : 'not in'} ${unifiedTarget.label}`
+    : `Merge status: ${inDevelop ? `in ${integrationLabel}` : `not in ${integrationLabel}`}, ` +
+      `${inMain ? `in ${releaseLabel}` : `not in ${releaseLabel}`}`;
 
-  return { branch, develop, main, tooltip, ariaLabel };
+  return { branch, develop, main, segments, tooltip, ariaLabel };
 }
 
 export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';

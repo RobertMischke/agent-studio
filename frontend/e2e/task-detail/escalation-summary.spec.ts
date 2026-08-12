@@ -62,7 +62,7 @@ function buildInfo(state: string, emptyContext = false) {
       branch: 'task/AGT-1994',
       inIntegration: true,
       inRelease: true,
-      integrationBranch: 'develop',
+      integrationBranch: 'main',
       releaseBranch: 'main',
       integrationSha: 'b2ed3f4',
       releaseSha: '1a526e9',
@@ -418,6 +418,10 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
       '3 review rounds · Grade B · 4 open findings · Reissue budget exhausted',
     );
     await expect(page.getByTestId('escalation-essence')).not.toContainText('Council finding 1');
+    const mergeSegments = page.getByTestId('escalation-merge-segment');
+    await expect(mergeSegments).toHaveCount(1);
+    await expect(mergeSegments).toHaveText('main ✓ merged');
+    await expect(mergeSegments).toHaveAttribute('data-state', 'merged');
     // Recommendation stays on the header.
     await expect(page.getByTestId('escalation-recommendation')).toHaveText('Needs decision');
     await expect(panel.getByTestId('escalation-action-reissue-escalated')).toHaveCount(0);
@@ -450,6 +454,10 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     expect(geometry!.rightDelta).toBeLessThanOrEqual(1);
 
     await dismissAppErrorDialog(page);
+    await shootBothThemes(page, testInfo, 'agt-2519-branch-chip-wide');
+    await page.setViewportSize({ width: 720, height: 960 });
+    await shootBothThemes(page, testInfo, 'agt-2519-branch-chip-narrow');
+    await page.setViewportSize({ width: 1440, height: 960 });
     const afterShots = await shootBothThemes(page, testInfo, 'escalation-collapsed');
 
     // 4. Clicking the header row expands the panel and reveals the details.
