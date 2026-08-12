@@ -706,6 +706,12 @@
       <li><strong>Prove readable controls.</strong> Normal field text meets a minimum 4.5:1 contrast ratio in light and dark themes. The same geometry must fit inside the details panel at a desktop viewport without clipping.</li>
     </ul>
 
+    <h3>Reference tooltip contract</h3>
+    <ul>
+      <li><strong>Use one shared overlay.</strong> Dossier task chips and lane dots use the shared task-reference control and application tooltip overlay. Do not add a component-local absolutely positioned popover for either variant.</li>
+      <li><strong>Keep complete text inside the viewport.</strong> The overlay is positioned against the browser viewport, uses a readable maximum width, wraps long titles, and preserves each status line without clipping. The same rule applies in the viewer header, linked-card rows, lists, and Wiki surfaces.</li>
+    </ul>
+
     <p class="muted">Evidence: <code>workbench-details-panel-before-light--mocked.png</code>, dark variant, <code>workbench-details-panel-after-light--mocked.png</code>, and dark variant.</p>
   </section>
 

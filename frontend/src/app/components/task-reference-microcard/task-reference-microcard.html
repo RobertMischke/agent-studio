@@ -12,6 +12,8 @@
       [href]="'#task:' + status().key"
       (click)="open($event)"
       [attr.aria-label]="'Open task ' + status().key + ': ' + status().title"
+      [appTooltip]="tooltipLabel()"
+      [appTooltipTestId]="testId() + '-tooltip'"
     >
       @if (variant() === 'lane-dot') {
         <i class="task-ref__lane-dot" [attr.data-tone]="laneTone()" aria-hidden="true"></i>
@@ -38,6 +40,8 @@
       class="task-ref__link"
       [class.task-ref__link--lane-dot]="variant() === 'lane-dot'"
       [attr.aria-label]="'Unknown or deleted task ' + status().key"
+      [appTooltip]="tooltipLabel()"
+      [appTooltipTestId]="testId() + '-tooltip'"
     >
       @if (variant() === 'lane-dot') {
         <i class="task-ref__lane-dot" data-tone="ghost" aria-hidden="true"></i>
@@ -47,14 +51,4 @@
       }
     </span>
   }
-  <span class="task-ref__popover" role="tooltip" [attr.data-testid]="testId() + '-tooltip'">
-    <strong>{{ status().title || 'Unknown or deleted task' }}</strong>
-    <span>{{ laneLabel() }} · {{ status().projectName }}</span>
-    @if (status().merge) {
-      <span>{{ mergePopoverLabel() }}</span>
-    }
-    @if (status().reviewGrade) {
-      <span>Review grade {{ status().reviewGrade }}</span>
-    }
-  </span>
 </span>

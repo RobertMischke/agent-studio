@@ -54,7 +54,8 @@ describe('WorkbenchViewerComponent', () => {
     fixture.componentRef.setInput('workbenchId', 'missing');
     fixture.detectChanges();
 
-    TestBed.inject(HttpTestingController)
+    const http = TestBed.inject(HttpTestingController);
+    http
       .expectOne('/api/projects/Demo/workbenches/missing')
       .flush(
         { error: 'Dossier entrypoint is missing.' },
@@ -67,7 +68,19 @@ describe('WorkbenchViewerComponent', () => {
       .toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="workbench-viewer-error"]')?.textContent)
       .toContain('Dossier entrypoint is missing.');
-    TestBed.inject(HttpTestingController).verify();
+
+    const hub = TestBed.inject(JobsHubClient);
+    hub.connected.set(true);
+    fixture.componentInstance.refreshManually();
+    http.expectNone('/api/projects/Demo/workbenches/missing');
+
+    hub.connected.set(false);
+    fixture.componentInstance.refreshManually();
+    http.expectOne('/api/projects/Demo/workbenches/missing').flush(
+      { error: 'Still unavailable.' },
+      { status: 503, statusText: 'Unavailable' },
+    );
+    http.verify();
   });
 
   it('normalises artifact HTML behind a policy-first fixed wrapper', async () => {
@@ -96,6 +109,7 @@ describe('WorkbenchViewerComponent', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/projects/Demo/workbenches/boundary').flush(DOCUMENT);
     fixture.detectChanges();
+    expect(fixture.componentInstance.lastUpdatedAtUtc()).not.toBeNull();
     await fixture.whenStable();
     fixture.detectChanges();
     http.expectOne('/api/projects/Demo/workbenches/DEM-W4/references').flush({

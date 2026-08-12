@@ -70,6 +70,10 @@ export class WorkbenchViewerComponent {
   readonly decisionResponses = signal<WorkbenchDecisionResponse[]>([]);
   readonly documenting = signal(false);
   readonly documentationError = signal<string | null>(null);
+  /** Timestamp of the last successful Dossier read, used by the offline as-of line. */
+  readonly lastUpdatedAtUtc = signal<string | null>(null);
+  readonly liveConnected = this.hub.connected;
+  readonly connectionChangedAtUtc = this.hub.connectionChangedAtUtc;
 
   readonly srcdoc = computed(() => {
     const document = this.document();
@@ -155,6 +159,11 @@ export class WorkbenchViewerComponent {
     this.loadDocument(this.projectName(), this.workbenchId(), false);
   }
 
+  refreshManually(): void {
+    if (this.hub.connected()) return;
+    this.loadDocument(this.projectName(), this.workbenchId(), false);
+  }
+
   discardDecisionDraft(): void {
     const document = this.document();
     if (!document) return;
@@ -213,11 +222,15 @@ export class WorkbenchViewerComponent {
     this.loading.set(true);
     this.error.set(null);
     this.documentationError.set(null);
-    if (clear) this.document.set(null);
+    if (clear) {
+      this.document.set(null);
+      this.lastUpdatedAtUtc.set(null);
+    }
     this.docs.getWorkbench(project, id).subscribe({
       next: (document) => {
         if (generation !== this.requestGeneration) return;
         this.document.set(document);
+        this.lastUpdatedAtUtc.set(new Date().toISOString());
         const discovered = discoverWorkbenchDecisionMarkup(document.html);
         if (document.workbench.decision?.state === 'succeeded')
           this.decisionDrafts.discard(project, id);

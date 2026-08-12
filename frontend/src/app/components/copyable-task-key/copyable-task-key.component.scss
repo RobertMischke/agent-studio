@@ -1,12 +1,16 @@
 :host {
   display: inline-flex;
+  align-items: center;
+  align-self: center;
   min-width: 0;
+  vertical-align: middle;
 }
 
 .copy-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   max-width: 100%;
   border: 1px solid var(--studio-border);
   color: var(--studio-fg-muted);
@@ -52,7 +56,7 @@ button.copy-key:focus-visible {
 }
 
 .copy-key--detail {
-  min-height: 22px;
+  height: 22px;
   padding: 0 var(--studio-spacing-2);
   border-radius: 4px;
   font-size: 11px;
@@ -60,7 +64,7 @@ button.copy-key:focus-visible {
 }
 
 .copy-key--reference {
-  min-height: 20px;
+  height: 20px;
   padding: 0 var(--studio-spacing-2);
   border-radius: 4px;
   font-family: var(--font-mono);
@@ -73,6 +77,13 @@ button.copy-key:focus-visible {
   color: var(--studio-success);
   background: color-mix(in srgb, var(--studio-success) 12%, var(--studio-bg-elevated));
   border-color: color-mix(in srgb, var(--studio-success) 42%, var(--studio-border));
+}
+
+.copy-key--copied > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  line-height: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

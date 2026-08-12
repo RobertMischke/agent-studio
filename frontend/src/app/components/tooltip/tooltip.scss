@@ -1,6 +1,7 @@
 .app-tooltip-overlay {
   position: fixed;
   z-index: var(--studio-z-overlay-root);
+  width: max-content;
   max-width: min(28rem, calc(100vw - (2 * var(--studio-spacing-4))));
   max-height: calc(100vh - (2 * var(--studio-spacing-2)));
   overflow-y: auto;

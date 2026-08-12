@@ -34,7 +34,7 @@ const primaryTask = {
   key: 'VHE-11',
   displayKey: 'VHE-11',
   taskKey: `${PROJECT}::compact-header-task`,
-  title: 'Implement compact viewer header',
+  title: 'Implement compact viewer header without clipping the complete operational context',
   state: '3-progress',
   order: 1,
   agent: 'codex',
@@ -59,11 +59,9 @@ const primaryTask = {
   },
 };
 
-interface RefreshCapture {
-  linked: boolean;
-  taskRequest: Record<string, unknown> | null;
-  referenceRequest: Record<string, unknown> | null;
+interface WorkbenchCapture {
   releaseWorkbench: () => void;
+  workbenchReads: number;
 }
 
 interface DossierFixture {
@@ -165,7 +163,7 @@ function json(route: Route, body: unknown): Promise<void> {
 async function installMocks(
   page: Page,
   options: WorkbenchMockOptions = {},
-): Promise<RefreshCapture> {
+): Promise<WorkbenchCapture> {
   const dossier = options.dossier ?? DEFAULT_DOSSIER;
   let releaseWorkbench = () => undefined;
   const workbenchReady = options.deferWorkbench
@@ -173,11 +171,9 @@ async function installMocks(
         releaseWorkbench = resolveWorkbench;
       })
     : Promise.resolve();
-  const capture: RefreshCapture = {
-    linked: false,
-    taskRequest: null,
-    referenceRequest: null,
+  const capture: WorkbenchCapture = {
     releaseWorkbench,
+    workbenchReads: 0,
   };
   await page.route('**/healthz', (route) => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', (route) => json(route, []));
@@ -269,20 +265,6 @@ async function installMocks(
       progress: [primaryTask],
     }),
   );
-  await page.route('**/api/tasks', (route) => {
-    capture.taskRequest = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
-    return json(route, { id: 'refresh-dossier' });
-  });
-  await page.route('**/api/tasks/refresh-dossier/references**', (route) => {
-    capture.referenceRequest = JSON.parse(
-      route.request().postData() ?? '{}',
-    ) as Record<string, unknown>;
-    capture.linked = true;
-    return json(route, {
-      references: capture.referenceRequest,
-      warnings: [],
-    });
-  });
   await page.route('**/api/tasks/reference-status', (route) => {
     const request = JSON.parse(route.request().postData() ?? '{"keys":[]}') as { keys?: string[] };
     const statuses = new Map([
@@ -303,14 +285,6 @@ async function installMocks(
           lane: '5-human-review',
         },
       ],
-      [
-        'VHE-14',
-        {
-          title: 'Refresh: Compact viewer header keeps operational context in one quiet line',
-          taskKey: `${PROJECT}::refresh-dossier`,
-          lane: '1-preparation',
-        },
-      ],
     ]);
     return json(route, {
       items: (request.keys ?? []).flatMap((key) => {
@@ -324,7 +298,12 @@ async function installMocks(
                 projectId: 'project-viewer-evidence',
                 projectName: PROJECT,
                 projectColor: '#a78bfa',
-                merge: null,
+                merge: key === 'VHE-11' ? {
+                  inIntegration: true,
+                  inRelease: false,
+                  integrationBranch: 'develop',
+                  releaseBranch: 'main',
+                } : null,
                 reviewGrade: null,
               },
             ]
@@ -365,32 +344,34 @@ async function installMocks(
       ],
     }),
   );
-  await page.route(`**/api/projects/${encodeURIComponent(PROJECT)}/workbenches`, (route) =>
-    json(route, {
-      projectName: PROJECT,
-      includesHistory: false,
-      count: 1,
-      items: [
-        {
-          id: WORKBENCH_ID,
-          key: dossier.key,
-          title: dossier.title,
-          summary: dossier.summary,
-          status: 'decision-pending',
-          phase: 'decision-ready',
-          updatedAtUtc: '2026-08-09T10:00:00Z',
-          entryPath: dossier.entryPath,
-          valid: true,
-          error: null,
-          sourceTaskKeys: [],
-          relatedTaskKeys: ['VHE-12', 'VHE-13'],
-        },
-      ],
-    }),
+  await page.route(
+    new RegExp(`/api/projects/${encodeURIComponent(PROJECT)}/workbenches(?:\\?.*)?$`),
+    (route) => json(route, {
+        projectName: PROJECT,
+        includesHistory: false,
+        count: 1,
+        items: [
+          {
+            id: WORKBENCH_ID,
+            key: dossier.key,
+            title: dossier.title,
+            summary: dossier.summary,
+            status: 'decision-pending',
+            phase: 'decision-ready',
+            updatedAtUtc: '2026-08-09T10:00:00Z',
+            entryPath: dossier.entryPath,
+            valid: true,
+            error: null,
+            sourceTaskKeys: [],
+            relatedTaskKeys: ['VHE-12', 'VHE-13'],
+          },
+        ],
+      }),
   );
   await page.route(
     `**/api/projects/${encodeURIComponent(PROJECT)}/workbenches/${WORKBENCH_ID}`,
     async (route) => {
+      capture.workbenchReads += 1;
       await workbenchReady;
       if (options.workbenchError) {
         return route.fulfill({
@@ -430,26 +411,14 @@ async function installMocks(
         workbenchKey: dossier.key,
         workbenchId: WORKBENCH_ID,
         legacyTaskKeys: ['VHE-12', 'VHE-13'],
-        items: [
-          {
-            sourceKey: 'VHE-11',
-            sourceJobId: primaryTask.id,
-            sourceTitle: primaryTask.title,
-            sourceState: primaryTask.state,
-            sourceWatchPath: WATCH_PATH,
-            kind: 'workbenches',
-          },
-          ...(capture.linked
-            ? [{
-                sourceKey: 'VHE-14',
-                sourceJobId: 'refresh-dossier',
-                sourceTitle: 'Refresh: Compact viewer header keeps operational context in one quiet line',
-                sourceState: '1-preparation',
-                sourceWatchPath: WATCH_PATH,
-                kind: 'workbenches',
-              }]
-            : []),
-        ],
+        items: [{
+          sourceKey: 'VHE-11',
+          sourceJobId: primaryTask.id,
+          sourceTitle: primaryTask.title,
+          sourceState: primaryTask.state,
+          sourceWatchPath: WATCH_PATH,
+          kind: 'workbenches',
+        }],
       }),
   );
   return capture;
@@ -668,7 +637,7 @@ test('unreadable dossier replaces loading feedback with the backend reason', asy
   }
 });
 
-test('compact viewer head keeps live card state and details usable in both themes and widths', async ({
+test('compact viewer head centers controls and exposes honest live status with offline fallback', async ({
   page,
 }, testInfo) => {
   const capture = await installMocks(page);
@@ -686,10 +655,24 @@ test('compact viewer head keeps live card state and details usable in both theme
     'In implementation',
   );
   await expect(page.getByTestId(/^workbench-viewer-task-VHE-(11|12|13)$/)).toHaveCount(3);
-  await page.getByTestId('workbench-viewer-task-VHE-11').hover();
-  await expect(page.getByTestId('workbench-viewer-task-VHE-11-tooltip')).toContainText(
-    'In progress',
+  await expect(page.getByTestId('workbench-viewer-refresh')).toHaveCount(0);
+  await expect(page.getByTestId('workbench-viewer-stale-as-of')).toContainText(
+    'Updates paused · as of',
   );
+  await page.getByTestId('workbench-viewer-task-VHE-11').hover();
+  const laneTooltip = page.getByTestId('workbench-viewer-task-VHE-11-tooltip');
+  await expect(laneTooltip).toContainText(primaryTask.title);
+  await expect(laneTooltip).toContainText('In progress · Viewer Header Evidence');
+  await expect(laneTooltip).toContainText('develop: merged · main: open');
+  const laneTooltipBox = await laneTooltip.boundingBox();
+  const initialViewport = page.viewportSize();
+  expect(laneTooltipBox).not.toBeNull();
+  expect(laneTooltipBox!.x).toBeGreaterThanOrEqual(8);
+  expect(laneTooltipBox!.x + laneTooltipBox!.width)
+    .toBeLessThanOrEqual((initialViewport?.width ?? 0) - 8);
+  expect(laneTooltipBox!.width).toBeLessThanOrEqual(448);
+  await page.mouse.move(2, 2);
+  await expect(laneTooltip).toHaveCount(0);
 
   for (const viewport of [
     { label: 'wide', width: 1700, height: 1000 },
@@ -699,15 +682,35 @@ test('compact viewer head keeps live card state and details usable in both theme
     await expect
       .poll(async () => (await header.boundingBox())?.height ?? 999)
       .toBeLessThanOrEqual(48);
-    const titleBox = await page.getByTestId('workbench-viewer-title').boundingBox();
-    const statusBox = await page.getByTestId('workbench-viewer-status').boundingBox();
-    expect(
-      Math.abs(
-        (titleBox?.y ?? 0) +
-          (titleBox?.height ?? 0) / 2 -
-          ((statusBox?.y ?? 0) + (statusBox?.height ?? 0) / 2),
-      ),
-    ).toBeLessThan(4);
+    const geometry = await header.evaluate((element) => {
+      const rect = (selector: string) => {
+        const target = element.querySelector<HTMLElement>(selector);
+        if (!target) return null;
+        const { x, y, width, height } = target.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      return {
+        title: rect('[data-testid="workbench-viewer-title"]'),
+        status: rect('[data-testid="workbench-viewer-status"]'),
+        key: rect('[data-testid="workbench-viewer-key"]'),
+        tasks: rect('[data-testid="workbench-viewer-tasks"]'),
+        trigger: rect('[data-testid="workbench-viewer-details-trigger"]'),
+        icon: rect('[data-testid="workbench-viewer-details-trigger"] svg'),
+      };
+    });
+    const centerY = (box: NonNullable<typeof geometry.title>) => box.y + box.height / 2;
+    const centerX = (box: NonNullable<typeof geometry.title>) => box.x + box.width / 2;
+    expect(geometry.title).not.toBeNull();
+    expect(geometry.status).not.toBeNull();
+    expect(geometry.key).not.toBeNull();
+    expect(geometry.tasks).not.toBeNull();
+    expect(geometry.trigger).not.toBeNull();
+    expect(geometry.icon).not.toBeNull();
+    expect(Math.abs(centerY(geometry.title!) - centerY(geometry.status!))).toBeLessThan(1.5);
+    expect(Math.abs(centerY(geometry.title!) - centerY(geometry.key!))).toBeLessThan(1.5);
+    expect(geometry.trigger!.height).toBe(geometry.tasks!.height);
+    expect(Math.abs(centerX(geometry.trigger!) - centerX(geometry.icon!))).toBeLessThan(0.5);
+    expect(Math.abs(centerY(geometry.trigger!) - centerY(geometry.icon!))).toBeLessThan(0.5);
 
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
@@ -719,53 +722,45 @@ test('compact viewer head keeps live card state and details usable in both theme
     }
   }
 
+  await page.setViewportSize({ width: 1700, height: 1000 });
   await page.getByTestId('workbench-viewer-details-trigger').click();
   const details = page.getByTestId('workbench-viewer-details-popover');
   await expect(details).toBeVisible();
   await expect(details).toContainText('Source metadata, actions, and decision controls');
   await expect(details).toContainText('docs/operations/compact-viewer-header/index.html');
   await expect(details.getByTestId('workbench-decision-panel')).toBeVisible();
-
-  await details.getByRole('button', { name: 'Close details' }).click();
-  await setTheme(page, 'light');
-  await page.getByTestId('workbench-viewer-refresh').click();
-  const confirmation = page.getByTestId('confirm-dialog');
-  await expect(confirmation).toBeVisible();
-  await expect(confirmation).toContainText('Create Dossier refresh card?');
-  await expect(confirmation).toContainText(
-    'Refresh: Compact viewer header keeps operational context in one quiet line',
+  await expect(details.getByTestId('workbench-viewer-connection-state')).toContainText(
+    'Disconnected since',
   );
-  await expect(confirmation).toContainText(WORKBENCH_KEY);
-  await expect(confirmation).toContainText('docs/operations/compact-viewer-header/index.html');
-  await page.screenshot({
-    path: evidencePath(testInfo, 'dossier-refresh-confirmation-light--mocked.png'),
-    fullPage: true,
-  });
-  await confirmation.getByTestId('confirm-dialog-confirm').click();
+  const fallback = details.getByTestId('workbench-viewer-manual-refresh');
+  await expect(fallback).toBeVisible();
 
-  await expect(page.getByTestId('workbench-viewer-task-VHE-14')).toBeVisible();
-  expect(capture.taskRequest).toMatchObject({
-    title: 'Refresh: Compact viewer header keeps operational context in one quiet line',
-    watchPath: WATCH_PATH,
-    targetState: '1-preparation',
-    taskType: 'chore',
-    mode: 'coding',
-  });
-  expect(String(capture.taskRequest?.['promptMarkdown'])).toContain(
-    'Dossier path: `docs/operations/compact-viewer-header/index.html`',
-  );
-  expect(String(capture.taskRequest?.['promptMarkdown'])).toContain(`Dossier key: \`${WORKBENCH_KEY}\``);
-  expect(String(capture.taskRequest?.['promptMarkdown'])).toContain(
-    'Update the document against reality (incorporate findings, mark completed sections, refresh figures).',
-  );
-  expect(capture.referenceRequest).toEqual({
-    dependsOn: [],
-    relatedTo: [],
-    blockedBy: [],
-    supersedes: [],
-    workbenches: [WORKBENCH_KEY],
-  });
+  await details.getByTestId('workbench-viewer-detail-task-VHE-11').hover();
+  const chipTooltip = page.getByTestId('workbench-viewer-detail-task-VHE-11-tooltip');
+  await expect(chipTooltip).toContainText(primaryTask.title);
+  await expect(chipTooltip).toContainText('develop: merged · main: open');
+  const chipTooltipBox = await chipTooltip.boundingBox();
+  const viewport = page.viewportSize();
+  expect(chipTooltipBox).not.toBeNull();
+  expect(chipTooltipBox!.x).toBeGreaterThanOrEqual(8);
+  expect(chipTooltipBox!.x + chipTooltipBox!.width).toBeLessThanOrEqual((viewport?.width ?? 0) - 8);
 
-  await setTheme(page, 'dark');
-  await captureViewerTop(page, testInfo, 'dossier-refresh-card-dark--mocked.png');
+  await page.mouse.move(2, 2);
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await page.screenshot({
+      path: evidencePath(testInfo, `dossier-live-status-menu-${theme}--mocked.png`),
+      fullPage: true,
+    });
+  }
+
+  const readsBeforeFallback = capture.workbenchReads;
+  if (!await fallback.isVisible()) {
+    await page.getByTestId('workbench-viewer-details-trigger').click();
+  }
+  await expect(fallback).toBeVisible();
+  await fallback.click();
+  await expect(header).toBeVisible();
+  await expect.poll(() => capture.workbenchReads).toBeGreaterThan(readsBeforeFallback);
+  await expect(page.getByTestId('workbench-viewer-stale-as-of')).toBeVisible();
 });
