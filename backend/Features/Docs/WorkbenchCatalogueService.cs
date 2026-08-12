@@ -8,13 +8,14 @@ using AgentStudio.Persistence;
 namespace AgentStudio.Docs;
 
 /// <summary>
-/// Read-only repository discovery for experiment Dossiers. Canonical items
+/// Read-only Wiki-source discovery for Dossiers. Canonical items
 /// are folders that carry a <c>workbench.json</c> descriptor and live anywhere
-/// under docs/ (each Dossier sits with its own theme, e.g.
-/// docs/operations/&lt;id&gt;/ or docs/quality/&lt;id&gt;/); the recursive scan
-/// skips dot-directories and node_modules-like folders. The small legacy list
-/// is an explicit migration bridge for named, already-existing artifacts, never
-/// a heuristic scan of arbitrary HTML.
+/// under docs/ in the same checkout or configured Git-ref snapshot used by the
+/// Wiki viewer. Each Dossier sits with its own theme, for example
+/// docs/operations/&lt;id&gt;/ or docs/quality/&lt;id&gt;/. The recursive scan skips
+/// dot-directories and node_modules-like folders. The small legacy list is an
+/// explicit migration bridge for named, already-existing artifacts, never a
+/// heuristic scan of arbitrary HTML.
 /// </summary>
 public sealed class WorkbenchCatalogueService
 {
@@ -36,7 +37,7 @@ public sealed class WorkbenchCatalogueService
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.Ordinal)
         { "active", "decision-pending", "decided", "documented", "archived" };
     private static readonly HashSet<string> AllowedPhases = new(StringComparer.Ordinal)
-        { "shaping", "testing", "decision-ready" };
+        { "informational", "shaping", "testing", "decision-ready" };
 
     private sealed record LegacyWorkbench(
         string Id, string Title, string Summary, string RepoRelPath, string Phase,
@@ -72,13 +73,27 @@ public sealed class WorkbenchCatalogueService
 
     public WorkbenchCatalogue? List(string projectName, bool includeHistory = false)
     {
-        var root = ResolveRoot(projectName);
-        if (root == null) return null;
+        var source = ResolveSource(projectName);
+        if (source == null) return null;
+        return ListFromSource(projectName, source, includeHistory);
+    }
+
+    /// <summary>
+    /// Builds the catalogue from an already-selected Wiki source. The central
+    /// Wiki snapshot uses this overload so a moving configured ref cannot be
+    /// resolved a second time midway through one cache fill.
+    /// </summary>
+    internal WorkbenchCatalogue ListFromSource(
+        string projectName,
+        WikiSourceContext source,
+        bool includeHistory = false)
+    {
+        var root = source.BaseDir;
 
         var project = ResolveProject(projectName);
-        if (project != null) EnsureCanonicalKeys(root, project);
+        if (project != null && source.Info.Writable) EnsureCanonicalKeys(root, project);
 
-        var items = DiscoverCanonical(root, project);
+        var items = DiscoverCanonical(root, project, requireKey: source.Info.Writable);
         foreach (var duplicate in items
                      .Where(item => item.Valid)
                      .GroupBy(item => item.Id, StringComparer.Ordinal)
@@ -132,12 +147,9 @@ public sealed class WorkbenchCatalogueService
 
         ApplyDocumentationProjection(items);
 
-        var visible = WorkbenchOverviewPolicy.Sort(items
-                .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
-                .Select(item => new WorkbenchOverviewItem(projectName, item)))
-            .Select(item => item.Workbench)
-            .ToList();
-        return new WorkbenchCatalogue(projectName, includeHistory, visible.Count, visible);
+        return FilterCatalogue(
+            new WorkbenchCatalogue(projectName, true, items.Count, items),
+            includeHistory);
     }
 
     /// <summary>All valid document reference keys currently owned by one project.</summary>
@@ -203,22 +215,32 @@ public sealed class WorkbenchCatalogueService
             if (catalogue == null) continue;
             items.AddRange(catalogue.Items.Select(item => new WorkbenchOverviewItem(name, item)));
         }
-
-        var sorted = WorkbenchOverviewPolicy.Sort(items);
-        return new WorkbenchOverview(
-            ProjectName: projectName,
-            Count: sorted.Count,
-            CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
-            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "documented"),
-            Items: sorted);
+        return BuildOverview(items, projectName);
     }
 
     public WorkbenchDocument? Read(string projectName, string id)
     {
         if (!SafeId(id)) return null;
-        var root = ResolveRoot(projectName);
-        if (root == null) return null;
-        var item = List(projectName, includeHistory: true)?.Items.FirstOrDefault(x => x.Id == id);
+        var source = ResolveSource(projectName);
+        if (source == null) return null;
+        return ReadFromSource(projectName, id, source);
+    }
+
+    /// <summary>
+    /// Reads a Workbench from the exact source already published by the Wiki
+    /// cache. Supplying the cached catalogue keeps list validation and document
+    /// resolution on one immutable view.
+    /// </summary>
+    internal WorkbenchDocument? ReadFromSource(
+        string projectName,
+        string id,
+        WikiSourceContext source,
+        WorkbenchCatalogue? catalogue = null)
+    {
+        if (!SafeId(id)) return null;
+        var root = source.BaseDir;
+        var item = (catalogue ?? ListFromSource(projectName, source, includeHistory: true)).Items
+            .FirstOrDefault(x => x.Id == id);
         if (item is not { Valid: true }) return null;
         var full = ContainedPath(root, item.EntryPath);
         if (full == null || !File.Exists(full)) return null;
@@ -238,16 +260,57 @@ public sealed class WorkbenchCatalogueService
         var provenancePaths = new List<string> { item.EntryPath };
         if (descriptorPath != null)
             provenancePaths.Add(Path.GetRelativePath(root, descriptorPath).Replace('\\', '/'));
-        var status = _git.GetStatusForRepoRoot(root);
-        var workingTreeModified = status.IsRepo && status.Files.Any(change =>
+        var status = source.Info.Writable ? _git.GetStatusForRepoRoot(root) : null;
+        var workingTreeModified = status?.IsRepo == true && status.Files.Any(change =>
             provenancePaths.Any(path => ChangeTouchesPath(change.Path, path)));
-        var revision = status.IsRepo && status.Error == null && !workingTreeModified
-            ? _git.GetHeadShaCached(root)
-            : null;
+        var revision = source.Info.Writable
+            ? status?.IsRepo == true && status.Error == null && !workingTreeModified
+                ? _git.GetHeadShaCached(root)
+                : null
+            : source.Info.Commit;
         var fingerprint = descriptorPath == null
             ? null
             : ComputeWorkbenchFingerprint(descriptorPath, full);
-        return new WorkbenchDocument(item, html, status.Branch, revision, workingTreeModified, fingerprint);
+        return new WorkbenchDocument(
+            item,
+            html,
+            source.Info.Writable ? status?.Branch : source.Info.Branch,
+            revision,
+            workingTreeModified,
+            fingerprint);
+    }
+
+    /// <summary>
+    /// Applies the public current/history projection to a complete cached
+    /// catalogue without scanning or resolving a repository source again.
+    /// </summary>
+    internal static WorkbenchCatalogue FilterCatalogue(
+        WorkbenchCatalogue catalogue,
+        bool includeHistory)
+    {
+        var visible = WorkbenchOverviewPolicy.Sort(catalogue.Items
+                .Where(item => !item.Valid || includeHistory || CurrentStatuses.Contains(item.Status))
+                .Select(item => new WorkbenchOverviewItem(catalogue.ProjectName, item)))
+            .Select(item => item.Workbench)
+            .ToList();
+        return new WorkbenchCatalogue(
+            catalogue.ProjectName,
+            includeHistory,
+            visible.Count,
+            visible);
+    }
+
+    internal static WorkbenchOverview BuildOverview(
+        IEnumerable<WorkbenchOverviewItem> items,
+        string? projectName)
+    {
+        var sorted = WorkbenchOverviewPolicy.Sort(items);
+        return new WorkbenchOverview(
+            ProjectName: projectName,
+            Count: sorted.Count,
+            CurrentCount: sorted.Count(item => CurrentStatuses.Contains(item.Workbench.Status)),
+            HistoryCount: sorted.Count(item => item.Workbench.Status is "archived" or "documented"),
+            Items: sorted);
     }
 
     /// <summary>
@@ -260,7 +323,7 @@ public sealed class WorkbenchCatalogueService
     internal WorkbenchMutationSnapshot? ResolveCanonicalForMutation(string projectName, string id)
     {
         if (!SafeId(id)) return null;
-        var root = ResolveRoot(projectName);
+        var root = ResolveWritableRoot(projectName);
         if (root == null) return null;
         var docsRoot = ContainedPath(root, "docs");
         if (docsRoot == null || !Directory.Exists(docsRoot)) return null;
@@ -312,7 +375,7 @@ public sealed class WorkbenchCatalogueService
     internal bool OperationIdOwnedByAnotherWorkbench(
         string projectName, string operationId, string workbenchId)
     {
-        var root = ResolveRoot(projectName);
+        var root = ResolveWritableRoot(projectName);
         var docsRoot = root == null ? null : ContainedPath(root, "docs");
         if (docsRoot == null || !Directory.Exists(docsRoot)) return false;
         foreach (var descriptorPath in EnumerateWorkbenchDescriptors(docsRoot))
@@ -348,7 +411,7 @@ public sealed class WorkbenchCatalogueService
     /// </summary>
     public bool OwnsCanonicalPath(string projectName, string relPath)
     {
-        var root = ResolveRoot(projectName);
+        var root = ResolveReadRoot(projectName);
         var docsRoot = root == null ? null : ContainedPath(root, "docs");
         if (root == null || docsRoot == null || !Directory.Exists(docsRoot)) return false;
         var normalized = relPath.Replace('\\', '/').TrimStart('/');
@@ -384,7 +447,10 @@ public sealed class WorkbenchCatalogueService
         candidate.Equals(folder, PathComparison)
         || candidate.StartsWith(folder + "/", PathComparison);
 
-    private List<WorkbenchListItem> DiscoverCanonical(string root, ProjectRecord? project)
+    private List<WorkbenchListItem> DiscoverCanonical(
+        string root,
+        ProjectRecord? project,
+        bool requireKey)
     {
         var result = new List<WorkbenchListItem>();
         var docsRoot = ContainedPath(root, "docs");
@@ -440,7 +506,7 @@ public sealed class WorkbenchCatalogueService
                     : RequiredString(obj, "status");
                 var phase = OptionalString(obj, "phase");
                 if (!SafeId(id) || id != folder) throw new InvalidDataException("id must match the containing folder.");
-                if (project != null && string.IsNullOrWhiteSpace(key))
+                if (project != null && requireKey && string.IsNullOrWhiteSpace(key))
                     throw new InvalidDataException("key is required after project discovery.");
                 if (key != null && !TryWorkbenchKeyNumber(key, null, out _))
                     throw new InvalidDataException(
@@ -619,17 +685,19 @@ public sealed class WorkbenchCatalogueService
                 : DateTime.UtcNow,
             entryPath, false, error, []);
 
-    private string? ResolveRoot(string projectName) =>
-        ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
+    private WikiSourceContext? ResolveSource(string projectName) =>
+        ProjectWikiSourceResolver.Resolve(projectName, _scanner, _registry, _git);
 
-    private ProjectRecord? ResolveProject(string projectName)
+    private string? ResolveReadRoot(string projectName) => ResolveSource(projectName)?.BaseDir;
+
+    private string? ResolveWritableRoot(string projectName)
     {
-        var entry = _scanner.GetWatchPaths().FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, projectName, StringComparison.OrdinalIgnoreCase));
-        return entry != null
-            ? _registry.FindByStorageLocation(entry.Path)
-            : _registry.FindByIdOrDisplayName(projectName);
+        var source = ResolveSource(projectName);
+        return source?.Info.Writable == true ? source.BaseDir : null;
     }
+
+    private ProjectRecord? ResolveProject(string projectName) =>
+        ProjectWikiSourceResolver.ResolveProject(projectName, _scanner, _registry);
 
     private static string? ContainedPath(string root, string rel)
     {
