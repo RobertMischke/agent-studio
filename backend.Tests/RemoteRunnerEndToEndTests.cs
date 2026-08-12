@@ -2997,6 +2997,61 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                           && capability.IsFresh);
     }
 
+    [Fact]
+    public async Task Unknown_authority_review_report_returns_LeaseExpired_quickly()
+    {
+        const string executorId = "review-runner-unknown-authority";
+        const string instanceId = "review-host:unknown-authority";
+        const string expectedSha = "589c462f589c462f589c462f589c462f589c462f";
+        var request = new Contract.ReviewReportRequest(
+            executorId,
+            instanceId,
+            "lease-unknown-authority",
+            1,
+            "unknown-authority-report",
+            "Pass",
+            null,
+            "The report must fail at the authority boundary.",
+            new Contract.ReviewWorkspaceProofDto(
+                "repository-unknown-authority",
+                expectedSha,
+                expectedSha,
+                expectedSha,
+                false,
+                false,
+                new string('c', 64),
+                "review-unknown-authority-f1"),
+            new Contract.ReviewEnvironmentDto(
+                "review-host",
+                executorId,
+                instanceId,
+                "linux",
+                "x64",
+                "10.0",
+                new Dictionary<string, string>(),
+                new Dictionary<string, string>()),
+            [],
+            [],
+            [new Contract.ReviewVerdictDto(
+                "build-tests",
+                "pass",
+                "Verified",
+                "Build and tests passed.")],
+            1);
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var response = await http.PostAsJsonAsync(
+                "/api/v1/reviews/attempts/review_unknown_authority/report",
+                request)
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<Contract.ApiError>();
+        Assert.NotNull(error);
+        Assert.Equal(AttemptWriteStatus.LeaseExpired.ToString(), error.Code);
+    }
+
     private static Contract.ReviewReportRequest InfrastructureReport(
         Contract.ReviewClaimResponse claim,
         string runnerId,

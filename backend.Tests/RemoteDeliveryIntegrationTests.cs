@@ -181,6 +181,44 @@ public sealed class RemoteDeliveryIntegrationCoordinatorTests
         Assert.Equal(["first", "second", "third"], order);
     }
 
+    [Fact]
+    public async Task EnqueueAsync_CoalescesConcurrentReplayOfSameDelivery()
+    {
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var coordinator = new RemoteDeliveryIntegrationCoordinator(
+            async _ =>
+            {
+                Interlocked.Increment(ref calls);
+                entered.TrySetResult();
+                await release.Task;
+                return MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Merged,
+                    mergedSha: new string('a', 40));
+            },
+            NullLogger<RemoteDeliveryIntegrationCoordinator>.Instance);
+
+        var request = Request("replayed", 1);
+        var first = coordinator.EnqueueAsync(request);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var replay = coordinator.EnqueueAsync(request with
+        {
+            JobFolderPath = "/task/replayed-after-lane-move",
+        });
+
+        Assert.Same(first, replay);
+        Assert.Equal(1, Volatile.Read(ref calls));
+
+        release.TrySetResult();
+        await Task.WhenAll(first, replay).WaitAsync(TimeSpan.FromSeconds(5));
+        var completedReplay = coordinator.EnqueueAsync(request);
+        Assert.Same(first, completedReplay);
+        Assert.Equal(1, Volatile.Read(ref calls));
+    }
+
     private static RemoteDeliveryIntegrationRequest Request(string jobId, int minute)
         => new(
             "project",

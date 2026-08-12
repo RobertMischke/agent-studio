@@ -124,9 +124,12 @@ public sealed record RemoteDeliveryIntegrationRequest(
 /// </summary>
 public sealed class RemoteDeliveryIntegrationCoordinator
 {
+    private static readonly TimeSpan CompletedReplayRetention = TimeSpan.FromMinutes(15);
     private readonly object _gate = new();
     private readonly Dictionary<string, ProjectQueue> _projectQueues =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DeliveryReplay> _deliveryReplays =
+        new(StringComparer.Ordinal);
     private readonly Func<RemoteDeliveryIntegrationRequest, Task<MergeIntoIntegrationResult>> _integrate;
     private readonly Func<RemoteDeliveryIntegrationRequest, MergeIntoIntegrationResult, Task<IntegrationAgentRoundStartResult>> _startAgentRound;
     private readonly Action<RemoteDeliveryIntegrationRequest, string, string, string> _recordFailure;
@@ -186,19 +189,41 @@ public sealed class RemoteDeliveryIntegrationCoordinator
         RemoteDeliveryIntegrationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var completion = new TaskCompletionSource<MergeIntoIntegrationResult>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        var sequence = Interlocked.Increment(ref _sequence);
+        var deliveryKey = DeliveryKey(request);
         ProjectQueue projectQueue;
         var startDrain = false;
+        TaskCompletionSource<MergeIntoIntegrationResult> completion;
+        long sequence;
         lock (_gate)
         {
+            PruneCompletedReplays(DateTimeOffset.UtcNow);
+            if (_deliveryReplays.TryGetValue(deliveryKey, out var replay))
+            {
+                _logger.LogInformation(
+                    "remote-delivery-integration replay coalesced project={Project} job={JobId} sequence={Sequence}",
+                    request.Project,
+                    request.JobId,
+                    replay.Sequence);
+                return replay.Completion.Task;
+            }
+
+            completion = new TaskCompletionSource<MergeIntoIntegrationResult>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            sequence = Interlocked.Increment(ref _sequence);
+            _deliveryReplays[deliveryKey] = new DeliveryReplay(
+                sequence,
+                completion,
+                CompletedAtUtc: null);
             if (!_projectQueues.TryGetValue(request.Project, out projectQueue!))
             {
                 projectQueue = new ProjectQueue();
                 _projectQueues[request.Project] = projectQueue;
             }
-            projectQueue.Pending.Add(new QueuedDelivery(request, sequence, completion));
+            projectQueue.Pending.Add(new QueuedDelivery(
+                request,
+                deliveryKey,
+                sequence,
+                completion));
             if (!projectQueue.Running)
             {
                 projectQueue.Running = true;
@@ -263,7 +288,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                         continuation.Started,
                         continuation.Reason);
                 }
-                delivery.Completion.TrySetResult(result);
+                CompleteDelivery(delivery, result);
             }
             catch (Exception ex)
             {
@@ -278,12 +303,53 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                     AcceptedIntegrationFailureCodes.IntegrationError,
                     "Immediate Remote delivery integration failed.",
                     ex.Message);
-                delivery.Completion.TrySetResult(MergeIntoIntegrationResult.Of(
+                CompleteDelivery(delivery, MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
                     error: ex.Message));
             }
         }
     }
+
+    private void CompleteDelivery(
+        QueuedDelivery delivery,
+        MergeIntoIntegrationResult result)
+    {
+        delivery.Completion.TrySetResult(result);
+        lock (_gate)
+        {
+            if (_deliveryReplays.TryGetValue(delivery.DeliveryKey, out var replay)
+                && ReferenceEquals(replay.Completion, delivery.Completion))
+            {
+                _deliveryReplays[delivery.DeliveryKey] = replay with
+                {
+                    CompletedAtUtc = DateTimeOffset.UtcNow,
+                };
+            }
+        }
+    }
+
+    private void PruneCompletedReplays(DateTimeOffset nowUtc)
+    {
+        foreach (var key in _deliveryReplays
+                     .Where(pair => pair.Value.CompletedAtUtc is { } completedAt
+                                    && nowUtc - completedAt >= CompletedReplayRetention)
+                     .Select(pair => pair.Key)
+                     .ToArray())
+        {
+            _deliveryReplays.Remove(key);
+        }
+    }
+
+    private static string DeliveryKey(RemoteDeliveryIntegrationRequest request)
+        => string.Join(
+            '\u001f',
+            request.Project,
+            request.JobId,
+            request.IntegrationBranch,
+            request.IntegrationStrategy,
+            request.PipelineType,
+            request.DeliveredAtUtc.ToUniversalTime().Ticks.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
 
     private sealed class ProjectQueue
     {
@@ -293,8 +359,14 @@ public sealed class RemoteDeliveryIntegrationCoordinator
 
     private sealed record QueuedDelivery(
         RemoteDeliveryIntegrationRequest Request,
+        string DeliveryKey,
         long Sequence,
         TaskCompletionSource<MergeIntoIntegrationResult> Completion);
+
+    private sealed record DeliveryReplay(
+        long Sequence,
+        TaskCompletionSource<MergeIntoIntegrationResult> Completion,
+        DateTimeOffset? CompletedAtUtc);
 
     private sealed class QueuedDeliveryComparer : IComparer<QueuedDelivery>
     {

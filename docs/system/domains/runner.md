@@ -231,7 +231,12 @@ state.
   on Pass, ProductFailure, and ReviewInfra exit paths even when the cleanup
   acknowledgement cannot be delivered. Compatibility report projection uses
   the archive-inclusive task snapshot so a late idempotent report can record
-  evidence without reopening an archived card.
+  evidence without reopening an archived card. The report boundary rejects a
+  missing authority record or an expired, non-replay lease immediately as
+  HTTP 409 `LeaseExpired`, before task scanning, evidence writes, or delivery
+  integration. A retry of an already settled report remains admissible under
+  its exact fence and idempotency key so post-settlement compatibility work can
+  converge after a process restart.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive
