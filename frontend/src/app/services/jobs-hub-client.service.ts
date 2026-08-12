@@ -36,6 +36,12 @@ export interface OrchestratorContextChangedEvent {
   updatedAt: string;
 }
 
+export interface PlanUpdatedEvent {
+  jobId: string;
+  cliType: string;
+  revision: number;
+}
+
 /**
  * Owns the single browser→backend SignalR connection for board-level task
  * mutation events. Push is the primary update path; the {@link TaskService}
@@ -61,6 +67,8 @@ export class JobsHubClient {
   readonly workbenchEvent = signal<WorkbenchHubEvent | null>(null);
   /** Monotonic refresh hint for the central Task Server Chat History view. */
   readonly orchestratorContextsRevision = signal(0);
+  /** Latest native agent-plan update, delivered on the shared jobs hub. */
+  readonly planUpdated = signal<PlanUpdatedEvent | null>(null);
 
   private connection: HubConnection | null = null;
   private handlers: JobsHubHandlers | null = null;
@@ -104,6 +112,13 @@ export class JobsHubClient {
     conn.on('workbenchStatusChanged', workbenchEvent);
     conn.on('orchestratorContextChanged', () => {
       this.publishOrchestratorContextRefresh();
+    });
+    conn.on('planUpdated', (jobId: string, cliType: string) => {
+      this.planUpdated.update(previous => ({
+        jobId,
+        cliType,
+        revision: (previous?.revision ?? 0) + 1,
+      }));
     });
 
     conn.onreconnecting(() => this.setConnected(false));

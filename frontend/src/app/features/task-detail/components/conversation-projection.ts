@@ -246,6 +246,15 @@ export function sanitizeProjectionLines(
 
   for (const line of lines) {
     const cleanText = stripAnsi(line.text);
+    // Codex todo_list snapshots have a dedicated living checklist fed from
+    // the typed PlanUpdated path. Keep the original line in the untouched
+    // Trace input, but do not hand it to CAC where every item.updated frame
+    // would otherwise become another row in the readable conversation.
+    if (isCodexTodoListFrame(cleanText)) {
+      anyRedacted = true;
+      runDetails = null;
+      continue;
+    }
     if (
       (line.stream === 'system' && CODEX_EXEC_RUNNER_MARKER.test(cleanText))
       || (line.stream === 'stderr' && CODEX_TEXT_MODE_BANNER.test(cleanText))
@@ -291,6 +300,18 @@ export function sanitizeProjectionLines(
   }
 
   return anyRedacted ? out : (lines as CliOutputLine[]);
+}
+
+export function isCodexTodoListFrame(text: string | undefined | null): boolean {
+  if (!text || !text.includes('todo_list')) return false;
+  try {
+    const frame = JSON.parse(text) as Record<string, unknown>;
+    if (!['item.started', 'item.updated', 'item.completed'].includes(String(frame['type']))) return false;
+    const item = frame['item'];
+    return isPlainObject(item) && item['type'] === 'todo_list' && Array.isArray(item['items']);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeProjectionLine(

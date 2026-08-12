@@ -30,6 +30,9 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
         "turn.failed",
         "session_meta",
         "rate_limits",
+        "item.started",
+        "item.updated",
+        "item.completed",
     };
 
     private static readonly HashSet<string> CodexItemTypes = new(StringComparer.Ordinal)
@@ -43,6 +46,7 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
         "web_search",
         "update_plan",
         "todo",
+        "todo_list",
     };
 
     private readonly Dictionary<string, long> _byFrameType = new(StringComparer.Ordinal);
@@ -101,10 +105,10 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
             return ClaudeFrameTypes.Contains(frameType);
         if (!string.Equals(cliType, AgentCliProcess.CodexCli, StringComparison.Ordinal))
             return false;
-        if (CodexFrameTypes.Contains(frameType)) return true;
+        if (CodexFrameTypes.Contains(frameType) && !frameType.StartsWith("item.", StringComparison.Ordinal)) return true;
         var separator = frameType.IndexOf('/');
         return separator > 0
-               && frameType[..separator] is "item.started" or "item.completed"
+               && frameType[..separator] is "item.started" or "item.updated" or "item.completed"
                && CodexItemTypes.Contains(frameType[(separator + 1)..]);
     }
 
@@ -130,7 +134,7 @@ internal sealed class CliProtocolNoveltyTracker(string cliType)
 
             var root = document.RootElement;
             frameType = Text(root, "type") ?? "<missing-type>";
-            if (frameType is "item.started" or "item.completed"
+            if (frameType is "item.started" or "item.updated" or "item.completed"
                 && root.TryGetProperty("item", out var item)
                 && item.ValueKind == JsonValueKind.Object
                 && Text(item, "type") is { } itemType)

@@ -122,8 +122,19 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
                 yield break;
             }
             case "item.started":
-                // Suppress: item.completed renders the same item; emitting both
-                // would double every tool line in the Activity Log.
+                // todo_list is a living item: retain its raw transport frame
+                // for Trace while the dedicated plan projection renders it as
+                // one in-place checklist. Other started items are suppressed
+                // because item.completed renders the same item.
+                if (IsTodoList(root)) yield return raw;
+                yield break;
+            case "item.updated":
+                // todo_list snapshots remain in the raw buffer for Trace and
+                // are removed from readable projections by their dedicated
+                // living checklist. Unknown updated items stay compact.
+                yield return IsTodoList(root)
+                    ? raw
+                    : raw with { Text = "● Item updated" };
                 yield break;
             case "item.completed":
             {
@@ -207,7 +218,9 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
             }
             case "update_plan":
             case "todo":
-                yield return raw with { Text = "● Todo update" };
+                // The typed PlanUpdated event owns the readable checklist.
+                // Suppress the legacy marker so repeated snapshots do not add
+                // one Activity row per update. Raw bytes remain in RunLogStore.
                 yield break;
             case null:
                 yield return raw with { Text = "● item" };
@@ -217,6 +230,12 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
                 yield break;
         }
     }
+
+    private static bool IsTodoList(JsonElement root)
+        => root.TryGetProperty("item", out var item)
+           && item.ValueKind == JsonValueKind.Object
+           && item.TryGetProperty("type", out var itemType)
+           && string.Equals(itemType.GetString(), "todo_list", StringComparison.Ordinal);
 
     /// <summary>
     /// Read a string-ish item field: a plain string, the first string in an

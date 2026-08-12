@@ -1,5 +1,6 @@
 using AgentStudio.Orchestrator;
 using AgentStudio.Shared;
+using AgentStudio.Tasks;
 
 using Xunit;
 
@@ -82,5 +83,33 @@ public sealed class OrchestratorTaskPromptContextComposerTests
         var identity = OrchestratorTaskPromptContextComposer.ResolveTaskIdentity(navigation, route);
 
         Assert.Equal("QS-54", identity);
+    }
+
+    [Fact]
+    public void Compose_IncludesTheCurrentAgentPlanAsQueryableTaskContext()
+    {
+        var detail = new TaskDetail
+        {
+            Info = new TaskInfo { Id = "AGT-2641", Key = "AGT-2641", Title = "Live plan", State = "3-progress" },
+        };
+        var plan = new TaskPlanView
+        {
+            HasPlan = true,
+            Source = "codex/todo_list",
+            Items =
+            [
+                new TaskPlanItemView { Id = "one", Title = "Inspect", Status = "done" },
+                new TaskPlanItemView { Id = "two", Title = "Implement", Status = "active" },
+                new TaskPlanItemView { Id = "three", Title = "Verify", Status = "pending" },
+            ],
+        };
+
+        var composed = OrchestratorTaskPromptContextComposer.Compose(detail, plan);
+
+        Assert.Contains("current agent plan", composed.IncludedBlocks);
+        Assert.Contains("--- CURRENT AGENT PLAN (limit: 600 estimated tokens; truncated: no) ---", composed.PromptBlock);
+        Assert.Contains("Progress: 1/3 completed", composed.PromptBlock);
+        Assert.Contains("Current step: Implement", composed.PromptBlock);
+        Assert.Contains("[>] Implement (active)", composed.PromptBlock);
     }
 }

@@ -54,6 +54,18 @@ public sealed class CliProtocolNoveltyTests
     }
 
     [Fact]
+    public void CodexTodoListLifecycleIsPartOfTheKnownVersionedVocabulary()
+    {
+        var tracker = new CliProtocolNoveltyTracker("codex");
+        foreach (var frameType in new[] { "item.started", "item.updated", "item.completed" })
+        {
+            var raw = "{\"type\":\"" + frameType
+                + "\",\"item\":{\"type\":\"todo_list\",\"items\":[{\"text\":\"Verify\",\"completed\":false}]}}";
+            Assert.False(tracker.TryObserveFrame(raw, out _));
+        }
+    }
+
+    [Fact]
     public void V1_event_classification_uses_the_protocol_novelty_kind()
     {
         var marker = new ProtocolNoveltyTelemetry(

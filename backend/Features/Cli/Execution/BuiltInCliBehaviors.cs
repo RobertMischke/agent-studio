@@ -953,12 +953,71 @@ internal static class BuiltInCliBehaviors
     internal static IEnumerable<CliRunEvent> MapCodexFrame(string text, string jobKey)
     {
         var events = CodexEventAdapter.Map(text, jobKey).ToList();
+        var todoList = TryExtractCodexTodoList(text);
+        if (todoList is not null && events.All(evt => evt is not CliRunEvent.PlanUpdated))
+        {
+            // CAR 0.7 predates Codex's item.updated/todo_list family. Keep the
+            // package adapter authoritative for every frame it knows, but
+            // bridge this observed additive family until the exact package pin
+            // advances. Unknown is diagnostic fallback, not a second semantic
+            // event once we have parsed the frame deliberately.
+            events.RemoveAll(evt => evt is CliRunEvent.Unknown);
+            events.Add(new CliRunEvent.PlanUpdated("codex/todo_list", todoList));
+        }
         var command = TryExtractCommandExecution(text);
         if (command?.ExitCode is not int exitCode || exitCode == 0) return events;
 
         return events.Select(evt => evt is CliRunEvent.ToolCompleted completed
             ? new CliRunEvent.ToolCompleted(completed.ToolName, IsError: true, completed.FirstLine)
             : evt);
+    }
+
+    /// <summary>
+    /// Parse Codex's live <c>todo_list</c> item family. The wire only carries a
+    /// completed boolean, so the first incomplete item is active while the item
+    /// is started or updated; an <c>item.completed</c> frame leaves incomplete
+    /// entries pending because the turn itself is no longer working that step.
+    /// </summary>
+    internal static IReadOnlyList<PlanFrameItem>? TryExtractCodexTodoList(string? line)
+    {
+        var text = line?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text![0] != '{') return null;
+        if (!text.Contains("todo_list", StringComparison.Ordinal)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            var frameType = root.TryGetProperty("type", out var type) ? type.GetString() : null;
+            if (frameType is not ("item.started" or "item.updated" or "item.completed")) return null;
+            if (!root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object) return null;
+            if (!item.TryGetProperty("type", out var itemType)
+                || !string.Equals(itemType.GetString(), "todo_list", StringComparison.Ordinal)) return null;
+            if (!item.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return null;
+
+            var projected = new List<PlanFrameItem>();
+            var activeAssigned = string.Equals(frameType, "item.completed", StringComparison.Ordinal);
+            foreach (var entry in items.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+                var title = entry.TryGetProperty("text", out var titleValue)
+                    && titleValue.ValueKind == JsonValueKind.String
+                    ? titleValue.GetString()?.Trim()
+                    : null;
+                if (string.IsNullOrWhiteSpace(title)) continue;
+                var completed = entry.TryGetProperty("completed", out var completedValue)
+                    && completedValue.ValueKind is JsonValueKind.True or JsonValueKind.False
+                    && completedValue.GetBoolean();
+                var status = completed ? "done" : activeAssigned ? "pending" : "active";
+                if (!completed) activeAssigned = true;
+                projected.Add(new PlanFrameItem(PlanItemId.From(title), title, status));
+            }
+            return projected.Count == 0 ? null : projected;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

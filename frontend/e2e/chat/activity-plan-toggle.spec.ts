@@ -2,22 +2,17 @@ import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Task-detail Activity tab: the Plan / CLI sub-view toggle
- * (ASS-677..682). The Activity panel used to hang the task-plan strip above a
- * [Conversation] [Trace] switch. It is now a single segmented pill toggle:
- *
- *   - [Plan] appears only when the agent has emitted a usable plan, and is the
- *     default sub-view when present.
- *   - [CLI] is always present and renders the CLI conversation/output view.
- *   - [Trace], [Debug], and [Copy] live in the Activity overflow menu.
+ * Task-detail Activity tab: native TODO_LIST snapshots are one living
+ * checklist entry in the readable stream. Repeated frames update that entry;
+ * Trace, Debug, and Copy remain in the Activity overflow menu.
  *
  * The spec drives the live frontend (proxied to a real backend) but pins the
- * two pieces of evidence the behaviour keys off — the per-job `output` buffer
+ * two pieces of evidence the behaviour keys off: the per-job `output` buffer
  * (so the panel is in its "has output" branch) and the per-job `plan` (so the
- * Plan tab is deterministically present or absent). Everything else (detail,
+ * living checklist is deterministically present or absent). Everything else (detail,
  * runs, board) is served by the backend the frontend proxies to.
  *
- * Screenshots land under JOB_RESULTS_DIR/plan-toggle when the orchestrator
+ * Screenshots land under PLAN_TOGGLE_SHOTS when the orchestrator
  * sets it, else test-results/ (scratch).
  */
 
@@ -32,10 +27,10 @@ function buildOutputBuffer(): OutLine[] {
   const t0 = Date.now() - 6 * 60 * 1000;
   const t = (s: number) => new Date(t0 + s * 1000).toISOString();
   return [
-    { timestamp: t(0), stream: 'user', text: 'Restructure the Activity tab so the plan is its own panel.' },
-    { timestamp: t(3), stream: 'stdout', text: '* Read protocol-pane.component.html' },
-    { timestamp: t(5), stream: 'stdout', text: '* Edit protocol-pane.component.ts' },
-    { timestamp: t(8), stream: 'stdout', text: 'Wired the [Plan] [Conversation] [Trace] toggle.' },
+    { timestamp: t(0), stream: 'user', text: 'Show TODO_LIST as one living checklist in Activity and Orchestrator.' },
+    { timestamp: t(3), stream: 'stdout', text: '* Read the Codex TODO_LIST frame' },
+    { timestamp: t(5), stream: 'stdout', text: '* Update the plan projection' },
+    { timestamp: t(8), stream: 'stdout', text: 'Mapped TODO_LIST snapshots into the live plan projection.' },
     { timestamp: t(10), stream: 'stdout', text: '[[TASK_DONE]]' },
   ];
 }
@@ -47,14 +42,14 @@ function buildPlan(present: boolean) {
   const ts = new Date(Date.now() - 4 * 60 * 1000).toISOString();
   return {
     hasPlan: true,
-    source: 'claude',
+    source: 'codex/todo_list',
     snapshotCount: 3,
     activeItemId: 'i2',
     softEstimateMedian: 2,
     items: [
-      { id: 'i1', title: 'Make the plan its own panel', status: 'done', subActionCount: 2, subActions: [{ ts, tool: 'Edit', label: 'protocol-pane.component.ts' }] },
-      { id: 'i2', title: 'Default to Plan when a plan exists', status: 'active', subActionCount: 1, subActions: [{ ts, tool: 'Edit', label: 'protocol-pane.component.html' }] },
-      { id: 'i3', title: 'Add the toggle spec', status: 'pending', subActionCount: 0, subActions: [] },
+      { id: 'i1', title: 'Render TODO_LIST as one checklist', status: 'done', subActionCount: 2, subActions: [{ ts, tool: 'Edit', label: 'conversation-projection.ts' }] },
+      { id: 'i2', title: 'Stream progress into Orchestrator', status: 'active', subActionCount: 1, subActions: [{ ts, tool: 'Edit', label: 'orchestrator-task-plan.store.ts' }] },
+      { id: 'i3', title: 'Lock the frame into the corpus', status: 'pending', subActionCount: 0, subActions: [] },
     ],
     unassignedSubActions: [],
   };
@@ -104,8 +99,24 @@ async function installRoutes(page: Page, planPresent: boolean): Promise<void> {
   const esc = encodeURIComponent(TARGET.id);
   const output = JSON.stringify(buildOutputBuffer());
   const plan = JSON.stringify(buildPlan(planPresent));
+  // The feature under test uses SignalR as its primary plan refresh path. A
+  // route-mocked browser has no hub server, so exercise the documented polling
+  // fallback without letting proxy negotiation surface an unrelated dialog.
+  await page.route('**/hubs/jobs/**', route => route.abort('connectionrefused'));
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/auth/status', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }));
+  await page.route('**/api/projects/*/workbenches**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName: 'fixture', items: [] }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
@@ -185,32 +196,59 @@ async function openActivity(page: Page, job: { id: string; watchPath: string }):
 }
 
 test.describe('Activity tab compact view switcher', () => {
-  test('plan present (flag off): Plan is the only first-class tab', async ({ page }) => {
+  test('plan present: checklist and agent events share one readable stream', async ({ page }) => {
     await setFlag(page, false);
     await installRoutes(page, true);
     await openActivity(page, TARGET);
 
-    const planTab = page.getByTestId('activity-view-tab-plan');
-    await expect(planTab).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('activity-view-tab-plan')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
     // Trace is no longer a primary tab.
     await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
     // The old Conversation test id was retired in favour of the user-facing CLI label.
     await expect(page.getByTestId('activity-view-tab-conversation')).toHaveCount(0);
-    // Plan is the default sub-view when a plan exists.
-    await expect(planTab).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('plan-strip')).toBeVisible();
-    await expect(page.getByTestId('plan-item').first()).toBeVisible();
+    const activityPanel = page.getByTestId('activity-panel');
+    await expect(activityPanel.getByTestId('plan-strip')).toBeVisible({ timeout: 15_000 });
+    await expect(activityPanel.getByTestId('plan-item').first()).toBeVisible();
+    await expect(activityPanel.getByTestId('activity-log-body')).toBeVisible();
+    await expect(activityPanel.getByTestId('plan-strip')).toHaveCount(1);
 
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'plan-default-flag-off--mocked.png'), fullPage: false });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset['studioTheme'] = value;
+        localStorage.setItem('atp.studio.theme', value);
+      }, theme);
+      await activityPanel.screenshot({
+        path: path.join(SHOTS_DIR, `activity-todo-list-${theme}--mocked.png`),
+      });
+    }
+
+    if (!await page.locator('app-orchestrator-side-sheet.is-open').count()) {
+      await page.getByTestId('orch-side-sheet-toggle').click();
+    }
+    const sheet = page.getByTestId('orch-side-sheet');
+    await expect(sheet).toBeVisible();
+    await expect(page.getByTestId('orch-task-progress')).toBeVisible();
+    await expect(page.getByTestId('orch-task-progress')).toContainText('Agent progress');
+    await expect(page.getByTestId('orch-task-progress')).toContainText('1/3 done');
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset['studioTheme'] = value;
+        localStorage.setItem('atp.studio.theme', value);
+      }, theme);
+      await sheet.screenshot({
+        path: path.join(SHOTS_DIR, `orchestrator-task-progress-${theme}--mocked.png`),
+      });
+    }
   });
 
-  test('Trace overflow action hides the plan; Plan switch brings it back', async ({ page }) => {
+  test('Trace owns raw output and Agent events restores the living checklist', async ({ page }) => {
     await setFlag(page, false);
     await installRoutes(page, true);
     await openActivity(page, TARGET);
 
-    await expect(page.getByTestId('plan-strip')).toBeVisible({ timeout: 15_000 });
+    const activityPanel = page.getByTestId('activity-panel');
+    await expect(activityPanel.getByTestId('plan-strip')).toBeVisible({ timeout: 15_000 });
 
     // Switch to Trace from the overflow menu: the raw activity-log body shows, the plan hides.
     await page.getByTestId('activity-toolbar-menu').click();
@@ -223,15 +261,15 @@ test.describe('Activity tab compact view switcher', () => {
     await traceItem.click();
     await expect(page.getByTestId('activity-log-body')).toBeVisible();
     await expect(page.getByTestId('activity-log-trace')).toBeVisible();
-    await expect(page.getByTestId('plan-strip')).toHaveCount(0);
+    await expect(activityPanel.getByTestId('plan-strip')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'trace-after-switch--mocked.png'), fullPage: false });
 
-    // Back to Plan.
-    await page.getByTestId('activity-view-tab-plan').click();
-    await expect(page.getByTestId('plan-strip')).toBeVisible();
-    await expect(page.getByTestId('activity-log-body')).toHaveCount(0);
+    await page.getByTestId('activity-toolbar-menu').click();
+    await page.getByTestId('activity-toolbar-menu-item-conversation').click();
+    await expect(activityPanel.getByTestId('plan-strip')).toBeVisible();
+    await expect(page.getByTestId('activity-log-conversation')).toBeVisible();
   });
 
   test('no plan (flag off): event body renders without an empty single-tab toggle', async ({ page }) => {
@@ -239,12 +277,13 @@ test.describe('Activity tab compact view switcher', () => {
     await installRoutes(page, false);
     await openActivity(page, TARGET);
 
+    const activityPanel = page.getByTestId('activity-panel');
     await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
     await expect(page.getByTestId('activity-log-body')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('activity-log-conversation')).toBeVisible();
     await expect(page.getByTestId('activity-view-tab-plan')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
-    await expect(page.getByTestId('plan-strip')).toHaveCount(0);
+    await expect(activityPanel.getByTestId('plan-strip')).toHaveCount(0);
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'no-plan-events--mocked.png'), fullPage: false });
   });
@@ -261,7 +300,8 @@ test.describe('Activity tab compact view switcher', () => {
     await expect(eventsItem).toBeVisible();
     await expect(eventsItem).toContainText('Agent events');
     await eventsItem.click();
-    await expect(page.getByTestId('conversation-view')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('activity-panel').getByTestId('conversation-view'))
+      .toBeVisible({ timeout: 15_000 });
 
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((value) => {

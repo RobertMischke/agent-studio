@@ -21,7 +21,7 @@ namespace AgentRunner.Tests;
 /// A pin that has to be edited is a behaviour change that needs a decision, not
 /// a test fix.</para>
 ///
-/// <para>The complete recorded matrix pins P1-P5, P9, P22, and P23. P5 is the sharp
+/// <para>The complete recorded matrix pins P1-P5, P9, P22, P23, and P24. P5 is the sharp
 /// protocol-form case: the same scenario classifies differently in plaintext
 /// and stream-json, and that intentional difference is recorded instead of
 /// being mistaken for engine drift. Process and host scenarios P6-P8 and
@@ -278,6 +278,21 @@ public sealed class ParityFixtureTests
                 ExecutionOutcomeKind.SuccessfulCompletion,
                 ExecutionOutcomeAdapter.Classify(Facts(fixture)).Outcome);
         }
+    }
+
+    [Fact]
+    public void P24_todo_list_lifecycle_is_known_and_terminal_semantics_stay_intact()
+    {
+        var fixture = CliFixture.Load("p24-todo-list.codex.fixture");
+        var tracker = new CliProtocolNoveltyTracker("codex");
+        var todoFrames = fixture.StdOut.Split('\n')
+            .Where(line => line.Contains("\"type\":\"todo_list\"", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Equal(4, todoFrames.Count);
+        Assert.All(todoFrames, frame => Assert.False(tracker.TryObserveFrame(frame, out _)));
+        Assert.Equal(RunOutcomeKind.Done, SentinelScanner.Scan(fixture.StdOut).Kind);
+        Assert.Equal(ExecutionOutcomeKind.SuccessfulCompletion, ExecutionOutcomeAdapter.Classify(Facts(fixture)).Outcome);
     }
 
     [Fact]

@@ -34,7 +34,7 @@ import { RunTimelinePollService } from '../../../../polling/services/run-timelin
 import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
 import { ScreenshotsPollService } from '../../../../polling/services/screenshots-poll.service';
 import { PlanPollService } from '../../../../polling/services/plan-poll.service';
-import { PlanStripComponent } from '../../../../plan-strip/plan-strip.component';
+import { PlanStripComponent } from '../../../../plan-strip';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { RunTimelineComponent } from '../run-timeline/run-timeline.component';
 import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.component';
@@ -74,7 +74,6 @@ import { TaskArtifactLinksDirective } from '../../task-artifact-links/task-artif
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
-import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
@@ -83,12 +82,11 @@ import { StudioTabStateService } from '../../../../studio-shell/services/studio-
 export type InspectorTab = 'task' | 'activity' | 'protocol';
 
 /**
- * Sub-view of the Activity tab: the agent's own task Plan, the compact
- * CLI conversation/output renderer, or the raw Trace (legacy activity-log view).
- * Trace is reached from the Activity overflow menu; the primary segmented
- * toggle stays intentionally small: Plan | CLI.
+ * Sub-view of the Activity tab: the readable agent stream or the raw Trace.
+ * A native agent plan is projected as one living checklist inside the readable
+ * stream, never as a competing tab or one row per transport update.
  */
-export type ActivityView = 'plan' | 'conversation' | 'trace';
+export type ActivityView = 'conversation' | 'trace';
 
 /**
  * Transient interim-summary result shown while a job is running. Generated
@@ -201,8 +199,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly nextGenChatEvents = signal<ConversationEvent[]>([]);
 
   constructor() {
-    // A fresh task opens at its default Activity sub-view (Plan when a plan
-    // exists). Clearing the explicit pick when the job changes keeps a Trace
+    // A fresh task opens at its readable Activity stream. Clearing the
+    // explicit pick when the job changes keeps a Trace
     // choice made on one task from leaking into the next.
     effect(() => {
       const id = this.detail().info.id;
@@ -679,10 +677,9 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly verboseDebugOpen = signal(false);
 
   /**
-   * The Activity tab is a single panel with a compact [Plan] [CLI] toggle in
-   * its toolbar and secondary actions in the overflow menu. `activityViewOverride` holds the user's explicit pick;
-   * when null the panel falls back to {@link defaultActivityView} (Plan when
-   * a plan exists, else CLI output). The constructor effect resets it per job.
+   * The Activity tab is one readable stream with secondary actions in the
+   * overflow menu. `activityViewOverride` holds the user's explicit Trace pick;
+   * when null the panel renders readable CLI output plus the living plan row.
    *
    * CLI uses the next-gen `cac-conversation-view` over the `ConversationEvent[]`
    * projection when the flag is enabled, and otherwise falls back to the
@@ -705,29 +702,12 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /** Sub-view shown when the user has not picked one explicitly. */
   readonly defaultActivityView = computed<ActivityView>(() => {
-    if (this.planAvailable()) return 'plan';
     return 'conversation';
   });
 
   /** Effective Activity sub-view: the user's pick if still valid, else the default. */
   readonly activityView = computed<ActivityView>(() => {
-    const picked = this.activityViewOverride();
-    if (picked === 'plan' && !this.planAvailable()) return this.defaultActivityView();
-    return picked ?? this.defaultActivityView();
-  });
-
-  readonly activityPrimaryTabs = computed<PaneTabDef[]>(() => {
-    const tabs: PaneTabDef[] = [];
-    if (this.planAvailable()) {
-      tabs.push({ id: 'plan', label: 'Plan', testid: 'activity-view-tab-plan' });
-    }
-    return tabs;
-  });
-
-  readonly activityPrimaryTabId = computed<string>(() => {
-    const view = this.activityView();
-    if (view === 'plan') return 'plan';
-    return 'conversation';
+    return this.activityViewOverride() ?? this.defaultActivityView();
   });
 
   readonly activityMenuItems = computed<readonly MenuItem[]>(() => [
@@ -757,14 +737,6 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   setActivityView(view: ActivityView): void {
     this.activityViewOverride.set(view);
-  }
-
-  onActivityPrimaryTabChange(id: string): void {
-    if (id === 'plan') {
-      this.setActivityView('plan');
-    } else if (id === 'conversation' || id === 'cli') {
-      this.setActivityView('conversation');
-    }
   }
 
   openActivityMenu(event: MouseEvent): void {
@@ -936,32 +908,11 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   private activityCopyText(): string {
     switch (this.activityView()) {
-      case 'plan':
-        return this.planCopyText();
       case 'trace':
         return this.traceCopyText();
       default:
         return this.cliCopyText();
     }
-  }
-
-  private planCopyText(): string {
-    const p = this.plan();
-    if (!p || !p.hasPlan || p.items.length === 0) return '';
-    const lines = [`Task plan (${p.source || 'plan'})`];
-    for (const item of p.items) {
-      lines.push(`[${item.status}] ${item.title}`);
-      for (const sub of item.subActions) {
-        lines.push(`  - ${sub.tool}: ${sub.label ?? sub.tool}`);
-      }
-    }
-    if (p.unassignedSubActions.length > 0) {
-      lines.push('Before plan');
-      for (const sub of p.unassignedSubActions) {
-        lines.push(`  - ${sub.tool}: ${sub.label ?? sub.tool}`);
-      }
-    }
-    return lines.join('\n');
   }
 
   private cliCopyText(): string {

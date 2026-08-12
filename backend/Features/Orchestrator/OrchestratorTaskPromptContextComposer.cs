@@ -15,6 +15,7 @@ public sealed class OrchestratorTaskPromptContextComposer
     internal const int MetadataTokenLimit = 256;
     internal const int PromptTokenLimit = 1_800;
     internal const int StatusTokenLimit = 1_800;
+    internal const int AgentPlanTokenLimit = 600;
     internal const int RunOutcomeTokenLimit = 256;
     private const int EstimatedCharactersPerToken = 4;
 
@@ -47,7 +48,7 @@ public sealed class OrchestratorTaskPromptContextComposer
                 $"Unknown task '{identity}' in project '{projectName}'.");
         }
 
-        return Compose(detail);
+        return Compose(detail, PlanReader.Read(detail.Info));
     }
 
     internal static string? ResolveTaskIdentity(
@@ -64,7 +65,7 @@ public sealed class OrchestratorTaskPromptContextComposer
         return null;
     }
 
-    internal static OrchestratorTaskPromptContext Compose(TaskDetail detail)
+    internal static OrchestratorTaskPromptContext Compose(TaskDetail detail, TaskPlanView? agentPlan = null)
     {
         ArgumentNullException.ThrowIfNull(detail);
         var info = detail.Info;
@@ -90,6 +91,15 @@ public sealed class OrchestratorTaskPromptContextComposer
         {
             included.Add("status.md");
             blocks.Add(RenderBoundedBlock("status.md", detail.StatusMarkdown, StatusTokenLimit));
+        }
+
+        if (agentPlan is { HasPlan: true, Items.Count: > 0 })
+        {
+            included.Add("current agent plan");
+            blocks.Add(RenderBoundedBlock(
+                "CURRENT AGENT PLAN",
+                RenderAgentPlan(agentPlan),
+                AgentPlanTokenLimit));
         }
 
         included.Add("last run outcome");
@@ -148,6 +158,28 @@ public sealed class OrchestratorTaskPromptContextComposer
         {
             lines.Add($"Outcome issue kind: {ValueOrUnknown(info.OutcomeIssue.Kind)}");
             lines.Add($"Outcome issue: {ValueOrUnknown(info.OutcomeIssue.Summary)}");
+        }
+        return string.Join("\n", lines);
+    }
+
+    private static string RenderAgentPlan(TaskPlanView plan)
+    {
+        var done = plan.Items.Count(item => item.Status == "done");
+        var active = plan.Items.FirstOrDefault(item => item.Status == "active");
+        var lines = new List<string>
+        {
+            $"Progress: {done.ToString(CultureInfo.InvariantCulture)}/{plan.Items.Count.ToString(CultureInfo.InvariantCulture)} completed",
+            $"Current step: {(active?.Title ?? "none")}",
+        };
+        foreach (var item in plan.Items)
+        {
+            var marker = item.Status switch
+            {
+                "done" => "x",
+                "active" => ">",
+                _ => " ",
+            };
+            lines.Add($"[{marker}] {item.Title} ({item.Status})");
         }
         return string.Join("\n", lines);
     }

@@ -194,8 +194,7 @@ public class CodexOutputRendererTests
     {
         var lines = Render("""{"type":"item.completed","item":{"type":"update_plan","plan":[{"step":"a","status":"completed"}]}}""");
 
-        Assert.Single(lines);
-        Assert.Equal("● Todo update", lines[0].Text);
+        Assert.Empty(lines);
     }
 
     [Fact]
