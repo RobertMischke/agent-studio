@@ -50,11 +50,13 @@ public class RunnerOptionsTests
                 "--poll-seconds", "9",
                 "--server-request-timeout-seconds", "17",
                 "--idle-watchdog-minutes", "3",
+                "--review-slot-max-age-hours", "12",
             ]);
         Assert.Equal(4, options.HostMaxParallelism);
         Assert.Equal(9, options.PollSeconds);
         Assert.Equal(17, options.ServerRequestTimeoutSeconds);
         Assert.Equal(3, options.IdleWatchdogMinutes);
+        Assert.Equal(12, options.ReviewSlotMaxAgeHours);
     }
 
     [Fact]

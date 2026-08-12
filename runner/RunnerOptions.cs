@@ -87,6 +87,11 @@ public sealed class RunnerOptions
     public string StateDir { get; init; } = Path.Combine(Path.GetTempPath(), "agent-runner-state");
 
     /// <summary>
+    /// Maximum age of a persisted review slot that has no live worker process.
+    /// </summary>
+    public int ReviewSlotMaxAgeHours { get; init; } = 24;
+
+    /// <summary>
     /// Additional host capabilities required by every claim for this service
     /// identity, for example toolchain:dotnet, toolchain:node, or
     /// toolchain:playwright. The Task Server combines these with the role,
@@ -278,6 +283,11 @@ public sealed class RunnerOptions
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             StateDir = Val("state-dir", "RUNNER_STATE_DIR",
                 Path.Combine(Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")), ".runner-state")),
+            ReviewSlotMaxAgeHours = overrides.TryGetValue("review-slot-max-age-hours", out var reviewSlotMaxAge)
+                                           && int.TryParse(reviewSlotMaxAge, out var reviewSlotMaxAgeValue)
+                                           && reviewSlotMaxAgeValue > 0
+                ? reviewSlotMaxAgeValue
+                : EnvInt("RUNNER_REVIEW_SLOT_MAX_AGE_HOURS", 24),
             RequiredCapabilities = Val(
                     "required-capabilities",
                     "RUNNER_REQUIRED_CAPABILITIES")

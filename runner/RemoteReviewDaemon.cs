@@ -31,6 +31,7 @@ public sealed class RemoteReviewDaemon
         var state = new ReviewStateStore(_options.StateDir);
         var persistedAtStartup = state.LoadAll();
         var active = new List<(Task<int> Run, string AttemptId, string ResourceNamespace)>();
+        var deferredRecovery = new Dictionary<string, PersistedReviewSlot>(StringComparer.Ordinal);
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var telemetry = new HostTelemetrySampler();
         HostTelemetrySample? latestTelemetry = null;
@@ -47,6 +48,40 @@ public sealed class RemoteReviewDaemon
                 $"oldestReportPendingSeconds={(hygiene.OldestReportPendingAge?.TotalSeconds ?? 0):0} " +
                 $"terminalCleanupPending={hygiene.TerminalCleanupPending}");
             nextSlotHygieneLog = now.AddMinutes(1);
+        }
+
+        void LogSlotAging(string source, ReviewSlotAgingSweepResult sweep)
+        {
+            _log(
+                $"review-slot-aging source={source} inspected={sweep.Inspected} " +
+                $"purged={sweep.Purged} retainedLive={sweep.RetainedLive} " +
+                $"failed={sweep.Failed} " +
+                $"maxAgeHours={_options.ReviewSlotMaxAgeHours}");
+        }
+
+        void StartRecoveredSlot(RecoveredReviewSlot recovered)
+        {
+            var slot = recovered.Slot;
+            var completed = DurableReviewProcess.HasCompleted(slot);
+            var live = DurableReviewProcess.VerifyLive(slot, out var verification);
+            var executor = new RemoteReviewExecutor(_options, _client, state, _log);
+            if (completed || live)
+            {
+                _log(
+                    $"persisted review accepted attempt={slot.AttemptId} " +
+                    $"fence={slot.Claim.Lease!.Fence} " +
+                    $"verification={(completed ? "durable result ready" : verification)}");
+                active.Add((
+                    executor.ReattachAsync(slot, shutdown),
+                    slot.AttemptId,
+                    slot.Claim.Lease.ResourceNamespace));
+                return;
+            }
+
+            active.Add((
+                executor.ReportNonAdoptableAsync(slot, verification, shutdown),
+                slot.AttemptId,
+                slot.Claim.Lease!.ResourceNamespace));
         }
 
         HostTelemetrySample? TakeTelemetry(bool force = false)
@@ -69,38 +104,39 @@ public sealed class RemoteReviewDaemon
 
         try
         {
+            var recoveredAtStartup = new List<PersistedReviewSlot>(persistedAtStartup.Count);
+            foreach (var persisted in persistedAtStartup)
+            {
+                recoveredAtStartup.Add(await RecoverLaunchingIdentityAsync(
+                    persisted,
+                    state,
+                    shutdown));
+            }
+            var startupAging = state.PurgeStale(
+                DateTime.UtcNow,
+                TimeSpan.FromHours(_options.ReviewSlotMaxAgeHours),
+                slot => DurableReviewProcess.VerifyLive(slot, out _));
+            LogSlotAging("startup", startupAging);
+            recoveredAtStartup = state.LoadAll().ToList();
+
             await WithServerRetryAsync(
                 "review registration",
                 () => _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown),
                 connectivity,
-                () => Math.Max(active.Count, persistedAtStartup.Count),
+                () => Math.Max(active.Count, recoveredAtStartup.Count),
                 shutdown);
 
-        foreach (var persisted in persistedAtStartup)
-        {
-            var slot = await RecoverLaunchingIdentityAsync(persisted, state, shutdown);
-            var completed = DurableReviewProcess.HasCompleted(slot);
-            var live = DurableReviewProcess.VerifyLive(slot, out var verification);
-            var executor = new RemoteReviewExecutor(_options, _client, state, _log);
-            if (completed || live)
-            {
-                _log(
-                    $"persisted review accepted attempt={slot.AttemptId} " +
-                    $"fence={slot.Claim.Lease!.Fence} " +
-                    $"verification={(completed ? "durable result ready" : verification)}");
-                active.Add((
-                    executor.ReattachAsync(slot, shutdown),
-                    slot.AttemptId,
-                    slot.Claim.Lease!.ResourceNamespace));
-            }
-            else
-            {
-                active.Add((
-                    executor.ReportNonAdoptableAsync(slot, verification, shutdown),
-                    slot.AttemptId,
-                    slot.Claim.Lease!.ResourceNamespace));
-            }
-        }
+        var reconciliation = await ReviewSlotRecovery.ReconcileAsync(
+            recoveredAtStartup,
+            state,
+            slot => DurableReviewProcess.VerifyLive(slot, out _),
+            ProbePersistedLeaseAsync,
+            _log,
+            shutdown);
+        foreach (var recovered in reconciliation.Active)
+            StartRecoveredSlot(recovered);
+        foreach (var deferred in reconciliation.Deferred)
+            deferredRecovery[deferred.AttemptId] = deferred;
         if (active.Count > 0)
         {
             _log(
@@ -138,6 +174,8 @@ public sealed class RemoteReviewDaemon
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         var admissionClosed = false;
         var nextRetentionSweep = DateTime.MinValue;
+        var nextSlotAgingSweep = DateTime.UtcNow.AddHours(1);
+        var nextDeferredRecovery = DateTime.UtcNow.AddMinutes(1);
         var consecutiveFaults = 0;
         while (!shutdown.IsCancellationRequested)
         {
@@ -165,6 +203,43 @@ public sealed class RemoteReviewDaemon
 
             try
             {
+                if (DateTime.UtcNow >= nextSlotAgingSweep)
+                {
+                    var aging = state.PurgeStale(
+                        DateTime.UtcNow,
+                        TimeSpan.FromHours(_options.ReviewSlotMaxAgeHours),
+                        slot => DurableReviewProcess.VerifyLive(slot, out _));
+                    LogSlotAging("periodic", aging);
+                    var retained = state.LoadAll()
+                        .Select(slot => slot.AttemptId)
+                        .ToHashSet(StringComparer.Ordinal);
+                    foreach (var attemptId in deferredRecovery.Keys
+                                 .Where(attemptId => !retained.Contains(attemptId))
+                                 .ToArray())
+                    {
+                        deferredRecovery.Remove(attemptId);
+                    }
+                    nextSlotAgingSweep = DateTime.UtcNow.AddHours(1);
+                }
+
+                if (deferredRecovery.Count > 0 && DateTime.UtcNow >= nextDeferredRecovery)
+                {
+                    var retry = await ReviewSlotRecovery.ReconcileAsync(
+                        deferredRecovery.Values.ToArray(),
+                        state,
+                        slot => DurableReviewProcess.VerifyLive(slot, out _),
+                        ProbePersistedLeaseAsync,
+                        _log,
+                        shutdown);
+                    deferredRecovery.Clear();
+                    foreach (var recovered in retry.Active)
+                        StartRecoveredSlot(recovered);
+                    foreach (var deferred in retry.Deferred)
+                        deferredRecovery[deferred.AttemptId] = deferred;
+                    idleWatchdog.RecordActiveSlots(active.Count);
+                    nextDeferredRecovery = DateTime.UtcNow.AddMinutes(1);
+                }
+
                 if (DateTime.UtcNow >= nextRetentionSweep)
                 {
                     try
@@ -388,6 +463,49 @@ public sealed class RemoteReviewDaemon
                 "The slot-free review daemon stopped polling and was terminated by its idle watchdog.");
     }
 
+    private async Task<ReviewLeaseRecoveryProbe> ProbePersistedLeaseAsync(
+        PersistedReviewSlot slot,
+        CancellationToken ct)
+    {
+        var lease = slot.Claim.Lease!;
+        try
+        {
+            var renewed = await _client.RenewReviewLeaseAsync(
+                slot.AttemptId,
+                new ReviewLeaseRenewRequest(
+                    lease.ExecutorId,
+                    lease.InstanceId,
+                    lease.LeaseId,
+                    lease.Fence,
+                    $"review-recovery-renew:{slot.AttemptId}:{lease.Fence}:{_client.RunnerInstanceId}",
+                    _options.TtlSeconds,
+                    AuthorityEpoch: lease.AuthorityEpoch),
+                ct);
+            return ReviewLeaseRecoveryProbe.Valid(renewed);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TaskServerException exception) when (
+            exception.StatusCode is >= 400 and < 500
+            && exception.StatusCode is not 401 and not 403 and not 408 and not 429)
+        {
+            return ReviewLeaseRecoveryProbe.Invalid(
+                $"status-{exception.StatusCode}-{exception.ErrorCode ?? "none"}");
+        }
+        catch (TaskServerException exception) when (exception.StatusCode is 408 or 429)
+        {
+            return ReviewLeaseRecoveryProbe.Unknown(
+                $"status-{exception.StatusCode}-{exception.ErrorCode ?? "none"}");
+        }
+        catch (Exception exception) when (RemoteRunnerDaemon.IsTransientServerFault(exception))
+        {
+            return ReviewLeaseRecoveryProbe.Unknown(
+                $"{exception.GetType().Name}-{exception.Message}");
+        }
+    }
+
     private async Task<T> WithServerRetryAsync<T>(
         string operation,
         Func<Task<T>> call,
@@ -440,7 +558,9 @@ public sealed class RemoteReviewDaemon
             if (attempt + 1 < attempts)
                 await Task.Delay(TimeSpan.FromMilliseconds(250), shutdown);
         }
-        return state.Save(slot with { AdoptionFailure = reason });
+        // Do not refresh a dead record before the startup age sweep. A valid
+        // server lease will persist the reason when its loss report begins.
+        return slot with { AdoptionFailure = reason };
     }
 
     private static async Task DelayThroughShutdown(

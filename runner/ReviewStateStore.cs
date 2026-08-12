@@ -162,6 +162,55 @@ public sealed class ReviewStateStore
         }
     }
 
+    public bool TryDelete(PersistedReviewSlot slot)
+    {
+        try
+        {
+            Delete(slot);
+            return !File.Exists(StatePath(slot.AttemptId));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    public ReviewSlotAgingSweepResult PurgeStale(
+        DateTime utcNow,
+        TimeSpan maxAge,
+        Func<PersistedReviewSlot, bool> isLive)
+    {
+        if (maxAge <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(maxAge));
+
+        var slots = LoadAll();
+        var purged = 0;
+        var retainedLive = 0;
+        var failed = 0;
+        foreach (var slot in slots)
+        {
+            var live = isLive(slot);
+            if (!ReviewSlotRecoveryPolicy.ShouldPurgeForAge(
+                    slot.UpdatedAtUtc,
+                    utcNow,
+                    maxAge,
+                    live))
+            {
+                if (live) retainedLive++;
+                continue;
+            }
+
+            if (TryDelete(slot)) purged++;
+            else failed++;
+        }
+
+        return new ReviewSlotAgingSweepResult(
+            slots.Count,
+            purged,
+            retainedLive,
+            failed);
+    }
+
     public void Flush() { }
 
     private string StatePath(string attemptId)
@@ -184,3 +233,9 @@ public sealed record ReviewSlotHygieneSnapshot(
     int ReportPending,
     TimeSpan? OldestReportPendingAge,
     int TerminalCleanupPending);
+
+public sealed record ReviewSlotAgingSweepResult(
+    int Inspected,
+    int Purged,
+    int RetainedLive,
+    int Failed);

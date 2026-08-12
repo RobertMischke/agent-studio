@@ -152,6 +152,28 @@ public sealed class RemoteReviewExecutorTests : IDisposable
         Assert.Empty(state.LoadAll());
     }
 
+    [Fact]
+    public async Task Product_failure_exit_deletes_the_cleaned_slot_record()
+    {
+        var handler = new ReportSequenceHandler(reportOutcome: "ProductFailure");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = Options();
+        using var client = new TaskServerClient(
+            http,
+            options.RunnerId,
+            usesDurableTaskServer: true,
+            options: options);
+        var state = new ReviewStateStore(options.StateDir);
+        var slot = await CreateCompletedSlotAsync(state);
+
+        var exitCode = await new RemoteReviewExecutor(options, client, state, _ => { })
+            .ReattachAsync(slot, CancellationToken.None);
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal(1, handler.CleanupAttempts);
+        Assert.Empty(state.LoadAll());
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.ServiceUnavailable, "task-not-found", "TaskNotFound")]
     [InlineData(HttpStatusCode.NotFound, "not-found", "TaskNotFound")]
@@ -246,6 +268,61 @@ public sealed class RemoteReviewExecutorTests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(90), snapshot.OldestReportPendingAge);
     }
 
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
+    public async Task Restart_with_dead_expired_slots_does_not_recover_them_as_active()
+    {
+        using var shutdown = new CancellationTokenSource();
+        var handler = new ReviewRestartHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
+        var options = Options(pollSeconds: 1, idleWatchdogMinutes: 1);
+        using var client = new TaskServerClient(
+            http,
+            options.RunnerId,
+            usesDurableTaskServer: true,
+            options: options);
+        var state = new ReviewStateStore(options.StateDir);
+        foreach (var attemptId in new[] { "expired-1", "expired-2" })
+        {
+            var slot = state.Create(
+                Claim(attemptId),
+                Path.Combine(_reviewRoot, $"{attemptId}-f17", "repository"));
+            state.Save(slot with
+            {
+                ProcessId = int.MaxValue,
+                ProcessStartedAtUtc = DateTime.UtcNow.AddHours(-2),
+                Phase = "handed-off",
+            });
+        }
+        var logs = new List<string>();
+        var run = new RemoteReviewDaemon(options, client, logs.Add).RunAsync(shutdown.Token);
+
+        var startup = await Task.WhenAny(
+            handler.CapabilitiesAdvertised.Task,
+            run,
+            Task.Delay(TimeSpan.FromSeconds(5)));
+        if (startup == run)
+            await run;
+        Assert.True(
+            startup == handler.CapabilitiesAdvertised.Task,
+            string.Join(Environment.NewLine, logs));
+        await shutdown.CancelAsync();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, handler.RecoveryLeaseChecks);
+        Assert.DoesNotContain(logs, line => line.Contains(
+            "recovering 2 persisted review slot(s)",
+            StringComparison.Ordinal));
+        Assert.Contains(logs, line => line.Contains(
+            "review-slot-reconciliation inspected=2 active=0",
+            StringComparison.Ordinal));
+        Assert.Equal(2, logs.Count(line => line.Contains(
+            "status=cleaned basis=server-lease-invalid",
+            StringComparison.Ordinal)));
+        Assert.Empty(state.LoadAll());
+    }
+
     private async Task<PersistedReviewSlot> CreateCompletedSlotAsync(ReviewStateStore state)
     {
         var workspacePath = Path.Combine(_reviewRoot, "review-attempt-1-f17", "repository");
@@ -276,7 +353,7 @@ public sealed class RemoteReviewExecutorTests : IDisposable
         return slot;
     }
 
-    private RunnerOptions Options() => new()
+    private RunnerOptions Options(int pollSeconds = 0, int idleWatchdogMinutes = 5) => new()
     {
         ServerUrl = "http://task-server",
         RunnerId = "review-runner",
@@ -292,14 +369,17 @@ public sealed class RemoteReviewExecutorTests : IDisposable
         CliArgs = "",
         TtlSeconds = 120,
         HeartbeatSeconds = 30,
+        HostMaxParallelism = 4,
+        PollSeconds = pollSeconds,
+        IdleWatchdogMinutes = idleWatchdogMinutes,
     };
 
-    private static ReviewClaimResponse Claim()
+    private static ReviewClaimResponse Claim(string attemptId = "attempt-1")
     {
         var now = new DateTime(2026, 8, 2, 15, 0, 0, DateTimeKind.Utc);
         var attempt = new ReviewAttemptDto(
-            "attempt-1",
-            "subject-1",
+            attemptId,
+            $"subject-{attemptId}",
             "AGT-2471",
             1,
             "leased",
@@ -312,7 +392,7 @@ public sealed class RemoteReviewExecutorTests : IDisposable
             null,
             null);
         var subject = new ReviewSubjectDto(
-            "subject-1",
+            attempt.SubjectId,
             "AGT-2471",
             "run-1",
             "example/repository",
@@ -326,7 +406,7 @@ public sealed class RemoteReviewExecutorTests : IDisposable
             new ReviewPlanDto([], []),
             now);
         var lease = new ReviewLeaseDto(
-            "lease-1",
+            $"lease-{attemptId}",
             attempt.AttemptId,
             subject.SubjectId,
             "review-runner",
@@ -340,6 +420,59 @@ public sealed class RemoteReviewExecutorTests : IDisposable
             25000,
             23);
         return new ReviewClaimResponse("claimed", attempt, subject, lease);
+    }
+
+    private sealed class ReviewRestartHandler : HttpMessageHandler
+    {
+        public TaskCompletionSource CapabilitiesAdvertised { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int RecoveryLeaseChecks { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.AbsolutePath ?? string.Empty;
+            if (path.EndsWith("/lease/renew", StringComparison.Ordinal))
+            {
+                RecoveryLeaseChecks++;
+                return Task.FromResult(ApiError(HttpStatusCode.Conflict, "review-lease-expired"));
+            }
+            if (path.EndsWith("/review-claims", StringComparison.Ordinal))
+            {
+                return Task.FromResult(JsonResponse(new ReviewClaimResponse("empty")));
+            }
+            if (path.EndsWith("/capabilities", StringComparison.Ordinal))
+            {
+                CapabilitiesAdvertised.TrySetResult();
+                return Task.FromResult(JsonResponse(new { }));
+            }
+            if (request.Method == HttpMethod.Put && path.Contains("/api/v1/runners/", StringComparison.Ordinal))
+                return Task.FromResult(JsonResponse(new { }));
+            if (path.EndsWith("/report", StringComparison.Ordinal))
+                return Task.FromResult(ApiError(HttpStatusCode.Conflict, "Superseded"));
+            if (path.EndsWith("/cleanup", StringComparison.Ordinal))
+                return Task.FromResult(JsonResponse(new ReviewCleanupResponse(
+                    "cleaned", "unknown", DateTime.UtcNow, false)));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static HttpResponseMessage ApiError(HttpStatusCode status, string code)
+            => new(status)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new
+                {
+                    code,
+                    message = "synthetic expired review authority",
+                    detail = (string?)null,
+                }, Json)),
+            };
+
+        private static HttpResponseMessage JsonResponse<T>(T value)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(value, Json)),
+            };
     }
 
     private sealed class InterruptedArtifactHandler : HttpMessageHandler
@@ -409,7 +542,8 @@ public sealed class RemoteReviewExecutorTests : IDisposable
     private sealed class ReportSequenceHandler(
         int transientFailures = 0,
         HttpStatusCode? terminalStatus = null,
-        string? terminalCode = null) : HttpMessageHandler
+        string? terminalCode = null,
+        string reportOutcome = "Pass") : HttpMessageHandler
     {
         public int ReportAttempts { get; private set; }
         public int CleanupAttempts { get; private set; }
@@ -430,7 +564,7 @@ public sealed class RemoteReviewExecutorTests : IDisposable
                     "report-1",
                     "attempt-1",
                     "subject-1",
-                    "Pass",
+                    reportOutcome,
                     null,
                     "review passed",
                     new string('c', 64),

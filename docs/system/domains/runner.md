@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-04
+Version: 2026-08-12
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -217,11 +217,18 @@ state.
   authority, or another fenced 4xx response is a classified terminal delivery
   rejection: the disposable workspace is reaped locally and the slot record is
   deleted, or retained as visible `terminal-cleanup-pending` state if cleanup
-  cannot complete. The daemon journals total persisted slots, pending report
-  count, oldest pending-report age, and terminal-cleanup count at startup and
-  once per minute. Compatibility report projection uses the archive-inclusive
-  task snapshot so a late idempotent report can record evidence without
-  reopening an archived card.
+  cannot complete. Startup reconciles every record before admission: only a
+  positively matched worker PID or an exact lease renewed against Task Server
+  authority may consume a slot. A durable result file alone is not liveness.
+  Dead records with rejected authority are deleted locally, while an unknown
+  server response is retained outside the active count for a later probe.
+  Records older than `RUNNER_REVIEW_SLOT_MAX_AGE_HOURS` (24 by default) with no
+  live PID are purged at startup and hourly. The daemon
+  journals reconciliation and aging counts in addition to total persisted
+  slots, pending report count, oldest pending-report age, and terminal-cleanup
+  count. Compatibility report projection uses the archive-inclusive task
+  snapshot so a late idempotent report can record evidence without reopening
+  an archived card.
 - `task-server/RemoteRunResultCollector.cs`,
   `contracts/TaskServer.Contracts/RemoteRunResultContracts.cs`, and
   [the remote run result contract](../contracts/remote-run-result.md): additive

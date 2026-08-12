@@ -2088,6 +2088,30 @@
             control-plane waiter; both paths meet only at canonical ReviewAttempt settlement.
           </td>
         </tr>
+        <tr>
+          <td>2026-08-12</td>
+          <td><code>AGT-2650</code><br><span class="small">stale persisted review slots exhausted the review ceiling</span></td>
+          <td>
+            A live Review Executor restart logged 60 recovered persisted slots while only two detached workers still
+            existed. Earlier observation had reached 112 records and <code>slot ceiling reached (15/4)</code>. Fifty-eight
+            of the archived records were <code>report-pending</code> with dead historical PIDs. They occupied admission,
+            blocked every fresh claim, and reduced observed review throughput to about two per hour until the operator
+            archived the stale records and restarted with the two live records.
+          </td>
+          <td>
+            Transient 60-second report HTTP timeouts left persisted report state when the slot task faulted. Startup then
+            called <code>active.Add</code> for every state file before proving its process or server authority. The clean
+            report paths, including product-failure exit 2 and terminal report rejection, did delete their records, so
+            those exits were not the accumulating population.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> startup now reconciles each record before admission. A positively
+            matched worker PID is active; otherwise the exact persisted lease must renew server-side. Rejected authority
+            is marked cleaned and deleted, unknown authority is retained outside the active count, and a configurable
+            24-hour no-live-PID sweep runs at startup and hourly with purge counts in the journal. Mixed live/stale and
+            crash-restart regressions pin the ceiling to reconciled slots only.
+          </td>
+        </tr>
       </tbody>
     </table>
 

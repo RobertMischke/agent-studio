@@ -381,6 +381,7 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. Settled attempt workspaces are removed after report acceptance; inactive attempt remnants older than 72 hours are swept hourly. The reusable `.baseline-cache` is preserved. |
 | `RUNNER_REVIEW_CREDENTIAL_ENV` | `--review-credential-env` | (none) | Comma-separated read-only credential variable names admitted into the cleared review environment. |
 | `RUNNER_STATE_DIR` | `--state-dir` | `$RUNNER_WORKDIR/.runner-state` | Durable slot, attempt, PID, worker result, and file-backed output state used for planned restart reattachment. Keep it on persistent local storage. |
+| `RUNNER_REVIEW_SLOT_MAX_AGE_HOURS` | `--review-slot-max-age-hours` | `24` | Safety-net age for a persisted Review slot with no live worker. Startup and hourly sweeps delete records at or beyond this age and journal the purge count. |
 | `RUNNER_EXEC_ENGINE` | `--exec-engine` | `car` | CLI execution engine inside the detached worker. `car` (default since AGT-2370) drives the CLI through the CodingAgentRunner library: descriptor-built argv, `stream-json` output, permission-mode injection from the card's spec (absent = bypass/yolo), and a task-stable isolated config home whose credential file is linked so OAuth refreshes write through. `legacy` is the pre-AGT-2370 raw spawn and is removed in AGT-2373. |
 | `AGENT_STUDIO_CLEAN_CONTEXT_ROOT` | none | `$XDG_STATE_HOME/agent-studio/clean-context` or `~/.local/state/agent-studio/clean-context` | Persistent non-temporary root for task-isolated Claude and Codex homes. Keep it on host-local storage. The same task reuses its marker-validated home across attempts and daemon restarts; inactive homes expire after seven days. |
 | `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). Under the `car` engine only the binary path and the CLI family derived from it are used. |
@@ -756,20 +757,29 @@ The Review service uses the same positive process-proof boundary under
 immutable ReviewAttempt, subject, original lease/fence, and exact review
 workspace. Its detached worker writes `review-worker.json`,
 `review-progress.json`, and `review-result.json`. On restart the replacement
-Review daemon verifies PID start time and `/proc/<pid>/cwd`, renews the persisted
-lease instance, and completes the same attempt and fence. Completed review
-commands and an in-flight command are not relaunched. Recovered slots resume
-before the daemon evaluates host load for a fresh claim, so load admission can
-close without discarding in-flight test time.
+Review daemon verifies PID start time and `/proc/<pid>/cwd`. A live PID is
+active process proof. Without one, the daemon must renew the exact persisted
+lease against Task Server authority before the record can consume a slot. A
+durable result file alone is not liveness. Completed review commands and an
+in-flight command are not relaunched. Reconciled slots resume before the daemon
+evaluates host load for a fresh claim, so load admission can close without
+discarding in-flight test time.
 
 If the Review worker is missing, its PID was reused, or its cwd differs, the
-replacement does not adopt or execute it. It submits a fenced
-`ReviewInfra / ExecutorRestarted` report containing the failed proof, completed
-step ids, completed-command duration, and retry reason. If the old lease already
-expired, the daemon reclaims that attempt under a fresh fence solely to deliver
-this loss report; it never runs from the unproven process. The deterministic
-`review-report:<attempt>:<fence>` key can replay the same terminal payload, but
-the authority rejects a conflicting payload.
+replacement does not adopt or execute it. A still-valid exact lease allows a
+fenced `ReviewInfra / ExecutorRestarted` report containing the failed proof,
+completed step ids, completed-command duration, and retry reason. Rejected or
+missing authority marks the host record cleaned and deletes it without adding
+an active slot; Task Server owns any later higher-fence retry. An unknown server
+response retains the record outside admission and probes it again. The
+deterministic `review-report:<attempt>:<fence>` key can replay the same terminal
+payload, but authority rejects a conflicting payload.
+
+As a second safety boundary, startup and hourly maintenance purge persisted
+Review slot records at least `RUNNER_REVIEW_SLOT_MAX_AGE_HOURS` old when they
+have no live PID. Each pass writes a
+`review-slot-aging` journal line with inspected, purged, retained, and failed
+counts. This local age rule never treats a result file as an active worker.
 
 During a Task Server or transport outage, transient claim, heartbeat, event,
 artifact, result-handoff, and completion failures do not terminate the daemon.
