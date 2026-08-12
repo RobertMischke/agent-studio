@@ -335,6 +335,8 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
 builder.Services.AddSingleton<SupersededCommitSweep>();
+builder.Services.AddSingleton<RemoteTokenReceiptService>();
+builder.Services.AddSingleton<RemoteCompletionAttributionSweep>();
 builder.Services.AddSingleton<TaskListGitProjectionCache>();
 builder.Services.AddSingleton<OperatorReviewRequeueService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
@@ -931,6 +933,19 @@ try
 catch (Exception ex)
 {
     crashRecorder.Record("SupersededCommitSweep", ex);
+}
+
+// One-time repair for recent remote completions whose integration branch had
+// already advanced to the result SHA and therefore collapsed commits[] to an
+// empty merge-base range. The same pass materializes missing remote token
+// receipts from the durable CLI log.
+try
+{
+    app.Services.GetRequiredService<RemoteCompletionAttributionSweep>().RunOnce();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RemoteCompletionAttributionSweep", ex);
 }
 
 // Cap legacy durable CLI logs after the one-time full-history wiki read

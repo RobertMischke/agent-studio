@@ -6,7 +6,7 @@
 > is the knowledge-collection point for this area. This document is the
 > system-of-record plan and migration record.
 
-> **Status (2026-08-09):** Project and task-card surfaces read a deduplicated
+> **Status (2026-08-12):** Project and task-card surfaces read a deduplicated
 > union of the historical token bus and durable `task.json.tokenSummary`
 > receipts. The bus remains the historical source, while task receipts are the
 > current source for remote runner calls. Project summary, heatmap, and pipeline
@@ -21,6 +21,9 @@
 > `AdHocUsageBusParityTests`) that drives both readers over the same data
 > set and asserts byte-identical numeric output. The drift rule
 > `token-aggregation-canonical` is ready to graduate from `Info` to `Warn`.
+> Remote completion now materializes that receipt from the fenced attempt's
+> provider usage frames in `logs/cli-output.log`; a bounded startup sweep repairs
+> recent remote cards that completed before this writer existed.
 
 ## Why this document exists
 
@@ -53,12 +56,16 @@ It did make a direct lane-folder-only fallback insufficient. The receipt reader
 therefore supports both layouts and enumerates every bucket, including later
 buckets such as `tasks/002`.
 
-The repair deliberately changes the read side instead of recreating the lost
-bus write at remote completion:
+The repair keeps the canonical read-side union and adds the missing durable
+receipt writer at remote completion:
 
 - `task.json.tokenSummary` is already the durable token receipt used by current
   task-card token chips. It retains per-call timestamps, participants, models,
   and token dimensions.
+- `RemoteTokenReceiptService` parses only the matching fenced session window,
+  preserving input, output, cache-read, and cache-creation categories. Attempt-
+  scoped participant ids make completion replay idempotent and prevent a later
+  continuation from counting an earlier attempt twice.
 - Historical bus entries remain in the aggregate. Receipt calls are merged by
   task, timestamp, and token dimensions with multiset deduplication, so an
   overlap does not count twice and the pre-July lifetime is retained.

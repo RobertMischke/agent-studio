@@ -175,6 +175,11 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   SHA-deduplicated union across generations; a later attempt does not replace
   earlier valid commits, and inherited SHAs retain their original
   `runAttemptId`, `runnerId`, delivery `branch`, and proving `resultSha`.
+- A fenced remote ResultEnvelope attributes the exact `BaseSha..ResultSha`
+  range. It must not recompute that boundary from the live integration branch:
+  release tasks can publish `main` before completion, making the live merge
+  base equal to the result and incorrectly producing an empty range. Review
+  subjects retain `BaseSha` so recovery uses the same immutable boundary.
 - Requeueing an integration-conflict or integration-error delivery marks that
   generation's entries with `supersededByAttempt`. The entries remain in
   `commits[]` for audit history, while attribution, aggregate diffs, provenance,
@@ -193,6 +198,13 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   changed-file overlap, no more than three omitted paths, and comparable total
   breadth. Cases outside those bounds remain untouched and are listed in the
   durable sweep report for manual review.
+- Startup also runs the bounded `remote-completion-attribution-v1` repair over
+  recent delivered and archived remote subjects. It accepts only a verified
+  immutable result ref plus an exact subject or provenance base, passes the
+  resulting non-empty range through the normal foreign-task guard, and writes
+  through `TaskMutationService`. The same pass materializes missing remote
+  token receipts from that attempt's CLI-log window. Ambiguous cards remain
+  unchanged and are listed in the durable migration report.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,

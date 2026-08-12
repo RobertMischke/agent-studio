@@ -3800,6 +3800,28 @@ public class GitService
         string expectedResultSha,
         string? recordedIntegrationBranch,
         CancellationToken cancellationToken = default)
+        => InspectRemoteDeliveryCommitRange(
+            repoRoot,
+            deliveryBranch,
+            expectedResultSha,
+            recordedIntegrationBranch,
+            expectedBaseSha: null,
+            cancellationToken);
+
+    /// <summary>
+    /// Fetches and verifies a remote delivery, then attributes the exact
+    /// pickup-base..result range. The explicit base is authoritative for a
+    /// fenced result envelope: the integration branch may already contain the
+    /// result by completion time, in which case a live merge-base would collapse
+    /// the delivery range to zero commits.
+    /// </summary>
+    public RemoteDeliveryCommitRange InspectRemoteDeliveryCommitRange(
+        string repoRoot,
+        string deliveryBranch,
+        string expectedResultSha,
+        string? recordedIntegrationBranch,
+        string? expectedBaseSha,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return Failed("Repository root does not exist.");
@@ -3832,6 +3854,37 @@ public class GitService
             return Failed(
                 $"Fenced delivery mismatch for '{branch}': completion expects {AbbreviateSha(expectedResultSha)}, origin has {AbbreviateSha(tip)}.",
                 DeliveryVerificationStatus.ShaMismatch);
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedBaseSha))
+        {
+            var baseSha = expectedBaseSha.Trim();
+            if (!ReviewSubjectStore.IsValidResultSha(baseSha))
+                return Failed("Remote delivery has no valid fenced base SHA.");
+            var (_, baseError, baseCode) = RunGitArgs(
+                repoRoot, "rev-parse", "--verify", $"{baseSha}^{{commit}}");
+            if (baseCode != 0)
+                return Failed($"Fenced delivery base {AbbreviateSha(baseSha)} is not a commit: {baseError.Trim()}");
+            var (_, ancestorError, ancestorCode) = RunGitArgs(
+                repoRoot, "merge-base", "--is-ancestor", baseSha, deliveryRef);
+            if (ancestorCode != 0)
+                return Failed(
+                    $"Fenced delivery base {AbbreviateSha(baseSha)} is not an ancestor of result {AbbreviateSha(tip)}: {ancestorError.Trim()}",
+                    DeliveryVerificationStatus.ShaMismatch);
+
+            var integrationBranch = TaskIntegrationBranch.NormalizeRef(recordedIntegrationBranch);
+            if (integrationBranch is null)
+                integrationBranch = TaskIntegrationBranch.NormalizeRef("main");
+            var exactCommits = GetCommitsInRangeAtRoot(repoRoot, baseSha, deliveryRef);
+            exactCommits.Reverse();
+            return new RemoteDeliveryCommitRange(
+                true,
+                integrationBranch,
+                baseSha,
+                tip,
+                exactCommits,
+                null,
+                DeliveryVerificationStatus.Verified);
         }
 
         var candidates = string.IsNullOrWhiteSpace(recordedIntegrationBranch)
