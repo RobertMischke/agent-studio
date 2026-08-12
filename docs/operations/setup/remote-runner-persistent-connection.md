@@ -72,14 +72,22 @@ Set-Location C:\Projects\agent-studio
     -RemotePort 15031 `
     -TaskServerPort 5031 `
     -IntervalMinutes 5
+.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -IntervalMinutes 1
 ```
 
 The registration is idempotent. It creates or updates
 `AgentRunner-TunnelKeeper`, uses `IgnoreNew` to prevent overlapping repair
-runs, starts the first run immediately, and repeats every five minutes. It uses
-the current interactive Windows identity because that identity owns the SSH
-key. A machine that must repair the tunnel before user logon needs a dedicated
-service identity with its own protected SSH key instead.
+runs, starts the first run immediately, and repeats every five minutes. Both
+the keeper and the separate `AgentRunner-TunnelWatchdog` use an S4U principal,
+so they are owned by Task Scheduler and survive sign-out instead of belonging
+to an interactive session. They use the current Windows identity because that
+identity owns the SSH key. Confirm that the key and SSH configuration are
+readable without an interactive profile prompt. A machine that needs a
+different security boundary should use a dedicated service identity with its
+own protected SSH key.
 
 The keeper in
 [`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
@@ -105,6 +113,35 @@ quiet. An ongoing failure is logged on transition and at most hourly, not on
 every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
 `15031` is still held by a half-dead previous session, SSH fails fast instead
 of connecting without the forward.
+
+The SSH process is launched through `run-tunnel-ssh.ps1`. Every SSH diagnostic
+and its final exit code is timestamped in
+`%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\ssh-exit.log`; this is the first
+place to inspect when the keeper process disappears.
+
+### Independent tunnel watchdog
+
+The one-minute watchdog is deliberately separate from the keeper. It runs the
+functional probe from the runner's point of view:
+
+```text
+ssh agent-runner 'curl -sf --max-time 6 http://127.0.0.1:15031/healthz'
+```
+
+After two consecutive failures it follows the operator recovery order: find
+and terminate only the agent-owned process listening on
+`127.0.0.1:15031`, stop and start `AgentRunner-TunnelKeeper`, and repeat the
+remote health probe for up to 45 seconds. No listener is a successful no-op.
+The watchdog journals timestamped probes and repairs in the devspace file
+`.tunnel-watchdog.log`. Its counters live under
+`%LOCALAPPDATA%\AgentTaskboard\tunnel-watchdog\state.json`. Two consecutive
+failed heal cycles append one alarm line to the existing devspace
+`.operator-alarm` channel; a recovery resets the alarm latch.
+
+The remote cleanup uses the normal `agent-runner` SSH account. It does not use
+`sudo` and cannot terminate another account's listener. If another account
+owns port 15031, the repair fails visibly and the second failed cycle raises
+the operator alarm.
 
 ## Option B - autossh + systemd on the host (host dials in, `-L`)
 
@@ -215,6 +252,21 @@ claim poll.
    the next capability advertisement returns the host card to **reachable**.
 5. Preserve screenshots from both states and the bounded journal excerpt in the
    task's absolute `results/` directory.
+
+For the Windows reverse-tunnel topology, the repository includes a destructive,
+bounded forced-kill test. It kills the real runner-side listener, occupies the
+same loopback port with a dummy HTTP server, starts the watchdog, and requires
+the health route to recover within 130 seconds:
+
+```powershell
+.\deploy\windows\agent-runner-tunnel\test-tunnel-watchdog-forced-kill.ps1 `
+    -SshTarget agent-runner `
+    -EvidenceDirectory C:\path\to\task\results
+```
+
+Run it only from the Windows studio that owns the tunnel. The script restores
+the scheduled task and attempts cleanup in `finally`; on success it writes
+`forced-kill-test.md` with elapsed time and the watchdog journal tail.
 
 ## Is the tunnel still the right topology?
 
