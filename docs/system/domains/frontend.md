@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-11
+Version: 2026-08-12
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -203,21 +203,26 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   branch rather than exposing the descriptor's physical `operations/` path.
   Current entries are grouped as `Needs a decision` and `In implementation`;
   `Documented` and `Discarded` stay under a collapsed History branch. Every
-  leaf is one shared 30 px tree row: its pattern icon aligns with every sibling
-  at that depth, its title receives the flexible width, and only a quiet status
-  dot or compact open-decision count trails it. Catalogue key, complete title,
-  lifecycle state, phase, and freshness stay in the viewport-safe shared
-  tooltip instead of a second tree line. The Dossiers count is the number of
-  open decisions, not the number of documents. Lifecycle-group counts equal
+  lifecycle header and leaf uses one compact 24 px tree row: its pattern icon
+  aligns with every sibling at that depth, its title receives the flexible
+  width, and only a quiet status dot or compact open-decision count trails it.
+  Catalogue key, complete title, lifecycle state, phase, and freshness stay in
+  the viewport-safe shared tooltip instead of a second tree line. The Dossiers
+  count is the number of open decisions, not the number of documents.
+  Lifecycle-group counts equal
   their visible leaves and zero counts stay hidden. The catalogue's
   `docs/operations/admin-design-guideline/index.html` entry is promoted once as
   the permanent `Style Guide` project destination and is omitted from the
   nested Dossiers list. This applies the AGT-2607 navigation-citizenship
   direction without introducing a second lifecycle or taxonomy source.
-  At the Explorer's narrow width, project and URL names own the remaining row
-  width before optional decoration: zero totals, hover-only jump actions, and
-  the quiet manual-mode dot collapse first. Ellipsis remains the last fallback,
-  and the complete name plus current status stays in the shared title tooltip.
+  The lifecycle branch uses one 12 px nesting step for both a group chevron and
+  its leaf icons instead of stacking a second full tree indent. At the
+  Explorer's narrow width, project and URL names own the remaining row width
+  before optional decoration: project activity overlays the avatar, zero totals
+  stay absent, hover-only jump actions collapse, gaps and gutters tighten, and
+  the project count disappears only at the resize floor. Ellipsis remains the
+  last fallback, and the complete name plus current status stays in the shared
+  title tooltip.
   An active Dossier is
   the selected leaf in the Explorer rather than making its Dossiers disclosure
   parent current. Opening one expands the owning workspace, project, and

@@ -55,25 +55,32 @@
   }
 }
 
-/* Narrow Explorer rows protect the project or URL name before optional
-   decoration. Zero task counts are omitted in the template; hover-only jump
-   actions and the quiet manual-mode dot collapse at the panel's tight width. */
+/* Narrow Explorer rows protect the name before optional decoration. Project
+   activity shares the avatar slot, zero totals stay absent, and hover-only
+   actions collapse before ellipsis has to shorten the name. */
 @container (max-width: 260px) {
-  .studio-project-row .tree-row,
-  .studio-tree-children .tree-row {
-    gap: var(--studio-spacing-1);
+  .studio-project-row,
+  .studio-tree-children app-tree-row {
+    --studio-tree-row-gap: var(--studio-spacing-1);
+    --studio-tree-row-trailing-gutter: var(--studio-spacing-2);
   }
 
   .studio-project-row .studio-tree-row__hub-link,
-  .studio-tree-children .studio-tree-row__url-ext,
-  .studio-project-row .studio-auto-pickup--manual {
+  .studio-tree-children .studio-tree-row__url-ext {
     display: none;
   }
 
-  .studio-project-row .count-badge {
-    min-width: 16px;
-    padding-right: var(--studio-spacing-1);
-    padding-left: var(--studio-spacing-1);
+  .studio-project-row {
+    --studio-count-badge-min-width: 16px;
+    --studio-count-badge-inline-padding: var(--studio-spacing-1);
+  }
+}
+
+/* At the resize floor the count is the last optional project-row decoration.
+   The full total remains in the row tooltip; the name keeps the usable width. */
+@container (max-width: 220px) {
+  .studio-project-row {
+    --studio-count-badge-display: none;
   }
 }
 

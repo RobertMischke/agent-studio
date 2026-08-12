@@ -9,6 +9,20 @@
   min-width: 0;
 }
 
+.studio-workbench-group-row,
+.studio-workbench-entry-row,
+.studio-workbench-group-items,
+.studio-workbench-history-items {
+  --studio-tree-row-height: var(--studio-spacing-5);
+  --studio-tree-row-gap: var(--studio-spacing-1);
+  --studio-tree-row-trailing-gutter: var(--studio-spacing-2);
+}
+
+.studio-workbench-group-row {
+  display: block;
+  margin-left: var(--studio-spacing-3);
+}
+
 .studio-workbench-topics__state {
   display: block;
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
@@ -19,7 +33,7 @@
 .studio-workbench-group-items,
 .studio-workbench-history-items {
   min-width: 0;
-  padding-left: var(--studio-spacing-5);
+  padding-left: var(--studio-spacing-3);
 }
 
 .studio-workbench-topic__status {

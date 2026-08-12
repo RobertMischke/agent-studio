@@ -4,8 +4,8 @@ import type { ProjectAutoPickupState } from '../../studio-shell.auto-pickup';
 
 /**
  * Static auto-pickup configuration mark for Explorer project rows and their
- * collapsed aggregates. Its fixed slot keeps labels, counts, and row height
- * stable across every state.
+ * collapsed aggregates. Project rows can project it into their avatar overlay,
+ * while aggregate rows retain the same fixed trailing slot.
  */
 @Component({
   selector: 'app-explorer-auto-pickup-indicator',

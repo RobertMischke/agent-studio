@@ -147,12 +147,14 @@
                             (contextmenu)="onProjectContextMenu($event, p)">
                 @let autoPickup = autoPickupFor(p.name);
                 <app-explorer-auto-pickup-indicator
+                  glyphOverlay
                   [state]="autoPickup.state"
                   [tooltip]="autoPickup.tooltip"
                   [reason]="autoPickup.reason"
                   [testid]="'studio-explorer-project-auto-pickup-' + p.name" />
                 <button type="button"
                         class="studio-tree-row__hub-link"
+                        [attr.data-testid]="'studio-explorer-project-hub-link-' + p.name"
                         cacTooltip="Open Deck"
                         aria-label="Open Deck"
                         (click)="openHubRequest.emit(p.name); $event.stopPropagation()">

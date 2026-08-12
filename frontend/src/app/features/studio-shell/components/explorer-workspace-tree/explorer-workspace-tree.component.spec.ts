@@ -749,6 +749,8 @@ describe('ExplorerWorkspaceTreeComponent auto-pickup indicator', () => {
     expect(dot('Delta')?.getAttribute('data-auto-pickup-state')).toBe('blocked');
     expect(dot('Delta')?.getAttribute('data-auto-pickup-reason')).toBe('build profile declared');
     expect(dot('Delta')?.getAttribute('aria-label')).toBe('Auto-pickup blocked: build profile declared');
+    expect(dot('Alpha')?.closest('.tree-row__glyph-overlay')).not.toBeNull();
+    expect(dot('Alpha')?.closest('[aria-hidden="true"]')).toBeNull();
   });
 
   it('rolls active and blocked auto projects into a blocked-wins aggregate', () => {
