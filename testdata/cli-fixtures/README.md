@@ -106,7 +106,9 @@ malformed fixture) and never comes from a fixture.
 | **P22** rate limit | `p22-rate-limit-{camel,snake}.claude.fixture`, `p22-rate-limit.codex.fixture` | Claude's `rate_limit_event` in both casings (CAR-E tolerance), including an ISO-8601 `resets_at` and a stringified boolean. The frame is informational: the run still ends `[[TASK_DONE]]`. Codex has no such frame — its limit arrives as a terminal `turn.failed` that today classifies as `QuotaExceeded` → `WaitForCapabilityRecovery`; recorded so the CAR path cannot quietly downgrade it to a plain crash. |
 | **P23** protocol novelty | `p23-unknown-frame.{claude,codex}.fixture` | Synthetic unknown-frame probes appended to each real-version folder. Normal completion remains authoritative, while the frame produces `runner.protocol.unknown-frame` with scrubbed per-type and total counters. |
 
-`runner.Tests/ParityFixtureTests` pins P1 through P5, P9, P22, and P23 and checks that
+| **P24** living todo list | `p24-todo-list.codex.fixture` | Codex `item.started` / `item.updated` / `item.completed` with `item.type=todo_list`; boolean completion is folded into one current plan and repeated updates never become separate readable Activity rows. Other CLIs have no equivalent fixture and therefore expose no native plan block. |
+
+`runner.Tests/ParityFixtureTests` pins P1 through P5, P9, P22, P23, and P24 and checks that
 every fixture in the folder is well formed. `BackendLocalExecutionEngineParityTests`
 and `RemoteWorkerEngineParityTests` provide the paired executable harnesses.
 

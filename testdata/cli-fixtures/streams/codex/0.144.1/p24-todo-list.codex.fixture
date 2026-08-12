@@ -1,0 +1,10 @@
+#! {"scenario":"P24","title":"Codex living todo-list snapshots","schemaVersion":1,"cli":"codex","cliVersion":"0.144.1","form":"stream-json","exitCode":0,"durableOutputState":"local-only","captureSource":"real-cli-stream","capturedAt":"2026-08-11","scrubbed":true}
+# Scrubbed item.started/item.updated/item.completed todo_list family observed in Codex JSONL.
+{"type":"thread.started","thread_id":"019f0000-0000-7000-8000-000000002641"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the existing activity projection","completed":false},{"text":"Render one living checklist","completed":false},{"text":"Verify both themes","completed":false}]}}
+{"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the existing activity projection","completed":true},{"text":"Render one living checklist","completed":false},{"text":"Verify both themes","completed":false}]}}
+{"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the existing activity projection","completed":true},{"text":"Render one living checklist","completed":true},{"text":"Verify both themes","completed":false}]}}
+{"type":"item.completed","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect the existing activity projection","completed":true},{"text":"Render one living checklist","completed":true},{"text":"Verify both themes","completed":true}]}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"The living checklist is verified.\n[[TASK_DONE]]"}}
+{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":400,"output_tokens":120}}

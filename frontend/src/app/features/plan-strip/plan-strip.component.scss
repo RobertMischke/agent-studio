@@ -11,6 +11,13 @@
   font-family: var(--font-ui);
 }
 
+.plan-strip--context {
+  margin: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--studio-accent) 5%, var(--studio-bg-elevated));
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+}
+
 .plan-strip__head {
   display: flex;
   align-items: center;
@@ -67,6 +74,19 @@
 
   &--pending {
     opacity: 0.7;
+  }
+
+  &--changed {
+    animation: plan-delta 1.8s ease-out;
+  }
+}
+
+@keyframes plan-delta {
+  0%, 32% {
+    background: color-mix(in srgb, var(--studio-accent) 20%, var(--studio-bg-elevated));
+  }
+  100% {
+    background: transparent;
   }
 }
 
@@ -270,5 +290,12 @@
 
   &:hover {
     color: var(--studio-fg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-item--changed,
+  .plan-item__heartbeat--pulsing {
+    animation-duration: 0s;
   }
 }

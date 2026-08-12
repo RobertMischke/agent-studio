@@ -59,6 +59,8 @@ import {
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
 import { buildContextChipPresentation } from '../../composer-location-context';
 import { UiPreferencesService } from '../../../shell/state/ui-preferences.service';
+import { PlanStripComponent } from '../../../plan-strip';
+import { OrchestratorTaskPlanStore } from '../../state/orchestrator-task-plan.store';
 
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
@@ -78,12 +80,13 @@ import { UiPreferencesService } from '../../../shell/state/ui-preferences.servic
     OrchestratorContextPickerComponent,
     ChatSwitcherRailComponent,
     OrchestratorPanelHeaderComponent,
-    OrchestratorJumpLatestComponent
+    OrchestratorJumpLatestComponent,
+    PlanStripComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
   styleUrl: './orchestrator-side-sheet.component.scss',
-  providers: [OrchestratorContextDigestService],
+  providers: [OrchestratorContextDigestService, OrchestratorTaskPlanStore],
   host: {
     '[class.is-open]': 'open()',
     // When open, drive the host width from the persisted user choice so
@@ -167,6 +170,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.chatActivity.workingContextKeys(this.contextSessions()).size);
   readonly contextMenuOpen = signal(false);
   readonly contextDigestState = inject(OrchestratorContextDigestService);
+  readonly taskPlanState = inject(OrchestratorTaskPlanStore);
   private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
 
   /** Total selectable scopes represented by the header context badge. */
@@ -453,6 +457,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (this.contextAttachments().length > 0) this.contextAttachments.set([]);
         this.contextPicker()?.close();
       });
+    });
+
+    effect(() => {
+      const jobId = this.effectiveJobId();
+      const watchPath = this.effectiveWatchPath();
+      untracked(() => this.taskPlanState.select(jobId, watchPath));
     });
 
     /**

@@ -264,6 +264,16 @@ describe('sanitizeProjectionLines', () => {
     const input = [line('hello'), line('● Read a.ts')];
     expect(sanitizeProjectionLines(input)).toBe(input);
   });
+
+  it('removes every Codex todo-list snapshot from the readable projection', () => {
+    const started = line('{"type":"item.started","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect","completed":false}]}}');
+    const updated = line('{"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[{"text":"Inspect","completed":true}]}}');
+    const message = line('{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Done"}}');
+
+    const out = sanitizeProjectionLines([started, updated, message]);
+
+    expect(out).toEqual([message]);
+  });
 });
 
 describe('renderable-kind whitelist', () => {

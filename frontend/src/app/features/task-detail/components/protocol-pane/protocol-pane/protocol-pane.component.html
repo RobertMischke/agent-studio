@@ -273,14 +273,6 @@
           <div class="inspector__stack">
             <section class="activity-panel" data-testid="activity-panel">
               <div class="activity-panel__header activity-panel__header--compact">
-                @if (planAvailable()) {
-                  <app-pane-tabs variant="pill"
-                                 class="activity-view-toggle"
-                                 ariaLabel="Plan"
-                                 [tabs]="activityPrimaryTabs()"
-                                 [activeTabId]="activityPrimaryTabId()"
-                                 (tabChange)="onActivityPrimaryTabChange($event)" />
-                }
                 <div class="activity-panel__actions">
                   @if (runCount() > 0) {
                     <span class="activity-runs" data-testid="activity-runs">
@@ -374,10 +366,11 @@
 
               @if (cliOutput().length > 0 || runnerEvents().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
                 @switch (activityView()) {
-                  @case ('plan') {
-                    <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
-                  }
                   @case ('conversation') {
+                    <app-plan-strip class="activity-stream__plan"
+                                    [plan]="plan()"
+                                    [isRunning]="isRunning()"
+                                    variant="activity" />
                     @if (nextGenConversationEnabled()) {
                       <app-runner-replay-metadata [events]="runnerEvents()" />
                       <!-- Activity rows have deliberately variable heights (short

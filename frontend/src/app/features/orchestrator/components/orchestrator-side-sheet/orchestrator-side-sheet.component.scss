@@ -101,6 +101,13 @@
   color: var(--studio-fg-dim);
 }
 
+.sheet__task-progress {
+  flex: 0 0 auto;
+  padding: var(--studio-spacing-2) var(--studio-spacing-4);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--orch-panel-bg);
+}
+
 .sheet__workspace {
   flex: 1 1 auto;
   min-width: 0;

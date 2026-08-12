@@ -120,6 +120,10 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
     }
   }
 
+  protected isCurrentJob(jobId: string): boolean {
+    return this.currentJob?.id === jobId;
+  }
+
   stop(): void {
     this.currentKey = '';
     this.currentJob = null;

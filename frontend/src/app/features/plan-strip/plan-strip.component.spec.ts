@@ -99,6 +99,43 @@ describe('PlanStripComponent', () => {
 
     expect(host.querySelector('[data-testid="plan-strip-before"]')?.textContent).toContain('Before plan: 1 action');
   });
+
+  it('updates the same rows in place and briefly marks status deltas', async () => {
+    const fixture = await render(plan);
+    const host = fixture.nativeElement as HTMLElement;
+    const before = Array.from(host.querySelectorAll('[data-testid="plan-item"]'));
+    fixture.componentRef.setInput('plan', {
+      ...plan,
+      snapshotCount: 5,
+      activeItemId: 'verify',
+      items: plan.items.map(item => item.id === 'patch'
+        ? { ...item, status: 'done' as const }
+        : item.id === 'verify'
+          ? { ...item, status: 'active' as const }
+          : item),
+    });
+    fixture.detectChanges();
+
+    const after = Array.from(host.querySelectorAll('[data-testid="plan-item"]'));
+    expect(after).toHaveLength(3);
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).toBe(before[1]);
+    expect(after[2]).toBe(before[2]);
+    expect(after[1].getAttribute('data-delta')).toBe('changed');
+    expect(after[2].getAttribute('data-delta')).toBe('changed');
+  });
+
+  it('renders a compact context block without activity drill-down telemetry', async () => {
+    const fixture = await render(plan);
+    fixture.componentRef.setInput('variant', 'context');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-testid="plan-strip"]')?.getAttribute('data-variant')).toBe('context');
+    expect(host.textContent).toContain('Agent progress');
+    expect(host.querySelector('[data-testid="plan-item-ticker"]')).toBeNull();
+    expect(host.querySelector('[data-testid="plan-strip-before"]')).toBeNull();
+  });
 });
 
 function texts(host: HTMLElement, selector: string): string[] {

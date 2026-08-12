@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { NowTickService } from '../../services/now-tick.service';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { TaskPlanView, TaskPlanItemView, TaskPlanSubAction } from './plan.model';
@@ -10,7 +10,7 @@ interface TickerMark {
 
 /**
  * Plan strip: a meta-level view above the activity log that surfaces the
- * CLI's own internal task plan (its TodoWrite / update_plan items). Each
+ * CLI's own internal task plan (TodoWrite, update_plan, or TODO_LIST items). Each
  * item shows a title and a status; the active item gets a denominator-free
  * progress shape built from four telemetry-derived cues, and finished items
  * expand to reveal the sub-actions they consisted of.
@@ -38,13 +38,18 @@ interface TickerMark {
 export class PlanStripComponent {
   readonly plan = input.required<TaskPlanView | null>();
   readonly isRunning = input(false);
+  readonly variant = input<'activity' | 'context'>('activity');
 
   private readonly nowTick = inject(NowTickService).now;
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Seconds of quiet after which the heartbeat stops pulsing. */
   private static readonly HeartbeatIdleSeconds = 30;
 
   private readonly expanded = signal<ReadonlySet<string>>(new Set());
+  readonly changedItemIds = signal<ReadonlySet<string>>(new Set());
+  private previousStatuses: ReadonlyMap<string, string> | null = null;
+  private highlightTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly visible = computed<boolean>(() => {
     const p = this.plan();
@@ -75,8 +80,39 @@ export class PlanStripComponent {
   /** True for sources we cannot fully trust as native plan frames. */
   readonly isHeuristic = computed<boolean>(() => (this.plan()?.source ?? '').includes('heuristic'));
 
+  readonly title = computed(() => this.variant() === 'context' ? 'Agent progress' : 'Agent plan');
+
+  constructor() {
+    effect(() => {
+      const statuses = new Map((this.plan()?.items ?? []).map(item => [item.id, item.status]));
+      untracked(() => {
+        const previous = this.previousStatuses;
+        this.previousStatuses = statuses;
+        if (previous === null) return;
+        const changed = new Set<string>();
+        for (const [id, status] of statuses) {
+          if (!previous.has(id) || previous.get(id) !== status) changed.add(id);
+        }
+        if (changed.size === 0) return;
+        this.changedItemIds.set(changed);
+        if (this.highlightTimer !== null) clearTimeout(this.highlightTimer);
+        this.highlightTimer = setTimeout(() => {
+          this.changedItemIds.set(new Set());
+          this.highlightTimer = null;
+        }, 1800);
+      });
+    });
+    this.destroyRef.onDestroy(() => {
+      if (this.highlightTimer !== null) clearTimeout(this.highlightTimer);
+    });
+  }
+
   isExpanded(id: string): boolean {
     return this.expanded().has(id);
+  }
+
+  isChanged(id: string): boolean {
+    return this.changedItemIds().has(id);
   }
 
   toggle(id: string): void {

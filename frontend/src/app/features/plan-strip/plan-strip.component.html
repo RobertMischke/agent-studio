@@ -1,7 +1,11 @@
 @if (visible()) {
-  <section class="plan-strip" data-testid="plan-strip">
+  <section class="plan-strip"
+           [class.plan-strip--context]="variant() === 'context'"
+           data-testid="plan-strip"
+           [attr.data-variant]="variant()"
+           aria-live="polite">
     <header class="plan-strip__head">
-      <span class="plan-strip__title">Task plan</span>
+      <span class="plan-strip__title">{{ title() }}</span>
       <span
         class="plan-strip__source"
         [class.plan-strip__source--heuristic]="isHeuristic()"
@@ -20,8 +24,10 @@
           [class.plan-item--active]="item.status === 'active'"
           [class.plan-item--done]="item.status === 'done'"
           [class.plan-item--pending]="item.status === 'pending'"
+          [class.plan-item--changed]="isChanged(item.id)"
           [attr.data-testid]="'plan-item'"
           [attr.data-status]="item.status"
+          [attr.data-delta]="isChanged(item.id) ? 'changed' : null"
         >
           <div class="plan-item__row">
             <span class="plan-item__glyph" [attr.data-status]="item.status" aria-hidden="true">{{
@@ -48,7 +54,7 @@
             }
 
             <!-- Completed items expand to reveal their sub-actions. -->
-            @if (item.status === 'done' && item.subActionCount > 0) {
+            @if (variant() === 'activity' && item.status === 'done' && item.subActionCount > 0) {
               <button
                 type="button"
                 class="plan-item__expand"
@@ -63,7 +69,7 @@
           </div>
 
           <!-- Ticker (cue 1) + soft-estimate band (cue 3) for items with work. -->
-          @if (item.subActionCount > 0) {
+          @if (variant() === 'activity' && item.subActionCount > 0) {
             <div
               class="plan-item__ticker"
               data-testid="plan-item-ticker"
@@ -93,7 +99,7 @@
           }
 
           <!-- Latest sub-action label (cue 2): live "what is it doing now". -->
-          @if (item.status === 'active' && latestLabel(item); as label) {
+          @if (variant() === 'activity' && item.status === 'active' && latestLabel(item); as label) {
             <div class="plan-item__latest" data-testid="plan-item-latest">
               <span class="plan-item__latest-arrow">→</span>
               <code>{{ label }}</code>
@@ -101,9 +107,9 @@
           }
 
           <!-- Expanded verbatim sub-action list for finished items. -->
-          @if (item.status === 'done' && isExpanded(item.id)) {
+          @if (variant() === 'activity' && item.status === 'done' && isExpanded(item.id)) {
             <ul class="plan-item__subs" data-testid="plan-item-subs">
-              @for (sub of item.subActions; track $index) {
+              @for (sub of item.subActions; track sub.ts + ':' + sub.tool + ':' + (sub.label ?? '')) {
                 <li class="plan-sub" [cacTooltip]="subActionTooltip(sub)">
                   <span class="plan-sub__tool">{{ sub.tool }}</span>
                   <code class="plan-sub__label">{{ sub.label ?? sub.tool }}</code>
@@ -116,7 +122,7 @@
     </ol>
 
     <!-- "Before plan" bucket: tool calls observed before the first plan frame. -->
-    @if (unassigned().length > 0) {
+    @if (variant() === 'activity' && unassigned().length > 0) {
       <div class="plan-strip__before" data-testid="plan-strip-before">
         <button
           type="button"
@@ -129,7 +135,7 @@
         </button>
         @if (isExpanded('::before-plan')) {
           <ul class="plan-item__subs">
-            @for (sub of unassigned(); track $index) {
+            @for (sub of unassigned(); track sub.ts + ':' + sub.tool + ':' + (sub.label ?? '')) {
               <li class="plan-sub" [cacTooltip]="subActionTooltip(sub)">
                 <span class="plan-sub__tool">{{ sub.tool }}</span>
                 <code class="plan-sub__label">{{ sub.label ?? sub.tool }}</code>

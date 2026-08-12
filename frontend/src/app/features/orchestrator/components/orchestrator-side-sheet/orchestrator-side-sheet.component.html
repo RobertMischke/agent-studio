@@ -34,6 +34,14 @@
     </div>
   }
 
+  @if (contextKind() === 'task' && taskPlanState.plan(); as taskPlan) {
+    <div class="sheet__task-progress" data-testid="orch-task-progress">
+      <app-plan-strip [plan]="taskPlan"
+                      [isRunning]="activeRun() !== null"
+                      variant="context" />
+    </div>
+  }
+
   <main class="sheet__workspace">
     @if (contextMenuOpen()) {
       <section id="orch-context-menu"

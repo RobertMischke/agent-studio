@@ -124,6 +124,41 @@ public class CodexEventAdapterTests
     }
 
     [Fact]
+    public void ItemUpdatedTodoList_EmitsOnePlanSnapshotWithDerivedActiveItem()
+    {
+        const string frame = """
+        {"type":"item.updated","item":{"id":"item_1","type":"todo_list","items":[
+          {"text":"Inspect the repository","completed":true},
+          {"text":"Implement the checklist","completed":false},
+          {"text":"Verify the result","completed":false}
+        ]}}
+        """;
+
+        var plan = Assert.Single(BuiltInCliBehaviors.MapCodexFrame(frame, Jk)
+            .OfType<CliRunEvent.PlanUpdated>());
+
+        Assert.Equal("codex/todo_list", plan.Source);
+        Assert.Equal(["done", "active", "pending"], plan.Items.Select(item => item.Status));
+        Assert.Equal("Implement the checklist", plan.Items[1].Title);
+    }
+
+    [Fact]
+    public void ItemCompletedTodoList_DoesNotClaimAnIncompleteItemIsStillActive()
+    {
+        const string frame = """
+        {"type":"item.completed","item":{"id":"item_1","type":"todo_list","items":[
+          {"text":"Implemented","completed":true},
+          {"text":"Not reached","completed":false}
+        ]}}
+        """;
+
+        var plan = Assert.Single(BuiltInCliBehaviors.MapCodexFrame(frame, Jk)
+            .OfType<CliRunEvent.PlanUpdated>());
+
+        Assert.Equal(["done", "pending"], plan.Items.Select(item => item.Status));
+    }
+
+    [Fact]
     public void UpdatePlanContentAlias_IsAcceptedAsStepTitle()
     {
         const string frame = """
