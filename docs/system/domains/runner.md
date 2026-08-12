@@ -261,12 +261,18 @@ state.
 - `deploy/agent-host/agent-runner-deploy`, its configuration policy, and
   `scripts/harden-agent-runner-host.sh`: the root-owned least-privilege release
   and role-configuration boundary. Release promotion retains its fixed
-  no-argument ingress. Role configuration accepts only Coding or Review
+  no-argument ingress. Before the atomic link flip, it validates the selected
+  `agent-host.deps.json` runtime-assembly closure and runs the staged binary as
+  the service user under a short timeout. It then restarts the fixed Coding and
+  Review units and detects an immediate crash loop from systemd restart counters;
+  failure output names the previous release and prints the operator rollback
+  command. Role configuration accepts only Coding or Review
   `RUNNER_MAX_PARALLELISM` values from 1 through 6, updates an EnvironmentFile
   loaded by that unit, and relies on systemd's documented precedence where
   `EnvironmentFile=` overrides `Environment=`. It restarts only the mapped
   unit, waits for an active new MainPID, proves the value through that exact
-  process's `/proc/<MainPID>/environ`, and journals or rolls back the result.
+  process's `/proc/<MainPID>/environ`, and journals or rolls back the result. The
+  release checks add no sudo command or argument shape.
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
