@@ -381,7 +381,7 @@ public static class V1ReviewPlaneEndpoints
         {
             if (!RunnerMatches(context, request.ExecutorId))
                 return Results.Unauthorized();
-            if (!TryValidateLease(
+            if (!TryValidateReportLease(
                     authority,
                     attemptId,
                     request.ExecutorId,
@@ -389,9 +389,9 @@ public static class V1ReviewPlaneEndpoints
                     request.LeaseId,
                     request.Fence,
                     request.AuthorityEpoch,
+                    request.IdempotencyKey,
                     out var current,
-                    out var error,
-                    allowTerminal: true))
+                    out var error))
                 return error!;
             var currentReview = current!;
             var authoritativeLease = currentReview.Lease!;
@@ -1146,6 +1146,66 @@ public static class V1ReviewPlaneEndpoints
         error = null;
         return true;
     }
+
+    private static bool TryValidateReportLease(
+        AttemptAuthorityService authority,
+        string attemptId,
+        string executorId,
+        string instanceId,
+        string leaseId,
+        long fence,
+        long authorityEpoch,
+        string idempotencyKey,
+        out ReviewAttemptDto? review,
+        out IResult? error)
+    {
+        review = authority.GetReview(attemptId);
+        if (review is null)
+        {
+            error = ReportLeaseExpired(
+                "ReviewAttempt authority is no longer available for this report.");
+            return false;
+        }
+
+        var isSettlementReplay = review.Reports.Any(report => string.Equals(
+            report.IdempotencyKey,
+            idempotencyKey,
+            StringComparison.Ordinal));
+        if (review.Lease is null
+            || review.State != AttemptLifecycleState.Leased && !isSettlementReplay)
+        {
+            error = ReportLeaseExpired(
+                "ReviewAttempt no longer has report authority; its lease expired.");
+            return false;
+        }
+
+        var lease = review.Lease;
+        if (!string.Equals(lease.ExecutorId, executorId, StringComparison.Ordinal)
+            || !string.Equals(lease.ClientId, instanceId, StringComparison.Ordinal)
+            || !string.Equals(lease.LeaseId, leaseId, StringComparison.Ordinal)
+            || review.LastFence != fence
+            || review.AuthorityEpoch != authorityEpoch)
+        {
+            error = Results.Conflict(new Contract.ApiError(
+                "stale-review-authority",
+                "AttemptId, lease, executor, instance, fence, or authority epoch is stale."));
+            return false;
+        }
+
+        if (!isSettlementReplay && lease.ExpiresAt <= DateTime.UtcNow)
+        {
+            error = ReportLeaseExpired("ReviewAttempt report authority expired.");
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static IResult ReportLeaseExpired(string message)
+        => Results.Conflict(new Contract.ApiError(
+            AttemptWriteStatus.LeaseExpired.ToString(),
+            message));
 
     /// <summary>
     /// Collects the task's full ReviewAttempt history (archived epochs included,

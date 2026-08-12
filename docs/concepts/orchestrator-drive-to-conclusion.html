@@ -2110,6 +2110,28 @@
             board activity plus active host-slot telemetry. A first 404/409 renewal performs one exact re-registration and
             retry; a mismatched or superseded fence still stops. Restart regressions cover review report and coding
             completion delivery under the original authority.
+        <tr id="case-agt-2657">
+          <td>2026-08-12</td>
+          <td><code>AGT-2657</code><br><span class="small">accepted review reports timed out behind immediate integration</span></td>
+          <td>
+            Six Pass reports timed out for about 85 minutes and accumulated up to 66 submissions each. GET routes,
+            unrelated POST routes, and fake report POSTs remained fast. A forced stable backend restart cleared the
+            volatile queue, after which clients observed accepted responses one at a time.
+          </td>
+          <td>
+            The report endpoint durably settled each first delivery, then synchronously awaited immediate integration.
+            Every timeout replay passed authority idempotency but enqueued the same merge and build gate again, creating
+            a self-sustaining per-project queue. Request logging occurred only when the endpoint completed, which hid the
+            accepted requests. The restart marker described the operator's forced Windows process kill, not a proven
+            earlier backend crash. The unrelated project URL probe was bounded asynchronous traffic.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> missing report authority and expired non-replay leases now return
+            HTTP 409 <code>LeaseExpired</code> before task or integration work. Identical immutable delivery replays share
+            one in-flight or recently completed integration result, preventing retry amplification while retaining
+            restart recovery. Endpoint and coordinator regressions pin both contracts. Attempt re-adoption remains
+            complementary: it preserves live pre-restart authority but cannot prevent a post-settlement integration
+            replay queue.
           </td>
         </tr>
       </tbody>
