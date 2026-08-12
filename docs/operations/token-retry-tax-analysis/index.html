@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token and retry tax | Decision dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 80ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td b { font-weight: 650; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 80ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } .wide { overflow-x: auto; } .wide table { min-width: 850px; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Decision dossier · Agent Studio · AGT-2652</p>
+  <h1>Token and retry tax, 11 to 12 August 2026</h1>
+  <p class="lede">The observed 68% to 95% weekly GPT quota rise was 11.1% useful first-run coding and 88.9% retry or aborted-run tax. Deterministic reviews consumed host time, but no GPT tokens.</p>
+  <div class="meta">
+    <span><b>Decision state:</b> decision pending, analysis decision ready</span>
+    <span><b>Quota anchors:</b> 23:52:46 CEST at 68% to 09:24:37 CEST at 95%</span>
+    <span><b>Evidence cutoff:</b> 12 August 2026, 10:00 CEST</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#decision">Decision</a></li>
+    <li><a href="#boundary">Accounting boundary</a></li>
+    <li><a href="#split">27-point split</a></li>
+    <li><a href="#units">Unit economics</a></li>
+    <li><a href="#reviews">Review journal</a></li>
+    <li><a href="#resume">Session continuation</a></li>
+    <li><a href="#fixes">Incident controls</a></li>
+    <li><a href="#recommendations">Recommendations</a></li>
+    <li><a href="#method">Method and limits</a></li>
+  </ul>
+</nav>
+
+<section id="decision" class="box accent">
+  <h4>Decision requested</h4>
+  <p><b>Approve a CAR requeue-continuation slice first.</b> Persist the captured Codex session id per attempt chain, resume it only when task identity, worktree, branch and provider match, and cap a mechanical resumed rebase round at 1.211 million tokens. On this night's workload the central counterfactual saves 19.8 weekly percentage points, with a prudent 17.6 to 19.8 point range.</p>
+  <p><b>Also finish the incident controls already in flight.</b> AGT-2650 is live as release <code>agt-2650b</code>. AGT-2646, AGT-2649 and AGT-2651 were still in auto-review at cutoff. Therefore a blanket claim that the incidents cannot recur is not yet justified.</p>
+</section>
+
+<h2 id="boundary"><span class="no">01</span>Accounting boundary</h2>
+<p>The operator's 27-point observation is reproducible, but its timestamps need one correction. The first Codex telemetry event reporting exactly 68% is <code>2026-08-11 21:52:46.417Z</code>, or 23:52:46 CEST. The first event reporting 95% is <code>2026-08-12 07:24:37.467Z</code>, or 09:24:37 CEST. Those two events are the exact boundary used below.</p>
+<div class="box warn">
+  <h4>The literal 22:00 local window was larger than 27 points</h4>
+  <p>The first available event after 22:00 CEST was already 63% at 22:22:57.759 CEST. The literal clock window therefore contains at least 32 observed points to 95%, not 27. This dossier answers the requested 68% to 95% question and retains the mismatch rather than silently shifting it.</p>
+</div>
+<p>Between the two anchors, 8,540 Codex <code>token_count</code> events reported 1,089,117,170 input tokens, of which 1,063,693,184 were cache reads, plus 2,822,481 output tokens. Total processed tokens were 1,091,939,651. TokenEconomy 0.3.2 prices the same usage at an API-list equivalent of <b>$743.640952</b>: $5.00 per million uncached input, $0.50 per million cache read and $30.00 per million output. This is a translation for comparison, not a subscription invoice and not the quota algorithm.</p>
+
+<h2 id="split"><span class="no">02</span>Where the 27 points went</h2>
+<figure>
+  <svg viewBox="0 0 960 250" role="img" aria-labelledby="quota-title quota-desc">
+    <title id="quota-title">Observed quota split from 68 to 95 percent</title>
+    <desc id="quota-desc">Three points were useful first-run coding, twenty-two points were conflict re-rounds, and two points were aborted-run overhead. Reviews used zero GPT points.</desc>
+    <text x="50" y="43" class="s-label">Observed weekly quota crossings</text>
+    <text x="50" y="67" class="s-sub">Every block is one whole percentage point first reported by a Codex token event.</text>
+    <rect x="50" y="95" width="95.6" height="62" rx="7" fill="var(--develop)"/>
+    <rect x="145.6" y="95" width="701.0" height="62" rx="0" fill="var(--salvage)"/>
+    <rect x="846.6" y="95" width="63.4" height="62" rx="7" fill="var(--warn)"/>
+    <text x="68" y="130" fill="white" font-size="14" font-weight="700">3</text>
+    <text x="474" y="130" fill="white" font-size="14" font-weight="700">22</text>
+    <text x="870" y="130" fill="white" font-size="14" font-weight="700">2</text>
+    <circle cx="60" cy="194" r="6" fill="var(--develop)"/><text x="74" y="199" class="s-sub">real coding 11.1%</text>
+    <circle cx="270" cy="194" r="6" fill="var(--salvage)"/><text x="284" y="199" class="s-sub">conflict re-round 81.5%</text>
+    <circle cx="540" cy="194" r="6" fill="var(--warn)"/><text x="554" y="199" class="s-sub">aborted/probe 7.4%</text>
+    <circle cx="760" cy="194" r="6" fill="var(--ink-3)"/><text x="774" y="199" class="s-sub">reviews 0.0%</text>
+  </svg>
+  <figcaption>The split is based on integer quota crossings. Concurrent calls and integer rounding prevent a defensible fractional attribution, so each point is assigned to the session whose response first reported it.</figcaption>
+</figure>
+
+<div class="wide"><table>
+  <thead><tr><th>Class</th><th>Work value</th><th class="num">Sessions</th><th class="num">Total tokens</th><th class="num">Uncached input</th><th class="num">Cache read</th><th class="num">Output</th><th class="num">API equivalent</th><th class="num">Quota points</th></tr></thead>
+  <tbody>
+    <tr><td><b>First-run coding</b></td><td>Real work</td><td class="num">13</td><td class="num">169,225,381</td><td class="num">3,642,261</td><td class="num">165,031,552</td><td class="num">551,568</td><td class="num">$117.274121</td><td class="num"><b>3</b></td></tr>
+    <tr><td><b>First-run reviews</b></td><td>Real work, deterministic shell</td><td class="num">88 distinct subjects; 0 Codex</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">$0</td><td class="num"><b>0</b></td></tr>
+    <tr><td><b>Review infrastructure reruns</b></td><td>Retry tax, host compute</td><td class="num">10 incident events; 0 Codex</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">$0</td><td class="num"><b>0</b></td></tr>
+    <tr><td><b>Conflict/rebase coding re-rounds</b></td><td>Retry tax</td><td class="num">61</td><td class="num">834,052,877</td><td class="num">19,454,278</td><td class="num">812,556,544</td><td class="num">2,042,055</td><td class="num">$564.811312</td><td class="num"><b>22</b></td></tr>
+    <tr><td><b>Aborted, duplicate and probe runs</b></td><td>Overhead</td><td class="num">7</td><td class="num">88,661,393</td><td class="num">2,327,447</td><td class="num">86,105,088</td><td class="num">228,858</td><td class="num">$61.555519</td><td class="num"><b>2</b></td></tr>
+    <tr><td><b>Total</b></td><td>11.1% real, 88.9% tax</td><td class="num">81</td><td class="num"><b>1,091,939,651</b></td><td class="num">25,423,986</td><td class="num">1,063,693,184</td><td class="num">2,822,481</td><td class="num"><b>$743.640952</b></td><td class="num"><b>27</b></td></tr>
+  </tbody>
+</table></div>
+
+<h3>Exact point reporters</h3>
+<p>First-run coding reported points 69 (<code>QS-86</code>), 71 (<code>QS-87</code>) and 72 (<code>QS-82</code>). Completed conflict re-rounds reported points 70, 73 through 77, and 79 through 94, with the exact task mapping retained in <code>docs/operations/token-retry-tax-analysis/evidence.json</code>. Aborted <code>AGT-2635</code> sessions reported points 78 and 95.</p>
+<p>The task server's current <code>task.json</code> records returned a null <code>tokenSummary</code> for the inspected nightly AGT and QS cards. TE-22 does retain a valid priced ledger. The nightly figures above are therefore reconstructed exactly from each Codex session's incremental <code>last_token_usage</code>, not copied from a missing card summary. All 81 per-session rows, including QS-81 through QS-89 and their requeue rounds, are retained in <code>coding-session-ledger.csv</code>. AGT-2642's separately authored round-2 addendum is real new-scope work. Two duplicate AGT-2649 implementations and one duplicate AGT-2650 implementation are overhead, not conflict rounds. A ledger-durability slice is necessary so this reconstruction is not required again.</p>
+
+<h2 id="units"><span class="no">03</span>Cost per unit</h2>
+<div class="wide"><table>
+  <thead><tr><th>Unit</th><th class="num">N</th><th class="num">Median total tokens</th><th class="num">Uncached input</th><th class="num">Cache read</th><th class="num">Output</th><th class="num">Median duration</th><th class="num">API equivalent</th></tr></thead>
+  <tbody>
+    <tr><td><b>xhigh coding card, first run</b><br>QS-81 through QS-89</td><td class="num">9</td><td class="num">11,653,720</td><td class="num">242,024</td><td class="num">11,371,264</td><td class="num">40,432</td><td class="num">998.556 s</td><td class="num">$8.108712</td></tr>
+    <tr><td><b>Review run</b><br>deterministic commands</td><td class="num">58 completed claim segments</td><td class="num"><b>0</b></td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">603.804 s</td><td class="num">$0</td></tr>
+    <tr><td><b>Cold rebase-only round</b><br>QS-81 through QS-89</td><td class="num">10</td><td class="num">12,112,130.5</td><td class="num">258,539.5</td><td class="num">11,772,672</td><td class="num">41,114.5</td><td class="num">1,258.814 s</td><td class="num">$8.636279</td></tr>
+    <tr><td><b>Resumed rebase target</b><br>engineering SLO</td><td class="num">pilot</td><td class="num">≤ 1,211,213</td><td class="num" colspan="3">≤ 10% of the cold-round envelope</td><td class="num">≤ 300 s</td><td class="num">≤ $0.863628 at Sol rates</td></tr>
+  </tbody>
+</table></div>
+<p>The cold rebase median was 3.9% more tokens and 26.1% longer than a first coding run. That is the opposite of the desired shape for a mechanical continuation. The 10% target is an explicit engineering SLO, not a claim that an untested resume path already achieves it.</p>
+
+<h2 id="reviews"><span class="no">04</span>Review journal and incident tax</h2>
+<p>The review daemon logged 95 claims across 88 distinct attempt ids and 88 distinct subject ids. It logged 61 finishes with exit 0, 36 with exit 2 and 4 with exit 3. These are wrapper finish records, not one-to-one claim outcomes: startup adoption also finishes attempts claimed before the window. Of 95 claim segments, 58 had a journal-correlatable terminal report by cutoff and 37 were censored or adopted. Median claim-to-terminal time was 603.8035 seconds, with p25 230.327 seconds and p75 3,273.638 seconds.</p>
+
+<figure>
+  <svg viewBox="0 0 960 315" role="img" aria-labelledby="incident-title incident-desc">
+    <title id="incident-title">Review incident timeline</title>
+    <desc id="incident-desc">Lease expiry storm, wedged worker kills and the bad release crash loop caused review reclaims but no GPT tokens.</desc>
+    <line x1="90" y1="155" x2="890" y2="155" class="s-flow"/>
+    <circle cx="220" cy="155" r="9" fill="var(--bad)"/>
+    <circle cx="480" cy="155" r="9" fill="var(--warn)"/>
+    <circle cx="760" cy="155" r="9" fill="var(--bad)"/>
+    <rect x="105" y="45" width="250" height="82" class="s-node"/>
+    <text x="125" y="72" class="s-label">02:42:39 to 03:10:12</text>
+    <text x="125" y="94" class="s-sub">1,905 LeaseExpired messages</text>
+    <text x="125" y="114" class="s-sub">2 same-subject reclaims · 0 GPT</text>
+    <rect x="365" y="182" width="255" height="82" class="s-node"/>
+    <text x="385" y="209" class="s-label">05:10:23</text>
+    <text x="385" y="231" class="s-sub">3 wedged-worker failures</text>
+    <text x="385" y="251" class="s-sub">1,167.153 command-s lost · 0 GPT</text>
+    <rect x="640" y="45" width="265" height="82" class="s-node"/>
+    <text x="660" y="72" class="s-label">08:41:02 to 09:09:52</text>
+    <text x="660" y="94" class="s-sub">160 starts · 318 missing-assembly lines</text>
+    <text x="660" y="114" class="s-sub">2 failures + 5 reclaims · 0 GPT</text>
+    <text x="90" y="296" class="s-tiny">Times are CEST. Lost seconds count unique attempts and exclude duplicate diagnostics.</text>
+  </svg>
+  <figcaption>Review retry tax is material host time and latency, but it is not part of the GPT quota loss. The coding service was also affected by deployments, which is why two aborted coding sessions do appear in the quota ledger.</figcaption>
+</figure>
+
+<div class="wide"><table>
+  <thead><tr><th>Incident</th><th>Exact review evidence</th><th>Review rerun tax</th><th>GPT tax</th></tr></thead>
+  <tbody>
+    <tr><td><b>LeaseExpired storm</b></td><td>1,905 messages from 02:42:39.973769 to 03:10:12.652483; two exact attempt/subject pairs reclaimed immediately after recovery.</td><td>2 reclaims; one reached a terminal report after 7,391.558 s and one remained censored in the claim-to-terminal ledger. The long value includes the wedge interval.</td><td class="num">0 points</td></tr>
+    <tr><td><b>05:10 worker kills</b></td><td><code>review_422…</code> 615.584 command-s; <code>review_a5a…</code> 551.569 command-s; <code>review_7aec…</code> 0 command-s.</td><td>3 unique failed attempts; 1,167.153 command-s lost. Duplicate a5a loss logging at 05:13 is counted once.</td><td class="num">0 points</td></tr>
+    <tr><td><b>08:40 to 09:10 crash loop</b></td><td>160 service starts and 318 lines naming missing <code>TaskServer.Contracts</code>; two failed attempts with 166.790 and 0 command-s; 5 old subject ids reclaimed among 6 post-recovery claims.</td><td>5 direct reclaims plus 2 failed attempts; startup reconcile scanned 21 persisted slots and purged all 21.</td><td class="num">0 review points; 1 coding-overhead crossing</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="resume"><span class="no">05</span>Session continuation and route choice</h2>
+<p>The host runs <b>codex-cli 0.144.1</b>. It supports <code>codex exec resume [SESSION_ID] [PROMPT]</code>, explicit session UUIDs, <code>--last</code>, stdin prompts and model overrides. The CAR request already carries a nullable <code>ResumeSessionId</code>. The runner uses it for one bounded recovery after a run exits without the required terminal sentinel. It does not carry the session into a later conflict/requeue generation. Nightly runner specs therefore had <code>resumeSessionId: null</code>, and every re-round opened a new rollout id.</p>
+
+<h3>Required CAR and task-state changes</h3>
+<ol>
+  <li>Persist the captured Codex session UUID on the fenced run attempt and expose it to the next attempt-chain generation.</li>
+  <li>Resume only when task key, provider, clean-context identity, repository, worktree path and branch lineage still match. A mismatch is a typed fresh-run decision.</li>
+  <li>Pass a compact requeue delta: current base SHA, conflict paths, new steer and verification plan. Do not resend the original full prompt as a new task.</li>
+  <li>Record <code>inputSessionId</code>, <code>capturedSessionId</code>, resume decision, rejection reason and per-generation token usage in the durable ledger.</li>
+  <li>Permit one resumed mechanical continuation. A semantic conflict, stale or missing session, provider change, or failed deterministic gate falls back to a policy-qualified fresh attempt.</li>
+</ol>
+
+<div class="box ok">
+  <h4>Nightly counterfactual</h4>
+  <p>Conflict rounds reported 22 quota crossings. A resumed-round SLO of 10% of the cold token envelope implies 2.2 points consumed and <b>19.8 points saved</b>. An 80% saving floor still saves 17.6 points. This range is the estimate to validate in a pilot, not a guaranteed property of the CLI.</p>
+</div>
+
+<h3>Model and thinking level</h3>
+<p>TE-22's delegation-economy rule supports bounded cheap execution, but the canonical model-routing policy controls the floor. A clean, mechanically provable rebase should be performed by the platform with no model. If an agent is needed and the diff remains trivial with deterministic verification, Luna/medium is the policy route, although its quality evidence is explicitly provisional. A standard reversible one-subsystem adjustment may use Terra/medium. Semantic conflicts must be re-scored: unclear bugs require at least Terra/medium, public or three-subsystem contracts require Sol/medium, and leases, fencing, distributed authority or credible data loss remain Sol/xhigh.</p>
+<p>At unchanged token volume, TokenEconomy prices Terra at 40% of Sol and Luna at 4% of Sol. Applying those price ratios only as a quota sensitivity gives 13.2 or 21.12 points saved from the 22 conflict points. Subscription quota buckets are not API dollars, so these are scenario bounds, not forecasts. Session continuation and model substitution overlap and must not be added.</p>
+
+<h2 id="fixes"><span class="no">06</span>Which incident controls remove which tax</h2>
+<div class="wide"><table>
+  <thead><tr><th>Control</th><th>Status at cutoff</th><th>Incident class removed</th><th>Share of 24-point GPT tax</th><th>Share of 10 direct review reclaims/kills</th></tr></thead>
+  <tbody>
+    <tr><td><b>AGT-2650</b><br>slot reconcile + worker watchdog</td><td><span class="pill done">live</span> <code>agt-2650b</code></td><td>Purges stale persisted slots; bounds dead-lease workers. Startup proof: 21 scanned, 21 purged.</td><td class="num">0 direct</td><td class="num">3/10, or 30%, for wedged workers</td></tr>
+    <tr><td><b>AGT-2646</b><br>attempt re-adoption</td><td><span class="pill queued">auto-review</span></td><td>Preserves active attempt authority through server restart. Covers the 2 LeaseExpired reclaims and the 5 crash-loop reclaims.</td><td class="num">0 direct</td><td class="num">7/10, or 70%</td></tr>
+    <tr><td><b>AGT-2649</b><br>config-helper PID race</td><td><span class="pill queued">auto-review</span></td><td>Prevents the false environment mismatch and avoidable service churn seen at 02:10. The temporal link to the first aborted AGT-2635 run is probable, not proven.</td><td class="num">1/24, or 4.2%, inferred</td><td class="num">trigger reduction, not additive</td></tr>
+    <tr><td><b>AGT-2651</b><br>deploy smoke + dependency closure</td><td><span class="pill queued">auto-review</span></td><td>Would reject the incomplete release before symlink flip, preventing the 08:40 crash loop, two later AGT-2635 aborts and five review reclaims.</td><td class="num">1/24, or 4.2%, observed crossing</td><td class="num">5/10, or 50%, overlaps AGT-2646</td></tr>
+    <tr><td><b>AGT-2648</b><br>wave-mode batch gate</td><td><span class="pill new">decision concept</span></td><td>Removes repeated full-suite pressure during exceptional waves. Reviews stay deterministic, so this is CPU and latency economy.</td><td class="num">0 direct</td><td class="num">exposure reduction, unmeasured</td></tr>
+  </tbody>
+</table></div>
+<p>The review percentages overlap because one control prevents the restart trigger while another preserves the same attempt if a restart still happens. They are not additive. The conflict-bounce tax, 22 of 24 retry points, requires the separate session-continuation or platform-rebase control.</p>
+
+<h2 id="recommendations"><span class="no">07</span>Decision-ready savings table</h2>
+<div class="wide"><table>
+  <thead><tr><th>Priority</th><th>Savings lever</th><th class="num">Estimated points/week</th><th>Implementation card</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td>P0</td><td><b>Resume the prior Codex session for a compatible conflict requeue</b>, with a 1.211M-token round ceiling and typed fallback.</td><td class="num"><b>17.6 to 19.8</b></td><td>New slice: CAR attempt-chain session continuation</td><td>Approve pilot on rebase-only rounds.</td></tr>
+    <tr><td>P0</td><td><b>Platform-owned clean rebase</b> with no model. Route only semantic conflicts back to a policy-qualified agent.</td><td class="num">up to 22.0, overlaps P0 above</td><td>New slice: deterministic rebase preflight</td><td>Approve design, do not sum with resume.</td></tr>
+    <tr><td>P0</td><td><b>Reject incomplete deploys before promotion.</b></td><td class="num">1.0 observed</td><td>AGT-2651</td><td>Finish review and ship.</td></tr>
+    <tr><td>P1</td><td><b>Wait for new MainPID before environment verification.</b></td><td class="num">1.0 inferred</td><td>AGT-2649</td><td>Finish review and ship.</td></tr>
+    <tr><td>P1</td><td><b>Re-adopt active attempts and terminate dead-lease workers.</b></td><td class="num">0 GPT; 10 review retries and 1,333.943 unique command-s exposed</td><td>AGT-2646 + AGT-2650</td><td>Keep AGT-2650 live; ship AGT-2646.</td></tr>
+    <tr><td>P1</td><td><b>Persist per-generation token ledgers</b> from rollout events into task history.</td><td class="num">0 direct</td><td>New slice: token-ledger durability</td><td>Approve for auditability.</td></tr>
+    <tr><td>P2</td><td><b>Wave-mode batch gate</b> for full suites.</td><td class="num">0 GPT direct</td><td>AGT-2648</td><td>Decide separately on CPU and queue latency.</td></tr>
+  </tbody>
+</table></div>
+<p>If this exact wave happens once per weekly quota window, the non-overlapping central saving is <b>21.8 points</b>: 19.8 from continuation, 1.0 from deploy smoke and 1.0 from the helper race. Because the helper attribution is inferred and the continuation target is unvalidated, use <b>18.6 points/week</b> as the planning floor: 17.6 continuation + 1.0 proven crash-loop crossing. Do not count model substitution or platform rebase on top.</p>
+
+<h2 id="method"><span class="no">08</span>Method, provenance and limits</h2>
+<ul>
+  <li><b>Token source:</b> all rollout JSONL under <code>/home/agent/.local/state/agent-studio/clean-context/codex/*/sessions/</code>. Incremental <code>last_token_usage</code> values were summed only after the 68% anchor and through the event first reporting 95%. The complete bounded coding ledger is <code>coding-session-ledger.csv</code>.</li>
+  <li><b>Card source:</b> current task records and prompts were read through the Task API for AGT, QS and TE cards. Prompt steer sections identify the conflict/rebase rounds. Nightly card <code>tokenSummary</code> fields were null, so rollout reconstruction is explicit.</li>
+  <li><b>Point attribution:</b> whole points follow the session first reporting each increase. Integer rate-limit telemetry cannot reveal fractional concurrent attribution.</li>
+  <li><b>Review source:</b> <code>agent-runner-review.service</code> journal lines and durable review specs/results. Reviews execute deterministic commands and produced no Codex session under <code>review-work</code>. The 58 completed claim-to-terminal segments are listed individually in <code>review-attempt-durations.csv</code>; the other 37 claims are explicitly censored at 10:00 CEST.</li>
+  <li><b>Cost source:</b> TokenEconomy NuGet 0.3.2, resolved on the host. Cached input is separated from uncached input before applying the historical price.</li>
+  <li><b>Reproducible snapshot:</b> exact totals, point reporters, unit medians and incident counts are retained in <code>docs/operations/token-retry-tax-analysis/evidence.json</code>.</li>
+</ul>
+<div class="box warn">
+  <h4>Decision condition</h4>
+  <p>Do not declare the recurrence closed until AGT-2646, AGT-2649 and AGT-2651 are live and a controlled restart/deploy smoke proves re-adoption, helper verification and dependency closure. AGT-2650b is the only named control verified live at this cutoff.</p>
+</div>
+
+</main>
+</body>
+</html>

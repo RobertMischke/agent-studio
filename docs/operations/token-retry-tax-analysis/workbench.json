@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "token-retry-tax-analysis",
+  "title": "Token and retry tax, 11 to 12 August 2026",
+  "summary": "Decision dossier reconciling the observed 68 to 95 percent GPT weekly-quota rise against Codex token events, coding rounds, deterministic reviews, infrastructure incidents, API-equivalent cost, and concrete savings controls.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-12T08:00:00Z",
+  "sourceTaskKeys": [
+    "AGT-2652"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2646",
+    "AGT-2648",
+    "AGT-2649",
+    "AGT-2650",
+    "AGT-2651",
+    "TE-22"
+  ],
+  "key": "AGT-2652"
+}
