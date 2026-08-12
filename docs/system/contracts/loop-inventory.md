@@ -122,6 +122,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet fired in production.
 - **Notes:** Iteration state is durable in `results/ui-iteration-NNN/` and `steer-pending.json`. Backend restarts do not reset the counter. The generic steer timeout explicitly ignores this human-review marker.
 
+### ui-task.visual-defect-auto-retry
+
+- **Kind:** Post-Guard
+- **Where:** [`backend/Features/Runner/VisualQa/VisualQaPolicy.cs`](../../../backend/Features/Runner/VisualQa/VisualQaPolicy.cs) and `ProjectRunner.HandleUiIterationCompletionAsync`
+- **Re-entry trigger:** The multimodal visual verdict for a gated AGT frontend delivery is `clear-defect` with one or more named visible defects.
+- **Budget:** `VisualQaPolicy.MaxAutomaticDefectRetries` (exactly 1 automatic visual-QA steer round per durable UI iteration evidence history).
+- **Action when budget exhausted:** Do not requeue again. Write the second verdict receipt and move the card to Human Review with all screenshots and named defects in the version 2 review marker. Capture or model unavailability also fails closed to this human hand-off without spending a blind retry.
+- **Breaker test:** [`backend.Tests/Architecture/VisualQaRetryBreakerTest.cs`](../../../backend.Tests/Architecture/VisualQaRetryBreakerTest.cs), plus [`backend.Tests/VisualQaPolicyTests.cs`](../../../backend.Tests/VisualQaPolicyTests.cs)
+- **Last fired:** 2026-08-12, AGT-2654 controlled before/after browser and multimodal probe.
+- **Notes:** The model only classifies pixels. Pure policy owns the lane-affecting action. Retry use is counted from `results/ui-iteration-NNN/visual-qa/round-RRR/verdict.json`, so process restart does not replenish it. The steer is appended through the existing continuation-note boundary before any Human Gate marker exists.
+
 ### clean-context.retention-sweep
 
 - **Kind:** Tick

@@ -64,10 +64,13 @@ pipeline view.
   canonical implementation log without changing decision content.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`,
   `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
-  `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
-  shared EvidenceGate-based routing, mandatory iteration result layout, and
-  bounded hand-off to Human Review. The durable Part 2 consumer shape is defined
-  in [the UI task pipeline contract](../contracts/ui-task-pipeline.md).
+  `backend/Features/Runner/UiIterationGate.cs`, plus
+  `backend/Features/Runner/VisualQa/`: the named UI iteration pipeline, shared
+  EvidenceGate-based routing, mandatory iteration result layout,
+  stable-equivalent Playwright capture, multimodal visible-defect verdict, one
+  durable automatic steer, and bounded hand-off to Human Review. The durable
+  Part 2 consumer shape is defined in
+  [the UI task pipeline contract](../contracts/ui-task-pipeline.md).
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.

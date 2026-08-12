@@ -51,15 +51,24 @@ public sealed class UiTaskPipelineTests : IDisposable
         var pipeline = PipelineCatalogue.UiIteration;
         var dossier = pipeline.Post.Single(step => step.Id == PipelineCatalogue.DossierMaintenanceStepId);
         var artifact = pipeline.Post.Single(step => step.Id == PipelineCatalogue.UiIterationArtifactStepId);
+        var capture = pipeline.Post.Single(step => step.Id == PipelineCatalogue.UiVisualCaptureStepId);
+        var verdict = pipeline.Post.Single(step => step.Id == PipelineCatalogue.UiVisualVerdictStepId);
         var review = pipeline.Post.Single(step => step.Id == PipelineCatalogue.UiHumanReviewGateStepId);
 
         Assert.Equal(PipelineCatalogue.UiPipelineId, pipeline.Id);
+        Assert.Equal(2, pipeline.Version);
         Assert.Contains(PipelineCatalogue.CoreAgentRunStepId, dossier.DependsOn);
         Assert.Contains(PipelineCatalogue.DossierMaintenanceStepId, artifact.DependsOn);
         Assert.False(PipelineStepConfigResolver.CanDisable(dossier));
-        Assert.Contains(PipelineCatalogue.UiIterationArtifactStepId, review.DependsOn);
+        Assert.Contains(PipelineCatalogue.UiIterationArtifactStepId, capture.DependsOn);
+        Assert.Contains(PipelineCatalogue.UiVisualCaptureStepId, verdict.DependsOn);
+        Assert.Contains(PipelineCatalogue.UiVisualVerdictStepId, review.DependsOn);
         Assert.False(PipelineStepConfigResolver.CanDisable(artifact));
+        Assert.False(PipelineStepConfigResolver.CanDisable(capture));
+        Assert.False(PipelineStepConfigResolver.CanDisable(verdict));
         Assert.False(PipelineStepConfigResolver.CanDisable(review));
+        Assert.Equal(PipelineStepModelDefaults.SupportModel,
+            PipelineStepModelDefaults.RuntimeDefaultFor(verdict));
     }
 
     [Fact]
@@ -167,7 +176,7 @@ public sealed class UiTaskPipelineTests : IDisposable
         Assert.Equal(2, marker.UiIterationReview.Iteration);
 
         using var json = JsonDocument.Parse(File.ReadAllText(SteerPendingMarker.PathFor(_folder)));
-        Assert.Equal(1, json.RootElement.GetProperty("uiIterationReview").GetProperty("contractVersion").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("uiIterationReview").GetProperty("contractVersion").GetInt32());
     }
 
     private TaskInfo Task(string title, string taskType, IReadOnlyList<string> tags) => new()

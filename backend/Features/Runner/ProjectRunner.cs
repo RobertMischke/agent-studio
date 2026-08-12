@@ -106,6 +106,7 @@ public class ProjectRunner
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly PromptEnrichmentService? _promptEnrichment;
     private readonly DossierMaintenanceService? _dossierMaintenance;
+    private readonly VisualQaService? _visualQa;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -451,7 +452,8 @@ public class ProjectRunner
         CliQuotaWaitPolicyService? quotaWaitPolicy = null,
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
         PromptEnrichmentService? promptEnrichment = null,
-        DossierMaintenanceService? dossierMaintenance = null)
+        DossierMaintenanceService? dossierMaintenance = null,
+        VisualQaService? visualQa = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -497,6 +499,7 @@ public class ProjectRunner
         _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
         _promptEnrichment = promptEnrichment;
         _dossierMaintenance = dossierMaintenance;
+        _visualQa = visualQa;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -5957,7 +5960,7 @@ public class ProjectRunner
                 && snapRun is { IsUiIterationPipeline: true })
             {
                 await HandleUiIterationCompletionAsync(
-                    activeInfo, jobId, execution,
+                    activeInfo, snapRun, jobId, execution,
                     snapRun.UiIteration, snapRun.UiMaxIterations,
                     capturedAttempt);
                 return;
@@ -6227,6 +6230,7 @@ public class ProjectRunner
 
     private async Task HandleUiIterationCompletionAsync(
         TaskInfo info,
+        ActiveRun run,
         string jobId,
         CliExecution execution,
         int iteration,
@@ -6297,19 +6301,100 @@ public class ProjectRunner
             return;
         }
 
+        var visualQa = _visualQa is null
+            ? VisualQaResult.NotApplicable
+            : await _visualQa.RunAsync(new VisualQaRequest(
+                info,
+                ResolveVisualQaRepositoryRoot(run),
+                ResolveVisualQaChangedFiles(run),
+                iteration), CancellationToken.None);
+        var visualStartedAt = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.UiVisualCaptureStepId,
+            Kind = StepKind.Tool,
+            Status = !visualQa.Applicable || visualQa.ScreenshotPaths.Count > 0
+                ? PipelineStepStatus.Passed
+                : PipelineStepStatus.Failed,
+            StartedAt = visualStartedAt,
+            CompletedAt = DateTime.UtcNow,
+            Verdict = !visualQa.Applicable
+                ? "not-applicable"
+                : visualQa.ScreenshotPaths.Count > 0 ? "screenshots-captured" : "capture-failed",
+            VerdictSummary = visualQa.Applicable
+                ? $"Captured {visualQa.ScreenshotPaths.Count} affected view(s); manifest: {visualQa.CaptureManifestPath}."
+                : "Visual QA was not applicable to this card.",
+        });
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.UiVisualVerdictStepId,
+            Kind = StepKind.Orchestrator,
+            Status = !visualQa.Applicable || visualQa.Verdict.Status == VisualQaVerdictStatus.Acceptable
+                ? PipelineStepStatus.Passed
+                : PipelineStepStatus.Failed,
+            StartedAt = visualStartedAt,
+            CompletedAt = DateTime.UtcNow,
+            Model = visualQa.Applicable ? visualQa.Model : null,
+            ThinkingLevel = visualQa.Applicable ? visualQa.ThinkingLevel : null,
+            Verdict = visualQa.Verdict.Status switch
+            {
+                VisualQaVerdictStatus.Acceptable => visualQa.Applicable ? "acceptable" : "not-applicable",
+                VisualQaVerdictStatus.ClearDefect => "clear-defect",
+                _ => "unavailable",
+            },
+            VerdictSummary = visualQa.Verdict.Summary,
+            Reason = visualQa.Decision.Action == VisualQaAction.ProceedToHumanReview
+                ? null
+                : visualQa.Decision.Reason,
+        });
+
+        if (visualQa.Decision.Action == VisualQaAction.RetryWithSteer)
+        {
+            var steer = visualQa.Decision.SteerPrompt!;
+            _mutations.AppendContinuationNote(jobId, steer, info.WatchPath);
+            _chatLog.Append(info, OrchestratorMessageKind.Reissue,
+                $"[visual-qa] {visualQa.Decision.Reason} Evidence: {string.Join(", ", visualQa.ScreenshotPaths)}");
+            ReleaseRun(jobId);
+            NotifyStatus();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RunCliAsync(jobId, RunIntent.UserContinue, steer,
+                        evidenceRetryAttempt + 1, ContinueModes.Continue, CancellationToken.None);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception, "Automatic visual-QA retry failed for {JobId}", jobId);
+                }
+            });
+            return;
+        }
+
         var contract = new UiIterationReviewContract
         {
             Iteration = iteration,
             MaxIterations = maxIterations,
             CapReached = decision.CapReached,
-            ArtifactPaths = decision.ArtifactPaths,
+            ArtifactPaths = decision.ArtifactPaths.Concat(visualQa.EvidenceScreenshotPaths).Distinct().ToArray(),
             ChangeDescriptionPath = decision.ChangeDescriptionPath!,
+            VisualQaStatus = visualQa.Applicable ? visualQa.Verdict.Status switch
+            {
+                VisualQaVerdictStatus.Acceptable => "acceptable",
+                VisualQaVerdictStatus.ClearDefect => "clear-defect",
+                _ => "unavailable",
+            } : "not-applicable",
+            VisualQaVerdictPath = visualQa.VerdictPath,
+            VisualQaDefects = visualQa.Verdict.Defects,
+            VisualQaAutoRetryUsed = visualQa.PriorAutomaticRetries > 0,
         };
         SteerPendingMarker.Write(info.FolderPath, new SteerPendingRecord
         {
             WaitStartedAt = DateTime.UtcNow,
             Kind = SteerPendingKinds.UiIterationReview,
-            Question = decision.CapReached
+            Question = visualQa.Decision.Action == VisualQaAction.EscalateToHumanReview
+                ? $"Visual QA requires human review: {visualQa.Decision.Reason} Inspect the attached screenshots before deciding."
+                : decision.CapReached
                 ? "Final configured UI iteration. Finish this task or escalate; another feedback iteration is not allowed."
                 : "Review the visual result and choose finish or provide feedback for the next iteration.",
             CliType = info.CliType,
@@ -6352,6 +6437,26 @@ public class ProjectRunner
                 iteration, maxIterations, jobId, move.Status, move.Message);
         }
     }
+
+    private IReadOnlyList<string>? ResolveVisualQaChangedFiles(ActiveRun run)
+    {
+        var root = ResolveVisualQaRepositoryRoot(run);
+        if (string.IsNullOrWhiteSpace(root)
+            || string.IsNullOrWhiteSpace(run.WorkerHeadShaBefore))
+            return null;
+        var after = _git.ReadHeadShaAt(root);
+        if (string.IsNullOrWhiteSpace(after)) return null;
+        var files = _git.GetFilesChangedInRangeAtRoot(root, run.WorkerHeadShaBefore, after)
+            .Select(change => change.Path.Replace('\\', '/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return files.Length == 0 ? null : files;
+    }
+
+    private string ResolveVisualQaRepositoryRoot(ActiveRun run)
+        => new[] { run.WorktreePath, Entry.RootPath, run.WorkingDirectory }
+            .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path))
+           ?? string.Empty;
 
     /// <summary>
     /// Drops the on-disk pickup lock we acquired in <see cref="RunCliAsync"/>

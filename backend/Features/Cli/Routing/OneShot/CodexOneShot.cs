@@ -41,13 +41,15 @@ public sealed class CodexOneShot : ICliOneShot
         var requestedAt = DateTime.UtcNow;
         var timeout = request.Timeout ?? DefaultTimeout;
         var executable = GenericCliExecutionService.ResolveExecutable(_configuration["CodexCli:Path"] ?? "codex");
-        var psi = BuildStartInfo(executable, request);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(timeout);
         Process? process = null;
+        string? imageDirectory = null;
         try
         {
+            var imagePaths = MaterializeInlineImages(request.InlineImages, out imageDirectory);
+            var psi = BuildStartInfo(executable, request, imagePaths);
             process = Process.Start(psi);
             if (process == null)
                 return Record(request, CliOneShotResult.SpawnFailure("Process.Start returned null", requestedAt, DateTime.UtcNow));
@@ -99,10 +101,14 @@ public sealed class CodexOneShot : ICliOneShot
         finally
         {
             process?.Dispose();
+            TryDeleteImageDirectory(imageDirectory);
         }
     }
 
-    internal static ProcessStartInfo BuildStartInfo(string executable, CliOneShotRequest request)
+    internal static ProcessStartInfo BuildStartInfo(
+        string executable,
+        CliOneShotRequest request,
+        IReadOnlyList<string>? imagePaths = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -137,8 +143,48 @@ public sealed class CodexOneShot : ICliOneShot
         {
             foreach (var arg in request.ExtraArgs) psi.ArgumentList.Add(arg);
         }
+        foreach (var imagePath in imagePaths ?? [])
+        {
+            psi.ArgumentList.Add("--image");
+            psi.ArgumentList.Add(imagePath);
+        }
         psi.ArgumentList.Add("-");
         return psi;
+    }
+
+    private static IReadOnlyList<string> MaterializeInlineImages(
+        IReadOnlyList<CliOneShotImage>? images,
+        out string? directory)
+    {
+        directory = null;
+        if (images is not { Count: > 0 }) return [];
+
+        directory = Path.Combine(Path.GetTempPath(), $"agent-studio-codex-images-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var paths = new List<string>();
+        foreach (var image in images.Take(8))
+        {
+            var bytes = Convert.FromBase64String(image.Base64);
+            if (bytes.Length == 0 || bytes.Length > 10 * 1024 * 1024) continue;
+            var extension = image.MediaType.ToLowerInvariant() switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/webp" => ".webp",
+                "image/gif" => ".gif",
+                _ => ".png",
+            };
+            var path = Path.Combine(directory, $"image-{paths.Count + 1:D2}{extension}");
+            File.WriteAllBytes(path, bytes);
+            paths.Add(path);
+        }
+        return paths;
+    }
+
+    private static void TryDeleteImageDirectory(string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        try { Directory.Delete(directory, recursive: true); }
+        catch (Exception exception) { SilentCatch.Note(exception, "CodexOneShot: temporary image cleanup"); }
     }
 
     internal static CliOneShotResult ParseOutput(
