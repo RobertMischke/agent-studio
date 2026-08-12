@@ -26,7 +26,9 @@ The orchestrator receives a current, read-only application digest with:
 The digest follows the multichat context key. `global` includes all registered
 projects, `project:<project>` includes only that project, and
 `task:<project>/<task>` adds a focused task row to the same project-scoped
-facts. Project and task contexts must never leak facts from other projects.
+facts, and `dossier:<project>/<dossier>` preserves the same project isolation
+for a Dossier transcript. Scoped contexts must never leak facts from other
+projects, and digest facts never become cross-context transcript continuity.
 
 The representation is bounded and model-oriented rather than a raw API dump.
 Noisy event sections have fixed row caps, long text is truncated, raw quota
@@ -59,10 +61,11 @@ user turn. It records stable ids, revisions or hashes, freshness, inclusion and
 omission state, character and token estimates, and budget. Resolved source
 bodies do not enter the receipt.
 
-Project and task transcript authority is the central Task Server. Every project
-context is permanent. Opening task Chat materializes a managed task context;
-archive hides it without deleting its turns. Chat History reads the central
-current-context list and compact summaries. Machine-local
+Project, task, and Dossier transcript authority is the central Task Server.
+Every project context is permanent. Opening task or Dossier Chat materializes a
+managed context; task archive and Dossier archived/documented states hide it
+without deleting its turns. Chat History reads the central current-context list
+and compact summaries. Machine-local
 `.orchestrator/orchestrator-chat.jsonl` is an idempotent migration source only.
 The task detail Activity tab remains the unchanged task-agent execution surface.
 

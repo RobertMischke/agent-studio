@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -16,6 +17,8 @@ test.use({ serviceWorkers: 'block' });
  *      the live-run pill with the short model name and a ticking duration
  *      even without opening the task detail (board-scope run resolution
  *      via `App.orchSideSheetActiveRun`).
+ *   3. A Dossier route receives an isolated first-class transcript, resumes
+ *      it on return, and never renders the project monitoring transcript.
  *
  * The task-scope rendering (task key + title + lane pill) and the elapsed
  * formatter are covered exhaustively by the component unit spec; this E2E
@@ -276,12 +279,98 @@ async function stubWorkspace(
   return unexpectedRequests;
 }
 
-async function stubLongWorkbench(page: Page): Promise<string[]> {
+interface DossierChatFixtureState {
+  resumed: boolean;
+}
+
+async function stubLongWorkbench(
+  page: Page,
+  chatState: DossierChatFixtureState = { resumed: false },
+): Promise<string[]> {
   const unexpectedRequests = await stubWorkspace(page, {
     withRunningTask: false,
     project: LONG_CONTEXT_PROJECT,
   });
   const encodedProject = encodeURIComponent(LONG_CONTEXT_PROJECT);
+
+  await page.route(/\/api\/orchestrator\/sessions(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {
+      sessions: [{
+        contextKey: `project:${LONG_CONTEXT_PROJECT}`,
+        kind: 'project',
+        projectId: LONG_CONTEXT_PROJECT,
+        taskKey: null,
+        updatedAt: '2026-08-10T08:00:00Z',
+        model: null,
+        cumulativeInputTokens: 0,
+        cumulativeOutputTokens: 0,
+        cumulativeCacheReadTokens: 0,
+        cumulativeCacheCreationTokens: 0,
+        runtimeStatus: 'idle',
+        queuePosition: 0,
+        summary: 'Project coordination chat',
+      }, {
+        contextKey: `dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`,
+        kind: 'dossier',
+        projectId: LONG_CONTEXT_PROJECT,
+        taskKey: null,
+        dossierId: LONG_CONTEXT_WORKBENCH,
+        dossierKey: 'AOW-W1',
+        dossierTitle: LONG_CONTEXT_TITLE,
+        dossierState: 'decision-pending',
+        updatedAt: '2026-08-10T08:00:00Z',
+        model: null,
+        cumulativeInputTokens: 0,
+        cumulativeOutputTokens: 0,
+        cumulativeCacheReadTokens: 0,
+        cumulativeCacheCreationTokens: 0,
+        runtimeStatus: 'idle',
+        queuePosition: 0,
+        summary: 'Dossier-specific discussion',
+      }],
+    }, unexpectedRequests);
+  });
+  await page.route(
+    new RegExp(`/api/orchestrator/context/dossier:${encodedProject}/${LONG_CONTEXT_WORKBENCH}$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`,
+        capturedAt: '2026-08-10T08:00:00Z',
+        digest: 'Dossier: decision-pending',
+        sources: [],
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/runner/dossier:${encodedProject}/${LONG_CONTEXT_WORKBENCH}/orchestrator-chat$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`,
+        project: LONG_CONTEXT_PROJECT,
+        turns: chatState.resumed
+          ? [{
+              id: 'dossier-turn', ts: '2026-08-10T09:00:00Z', role: 'user',
+              text: 'Continue the Dossier-specific discussion.',
+            }]
+          : [],
+        executionContext: null,
+      }, unexpectedRequests);
+    },
+  );
+  await page.route(
+    new RegExp(`/api/runner/project:${encodedProject}/orchestrator-chat$`),
+    async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `project:${LONG_CONTEXT_PROJECT}`,
+        project: LONG_CONTEXT_PROJECT,
+        turns: [{
+          id: 'project-turn', ts: '2026-08-10T08:30:00Z', role: 'orchestrator',
+          text: 'Global board monitoring status blurb.',
+        }],
+        executionContext: null,
+      }, unexpectedRequests);
+    },
+  );
 
   await page.route(/\/api\/workbenches(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, {
@@ -467,7 +556,7 @@ test.describe('Orchestrator context header · where am I', () => {
 
     const header = page.getByTestId('orch-context-header');
     await expect(header).toBeVisible();
-    await expect(header).toHaveAttribute('data-scope', 'board');
+    await expect(header).toHaveAttribute('data-scope', 'project');
     await expect(page.getByTestId('orch-context-project')).toContainText(PROJECT);
     await expect(page.getByTestId('orch-context-board')).toHaveText('Board');
     // Nothing running -> no live-run pill.
@@ -547,7 +636,7 @@ test.describe('Orchestrator context header · where am I', () => {
     { name: 'narrow light', width: 390, height: 844, theme: 'light' as const },
     { name: 'narrow dark', width: 390, height: 844, theme: 'dark' as const },
   ]) {
-    test(`keeps the Dossier context chip row compact in ${variant.name}`, async ({ page }) => {
+    test(`keeps the first-class Dossier chat identity compact in ${variant.name}`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: variant.height });
       await seedActiveTab(page, {
         kind: 'board',
@@ -573,69 +662,103 @@ test.describe('Orchestrator context header · where am I', () => {
         await showSideSheet(page, false);
       }
 
-      const draft = page.getByTestId('orch-context-draft');
-      const chip = page.getByTestId('orch-current-tab-chip');
-      const chipLabel = page.getByTestId('orch-current-tab-label');
-      const estimate = page.getByTestId('orch-context-estimate');
-      await expect(draft).toBeVisible();
-      await expect(chip).toHaveAttribute('data-context-type', 'Dossier');
-      await expect(page.getByTestId('orch-current-tab-type-icon')).toBeVisible();
-      await expect(chipLabel).toHaveText('AOW-W1');
-      await expect(chip).not.toContainText(LONG_CONTEXT_TITLE);
-      await expect(estimate).toHaveText('~1.6k');
-      await expect(estimate).not.toContainText('resolved when you send');
+      await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Dossier');
+      await expect(page.getByTestId('orch-panel-context-name')).toHaveText('AOW-W1');
+      await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Dossier');
+      await expect(page.getByTestId('chat-composer-context-detail')).toHaveText(LONG_CONTEXT_TITLE);
 
-      const layout = await draft.evaluate((element) => {
-        const rowItems = [
-          element.querySelector<HTMLElement>('[data-testid="orch-current-tab-chip"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-add-context"]')!,
-          element.querySelector<HTMLElement>('[data-testid="orch-context-estimate"]')!,
-        ];
-        const label = element.querySelector<HTMLElement>('[data-testid="orch-current-tab-label"]')!;
+      const layout = await page.getByTestId('orch-side-sheet').evaluate((element) => {
+        const panelHeader = element.querySelector<HTMLElement>('[data-testid="orch-panel-header"]')!;
         return {
-          fits: element.scrollWidth <= element.clientWidth + 1,
-          rowCount: new Set(rowItems.map(item => {
-            const box = item.getBoundingClientRect();
-            return Math.round(box.top + box.height / 2);
-          })).size,
-          chipWhiteSpace: getComputedStyle(rowItems[0]).whiteSpace,
-          labelOverflow: getComputedStyle(label).textOverflow,
+          sheetFits: element.scrollWidth <= element.clientWidth + 1,
+          headerFits: panelHeader.scrollWidth <= panelHeader.clientWidth + 1,
         };
       });
-      expect(layout).toEqual({
-        fits: true,
-        rowCount: 1,
-        chipWhiteSpace: 'nowrap',
-        labelOverflow: 'ellipsis',
-      });
+      expect(layout).toEqual({ sheetFits: true, headerFits: true });
 
       await page.mouse.move(1, 1);
       await page.getByTestId('orch-side-sheet').screenshot({
         path: resolve(
           RESULTS,
-          `orchestrator-context-chip--after--${variant.name.replace(' ', '-')}--mocked.png`,
+          `orchestrator-dossier-chat--${variant.name.replace(' ', '-')}--mocked.png`,
         ),
       });
 
-      await chip.hover();
-      await expect(page.locator('.app-tooltip-overlay')).toContainText(LONG_CONTEXT_TITLE);
-      await expect(page.locator('.app-tooltip-overlay')).toContainText('Current tab · Dossier');
-
-      await page.mouse.move(1, 1);
-      await expect(page.locator('.app-tooltip-overlay')).toHaveCount(0);
-      await estimate.hover();
-      await expect(page.locator('.app-tooltip-overlay'))
-        .toHaveText('1 source · about 1,600 tokens · resolved when you send');
-      await page.getByTestId('orch-side-sheet').screenshot({
-        path: resolve(
-          RESULTS,
-          `orchestrator-context-chip-meta-tooltip--after--${variant.name.replace(' ', '-')}--mocked.png`,
-        ),
-      });
+      await page.getByTestId('orch-context-badge').click();
+      await expect(page.getByTestId('orch-context-send-toggle'))
+        .toHaveText('Dossier context always included');
+      await expect(page.getByTestId('orch-context-send-toggle')).toBeDisabled();
 
       expect(unexpectedRequests).toEqual([]);
     });
   }
+
+  test('keeps Dossier history isolated, resumes it, and restores the project chat by route', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await seedActiveTab(page, {
+      kind: 'board',
+      projectName: LONG_CONTEXT_PROJECT,
+    }, `board:${LONG_CONTEXT_PROJECT}`, 'light');
+    const chatState: DossierChatFixtureState = { resumed: false };
+    const unexpectedRequests = await stubLongWorkbench(page, chatState);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const workbenchSection = page.getByTestId(
+      `studio-explorer-project-workbenches-${LONG_CONTEXT_PROJECT}`,
+    );
+    const workbench = page.getByTestId(
+      `studio-explorer-workbench-${LONG_CONTEXT_PROJECT}-${LONG_CONTEXT_WORKBENCH}`,
+    );
+    if (!await workbench.isVisible()) await workbenchSection.click();
+    await workbench.click();
+    if (!await page.locator('app-orchestrator-side-sheet.is-open').count()) {
+      await showSideSheet(page, false);
+    }
+
+    await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Dossier');
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText('AOW-W1');
+    await expect(page.getByTestId('orchestrator-conversation'))
+      .not.toContainText('Global board monitoring status blurb.');
+    await expect(page.getByTestId('orchestrator-conversation'))
+      .not.toContainText('Continue the Dossier-specific discussion.');
+    await expect(page.getByTestId('orchestrator-conversation-empty'))
+      .toHaveText('No conversation yet. Start this Dossier chat here.');
+
+    await page.getByTestId('orch-context-badge').click();
+    const menu = page.getByTestId('orch-context-menu');
+    await expect(menu.getByRole('heading', { name: 'Project', exact: true })).toBeVisible();
+    await expect(menu.getByRole('heading', { name: 'Dossiers', exact: true })).toBeVisible();
+    const dossierRow = page.getByTestId(
+      `chat-switcher-row-dossier:${LONG_CONTEXT_PROJECT}/${LONG_CONTEXT_WORKBENCH}`,
+    );
+    await expect(dossierRow).toHaveAttribute('aria-current', 'true');
+    await expect(dossierRow).toContainText('AOW-W1');
+    await page.getByTestId('orch-context-badge').click();
+    await page.getByTestId('orch-side-sheet').screenshot({
+      path: resolve(RESULTS, 'dossier-chat-fresh-isolated--light--mocked.png'),
+    });
+
+    await page.getByTestId(`studio-explorer-project-board-${LONG_CONTEXT_PROJECT}`).click();
+    await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Project');
+    await expect(page.getByTestId('orch-panel-context-name')).toHaveText(LONG_CONTEXT_PROJECT);
+    await expect(page.getByTestId('orchestrator-conversation'))
+      .toContainText('Global board monitoring status blurb.');
+
+    chatState.resumed = true;
+    await workbench.click();
+    await expect(page.getByTestId('orch-panel-context-type')).toHaveText('Dossier');
+    await expect(page.getByTestId('orchestrator-conversation'))
+      .toContainText('Continue the Dossier-specific discussion.');
+    await expect(page.getByTestId('orchestrator-conversation'))
+      .not.toContainText('Global board monitoring status blurb.');
+    await setTheme(page, 'dark');
+    await page.getByTestId('orch-side-sheet').screenshot({
+      path: resolve(RESULTS, 'dossier-chat-resumed-isolated--dark--mocked.png'),
+    });
+
+    expect(unexpectedRequests).toEqual([]);
+  });
   for (const variant of [
     { name: 'wide-light', width: 1440, panelWidth: 640, theme: 'light' as const },
     { name: 'wide-dark', width: 1440, panelWidth: 640, theme: 'dark' as const },

@@ -436,10 +436,12 @@ unseen again, and renders missing reviewed artifacts as no longer actionable.
   quota or installation detection failure. Do not replace it with a
   routing-only badge, reduced host list, or Orchestrator-only picker.
 - Chat History is the workspace-level projection of the central Task Server
-  context store. It lists permanent project contexts and non-archived task
-  contexts with the store-owned short summary and latest activity. Opening a
-  row selects that stable context in Orchestrator Chat. The view owns no second
-  transcript, summary, or visibility state and refreshes from TaskHub hints.
+  context store. It lists permanent project contexts, non-archived task
+  contexts, and Dossier contexts that are neither archived nor documented,
+  grouped by type with the store-owned short summary and latest activity.
+  Opening a row selects that stable context in Orchestrator Chat. The view owns
+  no second transcript, summary, or visibility state and refreshes from TaskHub
+  hints.
 - Project Overview remains operator-first. Do not add watch paths, repository
   paths, working directories, CLI health, clean-context controls, or session
   administration back to the Overview; those facts belong to Project Settings.

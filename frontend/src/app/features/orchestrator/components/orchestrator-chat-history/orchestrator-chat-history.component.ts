@@ -12,6 +12,7 @@ import { StudioIconComponent } from '../../../../components/studio-icon/studio-i
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 import { TaskService } from '../../../../services/task.service';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 /**
  * Workspace-wide projection of the Task Server context store. The component
@@ -20,7 +21,7 @@ import type { OrchestratorContextSession } from '../../models/orchestrator.model
 @Component({
   selector: 'app-orchestrator-chat-history',
   standalone: true,
-  imports: [StudioIconComponent],
+  imports: [StudioIconComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-chat-history.component.html',
   styleUrl: './orchestrator-chat-history.component.scss',
@@ -39,6 +40,9 @@ export class OrchestratorChatHistoryComponent {
     .sort((left, right) => left.projectId!.localeCompare(right.projectId!)));
   readonly taskContexts = computed(() => this.contexts()
     .filter(context => context.kind === 'task')
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  readonly dossierContexts = computed(() => this.contexts()
+    .filter(context => context.kind === 'dossier')
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
 
   private requestVersion = 0;
@@ -59,13 +63,16 @@ export class OrchestratorChatHistoryComponent {
   }
 
   contextTitle(context: OrchestratorContextSession): string {
-    return context.kind === 'task'
-      ? context.taskKey ?? context.contextKey
-      : context.projectId ?? context.contextKey;
+    if (context.kind === 'task') return context.taskKey ?? context.contextKey;
+    if (context.kind === 'dossier')
+      return context.dossierKey ?? context.dossierTitle ?? context.dossierId ?? context.contextKey;
+    return context.projectId ?? context.contextKey;
   }
 
   contextKindLabel(context: OrchestratorContextSession): string {
-    return context.kind === 'task' ? 'Task chat' : 'Project chat';
+    if (context.kind === 'task') return 'Task chat';
+    if (context.kind === 'dossier') return 'Dossier chat';
+    return 'Project chat';
   }
 
   activityLabel(value: string): string {

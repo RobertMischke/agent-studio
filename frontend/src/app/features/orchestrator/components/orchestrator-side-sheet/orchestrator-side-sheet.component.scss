@@ -246,6 +246,14 @@
   min-height: 0;
 }
 
+.sheet__conversation-empty {
+  padding: var(--studio-spacing-3);
+  border: 1px dashed var(--studio-border-strong);
+  border-radius: 8px;
+  color: var(--studio-fg-dim);
+  font-size: 12.5px;
+}
+
 :host ::ng-deep .sheet__conversation .conv {
   box-sizing: border-box;
   height: 100%;

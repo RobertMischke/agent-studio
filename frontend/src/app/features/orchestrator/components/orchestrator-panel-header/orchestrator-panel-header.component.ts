@@ -3,11 +3,7 @@ import {
   StudioIconComponent,
   type StudioIconName,
 } from '../../../../components/studio-icon/studio-icon.component';
-import {
-  pageTypeIcon,
-  pageTypeLabel,
-  type PageContext,
-} from '../../../../models/page-context.model';
+import type { PageContext } from '../../../../models/page-context.model';
 import type { ChatExecutionContext } from '../../models/orchestrator.model';
 
 interface PanelContextIdentity {
@@ -29,6 +25,8 @@ export class OrchestratorPanelHeaderComponent {
   readonly taskKey = input<string | null>(null);
   readonly taskTitle = input<string | null>(null);
   readonly pageContext = input<PageContext | null>(null);
+  readonly dossierKey = input<string | null>(null);
+  readonly dossierTitle = input<string | null>(null);
   readonly contextKey = input<string | null>(null);
   readonly executionContext = input<ChatExecutionContext | null>(null);
   readonly contextCount = input(0);
@@ -37,18 +35,17 @@ export class OrchestratorPanelHeaderComponent {
   readonly chatsToggle = output<void>();
 
   readonly identity = computed<PanelContextIdentity>(() => {
-    const page = this.pageContext();
     const project = this.project();
-    if (page && page.projectName === project) {
-      return {
-        icon: pageTypeIcon(page.pageType),
-        type: pageTypeLabel(page.pageType),
-        name: page.title,
-      };
-    }
     if (this.taskKey()) {
       const taskName = [this.taskKey(), this.taskTitle()].filter(Boolean).join(' · ');
       return { icon: 'code', type: 'Task', name: taskName };
+    }
+    if (this.dossierKey() || this.dossierTitle()) {
+      return {
+        icon: 'eye',
+        type: 'Dossier',
+        name: this.dossierKey() ?? this.dossierTitle() ?? 'Current Dossier',
+      };
     }
     if (this.contextKey() === 'global')
       return { icon: 'bot', type: 'Global', name: 'All projects' };

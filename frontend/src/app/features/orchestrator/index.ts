@@ -48,6 +48,7 @@ export { contextSourceId } from './models/orchestrator-context-source.model';
 export { buildChatNavigationContext } from './chat-navigation-context';
 export { buildOrchestratorContextEnvelope } from './orchestrator-context-envelope';
 export { buildOrchestratorConversationEvents } from './components/orchestrator-side-sheet/orchestrator-side-sheet.util';
+export { parseOrchestratorContextKey } from './components/orchestrator-side-sheet/orchestrator-context-key.util';
 export {
   buildContextChipPresentation,
   buildComposerLocationContext,

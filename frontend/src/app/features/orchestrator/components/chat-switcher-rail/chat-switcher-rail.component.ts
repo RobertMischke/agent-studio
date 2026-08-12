@@ -30,7 +30,6 @@ export class ChatSwitcherRailComponent {
       cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
       runtimeStatus: 'idle', queuePosition: 0,
     });
-    if (!byKey.has('global')) byKey.set('global', empty('global', 'global', null, null));
     for (const project of this.projects()) {
       const key = `project:${project}`;
       if (!byKey.has(key)) byKey.set(key, empty(key, 'project', project, null));
@@ -38,16 +37,18 @@ export class ChatSwitcherRailComponent {
     return [...byKey.values()].map(session => ({
       ...session,
       label: session.kind === 'global'
-        ? 'Global orchestrator'
+        ? 'Monitoring'
         : session.kind === 'project'
           ? (session.projectId ?? session.contextKey)
-          : this.taskLabel(session),
+          : session.kind === 'dossier'
+            ? (session.dossierKey ?? session.dossierTitle ?? session.dossierId ?? session.contextKey)
+            : this.taskLabel(session),
     }));
   });
 
-  readonly globalRows = computed(() => this.rows().filter(row => row.kind === 'global'));
   readonly projectRows = computed(() => this.rows().filter(row => row.kind === 'project'));
   readonly taskRows = computed(() => this.rows().filter(row => row.kind === 'task'));
+  readonly dossierRows = computed(() => this.rows().filter(row => row.kind === 'dossier'));
 
   select(contextKey: string): void {
     this.contextSelected.emit(contextKey);

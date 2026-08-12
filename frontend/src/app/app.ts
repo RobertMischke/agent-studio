@@ -56,6 +56,7 @@ import {
   OrchestratorFeedComponent,
   OrchestratorFeedStore,
   OrchestratorSideSheetComponent,
+  parseOrchestratorContextKey,
 } from './features/orchestrator';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
@@ -1779,21 +1780,15 @@ export class App implements OnInit, OnDestroy {
   }
 
   onNavigateToChatContext(contextKey: string): void {
-    if (contextKey === 'global') {
-      this.studioTabState.activateAllProjectsBoard();
-      return;
-    }
-    if (contextKey.startsWith('project:')) {
-      this.studioTabState.open({ kind: 'board', projectName: contextKey.slice('project:'.length) });
-      return;
-    }
-    if (!contextKey.startsWith('task:')) return;
-    const slash = contextKey.indexOf('/');
-    if (slash < 0) return;
-    const projectName = contextKey.slice('task:'.length, slash);
-    const taskKey = contextKey.slice(slash + 1);
-    const task = this.jobService.jobs().find(item => item.projectName === projectName
-      && (item.taskKey === taskKey || item.displayKey === taskKey || item.key === taskKey));
+    const context = parseOrchestratorContextKey(contextKey);
+    if (context?.kind === 'global') return void this.studioTabState.activateAllProjectsBoard();
+    if (context?.kind === 'project') return void this.studioTabState.open({ kind: 'board', projectName: context.projectId! });
+    if (context?.kind === 'dossier') return void this.studioTabState.open({
+      kind: 'workbench', projectName: context.projectId!, workbenchId: context.dossierId!,
+    });
+    if (context?.kind !== 'task') return;
+    const task = this.jobService.jobs().find(item => item.projectName === context.projectId
+      && (item.taskKey === context.taskKey || item.displayKey === context.taskKey || item.key === context.taskKey));
     if (task) { this.routeInspectorTab.set('chat'); this.studioTabState.open({ kind: 'task', taskKey: task.taskKey }); }
   }
 

@@ -22,7 +22,20 @@ describe('orchestrator context key resolution', () => {
 
     expect(key).toBe('task:Agent Studio/AGT-2149');
     expect(parseOrchestratorContextKey(key)).toEqual({
-      key, kind: 'task', projectId: 'Agent Studio', taskKey: 'AGT-2149',
+      key, kind: 'task', projectId: 'Agent Studio', taskKey: 'AGT-2149', dossierId: null,
+    });
+  });
+
+  it('builds and parses a canonical Dossier key', () => {
+    const key = buildNavigationContextKey('Agent Studio', null, 'routing-dossier');
+
+    expect(key).toBe('dossier:Agent Studio/routing-dossier');
+    expect(parseOrchestratorContextKey(key)).toEqual({
+      key,
+      kind: 'dossier',
+      projectId: 'Agent Studio',
+      taskKey: null,
+      dossierId: 'routing-dossier',
     });
   });
 

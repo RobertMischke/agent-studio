@@ -70,7 +70,7 @@ Three principles (sharpened by operator feedback 2026-07-08):
 2. **The switcher rail is extremely optional.** Default state: collapsed —
    the sheet simply *is* the chat of the current place, full width. A small
    "☰ n aktiv" chip in the header expands the rail on demand (sessions
-   grouped Global / Projects / Tasks; badges ● running, ◌ parked, unread,
+   grouped Project / Tasks / Dossiers; badges ● running, ◌ parked, unread,
    token cost). A user who never opens it loses nothing.
 3. **Rail rows go both ways.** Clicking the name switches the chat;
    clicking the row's "→" **navigates the app to that place** (task detail
@@ -79,8 +79,8 @@ Three principles (sharpened by operator feedback 2026-07-08):
    step.
 
 **Context header** pinned above the chat: exactly the merged AGT-1916
-`OrchestratorContextHeaderComponent` (project · task + lane pill · live-run
-telemetry) — reused verbatim, as designed. Works unchanged inside the
+`OrchestratorContextHeaderComponent` (project, task or Dossier identity, plus
+task lane and live-run telemetry), reused verbatim as designed. It works unchanged inside the
 AGT-1915 split view (the sheet IS the right-hand pane there).
 
 ## 5. Implementation plan (phases)
