@@ -32,6 +32,8 @@ public sealed record RunLeaseAcquireRequest(
 {
     /// <summary>Authenticated task API client identity when acquisition came through a daemon claim.</summary>
     public string? ClientId { get; init; }
+    /// <summary>Daemon generation that originally received this lease.</summary>
+    public string? LeaseInstanceId { get; init; }
 }
 
 /// <summary>Heartbeat: extends the lease only when lease id + fencing token + runner still match the current holder.</summary>
@@ -189,7 +191,8 @@ public sealed record RunnerClaimResponse(
     string? AdmissionReason = null,
     // T0b: additive execution spec. An older runner ignores the whole object;
     // prompt enrichment travels inside its existing ModeFraming component.
-    RunSpecDto? RunSpec = null);
+    RunSpecDto? RunSpec = null,
+    string? LeaseInstanceId = null);
 
 /// <summary>Fenced request for the server-rendered Epic decomposition prompt.</summary>
 public sealed record RemoteEpicPlanningPromptRequest(

@@ -45,13 +45,40 @@ public static class V1ReviewPlaneEndpoints
             HttpContext context,
             string runnerId,
             Contract.RegisterRunnerRequest request,
-            V1ReviewExecutorRegistry registry) =>
+            V1ReviewExecutorRegistry registry,
+            AttemptAuthorityService authority,
+            ILoggerFactory loggerFactory) =>
         {
             if (!RunnerMatches(context, runnerId))
                 return Results.Unauthorized();
             try
             {
-                return Results.Ok(registry.Register(runnerId, request));
+                var registered = registry.Register(runnerId, request);
+                var adoptions = authority.ReAdoptRunnerAttempts(
+                    runnerId,
+                    request.HostId,
+                    request.InstanceId,
+                    request.ActiveAttempts,
+                    request.AttemptLeaseTtlSeconds);
+                if (request.ActiveAttempts is { Count: > 0 })
+                {
+                    registry.RecordReAdoptedSlots(
+                        runnerId,
+                        request.InstanceId,
+                        adoptions.Count(item => string.Equals(
+                            item.Status, "adopted", StringComparison.Ordinal)));
+                }
+                if (adoptions.Count > 0)
+                {
+                    loggerFactory.CreateLogger(LoggerName).LogInformation(
+                        "runner-attempt-re-adoption runner={RunnerId} instance={InstanceId} reported={Reported} adopted={Adopted} rejected={Rejected}",
+                        runnerId,
+                        request.InstanceId,
+                        adoptions.Count,
+                        adoptions.Count(item => string.Equals(item.Status, "adopted", StringComparison.Ordinal)),
+                        adoptions.Count(item => !string.Equals(item.Status, "adopted", StringComparison.Ordinal)));
+                }
+                return Results.Ok(registered with { AttemptAdoptions = adoptions });
             }
             catch (ArgumentException exception)
             {
@@ -1236,6 +1263,25 @@ public sealed class V1ReviewExecutorRegistry
         if (reviewExecutor == codingExecutor)
             throw new InvalidOperationException(
                 "A runner identity must advertise exactly one coding or review executor role.");
+        var activeAttempts = request.ActiveAttempts ?? [];
+        if (activeAttempts.Count > 256)
+            throw new ArgumentException("At most 256 active attempts may be reported during registration.");
+        var expectedAttemptKind = reviewExecutor
+            ? Contract.RunnerAttemptKinds.Review
+            : Contract.RunnerAttemptKinds.Coding;
+        if (activeAttempts.Any(attempt => !string.Equals(
+                attempt.Kind, expectedAttemptKind, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException(
+                $"A {expectedAttemptKind} runner may report only {expectedAttemptKind} attempts.");
+        }
+        if (activeAttempts
+            .Select(attempt => attempt.AttemptId)
+            .Distinct(StringComparer.Ordinal)
+            .Count() != activeAttempts.Count)
+        {
+            throw new ArgumentException("Active attempt ids must be unique within a registration.");
+        }
 
         var now = DateTime.UtcNow;
         Registration registration;
@@ -1427,6 +1473,41 @@ public sealed class V1ReviewExecutorRegistry
                     null),
                 capabilities,
                 request.Telemetry);
+        }
+    }
+
+    public void RecordReAdoptedSlots(string runnerId, string instanceId, int activeSlots)
+    {
+        lock (_gate)
+        {
+            if (!_registrations.TryGetValue(runnerId, out var registration)
+                || !string.Equals(registration.InstanceId, instanceId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Attempt slot telemetry requires the current registered runner instance.");
+            }
+            _capabilityStates.TryGetValue(runnerId, out var existing);
+            var now = DateTime.UtcNow;
+            _capabilityStates[runnerId] = new CapabilityState(
+                instanceId,
+                existing?.Generation ?? 0,
+                existing?.Capabilities ?? [],
+                new Contract.HostTelemetrySnapshotDto(
+                    now,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    activeSlots,
+                    TaskServerConnectionStatus: "connected",
+                    TaskServerConnectionObservedAt: now));
         }
     }
 

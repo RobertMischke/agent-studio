@@ -46,7 +46,8 @@ public sealed class RunLeaseService
             request.RunnerName,
             request.BackendName,
             request.Pid,
-            request.ClientId);
+            request.ClientId,
+            request.LeaseInstanceId);
 
         return result.Status switch
         {

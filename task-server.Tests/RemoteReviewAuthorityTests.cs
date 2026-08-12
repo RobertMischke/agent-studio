@@ -343,6 +343,60 @@ public sealed class RemoteReviewAuthorityTests
     }
 
     [Fact]
+    public async Task Restart_registration_re_adopts_active_review_and_accepts_report()
+    {
+        using var temp = new TempDirectory();
+        var firstStore = Store(temp.Path);
+        await firstStore.InitializeAsync();
+        await SeedReviewSubjectAsync(firstStore);
+        await RegisterReviewerAsync(firstStore, "review-a", "instance-a", "host-a");
+        var claim = await firstStore.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var registered = await restarted.RegisterRunnerAsync(
+            "review-a",
+            new RegisterRunnerRequest(
+                "review-a",
+                "host-a",
+                "replacement-instance",
+                "1.0.0",
+                TaskServerProtocol.Current,
+                [
+                    ReviewCapabilities.ReviewExecutor,
+                    ReviewCapabilities.GitMaterialization,
+                    ReviewCapabilities.SemanticReview,
+                    ReviewCapabilities.VisionReview,
+                    ReviewCapabilities.BaselineComparison,
+                    ReviewCapabilities.DependencyPreparation,
+                ],
+                ActiveAttempts:
+                [
+                    new RunnerActiveAttempt(
+                        RunnerAttemptKinds.Review,
+                        claim.Attempt!.AttemptId,
+                        claim.Attempt.TaskId,
+                        claim.Lease!.LeaseId,
+                        claim.Lease.Fence,
+                        LeaseInstanceId: claim.Lease.InstanceId),
+                ]),
+            "review-a",
+            default);
+
+        Assert.Equal("adopted", Assert.Single(registered.AttemptAdoptions!).Status);
+        Assert.Equal(1, Assert.Single(
+            await restarted.ListRunnerCapabilitySnapshotsAsync(default),
+            snapshot => snapshot.RunnerId == "review-a").Telemetry!.ActiveSlots);
+        var accepted = await restarted.ReportReviewAsync(
+            claim.Attempt.AttemptId,
+            PassingReport(claim),
+            "review-a",
+            default);
+        Assert.Equal("Pass", accepted.Outcome);
+    }
+
+    [Fact]
     public async Task Coding_and_review_capabilities_require_separate_registered_identities()
     {
         using var temp = new TempDirectory();

@@ -2088,6 +2088,30 @@
             control-plane waiter; both paths meet only at canonical ReviewAttempt settlement.
           </td>
         </tr>
+        <tr id="case-agt-2646">
+          <td>2026-08-11</td>
+          <td><code>AGT-2646</code><br><span class="small">Stable restart forgot active coding and review attempts</span></td>
+          <td>
+            After rollout <code>release/20260811-193706Z</code>, the board showed zero active Post Processing work and the
+            footer showed no runners while four detached review workers plus coding runs remained verifiably active. Both
+            runner identities re-registered, but the in-flight attempts stayed absent from server counts and their final
+            report deliveries risked the <code>409</code>/<code>404</code> pattern previously seen in AGT-2591.
+          </td>
+          <td>
+            Attempt authority was durable, but runner registration carried no active-attempt inventory. The monolith's
+            runner and Auto Review activity registries were process-local, so a backend restart could accept the runner
+            identity without extending expired exact leases or rebuilding the read-side activity and slot projections.
+            A worker heartbeat could also encounter the restarted server before the daemon's periodic registration path.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> coding and Review registrations now carry positively proven attempt,
+            task, lease, fence, epoch, and original lease-instance authority. The server re-adopts only exact durable
+            matches, extends their leases without changing fences, returns typed adoption results, and immediately restores
+            board activity plus active host-slot telemetry. A first 404/409 renewal performs one exact re-registration and
+            retry; a mismatched or superseded fence still stops. Restart regressions cover review report and coding
+            completion delivery under the original authority.
+          </td>
+        </tr>
       </tbody>
     </table>
 
