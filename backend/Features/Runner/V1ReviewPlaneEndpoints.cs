@@ -195,6 +195,7 @@ public static class V1ReviewPlaneEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
+            RemoteReviewPlanBuilder remoteReviewPlans,
             HumanReviewEscalation escalation,
             TaskMutationService mutations,
             TimelineLog timeline,
@@ -272,7 +273,14 @@ public static class V1ReviewPlaneEndpoints
                 return AttemptError(claimed);
 
             var review = claimed.ReviewAttempt;
-            var subject = ToSubject(review, scanner, projects, settings, out var subjectTask, out var baseline);
+            var subject = ToSubject(
+                review,
+                scanner,
+                projects,
+                settings,
+                remoteReviewPlans,
+                out var subjectTask,
+                out var baseline);
             CorrectOutdatedIntegrationBranch(
                 subjectTask,
                 baseline,
@@ -336,10 +344,12 @@ public static class V1ReviewPlaneEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
+            RemoteReviewPlanBuilder remoteReviewPlans,
             TaskTransitionService transitions,
             HumanReviewEscalation escalation,
             RemoteDeliveryIntegrationCoordinator remoteIntegration,
             TimelineLog timeline,
+            RemotePipelineReviewEvidenceProjector remotePipelineEvidence,
             CancellationToken ct) =>
         {
             if (!RunnerMatches(context, request.ExecutorId))
@@ -357,6 +367,23 @@ public static class V1ReviewPlaneEndpoints
                     allowTerminal: true))
                 return error!;
             var currentReview = current!;
+            var authoritativeLease = currentReview.Lease!;
+            if (!string.Equals(request.Environment.ExecutorId, authoritativeLease.ExecutorId, StringComparison.Ordinal)
+                || !string.Equals(request.Environment.InstanceId, authoritativeLease.ClientId, StringComparison.Ordinal)
+                || !string.Equals(request.Environment.HostId, authoritativeLease.HostId, StringComparison.Ordinal)
+                || request.Commands.Any(command =>
+                    !string.Equals(command.ExecutionLocation, "remote", StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(command.ExecutorId)
+                        && !string.Equals(command.ExecutorId, authoritativeLease.ExecutorId, StringComparison.Ordinal))
+                    || (!string.IsNullOrWhiteSpace(command.HostId)
+                        && !string.Equals(command.HostId, authoritativeLease.HostId, StringComparison.Ordinal))
+                    || (!string.IsNullOrWhiteSpace(command.AttemptId)
+                        && !string.Equals(command.AttemptId, currentReview.AttemptId, StringComparison.Ordinal))))
+            {
+                return Results.Conflict(new Contract.ApiError(
+                    "review-execution-attribution-mismatch",
+                    "Remote command placement does not match the authoritative ReviewAttempt lease."));
+            }
             var materializableRepository = MaterializableRepository(
                 currentReview, scanner, projects, settings);
             if (!string.Equals(
@@ -441,6 +468,25 @@ public static class V1ReviewPlaneEndpoints
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
+            try
+            {
+                await remotePipelineEvidence.ProjectAsync(
+                    task,
+                    settled.ReviewAttempt,
+                    request,
+                    evidenceFile,
+                    receivedAt,
+                    ct);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return Results.Json(
+                    new Contract.ApiError(
+                        "remote-pipeline-evidence-write-failed",
+                        $"Review grade is durable, but remote pipeline evidence could not be projected: {exception.Message}"),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
             var infrastructureFailure = string.Equals(
                 request.Outcome,
                 "ReviewInfra",
@@ -479,6 +525,7 @@ public static class V1ReviewPlaneEndpoints
                                             scanner,
                                             projects,
                                             settings,
+                                            remoteReviewPlans,
                                             out _,
                                             out _).Plan;
                 var integrationDecision = RemoteDeliveryIntegrationPolicy.Decide(
@@ -748,6 +795,7 @@ public static class V1ReviewPlaneEndpoints
         TaskScannerService scanner,
         AgentStudio.Registry.ProjectRegistry projects,
         AgentStudio.Projects.ProjectSettingsService settings,
+        RemoteReviewPlanBuilder remoteReviewPlans,
         out TaskInfo? subjectTask,
         out ReviewBaselineBranchDecision? baseline)
     {
@@ -761,8 +809,13 @@ public static class V1ReviewPlaneEndpoints
         subjectTask = task;
         baseline = task is null ? null : ResolveBaselineBranch(task, project, settings);
         var integrationRef = baseline?.IntegrationRef;
+        var taskSettings = task is null ? null : settings.Get(task.ProjectName);
         var plan = review.Subject.Plan
-                   ?? FallbackPlan(project?.RepositoryPath, task?.ProjectName, settings, integrationRef);
+                   ?? remoteReviewPlans.Build(
+                       task,
+                       project?.RepositoryPath,
+                       taskSettings,
+                       integrationRef);
         // The plan is frozen with the subject, so a retry inherits whatever ref
         // the first attempt was handed. AGT-2220 replayed a stale
         // refs/heads/main through four attempts that way. Re-stamping the ref at

@@ -175,15 +175,7 @@ public sealed class TaskServerClient : IDisposable
             var options = _options ?? throw new InvalidOperationException("Runner options are unavailable for v1 registration.");
             var runnerId = options.RunnerId;
             string[] capabilities = options.Role == "review"
-                ? [
-                    Contract.ReviewCapabilities.ReviewExecutor,
-                    Contract.ReviewCapabilities.GitMaterialization,
-                    Contract.ReviewCapabilities.SourceBundleMaterialization,
-                    Contract.ReviewCapabilities.SemanticReview,
-                    Contract.ReviewCapabilities.VisionReview,
-                    Contract.ReviewCapabilities.BaselineComparison,
-                    Contract.ReviewCapabilities.DependencyPreparation,
-                ]
+                ? [.. RunnerCapabilityProbe.ReviewRegistrationCapabilities(options)]
                 : [
                     Contract.ReviewCapabilities.CodingExecutor,
                     "claim",

@@ -8,7 +8,11 @@ internal sealed record DetachedReviewSpec(
     ReviewSubjectDto Subject,
     ReviewLeaseDto Lease,
     string ReviewWorkDir,
-    IReadOnlyList<string> ReviewCredentialEnvironment);
+    IReadOnlyList<string> ReviewCredentialEnvironment,
+    string? CliBin = null,
+    string? CliArgs = null,
+    string? CodexCliBin = null,
+    string? ClaudeCliBin = null);
 
 internal sealed record DetachedReviewIdentity(
     int ProcessId,
@@ -50,11 +54,7 @@ internal sealed class DurableReviewProcess
         PersistedReviewSlot slot)
     {
         var claim = slot.Claim;
-        var spec = new DetachedReviewSpec(
-            claim.Subject!,
-            claim.Lease!,
-            Path.GetFullPath(options.ReviewWorkDir),
-            options.ReviewCredentialEnvironment);
+        var spec = BuildSpec(options, claim);
         Directory.CreateDirectory(slot.WorkerDirectory);
         var specPath = Path.Combine(slot.WorkerDirectory, "review-spec.json");
         File.WriteAllText(specPath, JsonSerializer.Serialize(spec, Json));
@@ -222,6 +222,19 @@ internal sealed class DurableReviewProcess
         }
     }
 
+    private static DetachedReviewSpec BuildSpec(
+        RunnerOptions options,
+        ReviewClaimResponse claim)
+        => new(
+            claim.Subject!,
+            claim.Lease!,
+            Path.GetFullPath(options.ReviewWorkDir),
+            options.ReviewCredentialEnvironment,
+            options.CliBin,
+            options.CliArgs,
+            options.CodexCliBin,
+            options.ClaudeCliBin);
+
     public static async Task<int> RunWorkerAsync(string specPath)
     {
         var spec = JsonSerializer.Deserialize<DetachedReviewSpec>(
@@ -241,8 +254,10 @@ internal sealed class DurableReviewProcess
             ReviewWorkDir = spec.ReviewWorkDir,
             ReviewCredentialEnvironment = spec.ReviewCredentialEnvironment,
             BaseBranch = "main",
-            CliBin = "unused",
-            CliArgs = string.Empty,
+            CliBin = spec.CliBin ?? "unused",
+            CliArgs = spec.CliArgs ?? string.Empty,
+            CodexCliBin = spec.CodexCliBin ?? "codex",
+            ClaudeCliBin = spec.ClaudeCliBin ?? "claude",
         };
         var workspace = new RemoteReviewWorkspace(options, spec.Subject, spec.Lease, _ => { });
         using (var current = Process.GetCurrentProcess())

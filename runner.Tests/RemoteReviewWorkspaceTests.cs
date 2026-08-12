@@ -186,6 +186,59 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Agent_aspect_runs_read_only_on_remote_host_and_reports_attributed_evidence()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var sha = await SeedOriginAsync();
+        var fakeCodex = Path.Combine(_root, "fake-codex.sh");
+        await File.WriteAllTextAsync(fakeCodex, """
+            #!/bin/sh
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"Looks good.\n[[ASPECT_VERDICT: status=pass; summary=Remote aspect inspected the exact subject.]]"}}'
+            printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":21,"output_tokens":8,"cached_input_tokens":5}}'
+            """);
+        File.SetUnixFileMode(
+            fakeCodex,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var command = new ReviewCommandDto(
+            "aspect-code-quality",
+            "code-quality",
+            "codex",
+            [],
+            TimeoutSeconds: 30,
+            ExecutionKind: ReviewCommandKinds.AgentAspect,
+            Prompt: "Inspect the exact result and return the required aspect sentinel.",
+            CliType: AgentCliProcess.CodexCli,
+            Model: "gpt-5.4-mini",
+            ThinkingLevel: "high");
+        var (workspace, _) = Workspace(
+            "attempt-agent-aspect",
+            sha,
+            [command],
+            24100,
+            codexCliBin: fakeCodex);
+
+        await workspace.PrepareAsync(null!, default);
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        var executed = Assert.Single(evidence.Commands);
+        Assert.Equal("Pass", evidence.Outcome);
+        Assert.Equal("remote", executed.ExecutionLocation);
+        Assert.Equal("review-host", executed.HostId);
+        Assert.Equal("review-executor", executed.ExecutorId);
+        Assert.Equal("attempt-agent-aspect", executed.AttemptId);
+        Assert.Equal(ReviewCommandKinds.AgentAspect, executed.ExecutionKind);
+        Assert.Equal("gpt-5.4-mini", executed.Model);
+        Assert.Equal("high", executed.ThinkingLevel);
+        Assert.Equal(21, executed.InputTokens);
+        Assert.Equal(8, executed.OutputTokens);
+        Assert.Equal(5, executed.CacheReadTokens);
+        Assert.Contains(evidence.Artifacts, artifact =>
+            artifact.Sha256 == executed.StdoutSha256 && artifact.ContentBase64 is not null);
+        Assert.Equal("pass", Assert.Single(evidence.Verdicts).Status);
+        Assert.False(evidence.Workspace.DirtyAfter);
+    }
+
+    [Fact]
     public async Task Node_fixture_without_node_modules_prepares_before_angular_style_build()
     {
         var sha = await SeedOriginWithFilesAsync(new Dictionary<string, string>
@@ -805,7 +858,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         string? resultRef = null,
         string? integrationRef = null,
         IReadOnlyList<ReviewPreparationCommandDto>? preparation = null,
-        IReadOnlyList<string>? preserveGlobs = null)
+        IReadOnlyList<string>? preserveGlobs = null,
+        string? codexCliBin = null)
     {
         var repositoryId = TaskServerClient.RepositoryIdentity(_origin)!;
         var subject = new ReviewSubjectDto(
@@ -853,6 +907,7 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             BaseBranch = "main",
             CliBin = "unused",
             CliArgs = "",
+            CodexCliBin = codexCliBin ?? "codex",
             TtlSeconds = 120,
             HeartbeatSeconds = 30,
         };

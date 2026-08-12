@@ -453,6 +453,16 @@ public sealed partial class TaskServerStore
         if (subject.Plan.RequiredAspects.Any(aspect =>
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence"))
             requirements.Add(ReviewCapabilities.SemanticReview);
+        foreach (var command in subject.Plan.Commands.Where(command =>
+                     ReviewCommandKinds.IsAgent(command.ExecutionKind)))
+        {
+            requirements.Add(ReviewCapabilities.SemanticReview);
+            if (!string.IsNullOrWhiteSpace(command.CliType))
+            {
+                requirements.Add(CapabilityProtocol.CliExecution(command.CliType));
+                requirements.Add(CapabilityProtocol.ProviderAuthentication(command.CliType));
+            }
+        }
         return requirements.Order(StringComparer.Ordinal).ToArray();
     }
 
@@ -705,6 +715,15 @@ public sealed partial class TaskServerStore
         if (request.Plan.Commands.Any(command => command.CompareToBaseline)
             && string.IsNullOrWhiteSpace(request.Plan.IntegrationRef))
             throw new ArgumentException("A baseline-compared review plan requires an integration ref.");
+        if (request.Plan.Commands.Any(command =>
+                ReviewCommandKinds.IsAgent(command.ExecutionKind)
+                && (string.IsNullOrWhiteSpace(command.Prompt)
+                    || string.IsNullOrWhiteSpace(command.CliType)
+                    || string.IsNullOrWhiteSpace(command.Model))))
+        {
+            throw new ArgumentException(
+                "An agent review command requires a prompt, CLI type, and model in the frozen plan.");
+        }
         if (request.Plan.RequiresVisualReview
             && !request.Plan.RequiredAspects.Contains("visual", StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException("A visual review plan must require the visual aspect.");
@@ -747,6 +766,15 @@ public sealed partial class TaskServerStore
                 .Any(stepId =>
                     !request.Environment.Toolchain.ContainsKey($"command:{stepId}")))
             return ("ReviewInfra", "ToolchainIdentityMissing");
+        if (request.Commands.Any(command =>
+                !string.Equals(command.ExecutionLocation, "remote", StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(command.ExecutorId)
+                    && !string.Equals(command.ExecutorId, attempt.ExecutorId, StringComparison.Ordinal))
+                || (!string.IsNullOrWhiteSpace(command.HostId)
+                    && !string.Equals(command.HostId, attempt.HostId, StringComparison.Ordinal))
+                || (!string.IsNullOrWhiteSpace(command.AttemptId)
+                    && !string.Equals(command.AttemptId, attempt.AttemptId, StringComparison.Ordinal))))
+            return ("ReviewInfra", "CommandAttributionMismatch");
         if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal)
             && request.FailureClassification is "SnapshotUnavailable" or "SourceBundleDigestMismatch")
             return ("ReviewInfra", request.FailureClassification);
@@ -911,6 +939,10 @@ public sealed partial class TaskServerStore
                && string.Equals(plannedCommand.Aspect, command.Aspect, StringComparison.Ordinal)
                && string.Equals(plannedCommand.FileName, command.FileName, StringComparison.Ordinal)
                && plannedCommand.Arguments.SequenceEqual(command.Arguments, StringComparer.Ordinal)
+               && string.Equals(plannedCommand.ExecutionKind, command.ExecutionKind, StringComparison.OrdinalIgnoreCase)
+               && (!ReviewCommandKinds.IsAgent(plannedCommand.ExecutionKind)
+                   || (string.Equals(plannedCommand.Model, command.Model, StringComparison.Ordinal)
+                       && string.Equals(plannedCommand.ThinkingLevel, command.ThinkingLevel, StringComparison.Ordinal)))
                && (command.WorkspaceRole == "candidate"
                    || command.WorkspaceRole.StartsWith("baseline-", StringComparison.Ordinal));
     }
@@ -1415,6 +1447,16 @@ public sealed partial class TaskServerStore
                 aspect is "completion" or "requirements" or "code-quality" or "documentation" or "evidence")
             && !executor.Capabilities.Contains(ReviewCapabilities.SemanticReview))
             return false;
+        foreach (var command in subject.Plan.Commands.Where(command =>
+                     ReviewCommandKinds.IsAgent(command.ExecutionKind)))
+        {
+            if (!executor.Capabilities.Contains(ReviewCapabilities.SemanticReview))
+                return false;
+            if (!string.IsNullOrWhiteSpace(command.CliType)
+                && (!executor.Capabilities.Contains(CapabilityProtocol.CliExecution(command.CliType))
+                    || !executor.Capabilities.Contains(CapabilityProtocol.ProviderAuthentication(command.CliType))))
+                return false;
+        }
         return true;
     }
 

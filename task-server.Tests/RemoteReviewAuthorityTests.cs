@@ -1209,7 +1209,14 @@ public sealed class RemoteReviewAuthorityTests
             command.StepId, command.Aspect, command.FileName, command.Arguments,
             ResultSha, ResultSha, TreeSha,
             DateTime.UtcNow.AddSeconds(-1), DateTime.UtcNow, 0, null,
-            new string('a', 64), new string('b', 64)))
+            new string('a', 64), new string('b', 64),
+            ExecutionKind: command.ExecutionKind,
+            ExecutionLocation: "remote",
+            ExecutorId: lease.ExecutorId,
+            HostId: lease.HostId,
+            AttemptId: claim.Attempt!.AttemptId,
+            Model: command.Model,
+            ThinkingLevel: command.ThinkingLevel))
             .Concat((subject.Plan.Preparation ?? []).Select(command => new ReviewCommandEvidenceDto(
                 command.StepId, "preparation", command.FileName, command.Arguments,
                 ResultSha, ResultSha, TreeSha,
@@ -1218,7 +1225,11 @@ public sealed class RemoteReviewAuthorityTests
                 Phase: "preparation",
                 WorkspaceRole: "candidate",
                 Budget: new ReviewCommandBudgetEvidenceDto(
-                    "review-command", command.TimeoutSeconds * 1000L, 1_000, false))))
+                    "review-command", command.TimeoutSeconds * 1000L, 1_000, false),
+                ExecutionLocation: "remote",
+                ExecutorId: lease.ExecutorId,
+                HostId: lease.HostId,
+                AttemptId: claim.Attempt!.AttemptId)))
             .ToArray();
         var verdicts = subject.Plan.RequiredAspects.Select(aspect =>
             new ReviewVerdictDto(aspect, "pass", "Verified", $"{aspect} passed")).ToArray();
