@@ -84,6 +84,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Task Timeline redesign: event categories, copyable explanatory technical popovers, recoverable incident history, bounded payload disclosure, newest-first navigation, and light/dark AGT-2577 mockups (AGT-2631) | [decision dossier](../operations/timeline-redesign/index.html) |
 | Accepted naming decision for the living decision-to-documentation artifact: Dossier remains the product noun, “living dossier” is explanatory copy, Living Dossier is the runner-up, and consequence delivery remains tracked to documented (AGT-W33) | [decision dossier](../operations/living-document-naming/index.html) |
 | Missing generated status.md on Concept and Planning cards: scaffold inventory, root-cause chain, and repair decision (AGT-2555) | [decision dossier](../operations/statusmd-konzept-karten/index.html) |
+| GPT quota and retry-tax analysis for the 11 to 12 August wave: exact token ledger, review incidents, session continuation, control coverage, and decision-ready savings (AGT-2652) | [decision dossier](../operations/token-retry-tax-analysis/index.html) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |

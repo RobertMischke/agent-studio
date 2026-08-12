@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-12T08:00:00Z",
+  "timezone": "Europe/Berlin",
+  "quotaBoundary": {
+    "baseline": { "usedPercent": 68, "timestampUtc": "2026-08-11T21:52:46.417Z", "timestampLocal": "2026-08-11T23:52:46.417+02:00", "reportingSessionTask": "QS-85" },
+    "end": { "usedPercent": 95, "timestampUtc": "2026-08-12T07:24:37.467Z", "timestampLocal": "2026-08-12T09:24:37.467+02:00", "reportingSessionTask": "AGT-2635" },
+    "observedPercentagePointDelta": 27,
+    "literalClockWindowFirstObserved": { "usedPercent": 63, "timestampUtc": "2026-08-11T20:22:57.759Z", "timestampLocal": "2026-08-11T22:22:57.759+02:00" }
+  },
+  "tokenAccounting": {
+    "model": "gpt-5.6-sol",
+    "thinkingLevel": "xhigh",
+    "pricingSource": "TokenEconomy 0.3.2, prices effective 2026-08-12",
+    "sessionLedger": "coding-session-ledger.csv",
+    "pricingUsdPerMillion": { "uncachedInput": 5.0, "cacheRead": 0.5, "output": 30.0 },
+    "categories": [
+      { "id": "first-run-coding", "sessions": 13, "tokenEvents": 1196, "inputTokensIncludingCache": 168673813, "cacheReadTokens": 165031552, "uncachedInputTokens": 3642261, "outputTokens": 551568, "totalTokens": 169225381, "apiEquivalentCostUsd": 117.274121, "quotaCrossings": 3, "note": "Includes AGT-2642's separately authored round-2 density addendum as new-scope work." },
+      { "id": "first-run-review", "reviewAttemptSubjects": 88, "codexSessions": 0, "tokenEvents": 0, "inputTokensIncludingCache": 0, "cacheReadTokens": 0, "uncachedInputTokens": 0, "outputTokens": 0, "totalTokens": 0, "apiEquivalentCostUsd": 0, "quotaCrossings": 0 },
+      { "id": "review-infrastructure-rerun", "incidentRetryEvents": 10, "sameAttemptSubjectReclaims": 7, "forcedRetryObligations": 3, "codexSessions": 0, "tokenEvents": 0, "inputTokensIncludingCache": 0, "cacheReadTokens": 0, "uncachedInputTokens": 0, "outputTokens": 0, "totalTokens": 0, "apiEquivalentCostUsd": 0, "quotaCrossings": 0 },
+      { "id": "conflict-rebase-coding-reround", "sessions": 61, "tokenEvents": 6623, "inputTokensIncludingCache": 832010822, "cacheReadTokens": 812556544, "uncachedInputTokens": 19454278, "outputTokens": 2042055, "totalTokens": 834052877, "apiEquivalentCostUsd": 564.811312, "quotaCrossings": 22 },
+      { "id": "overhead-aborted-probe-duplicate", "sessions": 7, "tokenEvents": 721, "inputTokensIncludingCache": 88432535, "cacheReadTokens": 86105088, "uncachedInputTokens": 2327447, "outputTokens": 228858, "totalTokens": 88661393, "apiEquivalentCostUsd": 61.555519, "quotaCrossings": 2, "note": "Three aborted AGT-2635 sessions, duplicate completed replays for AGT-2649 twice and AGT-2650 once, and one probe event." }
+    ],
+    "total": { "sessions": 81, "tokenEvents": 8540, "inputTokensIncludingCache": 1089117170, "cacheReadTokens": 1063693184, "uncachedInputTokens": 25423986, "outputTokens": 2822481, "totalTokens": 1091939651, "apiEquivalentCostUsd": 743.640952, "quotaCrossings": 27 }
+  },
+  "quotaCrossingTasks": {
+    "firstRunCoding": { "69": "QS-86", "71": "QS-87", "72": "QS-82" },
+    "conflictReRounds": { "70": "AGT-2617", "73": "AGT-2604", "74": "AGT-2634", "75": "QS-79", "76": "AGT-2634", "77": "QS-68", "79": "QS-71", "80": "AGT-2644", "81": "AGT-2635", "82": "QS-70", "83": "AGT-2641", "84": "AGT-2506", "85": "AGT-2645", "86": "AGT-2645", "87": "AGT-2624", "88": "AGT-2519", "89": "AGT-2646", "90": "AGT-2646", "91": "QS-79", "92": "AGT-2646", "93": "AGT-2646", "94": "QS-59" },
+    "overhead": { "78": "AGT-2635 aborted", "95": "AGT-2635 aborted" }
+  },
+  "unitMedians": {
+    "qs81To89FirstRun": { "n": 9, "totalTokens": 11653720, "inputTokensIncludingCache": 11613288, "cacheReadTokens": 11371264, "uncachedInputTokens": 242024, "outputTokens": 40432, "durationSeconds": 998.556, "medianApiEquivalentCostUsd": 8.108712 },
+    "qs81To89ColdRebaseRound": { "n": 10, "totalTokens": 12112130.5, "inputTokensIncludingCache": 12070024.5, "cacheReadTokens": 11772672, "uncachedInputTokens": 258539.5, "outputTokens": 41114.5, "durationSeconds": 1258.814, "medianApiEquivalentCostUsd": 8.6362785 },
+    "reviewRun": { "tokenCount": 0, "completedClaimSegments": 58, "medianDurationSeconds": 603.8035, "p25DurationSeconds": 230.327, "p75DurationSeconds": 3273.638 },
+    "resumedRebaseTarget": { "totalTokensCeiling": 1211213, "basis": "engineering SLO at 10 percent of the observed cold rebase median" }
+  },
+  "reviewJournal": {
+    "windowLocal": "2026-08-11T22:00:00+02:00/2026-08-12T10:00:00+02:00",
+    "claims": 95,
+    "distinctAttempts": 88,
+    "distinctSubjects": 88,
+    "finishesByExitCode": { "0": 61, "2": 36, "3": 4 },
+    "completedDurationLedger": "review-attempt-durations.csv",
+    "note": "Finish lines include adoption cleanup of attempts claimed before the window, so finishes do not reconcile one-to-one with claims.",
+    "incidents": [
+      { "id": "lease-expired-storm", "firstLocal": "2026-08-12T02:42:39.973769+02:00", "lastLocal": "2026-08-12T03:10:12.652483+02:00", "leaseExpiredMessages": 1905, "sameAttemptSubjectReclaims": 2, "gptTokens": 0 },
+      { "id": "wedged-worker-kills", "atLocal": "2026-08-12T05:10:23+02:00", "uniqueFailedAttempts": 3, "uniqueLostCommandSeconds": 1167.153, "gptTokens": 0 },
+      { "id": "bad-release-crash-loop", "firstLocal": "2026-08-12T08:41:02.687209+02:00", "lastLocal": "2026-08-12T09:09:52.271543+02:00", "serviceStartsInWindow": 160, "taskServerContractsExceptionLines": 318, "failedAttempts": 2, "uniqueLostCommandSeconds": 166.790, "sameAttemptSubjectReclaims": 5, "postRecoveryClaims": 6, "startupSlotsScanned": 21, "startupSlotsPurged": 21, "gptTokens": 0 }
+    ]
+  },
+  "host": {
+    "codexCliVersion": "0.144.1",
+    "codexResumeCapability": "codex exec resume [SESSION_ID] [PROMPT], with --last and explicit model override support",
+    "liveReviewRelease": "agt-2650b"
+  },
+  "dataQuality": {
+    "nightlyTaskJsonTokenSummaries": "null on the inspected AGT and QS cards",
+    "reconstruction": "sum of last_token_usage fields from Codex token_count events, bounded by the two quota telemetry events; all 81 bounded session rows are retained in coding-session-ledger.csv",
+    "integerQuotaRule": "each whole percentage-point crossing is assigned to the session whose token_count response first reported it",
+    "roundClassification": "A separately authored addendum is real new-scope work; a completed rerun with a conflict/rebase steer is conflict tax; exact duplicate completed implementations, non-terminal sessions and probes are overhead."
+  }
+}
