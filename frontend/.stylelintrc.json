@@ -241,6 +241,7 @@
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/wiki-pulse.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/workbench-inbox/workbench-inbox.component.scss",
         "src/app/features/project-detail/components/workbench-decision-panel/workbench-decision-panel.scss",
+        "src/app/features/project-detail/components/workbench-overview-controls/workbench-overview-controls.component.scss",
         "src/app/features/project-detail/components/workbench-viewer-header/workbench-viewer-header.component.scss",
         "src/app/features/project-detail/components/workbench-overview/workbench-overview.component.scss",
         "src/app/features/project-detail/components/workbench-tab-host/workbench-tab-host.component.scss",

@@ -14,7 +14,9 @@ import { LoadingSurfaceComponent } from '../../../../components/async-feedback';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { WorkbenchOverviewControlsComponent } from '../workbench-overview-controls/workbench-overview-controls.component';
 import { WorkbenchViewerComponent } from '../workbench-viewer/workbench-viewer.component';
+import { WorkbenchOverviewViewStateService } from './workbench-overview-view-state.service';
 import type {
   ArticlePattern,
   WorkbenchOverview,
@@ -24,7 +26,13 @@ import type {
 @Component({
   selector: 'app-workbench-overview',
   standalone: true,
-  imports: [LoadingSurfaceComponent, StudioIconComponent, WorkbenchViewerComponent],
+  imports: [
+    LoadingSurfaceComponent,
+    StudioIconComponent,
+    WorkbenchOverviewControlsComponent,
+    WorkbenchViewerComponent,
+  ],
+  providers: [WorkbenchOverviewViewStateService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workbench-overview.component.html',
   styleUrl: './workbench-overview.component.scss',
@@ -36,6 +44,7 @@ export class WorkbenchOverviewComponent {
   private readonly docs = inject(ProjectDocsService);
   private readonly hub = inject(JobsHubClient);
   private readonly destroyRef = inject(DestroyRef);
+  readonly viewState = inject(WorkbenchOverviewViewStateService);
   private refreshHandle: ReturnType<typeof setTimeout> | null = null;
   private requestGeneration = 0;
 
@@ -46,17 +55,25 @@ export class WorkbenchOverviewComponent {
   readonly completedOpen = signal(false);
   readonly expandedDecisionKey = signal<string | null>(null);
 
-  readonly decisionPending = computed(() => this.itemsWithStatus('decision-pending'));
-  readonly active = computed(() => this.itemsWithStatus('active'));
-  readonly tracking = computed(() => this.itemsWithStatus('decided'));
-  readonly invalid = computed(() => this.itemsWithStatus('invalid'));
-  readonly discarded = computed(() => this.itemsWithStatus('archived'));
-  readonly documented = computed(() => this.itemsWithStatus('documented'));
+  readonly filteredItems = computed(() => this.viewState.filter(
+    this.overview()?.items ?? [],
+    item => this.statusLabel(item),
+  ));
+  readonly filteredCount = computed(() => this.filteredItems().length);
+  readonly decisionPending = computed(() => this.sortedItemsWithStatus('decision-pending'));
+  readonly current = computed(() => this.viewState.sort([
+    ...this.filteredItemsWithStatus('active'),
+    ...this.filteredItemsWithStatus('decided'),
+    ...this.filteredItemsWithStatus('invalid'),
+  ], item => this.statusLabel(item)));
+  readonly discarded = computed(() => this.sortedItemsWithStatus('archived'));
+  readonly documented = computed(() => this.sortedItemsWithStatus('documented'));
 
   constructor() {
     effect(() => {
       const projectName = this.projectName();
       untracked(() => {
+        this.viewState.setScope(projectName);
         this.discardedOpen.set(false);
         this.completedOpen.set(false);
         this.expandedDecisionKey.set(null);
@@ -130,8 +147,19 @@ export class WorkbenchOverviewComponent {
     }).format(new Date(value));
   }
 
-  private itemsWithStatus(status: string): WorkbenchOverviewItem[] {
-    return (this.overview()?.items ?? []).filter(item => item.workbench.status === status);
+  keyLabel(item: WorkbenchOverviewItem): string {
+    return item.workbench.key ?? item.workbench.id;
+  }
+
+  private filteredItemsWithStatus(status: string): WorkbenchOverviewItem[] {
+    return this.filteredItems().filter(item => item.workbench.status === status);
+  }
+
+  private sortedItemsWithStatus(status: string): WorkbenchOverviewItem[] {
+    return this.viewState.sort(
+      this.filteredItemsWithStatus(status),
+      item => this.statusLabel(item),
+    );
   }
 
   private itemKey(item: WorkbenchOverviewItem): string {

@@ -1,0 +1,42 @@
+<div class="overview-controls" data-testid="workbench-overview-controls">
+  <label class="overview-controls__filter">
+    <span>Filter</span>
+    <input
+      type="search"
+      autocomplete="off"
+      data-testid="workbench-overview-filter"
+      placeholder="Key, title, project or status"
+      [value]="query()"
+      (input)="onQueryInput($event)" />
+  </label>
+
+  <div class="overview-controls__sort" role="group" aria-label="Sort Dossiers">
+    <span>Sort by</span>
+    <div class="overview-controls__segments">
+      @for (option of sortOptions; track option.key) {
+        <button
+          type="button"
+          [class.overview-controls__sort-button--active]="sortKey() === option.key"
+          [attr.aria-pressed]="sortKey() === option.key"
+          [attr.aria-label]="sortAriaLabel(option.key, option.label)"
+          [attr.data-testid]="'workbench-overview-sort-' + option.key"
+          (click)="sortChange.emit(option.key)">
+          <span>{{ option.label }}</span>
+          @if (sortKey() === option.key) {
+            <i aria-hidden="true">{{ direction() === 'asc' ? '↑' : '↓' }}</i>
+          }
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (active()) {
+    <button
+      type="button"
+      class="overview-controls__reset"
+      data-testid="workbench-overview-reset"
+      (click)="resetView.emit()">
+      Reset view
+    </button>
+  }
+</div>
