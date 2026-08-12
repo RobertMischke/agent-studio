@@ -79,6 +79,14 @@ internal static class RunnerCapabilityProbe
         }
         else
         {
+            // Remote pipeline aspects are bounded, read-only agent calls inside
+            // the exact-subject review workspace. Advertise the same provider
+            // execution and authentication facts used by coding claims so the
+            // Task Server can keep incompatible hosts out of the review lease.
+            AddCodingCliCapabilities(
+                list,
+                options,
+                providerAuth ?? ProviderAuthProbe.Shared);
             list.Add(Capability(CapabilityProtocol.Vision, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));

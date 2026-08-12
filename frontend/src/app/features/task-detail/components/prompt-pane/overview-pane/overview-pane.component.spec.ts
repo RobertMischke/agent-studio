@@ -1283,6 +1283,10 @@ describe('OverviewPaneComponent (smoke)', () => {
             startedAt: '2026-07-30T08:00:00Z', completedAt: '2026-07-30T08:10:00Z',
             durationMs: 600_000, inputTokens: 100, outputTokens: 20,
             cacheReadTokens: 0, cacheCreationTokens: 0,
+            executionLocation: {
+              executionKind: 'remote', hostId: 'runner-host-1', executorId: 'runner-1',
+              leaseId: 'run-lease-1', fence: 17,
+            },
           },
           {
             stepId: 'aspect-code-quality', kind: 'aspect', status: 'skipped',
@@ -1327,6 +1331,11 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(row?.getAttribute('data-status')).toBe('notApplicable');
     expect(row?.textContent).toContain('executed remotely · not applicable');
     expect(row?.textContent).not.toContain('not run:');
+    const location = fixture.nativeElement.querySelector(
+      '[data-step-id="core-agent-run"] [data-testid="overview-pipeline-step-location"]',
+    ) as HTMLElement | null;
+    expect(location?.textContent).toContain('Remote · runner-host-1');
+    expect(location?.getAttribute('data-execution-kind')).toBe('remote');
   });
 
   it('pipeline block: no verify commands is neutral while a required skipped build gate needs attention', async () => {

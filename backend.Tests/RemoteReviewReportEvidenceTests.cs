@@ -85,6 +85,10 @@ public sealed class RemoteReviewReportEvidenceTests : IDisposable
             stderr,
             await File.ReadAllBytesAsync(Path.Combine(
                 _root, "remote-review-attempt-1-candidate_prepare-dependencies_stderr_log")));
+        var json = await File.ReadAllTextAsync(Path.Combine(
+            _root, "remote-review-grade-attempt-1.json"));
+        Assert.Contains("\"leaseId\": \"lease\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"hostId\": \"host\"", json, StringComparison.Ordinal);
     }
 
     private static ReviewArtifactEvidenceDto Artifact(string name, byte[] content, string digest)

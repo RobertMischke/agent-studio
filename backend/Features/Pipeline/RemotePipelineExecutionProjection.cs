@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Pipeline;
 
@@ -23,7 +25,8 @@ internal static class RemotePipelineExecutionProjection
         string AttemptId,
         DateTime ReceivedAt,
         string Outcome,
-        string? Summary);
+        string? Summary,
+        Contract.ReviewReportRequest? Report = null);
 
     public static Result Project(
         PipelineExecutionRecord? local,
@@ -79,14 +82,6 @@ internal static class RemotePipelineExecutionProjection
             .ToList();
 
         SkipRemoteOnlySteps(steps, pipeline.Pre.Select(step => step.Id));
-        SkipRemoteOnlySteps(
-            steps,
-            pipeline.Post
-                .Where(step =>
-                    step.Kind is StepKind.Aspect or StepKind.Drift
-                    || step.Id is PipelineCatalogue.OrchestratorReviewStepId
-                        or PipelineCatalogue.CodeReviewGradeStepId)
-                .Select(step => step.Id));
 
         var allocations = AllocateLedgerCalls(
             tokenSummary,
@@ -102,11 +97,18 @@ internal static class RemotePipelineExecutionProjection
                 steps,
                 pipeline,
                 PipelineCatalogue.CoreAgentRunStepId,
-                BuildCoreStep(task, completion, startedAt, attempt, coreCalls));
+                BuildCoreStep(
+                    task,
+                    completion,
+                    startedAt,
+                    attempt,
+                    coreCalls,
+                    remoteSessions.LastOrDefault(item => item.Ts <= completion.Ts)?.ExecutionLocation));
         }
 
         if (grade is not null)
         {
+            ProjectReviewSteps(steps, pipeline, grade, attempt);
             var decisionCalls = allocations.GetValueOrDefault(decisionId) ?? [];
             Upsert(
                 steps,
@@ -114,6 +116,15 @@ internal static class RemotePipelineExecutionProjection
                 decisionId,
                 BuildDecisionStep(decisionId, grade, attempt, decisionCalls));
         }
+
+        SkipRemoteOnlySteps(
+            steps,
+            pipeline.Post
+                .Where(step =>
+                    step.Kind is StepKind.Aspect or StepKind.Drift
+                    || step.Id is PipelineCatalogue.OrchestratorReviewStepId
+                        or PipelineCatalogue.CodeReviewGradeStepId)
+                .Select(step => step.Id));
 
         var latestProjectedAt = new[]
             {
@@ -168,7 +179,8 @@ internal static class RemotePipelineExecutionProjection
         TimelineEvent completion,
         DateTime startedAt,
         int attempt,
-        IReadOnlyList<TaskTokenCall> calls)
+        IReadOnlyList<TaskTokenCall> calls,
+        TaskExecutionLocation? location)
     {
         var statusToken = Detail(completion, "status")?.Trim().ToLowerInvariant();
         var passed = statusToken is "done" or "noop" or "completed" or "pass";
@@ -189,6 +201,16 @@ internal static class RemotePipelineExecutionProjection
                     ? "Remote runner completed the fenced coding run."
                     : completion.Summary,
                 Verdict = statusToken,
+                ExecutionLocation = location is null
+                    ? new PipelineStepExecutionLocation { ExecutionKind = "remote" }
+                    : new PipelineStepExecutionLocation
+                    {
+                        ExecutionKind = "remote",
+                        HostId = location.HostDisplayName,
+                        ExecutorId = location.RunnerId,
+                        InstanceId = location.ClientId,
+                        WorkspaceIdentity = location.WorktreePath,
+                    },
             },
             calls,
             task.Model);
@@ -224,10 +246,88 @@ internal static class RemotePipelineExecutionProjection
                 Reason = reason,
                 Verdict = verdict,
                 VerdictSummary = grade.Summary,
+                ExecutionLocation = ReviewLocation(grade),
             },
             calls,
             calls.LastOrDefault()?.Model);
     }
+
+    private static void ProjectReviewSteps(
+        List<PipelineStepExecution> steps,
+        TaskPipeline pipeline,
+        ReviewGrade grade,
+        int attempt)
+    {
+        if (grade.Report is null) return;
+        var candidates = grade.Report.Commands
+            .Where(command => string.Equals(command.Phase, "verification", StringComparison.OrdinalIgnoreCase)
+                              && string.Equals(command.WorkspaceRole, "candidate", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(command => PipelineStepId(command.StepId), StringComparer.OrdinalIgnoreCase);
+        foreach (var group in candidates)
+        {
+            if (!pipeline.AllSteps.Any(step => string.Equals(step.Id, group.Key, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            var commands = group.ToArray();
+            var verdict = grade.Report.Verdicts.LastOrDefault(item =>
+                commands.Any(command => string.Equals(command.Aspect, item.Aspect, StringComparison.OrdinalIgnoreCase)));
+            var isDecisionSupport = string.Equals(
+                group.Key,
+                PipelineCatalogue.CodeReviewGradeStepId,
+                StringComparison.OrdinalIgnoreCase);
+            var failed = commands.Any(command => command.ExitCode != 0 || command.Signal is not null)
+                         || verdict?.Status is "block" or "fail";
+            var startedAt = commands.Min(command => command.StartedAt);
+            var completedAt = commands.Max(command => command.FinishedAt);
+            var usage = commands.Where(command => command.TokenUsage is not null)
+                .Select(command => command.TokenUsage!)
+                .ToArray();
+            Upsert(steps, pipeline, group.Key, new PipelineStepExecution
+            {
+                StepId = group.Key,
+                Attempt = attempt,
+                Status = failed ? PipelineStepStatus.Failed : PipelineStepStatus.Passed,
+                StartedAt = startedAt,
+                CompletedAt = completedAt,
+                DurationMs = DurationMs(startedAt, completedAt),
+                Model = commands.LastOrDefault(command => !string.IsNullOrWhiteSpace(command.Model))?.Model,
+                ThinkingLevel = commands.LastOrDefault(command => !string.IsNullOrWhiteSpace(command.ThinkingLevel))?.ThinkingLevel,
+                InputTokens = usage.Sum(item => item.InputTokens),
+                OutputTokens = usage.Sum(item => item.OutputTokens),
+                CacheReadTokens = usage.Sum(item => item.CacheReadTokens),
+                CacheCreationTokens = usage.Sum(item => item.CacheCreationTokens),
+                TokenUsageSource = usage.Length == 0 ? null : "Remote Review command evidence",
+                Reason = $"Remote Review Executor {grade.Report.ExecutorId} on {grade.Report.Environment.HostId} ran this step under lease {grade.Report.LeaseId}, fence {grade.Report.Fence}.",
+                Verdict = isDecisionSupport
+                          && verdict?.Classification.StartsWith("CodeReviewGrade:", StringComparison.OrdinalIgnoreCase) == true
+                    ? verdict.Classification[(verdict.Classification.IndexOf(':') + 1)..].ToLowerInvariant()
+                    : verdict?.Status ?? (failed ? "fail" : "pass"),
+                VerdictSummary = verdict?.Summary,
+                ExecutionLocation = ReviewLocation(grade),
+            });
+        }
+    }
+
+    private static string PipelineStepId(string commandStepId)
+    {
+        var separator = commandStepId.IndexOf(':');
+        return separator > 0 ? commandStepId[..separator] : commandStepId;
+    }
+
+    private static PipelineStepExecutionLocation? ReviewLocation(ReviewGrade grade)
+        => grade.Report is null
+            ? null
+            : new PipelineStepExecutionLocation
+            {
+                ExecutionKind = "remote",
+                HostId = grade.Report.Environment.HostId,
+                ExecutorId = grade.Report.ExecutorId,
+                InstanceId = grade.Report.InstanceId,
+                LeaseId = grade.Report.LeaseId,
+                Fence = grade.Report.Fence,
+                AttemptId = grade.AttemptId,
+                ResourceNamespace = grade.Report.Workspace.ResourceNamespace,
+                WorkspaceIdentity = grade.Report.Workspace.WorkspaceIdentity,
+            };
 
     private static PipelineStepExecution WithLedgerUsage(
         PipelineStepExecution step,
@@ -375,6 +475,31 @@ internal static class RemotePipelineExecutionProjection
     {
         if (string.IsNullOrWhiteSpace(jobFolder) || !Directory.Exists(jobFolder)) return null;
         ReviewGrade? latest = null;
+        foreach (var path in Directory.EnumerateFiles(jobFolder, "remote-review-grade-*.json"))
+        {
+            try
+            {
+                var envelope = JsonSerializer.Deserialize<AgentStudio.Runner.RemoteReviewReportEnvelope>(
+                    File.ReadAllText(path),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                if (envelope is null) continue;
+                var parsed = new ReviewGrade(
+                    envelope.AttemptId,
+                    envelope.ReceivedAt,
+                    envelope.Report.Outcome,
+                    envelope.Report.Summary,
+                    envelope.Report);
+                if (latest is null || parsed.ReceivedAt > latest.ReceivedAt) latest = parsed;
+            }
+            catch (JsonException exception)
+            {
+                SilentCatch.Note(exception, $"Remote pipeline projection ignored malformed review evidence: {path}");
+            }
+            catch (IOException exception)
+            {
+                SilentCatch.Note(exception, $"Remote pipeline projection could not read review evidence: {path}");
+            }
+        }
         foreach (var path in Directory.EnumerateFiles(jobFolder, "remote-review-grade-*.md"))
         {
             var parsed = ParseGrade(path);

@@ -73,11 +73,15 @@ public class PipelineExecutionRestartTests : IDisposable
             string.Equals(s.StepId, PipelineCatalogue.CoreAgentRunStepId, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(PipelineStepStatus.Passed, archivedCore.Status);
         Assert.Equal(5000, archivedCore.DurationMs);
+        Assert.Equal("local", archivedCore.ExecutionLocation?.ExecutionKind);
+        Assert.Equal(Environment.MachineName, archivedCore.ExecutionLocation?.HostId);
+        Assert.Equal("studio-control-plane", archivedCore.ExecutionLocation?.ExecutorId);
 
         // The fresh run's own steps are reset to Pending/Planned.
         var freshCore = second.Steps.First(s =>
             string.Equals(s.StepId, PipelineCatalogue.CoreAgentRunStepId, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(PipelineStepStatus.Pending, freshCore.Status);
+        Assert.Null(freshCore.ExecutionLocation);
         Assert.Null(second.CompletedAt);
     }
 

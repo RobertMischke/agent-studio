@@ -192,6 +192,103 @@ public sealed class RemoteReviewAuthorityTests
     }
 
     [Fact]
+    public async Task Quality_grade_is_decision_support_and_does_not_change_a_passing_review_outcome()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var plan = new ReviewPlanDto(
+            [
+                new ReviewCommandDto("verify", "build-tests", "review-tool", ["build-tests"]),
+                new ReviewCommandDto(
+                    "post-code-review-grade",
+                    "code-review-grade",
+                    "review-tool",
+                    ["grade"]),
+            ],
+            ["build-tests", "code-review-grade"]);
+        await SeedReviewSubjectAsync(store, plan: plan);
+        await RegisterReviewerAsync(store, "review-a", "review-instance-a", "review-host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "review-instance-a"), "review-a", default);
+        var passing = PassingReport(claim);
+        var gradeD = passing with
+        {
+            Verdicts = passing.Verdicts.Select(verdict =>
+                string.Equals(verdict.Aspect, "code-review-grade", StringComparison.OrdinalIgnoreCase)
+                    ? verdict with
+                    {
+                        Status = "block",
+                        Classification = "CodeReviewGrade:D",
+                        Summary = "Substantial changes required.",
+                    }
+                    : verdict).ToArray(),
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, gradeD, "review-a", default);
+
+        Assert.Equal("Pass", report.Outcome);
+    }
+
+    [Fact]
+    public async Task Agent_review_plan_is_claimed_only_by_a_runner_with_the_planned_cli_and_authentication()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var plan = new ReviewPlanDto(
+            [
+                new ReviewCommandDto(
+                    "aspect-code-quality",
+                    "code-quality",
+                    "agent",
+                    [],
+                    ExecutionKind: "agent",
+                    CliType: "codex",
+                    Model: "gpt-5.4-mini",
+                    ThinkingLevel: "high",
+                    Prompt: "Review the immutable subject."),
+            ],
+            ["code-quality"]);
+        await SeedReviewSubjectAsync(store, plan: plan);
+        await RegisterReviewerAsync(store, "review-no-cli", "instance-no-cli", "host-no-cli");
+
+        var incompatible = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-no-cli", "instance-no-cli"),
+            "review-no-cli",
+            default);
+
+        Assert.Equal("empty", incompatible.Status);
+
+        await store.RegisterRunnerAsync(
+            "review-codex",
+            new RegisterRunnerRequest(
+                "review-codex",
+                "host-codex",
+                "instance-codex",
+                "1.0.0",
+                TaskServerProtocol.Current,
+                [
+                    ReviewCapabilities.ReviewExecutor,
+                    ReviewCapabilities.GitMaterialization,
+                    ReviewCapabilities.SemanticReview,
+                    CapabilityProtocol.CliExecution("codex"),
+                    CapabilityProtocol.ProviderAuthentication("codex"),
+                ]),
+            "review-codex",
+            default);
+
+        var compatible = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-codex", "instance-codex"),
+            "review-codex",
+            default);
+
+        Assert.Equal("claimed", compatible.Status);
+        Assert.Equal("review-codex", compatible.Lease?.ExecutorId);
+    }
+
+    [Fact]
     public async Task Cleanup_does_not_reopen_an_operator_lane_move_or_leave_review_authority_active()
     {
         using var temp = new TempDirectory();

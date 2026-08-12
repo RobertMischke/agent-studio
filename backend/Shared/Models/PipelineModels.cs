@@ -236,6 +236,11 @@ public sealed record PipelineStepExecution
     public string? SelectionSource { get; init; }
     /// <summary>Heuristic saving versus the live catalogue's top rung.</summary>
     public int? EstimatedSavingsPercent { get; init; }
+    /// <summary>
+    /// Immutable provenance of the host and fenced lease that executed this
+    /// step. Null on legacy rows that predate per-step location evidence.
+    /// </summary>
+    public PipelineStepExecutionLocation? ExecutionLocation { get; init; }
     public PipelineStepStatus Status { get; init; } = PipelineStepStatus.Pending;
     public DateTime? StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
@@ -273,6 +278,19 @@ public sealed record PipelineStepExecution
     /// detail (e.g. a pass verdict, or a non-aspect step).
     /// </summary>
     public string? VerdictSummary { get; init; }
+}
+
+public sealed record PipelineStepExecutionLocation
+{
+    public string ExecutionKind { get; init; } = "local";
+    public string? HostId { get; init; }
+    public string? ExecutorId { get; init; }
+    public string? InstanceId { get; init; }
+    public string? LeaseId { get; init; }
+    public long? Fence { get; init; }
+    public string? AttemptId { get; init; }
+    public string? ResourceNamespace { get; init; }
+    public string? WorkspaceIdentity { get; init; }
 }
 
 public enum PipelineStepStatus

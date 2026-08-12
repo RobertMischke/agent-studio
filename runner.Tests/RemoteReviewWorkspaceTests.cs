@@ -54,6 +54,59 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         },
     };
 
+    [Fact]
+    public void Remote_agent_step_output_parses_codex_verdict_and_usage()
+    {
+        var process = new ProcessResult(
+            0,
+            "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Looks good.\\n[[ASPECT_VERDICT: status=pass; summary=Verified.]]\"}}\n" +
+            "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":120,\"output_tokens\":30,\"cached_input_tokens\":10}}",
+            string.Empty);
+
+        var parsed = RemoteAgentStepOutput.Parse(process, "codex", "gpt-5.4-mini");
+
+        Assert.Contains("ASPECT_VERDICT", parsed.Reply, StringComparison.Ordinal);
+        Assert.Equal("gpt-5.4-mini", parsed.Usage?.Model);
+        Assert.Equal(120, parsed.Usage?.InputTokens);
+        Assert.Equal(10, parsed.Usage?.CacheReadTokens);
+    }
+
+    [Fact]
+    public void Remote_agent_step_output_parses_claude_verdict_and_usage()
+    {
+        var process = new ProcessResult(
+            0,
+            """{"result":"[[ASPECT_VERDICT: status=concerns; summary=Check docs.]]","model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":12,"cache_read_input_tokens":3}}""",
+            string.Empty);
+
+        var parsed = RemoteAgentStepOutput.Parse(process, "claude", "claude-sonnet-5");
+
+        Assert.Contains("status=concerns", parsed.Reply, StringComparison.Ordinal);
+        Assert.Equal(50, parsed.Usage?.InputTokens);
+        Assert.Equal(12, parsed.Usage?.OutputTokens);
+    }
+
+    [Fact]
+    public void Remote_quality_grade_is_projected_as_decision_support_verdict()
+    {
+        var command = new ReviewCommandDto(
+            "post-code-review-grade",
+            "code-review-grade",
+            "agent",
+            [],
+            ExecutionKind: "agent");
+        var process = new ProcessResult(
+            0,
+            "Review complete.\n[[CODE_REVIEW_GRADE: grade=D; summary=Substantial changes required.]]",
+            string.Empty);
+
+        var verdict = RemoteReviewWorkspace.ParseVerdict(command, process);
+
+        Assert.Equal("block", verdict.Status);
+        Assert.Equal("CodeReviewGrade:D", verdict.Classification);
+        Assert.Equal("Substantial changes required.", verdict.Summary);
+    }
+
     [Theory]
     [MemberData(nameof(NodeFailureFixtures))]
     public void Parsed_test_failures_understands_node_test_runner_output(
@@ -183,6 +236,79 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal(workspace.BaselineCacheRoot, environment.Isolation["baselineResultCache"]);
         Assert.True(await workspace.CleanupAsync());
         Assert.False(Directory.Exists(workspace.AttemptRoot));
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    [Trait("Category", "ReviewFlaky")]
+    public async Task Tool_and_aspect_steps_execute_end_to_end_in_the_same_remote_task_worktree()
+    {
+        var sha = await SeedOriginAsync();
+        var fakeCodex = Path.Combine(_root, "fake-codex-review");
+        await File.WriteAllTextAsync(fakeCodex, """
+            #!/bin/sh
+            cat >/dev/null
+            printf '{"type":"item.completed","item":{"type":"agent_message","text":"review-cwd=%s\\n[[ASPECT_VERDICT: status=pass; summary=Remote aspect passed.]]"}}\n' "$PWD"
+            printf '{"type":"turn.completed","usage":{"input_tokens":17,"output_tokens":5,"cached_input_tokens":3}}\n'
+            """);
+        var chmod = await ProcessRunner.RunAsync("chmod", ["u+x", fakeCodex], workingDirectory: _root);
+        Assert.True(chmod.Success, $"chmod failed ({chmod.ExitCode}): {chmod.StdErr}");
+        var commands = new ReviewCommandDto[]
+        {
+            new(
+                "post-build-test-gate:1",
+                "build-tests",
+                PosixShell.RequirePath(),
+                ["-c", "test \"$(git rev-parse HEAD)\" = \"$(git rev-parse --verify HEAD)\""]),
+            new(
+                "aspect-code-quality",
+                "code-quality",
+                "agent",
+                [],
+                ExecutionKind: "agent",
+                CliType: "codex",
+                Model: "gpt-5.4-mini",
+                ThinkingLevel: "high",
+                Prompt: "Review this exact subject and return the required verdict marker."),
+        };
+        var (workspace, _) = Workspace(
+            "tool-aspect-e2e",
+            sha,
+            commands,
+            24002,
+            cliBinary: fakeCodex);
+
+        var prepared = await workspace.PrepareAsync(null!, default);
+        var evidence = await workspace.ExecutePlanAsync(default);
+
+        Assert.Equal("Pass", evidence.Outcome);
+        Assert.Equal(sha, prepared.ActualHead);
+        Assert.Collection(
+            evidence.Commands.Where(command => command.Phase == "verification"),
+            tool =>
+            {
+                Assert.Equal("post-build-test-gate:1", tool.StepId);
+                Assert.Equal(0, tool.ExitCode);
+                Assert.Equal(sha, tool.HeadBefore);
+            },
+            aspect =>
+            {
+                Assert.Equal("aspect-code-quality", aspect.StepId);
+                Assert.Equal("agent", aspect.ExecutionKind);
+                Assert.Equal("codex", aspect.CliType);
+                Assert.Equal("gpt-5.4-mini", aspect.Model);
+                Assert.Equal(17, aspect.TokenUsage?.InputTokens);
+            });
+        var aspectStdout = Assert.Single(evidence.Artifacts, artifact =>
+            artifact.Name.Contains("aspect-code-quality", StringComparison.Ordinal)
+            && artifact.Name.EndsWith("stdout.log", StringComparison.Ordinal));
+        Assert.Contains(
+            workspace.RepositoryPath,
+            System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(aspectStdout.ContentBase64!)),
+            StringComparison.Ordinal);
+        Assert.All(evidence.Commands, command => Assert.Equal(sha, command.HeadBefore));
+        Assert.False(evidence.Workspace.DirtyAfter);
+        Assert.Equal("review-host", workspace.EnvironmentEvidence().HostId);
     }
 
     [Fact]
@@ -805,7 +931,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         string? resultRef = null,
         string? integrationRef = null,
         IReadOnlyList<ReviewPreparationCommandDto>? preparation = null,
-        IReadOnlyList<string>? preserveGlobs = null)
+        IReadOnlyList<string>? preserveGlobs = null,
+        string? cliBinary = null)
     {
         var repositoryId = TaskServerClient.RepositoryIdentity(_origin)!;
         var subject = new ReviewSubjectDto(
@@ -851,8 +978,10 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             WorkDir = Path.Combine(_root, "coding"),
             ReviewWorkDir = _reviewRoot,
             BaseBranch = "main",
-            CliBin = "unused",
+            CliBin = cliBinary ?? "unused",
+            CodexCliBin = cliBinary ?? "codex",
             CliArgs = "",
+            ExecEngine = RunnerOptions.ExecEngineCar,
             TtlSeconds = 120,
             HeartbeatSeconds = 30,
         };

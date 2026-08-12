@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Auto-review display: parallel aspects + the orchestrator final verdict as
@@ -112,10 +113,35 @@ function pipelineAcceptedFinalVerdict() {
       steps: [
         execStep('pre-loop-guard', 'pre', 'passed'),
         execStep('core-agent-run', 'core', 'passed'),
-        execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('aspect-requirement-fit', 'aspect', 'passed', {
+          verdict: 'pass',
+          executionLocation: {
+            executionKind: 'remote',
+            hostId: 'runner-w18-02',
+            executorId: 'remote-review-runner',
+            instanceId: 'review-runner-02',
+            leaseId: 'lease-fixture-19',
+            fence: 19,
+            attemptId: 'attempt-fixture-19',
+            resourceNamespace: 'review/fixture/19',
+            workspaceIdentity: 'sha256:fixture',
+          },
+        }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-tests-and-evidence', 'aspect', 'passed', { verdict: 'pass' }),
-        execStep('post-lint-scss', 'tool', 'passed'),
+        execStep('post-lint-scss', 'tool', 'passed', {
+          executionLocation: {
+            executionKind: 'remote',
+            hostId: 'runner-w18-02',
+            executorId: 'remote-review-runner',
+            instanceId: 'review-runner-02',
+            leaseId: 'lease-fixture-19',
+            fence: 19,
+            attemptId: 'attempt-fixture-19',
+            resourceNamespace: 'review/fixture/19',
+            workspaceIdentity: 'sha256:fixture',
+          },
+        }),
         execStep('post-regression-radar', 'drift', 'passed', { verdict: 'clean' }),
         execStep('post-orchestrator-decision', 'orchestrator', 'passed', {
           verdict: 'accept',
@@ -338,6 +364,16 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(parallelNotes.first()).toHaveText('∥');
     await expect(parallelNotes.first()).toHaveAttribute('aria-label', 'Parallel review pool');
 
+    const remoteLocation = page
+      .locator('[data-step-id="aspect-requirement-fit"]')
+      .getByTestId('overview-pipeline-step-location');
+    await expect(remoteLocation).toHaveText('Remote · runner-w18-02');
+    await expect(remoteLocation).toHaveAttribute('data-execution-kind', 'remote');
+    await expect(
+      page.locator('[data-step-id="post-lint-scss"]')
+        .getByTestId('overview-pipeline-step-location'),
+    ).toHaveText('Remote · runner-w18-02');
+
     // The orchestrator decision is its own, clearly separated final-verdict row.
     // Its compact icon marker keeps the full kind available to assistive tech.
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
@@ -357,10 +393,13 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-parallel-aspects-and-final-verdict.png'),
-        fullPage: true,
-      });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await page.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-remote-step-location-${theme}.png`),
+          fullPage: true,
+        });
+      }
     }
 
     const aspectRow = page.locator('[data-step-id="aspect-requirement-fit"]');

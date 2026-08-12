@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Runner;
@@ -34,6 +35,19 @@ internal static class RemoteReviewReportEvidence
             receivedAt,
             artifactFiles);
         await File.WriteAllTextAsync(path, report, new UTF8Encoding(false), ct);
+        var jsonPath = Path.Combine(jobFolder, $"remote-review-grade-{SafeFilePart(attemptId)}.json");
+        await File.WriteAllTextAsync(
+            jsonPath,
+            JsonSerializer.Serialize(
+                new RemoteReviewReportEnvelope(
+                    attemptId,
+                    subjectId,
+                    reportSha256,
+                    receivedAt,
+                    request),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }),
+            new UTF8Encoding(false),
+            ct);
         return fileName;
     }
 
@@ -176,3 +190,10 @@ internal static class RemoteReviewReportEvidence
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
 }
+
+internal sealed record RemoteReviewReportEnvelope(
+    string AttemptId,
+    string SubjectId,
+    string ReportSha256,
+    DateTime ReceivedAt,
+    Contract.ReviewReportRequest Report);

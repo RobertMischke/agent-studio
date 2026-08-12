@@ -315,6 +315,9 @@ public sealed class CodeReviewStepService
         }
     }
 
+    /// <summary>Render the canonical grade prompt for a Remote Review plan.</summary>
+    internal string BuildRemotePrompt(CodeReviewStepRequest request) => BuildPrompt(request);
+
     private static string BuildInlineFallbackPrompt(CodeReviewStepRequest request)
     {
         var cardMode = string.IsNullOrWhiteSpace(request.CardMode)
