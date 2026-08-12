@@ -136,6 +136,7 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     expect(rows.map(row => row.dataset['project'])).toEqual(['Runbook', 'Agent Studio', 'Agent Studio']);
     expect(rows.map(row => row.querySelector('[data-testid="orchestrator-entry-project"]')?.textContent?.trim()))
       .toEqual(['RUN', 'AGT', 'AGT']);
+    expect(fixture.componentInstance.projectColor('Agent Studio')).toBe('#123456');
     expect(root.querySelector('[data-testid="orchestrator-feed-day"]')?.textContent).not.toContain('Agent Studio');
   });
 
@@ -210,7 +211,7 @@ function registryWorkspaces(): RegistryWorkspaceListItem[] {
     displayName,
     shortCode,
     workspaceId: 'workspace-1',
-    color: null,
+    color: shortCode === 'AGT' ? '#123456' : null,
     cliDefault: null,
     modelDefault: null,
     sortOrder,

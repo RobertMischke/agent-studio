@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
-import { projectIdentity } from '../../../../services/project-identity.util';
 import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
 
 /** One width-stable row in the workspace chronological event stream. */
@@ -59,7 +58,7 @@ export class OrchestratorFeedEntryComponent {
   }
 
   projectColor(project: string): string {
-    return projectIdentity(project).color;
+    return this.projectLookup.getProjectDisplay(project).color;
   }
 
   projectCode(project: string): string {

@@ -9,8 +9,7 @@
         <span class="orch-feed__scope orch-feed__scope--project" data-testid="orchestrator-feed-scope">Workspace scope</span>
       </div>
       <p class="orch-feed__sub">
-        {{ visibleProjectCount() }} {{ visibleProjectCount() === 1 ? 'project' : 'projects' }} ·
-        {{ visibleEntries().length }} events · newest first
+        {{ projectScopeLabel() }} · {{ kindScopeLabel() }} · newest first
       </p>
     </div>
     <div class="orch-feed__views" role="group" aria-label="Transparency view">

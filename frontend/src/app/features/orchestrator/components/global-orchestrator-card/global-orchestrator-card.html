@@ -34,6 +34,7 @@
         <div><dt>Last used</dt><dd>{{ formatTime(s.lastUsedAt) }}</dd></div>
         <div><dt>Input / output</dt><dd>{{ formatTokens(s.cumulativeInputTokens) }} / {{ formatTokens(s.cumulativeOutputTokens) }}</dd></div>
         <div><dt>Cache read / created</dt><dd>{{ formatTokens(s.cumulativeCacheReadTokens) }} / {{ formatTokens(s.cumulativeCacheCreationTokens) }}</dd></div>
+        <div><dt>Reference</dt><dd><app-concept-help concept="orchestrator" /></dd></div>
         @if (s.lastError) {
           <div><dt>Last error</dt><dd class="global-orch__error">{{ s.lastError }}</dd></div>
         }

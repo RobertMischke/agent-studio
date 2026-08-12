@@ -991,7 +991,7 @@ export class App implements OnInit, OnDestroy {
           break;
         case 'feed':
         case 'chat-history':
-          project = tab.kind === 'feed' ? undefined : null;
+          project = null;
           break;
         case 'workbenches':
         case 'workbench':
