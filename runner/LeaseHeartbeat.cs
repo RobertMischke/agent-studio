@@ -71,6 +71,27 @@ public sealed class LeaseHeartbeat
                 }
                 catch (TaskServerException ex) when (IsDefinitiveLeaseRejection(ex))
                 {
+                    if (ex.StatusCode is 404 or 409)
+                    {
+                        try
+                        {
+                            var reported = _client.CodingAttemptFor(_lease);
+                            if (await _client.ReRegisterAttemptAsync(reported, shutdown))
+                            {
+                                _log(
+                                    $"lease authority re-adopted after HTTP {ex.StatusCode}; " +
+                                    $"attempt={reported.AttemptId} fence={reported.Fence}");
+                                continue;
+                            }
+                        }
+                        catch (Exception registrationException) when (
+                            registrationException is not OperationCanceledException)
+                        {
+                            _log(
+                                $"lease re-adoption failed after HTTP {ex.StatusCode}: " +
+                                registrationException.Message);
+                        }
+                    }
                     _authority?.Reject(
                         $"Task Server rejected lease renewal with HTTP {ex.StatusCode}: {ex.Message}");
                     MarkLeaseLost(

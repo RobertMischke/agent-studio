@@ -79,7 +79,8 @@ public sealed class AttemptAuthorityService
         string? executorDisplayName = null,
         string? backendName = null,
         int processId = 0,
-        string? clientId = null)
+        string? clientId = null,
+        string? leaseInstanceId = null)
     {
         if (Blank(taskKey) || Blank(repositoryId) || Blank(executorId) || Blank(hostId) || Blank(idempotencyKey))
             return InvalidRun("TaskKey, RepositoryId, ExecutorId, HostId, and IdempotencyKey are required.");
@@ -125,7 +126,7 @@ public sealed class AttemptAuthorityService
                 AuthorityEpoch = _state.AuthorityEpoch,
                 CreatedAt = now,
                 Lease = NewLease(executorId, hostId, fence, requestedTtlSeconds, now,
-                    executorDisplayName, backendName, processId, clientId),
+                    executorDisplayName, backendName, processId, clientId, leaseInstanceId),
                 IdempotencyKeys = [deliveryKey],
             };
             _state.RunAttempts.Add(attempt);
@@ -934,10 +935,149 @@ public sealed class AttemptAuthorityService
         }
     }
 
+    /// <summary>
+    /// Re-opens the renewal window for exact fenced attempts reported during
+    /// runner registration. Expiry alone is recoverable because the durable
+    /// attempt, lease, fence, epoch, executor, host, and lease instance still
+    /// have to match. A takeover or terminal transition changes at least one of
+    /// those facts and therefore cannot be reversed by re-registration.
+    /// </summary>
+    public IReadOnlyList<AgentStudio.TaskServer.Contracts.RunnerAttemptAdoption> ReAdoptRunnerAttempts(
+        string runnerId,
+        string hostId,
+        string instanceId,
+        IReadOnlyList<AgentStudio.TaskServer.Contracts.RunnerActiveAttempt>? attempts,
+        int requestedTtlSeconds)
+    {
+        if (attempts is null || attempts.Count == 0) return [];
+        if (Blank(runnerId) || Blank(hostId) || Blank(instanceId))
+            throw new ArgumentException("Runner, host, and instance ids are required for attempt re-adoption.");
+        if (attempts.Count > 256)
+            throw new ArgumentException("At most 256 active attempts may be reported during registration.");
+
+        lock (_gate)
+        {
+            var now = _utcNow();
+            var expiresAt = now.Add(NormalizeTtl(requestedTtlSeconds));
+            var changed = false;
+            var results = new List<AgentStudio.TaskServer.Contracts.RunnerAttemptAdoption>(attempts.Count);
+            foreach (var reported in attempts)
+            {
+                AgentStudio.TaskServer.Contracts.RunnerAttemptAdoption result;
+                if (Same(reported.Kind, AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Coding))
+                {
+                    result = ReAdoptRunLocked(reported, runnerId, hostId, expiresAt, now, out var adopted);
+                    changed |= adopted;
+                }
+                else if (Same(reported.Kind, AgentStudio.TaskServer.Contracts.RunnerAttemptKinds.Review))
+                {
+                    result = ReAdoptReviewLocked(
+                        reported, runnerId, hostId, expiresAt, now, out var adopted);
+                    changed |= adopted;
+                }
+                else
+                {
+                    result = Adoption(reported, "invalid", message: "Attempt kind must be coding or review.");
+                }
+                results.Add(result);
+            }
+
+            if (changed) PersistLocked();
+            return results;
+        }
+    }
+
+    public IReadOnlyList<ReviewAttemptDto> ListActiveReviewAttempts()
+    {
+        lock (_gate)
+        {
+            var now = _utcNow();
+            return _state.ReviewAttempts
+                .Where(IsCurrentReview)
+                .Where(review =>
+                    review.State == AttemptLifecycleState.Leased
+                    && review.Lease is { } lease
+                    && lease.ExpiresAt > now)
+                .Select(ToDto)
+                .ToList();
+        }
+    }
+
     public RunAttemptDto? GetRun(string attemptId)
     {
         lock (_gate) return FindRun(attemptId) is { } run ? ToDto(run) : null;
     }
+
+    private AgentStudio.TaskServer.Contracts.RunnerAttemptAdoption ReAdoptRunLocked(
+        AgentStudio.TaskServer.Contracts.RunnerActiveAttempt reported,
+        string runnerId,
+        string hostId,
+        DateTime expiresAt,
+        DateTime now,
+        out bool adopted)
+    {
+        adopted = false;
+        var run = FindRun(reported.AttemptId);
+        if (run is null) return Adoption(reported, "not-found", message: "RunAttempt was not found.");
+        if (!IsCurrentRun(run) || run.State == AttemptLifecycleState.Superseded)
+            return Adoption(reported, "superseded", message: "RunAttempt is no longer current.");
+        if (run.State != AttemptLifecycleState.Leased || run.Lease is null)
+            return Adoption(reported, "invalid-state", message: $"RunAttempt is {run.State}.");
+        if (!Same(run.TaskKey, reported.TaskKey)
+            || !Same(run.Lease.ExecutorId, runnerId)
+            || !Same(run.Lease.HostId, hostId)
+            || !Same(run.Lease.LeaseId, reported.LeaseId)
+            || run.LastFence != reported.Fence
+            || run.AuthorityEpoch != reported.AuthorityEpoch
+            || !Same(run.Lease.LeaseInstanceId, reported.LeaseInstanceId))
+        {
+            return Adoption(reported, "stale-authority", message: "RunAttempt authority does not match the durable server record.");
+        }
+
+        run.Lease.ExpiresAt = expiresAt;
+        run.Lease.LastHeartbeat = now;
+        adopted = true;
+        return Adoption(reported, "adopted", expiresAt);
+    }
+
+    private AgentStudio.TaskServer.Contracts.RunnerAttemptAdoption ReAdoptReviewLocked(
+        AgentStudio.TaskServer.Contracts.RunnerActiveAttempt reported,
+        string runnerId,
+        string hostId,
+        DateTime expiresAt,
+        DateTime now,
+        out bool adopted)
+    {
+        adopted = false;
+        var review = FindReview(reported.AttemptId);
+        if (review is null) return Adoption(reported, "not-found", message: "ReviewAttempt was not found.");
+        if (!IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded)
+            return Adoption(reported, "superseded", message: "ReviewAttempt is no longer current.");
+        if (review.State != AttemptLifecycleState.Leased || review.Lease is null)
+            return Adoption(reported, "invalid-state", message: $"ReviewAttempt is {review.State}.");
+        if (!Same(review.TaskKey, reported.TaskKey)
+            || !Same(review.Lease.ExecutorId, runnerId)
+            || !Same(review.Lease.HostId, hostId)
+            || !Same(review.Lease.LeaseId, reported.LeaseId)
+            || review.LastFence != reported.Fence
+            || review.AuthorityEpoch != reported.AuthorityEpoch
+            || !Same(review.Lease.ClientId, reported.LeaseInstanceId))
+        {
+            return Adoption(reported, "stale-authority", message: "ReviewAttempt authority does not match the durable server record.");
+        }
+
+        review.Lease.ExpiresAt = expiresAt;
+        review.Lease.LastHeartbeat = now;
+        adopted = true;
+        return Adoption(reported, "adopted", expiresAt);
+    }
+
+    private static AgentStudio.TaskServer.Contracts.RunnerAttemptAdoption Adoption(
+        AgentStudio.TaskServer.Contracts.RunnerActiveAttempt reported,
+        string status,
+        DateTime? expiresAt = null,
+        string? message = null)
+        => new(reported.Kind, reported.AttemptId, reported.TaskKey, status, expiresAt, message);
 
     public AgentStudio.TaskServer.Contracts.ResultHandoffDto? GetResultHandoff(string attemptId)
     {
@@ -1172,7 +1312,8 @@ public sealed class AttemptAuthorityService
         string? executorDisplayName = null,
         string? backendName = null,
         int processId = 0,
-        string? clientId = null) => new()
+        string? clientId = null,
+        string? leaseInstanceId = null) => new()
     {
         LeaseId = Guid.NewGuid().ToString("N"),
         Fence = fence,
@@ -1186,6 +1327,7 @@ public sealed class AttemptAuthorityService
         BackendName = NormalizeNull(backendName),
         ProcessId = processId,
         ClientId = NormalizeNull(clientId),
+        LeaseInstanceId = NormalizeNull(leaseInstanceId),
     };
 
     private long NextFenceLocked(string taskKey)
@@ -1523,7 +1665,8 @@ public sealed class AttemptAuthorityService
         ExecutorDisplayName: lease.ExecutorDisplayName,
         BackendName: lease.BackendName,
         ProcessId: lease.ProcessId,
-        ClientId: lease.ClientId);
+        ClientId: lease.ClientId,
+        LeaseInstanceId: lease.LeaseInstanceId);
     private static ReviewSubjectDto ToDto(ReviewSubjectRecord subject) => new(
         SubjectId: subject.SubjectId,
         RepositoryId: subject.RepositoryId,
@@ -1638,6 +1781,7 @@ public sealed class AttemptAuthorityService
         public string? BackendName { get; set; }
         public int ProcessId { get; set; }
         public string? ClientId { get; set; }
+        public string? LeaseInstanceId { get; set; }
     }
 
     private sealed class RunAttemptRecord

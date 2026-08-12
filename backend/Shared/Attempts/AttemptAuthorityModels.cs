@@ -32,7 +32,8 @@ public sealed record AttemptLeaseDto(
     string? ExecutorDisplayName = null,
     string? BackendName = null,
     int ProcessId = 0,
-    string? ClientId = null);
+    string? ClientId = null,
+    string? LeaseInstanceId = null);
 
 public sealed record ReviewSubjectDto(
     string SubjectId,

@@ -67,7 +67,8 @@ public sealed class RemoteTaskRunner
         _log($"acquiring lease for task '{taskKey}' as runner '{_options.RunnerId}' ({_options.RunnerName})");
         var acquire = await _client.AcquireLeaseAsync(new RunLeaseAcquireRequest(
             taskKey, _options.RunnerId, _options.RunnerName, _options.Hostname,
-            Environment.ProcessId, _options.BackendName, _options.TtlSeconds), shutdown);
+            Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+            LeaseInstanceId: _client.RunnerInstanceId), shutdown);
 
         if (!acquire.Granted || acquire.Lease is null)
         {

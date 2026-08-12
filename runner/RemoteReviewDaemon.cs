@@ -30,6 +30,11 @@ public sealed class RemoteReviewDaemon
         shutdown = daemonStop.Token;
         var state = new ReviewStateStore(_options.StateDir);
         var persistedAtStartup = state.LoadAll();
+        Task<string> RegisterAsync(CancellationToken ct) => _client.RegisterAsync(
+            _options.RunnerName,
+            "review-executor",
+            ct,
+            RunnerActiveAttemptReporter.Review(state.LoadAll()));
         var active = new List<(Task<int> Run, string AttemptId, string ResourceNamespace)>();
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var telemetry = new HostTelemetrySampler();
@@ -71,7 +76,7 @@ public sealed class RemoteReviewDaemon
         {
             await WithServerRetryAsync(
                 "review registration",
-                () => _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown),
+                () => RegisterAsync(shutdown),
                 connectivity,
                 () => Math.Max(active.Count, persistedAtStartup.Count),
                 shutdown);
@@ -126,7 +131,7 @@ public sealed class RemoteReviewDaemon
             },
             async ct =>
             {
-                _ = await _client.RegisterAsync(_options.RunnerName, "review-executor", ct);
+                _ = await RegisterAsync(ct);
             },
             connectivity,
             () => active.Count,
@@ -200,10 +205,7 @@ public sealed class RemoteReviewDaemon
                             ct),
                         async ct =>
                         {
-                            _ = await _client.RegisterAsync(
-                                _options.RunnerName,
-                                "review-executor",
-                                ct);
+                            _ = await RegisterAsync(ct);
                         },
                         connectivity,
                         () => active.Count,
@@ -340,7 +342,7 @@ public sealed class RemoteReviewDaemon
                     "performing full review executor re-registration");
                 await WithServerRetryAsync(
                     "review claim authority recovery registration",
-                    () => _client.RegisterAsync(_options.RunnerName, "review-executor", shutdown),
+                    () => RegisterAsync(shutdown),
                     connectivity,
                     () => active.Count,
                     shutdown);

@@ -548,6 +548,27 @@ public sealed partial class TaskServerStore
             throw new TaskServerConflictException(
                 "runner-role-conflict",
                 "Coding and review executors require separate registered service identities.");
+        var activeAttempts = request.ActiveAttempts ?? [];
+        if (activeAttempts.Count > 256)
+            throw new ArgumentException("At most 256 active attempts may be reported during registration.");
+        var expectedAttemptKind = capabilities.Contains(
+            ReviewCapabilities.ReviewExecutor,
+            StringComparer.Ordinal)
+            ? RunnerAttemptKinds.Review
+            : RunnerAttemptKinds.Coding;
+        if (activeAttempts.Any(attempt => !string.Equals(
+                attempt.Kind, expectedAttemptKind, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException(
+                $"A {expectedAttemptKind} runner may report only {expectedAttemptKind} attempts.");
+        }
+        if (activeAttempts
+            .Select(attempt => attempt.AttemptId)
+            .Distinct(StringComparer.Ordinal)
+            .Count() != activeAttempts.Count)
+        {
+            throw new ArgumentException("Active attempt ids must be unique within a registration.");
+        }
 
         var id = StableOrGeneratedId(runnerId, "rnr");
         var now = Iso(UtcNow);
@@ -556,6 +577,7 @@ public sealed partial class TaskServerStore
             ReviewCapabilities.CodingExecutor,
             StringComparer.Ordinal);
         RuntimeCapacitySettingsDto? runtimeCapacity = null;
+        IReadOnlyList<RunnerAttemptAdoption> attemptAdoptions = [];
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var existingCapabilitiesJson = Convert.ToString(
@@ -644,6 +666,46 @@ public sealed partial class TaskServerStore
                     request.HostId.Trim(),
                     ct);
             }
+            attemptAdoptions = await ReAdoptRunnerAttemptsAsync(
+                connection,
+                transaction,
+                id,
+                request.HostId.Trim(),
+                activeAttempts,
+                request.AttemptLeaseTtlSeconds,
+                ct);
+            if (activeAttempts.Count > 0)
+            {
+                var activeSlots = attemptAdoptions.Count(item =>
+                    string.Equals(item.Status, "adopted", StringComparison.Ordinal));
+                var observedAt = UtcNow;
+                var telemetry = new HostTelemetrySnapshotDto(
+                    observedAt,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    activeSlots,
+                    TaskServerConnectionStatus: "connected",
+                    TaskServerConnectionObservedAt: observedAt);
+                await ExecuteAsync(connection, """
+                    INSERT INTO runner_telemetry_latest(runner_id, payload_json, observed_at)
+                    VALUES ($runner, $payload, $observed)
+                    ON CONFLICT(runner_id) DO UPDATE SET
+                        payload_json = excluded.payload_json,
+                        observed_at = excluded.observed_at;
+                    """, ct, transaction,
+                    ("$runner", id),
+                    ("$payload", JsonSerializer.Serialize(telemetry)),
+                    ("$observed", Iso(observedAt)));
+            }
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new
                 {
@@ -655,11 +717,147 @@ public sealed partial class TaskServerStore
                     request.HostOrchestratorMaximum,
                     bootstrapMaxParallelism,
                     runtimeCapacity?.MaxParallelism,
+                    activeAttemptsReported = activeAttempts.Count,
+                    activeAttemptsAdopted = attemptAdoptions.Count(item =>
+                        string.Equals(item.Status, "adopted", StringComparison.Ordinal)),
                 }), ct);
         }, ct);
         return new RunnerDto(id, request.Name.Trim(), request.HostId.Trim(), request.InstanceId.Trim(), request.RunnerVersion,
-            request.ProtocolVersion, "active", Parse(now), Parse(now), runtimeCapacity);
+            request.ProtocolVersion, "active", Parse(now), Parse(now), runtimeCapacity, attemptAdoptions);
     }
+
+    private async Task<IReadOnlyList<RunnerAttemptAdoption>> ReAdoptRunnerAttemptsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runnerId,
+        string hostId,
+        IReadOnlyList<RunnerActiveAttempt> attempts,
+        int requestedTtlSeconds,
+        CancellationToken ct)
+    {
+        if (attempts.Count == 0) return [];
+        var expiresAt = UtcNow.AddSeconds(NormalizeTtl(requestedTtlSeconds));
+        var results = new List<RunnerAttemptAdoption>(attempts.Count);
+        foreach (var reported in attempts)
+        {
+            results.Add(string.Equals(reported.Kind, RunnerAttemptKinds.Review, StringComparison.Ordinal)
+                ? await ReAdoptReviewAttemptAsync(
+                    connection, transaction, runnerId, hostId, reported, expiresAt, ct)
+                : await ReAdoptCodingAttemptAsync(
+                    connection, transaction, runnerId, reported, expiresAt, ct));
+        }
+        return results;
+    }
+
+    private static async Task<RunnerAttemptAdoption> ReAdoptCodingAttemptAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runnerId,
+        RunnerActiveAttempt reported,
+        DateTime expiresAt,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT t.task_key, r.status, l.lease_id, l.runner_id, l.instance_id,
+                   l.fence, l.status
+              FROM runs r
+              JOIN tasks t ON t.id = r.task_id
+              LEFT JOIN leases l ON l.run_id = r.id
+             WHERE r.id = $attempt;
+            """, transaction, ("$attempt", reported.AttemptId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return Adoption(reported, "not-found", "RunAttempt was not found.");
+        var taskKey = reader.GetString(0);
+        var runStatus = reader.GetString(1);
+        if (reader.IsDBNull(2))
+            return Adoption(reported, "invalid-state", "RunAttempt has no durable lease.");
+        var leaseId = reader.GetString(2);
+        var leaseRunner = reader.GetString(3);
+        var leaseInstance = reader.GetString(4);
+        var fence = reader.GetInt64(5);
+        var leaseStatus = reader.GetString(6);
+        await reader.DisposeAsync();
+        if (runStatus is not ("running" or "process-unknown")
+            || leaseStatus is not ("active" or "process-unknown"))
+        {
+            return Adoption(reported, "invalid-state", $"RunAttempt is {runStatus} with lease {leaseStatus}.");
+        }
+        if (!string.Equals(taskKey, reported.TaskKey, StringComparison.Ordinal)
+            || !string.Equals(leaseRunner, runnerId, StringComparison.Ordinal)
+            || !string.Equals(leaseInstance, reported.LeaseInstanceId, StringComparison.Ordinal)
+            || !string.Equals(leaseId, reported.LeaseId, StringComparison.Ordinal)
+            || fence != reported.Fence
+            || reported.AuthorityEpoch != 0)
+        {
+            return Adoption(reported, "stale-authority", "RunAttempt authority does not match the durable server record.");
+        }
+        await ExecuteAsync(connection, """
+            UPDATE leases
+               SET status = 'active', expires_at = $expires
+             WHERE run_id = $attempt;
+            UPDATE runs
+               SET status = 'running'
+             WHERE id = $attempt;
+            """, ct, transaction,
+            ("$expires", Iso(expiresAt)),
+            ("$attempt", reported.AttemptId));
+        return Adoption(reported, "adopted", expiresAt: expiresAt);
+    }
+
+    private static async Task<RunnerAttemptAdoption> ReAdoptReviewAttemptAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runnerId,
+        string hostId,
+        RunnerActiveAttempt reported,
+        DateTime expiresAt,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT task_id, status, executor_id, instance_id, host_id, lease_id, fence
+              FROM review_attempts
+             WHERE id = $attempt;
+            """, transaction, ("$attempt", reported.AttemptId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return Adoption(reported, "not-found", "ReviewAttempt was not found.");
+        var taskKey = reader.GetString(0);
+        var status = reader.GetString(1);
+        var executorId = reader.IsDBNull(2) ? null : reader.GetString(2);
+        var leaseInstance = reader.IsDBNull(3) ? null : reader.GetString(3);
+        var leaseHost = reader.IsDBNull(4) ? null : reader.GetString(4);
+        var leaseId = reader.IsDBNull(5) ? null : reader.GetString(5);
+        var fence = reader.GetInt64(6);
+        await reader.DisposeAsync();
+        if (status is not ("leased" or "process-unknown") || leaseId is null)
+            return Adoption(reported, "invalid-state", $"ReviewAttempt is {status}.");
+        if (!string.Equals(taskKey, reported.TaskKey, StringComparison.Ordinal)
+            || !string.Equals(executorId, runnerId, StringComparison.Ordinal)
+            || !string.Equals(leaseHost, hostId, StringComparison.Ordinal)
+            || !string.Equals(leaseInstance, reported.LeaseInstanceId, StringComparison.Ordinal)
+            || !string.Equals(leaseId, reported.LeaseId, StringComparison.Ordinal)
+            || fence != reported.Fence
+            || reported.AuthorityEpoch != 0)
+        {
+            return Adoption(reported, "stale-authority", "ReviewAttempt authority does not match the durable server record.");
+        }
+        await ExecuteAsync(connection, """
+            UPDATE review_attempts
+               SET status = 'leased', expires_at = $expires
+             WHERE id = $attempt;
+            """, ct, transaction,
+            ("$expires", Iso(expiresAt)),
+            ("$attempt", reported.AttemptId));
+        return Adoption(reported, "adopted", expiresAt: expiresAt);
+    }
+
+    private static RunnerAttemptAdoption Adoption(
+        RunnerActiveAttempt reported,
+        string status,
+        string? message = null,
+        DateTime? expiresAt = null)
+        => new(reported.Kind, reported.AttemptId, reported.TaskKey, status, expiresAt, message);
 
     public async Task<ClaimResponse> ClaimAsync(ClaimRequest request, string actorId, CancellationToken ct)
     {

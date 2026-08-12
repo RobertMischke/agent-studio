@@ -9,7 +9,37 @@ public sealed record RegisterRunnerRequest(
     IReadOnlyList<string>? Capabilities = null,
     string? HostOrchestratorMinimum = null,
     string? HostOrchestratorMaximum = null,
-    int BootstrapMaxParallelism = 2);
+    int BootstrapMaxParallelism = 2,
+    IReadOnlyList<RunnerActiveAttempt>? ActiveAttempts = null,
+    int AttemptLeaseTtlSeconds = 120);
+
+public static class RunnerAttemptKinds
+{
+    public const string Coding = "coding";
+    public const string Review = "review";
+}
+
+/// <summary>
+/// Exact fenced authority retained by a runner while the Task Server was
+/// unavailable. Registration reports only attempts whose process generation or
+/// durable terminal handoff is still positively present on the runner host.
+/// </summary>
+public sealed record RunnerActiveAttempt(
+    string Kind,
+    string AttemptId,
+    string TaskKey,
+    string LeaseId,
+    long Fence,
+    long AuthorityEpoch = 0,
+    string? LeaseInstanceId = null);
+
+public sealed record RunnerAttemptAdoption(
+    string Kind,
+    string AttemptId,
+    string TaskKey,
+    string Status,
+    DateTime? ExpiresAt = null,
+    string? Message = null);
 
 /// <summary>
 /// Server-owned runtime admission policy for one execution host. Projects use
@@ -56,7 +86,8 @@ public sealed record RunnerDto(
     string Status,
     DateTime RegisteredAt,
     DateTime LastSeenAt,
-    RuntimeCapacitySettingsDto? RuntimeCapacity = null);
+    RuntimeCapacitySettingsDto? RuntimeCapacity = null,
+    IReadOnlyList<RunnerAttemptAdoption>? AttemptAdoptions = null);
 
 public sealed record ClaimRequest(
     string RunnerId,

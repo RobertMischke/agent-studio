@@ -62,7 +62,8 @@ public sealed record RunLeaseAcquireRequest(
     int? RequestedTtlSeconds = null,
     string? RepositoryId = null,
     string? SourceRunAttemptId = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    string? LeaseInstanceId = null);
 
 /// <summary>Runner -> Server: heartbeat to extend the lease (/api/runner/lease/renew).</summary>
 public sealed record RunLeaseHeartbeatRequest(
