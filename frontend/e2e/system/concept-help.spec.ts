@@ -95,6 +95,7 @@ test('orchestrator concept-help on the global orchestrator card', async ({ page 
   const card = page.getByTestId('global-orchestrator-card');
   await card.scrollIntoViewIfNeeded();
   await expect(card).toBeVisible({ timeout: 10_000 });
+  await card.getByTestId('global-orchestrator-toggle').click();
   await assertConceptHelp(page, 'orchestrator', 'docs/system/architecture/decisions/adr-archive.md');
   await page.screenshot({
     path: `${SCREENSHOT_DIR}/01-orchestrator.png`,

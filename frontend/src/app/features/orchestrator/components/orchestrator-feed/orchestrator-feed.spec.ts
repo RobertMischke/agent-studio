@@ -6,6 +6,9 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { OrchestratorFeedComponent } from './orchestrator-feed';
 import type { OrchestratorLogEntry } from '../../../orchestrator';
+import { BoardFiltersService } from '../../../../features/board';
+import { ProjectLookupService } from '../../../../services/project-lookup.service';
+import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -65,7 +68,11 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     tokenUsage: null,
   };
 
-  async function setup(entries: OrchestratorLogEntry[] = [{ ...decisionEntry, project: 'demo-project' }]) {
+  async function setup(
+    entries: OrchestratorLogEntry[] = [{ ...decisionEntry, project: 'demo-project' }],
+    hash = '',
+  ) {
+    history.replaceState(null, '', `${window.location.pathname}${hash}`);
     await TestBed.configureTestingModule({
       imports: [OrchestratorFeedComponent],
       providers: [
@@ -75,6 +82,8 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
         provideRouter([]),
       ],
     }).compileComponents();
+    TestBed.inject(BoardFiltersService).hydrateFromUrl();
+    TestBed.inject(ProjectLookupService).setWorkspaces(registryWorkspaces());
     const fixture = TestBed.createComponent(OrchestratorFeedComponent);
     fixture.componentRef.setInput('projectName', 'demo-project');
     fixture.detectChanges();
@@ -98,13 +107,64 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     expect(trigger?.getAttribute('type')).toBe('button');
   });
 
-  it('defaults to signal and hides passive observations', async () => {
+  it('defaults to all activity and includes passive observations', async () => {
     const { fixture } = await setup([
       { ...decisionEntry, project: 'demo-project' },
       { ...decisionEntry, ts: '2026-05-14T10:00:00Z', kind: 'observation', summary: 'Routine scan', project: 'demo-project' },
     ]);
-    expect(fixture.componentInstance.kindFilter()).toBe('signal');
-    expect(fixture.componentInstance.visibleEntries().map(entry => entry.kind)).toEqual(['decision']);
+    expect(fixture.componentInstance.kindFilter()).toBe('all');
+    expect(fixture.componentInstance.visibleEntries().map(entry => entry.kind)).toEqual(['decision', 'observation']);
+  });
+
+  it('keeps interleaved projects in one newest-first day stream with a project chip per entry', async () => {
+    const { fixture } = await setup([
+      { ...decisionEntry, ts: '2026-05-14T09:00:00Z', summary: 'Old Agent Studio event', project: 'Agent Studio' },
+      { ...decisionEntry, ts: '2026-05-14T11:00:00Z', summary: 'Newest Runbook event', project: 'Runbook' },
+      { ...decisionEntry, ts: '2026-05-14T10:00:00Z', summary: 'Middle Agent Studio event', project: 'Agent Studio' },
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dayGroups()).toHaveLength(1);
+    expect(fixture.componentInstance.visibleEntries().map(entry => entry.summary)).toEqual([
+      'Newest Runbook event',
+      'Middle Agent Studio event',
+      'Old Agent Studio event',
+    ]);
+
+    const root = fixture.nativeElement as HTMLElement;
+    const rows = [...root.querySelectorAll<HTMLElement>('[data-testid="orchestrator-feed-entry"]')];
+    expect(rows.map(row => row.dataset['project'])).toEqual(['Runbook', 'Agent Studio', 'Agent Studio']);
+    expect(rows.map(row => row.querySelector('[data-testid="orchestrator-entry-project"]')?.textContent?.trim()))
+      .toEqual(['RUN', 'AGT', 'AGT']);
+    expect(fixture.componentInstance.projectColor('Agent Studio')).toBe('#123456');
+    expect(root.querySelector('[data-testid="orchestrator-feed-day"]')?.textContent).not.toContain('Agent Studio');
+  });
+
+  it('orders timestamps by instant when entries carry different UTC offsets', async () => {
+    const { fixture } = await setup([
+      { ...decisionEntry, ts: '2026-05-14T11:00:00+02:00', summary: 'Older offset event', project: 'Agent Studio' },
+      { ...decisionEntry, ts: '2026-05-14T10:00:00Z', summary: 'Newer UTC event', project: 'Runbook' },
+    ]);
+
+    expect(fixture.componentInstance.visibleEntries().map(entry => entry.summary)).toEqual([
+      'Newer UTC event',
+      'Older offset event',
+    ]);
+  });
+
+  it('honours a shared multi-project URL filter and writes chip filtering through the same contract', async () => {
+    const { fixture } = await setup([
+      { ...decisionEntry, project: 'Agent Studio' },
+      { ...decisionEntry, ts: '2026-05-14T10:00:00Z', project: 'Runbook' },
+      { ...decisionEntry, ts: '2026-05-14T09:00:00Z', project: 'Taskboard' },
+    ], '#/feed&filters=projects%3AAgent%20Studio%2CRunbook');
+
+    expect([...fixture.componentInstance.projectFilter()]).toEqual(['Agent Studio', 'Runbook']);
+    expect(fixture.componentInstance.visibleEntries().map(entry => entry.project)).toEqual(['Agent Studio', 'Runbook']);
+
+    fixture.componentInstance.selectProject('Taskboard');
+    expect(fixture.componentInstance.visibleEntries().map(entry => entry.project)).toEqual(['Taskboard']);
+    expect(decodeURIComponent(window.location.hash)).toContain('projects:Taskboard');
   });
 
   it('renders pipeline health alarms and exposes the dedicated alert filter', async () => {
@@ -118,7 +178,7 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    const alert = root.querySelector<HTMLElement>('.orch-feed__entry--alert');
+    const alert = root.querySelector<HTMLElement>('[data-testid="orchestrator-feed-entry"][data-entry-kind="alert"]');
     const filter = root.querySelector<HTMLElement>('[data-testid="feed-kind-alert"]');
     expect(alert?.textContent).toContain('Systemic gate problem detected');
     expect(alert?.textContent).toContain('Alert');
@@ -143,3 +203,37 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     expect(cancel?.getAttribute('type')).toBe('button');
   });
 });
+
+function registryWorkspaces(): RegistryWorkspaceListItem[] {
+  const project = (displayName: string, shortCode: string, sortOrder: number) => ({
+    sourceType: 'local-folder' as const,
+    id: `project-${shortCode}`,
+    displayName,
+    shortCode,
+    workspaceId: 'workspace-1',
+    color: shortCode === 'AGT' ? '#123456' : null,
+    cliDefault: null,
+    modelDefault: null,
+    sortOrder,
+    storageLocation: `/tmp/${shortCode.toLowerCase()}`,
+    repositoryPath: null,
+    rootPath: null,
+    repositoryUrl: null,
+    urls: [],
+    archived: false,
+    createdAt: '2026-05-01T00:00:00Z',
+  });
+  return [{
+    id: 'workspace-1',
+    displayName: 'Workspace',
+    sortOrder: 0,
+    isDefault: true,
+    color: null,
+    createdAt: '2026-05-01T00:00:00Z',
+    projects: [
+      project('Agent Studio', 'AGT', 0),
+      project('Runbook', 'RUN', 1),
+      project('Taskboard', 'TSK', 2),
+    ],
+  }];
+}
