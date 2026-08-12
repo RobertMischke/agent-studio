@@ -33,14 +33,17 @@ public class TokenSummaryTests
         long output,
         DateTime ts,
         string jobId = "job-a",
-        string? participantId = null)
+        string? participantId = null,
+        string topic = "test-token",
+        string? runId = null)
         => new()
         {
             Ts = ts,
             Kind = OrchestratorLogKinds.Decision,
-            Topic = "test-token",
+            Topic = topic,
             Summary = "test job entry",
             JobId = jobId,
+            RunId = runId,
             ParticipantId = participantId,
             TokenUsage = new OrchestratorTokenUsage
             {
@@ -242,6 +245,35 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+    }
+
+    [Theory]
+    [InlineData("agent:codex", "codex-turn", TaskTokenUsageTypePolicy.CodingRun)]
+    [InlineData("support:code-quality", "code-quality-review", TaskTokenUsageTypePolicy.ReviewRun)]
+    [InlineData("orchestrator:Demo", "review-decision", TaskTokenUsageTypePolicy.Gate)]
+    [InlineData("support:adhoc", "prompt-enhance", TaskTokenUsageTypePolicy.Enrichment)]
+    [InlineData(null, "legacy-token", TaskTokenUsageTypePolicy.Other)]
+    public void UsageTypePolicy_ClassifiesDurableRunContext(
+        string? participantId,
+        string topic,
+        string expected)
+    {
+        Assert.Equal(expected, TaskTokenUsageTypePolicy.Resolve(participantId, topic));
+    }
+
+    [Fact]
+    public void SummarizePerJob_PreservesRunAndStepContext()
+    {
+        var at = new DateTime(2026, 8, 12, 8, 0, 0, DateTimeKind.Utc);
+        var summary = TokenSummaryService.SummarizePerJob([
+            JobEntry("gpt-5-codex", 1_000, 100, at,
+                participantId: "agent:codex", topic: "codex-turn", runId: "run-7"),
+        ])["job-a"];
+
+        var call = Assert.Single(summary.Entries);
+        Assert.Equal("run-7", call.RunId);
+        Assert.Equal("codex-turn", call.Topic);
+        Assert.Equal(TaskTokenUsageTypePolicy.CodingRun, call.UsageType);
     }
 
     [Fact]

@@ -1,0 +1,75 @@
+@let tb = value();
+<span class="token-popover"
+      role="tooltip" data-token-popover hidden
+      data-testid="task-card-token-popover">
+  <header class="token-popover__header">
+    <span class="token-popover__title">Token usage</span>
+    <span class="token-popover__updated" data-testid="token-row-last-update">{{ tb.lastUpdate || '-' }}</span>
+  </header>
+
+  <div class="token-popover__overview">
+    <div>
+      <span>Total tokens</span>
+      <strong data-testid="token-row-total">{{ formatTokens(tb.total) }}</strong>
+    </div>
+    <div>
+      <span>Dated list cost</span>
+      <strong data-testid="token-cost-tooltip">{{ tb.costLabel }}</strong>
+    </div>
+  </div>
+
+  <dl class="token-popover__mix" aria-label="Token counters">
+    <div><dt>Input</dt><dd data-testid="token-row-input">{{ formatTokens(tb.input) }}</dd></div>
+    <div><dt>Output</dt><dd data-testid="token-row-output">{{ formatTokens(tb.output) }}</dd></div>
+    <div><dt>Cache read</dt><dd data-testid="token-row-cache-read">{{ formatTokens(tb.cacheRead) }}</dd></div>
+    <div><dt>Cache write</dt><dd data-testid="token-row-cache-write">{{ formatTokens(tb.cacheWrite) }}</dd></div>
+  </dl>
+
+  <div class="token-popover__breakdowns">
+    <section>
+      <h4>By type</h4>
+      <table class="token-popover__table" data-testid="token-type-table">
+        <thead><tr><th>Type</th><th>Tokens</th><th>Cost</th></tr></thead>
+        <tbody>
+          @for (row of tb.byType; track row.type) {
+            <tr [attr.data-token-type]="row.type">
+              <td>{{ row.label }}</td>
+              <td>{{ formatTokens(row.total) }}</td>
+              <td>{{ row.costLabel }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h4>Per run</h4>
+      <table class="token-popover__table token-popover__table--runs" data-testid="token-run-table">
+        <thead><tr><th>When</th><th>Type / model</th><th>Tokens</th><th>Cost</th></tr></thead>
+        <tbody>
+          @for (row of tb.runs; track row.id) {
+            <tr>
+              <td>{{ row.tsLabel }}</td>
+              <td><span>{{ row.typeLabel }}</span><small>{{ row.model }}</small></td>
+              <td>{{ formatTokens(row.total) }}</td>
+              <td>{{ row.costLabel }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <footer class="token-popover__footer">
+    <span class="token-popover__footnote"
+          tabindex="0"
+          data-testid="token-pricing-footnote"
+          [cacTooltip]="tb.disclaimer">List-price estimate · rate valid on each event date</span>
+    <a class="token-popover__link"
+       href="/workspace/tokens"
+       data-testid="token-popover-timeline-link"
+       (click)="$event.stopPropagation()">
+      Workspace timeline
+    </a>
+  </footer>
+</span>

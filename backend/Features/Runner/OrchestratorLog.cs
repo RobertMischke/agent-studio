@@ -131,6 +131,12 @@ public record OrchestratorLogEntry
     public string? JobId { get; init; }
 
     /// <summary>
+    /// Stable run or fenced attempt id when this entry was projected from a
+    /// run-aware source. Legacy orchestrator rows leave this null.
+    /// </summary>
+    public string? RunId { get; init; }
+
+    /// <summary>
     /// Agent-message-bus participant that produced this token event, when the
     /// entry was projected from the bus. Legacy orchestrator.jsonl entries
     /// leave this null and keep their historical job-title categorisation.
