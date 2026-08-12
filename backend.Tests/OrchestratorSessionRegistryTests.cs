@@ -32,10 +32,17 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
     }
 
     [Theory]
-    [InlineData("global", "global", "global", null, null)]
-    [InlineData("project:PROJ-001", "project~3APROJ-001", "project", "PROJ-001", null)]
-    [InlineData("task:PROJ-001/AGT-1930", "task~3APROJ-001~2FAGT-1930", "task", "PROJ-001", "AGT-1930")]
-    public void GetOrCreate_PersistsSessionJsonAndHistory(string raw, string encoded, string kind, string? projectId, string? taskKey)
+    [InlineData("global", "global", "global", null, null, null)]
+    [InlineData("project:PROJ-001", "project~3APROJ-001", "project", "PROJ-001", null, null)]
+    [InlineData("task:PROJ-001/AGT-1930", "task~3APROJ-001~2FAGT-1930", "task", "PROJ-001", "AGT-1930", null)]
+    [InlineData("dossier:PROJ-001/routing", "dossier~3APROJ-001~2Frouting", "dossier", "PROJ-001", null, "routing")]
+    public void GetOrCreate_PersistsSessionJsonAndHistory(
+        string raw,
+        string encoded,
+        string kind,
+        string? projectId,
+        string? taskKey,
+        string? dossierId)
     {
         var registry = Build();
 
@@ -46,6 +53,7 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
         Assert.Equal(kind, record.Kind);
         Assert.Equal(projectId, record.ProjectId);
         Assert.Equal(taskKey, record.TaskKey);
+        Assert.Equal(dossierId, record.DossierId);
         Assert.Null(record.SessionId);
         Assert.True(File.Exists(Path.Combine(_root, ".metadata", "orchestrator-sessions", encoded, "session.json")));
         Assert.True(File.Exists(Path.Combine(_root, ".metadata", "orchestrator-sessions", encoded, "history.jsonl")));

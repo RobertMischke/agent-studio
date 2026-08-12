@@ -52,8 +52,10 @@ import {
 } from './orchestrator-side-sheet.util';
 import {
   buildNavigationContextKey,
+  dossierContextIdentity,
   orchestratorContextErrorMessage,
   parseOrchestratorContextKey,
+  resolveEffectiveDossierIdentity,
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
 import { pageContextKey, type PageContext } from '../../../../models/page-context.model';
@@ -175,7 +177,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   /** Total selectable scopes represented by the header context badge. */
   readonly contextCount = computed(() => {
-    const keys = new Set<string>(['global']);
+    const keys = new Set<string>();
     for (const project of this.projects()) keys.add(`project:${project}`);
     for (const session of this.contextSessions()) keys.add(session.contextKey);
     return keys.size;
@@ -217,6 +219,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     jobKey: string | null;
     jobState: string | null;
     watchPath: string | null;
+    dossierId: string | null;
+    dossierKey: string | null;
+    dossierTitle: string | null;
   } | null>(null);
 
   /**
@@ -229,11 +234,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const context = this.composerContext();
     return context?.taskKey ? context : null;
   });
+  private readonly composerDossierContext = computed(() => {
+    const context = this.composerContext();
+    return context?.dossierId ? context : null;
+  });
 
   private readonly navigationProject = computed(() =>
     this.pinned()
       ? (this.pinnedSnapshot()?.project ?? null)
-      : (this.pageContext()?.projectName ?? this.composerTaskContext()?.project ?? this.activeProject()));
+      : (this.pageContext()?.projectName
+        ?? this.composerTaskContext()?.project
+        ?? this.composerDossierContext()?.project
+        ?? this.activeProject()));
   private readonly navigationJobId = computed(() =>
     this.pinned()
       ? (this.pinnedSnapshot()?.jobId ?? null)
@@ -254,9 +266,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.pinned()
       ? (this.pinnedSnapshot()?.watchPath ?? null)
       : (this.composerTaskContext()?.taskWatchPath ?? this.activeWatchPath()));
+  private readonly navigationDossier = computed(() => dossierContextIdentity(
+    this.pinned() ? this.pinnedSnapshot() : this.composerDossierContext(),
+    !this.pinned() && this.pageContext()?.pageType === 'workbench' ? this.pageContext()?.title ?? null : null,
+  ));
   private readonly navigationContextKey = computed(() => buildNavigationContextKey(
     this.navigationProject(),
     this.navigationJobKey(),
+    this.navigationDossier().dossierId,
   ));
   private readonly contextResolution = computed(() => resolveEffectiveContextKey(
     this.navigationContextKey(),
@@ -297,6 +314,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       : this.effectiveSelectionKey()
         ? (this.selectedTask()?.watchPath ?? null)
         : this.navigationWatchPath());
+  readonly effectiveDossier = computed(() => resolveEffectiveDossierIdentity(
+    this.parsedContext(),
+    this.navigationDossier(),
+    this.selectedSession(),
+    this.effectiveSelectionKey() !== null,
+  ));
 
   /**
    * Navigation-derived context kind and canonical context key. A task
@@ -307,8 +330,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * context-aware send in {@link onSubmit}), so a task page and the board no
    * longer share one history.
    */
-  readonly contextKind = computed<'task' | 'project'>(() =>
-    this.parsedContext()?.kind === 'task' ? 'task' : 'project');
+  readonly contextKind = computed<'task' | 'dossier' | 'project'>(() => {
+    const kind = this.parsedContext()?.kind;
+    return kind === 'task' || kind === 'dossier' ? kind : 'project';
+  });
   readonly contextKey = computed<string | null>(() => this.contextResolution().key);
 
   readonly turns = signal<OrchestratorChatTurn[]>([], { equal: sameOrchestratorChatTurns });
@@ -332,6 +357,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     contextKind: this.contextKind(),
     taskKey: this.effectiveJobKey(),
     taskTitle: this.effectiveJobTitle(),
+    dossierKey: this.effectiveDossier().dossierKey,
+    dossierTitle: this.effectiveDossier().dossierTitle,
     location: this.composerContext(),
   }));
 
@@ -403,16 +430,23 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.effectiveProject(),
     this.contextKey() ?? this.effectiveProject() ?? 'orchestrator-chat',
   ));
+  readonly emptyConversationText = computed(() => {
+    if (this.contextKind() === 'dossier') return 'No conversation yet. Start this Dossier chat here.';
+    if (this.contextKind() === 'task') return 'No conversation yet. Start this task chat here.';
+    return 'No conversation yet. Start this project chat here.';
+  });
 
   readonly contextChipText = computed<string | null>(() => {
     const proj = this.effectiveProject();
     if (!proj) return null;
     const page = this.pageContext();
-    const tail = page
-      ? `${page.pageType} '${page.title}'`
-      : this.contextKind() === 'task'
+    const tail = this.contextKind() === 'task'
       ? `Task '${this.effectiveJobTitle()}'`
-      : 'Board';
+      : this.contextKind() === 'dossier'
+        ? `Dossier '${this.effectiveDossier().dossierKey ?? this.effectiveDossier().dossierTitle}'`
+        : page
+          ? `Project chat · ${page.title}`
+          : 'Project chat';
     return `Context: ${proj} · ${tail}`;
   });
 
@@ -543,6 +577,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobKey: this.activeJobKey(),
       jobState: this.activeJobState(),
       watchPath: this.activeWatchPath(),
+      ...this.navigationDossier(),
     });
     this.pinned.set(true);
   }
@@ -720,12 +755,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   toggleNextMessageContext(): void {
-    if (this.contextKind() === 'task') return;
+    if (this.contextKind() !== 'project') return;
     this.contextDismissed.update(dismissed => !dismissed);
   }
 
   setNextMessageContextIncluded(included: boolean): void {
-    if (this.contextKind() === 'task') return;
+    if (this.contextKind() !== 'project') return;
     this.contextDismissed.set(!included);
   }
 
@@ -824,8 +859,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       jobTitle: this.effectiveJobTitle(),
       jobState: this.effectiveJobState(),
       page: this.pageContext(),
+      dossierId: this.effectiveDossier().dossierId,
     };
-    const contextIncludedSnapshot = navigationSnapshot.kind === 'task' || !this.contextDismissed();
+    const isolatedScope = navigationSnapshot.kind === 'task' || navigationSnapshot.kind === 'dossier';
+    const contextIncludedSnapshot = isolatedScope || !this.contextDismissed();
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
 
@@ -904,9 +941,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Task scope is attached to every turn. Project scope is also attached by
-    // default, with one explicit one-message exclusion available in the menu.
-    const taskScope = navigationSnapshot.kind === 'task';
+    // Task and Dossier scope are attached to every turn. Project scope is also
+    // attached by default, with one explicit one-message exclusion available.
     const contextPayload = contextIncludedSnapshot
       ? buildChatNavigationContext({
           activeJobId: navigationSnapshot.jobId,
@@ -942,7 +978,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         if (contextStillVisible && response.executionContext) {
           this.executionContext.set(response.executionContext);
         }
-        if (contextStillVisible && !taskScope && !contextIncludedSnapshot) {
+        if (contextStillVisible && !isolatedScope && !contextIncludedSnapshot) {
           this.contextDismissed.set(false);
         }
         if (contextStillVisible) this.contextAttachments.set([]);

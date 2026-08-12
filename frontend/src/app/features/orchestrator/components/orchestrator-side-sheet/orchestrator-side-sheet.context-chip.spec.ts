@@ -28,7 +28,7 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     return fixture;
   }
 
-  it('counts every distinct global, project and task context', async () => {
+  it('counts every distinct project, task and Dossier context', async () => {
     const fixture = await makeFixture();
     const session = (contextKey: string, kind: OrchestratorContextSession['kind']): OrchestratorContextSession => ({
       contextKey,
@@ -48,6 +48,7 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     fixture.componentInstance.contextSessions.set([
       session('project:demo-project', 'project'),
       session('task:demo-project/AGT-2087', 'task'),
+      session('dossier:demo-project/routing', 'dossier'),
     ]);
 
     expect(fixture.componentInstance.contextCount()).toBe(3);
@@ -59,7 +60,7 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
 
     const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelector('[data-testid="orch-context-badge"]')).not.toBeNull();
-    expect(root.querySelector('[data-testid="orch-context-count"]')?.textContent?.trim()).toBe('2');
+    expect(root.querySelector('[data-testid="orch-context-count"]')?.textContent?.trim()).toBe('1');
     expect(root.querySelector('[data-testid="orch-context-menu"]')).toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-pin"]')).toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-settings"]')).toBeNull();

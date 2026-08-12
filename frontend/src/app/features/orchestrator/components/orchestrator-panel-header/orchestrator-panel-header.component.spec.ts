@@ -24,20 +24,15 @@ describe('OrchestratorPanelHeaderComponent', () => {
     );
   });
 
-  it('lets a Dossier page replace the project fallback without changing the action row', async () => {
+  it('uses the bound Dossier chat identity instead of inferring it from page history', async () => {
     await TestBed.configureTestingModule({
       imports: [OrchestratorPanelHeaderComponent],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     const fixture = TestBed.createComponent(OrchestratorPanelHeaderComponent);
     fixture.componentRef.setInput('project', 'Agent Studio');
-    fixture.componentRef.setInput('pageContext', {
-      projectName: 'Agent Studio',
-      relPath: 'concepts/panel-frame.html',
-      title: 'AGT-W34',
-      pageType: 'workbench',
-      excerpt: '',
-    });
+    fixture.componentRef.setInput('dossierKey', 'AGT-W34');
+    fixture.componentRef.setInput('dossierTitle', 'Panel frame');
     fixture.componentRef.setInput('contextCount', 17);
     fixture.detectChanges();
 
@@ -49,5 +44,24 @@ describe('OrchestratorPanelHeaderComponent', () => {
       'AGT-W34',
     );
     expect(host.querySelector('[data-testid="orch-context-count"]')?.textContent).toContain('17');
+  });
+
+  it('keeps the project chat label when a Dossier page is merely stale page context', async () => {
+    await TestBed.configureTestingModule({
+      imports: [OrchestratorPanelHeaderComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(OrchestratorPanelHeaderComponent);
+    fixture.componentRef.setInput('project', 'Agent Studio');
+    fixture.componentRef.setInput('contextKey', 'project:Agent Studio');
+    fixture.componentRef.setInput('pageContext', {
+      projectName: 'Agent Studio', relPath: 'concepts/panel-frame.html', title: 'AGT-W34',
+      pageType: 'workbench', excerpt: '',
+    });
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="orch-panel-context-type"]')?.textContent).toContain('Project');
+    expect(host.querySelector('[data-testid="orch-panel-context-name"]')?.textContent).toContain('Agent Studio');
   });
 });

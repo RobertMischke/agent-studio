@@ -128,6 +128,7 @@ describe('buildOrchestratorContextEnvelope', () => {
         contextKey: 'task:Agent Studio/AGT-2572',
         projectId: 'Agent Studio',
         taskKey: 'AGT-2572',
+        dossierId: null,
       },
       activeSurface: {
         kind: 'task',
@@ -143,6 +144,23 @@ describe('buildOrchestratorContextEnvelope', () => {
         charactersPerEstimatedToken: 4,
       },
       capturedAt: '2026-08-10T10:15:00.000Z',
+    });
+  });
+
+  it('freezes a Dossier scope independently from project and task scopes', () => {
+    const envelope = buildOrchestratorContextEnvelope(
+      'dossier:Agent Studio/routing',
+      null,
+      [],
+      fixedNow,
+    );
+
+    expect(envelope.scope).toEqual({
+      kind: 'dossier',
+      contextKey: 'dossier:Agent Studio/routing',
+      projectId: 'Agent Studio',
+      taskKey: null,
+      dossierId: 'routing',
     });
   });
 

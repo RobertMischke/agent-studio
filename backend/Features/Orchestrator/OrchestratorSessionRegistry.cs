@@ -10,6 +10,7 @@ public sealed record OrchestratorSessionRecord(
     string Kind,
     string? ProjectId,
     string? TaskKey,
+    string? DossierId,
     DateTime CreatedAt,
     DateTime UpdatedAt,
     string? SessionId,
@@ -101,7 +102,11 @@ public sealed class OrchestratorSessionRegistry
             }
 
             return records
-                .OrderBy(r => r.Kind == OrchestratorContextKey.GlobalKind ? 0 : r.Kind == OrchestratorContextKey.ProjectKind ? 1 : 2)
+                .OrderBy(r => r.Kind == OrchestratorContextKey.GlobalKind
+                    ? 0
+                    : r.Kind == OrchestratorContextKey.ProjectKind
+                        ? 1
+                        : r.Kind == OrchestratorContextKey.TaskKind ? 2 : 3)
                 .ThenBy(r => r.ContextKey, StringComparer.Ordinal)
                 .ToList();
         }
@@ -198,6 +203,7 @@ public sealed class OrchestratorSessionRegistry
                 Kind: key.Kind,
                 ProjectId: null,
                 TaskKey: null,
+                DossierId: null,
                 CreatedAt: legacy.BootedAt,
                 UpdatedAt: legacy.LastUsedAt,
                 SessionId: legacy.SessionId,
@@ -227,6 +233,7 @@ public sealed class OrchestratorSessionRegistry
             Kind: key.Kind,
             ProjectId: key.ProjectId,
             TaskKey: key.TaskKey,
+            DossierId: key.DossierId,
             CreatedAt: now,
             UpdatedAt: now,
             SessionId: null,

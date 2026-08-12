@@ -35,7 +35,7 @@ internal sealed class CentralOrchestratorChatPersistenceStub : IOrchestratorChat
             {
                 turns = [];
                 _turns[key] = turns;
-                _summaries[key] = context?.TaskKey ?? $"Project chat for {projectName}";
+                _summaries[key] = context?.TaskKey ?? context?.DossierId ?? $"Project chat for {projectName}";
             }
             return Task.FromResult<IReadOnlyList<OrchestratorChatTurn>>(
                 turns.TakeLast(Math.Clamp(limit, 1, 1000)).ToArray());
@@ -61,7 +61,7 @@ internal sealed class CentralOrchestratorChatPersistenceStub : IOrchestratorChat
             if (turn.Role == OrchestratorChatRoles.User && !string.IsNullOrWhiteSpace(turn.Text))
                 _summaries[key] = turn.Text;
             else if (!_summaries.ContainsKey(key))
-                _summaries[key] = context?.TaskKey ?? $"Project chat for {projectName}";
+                _summaries[key] = context?.TaskKey ?? context?.DossierId ?? $"Project chat for {projectName}";
             return Task.CompletedTask;
         }
     }
@@ -84,18 +84,22 @@ internal sealed class CentralOrchestratorChatPersistenceStub : IOrchestratorChat
                     project,
                     null,
                     parsed.TaskKey,
-                    _summaries.GetValueOrDefault(key) ?? parsed.TaskKey ?? $"Project chat for {project}",
+                    _summaries.GetValueOrDefault(key) ?? parsed.TaskKey ?? parsed.DossierId ?? $"Project chat for {project}",
                     DateTime.UtcNow,
                     DateTime.UtcNow,
                     null,
-                    _turns[key].Count);
+                    _turns[key].Count,
+                    DossierId: parsed.DossierId,
+                    DossierKey: parsed.DossierId,
+                    DossierTitle: parsed.DossierId,
+                    DossierState: parsed.Kind == OrchestratorContextKey.DossierKind ? "active" : null);
             }).ToArray();
             return Task.FromResult<IReadOnlyList<OrchestratorContextDto>>(contexts);
         }
     }
 
     private static string ContextKey(string projectName, OrchestratorContextKey? context)
-        => context?.Kind == OrchestratorContextKey.TaskKind
+        => context?.Kind is OrchestratorContextKey.TaskKind or OrchestratorContextKey.DossierKind
             ? context.Value
             : $"project:{projectName}";
 }

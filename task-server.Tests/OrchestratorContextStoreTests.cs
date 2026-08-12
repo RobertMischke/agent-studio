@@ -17,7 +17,10 @@ public sealed class OrchestratorContextStoreTests
     [InlineData("project", "7-archive", false)]
     [InlineData("task", "6-completed", false)]
     [InlineData("task", "7-archive", true)]
-    public void Visibility_policy_only_hides_archived_task_contexts(
+    [InlineData("dossier", "active", false)]
+    [InlineData("dossier", "documented", true)]
+    [InlineData("dossier", "archived", true)]
+    public void Visibility_policy_hides_terminal_task_and_Dossier_contexts(
         string kind,
         string? taskState,
         bool expected)
@@ -75,6 +78,64 @@ public sealed class OrchestratorContextStoreTests
             default);
         Assert.NotNull(restored);
         Assert.Equal(2, (await store.ListOrchestratorContextsAsync(false, default)).Count);
+    }
+
+    [Fact]
+    public async Task Dossier_context_is_isolated_resumable_and_retained_after_terminal_lifecycle()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Workspace"), "test", default);
+        await store.CreateProjectAsync(
+            new CreateProjectRequest(workspace.WorkspaceId, "Agent Studio", "AGT"),
+            "test",
+            default);
+        var active = new OrchestratorDossierContext(
+            "routing", "AGT-W34", "Routing context", "active");
+
+        var fresh = await store.ReadOrchestratorContextAsync(
+            "Agent Studio", null, 20, "test", default, active);
+        Assert.Equal("dossier:Agent Studio/routing", fresh.Context.ContextKey);
+        Assert.Equal("AGT-W34", fresh.Context.DossierKey);
+        Assert.Empty(fresh.Turns);
+
+        await store.AppendOrchestratorContextTurnAsync(
+            "Agent Studio",
+            null,
+            new AppendOrchestratorContextTurnRequest(new OrchestratorContextTurnDto(
+                "dossier_user", DateTime.UtcNow, "user", "Discuss this Dossier only.")),
+            "test",
+            default,
+            active);
+        await store.AppendOrchestratorContextTurnAsync(
+            "Agent Studio",
+            null,
+            new AppendOrchestratorContextTurnRequest(new OrchestratorContextTurnDto(
+                "project_user", DateTime.UtcNow, "user", "Project-wide question.")),
+            "test",
+            default);
+
+        var resumed = await store.ReadOrchestratorContextAsync(
+            "Agent Studio", null, 20, "test", default, active);
+        Assert.Equal(new[] { "Discuss this Dossier only." }, resumed.Turns.Select(turn => turn.Body));
+
+        var documented = active with { LifecycleState = "documented" };
+        var hidden = await store.EnsureOrchestratorContextAsync(
+            "Agent Studio", null, "test", default, documented);
+        Assert.NotNull(hidden.HiddenAt);
+        Assert.DoesNotContain(
+            await store.ListOrchestratorContextsAsync(false, default),
+            context => context.ContextKey == hidden.ContextKey);
+        var retained = Assert.Single(
+            await store.ListOrchestratorContextsAsync(true, default),
+            context => context.ContextKey == hidden.ContextKey);
+        Assert.Equal(1, retained.TurnCount);
+
+        var retainedTranscript = await store.ReadOrchestratorContextAsync(
+            "Agent Studio", null, 20, "test", default, documented);
+        Assert.Equal("Discuss this Dossier only.", Assert.Single(retainedTranscript.Turns).Body);
     }
 
     [Fact]

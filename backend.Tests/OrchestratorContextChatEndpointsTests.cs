@@ -56,12 +56,13 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
     // ---- store layer -------------------------------------------------------
 
     [Fact]
-    public void ResolveContextPath_TaskGetsOwnFile_ProjectAndNullShareLegacyFile()
+    public void ResolveContextPath_TaskAndDossierGetOwnFiles_ProjectAndNullShareLegacyFile()
     {
         var legacy = Path.Combine(_projectRoot, ".orchestrator", "orchestrator-chat.jsonl");
 
         OrchestratorContextKey.TryParse("project:" + Project, out var project);
         OrchestratorContextKey.TryParse($"task:{Project}/AGT-1930", out var task);
+        OrchestratorContextKey.TryParse($"dossier:{Project}/routing", out var dossier);
 
         Assert.Equal(legacy, OrchestratorChat.ResolveContextPath(_projectRoot, context: null));
         Assert.Equal(legacy, OrchestratorChat.ResolveContextPath(_projectRoot, project));
@@ -72,24 +73,32 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
         Assert.Contains(Path.Combine(".orchestrator", "context-chats"), taskPath, StringComparison.Ordinal);
         // Reversible, filesystem-safe encoding: no colon / slash in the leaf.
         Assert.EndsWith(task!.Encode() + ".jsonl", taskPath, StringComparison.Ordinal);
+
+        var dossierPath = OrchestratorChat.ResolveContextPath(_projectRoot, dossier);
+        Assert.NotEqual(legacy, dossierPath);
+        Assert.EndsWith(dossier!.Encode() + ".jsonl", dossierPath, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Append_KeepsTaskAndProjectTranscriptsIsolated()
+    public void Append_KeepsProjectTaskAndDossierTranscriptsIsolated()
     {
         var chat = new OrchestratorChat(NullLogger<OrchestratorChat>.Instance);
         OrchestratorContextKey.TryParse("project:" + Project, out var project);
         OrchestratorContextKey.TryParse($"task:{Project}/AGT-1930", out var task);
+        OrchestratorContextKey.TryParse($"dossier:{Project}/routing", out var dossier);
 
         Assert.True(chat.Append(_projectRoot, Turn("user", "board question"), project));
         Assert.True(chat.Append(_projectRoot, Turn("orchestrator", "board answer"), project));
         Assert.True(chat.Append(_projectRoot, Turn("user", "task-only question"), task));
+        Assert.True(chat.Append(_projectRoot, Turn("user", "Dossier-only question"), dossier));
 
         var boardTurns = chat.Read(_projectRoot, project);
         var taskTurns = chat.Read(_projectRoot, task);
+        var dossierTurns = chat.Read(_projectRoot, dossier);
 
         Assert.Equal(new[] { "board question", "board answer" }, boardTurns.Select(t => t.Text));
         Assert.Equal(new[] { "task-only question" }, taskTurns.Select(t => t.Text));
+        Assert.Equal(new[] { "Dossier-only question" }, dossierTurns.Select(t => t.Text));
 
         // The legacy context-free read is the project thread — unchanged.
         Assert.Equal(boardTurns.Select(t => t.Text), chat.Read(_projectRoot).Select(t => t.Text));
@@ -143,6 +152,35 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
         Assert.Equal("local", execution.GetProperty("executionKind").GetString());
         Assert.Equal("local", execution.GetProperty("hostName").GetString());
         Assert.Equal(_codeRoot, execution.GetProperty("repoPath").GetString());
+    }
+
+    [Fact]
+    public async Task Get_DossierContext_StartsFreshAndResumesWithoutProjectHistory()
+    {
+        SeedTranscript("project:" + Project, ("orchestrator", "board monitoring history"));
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var route = $"/api/runner/dossier:{Project}/routing/orchestrator-chat";
+
+        using (var freshResponse = await client.GetAsync(route))
+        {
+            freshResponse.EnsureSuccessStatusCode();
+            using var fresh = JsonDocument.Parse(await freshResponse.Content.ReadAsStringAsync());
+            Assert.Empty(fresh.RootElement.GetProperty("turns").EnumerateArray());
+        }
+
+        SeedTranscript($"dossier:{Project}/routing", ("user", "question about this Dossier"));
+        using var resumedResponse = await client.GetAsync(route);
+        resumedResponse.EnsureSuccessStatusCode();
+        using var resumed = JsonDocument.Parse(await resumedResponse.Content.ReadAsStringAsync());
+        Assert.Equal($"dossier:{Project}/routing", resumed.RootElement.GetProperty("contextKey").GetString());
+        Assert.Equal(
+            new[] { "question about this Dossier" },
+            resumed.RootElement.GetProperty("turns").EnumerateArray()
+                .Select(turn => turn.GetProperty("text").GetString()).ToArray());
+        Assert.DoesNotContain(
+            resumed.RootElement.GetProperty("turns").EnumerateArray(),
+            turn => turn.GetProperty("text").GetString() == "board monitoring history");
     }
 
     [Fact]

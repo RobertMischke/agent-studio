@@ -25,6 +25,10 @@ export interface ComposerLocationContext {
   taskTitle?: string;
   taskState?: string;
   taskWatchPath?: string;
+  /** Stable route identity for a first-class Dossier conversation. */
+  dossierId?: string;
+  dossierKey?: string;
+  dossierTitle?: string;
 }
 
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
@@ -43,12 +47,22 @@ export interface ContextChipPresentation {
 export function buildContextChipPresentation(input: {
   project: string | null;
   page: PageContext | null;
-  contextKind: 'task' | 'project';
+  contextKind: 'task' | 'dossier' | 'project';
   taskKey: string | null;
   taskTitle: string | null;
+  dossierKey?: string | null;
+  dossierTitle?: string | null;
   location: ComposerLocationContext | null;
 }): ContextChipPresentation {
-  const { project, page, contextKind, taskKey, taskTitle, location } = input;
+  const { project, page, contextKind, taskKey, taskTitle, dossierKey, dossierTitle, location } = input;
+  if (contextKind === 'dossier') {
+    return {
+      label: dossierTitle ?? dossierKey ?? 'Current Dossier',
+      key: dossierKey ?? null,
+      typeLabel: 'Dossier',
+      icon: 'eye',
+    };
+  }
   if (page && page.projectName === project) {
     return { label: page.title, key: null, typeLabel: pageTypeLabel(page.pageType), icon: pageTypeIcon(page.pageType) };
   }
@@ -111,6 +125,9 @@ export function buildComposerLocationContext(
         surface: 'Dossier',
         detail: tab.title ?? tab.workbenchId,
         ...(tab.key ? { referenceKey: tab.key } : {}),
+        dossierId: tab.workbenchId,
+        ...(tab.key ? { dossierKey: tab.key } : {}),
+        ...(tab.title ? { dossierTitle: tab.title } : {}),
       };
     case 'workbenches':
       return { project: tab.projectName, surface: 'Dossiers' };

@@ -44,6 +44,9 @@ export class OrchestratorContextHeaderComponent {
   readonly taskKey = input<string | null>(null);
   /** Canonical lane key (e.g. `3-progress`) for the task in scope. */
   readonly taskState = input<string | null>(null);
+  readonly dossierTitle = input<string | null>(null);
+  readonly dossierKey = input<string | null>(null);
+  readonly dossierState = input<string | null>(null);
 
   /** Whether a CLI run is executing in the current scope right now. */
   readonly runActive = input(false);
@@ -66,12 +69,15 @@ export class OrchestratorContextHeaderComponent {
 
   readonly hasProject = computed<boolean>(() => !!this.project()?.trim());
   readonly hasTask = computed<boolean>(() => !!this.taskTitle()?.trim());
+  readonly hasDossier = computed<boolean>(() => !!(this.dossierTitle()?.trim() || this.dossierKey()?.trim()));
 
   /** "Task" when a task is open, otherwise the board is the scope. */
-  readonly scopeLabel = computed<string>(() => (this.hasTask() ? 'Task' : 'Board'));
+  readonly scopeLabel = computed<string>(() => this.hasTask() ? 'Task' : this.hasDossier() ? 'Dossier' : 'Project');
 
   /** Human lane label for the task in scope, else null (board scope). */
   readonly laneLabel = computed<string | null>(() => {
+    const dossierState = this.dossierState()?.trim();
+    if (this.hasDossier() && dossierState) return humanize(dossierState);
     const state = this.taskState()?.trim();
     if (!state) return null;
     return stateLabel(state);
@@ -84,6 +90,9 @@ export class OrchestratorContextHeaderComponent {
    */
   readonly laneTone = computed<'progress' | 'review' | 'done' | 'neutral'>(() => {
     const state = this.taskState()?.trim();
+    const dossierState = this.dossierState()?.trim();
+    if (this.hasDossier())
+      return dossierState === 'archived' || dossierState === 'documented' ? 'done' : 'neutral';
     if (!state) return 'neutral';
     if (state === TaskState.Progress) return 'progress';
     if (state === TaskState.AutoReview || state === TaskState.HumanReview || state === TaskState.Escalated) {
@@ -114,6 +123,11 @@ export class OrchestratorContextHeaderComponent {
     const dur = this.runDurationLabel();
     return dur ? `Live run · ${model} · running ${dur}` : `Live run · ${model}`;
   });
+}
+
+function humanize(value: string): string {
+  const words = value.replaceAll('-', ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 /**

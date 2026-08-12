@@ -2,9 +2,51 @@ import type { OrchestratorContextSession } from '../../models/orchestrator.model
 
 export interface ParsedOrchestratorContextKey {
   key: string;
-  kind: 'global' | 'project' | 'task';
+  kind: 'global' | 'project' | 'task' | 'dossier';
   projectId: string | null;
   taskKey: string | null;
+  dossierId: string | null;
+}
+
+export interface DossierContextIdentity {
+  dossierId: string | null;
+  dossierKey: string | null;
+  dossierTitle: string | null;
+  dossierState: string | null;
+}
+
+type DossierIdentitySource = Partial<DossierContextIdentity> & {
+  referenceKey?: string | null;
+  detail?: string | null;
+};
+
+export function dossierContextIdentity(
+  source: DossierIdentitySource | null | undefined,
+  pageTitle: string | null = null,
+): DossierContextIdentity {
+  return {
+    dossierId: source?.dossierId ?? null,
+    dossierKey: source?.dossierKey ?? source?.referenceKey ?? null,
+    dossierTitle: pageTitle ?? source?.dossierTitle ?? source?.detail ?? null,
+    dossierState: source?.dossierState ?? null,
+  };
+}
+
+export function resolveEffectiveDossierIdentity(
+  context: ParsedOrchestratorContextKey | null,
+  navigation: DossierContextIdentity,
+  selected: OrchestratorContextSession | null,
+  useSelection: boolean,
+): DossierContextIdentity {
+  if (context?.kind !== 'dossier') return dossierContextIdentity(null);
+  const identity = useSelection && selected?.kind === 'dossier'
+    ? dossierContextIdentity(selected)
+    : navigation;
+  return {
+    ...identity,
+    dossierId: context.dossierId,
+    dossierTitle: identity.dossierTitle ?? identity.dossierKey ?? context.dossierId,
+  };
 }
 
 function validPart(value: string): boolean {
@@ -21,10 +63,10 @@ function validPart(value: string): boolean {
 /** Mirrors the strict backend OrchestratorContextKey parser. */
 export function parseOrchestratorContextKey(raw: string | null | undefined): ParsedOrchestratorContextKey | null {
   if (!raw || raw !== raw.trim()) return null;
-  if (raw === 'global') return { key: raw, kind: 'global', projectId: null, taskKey: null };
+  if (raw === 'global') return { key: raw, kind: 'global', projectId: null, taskKey: null, dossierId: null };
   if (raw.startsWith('project:')) {
     const projectId = raw.slice('project:'.length);
-    return validPart(projectId) ? { key: raw, kind: 'project', projectId, taskKey: null } : null;
+    return validPart(projectId) ? { key: raw, kind: 'project', projectId, taskKey: null, dossierId: null } : null;
   }
   if (raw.startsWith('task:')) {
     const rest = raw.slice('task:'.length);
@@ -33,17 +75,33 @@ export function parseOrchestratorContextKey(raw: string | null | undefined): Par
     const projectId = rest.slice(0, slash);
     const taskKey = rest.slice(slash + 1);
     return validPart(projectId) && validPart(taskKey)
-      ? { key: raw, kind: 'task', projectId, taskKey }
+      ? { key: raw, kind: 'task', projectId, taskKey, dossierId: null }
+      : null;
+  }
+  if (raw.startsWith('dossier:')) {
+    const rest = raw.slice('dossier:'.length);
+    const slash = rest.indexOf('/');
+    if (slash < 0) return null;
+    const projectId = rest.slice(0, slash);
+    const dossierId = rest.slice(slash + 1);
+    return validPart(projectId) && validPart(dossierId)
+      ? { key: raw, kind: 'dossier', projectId, taskKey: null, dossierId }
       : null;
   }
   return null;
 }
 
-export function buildNavigationContextKey(project: string | null, taskKey: string | null): string | null {
+export function buildNavigationContextKey(
+  project: string | null,
+  taskKey: string | null,
+  dossierId: string | null = null,
+): string | null {
   const canonicalProject = project?.trim() ?? '';
   const canonicalTask = taskKey?.trim() ?? '';
   if (!validPart(canonicalProject)) return null;
   if (canonicalTask && validPart(canonicalTask)) return `task:${canonicalProject}/${canonicalTask}`;
+  const canonicalDossier = dossierId?.trim() ?? '';
+  if (canonicalDossier && validPart(canonicalDossier)) return `dossier:${canonicalProject}/${canonicalDossier}`;
   return `project:${canonicalProject}`;
 }
 
@@ -75,7 +133,12 @@ export function resolveEffectiveContextKey(
       session.contextKey === selected.key
       && session.kind === 'task'
       && session.projectId === selected.projectId
-      && session.taskKey === selected.taskKey));
+      && session.taskKey === selected.taskKey))
+    || (selected?.kind === 'dossier' && sessions.some(session =>
+      session.contextKey === selected.key
+      && session.kind === 'dossier'
+      && session.projectId === selected.projectId
+      && session.dossierId === selected.dossierId));
 
   if (!selected || !selectionStillAnchored || !selectedStillExists) {
     return { key: navigation?.key ?? null, discardedSelection: true };

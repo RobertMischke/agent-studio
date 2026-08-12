@@ -86,6 +86,24 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     expect(c.effectiveJobState()).toBe('3-progress');
   });
 
+  it('derives a first-class Dossier context from the active Dossier tab', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Agent Studio',
+      surface: 'Dossier',
+      detail: 'Routing context',
+      dossierId: 'routing',
+      dossierKey: 'AGT-W34',
+      dossierTitle: 'Routing context',
+    });
+
+    expect(c.contextKind()).toBe('dossier');
+    expect(c.contextKey()).toBe('dossier:Agent Studio/routing');
+    expect(c.contextChipText()).toBe("Context: Agent Studio · Dossier 'AGT-W34'");
+  });
+
   it('sends the stable task key and full navigation context on every task follow-up', async () => {
     const fixture = await makeFixture();
     const c = fixture.componentInstance;
@@ -310,6 +328,46 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     const sessions = http.expectOne('/api/orchestrator/sessions');
     expect(sessions.request.method).toBe('GET');
     sessions.flush({ sessions: [] });
+    http.verify();
+  });
+
+  it('keeps the Dossier transcript separate and resumes it on return', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+    c.activeProject.set('Agent Studio');
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Agent Studio', surface: 'Dossier', detail: 'Routing context',
+      dossierId: 'routing', dossierKey: 'AGT-W34', dossierTitle: 'Routing context',
+    });
+
+    c.refresh(true);
+    const fresh = http.expectOne('/api/runner/dossier:Agent%20Studio/routing/orchestrator-chat');
+    fresh.flush({ project: 'Agent Studio', turns: [] });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+    expect(c.turns()).toEqual([]);
+
+    fixture.componentRef.setInput('composerContext', { project: 'Agent Studio', surface: 'Board' });
+    c.refresh(true);
+    http.expectOne('/api/runner/project:Agent%20Studio/orchestrator-chat').flush({
+      project: 'Agent Studio',
+      turns: [{ id: 'board', ts: '2026-08-11T08:00:00Z', role: 'system', text: 'Board monitoring' }],
+    });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+    expect(c.turns().map(turn => turn.text)).toEqual(['Board monitoring']);
+
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Agent Studio', surface: 'Dossier', detail: 'Routing context',
+      dossierId: 'routing', dossierKey: 'AGT-W34', dossierTitle: 'Routing context',
+    });
+    c.refresh(true);
+    http.expectOne('/api/runner/dossier:Agent%20Studio/routing/orchestrator-chat').flush({
+      project: 'Agent Studio',
+      turns: [{ id: 'dossier', ts: '2026-08-11T09:00:00Z', role: 'user', text: 'Dossier question' }],
+    });
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
+
+    expect(c.turns().map(turn => turn.text)).toEqual(['Dossier question']);
     http.verify();
   });
 });

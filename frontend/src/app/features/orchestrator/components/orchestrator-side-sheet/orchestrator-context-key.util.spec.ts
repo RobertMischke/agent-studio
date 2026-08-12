@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 import {
   buildNavigationContextKey,
+  dossierContextIdentity,
   orchestratorContextErrorMessage,
   parseOrchestratorContextKey,
+  resolveEffectiveDossierIdentity,
   resolveEffectiveContextKey,
 } from './orchestrator-context-key.util';
 
@@ -22,7 +24,41 @@ describe('orchestrator context key resolution', () => {
 
     expect(key).toBe('task:Agent Studio/AGT-2149');
     expect(parseOrchestratorContextKey(key)).toEqual({
-      key, kind: 'task', projectId: 'Agent Studio', taskKey: 'AGT-2149',
+      key, kind: 'task', projectId: 'Agent Studio', taskKey: 'AGT-2149', dossierId: null,
+    });
+  });
+
+  it('builds and parses a canonical Dossier key', () => {
+    const key = buildNavigationContextKey('Agent Studio', null, 'routing-dossier');
+
+    expect(key).toBe('dossier:Agent Studio/routing-dossier');
+    expect(parseOrchestratorContextKey(key)).toEqual({
+      key,
+      kind: 'dossier',
+      projectId: 'Agent Studio',
+      taskKey: null,
+      dossierId: 'routing-dossier',
+    });
+  });
+
+  it('resolves Dossier display metadata from navigation or the selected session', () => {
+    const context = parseOrchestratorContextKey('dossier:Agent Studio/routing-dossier');
+    const navigation = dossierContextIdentity({ dossierId: 'routing-dossier' }, 'Routing decisions');
+    const selected = {
+      ...taskSession('dossier:Agent Studio/routing-dossier', 'Agent Studio', ''),
+      kind: 'dossier' as const,
+      taskKey: null,
+      dossierId: 'routing-dossier',
+      dossierKey: 'AGT-W34',
+      dossierTitle: 'Persisted routing decisions',
+      dossierState: 'active',
+    };
+
+    expect(resolveEffectiveDossierIdentity(context, navigation, null, false)).toMatchObject({
+      dossierId: 'routing-dossier', dossierTitle: 'Routing decisions',
+    });
+    expect(resolveEffectiveDossierIdentity(context, navigation, selected, true)).toMatchObject({
+      dossierKey: 'AGT-W34', dossierTitle: 'Persisted routing decisions', dossierState: 'active',
     });
   });
 

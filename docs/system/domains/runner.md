@@ -148,7 +148,7 @@ state.
   the contract.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
-  `OrchestratorTurnService.cs`: context-keyed global, project, and task
+  `OrchestratorTurnService.cs`: context-keyed global, project, task, and Dossier
   orchestrator sessions, the `/api/orchestrator/sessions/{contextKey}/turns`
   and `/park` API surface, and session turn dispatch through the existing
   orchestrator CLI runner. Records persist under
@@ -157,7 +157,8 @@ state.
   `OrchestratorContextEndpoints.cs`: ORCH-1 read context shared by side-sheet
   chat turns and session turns. The bounded digest folds board transitions,
   active lifecycle phases, cached quota, PUB-1 targets, backend/watcher health,
-  and decision-journal excerpts according to the `global|project|task` key.
+  and decision-journal excerpts according to the
+  `global|project|task|dossier` key.
   `POST .../refresh` is the explicit expensive path that re-probes quota first.
 - `backend/Features/Registry/OrchestratorSettingsResolver.cs`: pure two-tier
   resolver for the workspace-shaped orchestrator knobs (model, thinking level,
@@ -514,7 +515,7 @@ state.
   consult the same record; assigned remote-capable projects are never locally
   auto-picked. Lease fencing is the hard split-brain guard below that policy.
 
-- Side-sheet project and task chat follows the same remote pickup ownership.
+- Side-sheet project, task, and Dossier chat follows the same remote pickup ownership.
   A remote-assigned project's chat work is claimable only by its assigned
   Runner and executes inside a host checkout from the same project git cache as
   card runs. A project without a remote assignment executes chat locally. Each
@@ -698,8 +699,10 @@ state.
   cancels the active turn for that context and parks queued turns for the same
   context.
 - Every orchestrator chat entry point receives the same ORCH-1 application
-  digest. Global context may read all registered projects; project and task
-  contexts are project-isolated, with task context adding only its focused task.
+  digest. Global context may read all registered projects; project, task, and
+  Dossier contexts are project-isolated, with task context adding only its
+  focused task. The digest is evidence, not transcript continuity: global
+  monitoring turns never enter a task or Dossier history.
   Digest sections are capped and omit raw quota samples and full decision
   prompts/responses. Normal turns use cached quota; only the explicit refresh
   endpoint starts quota probes.
@@ -715,10 +718,11 @@ state.
 - Side-sheet chat sends one route-bound typed context envelope on every turn.
   Prompt order is scoped preamble, source ledger, automatic evidence, explicit
   attachments, bounded central transcript continuity, and the new user message
-  last. The Task Server owns project/task chat contexts, turns, receipts,
+  last. The Task Server owns project, task, and Dossier chat contexts, turns, receipts,
   lifecycle visibility, usage, and short summaries. Project contexts are
-  permanent; archived task contexts are retained with `hiddenAt` and omitted
-  from the current list. Local orchestrator chat JSONL is migration input only.
+  permanent; archived task contexts and archived or documented Dossier
+  contexts are retained with `hiddenAt` and omitted from the current list.
+  Local orchestrator chat JSONL is migration input only.
 - Project chat reference chips carry stable task, page, repository-file, or
   project-qualified commit ids only. The backend resolves them on the selected
   execution checkout after route and project validation. The UI exposes the
