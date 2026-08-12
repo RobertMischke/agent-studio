@@ -105,16 +105,18 @@ public sealed class RunnerServiceUnitTests
     }
 
     [Fact]
-    public void Manual_runner_publish_stages_an_immutable_release_before_switching_current()
+    public void Manual_runner_publish_uses_the_validated_root_promotion_boundary()
     {
         var content = File.ReadAllText(
             Path.Combine(RepoRoot(), "docs", "operations", "setup", "linux-runner-host.md"));
 
-        Assert.Contains("release_root=\"/opt/agent-host/releases/$release_id\"", content);
         Assert.Contains("dotnet publish runner/AgentRunner.csproj -c Release -o \"$staging_root\"", content);
-        Assert.Contains("ln -sfnT \"$release_root\" /opt/agent-host/current", content);
+        Assert.Contains("sudo /usr/local/sbin/agent-runner-deploy", content);
         Assert.DoesNotContain(
             "dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-host",
+            content);
+        Assert.DoesNotContain(
+            "sudo ln -sfnT \"$release_root\" /opt/agent-host/current",
             content);
     }
 
@@ -207,6 +209,46 @@ public sealed class RunnerServiceUnitTests
         Assert.Contains("main-unit-default-RUNNER_MAX_PARALLELISM=2", result.StandardOutput);
         Assert.Contains("role-EnvironmentFile-RUNNER_MAX_PARALLELISM=6", result.StandardOutput);
         Assert.Contains("effective-RUNNER_MAX_PARALLELISM=6", result.StandardOutput);
+    }
+
+    [Fact]
+    public void Agent_runner_release_helper_validates_and_boots_before_the_atomic_flip()
+    {
+        var helper = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "agent-runner-deploy"));
+        var closureValidation = helper.IndexOf(
+            "\"$deps_closure_validator\" \"$staging_root/agent-host.deps.json\"",
+            StringComparison.Ordinal);
+        var smokeCheck = helper.IndexOf("./agent-host --version", StringComparison.Ordinal);
+        var currentFlip = helper.IndexOf(
+            "ln -sfnT \"$release_root\" \"$current_link\"",
+            StringComparison.Ordinal);
+
+        Assert.True(closureValidation >= 0);
+        Assert.True(smokeCheck > closureValidation);
+        Assert.True(currentFlip > smokeCheck);
+        Assert.Contains("runuser -u \"$service_user\"", helper);
+        Assert.Contains("timeout --signal=TERM", helper);
+        Assert.Contains("DOTNET_ROOT=\"$dotnet_root\"", helper);
+        Assert.Contains("DOTNET_ROOT_X64=\"$dotnet_root\"", helper);
+        Assert.Contains("systemctl show --property=NRestarts", helper);
+        Assert.Contains("previous release:", helper);
+        Assert.Contains("rollback command:", helper);
+    }
+
+    [Fact]
+    public void Host_hardening_installs_the_root_owned_dependency_validator_without_expanding_sudoers()
+    {
+        var migration = File.ReadAllText(
+            Path.Combine(RepoRoot(), "scripts", "harden-agent-runner-host.sh"));
+        var sudoers = File.ReadAllText(
+            Path.Combine(RepoRoot(), "deploy", "agent-host", "sudoers.d", "agent-runner"));
+
+        Assert.Contains("agent-runner-deps-closure.py", migration);
+        Assert.Contains(
+            "install -o root -g root -m 0755 \"$deps_validator_source\" \"$installed_deps_validator\"",
+            migration);
+        Assert.DoesNotContain("agent-runner-deps-closure", sudoers);
     }
 
     [SkippableTheory]

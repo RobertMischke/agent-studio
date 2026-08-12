@@ -336,15 +336,12 @@ Do not create provider-specific files such as `claude.env`.
 git clone <origin> agent-taskboard && cd agent-taskboard
 release_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
 staging_root="$(mktemp -d)"
-release_root="/opt/agent-host/releases/$release_id"
 dotnet publish runner/AgentRunner.csproj -c Release -o "$staging_root"
-sudo install -d -m 0755 "$release_root"
-sudo cp -a "$staging_root/." "$release_root/"
-sudo ln -sfnT "$release_root" /opt/agent-host/current
-if [ -d /opt/agent-runner ] && [ ! -L /opt/agent-runner ]; then
-  sudo mv /opt/agent-runner /opt/agent-runner.pre-agent-host
-fi
-sudo ln -sfnT /opt/agent-host /opt/agent-runner
+incoming_root=/var/lib/agent-runner/deploy/incoming
+test -z "$(find "$incoming_root" -mindepth 1 -print -quit)"
+cp -a "$staging_root/." "$incoming_root/"
+printf '%s\n' "$release_id" >"$incoming_root/release-id"
+sudo /usr/local/sbin/agent-runner-deploy
 ```
 
 The selected output binary is `/opt/agent-host/current/agent-host`.
@@ -354,6 +351,24 @@ new release directory. Never publish into the active `current` target or over
 the files of a running daemon. The CLR can load metadata and method bodies
 lazily, so replacing only part of a live multi-file application can corrupt the
 running process even before systemd receives the planned restart.
+
+The root-owned deploy helper rejects an invalid or incomplete publish before
+changing `current`. It resolves the selected target in `agent-host.deps.json`
+and requires every managed runtime assembly by its flattened publish name. It
+then runs `agent-host --version` from the root-owned staging directory as the
+`agent` service user with a 10-second timeout and the resolved host .NET root.
+It does not inherit the caller or service EnvironmentFiles. Only a candidate
+that passes both checks becomes an immutable release.
+
+The validator uses the host's `/usr/bin/python3` standard library. The hardening
+migration refuses to install the helper when that interpreter is absent.
+
+Promotion restarts the fixed Coding and Review units, then observes their
+systemd `NRestarts` counters and active state for 15 seconds. A counter change,
+restart failure, or inactive unit makes the command fail and prints the previous
+release id plus an operator one-liner that re-points `current` and restarts both
+units. The failed release remains immutable for investigation. The helper does
+not add a rollback command or any new sudo argument shape.
 
 ## 3. Configure
 
@@ -412,10 +427,11 @@ sudo ./scripts/harden-agent-runner-host.sh --apply
 ```
 
 The migration installs `/usr/local/sbin/agent-runner-deploy`, its root-owned
-configuration policy, and the exact sudoers allowlist. It also preserves the
-existing no-argument immutable-release promotion command. An Agent CLI runs
-with `NoNewPrivileges=true`; initial installation or replacement of these
-root-owned assets therefore remains an operator provisioning action.
+dependency-closure validator, configuration policy, and the exact sudoers
+allowlist. It also preserves the existing no-argument immutable-release
+promotion command. An Agent CLI runs with `NoNewPrivileges=true`; initial
+installation or replacement of these root-owned assets therefore remains an
+operator provisioning action.
 
 The installed helper currently accepts one variable only:
 
@@ -843,18 +859,18 @@ recovery. Installing or changing the unit requires root, followed by
 
 ### Planned daemon restart and deploy
 
-A planned Runner deploy no longer waits for host idle. Publish the complete
-application into a new immutable release directory as described in section 2,
-atomically switch `/opt/agent-host/current`, and only then restart the main
-service process. Record the previous `readlink -f /opt/agent-host/current`
-target before switching so rollback can select that complete release.
+A planned Runner deploy no longer waits for host idle. On a hardened host, stage
+the complete application and invoke the no-argument deploy helper as described
+in section 2. The helper records the previous release, validates the dependency
+closure, runs the service-user boot smoke check, atomically switches
+`/opt/agent-host/current`, restarts both main service processes, and watches for
+an immediate restart loop.
 
 ```bash
-sudo systemctl restart agent-host
+sudo /usr/local/sbin/agent-runner-deploy
 sudo journalctl -u agent-host --since '-2 minutes' \
   | grep -E 'planned shutdown|persisted attempt accepted|recovered .* persisted slot|releasing dead persisted attempt'
 
-sudo systemctl restart agent-runner-review
 sudo journalctl -u agent-runner-review --since '-2 minutes' \
   | grep -E 'planned shutdown|review daemon handoff|persisted review accepted|adopting persisted review|review adoption failed'
 ```
@@ -871,8 +887,10 @@ accepted` and `adopting persisted review` under the same attempt and fence. A
 `ExecutorRestarted` infrastructure report with explicit loss extent and retry
 reason. Do not change either unit back to `KillMode=control-group`. Retain every release referenced by a
 daemon or detached worker; garbage collection is a separate, process-aware
-operation. Rollback switches `current` to the recorded previous release and
-restarts the daemon. It never copies old files over the active release.
+operation. If post-restart observation fails, use the exact rollback one-liner
+printed by the helper. Rollback switches `current` to the recorded previous
+release and restarts both daemons. It never copies old files over the active
+release.
 
 This procedure covers a planned daemon binary restart, not a machine reboot,
 power loss, Task Server authority restart, or forced `SIGKILL`. Those cases

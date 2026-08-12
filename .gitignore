@@ -98,6 +98,10 @@ frontend/mockup-chat.*.log
 **/bin/
 **/obj/
 
+# Python dependency-validator test bytecode.
+**/__pycache__/
+*.py[cod]
+
 # UpdateService launcher artefacts (update-service.sh detached pid + log).
 .update-service.pid
 .update-service.log
