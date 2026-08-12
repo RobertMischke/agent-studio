@@ -469,8 +469,10 @@ test.describe('Post Processing lane identity', () => {
 
     const lane = page.getByTestId('lane-4-auto-review');
     const title = lane.getByRole('heading', { name: 'Post Processing' });
+    const header = title.locator('..');
     const count = lane.getByTestId('lane-count-4-auto-review');
     const summary = lane.getByTestId('lane-post-processing-summary');
+    const infoButton = page.getByTestId('info-button-lane-4-auto-review');
     await expect(lane).toBeVisible();
     await expect(summary).toHaveAttribute('data-active-count', '0');
     await expect(summary).toHaveAttribute('data-waiting-count', '10');
@@ -479,20 +481,25 @@ test.describe('Post Processing lane identity', () => {
     mkdirSync(SHOTS, { recursive: true });
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
-      await lane.screenshot({
+      await header.screenshot({
         path: `${SHOTS}/AGT-2644--lane-header-${HEADER_CAPTURE_PHASE}-${theme}--mocked.png`,
       });
     }
 
+    if (HEADER_CAPTURE_PHASE === 'before') {
+      await expect(summary).toContainText('0 active / 10 waiting');
+      return;
+    }
+
     await expect(summary.getByTestId('lane-post-processing-summary-full')).toBeHidden();
     await expect(summary.getByTestId('lane-post-processing-summary-compact')).toHaveText('0/10');
+    await expect(infoButton).toBeHidden();
 
     const metrics = await Promise.all([
       lane.getByTestId('lane-header-avatar-4-auto-review'),
       title,
       count,
       summary,
-      page.getByTestId('info-button-lane-4-auto-review'),
       lane.getByTestId('lane-collapse-4-auto-review'),
     ].map(locator => locator.evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -511,10 +518,32 @@ test.describe('Post Processing lane identity', () => {
     expect(metrics[1].fontSize).toBe('13px');
     expect(metrics[2].fontSize).toBe('11px');
     expect(metrics[3].fontSize).toBe('11px');
-    expect(metrics[1].width).toBeGreaterThanOrEqual(72);
+    expect(metrics[1].width).toBeGreaterThanOrEqual(90);
+    expect(await title.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 
     await summary.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText('0 active post-processing tasks, 10 waiting');
+
+    await lane.evaluate(element => {
+      element.style.flex = '0 0 400px';
+      element.style.width = '400px';
+    });
+    await expect(summary.getByTestId('lane-post-processing-summary-full')).toBeVisible();
+    await expect(summary.getByTestId('lane-post-processing-summary-compact')).toBeHidden();
+    await expect(infoButton).toBeVisible();
+
+    const wideCenters = await Promise.all([
+      lane.getByTestId('lane-header-avatar-4-auto-review'),
+      title,
+      count,
+      summary,
+      infoButton,
+      lane.getByTestId('lane-collapse-4-auto-review'),
+    ].map(locator => locator.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    })));
+    expect(Math.max(...wideCenters) - Math.min(...wideCenters)).toBeLessThanOrEqual(1);
   });
 
   test('shows a timed loop-waiting phase without claiming a runner slot', async ({ page }) => {
