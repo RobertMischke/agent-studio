@@ -8,6 +8,10 @@ import { GitTokenCapabilityComponent } from '../git-token-capability/git-token-c
 import { HostWorkloadSummaryComponent } from '../host-workload-summary/host-workload-summary';
 import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
 import {
+  RemoteHostRoleRowComponent,
+  roleSlotTotal,
+} from '../remote-host-role-row/remote-host-role-row';
+import {
   RuntimeCapacityEditorComponent,
   type HostProjectPolicyChange,
   type RuntimeCapacityChange,
@@ -63,6 +67,7 @@ interface Meter {
     HostWorkloadSummaryComponent,
     HostTelemetryHistoryComponent,
     RuntimeCapacityEditorComponent,
+    RemoteHostRoleRowComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
@@ -76,6 +81,8 @@ interface Meter {
 })
 export class RemoteHostCardComponent {
   readonly host = input.required<RemoteHost>();
+  readonly roles = input<readonly RemoteHost[]>([]);
+  readonly roleActiveSlots = input<Readonly<Record<string, number>>>({});
   /** Board-local process runs or remote leased runs attributed to this host. */
   readonly boardActiveSlots = input(0);
   /**
@@ -194,15 +201,7 @@ export class RemoteHostCardComponent {
   );
   readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
   readonly slotTotal = computed(() => {
-    const host = this.host();
-    if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
-    if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
-      return host.effectiveMaxParallelism;
-    }
-    if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
-      return host.activeTaskCount + host.availableSlots;
-    }
-    return null;
+    return roleSlotTotal(this.host());
   });
   readonly occupiedSlots = computed(() => this.boardActiveSlots());
   readonly loadPct = computed(() => {
@@ -211,7 +210,7 @@ export class RemoteHostCardComponent {
     return load === null || load === undefined ? null : Math.round(clampPct(load));
   });
   readonly loadLabel = computed(() => this.loadPct() === null ? 'Not reported' : `${this.loadPct()}%`);
-  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || 'Not reported');
+  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || null);
   readonly detailId = computed(() => `remote-host-detail-${this.host().id.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
 
   latestAuthTransition(badge: ProviderAuthBadge) {
@@ -229,6 +228,10 @@ export class RemoteHostCardComponent {
   emit(kind: HostActionKind): void {
     if (this.host().busyAction) return;
     this.action.emit({ kind, id: this.host().id });
+  }
+
+  activeSlotsFor(role: RemoteHost): number {
+    return this.roleActiveSlots()[role.id] ?? 0;
   }
 
   requestSetup(): void {

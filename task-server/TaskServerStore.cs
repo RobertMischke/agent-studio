@@ -584,12 +584,13 @@ public sealed partial class TaskServerStore
                     id, name, host_id, instance_id, runner_version, protocol_version,
                     capabilities_json, status, registered_at, last_seen_at,
                     host_orchestrator_minimum, host_orchestrator_maximum,
+                    role_max_parallelism,
                     effective_max_parallelism, runtime_capacity_applied_at,
                     runtime_capacity_applied_version)
                 VALUES (
                     $id, $name, $host, $instance, $version, $protocol,
                     $capabilities, 'active', $now, $now, $hostOrchestratorMinimum,
-                    $hostOrchestratorMaximum, NULL, NULL, NULL)
+                    $hostOrchestratorMaximum, $roleMaxParallelism, NULL, NULL, NULL)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     host_id = excluded.host_id,
@@ -599,6 +600,7 @@ public sealed partial class TaskServerStore
                     capabilities_json = excluded.capabilities_json,
                     host_orchestrator_minimum = excluded.host_orchestrator_minimum,
                     host_orchestrator_maximum = excluded.host_orchestrator_maximum,
+                    role_max_parallelism = excluded.role_max_parallelism,
                     effective_max_parallelism = CASE
                         WHEN runners.instance_id <> excluded.instance_id
                           OR runners.host_id <> excluded.host_id
@@ -625,6 +627,7 @@ public sealed partial class TaskServerStore
                 ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)),
                 ("$hostOrchestratorMinimum", request.HostOrchestratorMinimum),
                 ("$hostOrchestratorMaximum", request.HostOrchestratorMaximum),
+                ("$roleMaxParallelism", bootstrapMaxParallelism),
                 ("$now", now));
             if (managesCodingCapacity)
             {
@@ -2058,6 +2061,7 @@ public sealed partial class TaskServerStore
                 last_seen_at TEXT NOT NULL,
                 host_orchestrator_minimum TEXT,
                 host_orchestrator_maximum TEXT,
+                role_max_parallelism INTEGER,
                 effective_max_parallelism INTEGER,
                 runtime_capacity_applied_at TEXT,
                 runtime_capacity_applied_version INTEGER
@@ -2402,6 +2406,7 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runs", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_minimum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_maximum", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runners", "role_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_version", "INTEGER", ct);

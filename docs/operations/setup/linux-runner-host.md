@@ -355,6 +355,12 @@ the files of a running daemon. The CLR can load metadata and method bodies
 lazily, so replacing only part of a live multi-file application can corrupt the
 running process even before systemd receives the planned restart.
 
+At startup, the runner resolves the final target of the `current` symlink and
+advertises that immutable release directory name to Studio. This deployment id,
+for example `agt-2650b-20260812T064049Z-ca5cbd6ff`, is the Release value shown in
+Execution Hosts. `RUNNER_RELEASE_ID` is an explicit override for installations
+that do not use the standard release-directory layout.
+
 ## 3. Configure
 
 Every value has an environment-variable default (systemd-friendly); the per-task

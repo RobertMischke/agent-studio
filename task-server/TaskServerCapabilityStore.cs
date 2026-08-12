@@ -327,7 +327,8 @@ public sealed partial class TaskServerStore
         await using (var command = Command(connection, """
             SELECT id, name, host_id, instance_id, runner_version, protocol_version,
                    status, registered_at, last_seen_at, effective_max_parallelism,
-                   runtime_capacity_applied_at, runtime_capacity_applied_version
+                   runtime_capacity_applied_at, runtime_capacity_applied_version,
+                   role_max_parallelism
               FROM runners
              ORDER BY host_id, name, id;
             """))
@@ -346,7 +347,8 @@ public sealed partial class TaskServerStore
                     Parse(reader.GetString(8)),
                     reader.IsDBNull(9) ? null : reader.GetInt32(9),
                     reader.IsDBNull(10) ? null : Parse(reader.GetString(10)),
-                    reader.IsDBNull(11) ? null : reader.GetInt64(11)));
+                    reader.IsDBNull(11) ? null : reader.GetInt64(11),
+                    reader.IsDBNull(12) ? null : reader.GetInt32(12)));
         }
 
         var result = new List<RunnerCapabilitySnapshotDto>();
@@ -427,7 +429,8 @@ public sealed partial class TaskServerStore
                 runner.EffectiveMaxParallelism,
                 runner.RuntimeCapacityAppliedAt,
                 runner.RuntimeCapacityAppliedVersion,
-                projectPolicy));
+                projectPolicy,
+                runner.RoleMaxParallelism));
         }
         return result;
     }
@@ -738,7 +741,7 @@ public sealed partial class TaskServerStore
             SELECT id, name, host_id, instance_id, runner_version, protocol_version,
                    status, registered_at, last_seen_at,
                    effective_max_parallelism, runtime_capacity_applied_at,
-                   runtime_capacity_applied_version
+                   runtime_capacity_applied_version, role_max_parallelism
               FROM runners WHERE id = $runner;
             """, transaction, ("$runner", runnerId));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -756,7 +759,8 @@ public sealed partial class TaskServerStore
             Parse(reader.GetString(8)),
             reader.IsDBNull(9) ? null : reader.GetInt32(9),
             reader.IsDBNull(10) ? null : Parse(reader.GetString(10)),
-            reader.IsDBNull(11) ? null : reader.GetInt64(11));
+            reader.IsDBNull(11) ? null : reader.GetInt64(11),
+            reader.IsDBNull(12) ? null : reader.GetInt32(12));
         if (!string.Equals(runner.InstanceId, instanceId, StringComparison.Ordinal))
             throw new TaskServerConflictException(
                 "runner-instance-mismatch",
@@ -897,7 +901,8 @@ public sealed partial class TaskServerStore
         DateTime LastSeenAt,
         int? EffectiveMaxParallelism = null,
         DateTime? RuntimeCapacityAppliedAt = null,
-        long? RuntimeCapacityAppliedVersion = null);
+        long? RuntimeCapacityAppliedVersion = null,
+        int? RoleMaxParallelism = null);
 
     private sealed record CapabilityRow(
         string Key,

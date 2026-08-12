@@ -170,6 +170,7 @@ export class RemoteHostsService {
               id: snapshot.runnerId,
               name: snapshot.name,
               role: 'remote' as const,
+              serviceRole: serviceRole(snapshot),
               address: null,
               clientId: snapshot.runnerId,
               status: 'offline' as const,
@@ -214,6 +215,7 @@ export class RemoteHostsService {
             const next: RemoteHost = {
               ...current,
               name: snapshot.name,
+              serviceRole: serviceRole(snapshot),
               status,
               lastHeartbeatAt: snapshot.lastSeenAt,
               releaseId: snapshot.runnerVersion,
@@ -233,6 +235,10 @@ export class RemoteHostsService {
                 snapshot.effectiveMaxParallelism !== undefined
                   ? snapshot.effectiveMaxParallelism
                   : current.effectiveMaxParallelism ?? null,
+              roleMaxParallelism:
+                snapshot.roleMaxParallelism !== undefined
+                  ? snapshot.roleMaxParallelism
+                  : current.roleMaxParallelism ?? null,
               runtimeCapacityAppliedAt:
                 snapshot.runtimeCapacityAppliedAt !== undefined
                   ? snapshot.runtimeCapacityAppliedAt
@@ -622,6 +628,12 @@ function clientCapacity(host: RemoteHost, client: ClientSummary): Partial<Remote
 
 function isRunnerIdentity(client: ClientSummary): boolean {
   return client.kind === 'retired' || !!client.runnerGitStatus || /runner|host/i.test(`${client.id} ${client.displayName}`);
+}
+
+function serviceRole(snapshot: TaskServerRunnerCapabilitySnapshot): RemoteHost['serviceRole'] {
+  if (snapshot.capabilities.some(capability => capability.key === 'executor:review')) return 'review';
+  if (snapshot.capabilities.some(capability => capability.key === 'executor:coding')) return 'coding';
+  return /review/i.test(`${snapshot.runnerId} ${snapshot.name}`) ? 'review' : 'runner';
 }
 
 function mergeRecentTelemetry(

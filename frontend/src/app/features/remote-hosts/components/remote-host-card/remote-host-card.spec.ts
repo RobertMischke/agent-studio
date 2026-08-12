@@ -63,6 +63,8 @@ function mount(host: RemoteHost, expanded = true) {
   });
   const fixture = TestBed.createComponent(RemoteHostCardComponent);
   fixture.componentRef.setInput('host', host);
+  fixture.componentRef.setInput('roles', [host]);
+  fixture.componentRef.setInput('roleActiveSlots', { [host.id]: 0 });
   fixture.componentRef.setInput('now', Date.parse('2026-07-10T12:00:00Z'));
   fixture.componentRef.setInput('expanded', expanded);
   fixture.detectChanges();
