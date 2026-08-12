@@ -136,7 +136,7 @@ export function pipelineTokenCostByStep(
   }]));
 }
 
-/** One pre/core/post phase grouping for the grid. */
+/** One pipeline phase grouping for the grid. */
 export interface PipelineGroup {
   phase: string;
   label: string;
@@ -145,6 +145,7 @@ export interface PipelineGroup {
 
 export function phaseForStep(step: PipelineCatalogueStep): string {
   if (step.kind === 'aspect') return 'aspect';
+  if (step.kind === 'analysis') return 'analysis';
   if (step.kind === 'tool') return 'tool';
   if (step.kind === 'drift') return 'drift';
   if (step.kind === 'core') return 'core';
@@ -159,6 +160,7 @@ export function pipelinePhaseLabel(phase: string): string {
     case 'pre': return 'Pre steps';
     case 'core': return 'Core agent work';
     case 'aspect': return 'Aspect reviews';
+    case 'analysis': return 'Quality analysis';
     case 'tool': return 'Tool steps';
     case 'decision': return 'Decision';
     case 'drift': return 'Drift';

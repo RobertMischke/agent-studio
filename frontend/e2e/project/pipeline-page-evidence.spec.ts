@@ -38,6 +38,7 @@ const CATALOGUE = {
     { id: 'aspect-code-quality', displayName: 'Aspect: Code quality', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-code-quality', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'aspect-security', displayName: 'Aspect: Security', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-security', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'decision-gate', displayName: 'Decision: Lint gate', kind: 'tool', usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
+    { id: 'analysis-qs-angular-rules', displayName: 'Quality Studio Angular rules', kind: 'analysis', framework: 'Angular', appliesTo: 'angular', applicable: true, usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
     { id: 'post-lint-scss', displayName: 'Frontend stylelint', kind: 'tool', framework: 'angular', appliesTo: 'angular', applicable: true, effectiveExecution: { executionKind: 'shell', source: 'catalogue', commands: [{ workingSubdir: 'frontend', command: 'npx stylelint "src/**/*.scss"' }] }, usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: true },
   ],
@@ -112,7 +113,12 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await page.route('**/api/cli/*/models*', r => r.fulfill(json({ models: [], source: 'stubbed' })));
   await page.route('**/api/watch-paths', r => r.fulfill(json([preferred])));
   await page.route('**/api/projects', r => r.fulfill(json([])));
-  await page.route('**/api/workspaces', r => r.fulfill(json([{
+  await page.route('**/api/projects?includeArchived=false', r => r.fulfill(json([{
+    id: 'PROJ-1', displayName: projectName, shortCode: 'PLH', workspaceId: 'WS-1',
+    color: null, cliDefault: null, modelDefault: null, sortOrder: 0,
+    storageLocation: preferred.path, archived: false, createdAt: '2026-07-22T00:00:00Z',
+  }])));
+  await page.route('**/api/workspaces**', r => r.fulfill(json([{
     id: 'WS-1', displayName: 'Workspace', sortOrder: 0, isDefault: true, color: null,
     createdAt: '2026-07-22T00:00:00Z',
     projects: [{
@@ -138,6 +144,9 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await page.route('**/api/tasks/archive**', r => r.fulfill(json({ items: [], total: 0 })));
   await page.route('**/api/runner/status', r => r.fulfill(json({ projects: {} })));
   await page.route('**/api/bus/*/messages**', r => r.fulfill(json([])));
+  await page.route('**/api/projects/*/workbenches**', r => r.fulfill(json({
+    projectName, includesHistory: true, count: 0, items: [],
+  })));
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(CATALOGUE)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
@@ -204,6 +213,8 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   // Phase groups: core renders "always on"; aspects expose a model picker; a
   // prompt cell deep-links to the Prompts registry rather than editing inline.
   await expect(page.getByTestId('pipeline-step-row-core-run')).toBeVisible();
+  await expect(page.getByTestId('pipeline-group-analysis')).toContainText('Quality analysis');
+  await expect(page.getByTestId('pipeline-step-kind-analysis-qs-angular-rules')).toHaveText('ANA');
   const codeQualityRow = page.getByTestId('pipeline-step-row-aspect-code-quality');
   await codeQualityRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(codeQualityRow.getByTestId('pipeline-step-setting-run-aspect-code-quality')).toBeVisible();
@@ -285,7 +296,12 @@ test('pipeline page: pure dotnet project keeps Angular stylelint visible but ina
   await page.route('**/api/cli/*/models*', r => r.fulfill(json({ models: [], source: 'stubbed' })));
   await page.route('**/api/watch-paths', r => r.fulfill(json([preferred])));
   await page.route('**/api/projects', r => r.fulfill(json([])));
-  await page.route('**/api/workspaces', r => r.fulfill(json([{
+  await page.route('**/api/projects?includeArchived=false', r => r.fulfill(json([{
+    id: 'PROJ-1', displayName: projectName, shortCode: 'PLH', workspaceId: 'WS-1',
+    color: null, cliDefault: null, modelDefault: null, sortOrder: 0,
+    storageLocation: preferred.path, archived: false, createdAt: '2026-07-22T00:00:00Z',
+  }])));
+  await page.route('**/api/workspaces**', r => r.fulfill(json([{
     id: 'WS-1', displayName: 'Workspace', sortOrder: 0, isDefault: true, color: null,
     createdAt: '2026-07-22T00:00:00Z',
     projects: [{
@@ -311,6 +327,9 @@ test('pipeline page: pure dotnet project keeps Angular stylelint visible but ina
   await page.route('**/api/tasks/archive**', r => r.fulfill(json({ items: [], total: 0 })));
   await page.route('**/api/runner/status', r => r.fulfill(json({ projects: {} })));
   await page.route('**/api/bus/*/messages**', r => r.fulfill(json([])));
+  await page.route('**/api/projects/*/workbenches**', r => r.fulfill(json({
+    projectName, includesHistory: true, count: 0, items: [],
+  })));
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(dotnetCatalogue)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));

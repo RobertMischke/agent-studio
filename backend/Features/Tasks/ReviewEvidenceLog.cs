@@ -101,6 +101,7 @@ internal static class ReviewEvidenceLog
             Id = id!,
             Source = ReviewEvidenceSources.Normalize(ReadString(doc, "source")),
             Severity = ReviewEvidenceSeverities.Normalize(ReadString(doc, "severity")),
+            RuleId = ReadString(doc, "ruleId"),
             Title = title!,
             Body = ReadString(doc, "body"),
             CreatedAt = ReadDateTime(doc, "createdAt") ?? DateTime.UtcNow,

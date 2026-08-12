@@ -32,7 +32,7 @@ public class PipelineCatalogueTests
     {
         var p = PipelineCatalogue.Standard;
         Assert.Equal(PipelineCatalogue.StandardPipelineId, p.Id);
-        Assert.Equal(1, p.Version);
+        Assert.Equal(2, p.Version);
         // Pre: loop guard and model qualification lead, followed by prompt
         // enrichment, opt-in orchestrator prep, and the deterministic reissue
         // open-items check.
@@ -54,7 +54,44 @@ public class PipelineCatalogueTests
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(26, p.Post.Count);
+        Assert.Equal(33, p.Post.Count);
+    }
+
+    [Fact]
+    public void StandardPipeline_QualityStudioAxesAreNamedDefaultOnAndAngularIsLive()
+    {
+        var steps = PipelineCatalogue.Standard.Post
+            .Where(step => step.Kind == StepKind.Analysis)
+            .ToList();
+
+        Assert.Equal(PipelineCatalogue.QualityStudioAnalysisStepIds, steps.Select(step => step.Id));
+        Assert.All(steps, step => Assert.True(step.DefaultEnabled));
+        Assert.All(steps, step => Assert.True(step.Idempotent));
+
+        var angular = steps.Single(step =>
+            step.Id == PipelineCatalogue.QualityStudioAngularRulesStepId);
+        Assert.False(angular.Stub);
+        Assert.Equal(PipelineStepStacks.Angular, angular.AppliesTo);
+        Assert.Contains(PipelineCatalogue.BuildTestGateStepId, angular.DependsOn);
+
+        Assert.All(steps.Where(step => step.Id != angular.Id), step => Assert.True(step.Stub));
+    }
+
+    [Fact]
+    public void QualityStudioSteps_UseProjectSettingsConvention()
+    {
+        var step = PipelineCatalogue.Standard.Post.Single(candidate =>
+            candidate.Id == PipelineCatalogue.QualityStudioAngularRulesStepId);
+        var disabled = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [step.Id] = new() { Enabled = false },
+            },
+        };
+
+        Assert.True(PipelineStepConfigResolver.IsEnabled(null, step));
+        Assert.False(PipelineStepConfigResolver.IsEnabled(disabled, step));
     }
 
     [Fact]

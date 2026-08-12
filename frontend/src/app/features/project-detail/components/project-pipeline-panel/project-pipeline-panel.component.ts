@@ -600,11 +600,11 @@ export class ProjectPipelinePanelComponent {
         return 'Optional review pass after an aborted or stopped run to decide rerun, reissue, or escalation.';
       default:
         if (step.id.startsWith('aspect-')) return 'Runs an LLM aspect review and records a focused verdict for auto-review.';
+        if (step.id.startsWith('analysis-qs-')) return 'Runs a named Quality Studio analysis axis and records portable findings as review evidence.';
         if (step.id.startsWith('post-drift-')) return 'Runs an opt-in drift analysis dimension after the main task decision.';
         return 'Pipeline step in the project processing flow.';
     }
   }
-
   kindKey(value: string | null | undefined): string {
     return (value ?? '').trim().toLowerCase();
   }
@@ -616,11 +616,11 @@ export class ProjectPipelinePanelComponent {
       case 'orchestrator': return 'ORC';
       case 'tool': return 'TOO';
       case 'aspect': return 'ASP';
+      case 'analysis': return 'ANA';
       case 'drift': return 'DRI';
       default: return (value ?? '').trim().slice(0, 3).toUpperCase();
     }
   }
-
   formatTokens = formatTokens;
   stepTokenLabel = stepTokenLabel;
   stepTokenTooltip = stepTokenTooltip;

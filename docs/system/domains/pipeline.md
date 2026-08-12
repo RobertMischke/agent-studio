@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-11
+Version: 2026-08-12
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -50,6 +50,11 @@ pipeline view.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
   concept, and UI pipeline definitions, step ids, default ordering, step run
   modes, and display names.
+- `backend/Features/Pipeline/QualityStudioAnalysis.cs`: the convention-based
+  Quality Studio card classifier, portable QS-74/QS-88 evidence adapter, first
+  Angular named-rule runner, and bounded finding policy. Quality Studio owns
+  rule definitions and matching logic; Agent Studio stores stable rule ids and
+  projects findings into its review loop.
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly
@@ -499,6 +504,68 @@ pipeline view.
   shell command against the repository, but it never creates a task or changes a
   lane. Every shell probe is serialized by the build/test machine lock.
 
+### Standard Quality Studio analysis
+
+Quality Studio analysis is a normal pipeline phase, not an optional external
+tool invocation. `StepKind.Analysis` separates it from model aspects and generic
+tool gates. The standard catalogue defines these named axes in order:
+
+1. `analysis-qs-angular-rules`
+2. `analysis-qs-dotnet-rules`
+3. `analysis-qs-model-review`
+4. `analysis-qs-visual-quality`
+5. `analysis-qs-security`
+6. `analysis-qs-redundancy`
+7. `analysis-qs-consistency`
+
+The first slice implements the Angular rule pass after the build/test gate. The
+same live pass runs after the UI iteration artifact gate and before its human
+review marker. The other six rows are explicit planned catalogue steps, so
+their absence from runtime cannot be mistaken for a pass. The UI iteration
+catalogue also places visual quality, model review, redundancy, and consistency
+before its human review gate as planned rows.
+
+Defaults are selected from the exact changed-file set, then resolved through
+the project's ordinary `PipelineSteps` settings:
+
+| Card class | Default Quality Studio axes |
+|---|---|
+| Frontend-touching | Angular rules, visual quality, model review, redundancy, consistency |
+| Backend-touching | C#/.NET rules, security, model review, redundancy, consistency |
+| Frontend and backend | Union of both rows |
+| No coding files | None |
+
+This is convention over card configuration. A project may enable or disable a
+known QS catalogue step through project pipeline settings. Cards and deployment
+environments cannot supply a QS executable, endpoint, rule body, or alternate
+axis list. The executable convention is `quality`.
+
+The integration boundary has two current QS-owned surfaces:
+
+- QS-74/QS-88 provide `quality diff . --base <sha> --head <sha> --no-write
+  --fail-on-regression --format json --output <artifact> --repository <id>` and
+  the version 1 `quality-finding` plus `change-review-evidence` schemas. Exit 0
+  means review completed without a requested regression failure, exit 1 means a
+  regression, and exit 2 means unavailable or invalid execution.
+- QS-90 owns the named rule library. Its current Angular ids are `QS-NG-001`
+  through `QS-NG-005`; its C#/.NET ids are `QS-CS-001` through `QS-CS-004`.
+  The first deterministic `quality-rules` sensor subset emits `QS-NG-002` and
+  `QS-NG-004`. This document intentionally does not repeat rule statements or
+  matching logic.
+
+The Angular runner requires an exact base/head subject. It writes the portable
+artifact to `results/quality-studio/angular-rules.json`, validates the QS schema,
+and imports only new or persisting findings carrying a recognized Angular rule
+id. An unavailable CLI, missing subject, invalid schema, or missing artifact is
+recorded as unavailable, never as a clean pass.
+
+Imported findings append to `results/review-evidence.jsonl` with source
+`quality-studio`, the named `ruleId`, QS fingerprint, file references, and the
+portable artifact reference. Medium, high, and critical findings reopen the
+same card once with the QS recommendations as targeted steering. The same
+actionable findings in the next attempt escalate instead of forming an
+unbounded loop. Low and informational findings remain advisory evidence.
+
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model
   ids. Explicit card model/reasoning pins always win; legacy cards without
@@ -611,6 +678,9 @@ code-owned, so that same destination is where an operator overrides it. A
 card-level addition is a separate execution-plan fact, not an activation source
 or a new arbitrary executable definition; it can only reference a known
 catalogue step.
+
+Quality Studio axes are narrower: they follow changed-file conventions and
+project settings only. They are not eligible for a card-level axis override.
 
 On-demand execution is bounded to post-steps that declare themselves
 idempotent and have an implemented runner. It is allowed after the main run and

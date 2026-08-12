@@ -222,6 +222,7 @@ export class PromptPaneComponent {
     const sections: EvidenceSection[] = [
       { key: 'code-review',    label: 'Code Review',  accent: 'var(--accent-3)', entries: [] },
       { key: 'security-audit', label: 'Security',     accent: 'var(--accent-warn)', entries: [] },
+      { key: 'quality-studio', label: 'Quality Studio', accent: 'var(--studio-accent)', entries: [] },
       { key: 'task-check',     label: 'Task Checks',  accent: 'var(--accent-2)', entries: [] },
       { key: 'human-note',     label: 'Human Notes',  accent: 'var(--accent-4)', entries: [] },
       { key: 'other',          label: 'Other',        accent: 'var(--studio-accent)', entries: [] },

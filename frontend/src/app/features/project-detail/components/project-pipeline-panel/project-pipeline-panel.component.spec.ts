@@ -69,6 +69,12 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         canDisable: true, defaultEnabled: true, supportsCondition: true,
       },
       {
+        id: 'analysis-qs-angular-rules', displayName: 'Quality Studio Angular rules', kind: 'analysis', phase: 'analysis',
+        runMode: 'sequential', dependsOn: ['post-build-test-gate'], idempotent: true, stub: false,
+        usesModel: false, usesPrompt: false, supportsMode: true, cliType: null,
+        framework: 'Angular', promptTemplate: null, canDisable: true, defaultEnabled: true, supportsCondition: false,
+      },
+      {
         id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', phase: 'tool',
         runMode: 'sequential', dependsOn: ['core-run'], idempotent: true, stub: false,
         usesModel: false, usesPrompt: false, supportsMode: true, cliType: null,
@@ -138,6 +144,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     // Phase groups + both step rows.
     expect(host.querySelector('[data-testid="pipeline-group-core"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-group-aspect"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-group-analysis"]')?.textContent).toContain('Quality analysis');
     expect(host.querySelector('[data-testid="pipeline-step-row-core-run"]')).toBeTruthy();
     const aspectRow = host.querySelector('[data-testid="pipeline-step-row-aspect-requirement-fit"]');
     expect(aspectRow).toBeTruthy();
@@ -211,6 +218,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-kind-core-run"]')?.textContent?.trim()).toBe('COR');
     expect(host.querySelector('[data-testid="pipeline-step-kind-aspect-requirement-fit"]')?.textContent?.trim()).toBe('ASP');
     expect(host.querySelector('[data-testid="pipeline-step-kind-post-build-test-gate"]')?.textContent?.trim()).toBe('TOO');
+    expect(host.querySelector('[data-testid="pipeline-step-kind-analysis-qs-angular-rules"]')?.textContent?.trim()).toBe('ANA');
   });
 
   it('emits openPrompts from the summary prompt chip and Manage in Prompts', async () => {

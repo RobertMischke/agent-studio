@@ -311,12 +311,13 @@ public sealed class ProjectPipelineCostService
     // deterministic tool steps, the orchestrator decision, and finally any
     // generic module step.
     private static readonly StepKind[] KindOrder =
-        [StepKind.Core, StepKind.Aspect, StepKind.Tool, StepKind.Orchestrator, StepKind.Drift, StepKind.Module];
+        [StepKind.Core, StepKind.Aspect, StepKind.Analysis, StepKind.Tool, StepKind.Orchestrator, StepKind.Drift, StepKind.Module];
 
     private static string KindKey(StepKind kind) => kind switch
     {
         StepKind.Core => "core",
         StepKind.Aspect => "aspect",
+        StepKind.Analysis => "analysis",
         StepKind.Tool => "tool",
         StepKind.Orchestrator => "orchestrator",
         StepKind.Drift => "drift",

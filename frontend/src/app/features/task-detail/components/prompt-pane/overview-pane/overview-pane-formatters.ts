@@ -9,6 +9,7 @@ export function stepKindLabel(kind: StepKind): string {
     case 'module':       return 'Pre steps';
     case 'core':         return 'Core agent work';
     case 'aspect':       return 'Aspect';
+    case 'analysis':     return 'Analysis';
     case 'orchestrator': return 'Decision';
     case 'tool':         return 'Tool';
     case 'drift':        return 'Drift';
@@ -21,6 +22,7 @@ export function stepKindIcon(kind: StepKind): StudioIconName {
     case 'module':       return 'sliders';
     case 'core':         return 'bot';
     case 'aspect':       return 'eye';
+    case 'analysis':     return 'search';
     case 'orchestrator': return 'branch';
     case 'tool':         return 'cli';
     case 'drift':        return 'diff';

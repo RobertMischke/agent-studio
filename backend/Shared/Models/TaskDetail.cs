@@ -34,7 +34,8 @@ public record TaskDetail
     /// <summary>
     /// Task-level review evidence parsed from
     /// <c>results/review-evidence.jsonl</c>. Findings produced by security
-    /// audits, code-review passes, task checks, or human reviewer notes.
+    /// audits, Quality Studio analyses, code-review passes, task checks, or
+    /// human reviewer notes.
     /// Empty when the file is absent or only contained malformed lines.
     /// Findings are evidence for review, not blockers: their presence does
     /// not gate any state transition. See
@@ -56,6 +57,8 @@ public record ReviewEvidenceEntry
     public string Source { get; init; } = ReviewEvidenceSources.Other;
     /// <summary>One of <see cref="ReviewEvidenceSeverities"/>. Unknown values are normalized to <c>info</c>.</summary>
     public string Severity { get; init; } = ReviewEvidenceSeverities.Info;
+    /// <summary>Stable producer-owned rule id, for example <c>QS-NG-002</c>.</summary>
+    public string? RuleId { get; init; }
     public string Title { get; init; } = "";
     public string? Body { get; init; }
     public DateTime CreatedAt { get; init; }
@@ -81,10 +84,11 @@ public static class ReviewEvidenceSources
     public const string SecurityAudit = "security-audit";
     public const string CodeReview = "code-review";
     public const string TaskCheck = "task-check";
+    public const string QualityStudio = "quality-studio";
     public const string HumanNote = "human-note";
     public const string Other = "other";
 
-    public static readonly string[] All = [SecurityAudit, CodeReview, TaskCheck, HumanNote, Other];
+    public static readonly string[] All = [SecurityAudit, CodeReview, TaskCheck, QualityStudio, HumanNote, Other];
 
     public static string Normalize(string? value)
     {

@@ -124,6 +124,12 @@ public static class TaskReviewEvidenceEndpoints
             ""
         };
 
+        if (!string.IsNullOrWhiteSpace(entry.RuleId))
+        {
+            lines.Add($"- Rule id: `{entry.RuleId}`");
+            lines.Add("");
+        }
+
         if (entry.RunIndex.HasValue)
         {
             lines.Add($"- Run index: {entry.RunIndex.Value}");

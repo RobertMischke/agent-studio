@@ -106,6 +106,7 @@ public class ProjectRunner
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly PromptEnrichmentService? _promptEnrichment;
     private readonly DossierMaintenanceService? _dossierMaintenance;
+    private readonly AgentStudio.Pipeline.IQualityStudioAnalysisRunner? _qualityStudioAnalysisRunner;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -451,7 +452,8 @@ public class ProjectRunner
         CliQuotaWaitPolicyService? quotaWaitPolicy = null,
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
         PromptEnrichmentService? promptEnrichment = null,
-        DossierMaintenanceService? dossierMaintenance = null)
+        DossierMaintenanceService? dossierMaintenance = null,
+        AgentStudio.Pipeline.IQualityStudioAnalysisRunner? qualityStudioAnalysisRunner = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -497,6 +499,7 @@ public class ProjectRunner
         _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
         _promptEnrichment = promptEnrichment;
         _dossierMaintenance = dossierMaintenance;
+        _qualityStudioAnalysisRunner = qualityStudioAnalysisRunner;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -6297,6 +6300,52 @@ public class ProjectRunner
             return;
         }
 
+        var qualityStudioResult = await RunUiQualityStudioAngularRulesAsync(info);
+        if (qualityStudioResult is { HasActionableFindings: true })
+        {
+            var findingSummary = QualityStudioReviewEvidence.Format(qualityStudioResult.Findings);
+            if (evidenceRetryAttempt < RunOutcomePolicy.MaxAutoReissueAttempts)
+            {
+                _chatLog.Append(info, OrchestratorMessageKind.Reissue,
+                    $"[quality-studio-angular] Iteration {iteration}/{maxIterations} has " +
+                    $"{qualityStudioResult.Findings.Count} actionable named-rule finding(s). Reissuing once with targeted steering.\n" +
+                    findingSummary);
+                ReleaseRun(jobId);
+                NotifyStatus();
+                var retryPrompt = QualityStudioReviewEvidence.BuildFollowUp(qualityStudioResult.Findings);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt,
+                            evidenceRetryAttempt + 1, ContinueModes.Continue, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "UI Quality Studio Angular reissue failed for {JobId}", jobId);
+                    }
+                });
+                return;
+            }
+
+            _pipelineLog?.Complete(info.FolderPath,
+                pendingStepReason: "UI Quality Studio Angular findings persisted after the bounded retry.");
+            TeardownWorktreeForJob(jobId);
+            var reason =
+                $"Quality Studio Angular named-rule findings persisted after one UI steering retry ({qualityStudioResult.Findings.Count} finding(s)).";
+            var escalation = await _humanReviewEscalation.EscalateAsync(
+                jobId, info.WatchPath, ProjectName,
+                HumanReviewEscalationCategories.AutoReviewEscalation,
+                reason + "\n" + findingSummary,
+                CancellationToken.None);
+            _logger.LogWarning(
+                "ui_quality_studio_escalated project={Project} job={JobId} iteration={Iteration}/{MaxIterations} status={Status} findings={Findings}",
+                ProjectName, jobId, iteration, maxIterations, escalation.Status,
+                qualityStudioResult.Findings.Count);
+            return;
+        }
+
         var contract = new UiIterationReviewContract
         {
             Iteration = iteration,
@@ -6351,6 +6400,120 @@ public class ProjectRunner
                 "UI iteration {Iteration}/{MaxIterations} for {JobId} is evidenced but could not move to human review: {Status} {Message}",
                 iteration, maxIterations, jobId, move.Status, move.Message);
         }
+    }
+
+    private async Task<QualityStudioAnalysisResult?> RunUiQualityStudioAngularRulesAsync(
+        TaskInfo info)
+    {
+        if (_qualityStudioAnalysisRunner == null) return null;
+
+        var settings = PipelineTypeSettings.ForTask(_projectSettings.Get(ProjectName), info);
+        var step = PipelineCatalogue.UiIteration.Post.Single(candidate =>
+            candidate.Id == PipelineCatalogue.QualityStudioAngularRulesStepId);
+        if (!PipelineStepConfigResolver.ShouldRun(settings, step, new PipelineStepConditionContext
+            {
+                ExitCode = 0,
+                TaskType = info.TaskType,
+                Tags = info.Tags,
+            }))
+        {
+            RecordUiQualityStudioAngularStep(
+                info.FolderPath, PipelineStepStatus.Skipped, 0, "off",
+                "disabled by project pipeline settings");
+            return null;
+        }
+
+        QualityStudioAnalysisResult result;
+        int? runIndex = null;
+        try
+        {
+            var events = _sessions.ReadSessionEvents(info.Id, Entry.Path);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
+            var run = ReviewDecisionOrchestrator.SelectLastSuccessfulReviewRun(
+                RunTimelineBuilder.Build(events, lines, DateTime.UtcNow).Runs);
+            if (run is null)
+            {
+                result = new QualityStudioAnalysisResult(
+                    QualityStudioAnalysisVerdict.Unavailable, null, 0,
+                    "an exact Quality Studio task-change subject could not be resolved",
+                    "", null, []);
+            }
+            else
+            {
+                runIndex = run.Index;
+                var changedFiles = _git.GetFilesChangedInShaRange(
+                        info.Id, Entry.Path, run.HeadShaBefore, run.HeadShaAfter)
+                    .Select(file => file.Path)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var repositoryPath = string.IsNullOrWhiteSpace(Entry.RepositoryPath)
+                    ? Entry.RootPath
+                    : Entry.RepositoryPath;
+                result = await _qualityStudioAnalysisRunner.RunAngularRulesAsync(
+                    new QualityStudioAnalysisRequest(
+                        repositoryPath!, ProjectName, info.Id, info.FolderPath,
+                        run.HeadShaBefore!, run.HeadShaAfter!, changedFiles)
+                    {
+                        RepositoryId = ProjectName,
+                        RunIndex = run.Index,
+                    },
+                    CancellationToken.None);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "UI Quality Studio Angular analysis failed for {Project}/{JobId}",
+                ProjectName, info.Id);
+            result = new QualityStudioAnalysisResult(
+                QualityStudioAnalysisVerdict.Unavailable, null, 0,
+                "Quality Studio Angular analysis failed", ex.Message, null, []);
+        }
+
+        var status = result.Verdict switch
+        {
+            QualityStudioAnalysisVerdict.Passed => PipelineStepStatus.Passed,
+            QualityStudioAnalysisVerdict.Findings when result.HasActionableFindings => PipelineStepStatus.Failed,
+            QualityStudioAnalysisVerdict.Findings => PipelineStepStatus.Passed,
+            QualityStudioAnalysisVerdict.NotApplicable => PipelineStepStatus.NotApplicable,
+            _ => PipelineStepStatus.Failed,
+        };
+        var verdict = result.Verdict switch
+        {
+            QualityStudioAnalysisVerdict.Passed => "pass",
+            QualityStudioAnalysisVerdict.Findings when result.HasActionableFindings => "findings",
+            QualityStudioAnalysisVerdict.Findings => "advisory-findings",
+            QualityStudioAnalysisVerdict.NotApplicable => "not-applicable",
+            _ => "unavailable",
+        };
+        RecordUiQualityStudioAngularStep(
+            info.FolderPath, status, result.DurationMs, verdict, result.Reason);
+        QualityStudioReviewEvidence.Append(info.FolderPath, runIndex, result);
+        return result;
+    }
+
+    private void RecordUiQualityStudioAngularStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdict,
+        string reason)
+    {
+        if (_pipelineLog == null) return;
+        var completedAt = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.QualityStudioAngularRulesStepId,
+            Kind = StepKind.Analysis,
+            Status = status,
+            StartedAt = completedAt - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = completedAt,
+            DurationMs = durationMs,
+            Verdict = verdict,
+            VerdictSummary = reason,
+            Reason = reason,
+        });
     }
 
     /// <summary>

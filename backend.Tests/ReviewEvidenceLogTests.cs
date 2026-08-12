@@ -75,6 +75,18 @@ public class ReviewEvidenceLogTests : IDisposable
     }
 
     [Fact]
+    public void ReadLatestPerId_QualityStudioFinding_PreservesSourceAndRuleId()
+    {
+        WriteEvidenceLines(
+            """{"id":"quality-studio:sha256:abc","source":"quality-studio","severity":"warn","ruleId":"QS-NG-002","title":"Named rule finding","createdAt":"2026-08-12T12:00:00Z"}"""
+        );
+
+        var entry = Assert.Single(ReviewEvidenceLog.ReadLatestPerId(_jobFolder));
+        Assert.Equal(ReviewEvidenceSources.QualityStudio, entry.Source);
+        Assert.Equal("QS-NG-002", entry.RuleId);
+    }
+
+    [Fact]
     public void ReadLatestPerId_MalformedLineDoesNotBreakRest()
     {
         WriteEvidenceLines(

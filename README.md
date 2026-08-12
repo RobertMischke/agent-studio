@@ -30,6 +30,9 @@
   completion judging in the separate API-only Orchestrator Engine. Flow
   definitions and in-flight runs remain durable Task Server data, so restarting
   the Engine does not orphan work.
+- Treats Quality Studio as a standard pipeline analysis phase. The first live
+  slice carries Angular named-rule findings into task evidence and bounded
+  steering, while the catalogue exposes the remaining quality axes explicitly.
 
 ## Get started
 

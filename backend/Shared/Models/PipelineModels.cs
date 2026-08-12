@@ -147,6 +147,12 @@ public enum StepKind
     /// </summary>
     Tool,
     /// <summary>
+    /// A named Quality Studio analysis axis. Analysis steps consume QS-owned
+    /// rule and finding contracts and remain distinct from generic tools,
+    /// aspect reviews, and final orchestrator decisions.
+    /// </summary>
+    Analysis,
+    /// <summary>
     /// One drift-analysis dimension run as an opt-in post-step (ADR / Code,
     /// Software / Architecture, Docs / Marketing, Spec / Task / Job, and the
     /// rule-based Code-Pattern check). Reuses the existing

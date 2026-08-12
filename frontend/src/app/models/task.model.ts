@@ -968,7 +968,8 @@ export interface TaskDetail {
   /**
    * Task-level review evidence. Populated from
    * `<job>/results/review-evidence.jsonl`. Findings produced by security
-   * audits, code-review passes, task checks, or human notes. Empty when
+   * audits, Quality Studio analyses, code-review passes, task checks, or human
+   * notes. Empty when
    * the file is absent. Findings are evidence for review, not blockers:
    * the lane transitions never gate on them. See
    * `docs/system/contracts/filesystem.md` "results/review-evidence.jsonl".
@@ -976,13 +977,14 @@ export interface TaskDetail {
   reviewEvidence: ReviewEvidenceEntry[];
 }
 
-export type ReviewEvidenceSource = 'security-audit' | 'code-review' | 'task-check' | 'human-note' | 'other';
+export type ReviewEvidenceSource = 'security-audit' | 'code-review' | 'task-check' | 'quality-studio' | 'human-note' | 'other';
 export type ReviewEvidenceSeverity = 'info' | 'warn' | 'high';
 
 export interface ReviewEvidenceEntry {
   id: string;
   source: ReviewEvidenceSource;
   severity: ReviewEvidenceSeverity;
+  ruleId?: string | null;
   title: string;
   body: string | null;
   createdAt: string;

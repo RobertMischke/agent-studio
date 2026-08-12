@@ -552,6 +552,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.ITestSelectionAdvisor,
     AgentStudio.Pipeline.LlmTestSelectionAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IQualityStudioAnalysisRunner,
+    AgentStudio.Pipeline.QualityStudioAnalysisRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PreMainTestGate>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineStepProbeService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PreDevelopBuildGate>();

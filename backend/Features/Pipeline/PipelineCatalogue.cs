@@ -213,6 +213,29 @@ public static class PipelineCatalogue
     /// <see cref="BuildTestGateRunner"/>.
     /// </summary>
     public const string BuildTestGateStepId = "post-build-test-gate";
+    public const string QualityStudioAngularRulesStepId = "analysis-qs-angular-rules";
+    public const string QualityStudioDotNetRulesStepId = "analysis-qs-dotnet-rules";
+    public const string QualityStudioModelReviewStepId = "analysis-qs-model-review";
+    public const string QualityStudioVisualStepId = "analysis-qs-visual-quality";
+    public const string QualityStudioSecurityStepId = "analysis-qs-security";
+    public const string QualityStudioRedundancyStepId = "analysis-qs-redundancy";
+    public const string QualityStudioConsistencyStepId = "analysis-qs-consistency";
+
+    /// <summary>
+    /// Standard Quality Studio axes. The Angular rule pass is the first live
+    /// slice; the remaining named entries deliberately stay visible as planned
+    /// catalogue work rather than being hidden behind one generic quality tool.
+    /// </summary>
+    public static readonly string[] QualityStudioAnalysisStepIds =
+    {
+        QualityStudioAngularRulesStepId,
+        QualityStudioDotNetRulesStepId,
+        QualityStudioModelReviewStepId,
+        QualityStudioVisualStepId,
+        QualityStudioSecurityStepId,
+        QualityStudioRedundancyStepId,
+        QualityStudioConsistencyStepId,
+    };
     /// <summary>
     /// Deterministic delivery gate for cards linked to a Dossier through
     /// <c>references.workbenches</c> or the descriptor's
@@ -531,7 +554,7 @@ public static class PipelineCatalogue
         {
             Id = StandardPipelineId,
             DisplayName = "Standard task pipeline",
-            Version = 1,
+            Version = 2,
             Pre =
             [
                 new PipelineStep
@@ -630,6 +653,90 @@ public static class PipelineCatalogue
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioAngularRulesStepId,
+                    DisplayName = "Quality Studio Angular rules",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.Angular,
+                    Framework = "Angular",
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioDotNetRulesStepId,
+                    DisplayName = "Quality Studio C# rules",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.DotNet,
+                    Framework = ".NET",
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioModelReviewStepId,
+                    DisplayName = "Quality Studio model review",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioVisualStepId,
+                    DisplayName = "Quality Studio visual quality",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.Angular,
+                    Framework = "Angular",
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioSecurityStepId,
+                    DisplayName = "Quality Studio security",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.DotNet,
+                    Framework = ".NET",
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioRedundancyStepId,
+                    DisplayName = "Quality Studio redundancy",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioConsistencyStepId,
+                    DisplayName = "Quality Studio consistency",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
                 },
                 .. aspects,
                 new PipelineStep
@@ -908,7 +1015,7 @@ public static class PipelineCatalogue
         {
             Id = UiPipelineId,
             DisplayName = "UI iteration task pipeline",
-            Version = 1,
+            Version = 2,
             Pre =
             [
                 .. StandardPipeline.Pre.Select(step => step with { }),
@@ -940,13 +1047,46 @@ public static class PipelineCatalogue
                     Idempotent = true,
                     DefaultEnabled = true,
                 },
+                StandardPipeline.Post.Single(step =>
+                    step.Id == QualityStudioAngularRulesStepId) with
+                {
+                    DependsOn = [UiIterationArtifactStepId],
+                },
+                StandardPipeline.Post.Single(step =>
+                    step.Id == QualityStudioVisualStepId) with
+                {
+                    DependsOn = [UiIterationArtifactStepId],
+                },
+                StandardPipeline.Post.Single(step =>
+                    step.Id == QualityStudioModelReviewStepId) with
+                {
+                    DependsOn = [UiIterationArtifactStepId],
+                },
+                StandardPipeline.Post.Single(step =>
+                    step.Id == QualityStudioRedundancyStepId) with
+                {
+                    DependsOn = [UiIterationArtifactStepId],
+                },
+                StandardPipeline.Post.Single(step =>
+                    step.Id == QualityStudioConsistencyStepId) with
+                {
+                    DependsOn = [UiIterationArtifactStepId],
+                },
                 new PipelineStep
                 {
                     Id = UiHumanReviewGateStepId,
                     DisplayName = "Human iteration review",
                     Kind = StepKind.Orchestrator,
                     RunMode = StepRunMode.Sequential,
-                    DependsOn = [UiIterationArtifactStepId],
+                    DependsOn =
+                    [
+                        UiIterationArtifactStepId,
+                        QualityStudioAngularRulesStepId,
+                        QualityStudioVisualStepId,
+                        QualityStudioModelReviewStepId,
+                        QualityStudioRedundancyStepId,
+                        QualityStudioConsistencyStepId,
+                    ],
                     Idempotent = true,
                     DefaultEnabled = true,
                 },

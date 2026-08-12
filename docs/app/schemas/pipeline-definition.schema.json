@@ -75,7 +75,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["Module", "Core", "Aspect", "Orchestrator", "Tool"],
+          "enum": ["Module", "Core", "Aspect", "Orchestrator", "Tool", "Analysis", "Drift"],
           "description": "Internal implementation binding (ADR-0045 StepKind). Defaults: Script -> Tool, Llm -> Module (or Aspect for aspect-style reviews). Present so built-in steps keep their service binding."
         },
         "failureMode": {

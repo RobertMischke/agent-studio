@@ -332,6 +332,7 @@ Append-only JSON-Lines file holding **task-level review evidence**: findings pro
 {"id":"e1","source":"security-audit","severity":"high","title":"Token logged in plaintext","body":"`AuthService.LogIn` writes the bearer token to `logs/cli-output.log`.","createdAt":"2026-05-08T12:34:00Z","runIndex":2,"fileRefs":["backend/Services/AuthService.cs:142"],"artifacts":["results/playwright/auth-spec/screenshot.png"]}
 {"id":"e2","source":"code-review","severity":"warn","title":"Defensive null check missing","body":"`JobScanner.GetJobDetail` dereferences `info.FolderPath` without a null guard.","createdAt":"2026-05-08T12:34:11Z"}
 {"id":"e3","source":"human-note","severity":"info","title":"Visual regression spotted","body":"Compose box border looks 1px off when the steer pill is active.","createdAt":"2026-05-08T12:36:00Z","artifacts":["results/screenshots/compose-steer.png"]}
+{"id":"quality-studio:sha256:abc123","source":"quality-studio","severity":"warn","ruleId":"QS-NG-002","title":"[QS-NG-002] Named Angular rule finding","body":"Quality Studio owns the rule text and recommendation.","createdAt":"2026-08-12T12:00:00Z","fileRefs":["frontend/src/app/example.scss:12"],"artifacts":["results/quality-studio/angular-rules.json"]}
 ```
 
 Schema, per line:
@@ -339,8 +340,9 @@ Schema, per line:
 | Field            | Type                        | Required | Notes |
 |------------------|-----------------------------|----------|-------|
 | `id`             | string                      | yes      | Stable identifier; producers may use a uuid or short slug. |
-| `source`         | string                      | yes      | One of `security-audit`, `code-review`, `task-check`, `human-note`, `other`. Unknown values fall back to `other` on read. |
+| `source`         | string                      | yes      | One of `security-audit`, `code-review`, `task-check`, `quality-studio`, `human-note`, `other`. Unknown values fall back to `other` on read. |
 | `severity`       | string                      | yes      | One of `info`, `warn`, `high`. Unknown values fall back to `info`. |
+| `ruleId`         | string                      | no       | Producer-owned stable rule id, such as a Quality Studio named rule. Agent Studio does not copy the rule definition into this contract. |
 | `title`          | string                      | yes      | Single-line headline rendered in the panel. |
 | `body`           | string                      | no       | Free-form Markdown (kept short — the panel does not virtualize). |
 | `createdAt`      | ISO-8601 string             | yes      | UTC. |
