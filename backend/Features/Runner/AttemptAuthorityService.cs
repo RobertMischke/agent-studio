@@ -68,6 +68,17 @@ public sealed class AttemptAuthorityService
         get { lock (_gate) return _state.AuthorityEpoch; }
     }
 
+    /// <summary>
+    /// Review-only telemetry snapshot. Returning DTO copies keeps the queue
+    /// watchdog outside the authority gate and prevents metrics from becoming
+    /// a second mutation path.
+    /// </summary>
+    public IReadOnlyList<ReviewAttemptDto> ListReviewAttempts()
+    {
+        lock (_gate)
+            return _state.ReviewAttempts.Select(ToDto).ToList();
+    }
+
     public AttemptWriteResult AcquireRun(
         string taskKey,
         string repositoryId,

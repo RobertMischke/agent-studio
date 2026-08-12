@@ -38,7 +38,7 @@ export class StatusbarItemComponent {
   /** Animate the icon as a live indicator (e.g. the "● running" chip). */
   readonly pulsing = input(false);
   /** Optional low-noise signal tone for a read-only status indicator. */
-  readonly signalTone = input<'unknown' | 'calm' | 'working' | 'hot' | 'mismatch' | null>(null);
+  readonly signalTone = input<'unknown' | 'calm' | 'working' | 'hot' | 'mismatch' | 'attention' | null>(null);
   /** Machine-readable correlation state for visual and E2E inspection. */
   readonly signalCorrelation = input<string | null>(null);
   /** Small, explicit warning when independent live sources disagree. */

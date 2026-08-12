@@ -486,6 +486,16 @@ lower the value if load, memory, or I/O pressure persists. A Coding change sets
 the local bootstrap/fallback ceiling; the Task Server remains authoritative for
 its centrally versioned live capacity.
 
+The role-config helper restarts the selected unit. With the managed unit's
+required `KillMode=process`, already-detached Review workers survive and the
+replacement daemon positively adopts their PID generation, workspace, lease,
+and fence. A Review still preparing its workspace has no detached identity to
+adopt: shutdown reports `ReviewInfra / ExecutorRestarted` with zero review
+commands and authority retries it. Do not automate role-config changes until a
+drain-ready operation can stop new claims and confirm that every occupied
+Review slot is detached or terminal. Queue pressure alone is not restart
+readiness, and changing capacity must not change the global FIFO claim order.
+
 Recommended per-CLI headless defaults (verify against your installed version):
 
 When both CLIs are installed, keep both provider-specific binary variables even
