@@ -11,6 +11,8 @@ param(
 
     [string] $SshExecutable = 'ssh.exe',
 
+    [string] $TunnelSshPath = (Join-Path $PSScriptRoot 'tunnel-ssh.ps1'),
+
     [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'AgentTaskboard\tunnel-keeper'),
 
     [ValidateRange(10, 180)]
@@ -128,16 +130,19 @@ try {
         -Message "Functional probe failed; stopped $stopped matching forward process(es) and started a replacement." `
         -RepairAttempts $attempts
 
+    $tunnelSsh = (Resolve-Path -LiteralPath $TunnelSshPath).Path
+    $powerShell = (Get-Command 'powershell.exe' -ErrorAction Stop).Source
     $arguments = @(
-        '-N', '-T',
-        '-o', 'BatchMode=yes',
-        '-o', 'ExitOnForwardFailure=yes',
-        '-o', 'ServerAliveInterval=30',
-        '-o', 'ServerAliveCountMax=3',
-        '-R', $forward,
-        $SshTarget
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', ('"{0}"' -f ($tunnelSsh -replace '"', '""')),
+        '-SshExecutable', ('"{0}"' -f ($script:sshPath -replace '"', '""')),
+        '-SshTarget', $SshTarget,
+        '-Forward', $forward,
+        '-StateDirectory', ('"{0}"' -f ($StateDirectory -replace '"', '""'))
     )
-    Start-Process -FilePath $script:sshPath -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+    Start-Process -FilePath $powerShell -ArgumentList $arguments -WindowStyle Hidden | Out-Null
 
     $deadline = [DateTime]::UtcNow.AddSeconds($RecoveryWaitSeconds)
     do {

@@ -6,37 +6,46 @@ param(
     [ValidateRange(1, 65535)]
     [int] $RemotePort = 15031,
 
-    [ValidateRange(1, 65535)]
-    [int] $TaskServerPort = 5031,
+    [string] $KeeperTaskName = 'AgentRunner-TunnelKeeper',
 
-    [ValidateRange(1, 60)]
-    [int] $IntervalMinutes = 5,
+    [ValidateRange(10, 3600)]
+    [int] $ProbeIntervalSeconds = 60,
 
-    [string] $TaskName = 'AgentRunner-TunnelKeeper',
+    [ValidateRange(1, 10)]
+    [int] $FailureThreshold = 2,
 
-    [string] $KeeperPath = (Join-Path $PSScriptRoot 'tunnel-keeper.ps1')
+    [string] $DevspaceDirectory = 'C:\Projects\agent-taskboard-devspace',
+
+    [string] $TaskName = 'AgentRunner-TunnelWatchdog',
+
+    [string] $WatchdogPath = (Join-Path $PSScriptRoot 'tunnel-watchdog.ps1')
 )
 
 $ErrorActionPreference = 'Stop'
-$keeper = (Resolve-Path -LiteralPath $KeeperPath).Path
+$watchdog = (Resolve-Path -LiteralPath $WatchdogPath).Path
 $powerShell = (Get-Command 'powershell.exe' -ErrorAction Stop).Source
 $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$quotedKeeper = '"{0}"' -f ($keeper -replace '"', '""')
+$quotedWatchdog = '"{0}"' -f ($watchdog -replace '"', '""')
+$quotedDevspace = '"{0}"' -f ($DevspaceDirectory -replace '"', '""')
 $arguments = @(
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy', 'Bypass',
-    '-File', $quotedKeeper,
+    '-File', $quotedWatchdog,
     '-SshTarget', $SshTarget,
     '-RemotePort', $RemotePort,
-    '-TaskServerPort', $TaskServerPort
+    '-KeeperTaskName', $KeeperTaskName,
+    '-ProbeIntervalSeconds', $ProbeIntervalSeconds,
+    '-FailureThreshold', $FailureThreshold,
+    '-DevspaceDirectory', $quotedDevspace
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
-$trigger = New-ScheduledTaskTrigger `
+$startupTrigger = New-ScheduledTaskTrigger -AtStartup
+$restartTrigger = New-ScheduledTaskTrigger `
     -Once `
     -At ([DateTime]::Now.AddMinutes(1)) `
-    -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
+    -RepetitionInterval (New-TimeSpan -Minutes 1) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal `
     -UserId $userId `
@@ -47,14 +56,14 @@ $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -RestartCount 3 `
     -RestartInterval (New-TimeSpan -Minutes 1) `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 4)
+    -ExecutionTimeLimit ([TimeSpan]::Zero)
 
-if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel keeper scheduled task')) {
+if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel watchdog scheduled task')) {
     Register-ScheduledTask `
         -TaskName $TaskName `
-        -Description 'Functionally probes and repairs the private Agent Host reverse tunnel.' `
+        -Description 'Probes and self-heals the Agent Host reverse tunnel every minute.' `
         -Action $action `
-        -Trigger $trigger `
+        -Trigger @($startupTrigger, $restartTrigger) `
         -Principal $principal `
         -Settings $settings `
         -Force | Out-Null

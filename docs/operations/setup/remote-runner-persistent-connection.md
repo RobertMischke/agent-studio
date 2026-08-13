@@ -72,14 +72,29 @@ Set-Location C:\Projects\agent-studio
     -RemotePort 15031 `
     -TaskServerPort 5031 `
     -IntervalMinutes 5
+
+.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -ProbeIntervalSeconds 60 `
+    -FailureThreshold 2
 ```
 
-The registration is idempotent. It creates or updates
+Both registrations are idempotent. The keeper registration creates or updates
 `AgentRunner-TunnelKeeper`, uses `IgnoreNew` to prevent overlapping repair
-runs, starts the first run immediately, and repeats every five minutes. It uses
-the current interactive Windows identity because that identity owns the SSH
-key. A machine that must repair the tunnel before user logon needs a dedicated
-service identity with its own protected SSH key instead.
+runs, starts the first run immediately, and retains a five-minute repair tick as
+a backstop. The watchdog registration creates the separate long-running
+`AgentRunner-TunnelWatchdog` task. It starts at boot, probes every 60 seconds,
+and has a one-minute repeated trigger so Task Scheduler restarts it after an
+unexpected exit.
+
+Both tasks use the current Windows identity with `LogonType S4U`, not an
+interactive session token. They therefore survive sign-out and do not become
+children of an agent or operator session. That identity must own a local
+OpenSSH private key which is usable without an interactive passphrase prompt.
+If local policy blocks that key under S4U, register both tasks under a dedicated
+service identity with its own protected key. Do not change them back to
+interactive-logon tasks.
 
 The keeper in
 [`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
@@ -105,6 +120,44 @@ quiet. An ongoing failure is logged on transition and at most hourly, not on
 every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
 `15031` is still held by a half-dead previous session, SSH fails fast instead
 of connecting without the forward.
+
+The keeper starts that command through `tunnel-ssh.ps1`. The wrapper appends
+the process start, SSH stdout/stderr, and final exit code to
+`%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\ssh-exit.log`. This is the
+root-cause record for an unexpected keeper SSH death. Preserve the lines around
+the exit before restarting repeatedly; messages such as keepalive timeout,
+authentication failure, forward-bind failure, or connection reset distinguish
+the underlying failure modes.
+
+### Windows tunnel watchdog
+
+`tunnel-watchdog.ps1` is independent from the keeper and follows the external
+watchdog pattern: one OS-owned process runs a bounded decision on each tick and
+keeps its own journal. Its probe is issued from Windows over the direct SSH
+control route:
+
+```powershell
+ssh agent-runner 'curl -sf --max-time 6 http://127.0.0.1:15031/healthz'
+```
+
+Two consecutive failed probes trigger exactly this recovery sequence:
+
+1. On the runner, find the process listening on `127.0.0.1:15031` and terminate
+   it as the SSH agent account. `ss` is preferred and `lsof` is supported. On a
+   host with process details hidden from `ss`, the watchdog falls back to the
+   other agent-account `sshd` process while excluding the SSH session executing
+   the cleanup. No listener is a successful no-op.
+2. Run `Stop-ScheduledTask` and `Start-ScheduledTask` for
+   `AgentRunner-TunnelKeeper`.
+3. Retry the same remote functional probe for up to 45 seconds and journal the
+   result.
+
+Every transition has a UTC timestamp in
+`C:\Projects\agent-taskboard-devspace\.tunnel-watchdog.log`. Two consecutive
+failed heal attempts append one `severity=alarm source=tunnel-watchdog` line to
+the existing operator-alarm channel,
+`C:\Projects\agent-taskboard-devspace\.operator-alarm.log`. Both paths can be
+overridden when registering a non-standard devspace.
 
 ## Option B - autossh + systemd on the host (host dials in, `-L`)
 
@@ -203,18 +256,25 @@ claim poll.
 1. Bring the tunnel service up (Option A or B).
 2. From the host: `curl -fsS http://127.0.0.1:15031/healthz` succeeds, and
    `agent-host --health-check --server http://127.0.0.1:15031` exits `0`.
-3. Stop `AgentRunner-TunnelKeeper`, terminate the matching reverse-forward SSH
-   process, and leave the route down. The same `--health-check` exits `4` with a
-   "tunnel down" reason within about 10 seconds. Within the capability's
-   three-minute freshness budget, Execution Hosts shows **Task Server route
-   unreachable**. After five continuous minutes, the runner journal contains
-   one `status=escalated` transition, not repeated poll errors.
-4. Start `AgentRunner-TunnelKeeper`. Its immediate or next scheduled run removes
-   the dead forward, starts a replacement, and accepts it only after the remote
-   sentinel probe passes. The runner logs one `status=recovered` transition and
-   the next capability advertisement returns the host card to **reachable**.
-5. Preserve screenshots from both states and the bounded journal excerpt in the
-   task's absolute `results/` directory.
+3. Run the destructive acceptance test from an elevated Windows PowerShell
+   after setting the task result directory:
+
+   ```powershell
+   $env:JOB_RESULTS_DIR = 'C:\path\to\task\results'
+   .\deploy\windows\agent-runner-tunnel\test-tunnel-watchdog-forced-kill.ps1
+   ```
+
+   The test confirms a healthy precondition, force-kills the agent-account
+   runner-side tunnel `sshd`, observes the outage, and waits at most 150 seconds
+   for a healthy probe plus `event=heal-result status=healthy`. It writes
+   `tunnel-watchdog-forced-kill.md` into `JOB_RESULTS_DIR` and fails if the
+   route did not recover within the deadline.
+4. Confirm `.tunnel-watchdog.log` shows two failed probes, listener cleanup,
+   keeper restart, and a healthy heal result. Confirm `ssh-exit.log` contains the
+   killed keeper SSH process's exit record.
+5. The next capability advertisement should return the host card to
+   **reachable**. Preserve the generated report and the relevant bounded log
+   excerpts in the task's absolute `results/` directory.
 
 ## Is the tunnel still the right topology?
 
