@@ -5,8 +5,8 @@
 // own machine paths, or the test host's real address.
 //
 // With --verify-registry it additionally asks npm and NuGet whether the release
-// claims recorded below still hold. That needs network, so CI runs it on a
-// schedule rather than on every pull request.
+// claims recorded below still hold. That needs network, so CI runs it only
+// when the workflow is manually dispatched.
 //
 //   node scripts/check-public-docs.mjs
 //   node scripts/check-public-docs.mjs --verify-registry
