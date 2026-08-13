@@ -4,22 +4,13 @@ on:
   push:
     branches:
       - main
-      - develop
+    tags:
+      - 'v*.*.*'
     paths:
       - 'README.md'
       - 'docs/**'
       - 'scripts/check-public-docs.mjs'
       - '.github/workflows/documentation-truth.yml'
-  pull_request:
-    paths:
-      - 'README.md'
-      - 'docs/**'
-      - 'scripts/check-public-docs.mjs'
-      - '.github/workflows/documentation-truth.yml'
-  # The registry claims can go stale without anyone touching a doc, so they are
-  # re-checked weekly rather than only when documentation changes.
-  schedule:
-    - cron: '23 5 * * 1'
   workflow_dispatch:
 
 permissions:
