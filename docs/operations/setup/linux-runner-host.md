@@ -127,18 +127,30 @@ Windows-to-Linux reverse route, register the repository-owned functional keeper
 from the Studio checkout:
 
 ```powershell
+$credential = Get-Credential `
+    -UserName "$env:USERDOMAIN\$env:USERNAME" `
+    -Message 'Credential for the unattended tunnel tasks'
 .\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
     -SshTarget agent-runner `
     -RemotePort 15031 `
     -TaskServerPort 5031 `
-    -IntervalMinutes 5
+    -IntervalMinutes 5 `
+    -Credential $credential
+.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -ProbeIntervalSeconds 60 `
+    -FailureThreshold 2 `
+    -Credential $credential
 ```
 
 The keeper probes `/healthz` from the Linux host, removes only the matching dead
-forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
-host can initiate the SSH connection, prefer the host-owned `autossh` plus
-systemd form in the linked tunnel runbook because it starts before an
-interactive Windows logon.
+forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. The
+separate password-logon watchdog runs outside interactive sessions, retains
+network access for SSH, probes once per minute, and restarts the keeper after
+targeted runner-side listener cleanup on two consecutive failures. If the host
+can initiate the SSH connection, prefer the host-owned `autossh` plus systemd
+form in the linked tunnel runbook.
 
 Treat either tunnel form as an interim local-profile topology. Once an
 authenticated private Task Server URL is available to the host, point
