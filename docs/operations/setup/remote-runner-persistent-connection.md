@@ -56,7 +56,7 @@ tunnel and a Windows Scheduled Task keeps it alive.
 ```sshconfig
 Host agent-runner
     HostName <runner-host-ip>
-    User runner
+    User agent
     IdentityFile ~/.ssh/agent-runner
     ServerAliveInterval 30
     ServerAliveCountMax 3
@@ -72,14 +72,30 @@ Set-Location C:\Projects\agent-studio
     -RemotePort 15031 `
     -TaskServerPort 5031 `
     -IntervalMinutes 5
+.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -ProbeIntervalSeconds 60 `
+    -FailureThreshold 2 `
+    -DevspaceDirectory C:\Projects\agent-taskboard-devspace
 ```
 
 The registration is idempotent. It creates or updates
 `AgentRunner-TunnelKeeper`, uses `IgnoreNew` to prevent overlapping repair
-runs, starts the first run immediately, and repeats every five minutes. It uses
-the current interactive Windows identity because that identity owns the SSH
-key. A machine that must repair the tunnel before user logon needs a dedicated
-service identity with its own protected SSH key instead.
+runs, starts the first run immediately, and repeats every five minutes. Both
+the keeper and the separate `AgentRunner-TunnelWatchdog` use an S4U principal,
+so they are owned by Task Scheduler and survive sign-out instead of belonging
+to an interactive session. They use the current Windows identity because that
+identity owns the SSH key. Confirm that the key and SSH configuration are
+readable without an interactive profile prompt. A machine that needs a
+different security boundary should use a dedicated service identity with its
+own protected SSH key.
+
+The watchdog is a long-running loop with an at-startup trigger. A repeated
+one-minute trigger and `IgnoreNew` act only as a restart backstop if that loop
+has exited; they do not create overlapping watchdog processes. Its execution
+time limit is disabled so Task Scheduler does not end the service after a
+session-scoped timeout.
 
 The keeper in
 [`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
@@ -105,6 +121,46 @@ quiet. An ongoing failure is logged on transition and at most hourly, not on
 every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
 `15031` is still held by a half-dead previous session, SSH fails fast instead
 of connecting without the forward.
+
+The SSH process is launched through `run-tunnel-ssh.ps1`. Every SSH diagnostic
+and its final exit code is timestamped in
+`%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\ssh-exit.log`; inspect this file to
+determine why a keeper SSH process exited instead of relying on Task Scheduler's
+last result alone.
+
+Incident note, 12 August 2026: the reverse tunnel died twice and silently
+stalled both claim traffic and report submissions. The pre-change keeper
+discarded the SSH process output, so the exact network or SSH exit reason is
+unknown. Do not assign a speculative root cause to those two deaths. The
+timestamped `ssh-output`, `ssh-exit`, and `ssh-launch-failed` records now retain
+the evidence needed to diagnose the next occurrence.
+
+### Independent tunnel watchdog
+
+The one-minute watchdog is deliberately separate from the keeper. It runs the
+functional probe from the runner's point of view:
+
+```text
+ssh agent-runner 'curl -sf --max-time 6 http://127.0.0.1:15031/healthz'
+```
+
+After two consecutive failures it follows the operator recovery order: find
+and terminate only the agent-owned listener for `127.0.0.1:15031`, stop and
+start `AgentRunner-TunnelKeeper`, and repeat the remote health probe for up to
+45 seconds. No listener is a successful no-op. On hardened hosts where
+`ss -p` hides the PID, cleanup resolves the listener's cgroup and signals only
+processes in that agent-owned session. A listener that cannot be resolved or
+removed remains a visible failed heal.
+
+The watchdog journals timestamped probes and repairs in the devspace file
+`.tunnel-watchdog.log`. Two consecutive failed heal cycles append one alarm
+line to the existing devspace `.operator-alarm` channel. A successful health
+probe resets the consecutive probe and heal counters.
+
+The remote cleanup uses the normal `agent-runner` SSH account. It does not use
+`sudo` and cannot terminate another account's listener. If another account owns
+port 15031, the repair fails visibly and the second failed cycle raises the
+operator alarm.
 
 ## Option B - autossh + systemd on the host (host dials in, `-L`)
 
@@ -203,18 +259,23 @@ claim poll.
 1. Bring the tunnel service up (Option A or B).
 2. From the host: `curl -fsS http://127.0.0.1:15031/healthz` succeeds, and
    `agent-host --health-check --server http://127.0.0.1:15031` exits `0`.
-3. Stop `AgentRunner-TunnelKeeper`, terminate the matching reverse-forward SSH
-   process, and leave the route down. The same `--health-check` exits `4` with a
-   "tunnel down" reason within about 10 seconds. Within the capability's
-   three-minute freshness budget, Execution Hosts shows **Task Server route
-   unreachable**. After five continuous minutes, the runner journal contains
-   one `status=escalated` transition, not repeated poll errors.
-4. Start `AgentRunner-TunnelKeeper`. Its immediate or next scheduled run removes
-   the dead forward, starts a replacement, and accepts it only after the remote
-   sentinel probe passes. The runner logs one `status=recovered` transition and
-   the next capability advertisement returns the host card to **reachable**.
-5. Preserve screenshots from both states and the bounded journal excerpt in the
-   task's absolute `results/` directory.
+3. Run the destructive acceptance test from an elevated Windows PowerShell
+   after both scheduled tasks are registered:
+
+   ```powershell
+   $env:JOB_RESULTS_DIR = 'C:\path\to\task-results'
+   .\deploy\windows\agent-runner-tunnel\test-tunnel-watchdog-forced-kill.ps1 `
+       -SshTarget agent-runner
+   ```
+
+   The test first restarts the healthy watchdog to reset its in-memory counters,
+   then stops the keeper task, kills the real runner-side listener, and binds a
+   dummy listener that returns a failing `/healthz`. Success requires two
+   journalled failed probes, listener cleanup, keeper restart, and a healthy
+   runner-side curl within 150 seconds. The test performs bounded cleanup and
+   restarts the keeper on failure.
+4. Preserve the generated `forced-kill-test.md`. It records elapsed recovery,
+   both S4U principals, the watchdog journal tail, and the keeper SSH exit tail.
 
 ## Is the tunnel still the right topology?
 
