@@ -226,6 +226,14 @@ public sealed class TokenSummaryBusParityTests : IDisposable
         Assert.Equal(2, summary.Entries.Count);
         Assert.Contains(summary.Entries, e => e.Model == "GPT-5 Codex");
         Assert.Contains(summary.Entries, e => e.Model == "Claude Haiku 4.5");
+        var coding = summary.Entries.Single(e => e.UsageType == TokenUsageTypes.Coding);
+        Assert.Equal(AgentMessageBusBridge.DeriveRunId(jobId, startedAt), coding.RunId);
+        Assert.Equal("codex-turn", coding.Topic);
+        Assert.Equal(
+            [TokenUsageTypes.Coding, TokenUsageTypes.Orchestrator],
+            summary.ByType.Select(row => row.Type));
+        Assert.Equal(summary.TotalTokens, summary.ByType.Sum(row => row.TotalTokens));
+        Assert.Equal(summary.EstimatedApiCostUsd, summary.ByType.Sum(row => row.EstimatedApiCostUsd));
 
         static AgentMessageLatency createdLatency(DateTime requestedAt, DateTime completedAt)
             => new(

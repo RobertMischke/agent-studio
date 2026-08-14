@@ -158,6 +158,9 @@ public class TokenSummaryService
                 Ts = entry.Ts,
                 Model = displayModel,
                 ParticipantId = entry.ParticipantId,
+                RunId = entry.RunId,
+                Topic = entry.Topic,
+                UsageType = TokenUsageTypePolicy.Classify(entry),
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
@@ -183,7 +186,8 @@ public class TokenSummaryService
                 AllModelsPriced = !b.AnyUnpriced,
                 LastModel = b.LastAgentModel ?? b.LastAnyModel,
                 LastUpdate = b.LastUpdate,
-                Entries = b.Entries.OrderBy(e => e.Ts).ToList()
+                Entries = b.Entries.OrderBy(e => e.Ts).ToList(),
+                ByType = BuildByType(b.Entries),
             };
         }
         return result;
@@ -207,6 +211,7 @@ public class TokenSummaryService
         {
             LastModel = string.IsNullOrWhiteSpace(summary.LastModel) && hasAgentFallbackRow ? fallback : summary.LastModel,
             Entries = entries,
+            ByType = BuildByType(entries),
             EstimatedApiCostUsd = entries.Sum(e => e.EstimatedApiCostUsd),
             AllModelsPriced = entries.Count > 0 && entries.All(e => e.ModelPriced),
         };
@@ -226,6 +231,22 @@ public class TokenSummaryService
     private static bool ShouldApplyRunModelFallback(TaskTokenCall entry)
         => TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
            && string.IsNullOrWhiteSpace(TokenModelDisplay.Label(entry.Model));
+
+    private static List<TaskTokenUsageTypeSummary> BuildByType(IReadOnlyList<TaskTokenCall> entries)
+        => entries
+            .GroupBy(entry => entry.UsageType, StringComparer.Ordinal)
+            .Select(group => new TaskTokenUsageTypeSummary
+            {
+                Type = group.Key,
+                Calls = group.Count(),
+                TotalTokens = group.Sum(entry => entry.InputTokens + entry.OutputTokens
+                    + entry.CacheReadTokens + entry.CacheCreationTokens),
+                EstimatedApiCostUsd = group.Sum(entry => entry.EstimatedApiCostUsd),
+                AllModelsPriced = group.All(entry => entry.ModelPriced),
+            })
+            .OrderBy(summary => TokenUsageTypePolicy.SortOrder(summary.Type))
+            .ThenBy(summary => summary.Type, StringComparer.Ordinal)
+            .ToList();
 
     private sealed class Bucket
     {
@@ -482,4 +503,37 @@ public class TokenSummaryService
             DisplayModel = displayModel;
         }
     }
+}
+
+/// <summary>
+/// Pure attribution policy for token events. The event topic carries step
+/// context, while participant identity is the fallback for older rows.
+/// </summary>
+public static class TokenUsageTypePolicy
+{
+    public static string Classify(OrchestratorLogEntry entry)
+    {
+        var topic = entry.Topic?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (ContainsAny(topic, "enrich", "intake", "prompt")) return TokenUsageTypes.Enrichment;
+        if (ContainsAny(topic, "gate", "build", "test", "verify")) return TokenUsageTypes.Gate;
+        if (ContainsAny(topic, "review", "aspect", "grade", "audit", "drift")) return TokenUsageTypes.Review;
+        if (TokenModelDisplay.IsOrchestratorParticipant(entry.ParticipantId)) return TokenUsageTypes.Orchestrator;
+        if (TokenModelDisplay.IsSupportingParticipant(entry.ParticipantId)) return TokenUsageTypes.Supporting;
+        if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)) return TokenUsageTypes.Coding;
+        return TokenUsageTypes.Other;
+    }
+
+    public static int SortOrder(string type) => type switch
+    {
+        TokenUsageTypes.Coding => 0,
+        TokenUsageTypes.Review => 1,
+        TokenUsageTypes.Gate => 2,
+        TokenUsageTypes.Enrichment => 3,
+        TokenUsageTypes.Orchestrator => 4,
+        TokenUsageTypes.Supporting => 5,
+        _ => 6,
+    };
+
+    private static bool ContainsAny(string value, params string[] needles)
+        => needles.Any(value.Contains);
 }

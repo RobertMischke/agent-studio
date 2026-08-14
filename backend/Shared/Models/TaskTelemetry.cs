@@ -34,6 +34,8 @@ public record TaskTokenSummary
     public DateTime? LastUpdate { get; init; }
     /// <summary>Per-call rows for the popover, oldest first.</summary>
     public List<TaskTokenCall> Entries { get; init; } = [];
+    /// <summary>Per-type rollup of <see cref="Entries"/> using durable run and step context.</summary>
+    public List<TaskTokenUsageTypeSummary> ByType { get; init; } = [];
 }
 
 /// <summary>
@@ -46,6 +48,12 @@ public record TaskTokenCall
     public string? Model { get; init; }
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
+    /// <summary>Durable run identity from the agent-message event, when recorded.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Step or event topic used to attribute the usage type.</summary>
+    public string? Topic { get; init; }
+    /// <summary>Stable usage type such as <c>coding</c>, <c>review</c>, or <c>gate</c>.</summary>
+    public string UsageType { get; init; } = TokenUsageTypes.Other;
     public long InputTokens { get; init; }
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
@@ -54,6 +62,28 @@ public record TaskTokenCall
     public decimal EstimatedApiCostUsd { get; init; }
     /// <summary>Whether the price catalog resolved the model at <see cref="Ts"/>.</summary>
     public bool ModelPriced { get; init; }
+}
+
+/// <summary>Token and dated-cost subtotal for one durable run/step type.</summary>
+public record TaskTokenUsageTypeSummary
+{
+    public string Type { get; init; } = TokenUsageTypes.Other;
+    public int Calls { get; init; }
+    public long TotalTokens { get; init; }
+    public decimal EstimatedApiCostUsd { get; init; }
+    public bool AllModelsPriced { get; init; }
+}
+
+/// <summary>Stable wire keys for the task-card token-usage breakdown.</summary>
+public static class TokenUsageTypes
+{
+    public const string Coding = "coding";
+    public const string Review = "review";
+    public const string Gate = "gate";
+    public const string Enrichment = "enrichment";
+    public const string Orchestrator = "orchestrator";
+    public const string Supporting = "supporting";
+    public const string Other = "other";
 }
 
 /// <summary>

@@ -88,6 +88,10 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   auto-review status snapshot into a compact current-step or elapsed-wait
   indicator; the lane header reconciles those visible cards as active versus
   waiting, with machine-lock gate queueing remaining a distinct waiting state.
+  A task card's token popover uses one aligned numeric hierarchy, shows dated
+  per-run token and historical-cost rows, and places the per-type subtotal
+  beside them. The complete pricing caveat is disclosed from one quiet
+  footnote rather than rendered as persistent prose.
 - `frontend/src/app/features/board/components/epic-overview-screen/`: the
   read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
   Its main list is the active list, without a redundant Active section header.

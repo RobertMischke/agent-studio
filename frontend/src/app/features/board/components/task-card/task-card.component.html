@@ -268,46 +268,7 @@
             </span>
             <span class="task-card__token-label">{{ tb.label }}</span>
           </button>
-          <span class="task-card__token-popover"
-                role="tooltip" data-token-popover hidden
-                data-testid="task-card-token-popover">
-            <span class="task-card__token-popover-title">Token usage</span>
-            <table class="task-card__token-table">
-              <tbody>
-                <tr><th>Input</th><td data-testid="token-row-input">{{ formatTokens(tb.input) }}</td></tr>
-                <tr><th>Output</th><td data-testid="token-row-output">{{ formatTokens(tb.output) }}</td></tr>
-                <tr><th>Cache read</th><td data-testid="token-row-cache-read">{{ formatTokens(tb.cacheRead) }}</td></tr>
-                <tr><th>Cache write</th><td data-testid="token-row-cache-write">{{ formatTokens(tb.cacheWrite) }}</td></tr>
-                <tr class="task-card__token-total-row"><th>Total</th><td data-testid="token-row-total">{{ formatTokens(tb.total) }}</td></tr>
-                <tr><th>Model</th><td data-testid="token-row-model">{{ tb.model || '-' }}</td></tr>
-                <tr><th>Last update</th><td data-testid="token-row-last-update">{{ tb.lastUpdate || '-' }}</td></tr>
-              </tbody>
-            </table>
-            <div class="task-card__token-runs-title" data-testid="token-cost-tooltip">{{ tb.costTooltip }}</div>
-            @if (tb.entries.length > 1) {
-              <div class="task-card__token-runs-title">Per-run</div>
-              <table class="task-card__token-table task-card__token-table--runs">
-                <thead>
-                  <tr><th>When</th><th>Model</th><th>Tokens</th></tr>
-                </thead>
-                <tbody>
-                  @for (row of tb.entries; track row.ts) {
-                    <tr>
-                      <td>{{ row.tsLabel }}</td>
-                      <td>{{ row.model || '-' }}</td>
-                      <td>{{ formatTokens(row.total) }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            }
-            <a class="task-card__token-link"
-               href="/workspace/tokens"
-               data-testid="token-popover-timeline-link"
-               (click)="$event.stopPropagation()">
-              View workspace timeline
-            </a>
-          </span>
+          <app-token-usage-popover [bubble]="tb" />
         </span>
       }
     </span>

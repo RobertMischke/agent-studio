@@ -33,14 +33,17 @@ public class TokenSummaryTests
         long output,
         DateTime ts,
         string jobId = "job-a",
-        string? participantId = null)
+        string? participantId = null,
+        string topic = "test-token",
+        string? runId = null)
         => new()
         {
             Ts = ts,
             Kind = OrchestratorLogKinds.Decision,
-            Topic = "test-token",
+            Topic = topic,
             Summary = "test job entry",
             JobId = jobId,
+            RunId = runId,
             ParticipantId = participantId,
             TokenUsage = new OrchestratorTokenUsage
             {
@@ -242,6 +245,52 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void SummarizePerJob_GroupsTokensAndDatedCostsByRunType()
+    {
+        var transition = TokenPricing.Catalog["claude-sonnet-5"].History.Max(price => price.ValidFrom);
+        var entries = new[]
+        {
+            JobEntry("claude-sonnet-5", 1_000_000, 0, transition.AddTicks(-1),
+                participantId: "agent:codex", topic: "codex-turn", runId: "run-coding"),
+            JobEntry("claude-sonnet-5", 1_000_000, 0, transition,
+                participantId: "agent:codex", topic: "code-review-grade", runId: "run-review"),
+            JobEntry("claude-haiku-4.5", 100_000, 10_000, transition.AddMinutes(1),
+                participantId: "support:prompt-enrichment", topic: "prompt-enrichment"),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.Equal(summary.TotalTokens, summary.ByType.Sum(row => row.TotalTokens));
+        Assert.Equal(summary.EstimatedApiCostUsd, summary.ByType.Sum(row => row.EstimatedApiCostUsd));
+        Assert.Equal(
+            [TokenUsageTypes.Coding, TokenUsageTypes.Review, TokenUsageTypes.Enrichment],
+            summary.ByType.Select(row => row.Type));
+        Assert.Equal("run-coding", summary.Entries[0].RunId);
+        Assert.Equal("codex-turn", summary.Entries[0].Topic);
+        Assert.NotEqual(
+            summary.ByType[0].EstimatedApiCostUsd,
+            summary.ByType[1].EstimatedApiCostUsd);
+    }
+
+    [Theory]
+    [InlineData("agent:codex", "codex-turn", TokenUsageTypes.Coding)]
+    [InlineData("agent:codex", "code-review-grade", TokenUsageTypes.Review)]
+    [InlineData("support:tests", "build-gate", TokenUsageTypes.Gate)]
+    [InlineData("support:intake", "prompt-enrichment", TokenUsageTypes.Enrichment)]
+    [InlineData("orchestrator:Demo", "orchestrator-decision", TokenUsageTypes.Orchestrator)]
+    [InlineData("support:security", "security-check", TokenUsageTypes.Supporting)]
+    public void TokenUsageTypePolicy_PrefersStepContextThenParticipant(
+        string participantId,
+        string topic,
+        string expected)
+    {
+        var entry = JobEntry("claude-haiku-4.5", 100, 10, DateTime.UtcNow,
+            participantId: participantId, topic: topic);
+
+        Assert.Equal(expected, TokenUsageTypePolicy.Classify(entry));
     }
 
     [Fact]
