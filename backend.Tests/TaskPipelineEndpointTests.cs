@@ -45,6 +45,9 @@ public sealed class TaskPipelineEndpointTests : IDisposable
         File.WriteAllText(Path.Combine(job, "status.md"), "# Result");
         File.WriteAllText(Path.Combine(job, "aspect-code-quality.md"), "# Code quality");
         File.WriteAllText(Path.Combine(job, "aspect-not-in-pipeline.md"), "# Unrelated");
+        var qualityEvidence = Path.Combine(job, "results", "quality-studio");
+        Directory.CreateDirectory(qualityEvidence);
+        File.WriteAllText(Path.Combine(qualityEvidence, "post-qs-rule-analysis.v1.json"), "{}");
 
         File.WriteAllText(Path.Combine(_watchPath, "project-settings.json"), JsonSerializer.Serialize(
             new Dictionary<string, ProjectSettings>
@@ -132,6 +135,8 @@ public sealed class TaskPipelineEndpointTests : IDisposable
             resultFiles.GetProperty(PipelineCatalogue.CoreAgentRunStepId).GetString());
         Assert.Equal("aspect-code-quality.md",
             resultFiles.GetProperty("aspect-code-quality").GetString());
+        Assert.Equal(QualityStudioRuleAnalysisRunner.ArtifactRelativePath,
+            resultFiles.GetProperty(PipelineCatalogue.QualityStudioRuleAnalysisStepId).GetString());
         Assert.False(resultFiles.TryGetProperty("aspect-requirement-fit", out _));
         Assert.False(resultFiles.TryGetProperty("aspect-not-in-pipeline", out _));
     }

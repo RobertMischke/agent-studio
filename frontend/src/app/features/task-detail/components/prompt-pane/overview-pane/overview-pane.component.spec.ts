@@ -1632,6 +1632,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.stepKindIcon('aspect')).toBe('eye');
     expect(c.stepKindIcon('orchestrator')).toBe('branch');
     expect(c.stepKindIcon('tool')).toBe('cli');
+    expect(c.stepKindLabel('analysis')).toBe('Quality analysis');
+    expect(c.stepKindIcon('analysis')).toBe('eye');
     expect(c.stepKindIcon('drift')).toBe('diff');
 
     const guard = rows.find(r => r.id === 'pre-loop-guard')!;
@@ -1912,6 +1914,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         allSteps: [
           mkStep('pre-loop-guard', 'Loop check', 'module'),
           mkStep('core-agent-run', 'Agent execution', 'core'),
+          mkStep('post-qs-rule-analysis', 'QS named-rule analysis', 'analysis'),
           mkStep('aspect-code-quality', 'Code quality', 'aspect'),
           mkStep('post-lint-scss', 'Frontend stylelint', 'tool'),
           mkStep('post-orchestrator-decision', 'Final verdict', 'orchestrator'),
@@ -1929,10 +1932,10 @@ describe('OverviewPaneComponent (smoke)', () => {
       fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-phase"]'),
     ) as HTMLElement[];
     expect(groups.map(g => g.querySelector('.ov-pl-phase__label')?.textContent?.trim())).toEqual([
-      'PRE STEPS', 'CORE AGENT WORK', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
+      'PRE STEPS', 'CORE AGENT WORK', 'QUALITY ANALYSIS', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
     ]);
     expect(groups.map(g => g.querySelector('.ov-pl-phase__info')?.textContent?.trim())).toEqual([
-      'i', 'i', 'i', 'i', 'i', 'i',
+      'i', 'i', 'i', 'i', 'i', 'i', 'i',
     ]);
     expect(groups.some(g => g.querySelector('.ov-pl-phase__description'))).toBe(false);
     // Each header is a real toggle button carrying an accessible name that folds
@@ -1941,22 +1944,23 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(groups.map(g => g.getAttribute('aria-label'))).toEqual([
       'PRE STEPS phase, pending, 1 step. Preparation checks before the agent gets the task.',
       'CORE AGENT WORK phase, pending, 1 step. The coding agent work.',
+      'QUALITY ANALYSIS phase, pending, 1 step. Standard Quality Studio analysis selected for this card.',
       'ASPECT phase, pending, 1 step. Parallel review passes over the finished work.',
       'TOOL phase, pending, 1 step. Deterministic post-run tooling and evidence steps.',
       'DECISION phase, pending, 1 step. The orchestrator ruling that accepts, reissues, or escalates.',
       'DRIFT phase, pending, 1 step. Optional drift-analysis passes.',
     ]);
     expect(groups.map(g => g.getAttribute('data-phase'))).toEqual([
-      'pre', 'core', 'aspect', 'tool', 'decision', 'drift',
+      'pre', 'core', 'analysis', 'aspect', 'tool', 'decision', 'drift',
     ]);
 
     // Nothing has run (execution === null) -> the Empty scenario collapses every
     // section, so no step rows render and every marker shows the "+" affordance.
     expect(groups.map(g => g.getAttribute('aria-expanded'))).toEqual(
-      ['false', 'false', 'false', 'false', 'false', 'false'],
+      ['false', 'false', 'false', 'false', 'false', 'false', 'false'],
     );
     expect(groups.map(g => g.querySelector('.ov-pl-phase__marker')?.textContent?.trim())).toEqual(
-      ['+', '+', '+', '+', '+', '+'],
+      ['+', '+', '+', '+', '+', '+', '+'],
     );
     expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]').length).toBe(0);
 
@@ -1966,7 +1970,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     const stepPhases = Array.from(
       fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]'),
     ).map(el => (el as HTMLElement).getAttribute('data-phase'));
-    expect(stepPhases).toEqual(['pre', 'core', 'aspect', 'tool', 'decision', 'drift']);
+    expect(stepPhases).toEqual(['pre', 'core', 'analysis', 'aspect', 'tool', 'decision', 'drift']);
   });
 
   it('pipeline block: sections carry aggregate tone and default collapse for a mid-flight run', async () => {

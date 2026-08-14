@@ -181,6 +181,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
+    private readonly QualityStudioRuleAnalysisRunner? _qualityStudioRuleAnalysis;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
     // The opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782). Optional so
@@ -264,7 +265,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
         PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
         AttemptAuthorityService? attemptAuthority = null,
-        DossierMaintenanceService? dossierMaintenance = null)
+        DossierMaintenanceService? dossierMaintenance = null,
+        QualityStudioRuleAnalysisRunner? qualityStudioRuleAnalysis = null)
     {
         _scanner = scanner;
         _taskAccess = taskAccess;
@@ -295,6 +297,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _agentsWikiSync = agentsWikiSync;
         _attemptAuthority = attemptAuthority;
         _dossierMaintenance = dossierMaintenance;
+        _qualityStudioRuleAnalysis = qualityStudioRuleAnalysis;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -2250,6 +2253,37 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        // Quality Studio is a first-class analysis bracket between deterministic
+        // build/test and the model aspect fan-out. The package owns rules and
+        // finding identity; Studio owns card policy, durable evidence, and retry.
+        var qualityStudioOutcome = await RunQualityStudioRuleAnalysisAsync(
+            entry, current, pipelineRecord?.Attempt, ct);
+        if (qualityStudioOutcome?.RequiresRetry == true)
+        {
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            var findings = qualityStudioOutcome.Findings.Count > 0
+                ? qualityStudioOutcome.Findings
+                    .Take(EvidenceGate.MaxFindings)
+                    .Select(finding =>
+                        $"{finding.RuleId} at {finding.Path ?? "repository"}" +
+                        (finding.Line is null ? ": " : $":{finding.Line}: ") +
+                        $"{finding.Title}. {finding.Recommendation}")
+                    .ToList()
+                : [qualityStudioOutcome.Reason];
+            await HandleCompletionGateAsync(workspace, entry, pending, current,
+                new CompletionGate.Decision
+                {
+                    Action = priorReissues >= ConfiguredMaxReissues()
+                        ? CompletionGate.CompletionGateAction.Escalate
+                        : CompletionGate.CompletionGateAction.Reissue,
+                    Findings = findings,
+                    Reason = qualityStudioOutcome.Reason,
+                }, ct,
+                source: "quality-studio-rule-analysis",
+                evidenceRef: qualityStudioOutcome.ArtifactPath);
+            return;
+        }
+
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
@@ -3380,6 +3414,57 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private static string ResolveBuildTestGateRepositoryPath(WatchPathEntry entry)
         => string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
 
+    private async Task<QualityStudioRuleAnalysisOutcome?> RunQualityStudioRuleAnalysisAsync(
+        WatchPathEntry entry,
+        TaskInfo current,
+        int? runIndex,
+        CancellationToken cancellationToken)
+    {
+        if (_qualityStudioRuleAnalysis is null) return null;
+        var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
+        var result = await _qualityStudioRuleAnalysis.RunAsync(
+            new QualityStudioRuleAnalysisRequest(
+                ResolveBuildTestGateRepositoryPath(entry),
+                current.FolderPath,
+                current.TaskType,
+                current.Tags,
+                current.Title,
+                changedFiles,
+                runIndex),
+            cancellationToken);
+        var status = result.Verdict switch
+        {
+            QualityStudioRuleAnalysisVerdict.Passed => PipelineStepStatus.Passed,
+            QualityStudioRuleAnalysisVerdict.Findings => PipelineStepStatus.Failed,
+            QualityStudioRuleAnalysisVerdict.Failed => PipelineStepStatus.Failed,
+            _ => PipelineStepStatus.NotApplicable,
+        };
+        _pipelineLog?.RecordStep(current.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.QualityStudioRuleAnalysisStepId,
+            Kind = StepKind.Analysis,
+            Status = status,
+            StartedAt = DateTime.UtcNow.AddMilliseconds(-result.DurationMs),
+            CompletedAt = DateTime.UtcNow,
+            DurationMs = result.DurationMs,
+            Verdict = result.Verdict switch
+            {
+                QualityStudioRuleAnalysisVerdict.Passed => "passed",
+                QualityStudioRuleAnalysisVerdict.Findings => "findings",
+                QualityStudioRuleAnalysisVerdict.Failed => "failed",
+                _ => "not-applicable",
+            },
+            Reason = result.Reason,
+            FailureCode = result.Verdict switch
+            {
+                QualityStudioRuleAnalysisVerdict.Findings => "quality-studio-findings",
+                QualityStudioRuleAnalysisVerdict.Failed => "quality-studio-analysis-failed",
+                _ => null,
+            },
+        });
+        return result;
+    }
+
     private BuildTestGateSubject ResolveBuildTestGateSubject(TaskInfo current, string? watchPath)
     {
         var remote = ReviewSubjectStore.Read(current.FolderPath);
@@ -3817,7 +3902,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         TaskInfo current,
         CompletionGate.Decision gate,
-        CancellationToken ct)
+        CancellationToken ct,
+        string source = "completion-gate",
+        string? evidenceRef = null)
     {
         _pipelineLog?.Complete(
             current.FolderPath,
@@ -3849,13 +3936,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
                 summary: escalationReason,
                 stepId: PipelineCatalogue.OrchestratorReviewStepId,
-                evidenceRef: "pipeline-execution.json",
+                evidenceRef: evidenceRef ?? "pipeline-execution.json",
                 findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
                 performer: PostProcessingPerformers.Orchestrator);
 
             EmitVerdictTimeline(escalatedFolder,
                 TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, escalationReason,
-                BuildEscalateDetails("completion-gate", escalationReason, priorReissues));
+                BuildEscalateDetails(source, escalationReason, priorReissues));
 
             AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
@@ -3863,7 +3950,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Project: entry.Name,
                 Kind: ReviewDecisionKind.Escalate,
                 Reason: escalationReason,
-                Prompt: "(completion-gate static scan)",
+                Prompt: $"({source} static scan)",
                 Response: findingsBlock,
                 FollowUp: string.Empty),
                 current.FolderPath,
@@ -3876,7 +3963,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Reissue: foreground the gate's findings so the next run finishes the
         // open work instead of restarting blind.
         var followUp = CompletionGate.BuildFollowUp(gate.Findings);
-        var moved = MoveReissueToReadyTop(current, entry, "completion-gate");
+        var moved = MoveReissueToReadyTop(current, entry, source);
         if (moved == null)
         {
             // Move failed -> no operator-facing banner; the DONE stays unresolved
@@ -3889,11 +3976,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
             summary: gate.Reason,
             stepId: PipelineCatalogue.OrchestratorReviewStepId,
-            evidenceRef: "pipeline-execution.json",
+            evidenceRef: evidenceRef ?? "pipeline-execution.json",
             findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
             performer: PostProcessingPerformers.Orchestrator);
 
-        followUp = await WriteFollowUpFileAsync(moved, followUp, ct);
+        var steering = new SteeringContext(source, "reissue", priorReissues, gate.Reason);
+        followUp = await WriteFollowUpFileAsync(moved, followUp, ct, steering);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
@@ -3902,8 +3990,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
             $"Reopened: {gate.Reason}",
-            BuildReopenDetails("completion-gate",
-                CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
+            BuildReopenDetails(source,
+                priorReissues, findingsBlock,
+                followUpPrompt: followUp,
+                context: steering));
 
         _statusSnapshot.RecordReissue();
 
@@ -3913,7 +4003,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Project: entry.Name,
             Kind: ReviewDecisionKind.Reissue,
             Reason: gate.Reason,
-            Prompt: "(completion-gate static scan)",
+            Prompt: $"({source} static scan)",
             Response: findingsBlock,
             FollowUp: followUp),
             current.FolderPath,

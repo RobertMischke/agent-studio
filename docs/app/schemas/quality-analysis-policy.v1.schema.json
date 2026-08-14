@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/quality-analysis-policy.v1.schema.json",
+  "title": "Quality Studio pipeline policy",
+  "description": "Repository-owned overrides for Agent Studio Quality Studio analysis steps.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "steps"],
+  "properties": {
+    "$schema": {
+      "const": "https://agent-taskboard.local/schemas/quality-analysis-policy.v1.schema.json",
+      "description": "Exact schema identifier required by the pipeline reader."
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "Policy contract version."
+    },
+    "steps": {
+      "type": "object",
+      "description": "Overrides keyed by stable Quality Studio pipeline step id.",
+      "propertyNames": {
+        "enum": [
+          "post-qs-rule-analysis",
+          "post-qs-model-review",
+          "post-qs-visual-quality",
+          "post-qs-security",
+          "post-qs-redundancy",
+          "post-qs-consistency"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enabled"],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this named axis runs for this repository."
+          }
+        }
+      }
+    }
+  }
+}

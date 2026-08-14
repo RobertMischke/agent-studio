@@ -147,6 +147,12 @@ public enum StepKind
     /// </summary>
     Tool,
     /// <summary>
+    /// A named Quality Studio analysis pass. Analysis steps consume the
+    /// in-process Quality Studio package and emit structured findings and
+    /// provenance as review evidence. They are distinct from generic tools.
+    /// </summary>
+    Analysis,
+    /// <summary>
     /// One drift-analysis dimension run as an opt-in post-step (ADR / Code,
     /// Software / Architecture, Docs / Marketing, Spec / Task / Job, and the
     /// rule-based Code-Pattern check). Reuses the existing

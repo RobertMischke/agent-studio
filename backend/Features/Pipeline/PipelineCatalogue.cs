@@ -72,6 +72,33 @@ public static class PipelineCatalogue
     public const string CoreAgentRunStepId = "core-agent-run";
 
     /// <summary>
+    /// Quality Studio analysis steps are first-class pipeline work, not generic
+    /// optional tools. The rule pass is the first executable slice. The other
+    /// named axes reserve the stable catalogue contract while their package
+    /// implementations are delivered independently.
+    /// </summary>
+    public const string QualityStudioRuleAnalysisStepId = "post-qs-rule-analysis";
+    public const string QualityStudioModelReviewStepId = "post-qs-model-review";
+    public const string QualityStudioVisualQualityStepId = "post-qs-visual-quality";
+    public const string QualityStudioSecurityStepId = "post-qs-security";
+    public const string QualityStudioRedundancyStepId = "post-qs-redundancy";
+    public const string QualityStudioConsistencyStepId = "post-qs-consistency";
+
+    public static readonly string[] QualityStudioAnalysisStepIds =
+    {
+        QualityStudioRuleAnalysisStepId,
+        QualityStudioModelReviewStepId,
+        QualityStudioVisualQualityStepId,
+        QualityStudioSecurityStepId,
+        QualityStudioRedundancyStepId,
+        QualityStudioConsistencyStepId,
+    };
+
+    public static bool IsQualityStudioAnalysisStep(string? stepId) =>
+        !string.IsNullOrWhiteSpace(stepId)
+        && QualityStudioAnalysisStepIds.Contains(stepId, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Pre-step that surfaces the auto-mode Ralph-loop guard
     /// (<c>AgentStudio.Runner.StuckLoopGuard</c>) in the
     /// pipeline table. It is the first row of <see cref="TaskPipeline.AllSteps"/>
@@ -514,6 +541,7 @@ public static class PipelineCatalogue
                     DisplayName = aspectId,
                     Kind = StepKind.Aspect,
                     RunMode = StepRunMode.Parallel,
+                    DependsOn = [QualityStudioRuleAnalysisStepId],
                     Idempotent = true,
                 });
                 continue;
@@ -524,6 +552,7 @@ public static class PipelineCatalogue
                 DisplayName = def.Title,
                 Kind = StepKind.Aspect,
                 RunMode = StepRunMode.Parallel,
+                DependsOn = [QualityStudioRuleAnalysisStepId],
                 Idempotent = true,
                 PromptTemplate = def.PromptTemplate,
             });
@@ -632,6 +661,75 @@ public static class PipelineCatalogue
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioRuleAnalysisStepId,
+                    DisplayName = "QS named-rule analysis",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioModelReviewStepId,
+                    DisplayName = "QS model review",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Parallel,
+                    DependsOn = [QualityStudioRuleAnalysisStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioVisualQualityStepId,
+                    DisplayName = "QS visual quality",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.Angular,
+                    Framework = "Angular",
+                    RunMode = StepRunMode.Parallel,
+                    DependsOn = [QualityStudioRuleAnalysisStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioSecurityStepId,
+                    DisplayName = "QS security",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.DotNet,
+                    Framework = ".NET",
+                    RunMode = StepRunMode.Parallel,
+                    DependsOn = [QualityStudioRuleAnalysisStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioRedundancyStepId,
+                    DisplayName = "QS redundancy",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Parallel,
+                    DependsOn = [QualityStudioRuleAnalysisStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityStudioConsistencyStepId,
+                    DisplayName = "QS consistency",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Parallel,
+                    DependsOn = [QualityStudioRuleAnalysisStepId],
+                    Idempotent = true,
+                    Stub = true,
+                    DefaultEnabled = true,
                 },
                 .. aspects,
                 new PipelineStep

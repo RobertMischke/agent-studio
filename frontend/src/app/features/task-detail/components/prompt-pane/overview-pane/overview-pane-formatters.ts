@@ -11,6 +11,7 @@ export function stepKindLabel(kind: StepKind): string {
     case 'aspect':       return 'Aspect';
     case 'orchestrator': return 'Decision';
     case 'tool':         return 'Tool';
+    case 'analysis':     return 'Quality analysis';
     case 'drift':        return 'Drift';
     default:             return kind;
   }
@@ -23,6 +24,7 @@ export function stepKindIcon(kind: StepKind): StudioIconName {
     case 'aspect':       return 'eye';
     case 'orchestrator': return 'branch';
     case 'tool':         return 'cli';
+    case 'analysis':     return 'eye';
     case 'drift':        return 'diff';
     default:             return 'dot';
   }

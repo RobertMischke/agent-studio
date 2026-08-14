@@ -104,7 +104,9 @@ public static class PipelineStepConfigResolver
     /// other step stays on by default.
     /// </summary>
     public static bool IsEnabled(ProjectSettings? settings, PipelineStep step)
-        => Lookup(settings, step.Id)?.Enabled ?? step.DefaultEnabled;
+        => CanDisable(step)
+            ? Lookup(settings, step.Id)?.Enabled ?? step.DefaultEnabled
+            : step.DefaultEnabled;
 
     /// <summary>
     /// Whether an operator may disable this catalogue step. The core agent run
@@ -114,6 +116,7 @@ public static class PipelineStepConfigResolver
     /// </summary>
     public static bool CanDisable(PipelineStep step)
         => step.Kind != StepKind.Core
+           && step.Kind != StepKind.Analysis
            && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.DossierMaintenanceStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiIterationArtifactStepId, StringComparison.Ordinal)

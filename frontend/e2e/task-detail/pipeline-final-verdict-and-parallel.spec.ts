@@ -55,11 +55,12 @@ function step(id: string, displayName: string, kind: string, runMode: string) {
   return { id, displayName, kind, runMode, dependsOn: [], idempotent: true, stub: false };
 }
 
-// Core run (sequential), then the read-only aspect pool (parallel), then the
-// single orchestrator final verdict (sequential).
+// Core run (sequential), standard Quality Studio analysis, then the read-only
+// aspect pool (parallel), and the single orchestrator final verdict.
 const pre = [step('pre-loop-guard', 'Loop guard', 'pre', 'sequential')];
 const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
+  step('post-qs-rule-analysis', 'QS named-rule analysis', 'analysis', 'sequential'),
   step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
   step('aspect-code-quality', 'Code quality', 'aspect', 'parallel'),
   step('aspect-tests-and-evidence', 'Tests and evidence', 'aspect', 'parallel'),
@@ -112,6 +113,7 @@ function pipelineAcceptedFinalVerdict() {
       steps: [
         execStep('pre-loop-guard', 'pre', 'passed'),
         execStep('core-agent-run', 'core', 'passed'),
+        execStep('post-qs-rule-analysis', 'analysis', 'passed', { verdict: 'passed' }),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-tests-and-evidence', 'aspect', 'passed', { verdict: 'pass' }),
@@ -338,6 +340,11 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(parallelNotes.first()).toHaveText('∥');
     await expect(parallelNotes.first()).toHaveAttribute('aria-label', 'Parallel review pool');
 
+    const analysisRow = page.locator('[data-step-id="post-qs-rule-analysis"]');
+    await expect(analysisRow).toBeVisible();
+    await expect(analysisRow.locator('.ov-pl-step__kind'))
+      .toHaveAttribute('aria-label', 'Quality analysis step');
+
     // The orchestrator decision is its own, clearly separated final-verdict row.
     // Its compact icon marker keeps the full kind available to assistive tech.
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
@@ -421,6 +428,7 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     expect(metrics.map(m => m.label)).toEqual([
       'pre step',
       'Core agent work step',
+      'Quality analysis step',
       'Aspect step',
       'Aspect step',
       'Aspect step',

@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RestoreAdditionalProjectSources>$(RestoreAdditionalProjectSources);$(MSBuildThisFileDirectory)..\eng\packages\quality-studio</RestoreAdditionalProjectSources>
   </PropertyGroup>
 
   <ItemGroup>
@@ -52,6 +53,7 @@
        Keep the exact pin so pricing changes arrive as explicit dependency updates. -->
   <ItemGroup>
     <PackageReference Include="TokenEconomy" Version="[0.3.1]" />
+    <PackageReference Include="AgentOrchestrator.CodeQuality" Version="[0.1.0-agt2655.1]" />
   </ItemGroup>
 
   <!-- Block 6: adopt the library's types by aliasing them to the names the app

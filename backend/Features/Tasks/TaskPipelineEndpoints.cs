@@ -77,6 +77,11 @@ public static class TaskPipelineEndpoints
                 {
                     StepKind.Core => "status.md",
                     StepKind.Aspect => $"{step.Id}.md",
+                    StepKind.Analysis when string.Equals(
+                        step.Id,
+                        PipelineCatalogue.QualityStudioRuleAnalysisStepId,
+                        StringComparison.OrdinalIgnoreCase)
+                        => QualityStudioRuleAnalysisRunner.ArtifactRelativePath,
                     _ => null,
                 };
                 if (relativePath is not null && File.Exists(Path.Combine(info.FolderPath, relativePath)))
@@ -98,7 +103,10 @@ public static class TaskPipelineEndpoints
                     return new
                     {
                         enabled = PipelineStepConfigResolver.IsEnabled(settings, step),
-                        enabledSource = configured?.Enabled.HasValue == true ? "project" : "catalogue",
+                        enabledSource = PipelineStepConfigResolver.CanDisable(step)
+                            && configured?.Enabled.HasValue == true
+                                ? "project"
+                                : "catalogue",
                         activation = PostStepActivationProjection.Build(
                             step, configured, stepExecution, execution, info),
                         canDisable = PipelineStepConfigResolver.CanDisable(step),

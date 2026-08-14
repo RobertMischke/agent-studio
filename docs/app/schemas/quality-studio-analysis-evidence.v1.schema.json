@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/quality-studio-analysis-evidence.v1.schema.json",
+  "title": "Quality Studio analysis evidence",
+  "description": "Durable evidence emitted by one Agent Studio Quality Studio analysis step.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema", "schemaVersion", "stepId", "packageId", "packageVersion",
+    "qsSourceCommits", "configurationPath", "ruleConfigurationPath",
+    "frontendTouching", "backendTouching", "enabledSteps", "verdict",
+    "reason", "durationMs", "analyzedPaths", "appliedRuleIds", "findings",
+    "provenance"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://agent-taskboard.local/schemas/quality-studio-analysis-evidence.v1.schema.json",
+      "description": "Evidence schema identifier."
+    },
+    "schemaVersion": { "const": 1, "description": "Evidence contract version." },
+    "stepId": { "type": "string", "minLength": 1, "description": "Stable analysis step id." },
+    "packageId": { "type": "string", "minLength": 1, "description": "In-process package identity." },
+    "packageVersion": { "type": "string", "minLength": 1, "description": "Exact in-process package version." },
+    "qsSourceCommits": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Quality Studio source-card and commit provenance for the package input."
+    },
+    "configurationPath": { "type": "string", "minLength": 1, "description": "Repository policy path read by Agent Studio." },
+    "ruleConfigurationPath": { "type": "string", "minLength": 1, "description": "Repository rule configuration path read by Quality Studio." },
+    "frontendTouching": { "type": "boolean", "description": "Whether frontend conventions selected this card." },
+    "backendTouching": { "type": "boolean", "description": "Whether backend conventions selected this card." },
+    "enabledSteps": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Named axes selected for the card after repository overrides."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["passed", "findings", "failed", "not-applicable"],
+      "description": "Step outcome used by pipeline routing."
+    },
+    "reason": { "type": "string", "minLength": 1, "description": "Human-readable outcome reason." },
+    "durationMs": { "type": "integer", "minimum": 0, "description": "Elapsed step time in milliseconds." },
+    "analyzedPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Repository-relative paths passed to the package."
+    },
+    "appliedRuleIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^QS-[A-Z]+-[0-9]{3}$" },
+      "description": "Named Quality Studio rule ids resolved for this run."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Package findings retained without copying rule definitions into Agent Studio.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "ruleId", "aspect", "severity", "title", "description", "recommendation", "fingerprint"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "ruleId": { "type": "string", "pattern": "^QS-[A-Z]+-[0-9]{3}$" },
+          "aspect": { "type": "string", "minLength": 1 },
+          "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "recommendation": { "type": "string", "minLength": 1 },
+          "fingerprint": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "line": { "type": "integer", "minimum": 1 },
+          "column": { "type": "integer", "minimum": 1 },
+          "sensorId": { "type": "string", "minLength": 1 },
+          "producerVersion": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "description": "Quality Studio sensor provenance for each analyzed target.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sensorId", "sensorVersion", "scope", "target", "scannedAt"],
+        "properties": {
+          "sensorId": { "type": "string", "minLength": 1 },
+          "sensorVersion": { "type": "string", "minLength": 1 },
+          "scope": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "scannedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

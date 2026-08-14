@@ -603,6 +603,9 @@ builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>(
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IQualityStudioAnalysisCore,
+    AgentStudio.Pipeline.QualityStudioPackageAnalysisCore>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.QualityStudioRuleAnalysisRunner>();
 // Transitional single-owner boundary. Engine mode deliberately registers none
 // of the legacy review/council/post-processing hosted loops.
 builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);

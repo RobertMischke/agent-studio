@@ -48,13 +48,14 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post includes the deterministic review/build gates, four aspects,
+        // Post includes the deterministic review/build gates, six Quality
+        // Studio analysis axes, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance, wiki-learnings
         // distillation, and agents/wiki-sync steps), the deferred operator-triggered
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(26, p.Post.Count);
+        Assert.Equal(32, p.Post.Count);
     }
 
     [Fact]
@@ -574,6 +575,52 @@ public class PipelineCatalogueTests
             },
         };
         Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+    }
+
+    [Fact]
+    public void StandardPipeline_QualityStudioAxesAreDistinctAndRuleGatePrecedesAspects()
+    {
+        var pipeline = PipelineCatalogue.Standard;
+        var analysisSteps = pipeline.Post.Where(step => step.Kind == StepKind.Analysis).ToList();
+
+        Assert.Equal(6, analysisSteps.Count);
+        Assert.Equal(
+            PipelineCatalogue.QualityStudioAnalysisStepIds.OrderBy(id => id, StringComparer.Ordinal),
+            analysisSteps.Select(step => step.Id).OrderBy(id => id, StringComparer.Ordinal));
+        Assert.All(analysisSteps, step =>
+        {
+            Assert.True(step.DefaultEnabled);
+            Assert.True(step.Idempotent);
+            Assert.False(PipelineStepConfigResolver.CanDisable(step));
+            var legacyCentralOverride = new ProjectSettings
+            {
+                PipelineSteps = new Dictionary<string, PipelineStepSetting>
+                {
+                    [step.Id] = new() { Enabled = false },
+                },
+            };
+            Assert.True(PipelineStepConfigResolver.IsEnabled(legacyCentralOverride, step));
+        });
+
+        var rule = Assert.Single(analysisSteps, step =>
+            step.Id == PipelineCatalogue.QualityStudioRuleAnalysisStepId);
+        Assert.False(rule.Stub);
+        Assert.Equal(StepRunMode.Sequential, rule.RunMode);
+        Assert.Contains(PipelineCatalogue.BuildTestGateStepId, rule.DependsOn);
+
+        foreach (var step in analysisSteps.Where(step => step.Id != rule.Id))
+        {
+            Assert.True(step.Stub);
+            Assert.Contains(rule.Id, step.DependsOn);
+        }
+
+        var ruleIndex = pipeline.Post.FindIndex(step => step.Id == rule.Id);
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            var aspect = pipeline.Post.Single(step => step.Id == aspectId);
+            Assert.Contains(rule.Id, aspect.DependsOn);
+            Assert.True(pipeline.Post.FindIndex(step => step.Id == aspectId) > ruleIndex);
+        }
     }
 
     [Fact]

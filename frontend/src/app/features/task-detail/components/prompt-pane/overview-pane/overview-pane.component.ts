@@ -184,7 +184,7 @@ interface PipelineRowVm {
   costTooltip: StructuredTooltip | null;
 }
 
-type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'decision' | 'drift';
+type PipelinePhaseKey = 'pre' | 'core' | 'analysis' | 'aspect' | 'tool' | 'decision' | 'drift';
 
 interface PipelinePhaseVm {
   key: PipelinePhaseKey;
@@ -397,6 +397,18 @@ const PIPELINE_STEP_EXPLANATIONS: Record<string, string> = {
     'Deterministic spec-change analysis. Reads the task\'s attributed commits and classifies each changed spec as intended, at-risk, or drift. Reporting only: it never triggers a re-issue.',
   'post-orchestrator-review':
     'Post-core completeness check. Right after the agent reports done, a deterministic scan reads the run\'s own close-out evidence (open items, notes, the result line, and the log tail) for unfinished-work signals such as open checklist boxes or self-reported build / test failures. A hit re-issues the task with those items foregrounded before any review pass runs, so a task is never accepted while its own evidence says it is unfinished.',
+  'post-qs-rule-analysis':
+    'Quality Studio named-rule analysis. Runs the in-process rule package against changed Angular or C# source paths and records named QS findings as review evidence.',
+  'post-qs-model-review':
+    'Quality Studio model review axis. Reserved for package-backed review using the Quality Studio finding model.',
+  'post-qs-visual-quality':
+    'Quality Studio visual and graphical quality axis for frontend-touching cards.',
+  'post-qs-security':
+    'Quality Studio security axis for backend-touching cards. Findings are recorded and visible but do not block the pipeline.',
+  'post-qs-redundancy':
+    'Quality Studio redundancy axis for frontend- or backend-touching cards.',
+  'post-qs-consistency':
+    'Quality Studio consistency axis for frontend- or backend-touching cards.',
   'post-orchestrator-decision':
     'The orchestrator\'s single final ruling. Aggregates the parallel aspect verdicts and decides re-issue, accept-as-done, or escalate. This is the step that moves the task out of auto-review.',
   'post-drift-adr-code':
@@ -420,6 +432,7 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   aspect:       'A read-only review aspect that runs in parallel after the agent finishes.',
   orchestrator: 'An orchestrator decision step that aggregates verdicts and chooses the next move.',
   tool:         'A deterministic tooling step that runs after the agent finishes.',
+  analysis:     'A standard Quality Studio analysis axis selected by card class and repository policy.',
   drift:        'An opt-in drift-analysis pass that runs after auto-review.',
 };
 
@@ -441,6 +454,11 @@ const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
     key: 'core',
     label: 'CORE AGENT WORK',
     description: 'The coding agent work.',
+  },
+  analysis: {
+    key: 'analysis',
+    label: 'QUALITY ANALYSIS',
+    description: 'Standard Quality Studio analysis selected for this card.',
   },
   aspect: {
     key: 'aspect',
@@ -468,6 +486,7 @@ function pipelinePhaseForKind(kind: StepKind): PipelinePhaseVm {
   switch (kind) {
     case 'module':       return PIPELINE_PHASES.pre;
     case 'core':         return PIPELINE_PHASES.core;
+    case 'analysis':     return PIPELINE_PHASES.analysis;
     case 'aspect':       return PIPELINE_PHASES.aspect;
     case 'tool':         return PIPELINE_PHASES.tool;
     case 'orchestrator': return PIPELINE_PHASES.decision;

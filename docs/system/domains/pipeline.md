@@ -50,6 +50,10 @@ pipeline view.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
   concept, and UI pipeline definitions, step ids, default ordering, step run
   modes, and display names.
+- `backend/Features/Pipeline/QualityStudio/`: convention-first card selection,
+  strict repository-owned overrides, the in-process Quality Studio package
+  adapter, named finding evidence, and bounded retry routing. The durable
+  contract is [Quality Studio analysis](../contracts/quality-studio-analysis.md).
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly
