@@ -61,8 +61,8 @@ Agent Studio is part of the agent-orc ecosystem. It uses
 sits alongside [Runner](https://github.com/agent-orc/runner) for hardened CLI
 execution, [Token Economy](https://github.com/agent-orc/token-economy) for
 model pricing and usage accounting, and
-[Quality Studio](https://github.com/agent-orc/quality-studio) for layered code
-review.
+[Quality Studio](https://github.com/agent-orc/quality-studio) for the standard
+in-process code-quality analysis steps in task pipelines.
 
 For future product direction, see the [roadmap](ROADMAP.md). For architecture,
 ADRs, contracts, and the full documentation index, see

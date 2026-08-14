@@ -54,7 +54,7 @@ public static class PipelineStepConfigResolver
         string? ModelDefault);
 
     /// <summary>Prefixes the catalogue uses; stripped to support bare-suffix lookup.</summary>
-    private static readonly string[] StepIdPrefixes = { "aspect-", "post-", "pre-" };
+    private static readonly string[] StepIdPrefixes = { "analysis-", "aspect-", "post-", "pre-" };
 
     /// <summary>
     /// Resolve the per-step override for a given step id, accepting either

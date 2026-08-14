@@ -157,6 +157,13 @@ public enum StepKind
     /// <c>DriftPostStepRunner</c>.
     /// </summary>
     Drift,
+    /// <summary>
+    /// A Quality Studio analysis pass. Analysis is a first-class pipeline kind,
+    /// separate from generic tools and LLM aspects, so deterministic rules,
+    /// visual checks, security, redundancy, and consistency retain distinct
+    /// policy and evidence identities.
+    /// </summary>
+    Analysis,
 }
 
 public enum StepRunMode

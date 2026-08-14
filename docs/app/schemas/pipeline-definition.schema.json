@@ -75,8 +75,8 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["Module", "Core", "Aspect", "Orchestrator", "Tool"],
-          "description": "Internal implementation binding (ADR-0045 StepKind). Defaults: Script -> Tool, Llm -> Module (or Aspect for aspect-style reviews). Present so built-in steps keep their service binding."
+          "enum": ["Module", "Core", "Analysis", "Aspect", "Orchestrator", "Tool", "Drift"],
+          "description": "Internal implementation binding (ADR-0045 StepKind). Analysis is a named Quality Studio pass, distinct from generic tools and LLM aspects. Present so built-in steps keep their service binding."
         },
         "failureMode": {
           "type": "string",

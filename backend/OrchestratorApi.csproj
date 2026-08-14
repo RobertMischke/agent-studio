@@ -17,9 +17,20 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="AgentOrchestrator.CodeQuality" Version="[0.1.0-agt2655]" />
     <ProjectReference Include="..\contracts\TaskServer.Contracts\TaskServer.Contracts.csproj" />
     <ProjectReference Include="..\cli-hosting\AgentStudio.CliHosting.csproj" />
   </ItemGroup>
+
+  <!--
+    First QS pipeline slice. The pre-release package is the immutable output of
+    the coordinated QS-90/QS-91 integration and keeps rule content owned by
+    Quality Studio. Remove this additional source when the same exact package is
+    published to the normal registry; never replace it with copied rule source.
+  -->
+  <PropertyGroup>
+    <RestoreAdditionalProjectSources>$(RestoreAdditionalProjectSources);$(MSBuildThisFileDirectory)..\packages\quality-studio</RestoreAdditionalProjectSources>
+  </PropertyGroup>
 
   <!-- Roslyn analyzer that flags silent (empty / comment-only) catch blocks so
        the no-silent-catch rule cannot regress. Built locally; referenced as an

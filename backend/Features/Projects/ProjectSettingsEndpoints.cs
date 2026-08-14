@@ -195,6 +195,7 @@ public static class ProjectSettingsEndpoints
             static string PhaseForPostStep(PipelineStep step)
             {
                 if (step.Kind == StepKind.Aspect) return "aspect";
+                if (step.Kind == StepKind.Analysis) return "analysis";
                 if (step.Kind == StepKind.Tool) return "tool";
                 if (step.Kind == StepKind.Drift) return "drift";
                 if (string.Equals(step.Id, PipelineCatalogue.OrchestratorDecisionStepId, StringComparison.OrdinalIgnoreCase))

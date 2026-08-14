@@ -215,6 +215,117 @@ public static class PipelineCatalogue
     /// <see cref="BuildTestGateRunner"/>.
     /// </summary>
     public const string BuildTestGateStepId = "post-build-test-gate";
+
+    // Quality Studio is a first-class analysis bracket between the deterministic
+    // build gate and the model aspects. Rule content and finding semantics stay
+    // in the AgentOrchestrator.CodeQuality package; Agent Studio owns only step
+    // policy, execution evidence, and the reissue reaction.
+    public const string QualityStudioAngularRulesStepId = "analysis-qs-angular-rules";
+    public const string QualityStudioDotNetRulesStepId = "analysis-qs-dotnet-rules";
+    public const string QualityStudioModelReviewStepId = "analysis-qs-model-review";
+    public const string QualityStudioVisualStepId = "analysis-qs-visual";
+    public const string QualityStudioSecurityStepId = "analysis-qs-security";
+    public const string QualityStudioRedundancyStepId = "analysis-qs-redundancy";
+    public const string QualityStudioConsistencyStepId = "analysis-qs-consistency";
+
+    public static readonly string[] QualityStudioAnalysisStepIds =
+    {
+        QualityStudioAngularRulesStepId,
+        QualityStudioDotNetRulesStepId,
+        QualityStudioModelReviewStepId,
+        QualityStudioVisualStepId,
+        QualityStudioSecurityStepId,
+        QualityStudioRedundancyStepId,
+        QualityStudioConsistencyStepId,
+    };
+
+    public static readonly PipelineStep[] QualityStudioAnalysisSteps =
+    {
+        new()
+        {
+            Id = QualityStudioAngularRulesStepId,
+            DisplayName = "QS Angular rule analysis",
+            Kind = StepKind.Analysis,
+            AppliesTo = PipelineStepStacks.Angular,
+            Framework = "Angular",
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+        },
+        new()
+        {
+            Id = QualityStudioDotNetRulesStepId,
+            DisplayName = "QS C# rule analysis",
+            Kind = StepKind.Analysis,
+            AppliesTo = PipelineStepStacks.DotNet,
+            Framework = ".NET",
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+            Stub = true,
+        },
+        new()
+        {
+            Id = QualityStudioModelReviewStepId,
+            DisplayName = "QS model review",
+            Kind = StepKind.Analysis,
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+            Stub = true,
+        },
+        new()
+        {
+            Id = QualityStudioVisualStepId,
+            DisplayName = "QS visual quality",
+            Kind = StepKind.Analysis,
+            AppliesTo = PipelineStepStacks.Angular,
+            Framework = "Angular",
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+            Stub = true,
+        },
+        new()
+        {
+            Id = QualityStudioSecurityStepId,
+            DisplayName = "QS security analysis",
+            Kind = StepKind.Analysis,
+            AppliesTo = PipelineStepStacks.DotNet,
+            Framework = ".NET",
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+            Stub = true,
+        },
+        new()
+        {
+            Id = QualityStudioRedundancyStepId,
+            DisplayName = "QS redundancy analysis",
+            Kind = StepKind.Analysis,
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+            Stub = true,
+        },
+        new()
+        {
+            Id = QualityStudioConsistencyStepId,
+            DisplayName = "QS consistency analysis",
+            Kind = StepKind.Analysis,
+            RunMode = StepRunMode.Sequential,
+            DependsOn = [BuildTestGateStepId],
+            Idempotent = true,
+            DefaultEnabled = true,
+            Stub = true,
+        },
+    };
     /// <summary>
     /// Deterministic delivery gate for cards linked to a Dossier through
     /// <c>references.workbenches</c> or the descriptor's
@@ -633,6 +744,7 @@ public static class PipelineCatalogue
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
                 },
+                .. QualityStudioAnalysisSteps,
                 .. aspects,
                 new PipelineStep
                 {

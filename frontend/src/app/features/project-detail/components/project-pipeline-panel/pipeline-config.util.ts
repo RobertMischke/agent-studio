@@ -145,6 +145,7 @@ export interface PipelineGroup {
 
 export function phaseForStep(step: PipelineCatalogueStep): string {
   if (step.kind === 'aspect') return 'aspect';
+  if (step.kind === 'analysis') return 'analysis';
   if (step.kind === 'tool') return 'tool';
   if (step.kind === 'drift') return 'drift';
   if (step.kind === 'core') return 'core';
@@ -158,12 +159,26 @@ export function pipelinePhaseLabel(phase: string): string {
   switch (phase) {
     case 'pre': return 'Pre steps';
     case 'core': return 'Core agent work';
+    case 'analysis': return 'Analysis';
     case 'aspect': return 'Aspect reviews';
     case 'tool': return 'Tool steps';
     case 'decision': return 'Decision';
     case 'drift': return 'Drift';
     case 'abort': return 'Abort-only';
     default: return 'Post steps';
+  }
+}
+
+export function pipelineKindAbbreviation(value: string | null | undefined): string {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'module': return 'MOD';
+    case 'core': return 'COR';
+    case 'analysis': return 'ANA';
+    case 'orchestrator': return 'ORC';
+    case 'tool': return 'TOO';
+    case 'aspect': return 'ASP';
+    case 'drift': return 'DRI';
+    default: return (value ?? '').trim().slice(0, 3).toUpperCase();
   }
 }
 

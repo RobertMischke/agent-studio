@@ -122,12 +122,16 @@ public sealed class FileGenerationIndex
             return step.StepId + ".md";
         if (step.Kind == StepKind.Drift)
             return $"logs/drift/{step.StepId}.md";
+        if (step.Kind == StepKind.Analysis
+            && step.StepId == PipelineCatalogue.QualityStudioAngularRulesStepId)
+            return $"results/{QualityStudioAnalysisStepRunner.EvidenceDirectory}/{QualityStudioAnalysisStepRunner.AngularEvidenceFile}";
         return null;
     }
 
     private static string KindForStep(PipelineStepExecution step) => step.Kind switch
     {
         StepKind.Aspect => "aspect",
+        StepKind.Analysis => "analysis",
         StepKind.Drift => "drift",
         _ => step.Kind.ToString().ToLowerInvariant(),
     };

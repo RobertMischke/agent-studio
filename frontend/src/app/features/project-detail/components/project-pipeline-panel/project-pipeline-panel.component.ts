@@ -17,6 +17,7 @@ import {
   phaseForStep,
   pipelineTypeOverrides,
   pipelinePhaseLabel,
+  pipelineKindAbbreviation,
   pipelineOrderSection,
   orderedPipelineCatalogue,
   canMovePipelineStep,
@@ -609,17 +610,7 @@ export class ProjectPipelinePanelComponent {
     return (value ?? '').trim().toLowerCase();
   }
 
-  kindAbbrev(value: string | null | undefined): string {
-    switch (this.kindKey(value)) {
-      case 'module': return 'MOD';
-      case 'core': return 'COR';
-      case 'orchestrator': return 'ORC';
-      case 'tool': return 'TOO';
-      case 'aspect': return 'ASP';
-      case 'drift': return 'DRI';
-      default: return (value ?? '').trim().slice(0, 3).toUpperCase();
-    }
-  }
+  kindAbbrev = pipelineKindAbbreviation;
 
   formatTokens = formatTokens;
   stepTokenLabel = stepTokenLabel;

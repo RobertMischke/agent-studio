@@ -353,7 +353,7 @@ Schema, per line:
 Hard rules:
 
 - **The endpoint and the UI must never break on a malformed line.** Skip non-parseable JSON and missing required fields with a warning; surface the rest.
-- **No state-machine effects.** Findings are review evidence, not blockers. `JobTransitionService` does not consult this file. The user can still move the job through `4-auto-review -> 5-human-review -> 6-completed` while findings are open.
+- **No direct state-machine effects.** `JobTransitionService` does not consult this file. A named pipeline analysis may independently react to the same finding set through its declared policy. The QS Angular rule pass feeds blocking findings into the bounded steered-retry decision; QS security findings are deliberately evidence-only and never block delivery for now. Manual review and acknowledgement continue to read this append-only evidence stream.
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
 

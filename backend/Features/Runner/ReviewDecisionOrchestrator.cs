@@ -181,6 +181,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
+    private readonly QualityStudioAnalysisStepRunner? _qualityStudioAnalysis;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
     // The opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782). Optional so
@@ -264,7 +265,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
         PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
         AttemptAuthorityService? attemptAuthority = null,
-        DossierMaintenanceService? dossierMaintenance = null)
+        DossierMaintenanceService? dossierMaintenance = null,
+        QualityStudioAnalysisStepRunner? qualityStudioAnalysis = null)
     {
         _scanner = scanner;
         _taskAccess = taskAccess;
@@ -295,6 +297,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _agentsWikiSync = agentsWikiSync;
         _attemptAuthority = attemptAuthority;
         _dossierMaintenance = dossierMaintenance;
+        _qualityStudioAnalysis = qualityStudioAnalysis;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -2250,11 +2253,61 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
+        var qualityChangedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
+        var qualityRepositoryPath = ResolveBuildTestGateRepositoryPath(entry);
+        var qualityPolicy = QualityStudioAnalysisPolicy.Resolve(
+            qualityChangedFiles,
+            ProjectStackDetector.Detect(qualityRepositoryPath),
+            settings);
+        var angularPolicy = qualityPolicy.First(decision =>
+            string.Equals(
+                decision.Step.Id,
+                PipelineCatalogue.QualityStudioAngularRulesStepId,
+                StringComparison.Ordinal));
+        QualityStudioAnalysisRunResult? angularAnalysis = null;
+        if (!angularPolicy.Enabled)
+        {
+            RecordQualityStudioAnalysisStep(current.FolderPath, new QualityStudioAnalysisRunResult(
+                angularPolicy.Step.Id,
+                QualityStudioAnalysisRunStatus.NotApplicable,
+                angularPolicy.Reason,
+                Array.Empty<AgentOrchestrator.CodeQuality.ReviewFinding>(),
+                $"results/{QualityStudioAnalysisStepRunner.EvidenceDirectory}/{QualityStudioAnalysisStepRunner.AngularEvidenceFile}",
+                DateTime.UtcNow,
+                DateTime.UtcNow));
+        }
+        else if (_qualityStudioAnalysis is null)
+        {
+            RecordQualityStudioAnalysisStep(current.FolderPath, new QualityStudioAnalysisRunResult(
+                angularPolicy.Step.Id,
+                QualityStudioAnalysisRunStatus.Failed,
+                "Quality Studio analysis runner is unavailable in this runtime.",
+                Array.Empty<AgentOrchestrator.CodeQuality.ReviewFinding>(),
+                $"results/{QualityStudioAnalysisStepRunner.EvidenceDirectory}/{QualityStudioAnalysisStepRunner.AngularEvidenceFile}",
+                DateTime.UtcNow,
+                DateTime.UtcNow));
+        }
+        else
+        {
+            angularAnalysis = await _qualityStudioAnalysis.RunAngularRulesAsync(
+                qualityRepositoryPath,
+                current.FolderPath,
+                qualityChangedFiles,
+                ct);
+            RecordQualityStudioAnalysisStep(current.FolderPath, angularAnalysis);
+            WritePostProcessingOutcome(current, PostProcessingOutcomes.FindingsAdded,
+                summary: angularAnalysis.Reason,
+                performer: PostProcessingPerformers.Orchestrator,
+                stepId: angularAnalysis.StepId,
+                evidenceRef: angularAnalysis.Artifact,
+                findingRefs: angularAnalysis.Findings.Select(finding => finding.RuleId).Distinct().ToList());
+        }
+
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
         // the catalogue step id (aspect-{id}); see PipelineStepConfigResolver.
-        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var conditionContext = new PipelineStepConditionContext
         {
             Aborted = false,
@@ -2307,6 +2360,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             entry.Name, current.Id, AutoReviewActivitySteps.Aspects);
         var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct,
             modelForAspect, thinkingLevelForAspect, promptForAspect, cliForAspect);
+        if (angularAnalysis is { Findings.Count: > 0 } && angularPolicy.BlocksOnFindings)
+        {
+            report = AspectRunReport.From([.. report.Verdicts, angularAnalysis.ToBlockingVerdict()]);
+        }
 
         // Grade the settled change set before any aspect-infrastructure
         // short-circuit. The grade supplies council findings; a dead aspect
@@ -3718,6 +3775,42 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DurationMs = durationMs,
             Verdict = verdictToken,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    private void RecordQualityStudioAnalysisStep(
+        string jobFolderPath,
+        QualityStudioAnalysisRunResult result)
+    {
+        if (_pipelineLog == null) return;
+        var status = result.Status switch
+        {
+            QualityStudioAnalysisRunStatus.Passed => PipelineStepStatus.Passed,
+            QualityStudioAnalysisRunStatus.Findings => PipelineStepStatus.Failed,
+            QualityStudioAnalysisRunStatus.NotApplicable => PipelineStepStatus.NotApplicable,
+            QualityStudioAnalysisRunStatus.Unavailable => PipelineStepStatus.Failed,
+            QualityStudioAnalysisRunStatus.Failed => PipelineStepStatus.Failed,
+            _ => PipelineStepStatus.Failed,
+        };
+        var verdict = result.Status switch
+        {
+            QualityStudioAnalysisRunStatus.Passed => "pass",
+            QualityStudioAnalysisRunStatus.Findings => "block",
+            QualityStudioAnalysisRunStatus.NotApplicable => "not-applicable",
+            QualityStudioAnalysisRunStatus.Unavailable => "unavailable",
+            _ => "error",
+        };
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = result.StepId,
+            Kind = StepKind.Analysis,
+            Status = status,
+            StartedAt = result.StartedAt,
+            CompletedAt = result.CompletedAt,
+            DurationMs = result.DurationMs,
+            Verdict = verdict,
+            VerdictSummary = result.Reason,
+            Reason = status == PipelineStepStatus.Failed ? result.Reason : null,
         });
     }
 

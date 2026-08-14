@@ -307,15 +307,15 @@ public sealed class ProjectPipelineCostService
     public static int ResolveDays(int requested) =>
         requested <= 0 ? DefaultDays : Math.Min(requested, MaxDays);
 
-    // Stable render order: core run first, then the model-driven aspects,
-    // deterministic tool steps, the orchestrator decision, and finally any
-    // generic module step.
+    // Stable render order: core run, first-class analysis, model aspects,
+    // deterministic tools, orchestrator decisions, drift, then modules.
     private static readonly StepKind[] KindOrder =
-        [StepKind.Core, StepKind.Aspect, StepKind.Tool, StepKind.Orchestrator, StepKind.Drift, StepKind.Module];
+        [StepKind.Core, StepKind.Analysis, StepKind.Aspect, StepKind.Tool, StepKind.Orchestrator, StepKind.Drift, StepKind.Module];
 
     private static string KindKey(StepKind kind) => kind switch
     {
         StepKind.Core => "core",
+        StepKind.Analysis => "analysis",
         StepKind.Aspect => "aspect",
         StepKind.Tool => "tool",
         StepKind.Orchestrator => "orchestrator",
@@ -492,8 +492,8 @@ public sealed record PipelineStepCostSeries(
 
 /// <summary>
 /// One step-kind's series over the window. <see cref="Kind"/> is the
-/// lowercase wire token (<c>core</c> / <c>aspect</c> / <c>tool</c> /
-/// <c>orchestrator</c> / <c>module</c>) matching the frontend StepKind
+/// lowercase wire token (<c>core</c> / <c>analysis</c> / <c>aspect</c> /
+/// <c>tool</c> / <c>orchestrator</c> / <c>module</c>) matching the frontend StepKind
 /// type. <see cref="AnyModelUnknown"/> is true when at least one
 /// contributing step used a model with no price on file, so the cost is
 /// a lower bound.

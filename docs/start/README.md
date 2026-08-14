@@ -52,6 +52,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Contribution and style conventions for all agents | [contribution-and-style-guide.html](contribution-and-style-guide.html) |
 | Runner | [domains/runner.md](../system/domains/runner.md) |
 | Pipeline | [domains/pipeline.md](../system/domains/pipeline.md) |
+| Quality Studio pipeline analysis evidence | [pipeline policy](../system/domains/pipeline.md#quality-studio-analysis-policy) · [JSON schema](../app/schemas/quality-studio-analysis-evidence.schema.json) |
 | Runtime prompt registry, review companions, call telemetry, and costs | [contracts/runtime-prompts.md](../system/contracts/runtime-prompts.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
 | Frontend | [domains/frontend.md](../system/domains/frontend.md) |

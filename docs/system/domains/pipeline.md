@@ -50,6 +50,17 @@ pipeline view.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
   concept, and UI pipeline definitions, step ids, default ordering, step run
   modes, and display names.
+- `backend/Features/Pipeline/QualityStudioAnalysisPolicy.cs`: convention-based
+  card classification for the named QS analysis bracket. Frontend changes select
+  Angular rules plus visual quality; backend changes select C# rules plus
+  security; code changes also select model review, redundancy, and consistency.
+  Project `PipelineSteps` may override step activation. There is no per-card,
+  environment, or central rule override.
+- `backend/Features/Pipeline/QualityStudioAnalysisStepRunner.cs`: in-process
+  `AgentOrchestrator.CodeQuality` package adapter. The first executable slice
+  runs the package's `quality-rules` analysis against changed Angular files,
+  writes `results/quality-studio/angular-rules.json`, and projects named `QS-*`
+  findings into `results/review-evidence.jsonl`.
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly
@@ -948,6 +959,41 @@ operator changes cause the step to fail before its writer runs.
   index). A missing concept page is surfaced as a visible dead-pointer finding in
   the generated index's "Pointer health" section and the step reason, never
   silently dropped.
+
+### Quality Studio analysis policy
+
+- Quality Studio analysis is a standard bracket after the build/test gate and
+  before aspect reviews. Catalogue ids are `analysis-qs-angular-rules`,
+  `analysis-qs-dotnet-rules`, `analysis-qs-model-review`, `analysis-qs-visual`,
+  `analysis-qs-security`, `analysis-qs-redundancy`, and
+  `analysis-qs-consistency`. Only the Angular rule pass is executable in the
+  first slice; the remaining rows are explicit planned catalogue slots, not
+  generic tool aliases. The adapter consumes the QS analysis core in-process,
+  never through HTTP. QS owns all rule statements and examples. Agent Studio
+  references the stable QS-90 ids (`QS-NG-001` through `QS-NG-005`) and does not
+  copy rule content.
+- The verified QS-91 package surface is `QualityAnalysisCore.CreateDefault()`
+  followed by `RunAsync(QualityAnalysisRequest)`. A request carries named
+  `NamedQualityAnalysis` entries and returns package-owned
+  `NamedQualityAnalysisResult` and `ReviewFinding` values. The Angular slice
+  requests the package's `quality-rules` analysis once per changed Angular path
+  and asks Agent Studio, rather than QS, to persist the enclosing pipeline
+  artifact. The pinned first-slice package and its source commit checksum are
+  recorded in `packages/quality-studio/README.md`.
+- Rule defaults and overrides are resolved by Quality Studio. The core default
+  set applies when the repository has no config. A project may version
+  `.quality/rules.json` using
+  `https://quality.studio/schemas/rule-configuration.v1.schema.json` to enable,
+  disable, or adjust the severity of named rules. Agent Studio has no
+  environment-specific or central rule override. Invalid repository config is a
+  visible failed analysis, not an implicit fallback.
+- QS findings keep their package `ruleId`, fingerprint, source, severity,
+  locations, evidence, and recommendation in the durable JSON result. Each is
+  also appended to task review evidence. Blocking Angular findings become a
+  synthetic blocking verdict in the existing bounded orchestrator reissue loop,
+  so the follow-up names exact `QS-*` ids and artifact paths. Security is the
+  stated exception from QS-90: unfixed findings remain recorded and visible but
+  do not block or withhold delivery at this stage.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - Raw step-call prompts are captured once, at central dispatch, into

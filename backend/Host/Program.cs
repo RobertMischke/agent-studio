@@ -558,6 +558,7 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
 builder.Services.AddSingleton<AgentStudio.Pipeline.PreMainTestGate>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineStepProbeService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PreDevelopBuildGate>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.QualityStudioAnalysisStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
 // Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the

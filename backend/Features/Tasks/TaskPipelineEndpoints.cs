@@ -77,6 +77,8 @@ public static class TaskPipelineEndpoints
                 {
                     StepKind.Core => "status.md",
                     StepKind.Aspect => $"{step.Id}.md",
+                    StepKind.Analysis when step.Id == PipelineCatalogue.QualityStudioAngularRulesStepId
+                        => $"results/{QualityStudioAnalysisStepRunner.EvidenceDirectory}/{QualityStudioAnalysisStepRunner.AngularEvidenceFile}",
                     _ => null,
                 };
                 if (relativePath is not null && File.Exists(Path.Combine(info.FolderPath, relativePath)))

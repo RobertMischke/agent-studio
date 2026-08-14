@@ -60,6 +60,7 @@ function step(id: string, displayName: string, kind: string, runMode: string) {
 const pre = [step('pre-loop-guard', 'Loop guard', 'pre', 'sequential')];
 const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
+  step('analysis-qs-angular-rules', 'QS Angular rule analysis', 'analysis', 'sequential'),
   step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
   step('aspect-code-quality', 'Code quality', 'aspect', 'parallel'),
   step('aspect-tests-and-evidence', 'Tests and evidence', 'aspect', 'parallel'),
@@ -112,6 +113,7 @@ function pipelineAcceptedFinalVerdict() {
       steps: [
         execStep('pre-loop-guard', 'pre', 'passed'),
         execStep('core-agent-run', 'core', 'passed'),
+        execStep('analysis-qs-angular-rules', 'analysis', 'passed', { verdict: 'pass' }),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-tests-and-evidence', 'aspect', 'passed', { verdict: 'pass' }),
@@ -332,6 +334,11 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
     await expandAllPipelineSections(page);
 
+    const analysisRow = page.locator('[data-step-id="analysis-qs-angular-rules"]');
+    await expect(analysisRow).toBeVisible();
+    await expect(analysisRow).toContainText('QS Angular rule analysis');
+    await expect(pipeline.getByText('ANALYSIS', { exact: true })).toBeVisible();
+
     // Each aspect row carries quiet parallel metadata (read-only pool, Req 1 + 3).
     const parallelNotes = page.getByTestId('overview-pipeline-step-parallel');
     await expect(parallelNotes).toHaveCount(3);
@@ -421,6 +428,7 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     expect(metrics.map(m => m.label)).toEqual([
       'pre step',
       'Core agent work step',
+      'Analysis step',
       'Aspect step',
       'Aspect step',
       'Aspect step',

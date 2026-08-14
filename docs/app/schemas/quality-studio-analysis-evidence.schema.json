@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/quality-studio-analysis-evidence.schema.json",
+  "title": "Quality Studio analysis evidence",
+  "description": "One durable pipeline result produced by an in-process Quality Studio analysis step.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "stepId",
+    "analysis",
+    "packageVersion",
+    "repositoryPath",
+    "repositoryRuleConfig",
+    "requestedPaths",
+    "analyses",
+    "status",
+    "reason",
+    "startedAt",
+    "completedAt"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-studio/quality-studio-analysis-evidence/v1",
+      "description": "Version token for this evidence envelope."
+    },
+    "stepId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable Agent Studio pipeline step identifier."
+    },
+    "analysis": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Named Quality Studio package analysis requested by the step."
+    },
+    "packageVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "In-process Quality Studio package version used for the run."
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute repository path supplied to the analysis core."
+    },
+    "repositoryRuleConfig": {
+      "const": ".quality/rules.json",
+      "description": "Versioned in-repository rule override path consumed by Quality Studio."
+    },
+    "requestedPaths": {
+      "type": "array",
+      "description": "Repository-relative paths selected by the card-class policy.",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "analyses": {
+      "type": "array",
+      "description": "Quality Studio result objects, preserved without duplicating rule definitions.",
+      "items": { "type": "object" }
+    },
+    "status": {
+      "enum": ["passed", "findings", "not-applicable", "unavailable", "failed"],
+      "description": "Terminal status of the analysis step."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable status explanation."
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC time at which analysis began."
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC time at which the evidence was completed."
+    }
+  }
+}

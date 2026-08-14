@@ -48,13 +48,14 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post includes the deterministic review/build gates, four aspects,
+        // Post includes the deterministic review/build gates, the seven named
+        // Quality Studio analysis slots, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance, wiki-learnings
         // distillation, and agents/wiki-sync steps), the deferred operator-triggered
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(26, p.Post.Count);
+        Assert.Equal(33, p.Post.Count);
     }
 
     [Fact]
