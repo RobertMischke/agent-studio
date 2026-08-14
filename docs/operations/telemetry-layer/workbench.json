@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "telemetry-layer",
+  "title": "Local Telemetry Layer Across Organization Apps",
+  "summary": "Decision dossier for a local-first organization telemetry layer. It inventories existing Agent Studio and Quality Studio telemetry, defines a content-free event envelope and structured-log seam, compares three no-cloud bus options, recommends a hybrid file buffer plus local push into the existing Agent Message Bus, connects event patterns to the Global Orchestrator Watcher, positions Agent Studio as the CI/CD, telemetry, alarm, and orchestration management hub, and proposes a Quality Studio reliability pilot followed by a bounded product rollout.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-14T16:30:00Z",
+  "sourceTaskKeys": [
+    "AGT-2661"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2557",
+    "AGT-2654",
+    "AGT-2648"
+  ]
+}
