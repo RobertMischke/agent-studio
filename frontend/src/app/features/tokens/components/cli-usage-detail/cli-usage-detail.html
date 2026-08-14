@@ -53,7 +53,7 @@
     <div class="cud__trend-head">
       <h4>Token trend</h4>
       @if (tokens(); as t) {
-        <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
+        <span data-testid="cli-usage-detail-token-scope">{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost · {{ tokenUsageScope() }}</span>
       }
     </div>
     <div class="cud__sparks">
@@ -80,7 +80,7 @@
     <section class="cud__projects" data-testid="cli-usage-detail-projects">
       <div class="cud__projects-head">
         <h4>By project</h4>
-        <span class="cud__muted">Click a project to open its settings</span>
+        <span class="cud__muted">Click a project to open its settings · {{ tokenUsageScope() }}</span>
       </div>
       <div class="cud__project-list">
         @for (p of projectRows(); track p.slug) {
@@ -130,6 +130,7 @@
         <div class="cud__grid">
           <div class="cud__panel">
             <h5>Quota windows</h5>
+            <p class="cud__muted" [attr.data-testid]="'cli-usage-detail-quota-scope-' + row.cliType">Reported windows · {{ quotaScopeFor(row) }}</p>
             @if (row.windows.length === 0) {
               <p class="cud__empty">No quota window data.</p>
             } @else {
@@ -158,6 +159,7 @@
 
           <div class="cud__panel">
             <h5>Top models</h5>
+            <p class="cud__muted" [attr.data-testid]="'cli-usage-detail-model-scope-' + row.cliType">{{ modelUsageScopeFor(row.cliType) }}</p>
             @if (modelRowsFor(row.cliType).length === 0) {
               <p class="cud__empty">No model usage attributed.</p>
             } @else {
@@ -186,6 +188,7 @@
         @if (sourceRowsFor(row.cliType).length > 0) {
           <div class="cud__panel">
             <h5>Top sources</h5>
+            <p class="cud__muted">{{ adHocUsageScope() }}</p>
             <table>
               <thead>
                 <tr>
@@ -216,6 +219,7 @@
 
   <section class="cud__jobs" data-testid="cli-usage-detail-top-jobs">
     <h4>Top tasks</h4>
+    <p class="cud__muted">{{ tokenUsageScope() }}</p>
     @if (topJobs().length === 0) {
       <p class="cud__empty">No task token usage recorded.</p>
     } @else {

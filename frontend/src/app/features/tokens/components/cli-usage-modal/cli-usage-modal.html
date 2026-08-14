@@ -21,6 +21,7 @@
           <span class="cum__plan">{{ plan }}</span>
         }
       </div>
+      <p class="cum__scope-note" data-testid="cli-usage-modal-quota-scope">{{ quotaScope() }}</p>
       @if (windowViews().length === 0) {
         <p class="cum__empty">No quota window data.</p>
       } @else {
@@ -69,7 +70,7 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      <p class="cum__scope-note" data-testid="cli-usage-modal-recorded-scope">{{ recordedUsageScope() }}</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

@@ -43,7 +43,9 @@ public sealed record TokenSummaryByModel(
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
     bool ModelPriced,
-    bool ModelInCatalog);
+    bool ModelInCatalog,
+    DateTime? OldestEntryAt,
+    DateTime? NewestEntryAt);
 
 public class TokenSummaryService
 {
@@ -316,6 +318,12 @@ public class TokenSummaryService
                 bucket.Cost += m.EstimatedApiCostUsd;
                 if (!m.ModelPriced) bucket.AnyUnpriced = true;
                 if (!m.ModelInCatalog) bucket.AnyUnknownModel = true;
+                if (m.OldestEntryAt is not null
+                    && (bucket.OldestEntryAt is null || m.OldestEntryAt < bucket.OldestEntryAt))
+                    bucket.OldestEntryAt = m.OldestEntryAt;
+                if (m.NewestEntryAt is not null
+                    && (bucket.NewestEntryAt is null || m.NewestEntryAt > bucket.NewestEntryAt))
+                    bucket.NewestEntryAt = m.NewestEntryAt;
             }
         }
 
@@ -330,7 +338,9 @@ public class TokenSummaryService
                 CacheCreationTokens: b.CacheCreate,
                 EstimatedApiCostUsd: b.Cost,
                 ModelPriced: !b.AnyUnpriced,
-                ModelInCatalog: !b.AnyUnknownModel))
+                ModelInCatalog: !b.AnyUnknownModel,
+                OldestEntryAt: b.OldestEntryAt,
+                NewestEntryAt: b.NewestEntryAt))
             .ToList();
 
         // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
@@ -424,6 +434,10 @@ public class TokenSummaryService
             if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
             if (entryCost.Status == TokenEconomy.PriceStatus.UnknownModel)
                 bucket.AnyUnknownModel = true;
+            if (bucket.OldestEntryAt is null || entry.Ts < bucket.OldestEntryAt)
+                bucket.OldestEntryAt = entry.Ts;
+            if (bucket.NewestEntryAt is null || entry.Ts > bucket.NewestEntryAt)
+                bucket.NewestEntryAt = entry.Ts;
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -442,7 +456,9 @@ public class TokenSummaryService
                 CacheCreationTokens: bucket.CacheCreate,
                 EstimatedApiCostUsd: bucket.Cost,
                 ModelPriced: !bucket.AnyUnpriced,
-                ModelInCatalog: !bucket.AnyUnknownModel));
+                ModelInCatalog: !bucket.AnyUnknownModel,
+                OldestEntryAt: bucket.OldestEntryAt,
+                NewestEntryAt: bucket.NewestEntryAt));
         }
 
         return new TokenSummary(
@@ -472,6 +488,8 @@ public class TokenSummaryService
         public decimal Cost;
         public bool AnyUnpriced;
         public bool AnyUnknownModel;
+        public DateTime? OldestEntryAt;
+        public DateTime? NewestEntryAt;
         public ModelBucket(string model) : this(model, model)
         {
         }

@@ -151,12 +151,14 @@ describe('CliUsageModalComponent', () => {
           inputTokens: 39_646_031, outputTokens: 97_412,
           cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          oldestEntryAt: '2026-06-01T08:00:00Z', newestEntryAt: '2026-08-10T12:00:00Z',
         },
         {
           model: 'GPT-5.5', calls: 8,
           inputTokens: 10_782_081, outputTokens: 66_760,
           cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          oldestEntryAt: '2026-05-03T09:15:00Z', newestEntryAt: '2026-08-11T18:42:00Z',
         },
       ],
       byProject: [],
@@ -197,6 +199,16 @@ describe('CliUsageModalComponent', () => {
     expect(component.modelRows().map(r => r.model)).toEqual(['gpt-5.6-sol', 'GPT-5.5']);
     expect(component.modelRows().every(r => r.source === 'project runtime')).toBe(true);
     expect(component.totals().tokens).toBe(50_592_284);
+    expect(component.recordedUsageScope()).toBe(
+      'Since 2026-05-03 · As of 2026-08-11 18:42 UTC. Independent of the active quota windows above.',
+    );
+  });
+
+  it('shows the quota snapshot with an absolute as-of timestamp', async () => {
+    const fixture = await build({ ...codexRow, fetchedAt: '2026-08-11T19:05:00Z' }, 'codex');
+    expect(fixture.componentInstance.quotaScope()).toBe(
+      'Reported windows · As of 2026-08-11 19:05 UTC',
+    );
   });
 
   it('still returns "n/a" when a window carries no usable number at all', async () => {

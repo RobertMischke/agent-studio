@@ -169,6 +169,8 @@ public sealed class AdHocUsageBusParityTests : IDisposable
             Assert.Equal(x[i].CacheCreationTokens,   y[i].CacheCreationTokens);
             Assert.Equal(x[i].EstimatedApiCostUsd,   y[i].EstimatedApiCostUsd);
             Assert.Equal(x[i].ModelPriced,           y[i].ModelPriced);
+            Assert.Equal(x[i].OldestEntryAt,         y[i].OldestEntryAt);
+            Assert.Equal(x[i].NewestEntryAt,         y[i].NewestEntryAt);
         }
     }
 

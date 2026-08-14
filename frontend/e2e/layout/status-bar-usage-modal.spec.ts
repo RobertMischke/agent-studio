@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
 import { setTheme } from '../helpers/theme';
 
@@ -28,11 +28,18 @@ const SCREENSHOT_DIR = process.env.STATUS_BAR_RESULTS_DIR?.trim() || 'test-resul
 const CLIS = ['copilot', 'claude', 'codex'] as const;
 
 test.describe('Status bar usage modal', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, devBackend }) => {
+    // Accessing the fixture keeps the isolated task backend alive for the UI;
+    // the usage payloads below remain deterministic route mocks.
+    void devBackend;
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    const leaveRecoveryUncommitted = page.getByRole('button', { name: 'Leave all uncommitted' });
+    if (await leaveRecoveryUncommitted.isVisible().catch(() => false)) {
+      await leaveRecoveryUncommitted.click();
+    }
     // Let the first quota poll fire so the strip has cards to render.
     await page.waitForTimeout(800);
   });
@@ -124,11 +131,11 @@ test.describe('Status bar usage modal', () => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
         json: {
-          at: new Date().toISOString(),
+          at: '2026-08-11T19:05:00Z',
           ttlSeconds: 600,
           snapshots: [{
             cliType: 'codex',
-            fetchedAt: new Date().toISOString(),
+            fetchedAt: '2026-08-11T19:05:00Z',
             plan: 'Pro',
             source: '/status',
             error: null,
@@ -157,12 +164,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            oldestEntryAt: '2026-06-01T08:00:00Z', newestEntryAt: '2026-08-10T12:00:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            oldestEntryAt: '2026-05-03T09:15:00Z', newestEntryAt: '2026-08-11T18:42:00Z',
           },
         ],
         byProject: [],
@@ -207,15 +216,18 @@ test.describe('Status bar usage modal', () => {
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-quota-scope')).toHaveText('Reported windows · As of 2026-08-11 19:05 UTC');
+    await expect(modal.getByTestId('cli-usage-modal-recorded-scope')).toHaveText(
+      'Since 2026-05-03 · As of 2026-08-11 18:42 UTC. Independent of the active quota windows above.',
+    );
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-period-after-light--mocked.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-period-after-dark--mocked.png` });
   });
 });

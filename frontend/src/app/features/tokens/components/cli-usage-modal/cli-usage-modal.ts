@@ -20,6 +20,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  oldestEntryAt: string | null;
+  newestEntryAt: string | null;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -98,6 +100,13 @@ export class CliUsageModalComponent {
 
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
 
+  readonly quotaScope = computed(() => {
+    const fetchedAt = this.row()?.fetchedAt;
+    return fetchedAt
+      ? `Reported windows · As of ${this.formatTimestamp(fetchedAt)}`
+      : 'Reported windows · As of unavailable';
+  });
+
   /** Reshapes each reported window into its card projection (pct, tone,
    *  bar width, reset countdown). Pure derivation of the input row. */
   readonly windowViews = computed<WindowView[]>(() =>
@@ -140,15 +149,36 @@ export class CliUsageModalComponent {
     const rows: ModelUsageRow[] = [];
     for (const m of this.tokens()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      const row = { ...m, source: 'project runtime', cacheIncludedInInput: cli === 'codex' };
+      const row = {
+        ...m,
+        source: 'project runtime',
+        cacheIncludedInInput: cli === 'codex',
+        oldestEntryAt: m.oldestEntryAt ?? null,
+        newestEntryAt: m.newestEntryAt ?? null,
+      };
       if (this.totalTokens(row) > 0) rows.push(row);
     }
     for (const m of this.adhoc()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      const row = { ...m, source: 'ad-hoc', cacheIncludedInInput: cli === 'codex' };
+      const row = {
+        ...m,
+        source: 'ad-hoc',
+        cacheIncludedInInput: cli === 'codex',
+        oldestEntryAt: m.oldestEntryAt ?? null,
+        newestEntryAt: m.newestEntryAt ?? null,
+      };
       if (this.totalTokens(row) > 0) rows.push(row);
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
+  });
+
+  readonly recordedUsageScope = computed(() => {
+    const oldest = this.timestampBound(this.modelRows().map(row => row.oldestEntryAt), 'oldest');
+    const newest = this.timestampBound(this.modelRows().map(row => row.newestEntryAt), 'newest');
+    if (!oldest || !newest) {
+      return 'Telemetry period unavailable. Independent of the active quota windows above.';
+    }
+    return `Since ${this.formatDate(oldest)} · As of ${this.formatTimestamp(newest)}. Independent of the active quota windows above.`;
   });
 
   limitText(window: QuotaWindow): string {
@@ -220,6 +250,26 @@ export class CliUsageModalComponent {
     if (n < 0.1) return '$' + n.toFixed(4);
     if (n < 1) return '$' + n.toFixed(3);
     return '$' + n.toFixed(2);
+  }
+
+  formatDate(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return date.toISOString().slice(0, 10);
+  }
+
+  formatTimestamp(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  }
+
+  private timestampBound(values: (string | null)[], direction: 'oldest' | 'newest'): string | null {
+    const valid = values
+      .filter((value): value is string => !!value && Number.isFinite(Date.parse(value)))
+      .sort((a, b) => Date.parse(a) - Date.parse(b));
+    if (valid.length === 0) return null;
+    return direction === 'oldest' ? valid[0] : valid[valid.length - 1];
   }
 
   private modelBelongsToCli(model: string, cliType: CliType): boolean {

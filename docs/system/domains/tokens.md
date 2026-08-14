@@ -256,6 +256,11 @@ mixed dashboard:
   aggregate contract has no reasoning-effort field. The UI therefore labels
   the trend as a workspace plausibility baseline and effort as unattributed. It
   does not invent either attribution.
+- Lifetime per-model rollups carry `oldestEntryAt` and `newestEntryAt` from the
+  telemetry entries folded into each bucket. The compact usage modal and the
+  grouped detail derive `Since` and `As of` labels from those bounds. Quota
+  surfaces use the separate quota snapshot timestamp and keep each provider's
+  reported duration and reset visible.
 - Per-task cap forecast (TE-4) is a labelled future integration point only.
 
 Workspace and project usage calculations are unchanged by this navigation

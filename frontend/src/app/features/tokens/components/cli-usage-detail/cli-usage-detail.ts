@@ -35,6 +35,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  oldestEntryAt: string | null;
+  newestEntryAt: string | null;
 }
 
 /**
@@ -76,6 +78,20 @@ export class CliUsageDetailComponent {
   readonly expensiveJobs = input<WorkspaceExpensiveJob[]>([]);
   readonly refreshing = input<Record<string, boolean>>({});
   readonly refreshingAll = input(false);
+
+  readonly tokenUsageScope = computed(() => this.periodLabel(
+    (this.tokens()?.byModel ?? []).map(model => ({
+      oldestEntryAt: model.oldestEntryAt ?? null,
+      newestEntryAt: model.newestEntryAt ?? null,
+    })),
+  ));
+
+  readonly adHocUsageScope = computed(() => this.periodLabel(
+    (this.adhoc()?.byModel ?? []).map(model => ({
+      oldestEntryAt: model.oldestEntryAt ?? null,
+      newestEntryAt: model.newestEntryAt ?? null,
+    })),
+  ));
 
   readonly refreshAll = output<Event>();
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
@@ -155,6 +171,8 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        oldestEntryAt: m.oldestEntryAt ?? null,
+        newestEntryAt: m.newestEntryAt ?? null,
       });
     }
     for (const m of this.adhoc()?.byModel ?? []) {
@@ -169,11 +187,21 @@ export class CliUsageDetailComponent {
         cacheCreationTokens: m.cacheCreationTokens,
         estimatedApiCostUsd: m.estimatedApiCostUsd,
         modelPriced: m.modelPriced,
+        oldestEntryAt: m.oldestEntryAt ?? null,
+        newestEntryAt: m.newestEntryAt ?? null,
       });
     }
     return rows
       .sort((a, b) => this.totalTokens(b) - this.totalTokens(a))
       .slice(0, 5);
+  }
+
+  modelUsageScopeFor(cliType: CliType): string {
+    return this.periodLabel(this.modelRowsFor(cliType));
+  }
+
+  quotaScopeFor(row: CliUsageQuotaRow): string {
+    return row.fetchedAt ? `As of ${this.formatTimestamp(row.fetchedAt)}` : 'As of unavailable';
   }
 
   sourceRowsFor(cliType: CliType) {
@@ -203,6 +231,33 @@ export class CliUsageDetailComponent {
 
   totalTokens(row: ModelUsageRow): number {
     return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
+  }
+
+  private periodLabel(rows: { oldestEntryAt: string | null; newestEntryAt: string | null }[]): string {
+    const oldest = this.timestampBound(rows.map(row => row.oldestEntryAt), 'oldest');
+    const newest = this.timestampBound(rows.map(row => row.newestEntryAt), 'newest');
+    if (!oldest || !newest) return 'Telemetry period unavailable';
+    return `Since ${this.formatDate(oldest)} · As of ${this.formatTimestamp(newest)}`;
+  }
+
+  private formatDate(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return date.toISOString().slice(0, 10);
+  }
+
+  private formatTimestamp(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  }
+
+  private timestampBound(values: (string | null)[], direction: 'oldest' | 'newest'): string | null {
+    const valid = values
+      .filter((value): value is string => !!value && Number.isFinite(Date.parse(value)))
+      .sort((a, b) => Date.parse(a) - Date.parse(b));
+    if (valid.length === 0) return null;
+    return direction === 'oldest' ? valid[0] : valid[valid.length - 1];
   }
 
   private sparkByBucket(timeline: TokenTimeline | null, limit: number): SparkPoint[] {
