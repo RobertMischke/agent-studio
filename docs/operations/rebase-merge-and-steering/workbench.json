@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "rebase-merge-and-steering",
+  "title": "Rebase, Merge, and Bounce Steering",
+  "summary": "Decision dossier on the current attribution-driven hybrid: delivery requeue rounds rebase into a fresh fenced generation, while server integration preserves reviewed delivery SHAs through merge-first reconciliation. It compares delivery and integration alternatives, reconciles the AGT-2648 Batch Gate proposal with AGT-2632, documents the session-side bounce-steer loop, and recommends a deterministic backend first retry followed by a strong-model targeted retry with a two-round cap per review epoch.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "pattern": "concept",
+  "updatedAt": "2026-08-14T13:04:28Z",
+  "sourceTaskKeys": [
+    "AGT-2662"
+  ],
+  "implementationTasks": [],
+  "relatedTaskKeys": [
+    "AGT-2632",
+    "AGT-2648",
+    "AGT-2544",
+    "AGT-2563",
+    "AGT-2654",
+    "AGT-2557"
+  ]
+}
