@@ -72,14 +72,33 @@ Set-Location C:\Projects\agent-studio
     -RemotePort 15031 `
     -TaskServerPort 5031 `
     -IntervalMinutes 5
+
+.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
+    -DevspacePath C:\Projects\agent-taskboard-devspace `
+    -SshTarget agent-runner `
+    -RemotePort 15031 `
+    -KeeperTaskName AgentRunner-TunnelKeeper `
+    -ProbeIntervalSeconds 60 `
+    -FailureThreshold 2 `
+    -OperatorAlarmPath C:\Projects\agent-taskboard-devspace\.operator-alarm.log
 ```
 
-The registration is idempotent. It creates or updates
-`AgentRunner-TunnelKeeper`, uses `IgnoreNew` to prevent overlapping repair
-runs, starts the first run immediately, and repeats every five minutes. It uses
-the current interactive Windows identity because that identity owns the SSH
-key. A machine that must repair the tunnel before user logon needs a dedicated
-service identity with its own protected SSH key instead.
+Both registrations are idempotent and use `IgnoreNew`. The keeper starts at
+boot, starts immediately when registered, and retains its five-minute fallback
+trigger. The independent `AgentRunner-TunnelWatchdog` starts at boot and owns a
+60-second probe loop. Both tasks use an S4U principal, so they do not depend on
+an interactive logon session. The selected identity must own a local protected
+SSH key and a non-interactive `agent-runner` alias. Run the registration from
+an elevated PowerShell session because an at-startup task can require that
+authority.
+
+The keeper task has no execution time limit and remains the owner of its
+`ssh.exe` child until SSH exits. It deliberately has no Task Scheduler retry:
+the watchdog owns the two-probe recovery sequence, while the keeper's periodic
+trigger remains a slower fallback if the watchdog task itself is unavailable.
+On the first run after upgrading, the keeper replaces a matching pre-existing
+Windows forward once so the long-lived SSH process moves under this ownership
+and logging contract.
 
 The keeper in
 [`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
@@ -105,6 +124,31 @@ quiet. An ongoing failure is logged on transition and at most hourly, not on
 every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
 `15031` is still held by a half-dead previous session, SSH fails fast instead
 of connecting without the forward.
+
+The watchdog in
+[`deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh`](../../../deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh)
+runs the functional probe every 60 seconds. After two consecutive failures it
+uses the operator recovery sequence in this order:
+
+1. Through the agent SSH account, find and stop a process listening specifically
+   on `127.0.0.1:15031`. A missing listener is a successful no-op.
+2. Call `Stop-ScheduledTask` and `Start-ScheduledTask` for
+   `AgentRunner-TunnelKeeper`.
+3. Retry the runner-side health request for up to 30 seconds and journal the
+   outcome.
+
+The append-only journal is `<devspace>/.tunnel-watchdog.log`. A second
+consecutive failed heal appends one `severity=alarm` line to the configured
+operator-alarm channel. The default channel is
+`<devspace>/.operator-alarm.log`; pass the path already consumed by the stable
+operator watcher when a devspace uses a different path.
+
+Each keeper replacement now writes its stdout and stderr to timestamped files
+under `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\` and records the paths in
+`ssh-attempts.log`. The keeper waits for the SSH process and always records its
+eventual exit code. The stderr file includes verbose OpenSSH disconnect and
+forwarding diagnostics, so a later incident can distinguish keepalive death,
+connection reset, authentication failure, and remote bind refusal.
 
 ## Option B - autossh + systemd on the host (host dials in, `-L`)
 
@@ -203,18 +247,25 @@ claim poll.
 1. Bring the tunnel service up (Option A or B).
 2. From the host: `curl -fsS http://127.0.0.1:15031/healthz` succeeds, and
    `agent-host --health-check --server http://127.0.0.1:15031` exits `0`.
-3. Stop `AgentRunner-TunnelKeeper`, terminate the matching reverse-forward SSH
-   process, and leave the route down. The same `--health-check` exits `4` with a
-   "tunnel down" reason within about 10 seconds. Within the capability's
-   three-minute freshness budget, Execution Hosts shows **Task Server route
-   unreachable**. After five continuous minutes, the runner journal contains
-   one `status=escalated` transition, not repeated poll errors.
-4. Start `AgentRunner-TunnelKeeper`. Its immediate or next scheduled run removes
-   the dead forward, starts a replacement, and accepts it only after the remote
-   sentinel probe passes. The runner logs one `status=recovered` transition and
-   the next capability advertisement returns the host card to **reachable**.
-5. Preserve screenshots from both states and the bounded journal excerpt in the
-   task's absolute `results/` directory.
+3. Run the live fault test from the Windows studio. The fault injector only
+   kills the runner-side listener, then waits up to 150 seconds for the
+   watchdog-owned Scheduled Task restart and writes its journal excerpt to
+   `JOB_RESULTS_DIR`:
+
+   ```powershell
+   .\deploy\windows\agent-runner-tunnel\test-tunnel-watchdog-forced-kill.ps1 `
+       -SshTarget agent-runner `
+       -RemotePort 15031 `
+       -TimeoutSeconds 150
+   ```
+
+4. Confirm `<devspace>/.tunnel-watchdog.log` contains two `probe_failed` rows,
+   followed by `remote_listener_cleanup`, `keeper_restart`, and
+   `heal_succeeded`. With the default cadence, recovery should complete in
+   about two minutes plus the bounded replacement verification time.
+5. Confirm the next capability advertisement returns Execution Hosts to
+   **reachable** and preserve the live test report in the task's absolute
+   `results/` directory.
 
 ## Is the tunnel still the right topology?
 
