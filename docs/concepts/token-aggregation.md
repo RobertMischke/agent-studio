@@ -3,12 +3,12 @@ id: token-aggregation-concept
 title: "Token aggregators use canonical hybrid projections (concept + living knowledge)"
 status: active
 category: concept
-updatedAt: 2026-08-11
-last-updated: 2026-08-11
-reason: "Align pipeline RUNS totals with canonical task-ledger attribution and expose missing run telemetry"
-taskKey: AGT-2626
+updatedAt: 2026-08-14
+last-updated: 2026-08-14
+reason: "Expose event-derived recording boundaries for lifetime usage totals"
+taskKey: AGT-2604
 tags: [token-aggregation, hybrid-projection, task-receipt, drift-rule, observability, cost]
-related-tasks: [ASS-881, ASS-1717, AGT-2542, AGT-2624, AGT-2626]
+related-tasks: [ASS-881, ASS-1717, AGT-2542, AGT-2604, AGT-2624, AGT-2626]
 related-adrs: []
 related-docs:
   - "docs/system/domains/tokens.md"
@@ -241,6 +241,12 @@ For an operator or an LLM instance working in this area, the rules of the road:
 Append new findings about the token-aggregation area here, newest on top. Keep
 each entry short: date, what was learned, and a pointer to the code/commit/task.
 
+- **2026-08-14 (AGT-2604).** Lifetime model totals need an event-derived time
+  boundary, not the aggregate fetch time. Project-runtime and ad-hoc per-model
+  rows now carry `FirstRecordedAt` and `LastRecordedAt`; workspace folding
+  preserves the minimum and maximum. Usage surfaces render these boundaries as
+  `Since` and `As of`, while older cached rows without the fields state that the
+  telemetry range is unavailable instead of inventing one.
 - **2026-08-12 (AGT-2624).** Receipt discovery was working, but remote
   completion never wrote `task.json.tokenSummary`; recent TE/CAC cards therefore
   had no current source to discover. `RemoteTokenReceiptService` now folds the

@@ -3,6 +3,7 @@ import type { CliType } from '../../../../models/task.model';
 import { CliUsageStore } from '../../services/cli-usage.store';
 import { CliUsageDetailComponent } from '../cli-usage-detail/cli-usage-detail';
 import { CliWindowAnalysisComponent } from '../cli-window-analysis/cli-window-analysis';
+import { recordedUsagePeriod } from '../../usage-period.util';
 
 type WorkspaceTokenUsagePage = 'workspace' | 'claude' | 'codex';
 import { WorkspaceTokenTimelineComponent } from '../workspace-token-timeline/workspace-token-timeline';
@@ -35,6 +36,10 @@ export class TokenUsageSectionComponent implements OnInit, OnDestroy {
   readonly page = input<WorkspaceTokenUsagePage>('workspace');
   readonly pageChange = output<WorkspaceTokenUsagePage>();
   readonly cliPage = computed<'claude' | 'codex'>(() => this.page() === 'codex' ? 'codex' : 'claude');
+  readonly workspaceRecordedPeriod = computed(() => recordedUsagePeriod([
+    ...(this.usage.tokens()?.byModel ?? []),
+    ...(this.usage.adhoc()?.byModel ?? []),
+  ]));
 
   /** Bubbled up (through WorkspaceOverlaysComponent) so the shell can route to a
    *  project's Settings when a "By project" usage row is clicked. */

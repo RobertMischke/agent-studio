@@ -24,7 +24,12 @@
     <header class="token-usage__page-head">
       <span class="token-usage__eyebrow">Workspace level</span>
       <h2>Workspace and project usage</h2>
-      <p>Recorded token events across this workspace. Project filters change every visible total below.</p>
+      <p>
+        Recorded token events across this workspace. Project filters change every visible total below.
+        <span data-testid="workspace-recorded-usage-period">
+          {{ workspaceRecordedPeriod() ?? 'Telemetry time range unavailable' }}
+        </span>
+      </p>
     </header>
     <app-workspace-token-timeline />
 

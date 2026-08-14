@@ -106,6 +106,23 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_RecordsPerModelEventBoundaries()
+    {
+        var first = new DateTime(2026, 6, 2, 8, 15, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 15, 45, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            Entry("gpt-5-codex", 100, 10) with { Ts = last },
+            Entry("gpt-5-codex", 200, 20) with { Ts = first },
+        };
+
+        var model = Assert.Single(TokenSummaryService.Summarize("Demo", entries).ByModel);
+
+        Assert.Equal(first, model.FirstRecordedAt);
+        Assert.Equal(last, model.LastRecordedAt);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with

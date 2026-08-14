@@ -7,6 +7,7 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
+import { recordedUsagePeriod } from '../../usage-period.util';
 
 interface ModelUsageRow {
   model: string;
@@ -20,6 +21,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -150,6 +153,8 @@ export class CliUsageModalComponent {
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
   });
+
+  readonly recordedPeriod = computed(() => recordedUsagePeriod(this.modelRows()));
 
   limitText(window: QuotaWindow): string {
     if (window.used !== null && window.limit !== null) {

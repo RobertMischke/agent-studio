@@ -31,6 +31,9 @@ test.describe('Status bar usage modal', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
+    await page.route('**/api/auth/status', route => route.fulfill({
+      json: { profile: 'local', bootstrapRequired: false, authenticated: true, user: null },
+    }));
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     // Let the first quota poll fire so the strip has cards to render.
@@ -157,12 +160,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-06-02T08:15:00Z', lastRecordedAt: '2026-08-10T14:00:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-06-18T10:00:00Z', lastRecordedAt: '2026-08-11T15:45:00Z',
           },
         ],
         byProject: [],
@@ -201,21 +206,23 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
+    await page.getByTestId('error-dialog-close').click({ timeout: 2_000 }).catch(() => {});
     await page.getByTestId('hquota-card-codex').click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-recorded-period')).toHaveText('Since 2 Jun 2026 · As of 11 Aug 2026, 15:45 UTC');
+    await expect(modal.getByText('Recorded telemetry by model. Independent of the active quota windows above.')).toBeVisible();
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-period-light--mocked.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-period-dark--mocked.png` });
   });
 });
