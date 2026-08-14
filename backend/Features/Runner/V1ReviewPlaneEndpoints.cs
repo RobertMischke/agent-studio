@@ -377,6 +377,8 @@ public static class V1ReviewPlaneEndpoints
             RemoteDeliveryIntegrationCoordinator remoteIntegration,
             TimelineLog timeline,
             RemotePipelineReviewEvidenceProjector remotePipelineEvidence,
+            PipelineExecutionLog pipelineLog,
+            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             if (!RunnerMatches(context, request.ExecutorId))
@@ -518,6 +520,11 @@ public static class V1ReviewPlaneEndpoints
                 request.Outcome,
                 "ReviewInfra",
                 StringComparison.OrdinalIgnoreCase);
+            var qualityRetryDecision = infrastructureFailure
+                ? QualityAnalysisRetryDecision.None("Infrastructure failures use the Review Plane retry policy.")
+                : QualityAnalysisSteeredRetryPolicy.Decide(
+                    request,
+                    pipelineLog.Read(task.FolderPath));
             var retry = infrastructureFailure
                         && authority.HasReviewInfrastructureRetryBudget(settled.ReviewAttempt.AttemptId);
             var repeatDiagnosis = infrastructureFailure
@@ -542,6 +549,63 @@ public static class V1ReviewPlaneEndpoints
                     review.Subject.Plan));
                 if (!created.Accepted)
                     return AttemptError(created);
+            }
+            else if (qualityRetryDecision.ShouldRetry)
+            {
+                var moved = await transitions.MoveAsync(
+                    task.Id,
+                    TaskStates.Ready,
+                    task.WatchPath,
+                    ct,
+                    cause: "quality-studio-steered-retry",
+                    authorityWrite: new AttemptWriteReference(
+                        attemptId,
+                        request.Fence,
+                        request.AuthorityEpoch,
+                        $"quality-analysis-retry:{request.IdempotencyKey}"),
+                    suppressProductExecution: false,
+                    expectedSourceState: TaskStates.AutoReview);
+                if (moved.Status != MoveJobStatus.Success)
+                {
+                    return Results.Json(
+                        new Contract.ApiError(
+                            "quality-analysis-retry-lane-write-failed",
+                            $"Quality Studio findings are durable, but the steered retry lane write failed: {moved.Status} {moved.Message}"),
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+
+                var movedFolder = moved.NewFolderPath ?? task.FolderPath;
+                var logger = loggerFactory.CreateLogger(LoggerName);
+                TaskJsonFile.UpdateOrder(movedFolder, 0, logger);
+                await ReviewDecisionOrchestrator.WriteFollowUpFilesAsync(
+                    movedFolder,
+                    qualityRetryDecision.FollowUp,
+                    context: null,
+                    task.Id,
+                    logger,
+                    ct);
+                scanner.InvalidateCache();
+                timeline.Append(movedFolder, new TimelineEvent
+                {
+                    Ts = DateTime.UtcNow,
+                    Kind = TimelineEventKinds.QualityLoopReopened,
+                    Actor = TimelineActors.QualityLoop,
+                    Summary = qualityRetryDecision.Reason,
+                    RunId = attemptId,
+                    PayloadRef = "results/quality-studio/angular-rules.json",
+                    Details = new Dictionary<string, string>
+                    {
+                        ["cause"] = "quality-studio-angular-rules",
+                        ["stepId"] = PipelineCatalogue.QualityStaticRulesStepId,
+                        ["findingCount"] = qualityRetryDecision.Findings.Count.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        ["ruleIds"] = string.Join(",", qualityRetryDecision.Findings
+                            .Select(finding => finding.RuleId)
+                            .Distinct(StringComparer.Ordinal)
+                            .Order(StringComparer.Ordinal)),
+                    },
+                });
+                taskState = TaskStates.Ready;
             }
             else if (!infrastructureFailure)
             {
@@ -703,7 +767,7 @@ public static class V1ReviewPlaneEndpoints
                 request.Summary,
                 reportHash,
                 receivedAt,
-                retry,
+                retry || qualityRetryDecision.ShouldRetry,
                 taskState));
         });
 

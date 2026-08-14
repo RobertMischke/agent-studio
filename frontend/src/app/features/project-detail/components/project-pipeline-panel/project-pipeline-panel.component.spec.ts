@@ -74,12 +74,19 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         usesModel: false, usesPrompt: false, supportsMode: true, cliType: null,
         promptTemplate: null, canDisable: true, defaultEnabled: true, supportsCondition: false,
       },
+      {
+        id: 'analysis-qs-static-rules', displayName: 'QS rule pass', kind: 'analysis', phase: 'analysis',
+        runMode: 'parallel', dependsOn: ['post-build-test-gate'], idempotent: true, stub: false,
+        usesModel: false, usesPrompt: false, supportsMode: false, cliType: null,
+        promptTemplate: null, canDisable: false, defaultEnabled: true, supportsCondition: false,
+      },
     ];
   }
 
   function overrides(): Record<string, PipelineStepSetting> {
     return {
       'aspect-requirement-fit': { enabled: true, mode: 'warn', prompt: 'legacy inline text' },
+      'analysis-qs-static-rules': { enabled: false },
     };
   }
 
@@ -138,6 +145,10 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     // Phase groups + both step rows.
     expect(host.querySelector('[data-testid="pipeline-group-core"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-group-aspect"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-group-analysis"]')).toBeTruthy();
+    const analysisRow = host.querySelector('[data-testid="pipeline-step-row-analysis-qs-static-rules"]');
+    expect(analysisRow?.getAttribute('data-enabled')).toBe('true');
+    expect(analysisRow?.textContent).toContain('always on');
     expect(host.querySelector('[data-testid="pipeline-step-row-core-run"]')).toBeTruthy();
     const aspectRow = host.querySelector('[data-testid="pipeline-step-row-aspect-requirement-fit"]');
     expect(aspectRow).toBeTruthy();
@@ -211,6 +222,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-kind-core-run"]')?.textContent?.trim()).toBe('COR');
     expect(host.querySelector('[data-testid="pipeline-step-kind-aspect-requirement-fit"]')?.textContent?.trim()).toBe('ASP');
     expect(host.querySelector('[data-testid="pipeline-step-kind-post-build-test-gate"]')?.textContent?.trim()).toBe('TOO');
+    expect(host.querySelector('[data-testid="pipeline-step-kind-analysis-qs-static-rules"]')?.textContent?.trim()).toBe('ANA');
   });
 
   it('emits openPrompts from the summary prompt chip and Manage in Prompts', async () => {

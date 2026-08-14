@@ -5,7 +5,7 @@
  * enums as camelCase strings via the global `JsonStringEnumConverter`).
  */
 
-export type StepKind = 'module' | 'core' | 'aspect' | 'orchestrator' | 'tool' | 'drift';
+export type StepKind = 'module' | 'core' | 'analysis' | 'aspect' | 'orchestrator' | 'tool' | 'drift';
 export type StepRunMode = 'sequential' | 'parallel';
 export type PipelineStepStatus =
   | 'pending'

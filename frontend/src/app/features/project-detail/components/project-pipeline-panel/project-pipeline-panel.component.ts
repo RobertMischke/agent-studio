@@ -107,7 +107,7 @@ export class ProjectPipelinePanelComponent {
         supportsCondition: step.supportsCondition,
         framework: step.framework ?? '',
         phase: step.phase ?? phaseForStep(step),
-        enabled: ov?.enabled ?? step.defaultEnabled,
+        enabled: step.canDisable ? (ov?.enabled ?? step.defaultEnabled) : step.defaultEnabled,
         economyModel: ov?.economyModel ?? false,
         cliType: ov?.cliType ?? step.cliType ?? '',
         model: ov?.model ?? '',
@@ -613,6 +613,7 @@ export class ProjectPipelinePanelComponent {
     switch (this.kindKey(value)) {
       case 'module': return 'MOD';
       case 'core': return 'COR';
+      case 'analysis': return 'ANA';
       case 'orchestrator': return 'ORC';
       case 'tool': return 'TOO';
       case 'aspect': return 'ASP';

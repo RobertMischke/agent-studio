@@ -37,6 +37,7 @@ interface PipelineStackColumn {
 
 const KIND_LABELS: Record<PipelineStepKindKey, string> = {
   core: 'Core run',
+  analysis: 'Analysis steps',
   aspect: 'Aspects',
   tool: 'Tool steps',
   orchestrator: 'Orchestrator',

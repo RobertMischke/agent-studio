@@ -16,9 +16,18 @@ public static class ReviewCommandKinds
 {
     public const string Tool = "tool";
     public const string AgentAspect = "agent-aspect";
+    /// <summary>
+    /// In-process Quality Studio analysis executed by the Review Host against
+    /// the immutable review workspace. This is not a shell command and never
+    /// crosses the Quality Studio HTTP API.
+    /// </summary>
+    public const string QualityAnalysis = "quality-analysis";
 
     public static bool IsAgent(string? value)
         => string.Equals(value, AgentAspect, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsQualityAnalysis(string? value)
+        => string.Equals(value, QualityAnalysis, StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed record ReviewDependencyScopeDto(

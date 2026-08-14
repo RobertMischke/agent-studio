@@ -117,38 +117,38 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   await expect(page.getByTestId('pipeline-step-row-core-agent-run')).toBeVisible();
 
   // One representative per visible kind locks the shared identity columns.
-  // The badge precedes the name, and badge/name/info/toggle geometry does not
-  // depend on display-name length or framework metadata in the middle lane.
+  // The badge precedes the name, and badge/name/info geometry does not depend
+  // on display-name length or framework metadata in the state lane.
   const representativeSteps = [
     'pre-loop-guard',
     'core-agent-run',
+    'analysis-qs-static-rules',
     'post-orchestrator-review',
     'post-build-test-gate',
     'aspect-requirement-fit',
   ];
-  const geometry: { kindX: number; kindWidth: number; nameX: number; infoX: number; toggleX: number }[] = [];
+  const geometry: { kindX: number; kindWidth: number; nameX: number; infoX: number }[] = [];
   for (const stepId of representativeSteps) {
     const kind = page.getByTestId(`pipeline-step-kind-${stepId}`);
     const name = page.getByTestId(`pipeline-step-name-${stepId}`);
     const info = page.getByTestId(`pipeline-step-info-${stepId}`);
-    const toggle = page.getByTestId(`pipeline-step-enabled-${stepId}`);
+    const state = page.getByTestId(`pipeline-step-state-${stepId}`);
     await expect(kind).toBeVisible();
     await expect(name).toBeVisible();
     await expect(info).toBeVisible();
-    await expect(toggle).toBeVisible();
-    const [kindBox, nameBox, infoBox, toggleBox] = await Promise.all([
-      kind.boundingBox(), name.boundingBox(), info.boundingBox(), toggle.boundingBox(),
+    await expect(state).toBeVisible();
+    const [kindBox, nameBox, infoBox, stateBox] = await Promise.all([
+      kind.boundingBox(), name.boundingBox(), info.boundingBox(), state.boundingBox(),
     ]);
     expect(kindBox).not.toBeNull();
     expect(nameBox).not.toBeNull();
     expect(infoBox).not.toBeNull();
-    expect(toggleBox).not.toBeNull();
+    expect(stateBox).not.toBeNull();
     geometry.push({
       kindX: kindBox!.x,
       kindWidth: kindBox!.width,
       nameX: nameBox!.x,
       infoX: infoBox!.x,
-      toggleX: toggleBox!.x,
     });
   }
   const baseline = geometry[0];
@@ -157,7 +157,6 @@ test('pipeline page (real): reworked panel renders against the live backend', as
     expect(Math.abs(row.kindWidth - baseline.kindWidth)).toBeLessThanOrEqual(1);
     expect(Math.abs(row.nameX - baseline.nameX)).toBeLessThanOrEqual(1);
     expect(Math.abs(row.infoX - baseline.infoX)).toBeLessThanOrEqual(1);
-    expect(Math.abs(row.toggleX - baseline.toggleX)).toBeLessThanOrEqual(1);
     expect(row.kindX).toBeLessThan(row.nameX);
   }
 
@@ -168,6 +167,8 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   expect(kindLabels.every(label => label.trim().length === 3)).toBe(true);
   await expect(page.getByTestId('pipeline-step-kind-post-orchestrator-review')).toHaveText('ORC');
   await expect(page.getByTestId('pipeline-step-kind-post-build-test-gate')).toHaveText('TOO');
+  await expect(page.getByTestId('pipeline-step-kind-analysis-qs-static-rules')).toHaveText('ANA');
+  await expect(page.getByTestId('pipeline-step-row-analysis-qs-static-rules')).toContainText('always on');
   await expect(page.getByTestId('pipeline-step-tokens-post-build-test-gate')).toHaveCount(0);
   const toolRow = page.getByTestId('pipeline-step-row-post-build-test-gate');
   await toolRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
@@ -177,7 +178,7 @@ test('pipeline page (real): reworked panel renders against the live backend', as
   const stylelintRow = page.getByTestId('pipeline-step-row-post-lint-scss');
   await expect(stylelintRow).toBeVisible();
   await expect(stylelintRow).toHaveAttribute('data-applicable', 'true');
-  await expect(page.getByTestId('pipeline-step-stack-post-lint-scss')).toHaveText('angular');
+  await expect(page.getByTestId('pipeline-step-framework-post-lint-scss')).toHaveText('angular');
   await stylelintRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(page.getByTestId('pipeline-step-commands-post-lint-scss'))
     .toContainText('cd frontend && npx stylelint "src/**/*.scss"');

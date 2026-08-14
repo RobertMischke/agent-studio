@@ -20,6 +20,7 @@ public sealed class RemoteReviewWorkspace
     private readonly ReviewLeaseDto _lease;
     private readonly Action<string> _log;
     private readonly RemoteReviewAgentCommandRunner _agentCommands;
+    private readonly QualityStudioAnalysisCommandRunner _qualityAnalysis;
     private string? _initialTree;
     private string? _baselineSha;
     private bool _dirtyBefore;
@@ -50,6 +51,7 @@ public sealed class RemoteReviewWorkspace
             ArtifactPath,
             HomePath,
             log);
+        _qualityAnalysis = new QualityStudioAnalysisCommandRunner();
     }
 
     public string AttemptRoot { get; }
@@ -204,7 +206,9 @@ public sealed class RemoteReviewWorkspace
                         $"Step '{command.StepId}' would run at '{headBefore}', not '{_subject.ExpectedResultSha}'.");
                 var execution = ReviewCommandKinds.IsAgent(command.ExecutionKind)
                     ? await _agentCommands.RunAsync(command, ct)
-                    : await RunCommandAsync(command, RepositoryPath, ct);
+                    : ReviewCommandKinds.IsQualityAnalysis(command.ExecutionKind)
+                        ? await _qualityAnalysis.RunAsync(command, RepositoryPath, ct)
+                        : await RunCommandAsync(command, RepositoryPath, ct);
                 if (MissingToolchain(execution.Process)
                     || AgentCommandUnavailable(command, execution.Process))
                 {
@@ -588,7 +592,8 @@ public sealed class RemoteReviewWorkspace
         var stderrName = ArtifactName(workspaceRole, stepId, "stderr");
         var includeContent = !process.Success
                              || signal is not null
-                             || ReviewCommandKinds.IsAgent(plannedCommand?.ExecutionKind);
+                             || ReviewCommandKinds.IsAgent(plannedCommand?.ExecutionKind)
+                             || ReviewCommandKinds.IsQualityAnalysis(plannedCommand?.ExecutionKind);
         var stdout = await WriteArtifactAsync(stdoutName, process.StdOut, includeContent, ct);
         var stderr = await WriteArtifactAsync(stderrName, process.StdErr, includeContent, ct);
         artifacts.Add(stdout);
@@ -1211,6 +1216,16 @@ public sealed class RemoteReviewWorkspace
 
     private static ReviewVerdictDto ParseVerdict(ReviewCommandDto command, ProcessResult result)
     {
+        if (ReviewCommandKinds.IsQualityAnalysis(command.ExecutionKind)
+            && QualityStudioAnalysisEvidence.TryParse(result.StdOut, out var quality)
+            && quality is not null)
+        {
+            return new ReviewVerdictDto(
+                command.Aspect,
+                result.Success ? "pass" : "block",
+                result.Success ? "QualityAnalysisPassed" : "QualityAnalysisFindings",
+                quality.VerdictSummary());
+        }
         var marker = result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .LastOrDefault(line => line.Contains("[[ASPECT_VERDICT:", StringComparison.Ordinal));
         if (marker is not null)

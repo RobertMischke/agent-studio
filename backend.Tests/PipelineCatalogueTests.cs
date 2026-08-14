@@ -32,7 +32,7 @@ public class PipelineCatalogueTests
     {
         var p = PipelineCatalogue.Standard;
         Assert.Equal(PipelineCatalogue.StandardPipelineId, p.Id);
-        Assert.Equal(1, p.Version);
+        Assert.Equal(2, p.Version);
         // Pre: loop guard and model qualification lead, followed by prompt
         // enrichment, opt-in orchestrator prep, and the deterministic reissue
         // open-items check.
@@ -54,7 +54,57 @@ public class PipelineCatalogueTests
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(26, p.Post.Count);
+        Assert.Equal(32, p.Post.Count);
+    }
+
+    [Fact]
+    public void StandardPipeline_QualityStudioAxes_AreDistinctStandardAnalysisSteps()
+    {
+        var steps = PipelineCatalogue.Standard.Post
+            .Where(step => PipelineCatalogue.QualityAnalysisStepIds.Contains(step.Id))
+            .ToArray();
+
+        Assert.Equal(PipelineCatalogue.QualityAnalysisStepIds, steps.Select(step => step.Id));
+        Assert.All(steps, step =>
+        {
+            Assert.Equal(StepKind.Analysis, step.Kind);
+            Assert.True(step.DefaultEnabled);
+            Assert.True(step.Idempotent);
+            Assert.False(PipelineStepConfigResolver.CanDisable(step));
+            Assert.Contains(PipelineCatalogue.BuildTestGateStepId, step.DependsOn);
+        });
+        Assert.False(steps.Single(step =>
+            step.Id == PipelineCatalogue.QualityStaticRulesStepId).Stub);
+        Assert.All(steps.Where(step =>
+            step.Id != PipelineCatalogue.QualityStaticRulesStepId), step => Assert.True(step.Stub));
+    }
+
+    [Fact]
+    public void QualityStudioSteps_IgnoreCentralEnablementAndConditionOverrides()
+    {
+        var step = PipelineCatalogue.Standard.Post.Single(candidate =>
+            candidate.Id == PipelineCatalogue.QualityStaticRulesStepId);
+        var settings = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [step.Id] = new()
+                {
+                    Enabled = false,
+                    Condition = new PipelineStepCondition
+                    {
+                        When = PipelineStepConditions.Tag,
+                        Value = "never-present",
+                    },
+                },
+            },
+        };
+
+        Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+        Assert.True(PipelineStepConfigResolver.ShouldRun(
+            settings,
+            step,
+            new PipelineStepConditionContext { Tags = [] }));
     }
 
     [Fact]

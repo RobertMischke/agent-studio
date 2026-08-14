@@ -133,6 +133,17 @@ Each entry uses the same fields:
 - **Last fired:** 2026-08-12, AGT-2654 controlled before/after browser and multimodal probe.
 - **Notes:** The model only classifies pixels. Pure policy owns the lane-affecting action. Retry use is counted from `results/ui-iteration-NNN/visual-qa/round-RRR/verdict.json`, so process restart does not replenish it. The steer is appended through the existing continuation-note boundary before any Human Gate marker exists.
 
+### quality-analysis.angular-rule-steered-retry
+
+- **Kind:** Post-Guard
+- **Where:** [`backend/Features/Pipeline/QualityStudio/QualityAnalysisSteeredRetryPolicy.cs`](../../../backend/Features/Pipeline/QualityStudio/QualityAnalysisSteeredRetryPolicy.cs), invoked by `V1ReviewPlaneEndpoints` after accepted remote review evidence is projected.
+- **Re-entry trigger:** The in-process Quality Studio Angular rule pass returns one or more structured findings with named rule ids for the immutable review subject.
+- **Budget:** `QualityAnalysisSteeredRetryPolicy.MaxAutomaticRetries` (exactly 1 automatic rule-finding steer round per durable pipeline history).
+- **Action when budget exhausted:** Do not requeue again. Preserve the named findings in `results/quality-studio/` and continue to Human Review. Security-axis findings never enter this blocking loop.
+- **Breaker test:** [`backend.Tests/Architecture/QualityAnalysisRetryBreakerTest.cs`](../../../backend.Tests/Architecture/QualityAnalysisRetryBreakerTest.cs), plus [`backend.Tests/QualityAnalysisPolicyTests.cs`](../../../backend.Tests/QualityAnalysisPolicyTests.cs).
+- **Last fired:** Not yet fired in production. AGT-2655 proved the runner against a locally packed QS-90/QS-91 analysis assembly while publication remains pending.
+- **Notes:** Retry use is counted from prior failed `analysis-qs-static-rules` rows in `PipelineExecutionRecord.PreviousAttempts`, so backend restart does not replenish it. The follow-up carries only QS-owned rule ids, locations, and recommendations from the finding contract. AGT does not copy the rule definitions.
+
 ### clean-context.retention-sweep
 
 - **Kind:** Tick

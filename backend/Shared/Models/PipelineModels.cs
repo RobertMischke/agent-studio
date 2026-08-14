@@ -157,6 +157,12 @@ public enum StepKind
     /// <c>DriftPostStepRunner</c>.
     /// </summary>
     Drift,
+    /// <summary>
+    /// A named Quality Studio analysis. Analysis steps are distinct from shell
+    /// tools and prompt-based aspects: the Review Host invokes the QS analysis
+    /// core in-process and returns structured findings with stable rule ids.
+    /// </summary>
+    Analysis,
 }
 
 public enum StepRunMode

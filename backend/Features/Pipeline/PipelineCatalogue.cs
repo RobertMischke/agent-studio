@@ -288,6 +288,30 @@ public static class PipelineCatalogue
     public const string AgentsWikiSyncStepId = "post-agents-wiki-sync";
 
     /// <summary>
+    /// Standard Quality Studio analysis catalogue. These are analysis rows,
+    /// not optional ad-hoc tools. Card applicability is derived from the change
+    /// set by <see cref="QualityAnalysisPolicy"/>. The rule pass is the first
+    /// executable slice; the remaining axes reserve their stable pipeline ids
+    /// for the QS package implementations that follow it.
+    /// </summary>
+    public const string QualityStaticRulesStepId = "analysis-qs-static-rules";
+    public const string QualityModelReviewStepId = "analysis-qs-model-review";
+    public const string QualityVisualStepId = "analysis-qs-visual";
+    public const string QualitySecurityStepId = "analysis-qs-security";
+    public const string QualityRedundancyStepId = "analysis-qs-redundancy";
+    public const string QualityConsistencyStepId = "analysis-qs-consistency";
+
+    public static readonly string[] QualityAnalysisStepIds =
+    {
+        QualityStaticRulesStepId,
+        QualityModelReviewStepId,
+        QualityVisualStepId,
+        QualitySecurityStepId,
+        QualityRedundancyStepId,
+        QualityConsistencyStepId,
+    };
+
+    /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
     /// run, before the aspect verdicts. It is the deterministic
     /// <c>CompletionGate</c> scan of the run's own close-out evidence
@@ -533,7 +557,7 @@ public static class PipelineCatalogue
         {
             Id = StandardPipelineId,
             DisplayName = "Standard task pipeline",
-            Version = 1,
+            Version = 2,
             Pre =
             [
                 new PipelineStep
@@ -633,6 +657,7 @@ public static class PipelineCatalogue
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
                 },
+                .. BuildQualityAnalysisSteps(),
                 .. aspects,
                 new PipelineStep
                 {
@@ -1003,6 +1028,34 @@ public static class PipelineCatalogue
                 DependsOn = [.. dependsOnReview],
                 Idempotent = true,
                 DefaultEnabled = false,
+            };
+        }
+    }
+
+    private static IEnumerable<PipelineStep> BuildQualityAnalysisSteps()
+    {
+        (string Id, string Name, string AppliesTo, bool Implemented)[] analyses =
+        {
+            (QualityStaticRulesStepId, "Quality Studio rule pass", PipelineStepStacks.Any, true),
+            (QualityModelReviewStepId, "Quality Studio model review", PipelineStepStacks.Any, false),
+            (QualityVisualStepId, "Quality Studio visual quality", PipelineStepStacks.Angular, false),
+            (QualitySecurityStepId, "Quality Studio security", PipelineStepStacks.DotNet, false),
+            (QualityRedundancyStepId, "Quality Studio redundancy", PipelineStepStacks.Any, false),
+            (QualityConsistencyStepId, "Quality Studio consistency", PipelineStepStacks.Any, false),
+        };
+        foreach (var (id, name, appliesTo, implemented) in analyses)
+        {
+            yield return new PipelineStep
+            {
+                Id = id,
+                DisplayName = name,
+                Kind = StepKind.Analysis,
+                AppliesTo = appliesTo,
+                RunMode = StepRunMode.Parallel,
+                DependsOn = [BuildTestGateStepId],
+                Idempotent = true,
+                DefaultEnabled = true,
+                Stub = !implemented,
             };
         }
     }

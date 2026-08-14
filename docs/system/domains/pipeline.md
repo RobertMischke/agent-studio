@@ -315,6 +315,14 @@ pipeline view.
 - `backend/Features/Pipeline/ProjectStackDetector.cs`: bounded convention-based
   Angular, .NET, and Node detection from repository markers. Pipeline catalogue
   applicability never reads the configured build-profile stack label.
+- `backend/Features/Pipeline/QualityStudio/QualityAnalysisPolicy.cs` and
+  `QualityAnalysisSteeredRetryPolicy.cs`: changed-file classification for the
+  standard Quality Studio axes and the pure, one-round Angular findings retry
+  decision.
+- `runner/QualityStudioAnalysisCommandRunner.cs`: exact-subject, in-process
+  invocation of the `AgentOrchestrator.CodeQuality` rule sensor. The runner
+  loads the package through normal .NET package resolution and has no Quality
+  Studio HTTP fallback.
 - `backend/Features/Pipeline/PipelineStepExecutionResolver.cs` and
   `PipelineStepProbeService.cs`: effective shell-command projection and isolated
   per-step probes. Probes do not create or move tasks and execute through the
@@ -377,6 +385,55 @@ pipeline view.
   activity time. It reads the current execution root only.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
   pipeline presentation.
+
+## Quality Studio analysis steps
+
+Quality analysis is a first-class pipeline step kind. It is distinct from
+shell tools and semantic aspect agents. The standard catalogue defines these
+stable steps after the build/test gate:
+
+| Step id | Axis | Current state |
+|---|---|---|
+| `analysis-qs-static-rules` | Rule-based static pass | Implemented for changed Angular paths through the QS `quality-rules` sensor |
+| `analysis-qs-model-review` | Model review using the QS finding model | Named planned step |
+| `analysis-qs-visual` | Visual and graphical quality | Named planned step |
+| `analysis-qs-security` | Security | Named planned step |
+| `analysis-qs-redundancy` | Redundancy | Named planned step |
+| `analysis-qs-consistency` | Consistency | Named planned step |
+
+The default policy is convention-based and classifies the immutable delivery
+from its changed paths. Frontend changes select Angular rules plus the visual
+axis. .NET changes select C# rules plus the security axis. A mixed delivery
+selects both sets. Documentation-only changes select no code axis. The named
+catalogue steps are standard and cannot be disabled or conditionally skipped
+through central project settings.
+
+Rule selection and severity overrides belong only to the versioned
+`.quality/rules.json` file in the subject repository. Its schema and rule
+definitions remain owned by the Quality Studio rule library from QS-90. AGT
+passes rule ids such as `QS-NG-002` and `QS-NG-004` through in findings and
+follow-up evidence; it does not duplicate their definitions or add environment
+variables, server settings, or per-card override fields.
+
+The execution boundary is the QS analysis core package from QS-91. A Review
+Host loads `AgentOrchestrator.CodeQuality` in-process and invokes the public
+`RulePrecheckSensor` with `SensorScanRequest` for each changed Angular path in
+the exact Result-SHA workspace. Package or type absence is an explicit review
+infrastructure failure with exit code 127. It never falls back to the Quality
+Studio HTTP API. The package must be published and installed in the Review
+Host deployment before this step can run outside a package-proof environment.
+
+The structured result retains provider version, configuration path, rule id,
+severity, fingerprint, path, line, and recommendation. Accepted evidence is
+projected to `results/quality-studio/angular-rules.json` and
+`results/quality-studio/angular-rules.md`, with the corresponding
+`StepKind.Analysis` pipeline row and exact remote host/attempt attribution.
+Named Angular findings can reopen the same card once with a targeted
+`orchestrator-follow-up.md`. The budget is counted from prior durable failed
+analysis rows. A second finding-bearing attempt remains visible and proceeds
+to Human Review. Security findings are always recorded and visible but are
+nonblocking: they do not trigger this retry policy or block the pipeline under
+the current QS-90 policy.
 
 ## Invariants
 

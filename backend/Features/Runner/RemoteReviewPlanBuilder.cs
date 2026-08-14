@@ -66,6 +66,7 @@ public sealed class RemoteReviewPlanBuilder
             7200);
 
         var commands = toolPlan.Commands.ToList();
+        AddQualityStudioRulePass(task, pipeline, commands);
         foreach (var step in pipeline.Post.Where(step => step.Kind == StepKind.Aspect))
         {
             var aspectId = step.Id.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase)
@@ -111,6 +112,44 @@ public sealed class RemoteReviewPlanBuilder
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
         };
+    }
+
+    private static void AddQualityStudioRulePass(
+        TaskInfo task,
+        TaskPipeline pipeline,
+        ICollection<Contract.ReviewCommandDto> commands)
+    {
+        var step = pipeline.Post.FirstOrDefault(candidate =>
+            string.Equals(
+                candidate.Id,
+                PipelineCatalogue.QualityStaticRulesStepId,
+                StringComparison.Ordinal));
+        if (step is null || step.Stub || !step.DefaultEnabled) return;
+
+        var decision = QualityAnalysisPolicy.Decide(CurrentFiles(task));
+        if (!decision.RunsAngularRules) return;
+
+        commands.Add(new Contract.ReviewCommandDto(
+            step.Id,
+            QualityAnalysisPolicy.AngularRuleAxis,
+            QualityAnalysisPolicy.AngularRuleAnalysis,
+            decision.AngularPaths,
+            Required: true,
+            TimeoutSeconds: 300,
+            CompareToBaseline: false,
+            ExecutionKind: Contract.ReviewCommandKinds.QualityAnalysis));
+    }
+
+    private static IReadOnlyList<string> CurrentFiles(TaskInfo task)
+    {
+        var fromChain = task.Commits
+            .Where(commit => !TaskCommitSupersession.IsSuperseded(commit))
+            .SelectMany(commit => commit.Files)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return fromChain.Length > 0
+            ? fromChain
+            : task.Commit?.Files ?? [];
     }
 
     private IReadOnlySet<string> ConfiguredAspectIds()

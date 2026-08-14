@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using AgentStudio.GeneratedFiles;
 using AgentStudio.Pipeline;
 using AgentStudio.Tasks;
@@ -53,10 +54,135 @@ public sealed class RemotePipelineReviewEvidenceProjector
         {
             if (Contract.ReviewCommandKinds.IsAgent(command.ExecutionKind))
                 await ProjectAspectAsync(task, review, command, report, receivedAt, execution.Attempt, ct);
+            else if (Contract.ReviewCommandKinds.IsQualityAnalysis(command.ExecutionKind))
+                await ProjectQualityAnalysisAsync(task, review, command, report, execution.Attempt, ct);
         }
         ProjectToolGate(task, review, report, execution.Attempt);
         ProjectTimeline(task, review, report, evidenceFile);
     }
+
+    private async Task ProjectQualityAnalysisAsync(
+        TaskInfo task,
+        ReviewAttemptDto review,
+        Contract.ReviewCommandEvidenceDto command,
+        Contract.ReviewReportRequest report,
+        int pipelineAttempt,
+        CancellationToken ct)
+    {
+        var json = ArtifactText(report.Artifacts, command.StdoutSha256);
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        var directory = Path.Combine(task.FolderPath, "results", "quality-studio");
+        Directory.CreateDirectory(directory);
+        var stem = command.Aspect.Equals(
+            QualityAnalysisPolicy.AngularRuleAxis,
+            StringComparison.OrdinalIgnoreCase)
+                ? "angular-rules"
+                : SafeName(command.Aspect);
+        var jsonRelative = Path.Combine("results", "quality-studio", stem + ".json");
+        var markdownRelative = Path.Combine("results", "quality-studio", stem + ".md");
+        await File.WriteAllTextAsync(
+            Path.Combine(task.FolderPath, jsonRelative),
+            json,
+            new UTF8Encoding(false),
+            ct);
+        await File.WriteAllTextAsync(
+            Path.Combine(task.FolderPath, markdownRelative),
+            RenderQualityAnalysisMarkdown(json, command),
+            new UTF8Encoding(false),
+            ct);
+
+        var duration = Math.Max(0, (long)(command.FinishedAt - command.StartedAt).TotalMilliseconds);
+        var generation = new FileGenerationMeta
+        {
+            Kind = "quality-analysis",
+            Cli = "quality-studio-package",
+            StartedAt = command.StartedAt,
+            EndedAt = command.FinishedAt,
+            DurationMs = duration,
+            StepId = command.StepId,
+            HeadShaAfter = command.ExpectedResultSha,
+        };
+        _files.Upsert(task.FolderPath, generation with { File = jsonRelative.Replace('\\', '/') });
+        _files.Upsert(task.FolderPath, generation with { File = markdownRelative.Replace('\\', '/') });
+
+        var verdict = report.Verdicts.LastOrDefault(candidate =>
+            string.Equals(candidate.Aspect, command.Aspect, StringComparison.OrdinalIgnoreCase));
+        var passed = command.ExitCode == 0 && command.Signal is null;
+        _pipeline.RecordStep(task.FolderPath, new PipelineStepExecution
+        {
+            StepId = command.StepId,
+            Kind = StepKind.Analysis,
+            Attempt = pipelineAttempt,
+            Status = passed ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+            StartedAt = command.StartedAt,
+            CompletedAt = command.FinishedAt,
+            DurationMs = duration,
+            Verdict = passed ? "pass" : "findings",
+            Reason = verdict?.Summary ?? "Quality Studio analysis returned structured evidence.",
+            ExecutionLocation = "remote",
+            ExecutionHostId = review.Lease?.HostId ?? report.Environment.HostId,
+            ExecutionExecutorId = review.Lease?.ExecutorId ?? report.ExecutorId,
+            ExecutionAttemptId = review.AttemptId,
+        });
+    }
+
+    private static string RenderQualityAnalysisMarkdown(
+        string json,
+        Contract.ReviewCommandEvidenceDto command)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var findings = root.TryGetProperty("findings", out var value)
+            && value.ValueKind == JsonValueKind.Array
+                ? value
+                : default;
+        var count = findings.ValueKind == JsonValueKind.Array ? findings.GetArrayLength() : 0;
+        var builder = new StringBuilder();
+        builder.AppendLine("# Quality Studio analysis evidence");
+        builder.AppendLine();
+        builder.Append("- Step: `").Append(command.StepId).AppendLine("`");
+        builder.Append("- Axis: `").Append(command.Aspect).AppendLine("`");
+        builder.Append("- Result-SHA: `").Append(command.ExpectedResultSha).AppendLine("`");
+        builder.Append("- Findings: ").Append(count).AppendLine();
+        builder.AppendLine("- Rule configuration: `.quality/rules.json`");
+        builder.AppendLine();
+        if (count == 0)
+        {
+            builder.AppendLine("No named rule violations were found.");
+            return builder.ToString();
+        }
+
+        builder.AppendLine("## Findings");
+        foreach (var finding in findings.EnumerateArray())
+        {
+            var ruleId = Text(finding, "ruleId", "unknown-rule");
+            var title = Text(finding, "title", "Quality finding");
+            var path = Text(finding, "path", "unknown-path");
+            var line = finding.TryGetProperty("line", out var lineValue)
+                       && lineValue.ValueKind == JsonValueKind.Number
+                ? $":{lineValue.GetInt32()}"
+                : string.Empty;
+            builder.AppendLine();
+            builder.Append("### `").Append(ruleId).Append("` ").AppendLine(title);
+            builder.Append("- Location: `").Append(path).Append(line).AppendLine("`");
+            builder.Append("- Severity: `").Append(Text(finding, "severity", "unknown")).AppendLine("`");
+            builder.AppendLine(Text(finding, "description", "No description supplied."));
+            builder.AppendLine();
+            builder.Append("Recommendation: ").AppendLine(Text(finding, "recommendation", "See the named Quality Studio rule."));
+        }
+        return builder.ToString();
+    }
+
+    private static string Text(JsonElement value, string property, string fallback)
+        => value.TryGetProperty(property, out var item) && item.ValueKind == JsonValueKind.String
+            ? item.GetString() ?? fallback
+            : fallback;
+
+    private static string SafeName(string value)
+        => new(value.Select(character => char.IsLetterOrDigit(character) || character is '-' or '_'
+            ? character
+            : '_').ToArray());
 
     private async Task ProjectAspectAsync(
         TaskInfo task,
@@ -155,7 +281,8 @@ public sealed class RemotePipelineReviewEvidenceProjector
     {
         var tools = report.Commands
             .Where(command => command.Phase == "verification"
-                              && !Contract.ReviewCommandKinds.IsAgent(command.ExecutionKind))
+                              && !Contract.ReviewCommandKinds.IsAgent(command.ExecutionKind)
+                              && !Contract.ReviewCommandKinds.IsQualityAnalysis(command.ExecutionKind))
             .ToArray();
         if (tools.Length == 0) return;
         var passed = tools.All(command => command.ExitCode == 0 && command.Signal is null);
@@ -234,6 +361,7 @@ public sealed class RemotePipelineReviewEvidenceProjector
         {
             ["stepId"] = command.StepId,
             ["pipelineStepId"] = Contract.ReviewCommandKinds.IsAgent(command.ExecutionKind)
+                || Contract.ReviewCommandKinds.IsQualityAnalysis(command.ExecutionKind)
                 ? command.StepId
                 : PipelineCatalogue.BuildTestGateStepId,
             ["executionKind"] = command.ExecutionKind,

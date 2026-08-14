@@ -104,7 +104,8 @@ public static class PipelineStepConfigResolver
     /// other step stays on by default.
     /// </summary>
     public static bool IsEnabled(ProjectSettings? settings, PipelineStep step)
-        => Lookup(settings, step.Id)?.Enabled ?? step.DefaultEnabled;
+        => !CanDisable(step)
+            || (Lookup(settings, step.Id)?.Enabled ?? step.DefaultEnabled);
 
     /// <summary>
     /// Whether an operator may disable this catalogue step. The core agent run
@@ -119,7 +120,8 @@ public static class PipelineStepConfigResolver
            && !string.Equals(step.Id, PipelineCatalogue.UiIterationArtifactStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiVisualCaptureStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiVisualVerdictStepId, StringComparison.Ordinal)
-           && !string.Equals(step.Id, PipelineCatalogue.UiHumanReviewGateStepId, StringComparison.Ordinal);
+           && !string.Equals(step.Id, PipelineCatalogue.UiHumanReviewGateStepId, StringComparison.Ordinal)
+           && !PipelineCatalogue.QualityAnalysisStepIds.Contains(step.Id, StringComparer.Ordinal);
 
     /// <summary>Resolve and clamp the UI iteration cap from the named routing step.</summary>
     public static int ResolveUiMaxIterations(ProjectSettings? settings)
@@ -314,10 +316,12 @@ public static class PipelineStepConfigResolver
     /// Whether a catalogue step should actually run for this task run: the step
     /// must be enabled (honouring its <see cref="PipelineStep.DefaultEnabled"/>)
     /// and its configured run condition must match the run facts in
-    /// <paramref name="ctx"/>. A step with no condition runs whenever enabled.
+    /// <paramref name="ctx"/>. Mandatory steps ignore both central enablement
+    /// and condition overrides.
     /// </summary>
     public static bool ShouldRun(ProjectSettings? settings, PipelineStep step, PipelineStepConditionContext ctx)
-        => IsEnabled(settings, step)
+        => !CanDisable(step)
+           || IsEnabled(settings, step)
            && PipelineStepConditionEvaluator.Matches(ResolveCondition(settings, step), ctx);
 
     /// <summary>

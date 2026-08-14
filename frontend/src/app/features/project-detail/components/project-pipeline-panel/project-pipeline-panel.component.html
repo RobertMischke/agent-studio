@@ -100,6 +100,7 @@
                   }
                 </span>
                 <app-pipeline-step-row-state
+                  [attr.data-testid]="'pipeline-step-state-' + step.id"
                   [stepId]="step.id"
                   [framework]="step.framework ?? ''"
                   [enabled]="step.enabled"

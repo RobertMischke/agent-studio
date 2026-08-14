@@ -1629,6 +1629,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.stepKindLabel(rows[0].kind)).toBe('Pre steps');
     expect(c.stepKindIcon(rows[0].kind)).toBe('sliders');
     expect(c.stepKindIcon('core')).toBe('bot');
+    expect(c.stepKindLabel('analysis')).toBe('Analysis');
+    expect(c.stepKindIcon('analysis')).toBe('search');
     expect(c.stepKindIcon('aspect')).toBe('eye');
     expect(c.stepKindIcon('orchestrator')).toBe('branch');
     expect(c.stepKindIcon('tool')).toBe('cli');

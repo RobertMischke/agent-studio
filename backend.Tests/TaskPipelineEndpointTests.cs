@@ -102,6 +102,7 @@ public sealed class TaskPipelineEndpointTests : IDisposable
 
         Assert.False(config.GetProperty(PipelineCatalogue.CoreAgentRunStepId).GetProperty("canDisable").GetBoolean());
         Assert.False(config.GetProperty(PipelineCatalogue.LoopGuardStepId).GetProperty("canDisable").GetBoolean());
+        Assert.False(config.GetProperty(PipelineCatalogue.QualityStaticRulesStepId).GetProperty("canDisable").GetBoolean());
         Assert.True(config.GetProperty(PipelineCatalogue.LintScssStepId).GetProperty("canDisable").GetBoolean());
 
         var qualityConfig = config.GetProperty("aspect-code-quality");
