@@ -14,7 +14,9 @@ param(
 
     [string] $TaskName = 'AgentRunner-TunnelKeeper',
 
-    [string] $KeeperPath = (Join-Path $PSScriptRoot 'tunnel-keeper.ps1')
+    [string] $KeeperPath = (Join-Path $PSScriptRoot 'tunnel-keeper.ps1'),
+
+    [PSCredential] $Credential
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,10 +40,6 @@ $trigger = New-ScheduledTaskTrigger `
     -At ([DateTime]::Now.AddMinutes(1)) `
     -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
-$principal = New-ScheduledTaskPrincipal `
-    -UserId $userId `
-    -LogonType Interactive `
-    -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
     -StartWhenAvailable `
@@ -50,14 +48,23 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 4)
 
 if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel keeper scheduled task')) {
+    if ($null -eq $Credential) {
+        $Credential = Get-Credential `
+            -UserName $userId `
+            -Message 'Enter the Windows password used to run the tunnel keeper outside interactive sessions.'
+    }
+    $password = $Credential.GetNetworkCredential().Password
     Register-ScheduledTask `
         -TaskName $TaskName `
         -Description 'Functionally probes and repairs the private Agent Host reverse tunnel.' `
         -Action $action `
         -Trigger $trigger `
-        -Principal $principal `
+        -User $userId `
+        -Password $password `
+        -RunLevel Limited `
         -Settings $settings `
         -Force | Out-Null
+    $password = $null
     Start-ScheduledTask -TaskName $TaskName
     Get-ScheduledTask -TaskName $TaskName
 }
