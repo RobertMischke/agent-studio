@@ -8,6 +8,7 @@ readonly legacy_sudoers="/etc/sudoers.d/agent"
 readonly installed_sudoers="/etc/sudoers.d/agent-runner"
 readonly installed_helper="/usr/local/sbin/agent-runner-deploy"
 readonly installed_policy="/usr/local/libexec/agent-runner-config-policy"
+readonly installed_deps_validator="/usr/local/libexec/agent-runner-deps-closure"
 
 usage() {
   printf '%s\n' \
@@ -30,13 +31,20 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sudoers_source="$repo_root/deploy/agent-host/sudoers.d/agent-runner"
 helper_source="$repo_root/deploy/agent-host/agent-runner-deploy"
 policy_source="$repo_root/deploy/agent-host/agent-runner-config-policy"
+deps_validator_source="$repo_root/deploy/agent-host/agent-runner-deps-closure.py"
 handoff_source="$repo_root/deploy/agent-host/systemd/10-agent-runner-hardening.conf"
 
-for required_source in "$sudoers_source" "$helper_source" "$policy_source" "$handoff_source"; do
+for required_source in \
+  "$sudoers_source" \
+  "$helper_source" \
+  "$policy_source" \
+  "$deps_validator_source" \
+  "$handoff_source"; do
   [[ -f "$required_source" ]] || die "versioned host asset is missing: $required_source"
 done
 command -v visudo >/dev/null || die "visudo is required"
 command -v gpasswd >/dev/null || die "gpasswd is required"
+[[ -x /usr/bin/python3 ]] || die "/usr/bin/python3 is required"
 id "$service_user" >/dev/null 2>&1 || die "service account '$service_user' does not exist"
 getent group "$service_group" >/dev/null || die "service group '$service_group' does not exist"
 
@@ -62,6 +70,8 @@ install -d -o root -g root -m 0700 "$backup_root"
 [[ ! -e "$installed_sudoers" ]] || cp -a "$installed_sudoers" "$backup_root/previous-agent-runner-sudoers"
 [[ ! -e "$installed_helper" ]] || cp -a "$installed_helper" "$backup_root/previous-agent-runner-deploy"
 [[ ! -e "$installed_policy" ]] || cp -a "$installed_policy" "$backup_root/previous-agent-runner-config-policy"
+[[ ! -e "$installed_deps_validator" ]] \
+  || cp -a "$installed_deps_validator" "$backup_root/previous-agent-runner-deps-closure"
 for unit in agent-runner.service agent-runner-review.service; do
   drop_in="/etc/systemd/system/$unit.d/10-agent-runner-hardening.conf"
   [[ ! -e "$drop_in" ]] || cp -a "$drop_in" "$backup_root/previous-$unit-handoff.conf"
@@ -70,6 +80,7 @@ done
 install -d -o root -g root -m 0755 /usr/local/sbin /usr/local/libexec
 install -o root -g root -m 0755 "$helper_source" "$installed_helper"
 install -o root -g root -m 0755 "$policy_source" "$installed_policy"
+install -o root -g root -m 0755 "$deps_validator_source" "$installed_deps_validator"
 install -o root -g root -m 0440 "$sudoers_source" "$installed_sudoers"
 visudo -c >/dev/null || die "installed sudoers policy did not parse"
 rm -f -- "$legacy_sudoers"
@@ -119,5 +130,6 @@ printf '  groups: %s\n' "$groups_after"
 printf '  sudoers: %s\n' "$installed_sudoers"
 printf '  deploy helper: %s\n' "$installed_helper"
 printf '  config policy: %s\n' "$installed_policy"
+printf '  dependency validator: %s\n' "$installed_deps_validator"
 printf '%s\n' \
   "Existing login sessions retain supplementary groups. End them and restart both services from an operator session before acceptance."
