@@ -1,0 +1,45 @@
+@if (entry(); as item) {
+  <article class="feed-entry"
+           role="button"
+           tabindex="0"
+           data-testid="orchestrator-feed-entry"
+           [attr.data-project]="item.project || projectFallback()"
+           [attr.data-entry-kind]="item.kind"
+           [class.feed-entry--selected]="selected()"
+           [class.feed-entry--alert]="item.kind === 'alert'"
+           [class.feed-entry--decision]="item.kind === 'decision'"
+           [class.feed-entry--action]="item.kind === 'action'"
+           [class.feed-entry--observation]="item.kind === 'observation'"
+           [class.feed-entry--intervention]="item.kind === 'intervention'"
+           (click)="select()"
+           (keydown.enter)="select()"
+           (keydown.space)="select(); $event.preventDefault()">
+    <time class="feed-entry__time"
+          data-testid="orchestrator-entry-time"
+          [attr.datetime]="item.ts"
+          [cacTooltip]="formatTime(item.ts)">{{ formatClock(item.ts) }}</time>
+    <button type="button"
+            class="feed-entry__project"
+            data-testid="orchestrator-entry-project"
+            [attr.aria-label]="'Filter activity to ' + (item.project || projectFallback())"
+            [cacTooltip]="item.project || projectFallback()"
+            (click)="filterProject($event, item.project || projectFallback())">
+      <i [style.background]="projectColor(item.project || projectFallback())" aria-hidden="true"></i>
+      <span>{{ projectCode(item.project || projectFallback()) }}</span>
+    </button>
+    <span class="feed-entry__kind" data-testid="orchestrator-entry-kind">{{ kindLabel(item.kind) }}</span>
+    <span class="feed-entry__summary" data-testid="orchestrator-entry-summary">{{ item.summary }}</span>
+    <span class="feed-entry__context" data-testid="orchestrator-entry-context" [cacTooltip]="item.topic">
+      @if (item.jobId && item.watchPath) {
+        <button type="button"
+                class="feed-entry__task-link"
+                (click)="openTask($event)"
+                [attr.aria-label]="'Open task ' + item.jobId"
+                data-testid="orchestrator-entry-task">{{ item.jobId }}</button>
+      } @else {
+        <span>{{ item.topic }}</span>
+      }
+    </span>
+    <span class="feed-entry__disclosure" data-testid="orchestrator-entry-disclosure" aria-hidden="true">›</span>
+  </article>
+}
