@@ -148,6 +148,19 @@ describe('BoardFiltersService project selection', () => {
     expect(decodeURIComponent(window.location.hash)).not.toContain('projects:');
   });
 
+  it('keeps an explicit sole-project scope in the shareable filter URL', () => {
+    window.location.hash = '#/feed';
+
+    svc.setExplicitSoleProject('Agent Task Processor');
+    svc.setExplicitSoleProject('Agent Task Processor');
+
+    expect([...svc.activeProjects()]).toEqual(['Agent Task Processor']);
+    expect(svc.activeFilterPills().map(pill => pill.label)).toEqual([
+      'projects:Agent Task Processor',
+    ]);
+    expect(decodeURIComponent(window.location.hash)).toContain('projects:Agent Task Processor');
+  });
+
   it('counts only real active filters and search text', () => {
     svc.selectProject('Agent Task Processor', false);
     svc.setSearchQuery('ready');
