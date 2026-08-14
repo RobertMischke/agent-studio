@@ -81,6 +81,12 @@ const GROUPED = {
 async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
   await page.route('**/api/watch-paths**', (route) =>
@@ -159,17 +165,16 @@ test.describe('Token popover WCAG-AA contrast', () => {
       await setTheme(page, theme);
       await page.waitForTimeout(200);
 
-      const card = page.locator('[data-testid="job-card"]').first();
+      const card = page.locator('[data-testid="task-card"]').first();
       await expect(card).toBeVisible({ timeout: 10_000 });
 
-      const bubble = card.locator('[data-testid="job-card-token-bubble"]');
+      const bubble = card.locator('[data-testid="task-card-token-bubble"]');
       await expect(bubble).toBeVisible({ timeout: 5_000 });
 
       // Open the popover via focus (keyboard-accessible path).
       await bubble.focus();
-      const popover = card.locator('[data-testid="job-card-token-popover"]');
+      const popover = page.locator('[data-testid="task-card-token-popover"]');
       await expect(popover).toBeVisible({ timeout: 3_000 });
-      await page.waitForTimeout(100);
 
       // Sample the popover background. It may be semi-transparent, so
       // we composite it onto a black page backdrop (worst case for dark
@@ -179,10 +184,10 @@ test.describe('Token popover WCAG-AA contrast', () => {
       const effectiveBg = compositeOnto(popoverBg, pageBg);
 
       // Sample representative text elements.
-      const titleEl = popover.locator('.job-card__token-popover-title');
-      const thEl = popover.locator('.job-card__token-table th').first();
-      const tdEl = popover.locator('.job-card__token-table td').first();
-      const linkEl = popover.locator('.job-card__token-link');
+      const titleEl = popover.locator('.token-popover__title');
+      const thEl = popover.locator('.token-popover__table th').first();
+      const tdEl = popover.locator('.token-popover__table td').first();
+      const linkEl = popover.locator('.token-popover__link');
 
       const titleColor = await titleEl.evaluate((el) => getComputedStyle(el).color);
       const thColor = await thEl.evaluate((el) => getComputedStyle(el).color);
@@ -190,12 +195,12 @@ test.describe('Token popover WCAG-AA contrast', () => {
       const linkColor = await linkEl.evaluate((el) => getComputedStyle(el).color);
 
       // Per-run table rows (if the per-run section is rendered).
-      const runsTitle = popover.locator('.job-card__token-runs-title');
+      const runsTitle = popover.getByRole('heading', { name: 'Per run' });
       let runsTitleColor: string | undefined;
       if (await runsTitle.isVisible().catch(() => false)) {
         runsTitleColor = await runsTitle.evaluate((el) => getComputedStyle(el).color);
       }
-      const runsTd = popover.locator('.job-card__token-table--runs td').first();
+      const runsTd = popover.getByTestId('token-run-table').locator('td').first();
       let runsTdColor: string | undefined;
       if (await runsTd.isVisible().catch(() => false)) {
         runsTdColor = await runsTd.evaluate((el) => getComputedStyle(el).color);

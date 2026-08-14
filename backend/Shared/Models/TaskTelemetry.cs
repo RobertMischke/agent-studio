@@ -44,6 +44,12 @@ public record TaskTokenCall
 {
     public DateTime Ts { get; init; }
     public string? Model { get; init; }
+    /// <summary>Stable run or fenced attempt id when the producer supplied one.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Producer topic used to retain pipeline step context across projections.</summary>
+    public string? Topic { get; init; }
+    /// <summary>Stable display group: coding-run, review-run, gate, enrichment, or other.</summary>
+    public string UsageType { get; init; } = "other";
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
     public long InputTokens { get; init; }

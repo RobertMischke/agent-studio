@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-pricing-footnote"]')?.textContent).toContain('rate valid on each event date');
 
     fixture.destroy();
   });
@@ -1538,7 +1538,7 @@ describe('buildOwnerChip', () => {
 });
 
 describe('buildTokenBubble', () => {
-  it('uses backend-resolved model labels for aggregate and per-run rows', () => {
+  it('groups dated costs by run and usage type', () => {
     const bubble = buildTokenBubble({
       calls: 2,
       inputTokens: 3000,
@@ -1554,30 +1554,92 @@ describe('buildTokenBubble', () => {
         {
           ts: '2026-06-09T08:00:00Z',
           model: 'GPT-5 Codex',
+          runId: 'run-1',
+          topic: 'codex-turn',
+          usageType: 'coding-run',
           participantId: 'agent:codex',
           inputTokens: 2000,
           outputTokens: 200,
           cacheReadTokens: 1000,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.06,
+          modelPriced: true,
         },
         {
           ts: '2026-06-09T08:05:00Z',
           model: 'Claude Haiku 4.5',
+          runId: 'gate-1',
+          topic: 'review-decision',
+          usageType: 'gate',
           participantId: 'orchestrator:Test',
           inputTokens: 1000,
           outputTokens: 100,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.03,
+          modelPriced: true,
         },
       ],
     });
 
     expect(bubble?.model).toBe('GPT-5 Codex');
-    expect(bubble?.costTooltip).toContain('Estimated cost: $0.09');
-    expect(bubble?.entries.map((entry) => entry.model)).toEqual([
+    expect(bubble?.costLabel).toBe('$0.09');
+    expect(bubble?.byType.map((entry) => entry.label)).toEqual([
+      'Coding run',
+      'Gate',
+    ]);
+    expect(bubble?.runs.map((entry) => entry.model)).toEqual([
       'GPT-5 Codex',
       'Claude Haiku 4.5',
     ]);
+    expect(bubble?.runs.map((entry) => entry.costLabel)).toEqual(['$0.06', '$0.03']);
+    expect(bubble?.disclaimer).toContain('TokenEconomy catalog price valid on that event date');
+  });
+
+  it('marks mixed totals partial and keeps an unpriced run explicit', () => {
+    const bubble = buildTokenBubble({
+      calls: 2,
+      inputTokens: 3000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 3000,
+      estimatedApiCostUsd: 0.05,
+      allModelsPriced: false,
+      lastModel: 'GPT-5 Codex',
+      lastUpdate: '2026-08-12T08:01:00Z',
+      entries: [
+        { ts: '2026-08-12T08:00:00Z', runId: 'run-1', usageType: 'coding-run', model: 'GPT-5 Codex', inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0.05, modelPriced: true },
+        { ts: '2026-08-12T08:01:00Z', runId: 'run-2', usageType: 'coding-run', model: 'future-model', inputTokens: 2000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0, modelPriced: false },
+      ],
+    });
+
+    expect(bubble?.costLabel).toBe('$0.05 partial');
+    expect(bubble?.byType[0].costLabel).toBe('$0.05 partial');
+    expect(bubble?.runs.map((run) => run.costLabel)).toEqual(['$0.05', 'No price']);
+    expect(bubble?.disclaimer).toContain('1 event could not be priced and is excluded');
+  });
+
+  it('makes the visible total cost equal the dated run rows', () => {
+    const bubble = buildTokenBubble({
+      calls: 2,
+      inputTokens: 2000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 2000,
+      estimatedApiCostUsd: 99,
+      allModelsPriced: true,
+      lastModel: 'GPT-5 Codex',
+      lastUpdate: '2026-08-12T08:01:00Z',
+      entries: [
+        { ts: '2026-08-12T08:00:00Z', runId: 'run-1', usageType: 'coding-run', model: 'GPT-5 Codex', inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0.04, modelPriced: true },
+        { ts: '2026-08-12T08:01:00Z', runId: 'run-2', usageType: 'review-run', model: 'Claude Haiku 4.5', inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0.03, modelPriced: true },
+      ],
+    });
+
+    expect(bubble?.costLabel).toBe('$0.07');
+    expect(bubble?.runs.map((run) => run.costLabel)).toEqual(['$0.04', '$0.03']);
   });
 });
 

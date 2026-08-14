@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { setTheme, type Theme } from '../helpers/theme';
 
 /**
  * Job-card token bubble.
@@ -56,10 +57,16 @@ interface JobInfoStub {
     entries: {
       ts: string;
       model: string | null;
+      runId?: string | null;
+      topic?: string | null;
+      usageType?: 'coding-run' | 'review-run' | 'gate' | 'enrichment' | 'other';
+      participantId?: string | null;
       inputTokens: number;
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
+      estimatedApiCostUsd?: number;
+      modelPriced?: boolean;
     }[];
   };
 }
@@ -154,6 +161,13 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ clientId: 'local-default', defaultCliType: null, defaultModel: null }),
+      });
+    }
+    if (/^\/api\/clients\/[^/]+\/telemetry$/.test(p)) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ window: '1h', points: [], findings: [] }),
       });
     }
     if (p === '/api/environment') {
@@ -252,9 +266,9 @@ test.describe('Token bubble on job cards', () => {
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
+          { ts: '2026-05-05T08:00:00Z', runId: 'run-code-1', topic: 'codex-turn', usageType: 'coding-run', participantId: 'agent:codex', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.40, modelPriced: true },
+          { ts: '2026-05-05T08:15:00Z', runId: 'run-review-1', topic: 'code-quality-review', usageType: 'review-run', participantId: 'support:code-quality', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.35, modelPriced: true },
+          { ts: '2026-05-05T08:30:00Z', runId: 'gate-1', topic: 'review-decision', usageType: 'gate', participantId: 'orchestrator:stub-project', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.50, modelPriced: true }
         ]
       }
     });
@@ -287,10 +301,23 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-read')).toContainText('250k');
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
-    await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
-    await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
+    const phase = process.env.TOKEN_POPOVER_PHASE ?? 'after';
+    if (phase === 'before') {
+      await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
+      await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
+      await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
+    } else {
+      await expect(popover.getByTestId('token-cost-tooltip')).toHaveText('$1.25');
+      await expect(popover.getByTestId('token-type-table')).toContainText('Coding run');
+      await expect(popover.getByTestId('token-type-table')).toContainText('Review run');
+      await expect(popover.getByTestId('token-type-table')).toContainText('Gate');
+      await expect(popover.getByTestId('token-run-table')).toContainText('Claude Haiku 4.5');
+      await expect(popover.getByTestId('token-run-table')).toContainText('$0.35');
+      const footnote = popover.getByTestId('token-pricing-footnote');
+      await expect(footnote).toHaveText('List-price estimate · rate valid on each event date');
+      await footnote.focus();
+      await expect(page.getByText(/Theoretical API-equivalent estimate\. Each event uses the TokenEconomy catalog price valid on that event date\./)).toBeVisible();
+    }
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 
     // Anti-clipping contract: the directive lifts the panel into the
@@ -304,9 +331,20 @@ test.describe('Token bubble on job cards', () => {
     expect(popBox!.x + popBox!.width).toBeLessThanOrEqual(vp.width + 1);
     expect(popBox!.y + popBox!.height).toBeLessThanOrEqual(vp.height + 1);
 
-    // Screenshot evidence: bubble + overlay popover in the viewport.
+    // Screenshot evidence: calm popover in both supported themes. The optional
+    // before phase targets Stable so the task result preserves a direct visual
+    // comparison without depending on a historical checkout.
     mkdirSync(SHOTS, { recursive: true });
-    await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
+    await page.addStyleTag({ content: 'app-error-dialog, [data-testid="error-dialog-overlay"] { display: none !important; }' });
+    const themes: Theme[] = phase === 'before' ? ['light'] : ['light', 'dark'];
+    for (const theme of themes) {
+      await setTheme(page, theme);
+      await bubble.focus();
+      await expect(popover).toBeVisible();
+      await dismissErrorDialogIfPresent(page);
+      await expect(popover).toBeVisible();
+      await popover.screenshot({ path: `${SHOTS}/token-popover-${phase}-${theme}--mocked.png` });
+    }
   });
 
   test('tier escalates with spend', async ({ page }) => {

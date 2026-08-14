@@ -11,6 +11,9 @@
 export interface TaskTokenCall {
   ts: string;
   model: string | null;
+  runId?: string | null;
+  topic?: string | null;
+  usageType?: TaskTokenUsageType | null;
   participantId?: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -19,6 +22,8 @@ export interface TaskTokenCall {
   estimatedApiCostUsd?: number;
   modelPriced?: boolean;
 }
+
+export type TaskTokenUsageType = 'coding-run' | 'review-run' | 'gate' | 'enrichment' | 'other';
 
 export interface TaskTokenSummary {
   calls: number;

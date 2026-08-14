@@ -101,6 +101,15 @@ aggregate wording, and the explicit `no price data` fallback. Review rows,
 task-detail pipeline totals, project Pipeline `Tokens / 90d`, and board badges
 must use this helper instead of composing local tooltip strings.
 
+The board task popover keeps the per-event timestamp, `runId`, topic, and
+participant role carried by the token bus or durable remote receipt. It groups
+those events into coding run, review run, gate, enrichment, and other rows, and
+also groups repeated calls with the same run or fenced attempt id. Every run
+row shows its dated TokenEconomy cost; the visible total is the sum of those
+rows and is marked partial when any event has no historical price. The compact
+footnote stays on one line, with the full subscription and estimate caveat in
+its tooltip.
+
 ## Verification
 
 `backend.Tests/TokenPricingTests.cs` pins the provider adapter to the

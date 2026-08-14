@@ -9,7 +9,8 @@ import { shouldShowFailureToast } from '../../../task-detail/services/run-outcom
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 import { isTaskRunActive } from '../../../../services/run-activity.util';
-import { buildTokenCostTooltip } from '../../../tokens';
+import { formatTokenCostDisplay, formatTokenCostUsd } from '../../../tokens';
+import type { TaskTokenUsageType } from '../../../tokens';
 
 export interface TaskTypeChip {
   kind: string;
@@ -25,12 +26,45 @@ export interface TaskTokenBubble {
   output: number;
   cacheRead: number;
   cacheWrite: number;
-  costTooltip: string;
+  costLabel: string;
+  disclaimer: string;
   model: string | null;
   lastUpdate: string | null;
   tier: 'neutral' | 'blue' | 'mauve' | 'peach';
-  entries: { ts: string; tsLabel: string; model: string | null; total: number }[];
+  byType: TaskTokenTypeRow[];
+  runs: TaskTokenRunRow[];
 }
+
+export interface TaskTokenTypeRow {
+  type: TaskTokenUsageType;
+  label: string;
+  calls: number;
+  total: number;
+  costLabel: string;
+}
+
+export interface TaskTokenRunRow {
+  id: string;
+  ts: string;
+  tsLabel: string;
+  typeLabel: string;
+  model: string;
+  calls: number;
+  total: number;
+  costLabel: string;
+}
+
+const TOKEN_TYPE_ORDER: readonly TaskTokenUsageType[] = [
+  'coding-run', 'review-run', 'gate', 'enrichment', 'other',
+];
+
+const TOKEN_TYPE_LABELS: Record<TaskTokenUsageType, string> = {
+  'coding-run': 'Coding run',
+  'review-run': 'Review run',
+  gate: 'Gate',
+  enrichment: 'Enrichment',
+  other: 'Other',
+};
 
 const FILE_LIST_MAX = 12;
 
@@ -242,12 +276,70 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     : total >= 500_000 ? 'mauve'
       : total >= 50_000 ? 'blue'
         : 'neutral';
-  const entries = (tokenSummary.entries ?? []).map((entry) => ({
-    ts: entry.ts,
-    tsLabel: formatShortTime(entry.ts),
-    model: entry.model,
-    total: (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0),
-  }));
+  const entries = (tokenSummary.entries ?? []).map((entry, index) => {
+    const entryTotal = (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0)
+      + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0);
+    const type = normalizeTokenUsageType(entry.usageType);
+    return {
+      ...entry,
+      index,
+      type,
+      total: entryTotal,
+      cost: Number(entry.estimatedApiCostUsd ?? 0),
+      priced: entry.modelPriced === true,
+    };
+  });
+  const byType = TOKEN_TYPE_ORDER
+    .map((type): TaskTokenTypeRow | null => {
+      const rows = entries.filter((entry) => entry.type === type);
+      if (rows.length === 0) return null;
+      const cost = rows.reduce((sum, row) => sum + row.cost, 0);
+      const rowTotal = rows.reduce((sum, row) => sum + row.total, 0);
+      return {
+        type,
+        label: TOKEN_TYPE_LABELS[type],
+        calls: rows.length,
+        total: rowTotal,
+        costLabel: tokenCostLabel(cost, rowTotal, rows.every((row) => row.priced)),
+      };
+    })
+    .filter((row): row is TaskTokenTypeRow => row !== null);
+
+  const runBuckets = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const key = entry.runId?.trim() || `event:${entry.ts}:${entry.index}`;
+    const bucket = runBuckets.get(key) ?? [];
+    bucket.push(entry);
+    runBuckets.set(key, bucket);
+  }
+  const runs = Array.from(runBuckets.entries()).map(([id, rows]): TaskTokenRunRow => {
+    const models = Array.from(new Set(rows.map((row) => row.model).filter((model): model is string => !!model)));
+    const types = Array.from(new Set(rows.map((row) => TOKEN_TYPE_LABELS[row.type])));
+    const runTotal = rows.reduce((sum, row) => sum + row.total, 0);
+    const cost = rows.reduce((sum, row) => sum + row.cost, 0);
+    return {
+      id,
+      ts: rows[0].ts,
+      tsLabel: formatRunDate(rows[0].ts),
+      typeLabel: types.join(' / '),
+      model: models.length === 0 ? '-' : models.join(', '),
+      calls: rows.length,
+      total: runTotal,
+      costLabel: tokenCostLabel(cost, runTotal, rows.every((row) => row.priced)),
+    };
+  });
+  const unpricedEvents = entries.filter((entry) => !entry.priced).length;
+  const visibleCost = entries.length > 0
+    ? entries.reduce((sum, entry) => sum + entry.cost, 0)
+    : Number(tokenSummary.estimatedApiCostUsd ?? 0);
+  const visibleAllPriced = entries.length > 0
+    ? unpricedEvents === 0
+    : tokenSummary.allModelsPriced === true;
+  const disclaimer = [
+    'Theoretical API-equivalent estimate. Each event uses the TokenEconomy catalog price valid on that event date.',
+    'CLI subscription billing, discounts, and provider-side cache adjustments may differ.',
+    unpricedEvents > 0 ? `${unpricedEvents} event${unpricedEvents === 1 ? '' : 's'} could not be priced and is excluded from the subtotal.` : '',
+  ].filter(Boolean).join(' ');
   return {
     label: formatTokens(total),
     total,
@@ -255,12 +347,37 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     output,
     cacheRead,
     cacheWrite,
-    costTooltip: buildTokenCostTooltip({ costUsd: tokenSummary.estimatedApiCostUsd, priceKnown: tokenSummary.allModelsPriced === true }),
+    costLabel: tokenCostLabel(visibleCost, total, visibleAllPriced),
+    disclaimer,
     model: tokenSummary.lastModel ?? null,
     lastUpdate: tokenSummary.lastUpdate ? formatShortTime(tokenSummary.lastUpdate) : null,
     tier,
-    entries,
+    byType,
+    runs,
   };
+}
+
+function normalizeTokenUsageType(value: string | null | undefined): TaskTokenUsageType {
+  return TOKEN_TYPE_ORDER.includes(value as TaskTokenUsageType)
+    ? value as TaskTokenUsageType
+    : 'other';
+}
+
+function tokenCostLabel(cost: number, total: number, allPriced: boolean): string {
+  if (allPriced) {
+    return formatTokenCostDisplay({ costUsd: cost, totalTokens: total, unpricedRuns: 0 });
+  }
+  return cost > 0 ? `${formatTokenCostUsd(cost)} partial` : 'No price';
+}
+
+export function formatRunDate(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
 }
 
 /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */
