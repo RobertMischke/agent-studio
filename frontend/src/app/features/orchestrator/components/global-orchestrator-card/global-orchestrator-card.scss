@@ -1,77 +1,194 @@
-@use '../../../../../styles/mixins' as m;
-
-// Colours read from the Tier-2 semantic theme tokens so the card is legible
-// on both the dark (Mocha) and light shells. The card formerly hardcoded
-// purple/slate hex + white-alpha text that washed out to near-invisible on
-// the light theme. The violet accent (the orchestrator's identity colour)
-// is kept but expressed through the accent-4 token + color-mix tints so the
-// tint flips with the theme instead of staying a fixed dark wash.
-:host { display: block; }
+:host {
+  display: block;
+  min-width: 0;
+}
 
 .global-orch {
-  @include m.deck-panel;
-}
-.global-orch__head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--studio-spacing-3);
-  margin-bottom: var(--studio-spacing-3);
-  flex-wrap: wrap;
-}
-.global-orch__badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: var(--studio-accent-4-strong);
-  background: color-mix(in srgb, var(--studio-accent-4) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
-}
-.global-orch__role {
-  font-size: 1.0rem;
-  font-weight: 700;
-  color: var(--studio-fg-strong);
-  letter-spacing: 0.01em;
-}
-.global-orch__scope {
-  font-size: 0.82rem;
-  color: var(--studio-fg-dim);
-}
-
-.global-orch__voice {
-  margin: 0 0 var(--studio-spacing-4);
-  font-size: 1.0rem;
-  line-height: 1.55;
+  min-width: 0;
   color: var(--studio-fg);
-  font-style: italic;
-  cursor: help;
 }
 
-.global-orch__meta {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px var(--studio-spacing-4);
-  margin: 0;
-  font-size: 0.86rem;
+.global-orch__status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--studio-spacing-2);
 }
-.global-orch__meta > div { display: contents; }
-.global-orch__meta dt {
+
+.global-orch__toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--studio-fg);
+  cursor: pointer;
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.global-orch__toggle:hover .global-orch__role,
+.global-orch__toggle:focus-visible .global-orch__role {
+  color: var(--studio-fg-strong);
+}
+
+.global-orch__toggle:focus-visible,
+.global-orch__command:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.global-orch__chevron {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.global-orch__chevron--open {
+  transform: rotate(90deg);
+}
+
+.global-orch__role {
+  flex: 0 0 auto;
+  color: var(--studio-fg);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.global-orch__field {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--studio-fg-dim);
+  font: 12px/1.3 var(--font-mono, monospace);
+  text-overflow: ellipsis;
+}
+
+.global-orch__field b {
+  color: var(--studio-fg-muted);
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.global-orch__command {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  max-width: min(36vw, 360px);
+  min-height: var(--studio-row-min-h-interactive);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 0;
+  border-radius: 4px;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-dim);
+  cursor: copy;
+  font: 11px/1 var(--font-mono, monospace);
+  white-space: nowrap;
+}
+
+.global-orch__command:hover {
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+}
+
+.global-orch__command code {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+.global-orch__copy-state {
+  flex: 0 0 auto;
+  color: var(--studio-fg);
+}
+
+.global-orch__details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--studio-spacing-2) var(--studio-spacing-4);
+  margin: 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-4) var(--studio-spacing-3);
+  background: color-mix(in srgb, var(--studio-bg-hover) 60%, transparent);
+  font-size: 12px;
+}
+
+.global-orch__details div {
+  min-width: 0;
+}
+
+.global-orch__details dt {
   color: var(--studio-fg-muted);
 }
-.global-orch__meta dd {
-  margin: 0;
+
+.global-orch__details dd {
+  margin: var(--studio-spacing-1) 0 0;
   color: var(--studio-fg);
   font-family: var(--font-mono, monospace);
-  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
-.global-orch__error { color: var(--notify-error-icon-fg); }
+
+.global-orch__details .global-orch__error {
+  color: var(--notify-error-icon-fg);
+}
 
 .global-orch__loading,
 .global-orch__empty {
   margin: 0;
+  padding: var(--studio-spacing-2) 0;
   color: var(--studio-fg-dim);
-  font-size: 0.88rem;
-  line-height: 1.5;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .global-orch__status {
+    align-items: center;
+  }
+
+  .global-orch__toggle {
+    gap: var(--studio-spacing-2);
+  }
+
+  .global-orch__command {
+    max-width: min(30vw, 190px);
+  }
+
+  .global-orch__command > span:first-child,
+  .global-orch__role {
+    display: none;
+  }
+
+  .global-orch__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .global-orch__toggle {
+    white-space: nowrap;
+  }
+
+  .global-orch__command {
+    max-width: min(30vw, 150px);
+  }
+
+  .global-orch__details {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-orch__chevron {
+    transition-duration: 0s;
+  }
 }
