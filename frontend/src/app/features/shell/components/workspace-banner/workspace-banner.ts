@@ -46,6 +46,7 @@ const BANNER_TOPICS: ReadonlySet<string> = new Set([
 @Component({
   selector: 'app-workspace-banner',
   standalone: true,
+  host: { 'data-testid': 'workspace-banner' },
   imports: [AcceptedIntegrationAlertBannerComponent, RemoteQueueStarvationBannerComponent],
   templateUrl: './workspace-banner.html',
   styleUrl: './workspace-banner.scss',
