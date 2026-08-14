@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "telemetry-layer",
+  "title": "Local-first telemetry layer across organization applications",
+  "summary": "Decision-ready dossier for a shared, local-first telemetry layer that preserves per-product domain ownership while Agent Studio collects selected operational and usage events, groups them into bounded cases, and prepares reviewable feature or healing cards through existing orchestration authorities.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-14T10:16:43Z",
+  "sourceTaskKeys": [
+    "AGT-2661"
+  ],
+  "implementationTasks": [],
+  "relatedTaskKeys": [
+    "AGT-2557",
+    "AGT-2654"
+  ]
+}
