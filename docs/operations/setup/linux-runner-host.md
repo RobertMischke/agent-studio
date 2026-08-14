@@ -314,6 +314,14 @@ provisioning. A unit test uses a dummy token only to prove environment transport
 only the real `claude auth status --text` probe and a probe card validate a real
 token. Provider-auth details and task output must never contain the token.
 
+The Linux daemon launches provider status commands with `nice -n 10` and allows
+30 seconds for CLI startup. A timeout, empty response, spawn failure, or unknown
+CLI error is not evidence of logout. The daemon preserves the last determinate
+capability state, writes a `runner-provider-auth probe-degraded` journal line,
+and retries automatically. It advertises `unavailable` only after two
+consecutive responses carry a recognized logout signal such as `Not logged in`.
+A later successful probe restores `ready` without restarting the service.
+
 The Execution Hosts dialog performs the same SSH-stdin provisioning without
 placing the secret in a task. It atomically updates the shared file, restarts
 both installed units, verifies the variable name in each daemon's

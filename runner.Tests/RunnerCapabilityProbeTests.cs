@@ -118,6 +118,7 @@ public sealed class RunnerCapabilityProbeTests
                     : new ProcessResult(0, "Logged in", "")),
             File.Exists);
         await probe.RefreshAsync(claude, CancellationToken.None);
+        await probe.RefreshAsync(claude, CancellationToken.None);
         await probe.RefreshAsync(codex, CancellationToken.None);
 
         var advertised = RunnerCapabilityProbe.Advertise(
@@ -182,6 +183,8 @@ public sealed class RunnerCapabilityProbeTests
                     : new ProcessResult(0, "Authenticated", "")),
             File.Exists);
         await probe.RefreshAsync(claude, CancellationToken.None);
+        if (!tokenProvisioned)
+            await probe.RefreshAsync(claude, CancellationToken.None);
 
         var advertised = RunnerCapabilityProbe.Advertise(
             options,

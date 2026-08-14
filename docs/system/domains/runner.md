@@ -133,7 +133,14 @@ state.
   invoke. The primary `RUNNER_CLI_BIN` and the provider-specific
   `RUNNER_CLAUDE_CLI_BIN` / `RUNNER_CODEX_CLI_BIN` paths form that inventory;
   setup preserves both discovered paths even when Codex is selected as the
-  primary. `LeaseEndpoints` adds the candidate card's normalized CLI keys to
+  primary. On Linux the provider status command runs at `nice -n 10` with a
+  30-second deadline. A timeout, empty output, spawn failure, or unrecognized
+  error is indeterminate: the runner keeps its last determinate status, emits a
+  `probe-degraded` journal line, and retries without requiring a service
+  restart. Only two consecutive recognized logout responses, such as
+  `Not logged in`, change a present provider capability to `unavailable`; a
+  later successful probe restores `ready` automatically. `LeaseEndpoints` adds
+  the candidate card's normalized CLI keys to
   the existing required-capability set before repository preflight or lease
   acquisition. An incompatible card stays Ready. Fenced idempotent claim replay
   is evaluated first and always describes the already claimed run. Capability
