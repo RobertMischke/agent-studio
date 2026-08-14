@@ -23,6 +23,34 @@ public sealed class ProviderAuthProbeTests
         TimeSpan? timeout = null)
         => new(launcher, _ => binaryExists, clock, ttl, timeout);
 
+    [Fact]
+    public void Default_probe_budget_is_thirty_seconds()
+        => Assert.Equal(TimeSpan.FromSeconds(30), ProviderAuthProbe.DefaultTimeout);
+
+    [Fact]
+    public void Negative_confirmation_policy_requires_two_explicit_logout_observations()
+    {
+        var observedAt = new DateTimeOffset(2026, 8, 14, 10, 0, 0, TimeSpan.Zero);
+        var logout = new ProviderAuthObservation(
+            ProviderAuthObservationKind.ConfirmedLogout,
+            "Not logged in",
+            observedAt);
+
+        var first = ProviderAuthProbePolicy.Apply(
+            previous: null,
+            logout,
+            ProviderAuthProbe.ConfirmedFailureThreshold);
+        var second = ProviderAuthProbePolicy.Apply(
+            first,
+            logout,
+            ProviderAuthProbe.ConfirmedFailureThreshold);
+
+        Assert.Equal(ProviderAuthProbe.Ready, first.Status.Status);
+        Assert.Equal(1, first.ConsecutiveConfirmedFailures);
+        Assert.Equal(ProviderAuthProbe.Unavailable, second.Status.Status);
+        Assert.Equal(2, second.ConsecutiveConfirmedFailures);
+    }
+
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
     [InlineData(1, "Error: login required")]
@@ -30,10 +58,16 @@ public sealed class ProviderAuthProbeTests
     [InlineData(1, "OAuth token expired")]
     public async Task A_dead_session_is_unavailable_whatever_the_exit_code(int exitCode, string output)
     {
-        var status = await Probe(Answers(exitCode, output)).RefreshAsync("claude", CancellationToken.None);
+        var probe = Probe(Answers(exitCode, output));
 
+        var first = await probe.RefreshAsync("claude", CancellationToken.None);
+        var status = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, first.Status);
+        Assert.Contains("Negative confirmation 1/2", first.Detail, StringComparison.Ordinal);
         Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
         Assert.Contains("no usable session", status.Detail, StringComparison.Ordinal);
+        Assert.Contains("Confirmed by 2 consecutive probes", status.Detail, StringComparison.Ordinal);
         Assert.Contains("claude auth status --text", status.Detail, StringComparison.Ordinal);
     }
 
@@ -65,32 +99,120 @@ public sealed class ProviderAuthProbeTests
     }
 
     [Fact]
-    public async Task A_probe_that_hangs_is_unavailable_rather_than_a_stuck_advertisement()
+    public async Task A_probe_that_hangs_keeps_last_good_and_logs_probe_degraded()
     {
-        var probe = Probe(
+        var logs = new List<string>();
+        var calls = 0;
+        var probe = new ProviderAuthProbe(
             async (_, _, ct) =>
             {
+                if (Interlocked.Increment(ref calls) == 1)
+                    return new ProcessResult(0, "Login method: Claude Max account", "");
                 await Task.Delay(TimeSpan.FromMinutes(5), ct);
                 return new ProcessResult(0, "", "");
             },
-            timeout: TimeSpan.FromMilliseconds(50));
+            _ => true,
+            timeout: TimeSpan.FromMilliseconds(50),
+            log: logs.Add);
 
+        var lastGood = await probe.RefreshAsync("claude", CancellationToken.None);
         var status = await probe.RefreshAsync("claude", CancellationToken.None);
 
-        Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, lastGood.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
         Assert.Contains("did not answer", status.Detail, StringComparison.Ordinal);
+        Assert.Contains("Keeping the last conclusive status 'ready'", status.Detail, StringComparison.Ordinal);
+        Assert.Contains(logs, line => line.Contains("probe-degraded", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task A_launcher_that_throws_is_unavailable_with_the_reason()
+    public async Task A_launcher_that_throws_is_indeterminate_and_keeps_the_last_status()
     {
-        var probe = Probe((_, _, _) => throw new InvalidOperationException("spawn refused by the host"));
+        var logs = new List<string>();
+        var probe = new ProviderAuthProbe(
+            (_, _, _) => throw new InvalidOperationException("spawn refused by the host"),
+            _ => true,
+            log: logs.Add);
 
         var status = await probe.RefreshAsync("claude", CancellationToken.None);
 
-        Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
         Assert.Contains("could not be started", status.Detail, StringComparison.Ordinal);
         Assert.Contains("spawn refused by the host", status.Detail, StringComparison.Ordinal);
+        Assert.Contains(logs, line => line.Contains("probe-degraded", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task An_empty_probe_result_is_indeterminate_and_does_not_flip_ready(int exitCode)
+    {
+        var logs = new List<string>();
+        var probe = new ProviderAuthProbe(
+            Answers(exitCode),
+            _ => true,
+            log: logs.Add);
+
+        var status = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Contains("no authentication status", status.Detail, StringComparison.Ordinal);
+        Assert.Contains(logs, line => line.Contains("probe-degraded", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_indeterminate_probe_breaks_the_consecutive_logout_sequence()
+    {
+        var outcomes = new Queue<ProcessResult>(
+        [
+            new ProcessResult(1, "Not logged in", ""),
+            new ProcessResult(1, "", ""),
+            new ProcessResult(1, "Not logged in", ""),
+        ]);
+        var probe = Probe((_, _, _) => Task.FromResult(outcomes.Dequeue()));
+
+        var first = await probe.RefreshAsync("claude", CancellationToken.None);
+        var busy = await probe.RefreshAsync("claude", CancellationToken.None);
+        var nextLogout = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, first.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, busy.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, nextLogout.Status);
+        Assert.Contains("Negative confirmation 1/2", nextLogout.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_successful_probe_recovers_confirmed_logout_without_restarting_the_probe()
+    {
+        var outcomes = new Queue<ProcessResult>(
+        [
+            new ProcessResult(1, "Not logged in", ""),
+            new ProcessResult(1, "Not logged in", ""),
+            new ProcessResult(0, "Login method: Claude Max account", ""),
+        ]);
+        var probe = Probe((_, _, _) => Task.FromResult(outcomes.Dequeue()));
+
+        await probe.RefreshAsync("claude", CancellationToken.None);
+        var unavailable = await probe.RefreshAsync("claude", CancellationToken.None);
+        var recovered = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Unavailable, unavailable.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Contains("confirmed an active session", recovered.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Provider_auth_commands_are_wrapped_in_nice_before_the_cli_starts()
+    {
+        var command = ProviderAuthProcess.BuildNiceCommand(
+            "/usr/bin/nice",
+            "claude",
+            ["auth", "status", "--text"]);
+
+        Assert.Equal("/usr/bin/nice", command.FileName);
+        Assert.Equal(
+            ["-n", "10", "--", "claude", "auth", "status", "--text"],
+            command.Arguments);
     }
 
     [Fact]
@@ -168,6 +290,7 @@ public sealed class ProviderAuthProbeTests
         var options = CodingOptions();
 
         await probe.RefreshAsync(options.CliBin, CancellationToken.None);
+        await probe.RefreshAsync(options.CliBin, CancellationToken.None);
         var advertised = RunnerCapabilityProbe.Advertise(options, gitPushReady: true, providerAuth: probe);
 
         var auth = Assert.Single(
@@ -185,8 +308,9 @@ public sealed class ProviderAuthProbeTests
     [Fact]
     public async Task The_detail_never_carries_a_token_shaped_string()
     {
-        var status = await Probe(Answers(1, "", "invalid api key sk-ant-api03-AAAABBBBCCCCDDDDEEEEFFFF"))
-            .RefreshAsync("claude", CancellationToken.None);
+        var probe = Probe(Answers(1, "", "invalid api key sk-ant-api03-AAAABBBBCCCCDDDDEEEEFFFF"));
+        await probe.RefreshAsync("claude", CancellationToken.None);
+        var status = await probe.RefreshAsync("claude", CancellationToken.None);
 
         Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
         Assert.Contains("[redacted]", status.Detail, StringComparison.Ordinal);

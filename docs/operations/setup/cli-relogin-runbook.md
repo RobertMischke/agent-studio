@@ -17,8 +17,9 @@ Open **Workspace Settings > Execution Hosts** and inspect **Provider
 authentication** on the affected host. The badge exposes three states:
 
 - **OK**: a fresh capability snapshot reports usable provider authentication.
-- **Unavailable**: a fresh probe failed. Hover the badge for the runner's probe
-  detail, such as `Not logged in`.
+- **Unavailable**: two consecutive probes reported an explicit authentication
+  failure, such as `Not logged in`, or the provider binary is missing. Hover the
+  badge for the runner's probe detail.
 - **Unknown**: no current provider-auth advertisement exists, the advertisement
   is stale, or the runner is unreachable.
 
@@ -27,6 +28,12 @@ Provider transitions are retained in the capability recovery history. An
 fails with a recognized provider-auth error reports the capability failure at
 once, without waiting for the next 60-second probe cycle. Ready cards assigned
 to that host show the same blocking reason.
+
+The CLI probe runs at niceness 10 with a 30-second timeout. Timeout, empty
+output, launch failure, and unrecognized nonzero output are indeterminate, not
+logout evidence. They preserve the last conclusive badge state and write a
+`runner-provider-auth probe-degraded` journal line. A later successful periodic
+probe restores **OK** and releases waiting cards without restarting the unit.
 
 If the runner advertises a credential expiry, Studio warns once when it enters
 the final 14 days. An absent expiry is reported as unknown and is never guessed
@@ -54,8 +61,9 @@ preserving entries for future providers in the shared file.
 
 ## 3. Verify recovery
 
-The next provider probe normally arrives within 60 seconds. Recovery is
-complete when all of these statements are true:
+The runner advertises capabilities every 60 seconds and refreshes a stale
+provider-auth result in the background after its five-minute cache lifetime.
+Recovery is complete when all of these statements are true:
 
 1. The host badge is **OK** and its timestamp is fresh.
 2. The newest recovery-history entry records `unavailable -> ready`.

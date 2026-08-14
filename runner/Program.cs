@@ -30,7 +30,7 @@ var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 // Keep the process boundary in the composition root and let the cached probe
 // decide when each bounded status command needs to run.
 ProviderAuthProbe.Shared.UseLauncher((fileName, arguments, ct) =>
-    ProcessRunner.RunAsync(fileName, arguments, ct: ct));
+    ProviderAuthProcess.RunAsync(fileName, arguments, ct), Log);
 
 if (help)
 {

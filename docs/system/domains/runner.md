@@ -144,8 +144,13 @@ state.
   `root:agent` mode `640`, loaded by both Coding and Review units after their
   existing EnvironmentFile, and provisioned only through SSH stdin. Studio
   never stores the value. Provider probes inspect only the process environment
-  and CLI status. Provider-specific files, including `claude.env`, are outside
-  the contract.
+  and CLI status. The CLI status process runs at niceness 10 with a 30-second
+  timeout. Two consecutive probes containing an explicit logout signal are
+  required before authentication becomes unavailable. A timeout, empty output,
+  launch failure, or unrecognized error is indeterminate: the runner preserves
+  the last conclusive status and logs `runner-provider-auth probe-degraded`.
+  Periodic successful probes restore `ready` without a service restart.
+  Provider-specific files, including `claude.env`, are outside the contract.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
