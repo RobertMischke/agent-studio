@@ -16,6 +16,13 @@ button:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 
 .cwa__levels span { color: var(--studio-fg-muted); font-size: 0.68rem; text-transform: uppercase; }
 .cwa__levels strong { color: var(--studio-fg-strong); font-size: 1rem; }
 .cwa__section-head { margin-bottom: var(--studio-spacing-3); }
+.cwa__as-of,
+.cwa__levels time {
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+.cwa__as-of { white-space: nowrap; }
 .cwa__windows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--studio-spacing-2); }
 .cwa__window { padding: var(--studio-spacing-3); border: 1px solid var(--studio-border); border-radius: 7px; background: var(--studio-bg-surface); }
 .cwa__window header span { color: var(--studio-fg-dim); font-size: 0.72rem; }

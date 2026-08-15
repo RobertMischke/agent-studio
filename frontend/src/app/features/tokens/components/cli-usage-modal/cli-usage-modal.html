@@ -17,9 +17,16 @@
     <section class="cum__panel">
       <div class="cum__panel-head">
         <h5 class="cum__panel-title">Quota windows</h5>
-        @if (row()?.plan; as plan) {
-          <span class="cum__plan">{{ plan }}</span>
-        }
+        <div class="cum__panel-meta">
+          @if (quotaAsOf(); as asOf) {
+            <time class="cum__as-of" data-testid="cli-usage-quota-as-of" [attr.datetime]="asOf">
+              As of {{ formatRecordedAt(asOf) }}
+            </time>
+          }
+          @if (row()?.plan; as plan) {
+            <span class="cum__plan">{{ plan }}</span>
+          }
+        </div>
       </div>
       @if (windowViews().length === 0) {
         <p class="cum__empty">No quota window data.</p>
@@ -56,7 +63,19 @@
 
     <section class="cum__panel">
       <div class="cum__panel-head">
-        <h5 class="cum__panel-title">Recorded model usage</h5>
+        <div class="cum__panel-heading">
+          <h5 class="cum__panel-title">Recorded model usage</h5>
+          <p class="cum__scope-note" data-testid="cli-usage-model-period">
+            Lifetime telemetry by model.
+            @if (recordedUsagePeriod(); as period) {
+              Since <time [attr.datetime]="period.oldestRecordedAt">{{ formatRecordedDate(period.oldestRecordedAt) }}</time>
+              · as of <time [attr.datetime]="period.newestRecordedAt">{{ formatRecordedAt(period.newestRecordedAt) }}</time>.
+            } @else {
+              Recording period unavailable.
+            }
+            Independent of the active quota windows above.
+          </p>
+        </div>
         <div class="cum__totals">
           <span class="cum__total">
             <span class="cum__total-label">Tokens</span>
@@ -69,7 +88,6 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

@@ -65,6 +65,14 @@ describe('CliUsageModalComponent', () => {
     expect(fixture.componentInstance.windows()).toHaveLength(2);
   });
 
+  it('shows the quota snapshot as an absolute as-of timestamp', async () => {
+    const fixture = await build({ ...row, fetchedAt: '2026-08-11T12:45:00Z' });
+
+    expect(fixture.componentInstance.quotaAsOf()).toBe('2026-08-11T12:45:00Z');
+    expect(document.body.querySelector('[data-testid="cli-usage-modal-claude"] [data-testid="cli-usage-quota-as-of"]')?.textContent)
+      .toContain('As of 11 Aug 2026, 12:45 UTC');
+  });
+
   it('falls back to the CLI label and "no data" when no row is given', async () => {
     const fixture = await build(null);
     const c = fixture.componentInstance;
@@ -151,12 +159,16 @@ describe('CliUsageModalComponent', () => {
           inputTokens: 39_646_031, outputTokens: 97_412,
           cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          oldestRecordedAt: '2026-06-01T08:15:00Z',
+          newestRecordedAt: '2026-08-10T11:45:00Z',
         },
         {
           model: 'GPT-5.5', calls: 8,
           inputTokens: 10_782_081, outputTokens: 66_760,
           cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          oldestRecordedAt: '2026-06-14T09:30:00Z',
+          newestRecordedAt: '2026-08-11T12:30:00Z',
         },
       ],
       byProject: [],
@@ -197,6 +209,37 @@ describe('CliUsageModalComponent', () => {
     expect(component.modelRows().map(r => r.model)).toEqual(['gpt-5.6-sol', 'GPT-5.5']);
     expect(component.modelRows().every(r => r.source === 'project runtime')).toBe(true);
     expect(component.totals().tokens).toBe(50_592_284);
+    expect(component.recordedUsagePeriod()).toEqual({
+      oldestRecordedAt: '2026-06-01T08:15:00Z',
+      newestRecordedAt: '2026-08-11T12:30:00Z',
+    });
+    expect(document.body.querySelector('[data-testid="cli-usage-modal-codex"] [data-testid="cli-usage-model-period"]')?.textContent)
+      .toContain('Since 01 Jun 2026 · as of 11 Aug 2026, 12:30 UTC');
+  });
+
+  it('labels missing legacy timestamp bounds instead of inventing a period', async () => {
+    const fixture = await build(codexRow, 'codex', {
+      projects: 1,
+      orchestratorEntries: 1,
+      orchestratorLlmCalls: 1,
+      totalInputTokens: 100,
+      totalOutputTokens: 10,
+      totalCacheReadTokens: 0,
+      totalCacheCreationTokens: 0,
+      estimatedApiCostUsd: 0,
+      allModelsPriced: false,
+      byModel: [{
+        model: 'gpt-5-codex', calls: 1, inputTokens: 100, outputTokens: 10,
+        cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0, modelPriced: false,
+      }],
+      byProject: [],
+      fetchedAt: '2026-08-11T12:45:00Z',
+      disclaimer: '',
+    });
+
+    expect(fixture.componentInstance.recordedUsagePeriod()).toBeNull();
+    expect(document.body.querySelector('[data-testid="cli-usage-modal-codex"] [data-testid="cli-usage-model-period"]')?.textContent)
+      .toContain('Recording period unavailable');
   });
 
   it('still returns "n/a" when a window carries no usable number at all', async () => {

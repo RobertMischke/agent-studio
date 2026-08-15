@@ -7,6 +7,7 @@ type AnalysisPeriod = '1h' | '24h' | '7d';
 
 interface TrendPoint { label: string; total: number; height: number; }
 interface StreamPart { label: string; tokens: number; pct: number; }
+interface UsagePeriod { oldestRecordedAt: string; newestRecordedAt: string; }
 
 @Component({
   selector: 'app-cli-window-analysis',
@@ -31,6 +32,24 @@ export class CliWindowAnalysisComponent {
   readonly row = computed(() => this.quotaRows().find(row => row.cliType === this.cliType()) ?? null);
   readonly label = computed(() => this.cliType() === 'claude' ? 'Claude' : 'Codex');
   readonly cliModels = computed(() => (this.tokens()?.byModel ?? []).filter(row => this.modelMatches(row.model)));
+  readonly quotaAsOf = computed(() => this.validTimestamp(this.row()?.fetchedAt));
+  readonly recordedUsagePeriod = computed<UsagePeriod | null>(() => {
+    const models = [...this.cliModels()];
+    if (this.cliType() === 'claude') {
+      models.push(...(this.adhoc()?.byModel ?? []).filter(row => this.modelMatches(row.model)));
+    }
+    let oldest: { iso: string; ms: number } | null = null;
+    let newest: { iso: string; ms: number } | null = null;
+    for (const model of models) {
+      const modelOldest = this.parsedTimestamp(model.oldestRecordedAt);
+      const modelNewest = this.parsedTimestamp(model.newestRecordedAt);
+      if (modelOldest && (!oldest || modelOldest.ms < oldest.ms)) oldest = modelOldest;
+      if (modelNewest && (!newest || modelNewest.ms > newest.ms)) newest = modelNewest;
+    }
+    return oldest && newest
+      ? { oldestRecordedAt: oldest.iso, newestRecordedAt: newest.iso }
+      : null;
+  });
   readonly capturedTokens = computed(() => this.cliModels().reduce((sum, model) => sum + this.modelTotal(model), 0)
     + (this.cliType() === 'claude' ? this.adhocTotal() : 0));
   readonly streamParts = computed<StreamPart[]>(() => {
@@ -88,6 +107,17 @@ export class CliWindowAnalysisComponent {
     return `${(value / 1_000_000).toFixed(2)}M`;
   }
   formatPct(value: number | null): string { return value == null ? 'Unknown' : `${value.toFixed(1)}% / h`; }
+  formatRecordedDate(value: string): string {
+    return new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC',
+    }).format(new Date(value));
+  }
+  formatRecordedAt(value: string): string {
+    return new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      hourCycle: 'h23', timeZone: 'UTC',
+    }).format(new Date(value)) + ' UTC';
+  }
 
   private adhocTotal(): number {
     const value = this.adhoc();
@@ -101,5 +131,13 @@ export class CliWindowAnalysisComponent {
     return this.cliType() === 'claude'
       ? /claude|haiku|sonnet|opus/.test(value)
       : /codex|^gpt|^o[0-9]/.test(value);
+  }
+  private validTimestamp(value: string | null | undefined): string | null {
+    return this.parsedTimestamp(value)?.iso ?? null;
+  }
+  private parsedTimestamp(value: string | null | undefined): { iso: string; ms: number } | null {
+    if (!value) return null;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? { iso: value, ms } : null;
   }
 }

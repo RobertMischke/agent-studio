@@ -12,7 +12,10 @@
 > current source for remote runner calls. Project summary, heatmap, and pipeline
 > cost responses include the newest successfully read usage timestamp and
 > report partial or unavailable sources instead of presenting an unexplained
-> zero. The legacy services (`TokenSummaryService`,
+> zero. Per-model lifetime aggregates preserve the oldest and newest source
+> entry timestamps; the per-CLI usage dialog derives its visible "Since" and
+> "as of" range from those model rows, while quota windows show their separate
+> snapshot time and reset boundaries. The legacy services (`TokenSummaryService`,
 > `WorkspaceTokensTimelineService`, `ProjectTokenUsageService`) retain the pure
 > fold helpers used by the canonical readers and parity fixtures. Each surface ships
 > with a Phase-5 parity test

@@ -49,17 +49,17 @@ async function stubBackgroundApis(page: Page) {
     projects: 2, orchestratorEntries: 21, orchestratorLlmCalls: 21,
     totalInputTokens: 510000, totalOutputTokens: 94000, totalCacheReadTokens: 180000, totalCacheCreationTokens: 22000,
     estimatedApiCostUsd: 2.4, allModelsPriced: true, byModel: [
-      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true },
-      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true },
+      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true, oldestRecordedAt: '2026-06-01T08:15:00Z', newestRecordedAt: '2026-08-11T12:30:00Z' },
+      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true, oldestRecordedAt: '2026-06-14T09:30:00Z', newestRecordedAt: '2026-08-10T11:45:00Z' },
     ], byProject: [],
     fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
   }));
   await page.route('**/api/cli/quota', json({ at: new Date().toISOString(), ttlSeconds: 600, snapshots: [
-    { cliType: 'claude', fetchedAt: new Date().toISOString(), plan: 'Max', source: 'local probe', error: null, windows: [
+    { cliType: 'claude', fetchedAt: '2026-08-11T12:45:00Z', plan: 'Max', source: 'local probe', error: null, windows: [
       { label: '5h session', usedPct: 42, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 3 * 3600_000).toISOString(), resetLabel: 'in 3 hours' },
       { label: '7d weekly', usedPct: 61, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 4 * 86400_000).toISOString(), resetLabel: 'in 4 days' },
     ] },
-    { cliType: 'codex', fetchedAt: new Date().toISOString(), plan: 'Pro', source: 'local probe', error: null, windows: [
+    { cliType: 'codex', fetchedAt: '2026-08-11T12:45:00Z', plan: 'Pro', source: 'local probe', error: null, windows: [
       { label: '5h session', usedPct: 36, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 2 * 3600_000).toISOString(), resetLabel: 'in 2 hours' },
       { label: '7d weekly', usedPct: 24, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 5 * 86400_000).toISOString(), resetLabel: 'in 5 days' },
     ] },
@@ -245,6 +245,10 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(page.getByTestId('cli-window-analysis-claude')).toBeVisible();
     await expect(page.getByTestId('cli-window-analysis-claude')).toContainText('CLI account level');
     await expect(page.getByTestId('cli-window-cards')).toContainText('5h session');
+    await expect(page.getByTestId('cli-window-recorded-period'))
+      .toContainText('Since 01 Jun 2026 · as of 11 Aug 2026, 12:30 UTC');
+    await expect(page.getByTestId('cli-window-quota-as-of'))
+      .toHaveText('As of 11 Aug 2026, 12:45 UTC');
     await expect(page.getByTestId('cli-effort-split')).toContainText('Unattributed 100%');
     await expect(page.getByTestId('cli-plausibility')).toContainText('Per-task cap forecast (TE-4)');
 
@@ -257,7 +261,7 @@ test.describe('Workspace settings home (Dach)', () => {
     }
 
     await page.getByTestId('token-usage-nav-codex').click();
-    await expect(page).toHaveURL(/#\/workspace\/tokens\/codex$/);
+    await expect(page).toHaveURL(/#\/workspace\/(?:settings\/)?tokens\/codex$/);
     await expect(page.getByTestId('cli-window-analysis-codex')).toContainText('Codex usage windows');
     await page.getByTestId('cli-window-period-7d').click();
     await expect(page.getByTestId('cli-window-period-7d')).toHaveAttribute('aria-pressed', 'true');

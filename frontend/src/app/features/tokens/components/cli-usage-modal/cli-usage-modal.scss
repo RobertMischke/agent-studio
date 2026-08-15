@@ -17,10 +17,27 @@
 
 .cum__panel-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--studio-spacing-3);
   margin-bottom: var(--studio-spacing-3);
+}
+
+.cum__panel-heading {
+  min-width: 0;
+}
+
+.cum__panel-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+
+.cum__as-of {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .cum__panel-title {
@@ -147,9 +164,10 @@
 // Summary head over the model table — token + cost totals as stat tiles.
 // ---------------------------------------------------------------------------
 .cum__scope-note {
-  margin: calc(var(--studio-spacing-2) * -1) 0 var(--studio-spacing-3);
+  margin: var(--studio-spacing-1) 0 0;
   color: var(--studio-fg-dim);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .cum__totals {

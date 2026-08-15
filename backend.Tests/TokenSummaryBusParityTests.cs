@@ -257,6 +257,8 @@ public sealed class TokenSummaryBusParityTests : IDisposable
             Assert.Equal(a.ByModel[i].CacheCreationTokens,   b.ByModel[i].CacheCreationTokens);
             Assert.Equal(a.ByModel[i].EstimatedApiCostUsd,   b.ByModel[i].EstimatedApiCostUsd);
             Assert.Equal(a.ByModel[i].ModelPriced,           b.ByModel[i].ModelPriced);
+            Assert.Equal(a.ByModel[i].OldestRecordedAt,      b.ByModel[i].OldestRecordedAt);
+            Assert.Equal(a.ByModel[i].NewestRecordedAt,      b.ByModel[i].NewestRecordedAt);
         }
     }
 

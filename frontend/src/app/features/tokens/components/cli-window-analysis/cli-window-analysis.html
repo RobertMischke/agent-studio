@@ -13,11 +13,26 @@
   <div class="cwa__levels" data-testid="cli-usage-levels">
     <article><span>Account</span><strong>{{ row()?.plan ?? 'Plan not reported' }}</strong><small>Identity exposed by the local CLI probe</small></article>
     <article><span>Quota windows</span><strong>{{ row()?.windows?.length ?? 0 }} reported</strong><small>Provider units, not raw token totals</small></article>
-    <article><span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong><small>Workspace events mapped to {{ label() }} models</small></article>
+    <article>
+      <span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong>
+      <small data-testid="cli-window-recorded-period">
+        @if (recordedUsagePeriod(); as period) {
+          Since <time [attr.datetime]="period.oldestRecordedAt">{{ formatRecordedDate(period.oldestRecordedAt) }}</time>
+          · as of <time [attr.datetime]="period.newestRecordedAt">{{ formatRecordedAt(period.newestRecordedAt) }}</time>
+        } @else {
+          Recording period unavailable
+        }
+      </small>
+    </article>
   </div>
 
   <section class="cwa__panel" data-testid="cli-window-cards">
-    <div class="cwa__section-head"><div><h3>Window progression</h3><p>Reported use is projected at its current average burn rate until reset.</p></div></div>
+    <div class="cwa__section-head">
+      <div><h3>Window progression</h3><p>Reported use is projected at its current average burn rate until reset.</p></div>
+      @if (quotaAsOf(); as asOf) {
+        <time class="cwa__as-of" data-testid="cli-window-quota-as-of" [attr.datetime]="asOf">As of {{ formatRecordedAt(asOf) }}</time>
+      }
+    </div>
     <div class="cwa__windows">
       @for (window of row()?.windows ?? []; track window.label) {
         <article class="cwa__window">

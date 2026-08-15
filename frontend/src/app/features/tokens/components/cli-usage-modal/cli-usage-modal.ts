@@ -20,6 +20,13 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  oldestRecordedAt?: string | null;
+  newestRecordedAt?: string | null;
+}
+
+interface UsagePeriod {
+  oldestRecordedAt: string;
+  newestRecordedAt: string;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -98,6 +105,9 @@ export class CliUsageModalComponent {
 
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
 
+  /** Absolute observation time for the independently sampled quota data. */
+  readonly quotaAsOf = computed(() => this.validTimestamp(this.row()?.fetchedAt));
+
   /** Reshapes each reported window into its card projection (pct, tone,
    *  bar width, reset countdown). Pure derivation of the input row. */
   readonly windowViews = computed<WindowView[]>(() =>
@@ -149,6 +159,25 @@ export class CliUsageModalComponent {
       if (this.totalTokens(row) > 0) rows.push(row);
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
+  });
+
+  /**
+   * Earliest and newest telemetry entries represented by this CLI's visible
+   * model rows. These are entry timestamps from the aggregates, never fetch
+   * time or configuration, so the lifetime totals carry an honest period.
+   */
+  readonly recordedUsagePeriod = computed<UsagePeriod | null>(() => {
+    let oldest: { iso: string; ms: number } | null = null;
+    let newest: { iso: string; ms: number } | null = null;
+    for (const row of this.modelRows()) {
+      const rowOldest = this.parsedTimestamp(row.oldestRecordedAt);
+      const rowNewest = this.parsedTimestamp(row.newestRecordedAt);
+      if (rowOldest && (!oldest || rowOldest.ms < oldest.ms)) oldest = rowOldest;
+      if (rowNewest && (!newest || rowNewest.ms > newest.ms)) newest = rowNewest;
+    }
+    return oldest && newest
+      ? { oldestRecordedAt: oldest.iso, newestRecordedAt: newest.iso }
+      : null;
   });
 
   limitText(window: QuotaWindow): string {
@@ -220,6 +249,37 @@ export class CliUsageModalComponent {
     if (n < 0.1) return '$' + n.toFixed(4);
     if (n < 1) return '$' + n.toFixed(3);
     return '$' + n.toFixed(2);
+  }
+
+  formatRecordedDate(value: string): string {
+    return new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(value));
+  }
+
+  formatRecordedAt(value: string): string {
+    return new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'UTC',
+    }).format(new Date(value)) + ' UTC';
+  }
+
+  private validTimestamp(value: string | null | undefined): string | null {
+    return this.parsedTimestamp(value)?.iso ?? null;
+  }
+
+  private parsedTimestamp(value: string | null | undefined): { iso: string; ms: number } | null {
+    if (!value) return null;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? { iso: value, ms } : null;
   }
 
   private modelBelongsToCli(model: string, cliType: CliType): boolean {
