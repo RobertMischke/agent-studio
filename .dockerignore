@@ -21,6 +21,8 @@
 **/.angular
 results
 artifacts
-docs/
+docs/**
+!docs/app/
+!docs/app/**
 **/*.log
 **/cli-output.log

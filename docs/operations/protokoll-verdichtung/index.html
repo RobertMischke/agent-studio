@@ -102,7 +102,7 @@
 <p>Also: Tool-Mix (Top-2-Arten mit Zähler), Erfolgs-Aggregat (alle ok / n fehlgeschlagen — Fehlschläge rot und nie verdichtet), Dauer. Umsetzungsort analog Variante B (AS-Projektion) bzw. A (Library-Zeile), gleiche Abwägung.</p>
 
 <h2><span class="no">04</span>Edit-Zeilen: Pfad, Zähler-Semantik, Diff</h2>
-<p>Beobachtet: <code>edit Edit C:\Users\rmisc\AppData\Local\Temp\ass-worktrees\Agent-Studio-Marketing\marketing-stu… ok ×5</code> — abgeschnittener Absolutpfad, mehrdeutiges ×5.</p>
+<p>Beobachtet: <code>edit Edit %LOCALAPPDATA%\Temp\ass-worktrees\Agent-Studio-Marketing\marketing-stu… ok ×5</code>, abgeschnittener Absolutpfad, mehrdeutiges ×5.</p>
 <ul>
   <li><b>Antwort auf die Operator-Frage („kommt das von der CLI?"):</b> Ja und nein. Die Edit-Operationen samt Pfaden kommen aus dem CLI-Ausgabestrom; die <b>Darstellung</b> (Rohpfad ungekürzt, ×5-Aggregation) ist Projektion/Renderer. Die CLI liefert im Stream <b>keine Diffs</b> — nur die Edit-Ereignisse.</li>
   <li><b>Pfad:</b> Der Temp-Worktree-Präfix ist Rauschen — der Host kennt den Worktree-Root und kann <b>repo-relativ</b> anzeigen (<code>frontend/src/app/wiki/…</code>), voller Pfad im Tooltip. Damit verschwindet auch das Truncation-Problem fast immer.</li>
