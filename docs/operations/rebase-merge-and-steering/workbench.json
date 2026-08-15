@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "rebase-merge-and-steering",
+  "title": "Rebase, merge, and bounce steering",
+  "summary": "Decision-ready concept explaining the current stage-specific Git hybrid through commit attribution: rebase-first replacement delivery rounds, merge-first canonical integration, exact-SHA promotion and Batch Gate compatibility, plus a migration from session-owned bounce sweeps to deterministic backend recovery with a bounded strong-model guardian exception lane.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-15T08:31:53Z",
+  "sourceTaskKeys": [
+    "AGT-2662"
+  ],
+  "implementationTasks": [],
+  "relatedTaskKeys": [
+    "AGT-2544",
+    "AGT-2557",
+    "AGT-2563",
+    "AGT-2632",
+    "AGT-2648",
+    "AGT-2654"
+  ],
+  "key": "AGT-W37"
+}

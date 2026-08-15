@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Rebase, merge, and bounce steering | Decision dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+  a { color: var(--develop); text-underline-offset: 3px; }
+  ol { padding-left: 22px; }
+  .table-wrap { overflow-x: auto; }
+  .decision-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+  .decision { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 15px; }
+  .decision h4 { margin: 0 0 6px; font-size: 15px; }
+  .decision p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  .small { color: var(--ink-2); font-size: 13px; }
+  .forced { color: var(--bad); font-weight: 650; }
+  .choice { color: var(--warn); font-weight: 650; }
+  .recommended { color: var(--ok); font-weight: 650; }
+  @media (max-width: 760px) { .decision-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <p class="kicker">Decision dossier · AGT-2662 · concept only</p>
+  <h1>Rebase, merge, and bounce steering</h1>
+  <p class="lede">The pipeline is intentionally hybrid. Delivery repair may rewrite a superseded candidate under a new fence. Canonical integration should preserve the accepted delivery objects whenever possible. This page explains why, where the operator still has a choice, and how routine bounce recovery can move from session labor into bounded platform policy.</p>
+  <div class="meta">
+    <span><b>Status</b> decision pending</span>
+    <span><b>Phase</b> decision ready</span>
+    <span><b>Evidence cut</b> 14 August 2026</span>
+    <span><b>Implementation</b> none in this card</span>
+  </div>
+</header>
+
+<div class="box accent" data-document-section="recommendation">
+  <h4>Recommendation</h4>
+  <p><b>Keep the hybrid and make its boundary explicit.</b> Use rebase as the default agent-side repair for a superseded delivery, then record a fresh fence, result SHA, commit attribution, gate, and review subject. At server integration, keep AGT-2632's merge-first order: direct merge, then SHA-preserving mechanical merge, and only then a one-to-one mapped rebase fallback. Never squash an accepted delivery under the current evidence contract. Automate routine conflict bounce recovery as a deterministic backend rule; invoke a strong guardian only after the deterministic round fails or the evidence shows a genuine semantic conflict.</p>
+</div>
+
+<div class="box warn">
+  <h4>Decision requested</h4>
+  <p>Approve the stage-specific Git policy and the steering escalation ladder. This is not approval to change the integrator, task API, prompts, or lane transitions. The implementation slices in §10 remain proposed.</p>
+</div>
+
+<nav aria-label="Contents">
+  <h3>Contents</h3>
+  <ol class="toc">
+    <li><a href="#answer">Short answer</a></li>
+    <li><a href="#invariants">The invariants</a></li>
+    <li><a href="#current-hybrid">Current hybrid</a></li>
+    <li><a href="#attribution">SHA attribution flow</a></li>
+    <li><a href="#delivery-options">Delivery reconciliation options</a></li>
+    <li><a href="#integration-options">Integration options</a></li>
+    <li><a href="#batch-gate">Batch Gate calculus</a></li>
+    <li><a href="#today">Bounce steering today</a></li>
+    <li><a href="#scenarios">Automation scenarios</a></li>
+    <li><a href="#migration">Migration slices</a></li>
+    <li><a href="#decisions">Operator decisions</a></li>
+    <li><a href="#evidence">Evidence and limits</a></li>
+  </ol>
+</nav>
+
+<h2 id="answer"><span class="no">§1</span>Short answer: identity changes meaning by stage</h2>
+<div class="decision-grid">
+  <article class="decision">
+    <h4>Repairing a delivery</h4>
+    <p>The previous subject is superseded. A new attempt may rewrite commits because the platform records new commit identities and reviews the new exact head.</p>
+  </article>
+  <article class="decision">
+    <h4>Integrating a delivery</h4>
+    <p>The accepted subject is authoritative. Rewriting it after review disconnects acceptance evidence from Git ancestry unless an explicit mapping contract replaces that proof.</p>
+  </article>
+  <article class="decision">
+    <h4>Publishing a batch</h4>
+    <p>The exact tested candidate is authoritative. Replayed member SHAs are valid only when the batch record maps each accepted result to its replacements before publication.</p>
+  </article>
+</div>
+<p>“Rebase or merge?” therefore has no pipeline-wide answer. The correct answer depends on whether the operation is creating a new review subject, preserving an accepted subject, or publishing a separately fenced combined candidate.</p>
+
+<h2 id="invariants"><span class="no">§2</span>The invariants that constrain the choice</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Invariant</th><th>Operational meaning</th><th>What violates it</th></tr></thead>
+  <tbody>
+    <tr><td><b>Unambiguous commit attribution</b></td><td><code>task.json commits[]</code>, the current attempt, the result envelope, review subject, and integration ancestry must describe the same delivery or an explicit one-to-one replacement map.</td><td>Silent SHA rewrite, changed commit cardinality, or a squash without a new attribution record.</td></tr>
+    <tr><td><b>Reviewable card-scoped diff</b></td><td>A reviewer can compare the candidate against its declared base and see only the card's intended change plus explicit conflict resolution.</td><td>Merging broad upstream history into the subject without a stable base, or reconstructing a delivery by ad hoc cherry-picks.</td></tr>
+    <tr><td><b>Truthful canonical history</b></td><td><code>develop</code> and <code>main</code> show which accepted delivery entered, what combined revision was tested, and where conflict resolution occurred.</td><td>Invented ancestry, an untested post-gate merge commit, or collapsing multiple deliveries into an unattributed commit.</td></tr>
+    <tr><td><b>Exact candidate compatibility</b></td><td>The promotion train tests and publishes a pinned candidate SHA. Any integration or batch operation must preserve that exact-subject claim.</td><td>Testing one SHA and later creating a different merge or squash commit for publication.</td></tr>
+    <tr><td><b>Bounded continuation</b></td><td>Recovery has an attempt identity, a round budget, restart-safe state, and a terminal escalation path.</td><td>A session-only sweep with no durable owner, or an unlimited model retry loop.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="box bad">
+  <h4>The forcing invariant</h4>
+  <p>Under the current acceptance contract, the delivery commits recorded for the current attempt must be ancestors of the integration branch. If integration rewrites those objects without first replacing the evidence with an authoritative map, acceptance becomes ambiguous and must refuse. This is why merge-first is not merely a history preference.</p>
+</div>
+
+<h2 id="current-hybrid"><span class="no">§3</span>The current hybrid, without smoothing over its seams</h2>
+<h3>Server side: merge-first since AGT-2632</h3>
+<p><a href="../../../backend/Features/Git/GitService.cs"><code>GitService.MergeRefIntoIntegration</code></a> first synchronizes the target, checks whether the exact delivery is already an ancestor, and attempts <code>git merge --no-ff --no-edit</code>. A conflict triggers a SHA-preserving mechanical three-way merge with <code>ort</code> and recorded <code>rerere</code> resolution. Only after both merge routes fail does it try an isolated rebase. That fallback is accepted only for a linear delivery with unchanged commit cardinality and a one-to-one old-SHA to new-SHA map. Otherwise the outcome is <code>AgentRoundRequired</code>.</p>
+<p>The historical cause is concrete. AGT-2563 introduced a conflict-free replay path for behind-base deliveries. In AGT-2632 that replay changed delivery commit cardinality. The integrator correctly refused to guess which replacement represented which accepted commit, but the refusal initially parked the card until an operator intervened. AGT-2632 changed the order to exhaust SHA-preserving merge strategies first and added one narrow automatic agent continuation for attribution ambiguity.</p>
+<p><a href="../../../backend/Features/Tasks/TaskTransitionService.cs"><code>TaskTransitionService.ValidateIntegratedAcceptance</code></a> separately proves that human acceptance is not an integration trigger. For a coding delivery moving from Human Review to Completed, it validates the current review attempt and refuses the move unless current integration status is <code>integrated</code>. Escalated coding cards are likewise accepted only when their latest attributed task commit is an ancestor of the resolved integration branch, absent an explicit operator override.</p>
+
+<h3>Agent side: rebase the superseded delivery onto the current target</h3>
+<p>A requeue round starts from the existing delivery but creates a new authoritative attempt. The steer asks the agent to fetch the current <code>origin/&lt;integration branch&gt;</code>, rebase the delivery, resolve conservatively, rerun the relevant gate, and deliver again without redoing feature work. The old delivery remains superseded history. The fresh run records the new commits, fence, immutable result ref, result SHA, and review subject, so a rewrite is not hidden from acceptance.</p>
+<p>This route also fits the review shape: one linear candidate with one expected head SHA and a diff against the current target. Rebase is a default here, not an invariant. A merge of the target into the delivery can be made reviewable, but it introduces a non-linear subject and increases the risk that upstream commits or a broad merge commit enter task attribution. Cherry-pick is reserved for controlled salvage because it reconstructs intent by selection.</p>
+
+<div class="box ok">
+  <h4>Why the hybrid is coherent</h4>
+  <p>Before a new fence, the pipeline is allowed to create a replacement delivery. After acceptance has attached to an exact delivery, integration must preserve that subject or explicitly replace its identity proof. The boundary is authority, not aesthetics.</p>
+</div>
+
+<h2 id="attribution"><span class="no">§4</span>SHA attribution flow: rebase versus merge</h2>
+<figure>
+  <svg viewBox="0 0 1040 610" role="img" aria-labelledby="sha-title sha-desc">
+    <title id="sha-title">SHA attribution under rebase and merge</title>
+    <desc id="sha-desc">The upper path shows an accepted delivery whose commits are rebased during integration, breaking ancestry unless a replacement map is persisted. The middle path shows merge-first integration preserving the accepted objects. The lower path shows an agent requeue rebase producing a new fenced subject before review.</desc>
+    <defs>
+      <marker id="sha-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--ink-3)"/></marker>
+      <marker id="sha-bad-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--bad)"/></marker>
+      <marker id="sha-ok-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--ok)"/></marker>
+    </defs>
+    <text class="s-tiny" x="28" y="30">A · REBASE DURING INTEGRATION</text>
+    <rect class="s-node" x="28" y="48" width="210" height="90"/>
+    <text class="s-label" x="48" y="76">Accepted subject</text>
+    <text class="s-sub" x="48" y="100">commits[] = D1, D2</text>
+    <text class="s-sub" x="48" y="121">review head = D2</text>
+    <path class="s-flow" d="M238 93 H298" marker-end="url(#sha-arrow)"/>
+    <rect class="badge-warn" x="298" y="48" width="210" height="90" rx="8"/>
+    <text class="s-label" x="318" y="76">Replay onto newer target</text>
+    <text class="s-sub" x="318" y="100">D1 → R1, D2 → R2</text>
+    <text class="s-sub" x="318" y="121">or cardinality changes</text>
+    <path d="M508 93 H568" stroke="var(--bad)" stroke-width="1.8" fill="none" marker-end="url(#sha-bad-arrow)"/>
+    <rect class="badge-bad" x="568" y="48" width="224" height="90" rx="8"/>
+    <text class="s-label" x="588" y="76">Ancestry proof breaks</text>
+    <text class="s-sub" x="588" y="100">D1 and D2 are absent</text>
+    <text class="s-sub" x="588" y="121">mapping may be ambiguous</text>
+    <path d="M792 93 H850" stroke="var(--bad)" stroke-width="1.8" fill="none" marker-end="url(#sha-bad-arrow)"/>
+    <rect class="badge-bad" x="850" y="48" width="162" height="90" rx="8"/>
+    <text class="t-bad" x="870" y="81">REFUSE</text>
+    <text class="s-sub" x="870" y="105">unless exact map</text>
+    <text class="s-sub" x="870" y="123">is persisted</text>
+
+    <line class="s-lane" x1="20" y1="168" x2="1020" y2="168"/>
+    <text class="s-tiny" x="28" y="199">B · MERGE-FIRST INTEGRATION</text>
+    <rect class="s-node" x="28" y="217" width="210" height="90"/>
+    <text class="s-label" x="48" y="245">Accepted subject</text>
+    <text class="s-sub" x="48" y="269">delivery objects D1, D2</text>
+    <text class="s-sub" x="48" y="290">remain authoritative</text>
+    <path class="s-flow" d="M238 262 H298" marker-end="url(#sha-arrow)"/>
+    <rect class="s-node2" x="298" y="217" width="210" height="90" rx="8"/>
+    <text class="s-label" x="318" y="245">Merge commit M</text>
+    <text class="s-sub" x="318" y="269">parents: target + D2</text>
+    <text class="s-sub" x="318" y="290">D1, D2 unchanged</text>
+    <path d="M508 262 H568" stroke="var(--ok)" stroke-width="1.8" fill="none" marker-end="url(#sha-ok-arrow)"/>
+    <rect class="badge-ok" x="568" y="217" width="224" height="90" rx="8"/>
+    <text class="s-label" x="588" y="245">Ancestry remains true</text>
+    <text class="s-sub" x="588" y="269">gate exact merge SHA M</text>
+    <text class="s-sub" x="588" y="290">record merge provenance</text>
+    <path d="M792 262 H850" stroke="var(--ok)" stroke-width="1.8" fill="none" marker-end="url(#sha-ok-arrow)"/>
+    <rect class="badge-ok" x="850" y="217" width="162" height="90" rx="8"/>
+    <text class="t-ok" x="870" y="250">INTEGRATE</text>
+    <text class="s-sub" x="870" y="274">then verify remote</text>
+    <text class="s-sub" x="870" y="292">exact candidate</text>
+
+    <line class="s-lane" x1="20" y1="337" x2="1020" y2="337"/>
+    <text class="s-tiny" x="28" y="368">C · REBASE IN A NEW AGENT ROUND</text>
+    <rect class="badge-warn" x="28" y="386" width="210" height="104" rx="8"/>
+    <text class="s-label" x="48" y="414">Supersede old delivery</text>
+    <text class="s-sub" x="48" y="438">old fence and head retained</text>
+    <text class="s-sub" x="48" y="459">as historical evidence</text>
+    <text class="s-sub" x="48" y="480">not current acceptance</text>
+    <path class="s-flow" d="M238 438 H298" marker-end="url(#sha-arrow)"/>
+    <rect class="s-node2" x="298" y="386" width="210" height="104" rx="8"/>
+    <text class="s-label" x="318" y="414">Agent rebases and resolves</text>
+    <text class="s-sub" x="318" y="438">current origin/develop</text>
+    <text class="s-sub" x="318" y="459">new commits N1, N2</text>
+    <text class="s-sub" x="318" y="480">linear expected head N2</text>
+    <path class="s-flow" d="M508 438 H568" marker-end="url(#sha-arrow)"/>
+    <rect class="s-node" x="568" y="386" width="224" height="104"/>
+    <text class="s-label" x="588" y="414">Fresh evidence envelope</text>
+    <text class="s-sub" x="588" y="438">new fence + result SHA</text>
+    <text class="s-sub" x="588" y="459">new commits[] + gate</text>
+    <text class="s-sub" x="588" y="480">new review subject</text>
+    <path d="M792 438 H850" stroke="var(--ok)" stroke-width="1.8" fill="none" marker-end="url(#sha-ok-arrow)"/>
+    <rect class="badge-ok" x="850" y="386" width="162" height="104" rx="8"/>
+    <text class="t-ok" x="870" y="422">REVIEW N2</text>
+    <text class="s-sub" x="870" y="446">no claim that N2</text>
+    <text class="s-sub" x="870" y="467">is still old D2</text>
+
+    <text class="s-tiny" x="28" y="550">Rule of thumb: rewrite before new evidence is bound; preserve after acceptance is bound.</text>
+    <text class="s-tiny" x="28" y="574">Batch Gate is a third authority boundary: it may replay only with durable per-member original-to-replacement mapping and exact-candidate publication.</text>
+  </svg>
+  <figcaption><b>Figure 1: attribution is an evidence relation, not a branch-shape preference.</b> Merge retains the accepted objects. A delivery-round rebase is valid because it creates a new subject. An integration rebase needs a complete replacement map before the original objects disappear from ancestry.</figcaption>
+</figure>
+
+<h2 id="delivery-options" data-document-section="alternatives"><span class="no">§5</span>Delivery branch reconciliation options</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Option</th><th>Attribution</th><th>Review shape</th><th>History and candidate mode</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td><b>Rebase onto current target</b></td><td>Rewrites delivery SHAs, which is valid only because the old attempt is superseded and the new fence records the replacements as current.</td><td>Linear, card-scoped candidate against the newest base; one expected head SHA.</td><td>Does not add upstream merge commits to the delivery. Exact result head is straightforward to gate.</td><td><span class="recommended">Recommended default.</span> Resolve conservatively and rerun evidence.</td></tr>
+    <tr><td><b>Merge current target into delivery</b></td><td>Preserves original delivery SHAs and adds a merge commit, but attribution must exclude upstream commits and identify the merge resolution correctly.</td><td>Non-linear subject. Diff can remain card-scoped with the right base, but review tooling and commit aggregation have more work.</td><td>Truthfully records reconciliation in the delivery branch. Candidate mode can pin the merge head, but the subject is less uniform.</td><td><span class="choice">Real operator choice.</span> Keep as an escape hatch for complex topology or when preserving a signed/public commit matters.</td></tr>
+    <tr><td><b>Cherry-pick selected delivery commits</b></td><td>Rewrites every selected commit and relies on an operator or agent to choose the complete set and order.</td><td>Can be linear and small, but omission, duplication, and reordered intent are easy to hide.</td><td>Creates a reconstructed narrative. Exact candidate mode works only after the reconstruction is fenced and reviewed as new.</td><td><span class="forced">Not routine.</span> Use only for bounded salvage with an explicit source-to-replacement inventory.</td></tr>
+  </tbody>
+</table></div>
+<p>The operator has a genuine choice between rebase and merge-target-in during <em>delivery repair</em>. The recommendation is driven by review ergonomics, not by the acceptance ancestry invariant, because the repaired delivery receives new evidence either way.</p>
+
+<h2 id="integration-options"><span class="no">§6</span>Canonical integration options</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Option</th><th>Commit attribution</th><th>Card diff and canonical history</th><th>Candidate-SHA compatibility</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td><b>Direct or mechanical merge</b></td><td>Preserves every accepted delivery SHA and adds one attributable merge result.</td><td>Delivery remains a revertable unit. A mechanical resolution belongs visibly to the merge commit.</td><td>Gate and publish the exact merge-result SHA. Never synthesize a different merge after the gate.</td><td><span class="recommended">First choice.</span> This is the current merge-first contract.</td></tr>
+    <tr><td><b>Squash merge</b></td><td>Replaces all accepted delivery objects with one new object. Current <code>commits[]</code> ancestry becomes false.</td><td>Looks compact but erases per-commit evidence and obscures which accepted objects entered.</td><td>The squash SHA can be pinned, but only a new authoritative acceptance-to-squash record could connect it to the card.</td><td><span class="forced">Forced no under current invariants.</span> It becomes a choice only after a redesigned attribution and revert contract.</td></tr>
+    <tr><td><b>Rebase then fast-forward</b></td><td>Rewrites accepted objects. Safe only for a linear, unchanged-cardinality replay with a persisted one-to-one map.</td><td>Linear canonical history, but conflict resolution can be distributed across rewritten commits and historical acceptance no longer points directly at them.</td><td>Compatible when the rebased tip itself is the gated and published candidate and the mapping is durable before release.</td><td><span class="choice">Bounded fallback.</span> Current code permits only the provable one-to-one case; ambiguity forces a new round.</td></tr>
+    <tr><td><b>Cherry-pick into target</b></td><td>Same rewrite problem as rebase, plus manual selection risk and no natural whole-delivery boundary.</td><td>Can manufacture a tidy history while losing the reviewed grouping.</td><td>Pinning the final tip does not repair missing source attribution.</td><td><span class="forced">Forced no for normal integration.</span> Reserved for operator-owned repository repair outside acceptance automation.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="box accent">
+  <h4>Where the invariant decides, and where taste remains</h4>
+  <p><b>Forced:</b> do not silently squash, cherry-pick, or ambiguously rebase an accepted delivery. <b>Choice:</b> a provably mapped rebase-fast-forward remains technically valid, and the operator may decide whether its linear history is worth the extra evidence complexity. <b>Recommendation:</b> preserve it as a late fallback, not the primary integration path.</p>
+</div>
+
+<h2 id="batch-gate"><span class="no">§7</span>How Batch Gate changes the calculus</h2>
+<p>The <a href="../batch-gate-concept/index.html">AGT-2648 Batch Gate dossier</a> proposes a different integration authority. It closes a manifest on a pinned <code>develop</code> base, mechanically replays each eligible delivery into a temporary candidate, runs one full suite on the exact combined SHA, and publishes only that exact green tip. Every replacement SHA maps back to its original delivery SHA. A conflict ejects only that member to the rebase-steer path.</p>
+<p>This makes per-card merge commits optional <em>inside the future batch path</em>, but it does not make attribution optional. The native batch record must bind task key, attempt, delivery epoch, original result SHA, replacement SHA set, membership digest, base SHA, tested candidate SHA, gate profile, and integration receipt. The current five-class historical integration record is not sufficient authority by itself.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Question</th><th>Per-card integration today</th><th>Batch Gate world</th></tr></thead>
+  <tbody>
+    <tr><td><b>What is the gated subject?</b></td><td>The exact merge result for one delivery.</td><td>The exact closed combined candidate.</td></tr>
+    <tr><td><b>How is attribution proven?</b></td><td>Accepted delivery objects remain ancestors, or a one-to-one mechanical rebase map is persisted.</td><td>Each original delivery maps to its replayed replacement set in the fenced batch manifest and receipt.</td></tr>
+    <tr><td><b>What if develop moves?</b></td><td>Synchronize before serialized merge; a new result must be gated.</td><td>Mark the green run <code>stale-base</code>, rebuild on the new base, and run the suite again.</td></tr>
+    <tr><td><b>What conflicts?</b></td><td>The card receives integration failure or a bounded continuation.</td><td>The conflicting member is ejected; admitted members continue unless the cascade guard closes the batch.</td></tr>
+    <tr><td><b>Who may publish?</b></td><td>The mechanical integrator under its merge and push gates.</td><td>The batch publisher under the shared project ref-mutation lease, serialized with auto-main and the promotion train.</td></tr>
+  </tbody>
+</table></div>
+<p>Batch Gate therefore reduces develop races and routine per-card rebases, but only after its native evidence contract exists. Until then, merge-first remains the safer production answer. Even after Batch Gate, genuine content conflicts still need a replacement delivery round; the coordinator must not resolve product semantics centrally.</p>
+
+<h2 id="today"><span class="no">§8</span>Bounce steering today: two mechanisms with different coverage</h2>
+<h3>The session-side operating practice</h3>
+<p>On each orchestration tick, the session inspects bounced review cards. When integration is <code>conflict-skipped</code>, it appends a <code>STEER</code> section to <code>prompt.md</code>, changes the card's thinking level to <code>high</code> for the bounded repair round, and moves the card to <code>2-ready</code> through the move API. Escalated cards that are not explicit holds are requeued in the same family of sweep. The practical steer is:</p>
+<div class="box">
+  <p class="mono">Your delivery could not be merged. Rebase it onto CURRENT origin/&lt;integration branch&gt;, resolve conservatively, rerun the relevant gate, and deliver again. Continue from the existing work; do not redo the feature.</p>
+</div>
+<p>This works while the orchestrator session is alive and attentive. It is model-authored control-plane labor on every tick, duplicates state classification already available to the backend, and can append inconsistent wording or miss a lane. On 13 August 2026 the session stopped overnight and 17 cards accumulated. That observation is operational evidence supplied with AGT-2662, not a controlled benchmark.</p>
+
+<h3>The narrow AGT-2632 backend continuation already present</h3>
+<p><a href="../../../backend/Features/Pipeline/IntegrationAgentRoundService.cs"><code>IntegrationAgentRoundService</code></a> handles one narrower case. When pre-human-review remote integration returns <code>AgentRoundRequired</code> because direct merge, mechanical merge, and safe mechanical rebase could not preserve attribution, it persists a steer intent, appends a continuation note, supersedes the delivery commits, moves the Auto Review card to the top of Ready, and records a timeline event. <code>RemoteIntegrationContinuationPolicy</code> allows one automatic agent round per operator review epoch, then leaves repeated ambiguity for Human Review.</p>
+<p>The operator endpoint <a href="../../../backend/Features/Tasks/TaskIntegrationRecoveryEndpoints.cs"><code>POST /api/tasks/{jobId}/integration/rebase</code></a> separately packages the fenced ref, exact result SHA, integration branch, steer intent, supersession, Ready move, and timeline record for recoverable failures in Human Review or later. It is deterministic but remains operator-triggered.</p>
+
+<div class="box warn">
+  <h4>Current-state conclusion</h4>
+  <p>The platform already knows how to persist and bound one attribution-ambiguity continuation and exposes a one-click rebase recovery endpoint. The broader conflict-skipped and escalated-card drive-to-conclusion loop is still session-owned in practice. Scenario 2 is an extension and consolidation, not a greenfield invention.</p>
+</div>
+
+<h3>Thinking-level policy</h3>
+<p>The current session practice lowers a strictly mechanical reround from <code>xhigh</code> to <code>high</code>. That is reasonable when the task scope, accepted intent, conflict files, and verification are already bounded; a stale base or environmental retry does not justify promotion under the <a href="../../system/domains/model-routing-policy.md">model routing policy</a>. Automation must still retain the card's model tier and correctness floor. A conflict involving security, fencing, data loss, or distributed authority must not be downgraded merely because it arrived through the rebase path. If the conflict needs new product judgment, it is no longer a mechanical round and should move to the guardian or human branch.</p>
+
+<h2 id="scenarios"><span class="no">§9</span>Automation scenarios</h2>
+<figure>
+  <svg viewBox="0 0 1040 650" role="img" aria-labelledby="steer-title steer-desc">
+    <title id="steer-title">Bounce steering today and under platform and guardian automation</title>
+    <desc id="steer-desc">The upper lane shows a session orchestrator polling, editing the prompt, lowering thinking level, and moving a card. The lower lane shows a restart-safe backend rule doing deterministic recovery once, followed by a strong guardian for repeated or complex evidence and then human escalation.</desc>
+    <defs>
+      <marker id="st-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--ink-3)"/></marker>
+      <marker id="st-ok-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--ok)"/></marker>
+      <marker id="st-warn-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--warn)"/></marker>
+    </defs>
+    <text class="s-tiny" x="28" y="30">TODAY · SESSION-SIDE SWEEP</text>
+    <rect class="badge-bad" x="28" y="48" width="190" height="96" rx="8"/>
+    <text class="s-label" x="48" y="76">Review bounce</text>
+    <text class="s-sub" x="48" y="100">conflict-skipped</text>
+    <text class="s-sub" x="48" y="122">or escalated, not hold</text>
+    <path class="s-flow" d="M218 96 H270" marker-end="url(#st-arrow)"/>
+    <rect class="s-node" x="270" y="48" width="190" height="96"/>
+    <text class="s-label" x="290" y="76">Session notices</text>
+    <text class="s-sub" x="290" y="100">poll each tick</text>
+    <text class="s-sub" x="290" y="122">model remains owner</text>
+    <path class="s-flow" d="M460 96 H512" marker-end="url(#st-arrow)"/>
+    <rect class="s-node2" x="512" y="48" width="238" height="96" rx="8"/>
+    <text class="s-label" x="532" y="76">Manual control actions</text>
+    <text class="s-sub" x="532" y="100">append STEER · set high</text>
+    <text class="s-sub" x="532" y="122">move API → 2-ready</text>
+    <path class="s-flow" d="M750 96 H802" marker-end="url(#st-arrow)"/>
+    <rect class="badge-warn" x="802" y="48" width="210" height="96" rx="8"/>
+    <text class="s-label" x="822" y="76">Agent repair round</text>
+    <text class="s-sub" x="822" y="100">fresh fence and gate</text>
+    <text class="s-sub" x="822" y="122">stops if session dies</text>
+
+    <line class="s-lane" x1="20" y1="178" x2="1020" y2="178"/>
+    <text class="s-tiny" x="28" y="209">RECOMMENDED · RESTART-SAFE ESCALATION LADDER</text>
+    <rect class="badge-bad" x="28" y="227" width="190" height="108" rx="8"/>
+    <text class="s-label" x="48" y="255">Typed integration failure</text>
+    <text class="s-sub" x="48" y="279">current attempt + epoch</text>
+    <text class="s-sub" x="48" y="300">conflict files + evidence</text>
+    <text class="s-sub" x="48" y="321">hold and budget checked</text>
+    <path d="M218 281 H270" stroke="var(--ok)" stroke-width="1.8" fill="none" marker-end="url(#st-ok-arrow)"/>
+    <rect class="badge-ok" x="270" y="227" width="210" height="108" rx="8"/>
+    <text class="s-label" x="290" y="255">Platform rule · round 1</text>
+    <text class="s-sub" x="290" y="279">deterministic template</text>
+    <text class="s-sub" x="290" y="300">safe thinking policy</text>
+    <text class="s-sub" x="290" y="321">supersede + Ready atomically</text>
+    <path class="s-flow" d="M480 281 H532" marker-end="url(#st-arrow)"/>
+    <rect class="s-node2" x="532" y="227" width="210" height="108" rx="8"/>
+    <text class="s-label" x="552" y="255">Agent repair + new gate</text>
+    <text class="s-sub" x="552" y="279">success exits loop</text>
+    <text class="s-sub" x="552" y="300">repeat carries exact</text>
+    <text class="s-sub" x="552" y="321">failure evidence</text>
+    <path d="M742 281 H794" stroke="var(--warn)" stroke-width="1.8" fill="none" marker-end="url(#st-warn-arrow)"/>
+    <rect class="badge-warn" x="794" y="227" width="218" height="108" rx="8"/>
+    <text class="s-label" x="814" y="255">Guardian · round 2</text>
+    <text class="s-sub" x="814" y="279">strong model reads evidence</text>
+    <text class="s-sub" x="814" y="300">writes targeted steer</text>
+    <text class="s-sub" x="814" y="321">no Git or lane authority</text>
+
+    <path d="M903 335 V411" stroke="var(--warn)" stroke-width="1.8" fill="none" marker-end="url(#st-warn-arrow)"/>
+    <rect class="badge-bad" x="794" y="411" width="218" height="94" rx="8"/>
+    <text class="s-label" x="814" y="439">Human Review</text>
+    <text class="s-sub" x="814" y="463">repeated or semantic conflict</text>
+    <text class="s-sub" x="814" y="484">evidence and choices visible</text>
+    <path d="M794 458 H665 V335" stroke="var(--ok)" stroke-width="1.8" fill="none" marker-end="url(#st-ok-arrow)"/>
+    <text class="t-ok" x="676" y="447">TARGETED RETRY</text>
+
+    <rect class="s-node" x="28" y="411" width="610" height="94"/>
+    <text class="s-label" x="48" y="439">Durable recovery record</text>
+    <text class="s-sub" x="48" y="463">failure fingerprint · attempt epoch · rounds used · selected route · prompt digest · transition receipt</text>
+    <text class="s-sub" x="48" y="484">a restart continues from this record; a duplicate tick is idempotent and cannot spend another round</text>
+
+    <text class="s-tiny" x="28" y="557">Scenario 2 handles classification and ordinary rebase instructions without a model.</text>
+    <text class="s-tiny" x="28" y="581">Scenario 3 spends strong-model tokens only when evidence can improve the next instruction: repeated conflict, ambiguous intent, or coupled failures.</text>
+    <text class="s-tiny" x="28" y="605">In Batch Gate, fewer stale-base races enter this ladder; genuine member conflicts and repeated semantic failures still do.</text>
+  </svg>
+  <figcaption><b>Figure 2: move ownership from a live session to durable policy.</b> The backend owns classification, budgets, supersession, and lane mutation. A guardian may author advice from bounded evidence, but the platform validates and executes any transition.</figcaption>
+</figure>
+
+<h3>Scenario comparison</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Scenario</th><th>Owner and trigger</th><th>Strengths</th><th>Cost and failure mode</th><th>Recommendation</th></tr></thead>
+  <tbody>
+    <tr><td><b>1 · Session orchestrator</b></td><td>A live model polls the board, edits prompts, changes thinking, and calls the move API.</td><td>Flexible, available now, can interpret unusual card context.</td><td>Consumes orchestration attention every tick, wording and coverage can drift, and recovery stops with the session. The 17-card overnight pile-up demonstrates the availability gap.</td><td>Retain only as compatibility and exception handling during migration.</td></tr>
+    <tr><td><b>2 · Platform rule</b></td><td>The backend reacts to an authoritative typed integration terminal or restart sweep.</td><td>Deterministic, restart-safe, idempotent, cheap, auditable, and no model is required for routine instructions.</td><td>A generic template cannot decide product semantics. Unsafe if it ignores holds, current-attempt fencing, route floors, or round budgets.</td><td><span class="recommended">Default rail.</span> Generalize AGT-2544's recovery envelope and AGT-2632's bounded continuation.</td></tr>
+    <tr><td><b>3 · Guardian steers</b></td><td>A strong bounded model receives the exact failed subject, conflict paths, diagnostics, prior prompts, and attempt history after deterministic recovery fails or policy detects complexity.</td><td>Can name the conflicting concepts, preserve explicit intent, distinguish test failure from Git conflict, and write a targeted repair instruction. Generalizes AGT-2654 visual-QA steered retry and the AGT-2557 Watcher vision.</td><td>Higher token and latency cost; a model can overreach or restate the task. It must not mutate Git or lanes directly.</td><td>Use for round 2, multiple coupled files, ambiguous old-to-new mapping, or evidence that the generic steer already failed.</td></tr>
+    <tr><td><b>4 · Batch Gate</b></td><td>The batch coordinator replays members on one pinned base and ejects conflicts.</td><td>Eliminates most per-card races with moving <code>develop</code>; one closed candidate owns the gate and publication window.</td><td>Requires native member mapping, fencing, and exact candidate receipts. Content conflicts do not disappear.</td><td>Reduce the volume entering scenarios 2 and 3. Keep the same bounded conflict ladder for ejected members.</td></tr>
+  </tbody>
+</table></div>
+
+<p>AGT-2544 supplies the closest recovery precedent. Every coding terminal now owes a complete immutable result envelope. A first consecutive envelope failure becomes <code>Failed/delivery-failed</code> and returns to Ready with salvage context; a second reaches Escalated as <code>unverified-delivery</code>. The platform owns the counter and the durable evidence, so a server restart does not reset the obligation or require a model to rediscover it. Scenario 2 should use that same shape for integration recovery: typed terminal, current-attempt identity, one automatic return, then visible escalation. AGT-2563 and AGT-2632 supply the Git-specific classifier and recovery primitives below that envelope pattern.</p>
+
+<h3>When a guardian is worth the tokens</h3>
+<ul>
+  <li>The same failure fingerprint survives one deterministic rebase round.</li>
+  <li>Conflict paths cross subsystem or contract boundaries and the correct resolution is not “take ours” or “take theirs.”</li>
+  <li>The integrator reports attribution ambiguity, changed cardinality, or non-linear delivery history.</li>
+  <li>The gate is red after Git reconciliation and the next instruction must separate a product regression from an infrastructure failure.</li>
+  <li>The prior steer was incomplete, contradictory, or would cross a hard correctness floor.</li>
+</ul>
+<p>A guardian is not justified for a first stale-base bounce with a complete typed failure, one current attempt, no hold, and a deterministic verification command. In that case the model would paraphrase state the backend already knows.</p>
+
+<h2 id="migration"><span class="no">§10</span>Recommended migration slices</h2>
+<ol>
+  <li><b>Make the current loop observable.</b> Add a read-only recovery projection that reports eligible conflict-skipped and non-hold escalated cards, current attempt epoch, failure fingerprint, prior recovery rounds, hold reason, and proposed route. Shadow it against the session sweep without moving cards.</li>
+  <li><b>Consolidate deterministic mutation.</b> Extract a pure recovery policy and one application service around the existing integration recovery endpoint and <code>IntegrationAgentRoundService</code>. Atomically persist the templated steer, supersede the current delivery, apply a policy-safe thinking adjustment, move to Ready, and append timeline evidence. Reuse the Task API boundary; do not write task folders from an external orchestrator.</li>
+  <li><b>Add restart-safe bounded ownership.</b> Persist a recovery record keyed by task, attempt epoch, and failure fingerprint. Default budget: one deterministic automatic round. Duplicate ticks are no-ops. Holds, stale attempts, missing envelopes, and non-recoverable failure classes remain untouched.</li>
+  <li><b>Add the guardian exception lane.</b> After the deterministic round repeats, build a compact evidence packet and ask a strong model for a targeted steer in a parseable contract. The backend validates scope and route, then queues at most one guardian-authored round. A repeated same-fingerprint failure reaches Human Review.</li>
+  <li><b>Integrate with Batch Gate.</b> When AGT-2648 is implemented, let member ejection emit the same typed recovery request. Do not auto-steer <code>stale-base</code> batch runs as content conflicts; rebuild the batch. Track how many steers remain genuine content conflicts.</li>
+  <li><b>Retire the session sweep.</b> Remove it only after restart drills, idempotency tests, shadow parity, and a soak window show that no eligible cards depend on a live orchestrator. Keep manual API recovery as a visible operator override.</li>
+</ol>
+
+<div class="box ok">
+  <h4>Proposed bounded ladder</h4>
+  <p><b>Round 0:</b> merge-first mechanical integration. <b>Round 1:</b> deterministic platform rebase steer. <b>Round 2:</b> targeted guardian steer only when evidence merits it. <b>Then:</b> Human Review with the full attempt chain. New operator intent or a materially different failure fingerprint starts a new review epoch; a process restart does not.</p>
+</div>
+
+<h2 id="decisions" data-document-section="open-decisions"><span class="no">§11</span>What the operator can decide</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Question</th><th>Invariant or choice?</th><th>Recommended decision</th></tr></thead>
+  <tbody>
+    <tr><td>May accepted commits disappear from canonical ancestry without replacement evidence?</td><td><span class="forced">Invariant.</span></td><td>No.</td></tr>
+    <tr><td>Should canonical integration try merge before rebase?</td><td>Technically a choice if a complete mapping contract exists; effectively constrained by today's evidence model.</td><td>Yes. Retain direct merge, mechanical merge, then mapped rebase fallback.</td></tr>
+    <tr><td>May normal integration squash a card?</td><td><span class="forced">Invariant under the current contract.</span></td><td>No. Revisit only with a new acceptance-to-squash identity and revert contract.</td></tr>
+    <tr><td>Should an agent repair use rebase or merge-target-in?</td><td><span class="choice">Real choice.</span></td><td>Default to rebase; retain merge-target-in as an explicit exception.</td></tr>
+    <tr><td>Should routine conflict bounces require a model?</td><td><span class="choice">Product choice.</span></td><td>No. Backend policy owns first recovery.</td></tr>
+    <tr><td>How many automatic rounds?</td><td><span class="choice">Product choice with safety bound.</span></td><td>One deterministic plus at most one guardian-authored round per review epoch.</td></tr>
+    <tr><td>May automated recovery lower reasoning below a correctness floor?</td><td><span class="forced">Model-routing invariant.</span></td><td>No. Lower only a strictly bounded mechanical round where no hard floor applies.</td></tr>
+    <tr><td>Does Batch Gate replace per-member attribution?</td><td><span class="forced">Invariant.</span></td><td>No. It replaces ancestry-only proof with a stronger mapped batch receipt.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="evidence" data-document-section="evidence"><span class="no">§12</span>Evidence base, claims, and limits</h2>
+<h3>Current code read for this dossier</h3>
+<ul>
+  <li><a href="../../../backend/Features/Tasks/TaskTransitionService.cs"><code>TaskTransitionService</code></a>: Human Review acceptance guard, current-attempt review-subject validation, integration-status refusal, and Escalated ancestry check.</li>
+  <li><a href="../../../backend/Features/Pipeline/MergeIntoDevelopRunner.cs"><code>MergeIntoDevelopRunner</code></a> and <a href="../../../backend/Features/Git/GitService.cs"><code>GitService</code></a>: serialized integration, exact merge-result gate, target synchronization, merge-first recovery order, mapped mechanical rebase, rollback, and pinned push SHA.</li>
+  <li><a href="../../../backend/Features/Pipeline/RemoteDeliveryIntegration.cs"><code>RemoteDeliveryIntegration</code></a> and <a href="../../../backend/Features/Pipeline/IntegrationAgentRoundService.cs"><code>IntegrationAgentRoundService</code></a>: ordered remote integration and the one-round attribution-ambiguity continuation.</li>
+  <li><a href="../../../backend/Features/Tasks/TaskIntegrationRecoveryEndpoints.cs"><code>TaskIntegrationRecoveryEndpoints</code></a> and <a href="../../../backend/Features/Pipeline/AcceptedIntegrationFailurePolicy.cs"><code>AcceptedIntegrationFailurePolicy</code></a>: typed recoverability and operator-triggered rebase round.</li>
+</ul>
+<h3>Historical and concept evidence</h3>
+<ul>
+  <li><a href="../../concepts/orchestrator-drive-to-conclusion.html">Drive-to-conclusion incident log</a>: AGT-2563's 0-of-11 retrospective clean replay sample and AGT-2632's changed-cardinality attribution failure and repair.</li>
+  <li><a href="../batch-gate-concept/index.html">Batch Gate dossier, AGT-2648</a>: closed manifest, deterministic replay, member mapping, exact-candidate publication, conflict ejection, and promotion-train authority.</li>
+  <li><a href="../orchestrator-waechter/index.html">Orchestrator Watcher dossier, AGT-2557</a>: observe-first guardian, bounded action allowlist, and strong analysis above deterministic substrate.</li>
+  <li><a href="../../system/domains/pipeline.md">Pipeline domain</a>: review-subject and pipeline-step contracts.</li>
+  <li><a href="../../system/domains/model-routing-policy.md">Model routing policy</a>: risk floors, mechanical retry treatment, and role-bounded model use.</li>
+</ul>
+<p class="small">The 13 August 17-card pile-up and the exact session-side tick practice are operator field observations supplied with AGT-2662. They are treated as current operational evidence, not inferred from backend code and not presented as a measured reliability rate. Batch Gate remains a decision dossier, not current behavior. This document proposes no runtime mutation.</p>
+
+<footer class="box">
+  <p><b>Decision record:</b> merge-first integration is the evidence-preserving default; delivery repair remains rebase-first; deterministic backend steering should replace routine session labor; a strong guardian is reserved for repeated or semantically complex failures.</p>
+</footer>
+</main>
+</body>
+</html>
