@@ -33,28 +33,27 @@ $arguments = @(
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
-$trigger = New-ScheduledTaskTrigger `
+$periodicTrigger = New-ScheduledTaskTrigger `
     -Once `
     -At ([DateTime]::Now.AddMinutes(1)) `
     -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
+$startupTrigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal `
     -UserId $userId `
-    -LogonType Interactive `
+    -LogonType S4U `
     -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
     -StartWhenAvailable `
-    -RestartCount 3 `
-    -RestartInterval (New-TimeSpan -Minutes 1) `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 4)
+    -ExecutionTimeLimit ([TimeSpan]::Zero)
 
 if ($PSCmdlet.ShouldProcess($TaskName, 'Register or update the tunnel keeper scheduled task')) {
     Register-ScheduledTask `
         -TaskName $TaskName `
         -Description 'Functionally probes and repairs the private Agent Host reverse tunnel.' `
         -Action $action `
-        -Trigger $trigger `
+        -Trigger @($startupTrigger, $periodicTrigger) `
         -Principal $principal `
         -Settings $settings `
         -Force | Out-Null

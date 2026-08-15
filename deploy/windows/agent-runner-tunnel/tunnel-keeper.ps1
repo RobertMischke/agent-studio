@@ -23,6 +23,7 @@ $healthUrl = "http://127.0.0.1:$RemotePort/healthz"
 $forward = "${RemotePort}:127.0.0.1:${TaskServerPort}"
 $statePath = Join-Path $StateDirectory 'state.json'
 $logPath = Join-Path $StateDirectory 'events.log'
+$sshAttemptLogPath = Join-Path $StateDirectory 'ssh-attempts.log'
 $mutexName = "Local\AgentTaskboardTunnelKeeper-$RemotePort"
 $mutex = [Threading.Mutex]::new($false, $mutexName)
 $ownsMutex = $false
@@ -106,6 +107,33 @@ function Stop-MatchingForwards {
     return @($matches).Count
 }
 
+function Start-CapturedForward {
+    $attemptId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
+    $stdoutPath = Join-Path $StateDirectory "ssh-$attemptId.stdout.log"
+    $stderrPath = Join-Path $StateDirectory "ssh-$attemptId.stderr.log"
+    $arguments = @(
+        '-N', '-T',
+        '-o', 'BatchMode=yes',
+        '-o', 'ExitOnForwardFailure=yes',
+        '-o', 'ServerAliveInterval=30',
+        '-o', 'ServerAliveCountMax=3',
+        '-o', 'LogLevel=VERBOSE',
+        '-R', $forward,
+        $SshTarget
+    )
+    $process = Start-Process `
+        -FilePath $script:sshPath `
+        -ArgumentList $arguments `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath `
+        -PassThru
+    $line = '{0:o} event=ssh_started pid={1} target={2} forward={3} stdout={4} stderr={5}' -f `
+        [DateTime]::UtcNow, $process.Id, $SshTarget, $forward, $stdoutPath, $stderrPath
+    Add-Content -LiteralPath $sshAttemptLogPath -Value $line -Encoding utf8
+    return $process
+}
+
 try {
     $ownsMutex = $mutex.WaitOne(0)
     if (-not $ownsMutex) { exit 0 }
@@ -114,44 +142,59 @@ try {
     $script:sshPath = (Get-Command $SshExecutable -ErrorAction Stop).Source
     $script:sshProcessName = [IO.Path]::GetFileName($script:sshPath)
 
-    if (Test-TaskServerRoute) {
-        Write-KeeperState -Status 'healthy' -Message 'Remote functional probe returned the expected sentinel.'
-        exit 0
-    }
-
     $previous = Read-KeeperState
     $attempts = if ($previous -and $previous.status -eq 'unreachable') {
         [int] $previous.repairAttempts + 1
     } else { 1 }
+    $routeWasHealthy = Test-TaskServerRoute
     $stopped = Stop-MatchingForwards
+    if ($routeWasHealthy -and $stopped -eq 0) {
+        Write-KeeperState -Status 'healthy' `
+            -Message 'Remote functional probe passed, but this task found no matching Windows forward to adopt.'
+        exit 0
+    }
+    $repairMessage = if ($routeWasHealthy) {
+        "Functional probe passed; stopped $stopped pre-existing matching forward process(es) so the Scheduled Task owns the replacement."
+    } else {
+        "Functional probe failed; stopped $stopped matching forward process(es) and started a replacement."
+    }
     Write-KeeperState -Status 'unreachable' `
-        -Message "Functional probe failed; stopped $stopped matching forward process(es) and started a replacement." `
+        -Message $repairMessage `
         -RepairAttempts $attempts
 
-    $arguments = @(
-        '-N', '-T',
-        '-o', 'BatchMode=yes',
-        '-o', 'ExitOnForwardFailure=yes',
-        '-o', 'ServerAliveInterval=30',
-        '-o', 'ServerAliveCountMax=3',
-        '-R', $forward,
-        $SshTarget
-    )
-    Start-Process -FilePath $script:sshPath -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+    $forwardProcess = Start-CapturedForward
 
     $deadline = [DateTime]::UtcNow.AddSeconds($RecoveryWaitSeconds)
     do {
         Start-Sleep -Seconds 3
+        if ($forwardProcess.HasExited) {
+            $line = '{0:o} event=ssh_exited pid={1} exit_code={2}' -f `
+                [DateTime]::UtcNow, $forwardProcess.Id, $forwardProcess.ExitCode
+            Add-Content -LiteralPath $sshAttemptLogPath -Value $line -Encoding utf8
+            break
+        }
         if (Test-TaskServerRoute) {
             Write-KeeperState -Status 'healthy' `
                 -Message 'Replacement forward passed the remote functional probe.' `
                 -RepairAttempts $attempts
-            exit 0
+            $forwardProcess.WaitForExit()
+            $line = '{0:o} event=ssh_exited pid={1} exit_code={2}' -f `
+                [DateTime]::UtcNow, $forwardProcess.Id, $forwardProcess.ExitCode
+            Add-Content -LiteralPath $sshAttemptLogPath -Value $line -Encoding utf8
+            Write-KeeperState -Status 'unreachable' `
+                -Message "SSH forward exited with code $($forwardProcess.ExitCode); captured output paths are in ssh-attempts.log." `
+                -RepairAttempts $attempts
+            exit 4
         }
     } while ([DateTime]::UtcNow -lt $deadline)
 
+    $failureMessage = if ($forwardProcess.HasExited) {
+        "Replacement SSH exited with code $($forwardProcess.ExitCode) before the remote functional probe passed; captured output paths are in ssh-attempts.log."
+    } else {
+        'Replacement forward did not pass the remote functional probe before the recovery deadline.'
+    }
     Write-KeeperState -Status 'unreachable' `
-        -Message 'Replacement forward did not pass the remote functional probe before the recovery deadline.' `
+        -Message $failureMessage `
         -RepairAttempts $attempts
     exit 4
 }
