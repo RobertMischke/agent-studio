@@ -99,13 +99,17 @@
                     <span class="pp__chip pp__chip--muted">When {{ conditionSummary(step) }}</span>
                   }
                 </span>
-                <app-pipeline-step-row-state
-                  [stepId]="step.id"
-                  [framework]="step.framework ?? ''"
-                  [enabled]="step.enabled"
-                  [canDisable]="step.canDisable"
-                  [disabled]="!!stepBusy[step.id]"
-                  (enabledChange)="onStepEnabledChange(step.id, $event)" />
+                @if (kindKey(step.kind) === 'analysis') {
+                  <span class="pp__chip pp__chip--muted">repository policy</span>
+                } @else {
+                  <app-pipeline-step-row-state
+                    [stepId]="step.id"
+                    [framework]="step.framework ?? ''"
+                    [enabled]="step.enabled"
+                    [canDisable]="step.canDisable"
+                    [disabled]="!!stepBusy[step.id]"
+                    (enabledChange)="onStepEnabledChange(step.id, $event)" />
+                }
                 <span class="pp__summary-caret" aria-hidden="true">▾</span>
               </summary>
               <div class="pp__details"><p class="pp__purpose">{{ stepPurpose(step) }}</p>

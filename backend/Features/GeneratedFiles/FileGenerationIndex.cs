@@ -122,6 +122,8 @@ public sealed class FileGenerationIndex
             return step.StepId + ".md";
         if (step.Kind == StepKind.Drift)
             return $"logs/drift/{step.StepId}.md";
+        if (step.Kind == StepKind.Analysis)
+            return $"results/quality-studio/{step.StepId}.json";
         return null;
     }
 
@@ -129,6 +131,7 @@ public sealed class FileGenerationIndex
     {
         StepKind.Aspect => "aspect",
         StepKind.Drift => "drift",
+        StepKind.Analysis => "analysis",
         _ => step.Kind.ToString().ToLowerInvariant(),
     };
 

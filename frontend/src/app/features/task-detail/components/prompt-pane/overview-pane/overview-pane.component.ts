@@ -421,6 +421,7 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   orchestrator: 'An orchestrator decision step that aggregates verdicts and chooses the next move.',
   tool:         'A deterministic tooling step that runs after the agent finishes.',
   drift:        'An opt-in drift-analysis pass that runs after auto-review.',
+  analysis:     'A Quality Studio analysis pass that emits structured findings and rule evidence.',
 };
 
 /**

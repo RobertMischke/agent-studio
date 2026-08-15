@@ -138,6 +138,30 @@ public static class PipelineCatalogue
     public const string PreReissueOpenItemsStepId = "pre-reissue-open-items";
 
     /// <summary>
+    /// Quality Studio analyses are standard pipeline work. The catalogue names
+    /// the stable axes; <see cref="QualityStudioAnalysisPolicy"/> selects the
+    /// applicable subset from the card's changed paths and the repository-owned
+    /// <c>.quality/agent-studio.json</c> override. Rule content remains owned by
+    /// the QS-90 library and is never copied into Agent Studio.
+    /// </summary>
+    public const string QualityStaticRulesStepId = "analysis-qs-static-rules";
+    public const string QualityModelReviewStepId = "analysis-qs-model-review";
+    public const string QualityVisualStepId = "analysis-qs-visual";
+    public const string QualitySecurityStepId = "analysis-qs-security";
+    public const string QualityRedundancyStepId = "analysis-qs-redundancy";
+    public const string QualityConsistencyStepId = "analysis-qs-consistency";
+
+    public static readonly string[] QualityAnalysisStepIds =
+    {
+        QualityStaticRulesStepId,
+        QualityModelReviewStepId,
+        QualityVisualStepId,
+        QualitySecurityStepId,
+        QualityRedundancyStepId,
+        QualityConsistencyStepId,
+    };
+
+    /// <summary>
     /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
     /// post-steps (DRIFT Nachtrag): four LLM dimensions plus the rule-based
     /// code-pattern check. They default <c>DefaultEnabled = false</c> because a
@@ -515,6 +539,7 @@ public static class PipelineCatalogue
                     Kind = StepKind.Aspect,
                     RunMode = StepRunMode.Parallel,
                     Idempotent = true,
+                    DependsOn = [.. QualityAnalysisStepIds],
                 });
                 continue;
             }
@@ -526,6 +551,7 @@ public static class PipelineCatalogue
                 RunMode = StepRunMode.Parallel,
                 Idempotent = true,
                 PromptTemplate = def.PromptTemplate,
+                DependsOn = [.. QualityAnalysisStepIds],
             });
         }
 
@@ -633,6 +659,7 @@ public static class PipelineCatalogue
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
                 },
+                .. BuildQualityAnalysisSteps(),
                 .. aspects,
                 new PipelineStep
                 {
@@ -932,13 +959,17 @@ public static class PipelineCatalogue
                 {
                     DependsOn = [CoreAgentRunStepId],
                 },
+                .. BuildQualityAnalysisSteps().Select(step => step with
+                {
+                    DependsOn = [DossierMaintenanceStepId],
+                }),
                 new PipelineStep
                 {
                     Id = UiIterationArtifactStepId,
                     DisplayName = "UI iteration evidence",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
-                    DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
+                    DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId, .. QualityAnalysisStepIds],
                     Idempotent = true,
                     DefaultEnabled = true,
                 },
@@ -1003,6 +1034,33 @@ public static class PipelineCatalogue
                 DependsOn = [.. dependsOnReview],
                 Idempotent = true,
                 DefaultEnabled = false,
+            };
+        }
+    }
+
+    private static IEnumerable<PipelineStep> BuildQualityAnalysisSteps()
+    {
+        var steps = new (string Id, string Name)[]
+        {
+            (QualityStaticRulesStepId, "Quality Studio rule pass"),
+            (QualityModelReviewStepId, "Quality Studio model review"),
+            (QualityVisualStepId, "Quality Studio visual quality"),
+            (QualitySecurityStepId, "Quality Studio security"),
+            (QualityRedundancyStepId, "Quality Studio redundancy"),
+            (QualityConsistencyStepId, "Quality Studio consistency"),
+        };
+
+        foreach (var (id, name) in steps)
+        {
+            yield return new PipelineStep
+            {
+                Id = id,
+                DisplayName = name,
+                Kind = StepKind.Analysis,
+                RunMode = StepRunMode.Sequential,
+                DependsOn = [BuildTestGateStepId],
+                Idempotent = true,
+                DefaultEnabled = true,
             };
         }
     }

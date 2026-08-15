@@ -147,6 +147,7 @@ export function phaseForStep(step: PipelineCatalogueStep): string {
   if (step.kind === 'aspect') return 'aspect';
   if (step.kind === 'tool') return 'tool';
   if (step.kind === 'drift') return 'drift';
+  if (step.kind === 'analysis') return 'analysis';
   if (step.kind === 'core') return 'core';
   if (step.id.startsWith('pre-')) return 'pre';
   if (step.id.includes('decision')) return 'decision';
@@ -162,9 +163,47 @@ export function pipelinePhaseLabel(phase: string): string {
     case 'tool': return 'Tool steps';
     case 'decision': return 'Decision';
     case 'drift': return 'Drift';
+    case 'analysis': return 'Analysis';
     case 'abort': return 'Abort-only';
     default: return 'Post steps';
   }
+}
+
+const PIPELINE_STEP_PURPOSES: Readonly<Record<string, string>> = {
+  'pre-loop-guard': 'Detects stuck auto-mode loops and surfaces the loop guard state before the agent run.',
+  'pre-orchestrator-prep': 'Optional prep pass that checks prompt clarity before work is admitted to Ready.',
+  'pre-reissue-open-items': 'On reissues, foregrounds unresolved open items so the next agent run does not restart blindly.',
+  'core-agent-run': 'Runs the task-owning CLI agent with the task prompt, branch/worktree context, and selected task model.',
+  'post-orchestrator-review': 'Early post-core completeness scan over close-out evidence before spending review tokens.',
+  'post-orchestrator-decision': 'Final orchestrator decision that accepts, reissues, or escalates after reviews and gates.',
+  'post-code-review-grade': 'LLM code-review pass that assigns the A/B/C/D quality grade visible on the task card.',
+  'post-build-test-gate': 'Runs the configured build/test gate and can reissue when the repository is red.',
+  'analysis-qs-static-rules': 'Runs the Quality Studio named-rule pass selected by changed paths and repository policy.',
+  'analysis-qs-model-review': 'Runs the Quality Studio model review and emits findings through the shared finding model.',
+  'analysis-qs-visual': 'Reviews visual and graphical quality for frontend-touching cards.',
+  'analysis-qs-security': 'Records Quality Studio security findings as visible, currently non-blocking evidence.',
+  'analysis-qs-redundancy': 'Checks the change for redundant implementation or structure.',
+  'analysis-qs-consistency': 'Checks cross-file and cross-component consistency.',
+  'post-worktree-containment': 'Checks that work stayed inside the task worktree and did not leak into shared state.',
+  'post-integrate-merge': 'Keeps parallel task worktrees integrated with the project integration line.',
+  'post-conflict-resolution': 'Uses orchestrator reasoning when integration detects conflicts that need structured handling.',
+  'post-git-commit-attribution': 'Attributes commits to the task so review and merge screens know which changes belong together.',
+  'post-merge-into-develop': 'Operator-triggered delivery step that merges accepted task work into develop.',
+  'post-merge-into-develop-push': 'Pushes the integration branch to origin after the merge so integration is never only local.',
+  'post-lint-scss': 'Runs frontend stylelint for SCSS quality and can warn or fail depending on gate mode.',
+  'post-regression-radar': 'Classifies changed specs as intended, at-risk, or drift without gating the lane decision.',
+  'post-wiki-maintenance': 'Maintains common-problem wiki entries from run outcomes when enabled.',
+  'post-wiki-learnings': 'Writes per-task learnings into the project wiki from structured run evidence.',
+  'post-agents-wiki-sync': 'Keeps AGENTS/wiki pointers for designated topics consistent and collects each topic current state when enabled.',
+  'post-abort-review': 'Optional review pass after an aborted or stopped run to decide rerun, reissue, or escalation.',
+};
+
+export function pipelineStepPurpose(step: Pick<PipelineAdminRow, 'id'>): string {
+  const exact = PIPELINE_STEP_PURPOSES[step.id];
+  if (exact) return exact;
+  if (step.id.startsWith('aspect-')) return 'Runs an LLM aspect review and records a focused verdict for auto-review.';
+  if (step.id.startsWith('post-drift-')) return 'Runs an opt-in drift analysis dimension after the main task decision.';
+  return 'Pipeline step in the project processing flow.';
 }
 
 /** The pre / core / post ordering bucket a step belongs to. */

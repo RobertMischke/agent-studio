@@ -80,11 +80,12 @@ public static class ReviewEvidenceSources
 {
     public const string SecurityAudit = "security-audit";
     public const string CodeReview = "code-review";
+    public const string QualityStudio = "quality-studio";
     public const string TaskCheck = "task-check";
     public const string HumanNote = "human-note";
     public const string Other = "other";
 
-    public static readonly string[] All = [SecurityAudit, CodeReview, TaskCheck, HumanNote, Other];
+    public static readonly string[] All = [SecurityAudit, CodeReview, QualityStudio, TaskCheck, HumanNote, Other];
 
     public static string Normalize(string? value)
     {

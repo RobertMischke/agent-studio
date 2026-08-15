@@ -197,6 +197,7 @@ public static class ProjectSettingsEndpoints
                 if (step.Kind == StepKind.Aspect) return "aspect";
                 if (step.Kind == StepKind.Tool) return "tool";
                 if (step.Kind == StepKind.Drift) return "drift";
+                if (step.Kind == StepKind.Analysis) return "analysis";
                 if (string.Equals(step.Id, PipelineCatalogue.OrchestratorDecisionStepId, StringComparison.OrdinalIgnoreCase))
                     return "decision";
                 return "post";
@@ -258,7 +259,7 @@ public static class ProjectSettingsEndpoints
                     // defaults on. The Settings UI uses this to render the toggle's
                     // initial state when the project has no explicit override.
                     defaultEnabled = s.DefaultEnabled,
-                    supportsCondition = s.Kind != StepKind.Core,
+                    supportsCondition = s.Kind is not (StepKind.Core or StepKind.Analysis),
                     supportsMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase),
                     defaultMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase)
                         ? UiIterationGate.DefaultMaxIterations

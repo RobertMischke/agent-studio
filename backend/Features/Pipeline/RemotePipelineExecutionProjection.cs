@@ -83,7 +83,7 @@ internal static class RemotePipelineExecutionProjection
             steps,
             pipeline.Post
                 .Where(step =>
-                    step.Kind is StepKind.Aspect or StepKind.Drift
+                    step.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Analysis
                     || step.Id is PipelineCatalogue.OrchestratorReviewStepId
                         or PipelineCatalogue.CodeReviewGradeStepId)
                 .Select(step => step.Id));

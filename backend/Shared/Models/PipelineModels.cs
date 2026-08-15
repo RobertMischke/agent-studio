@@ -157,6 +157,13 @@ public enum StepKind
     /// <c>DriftPostStepRunner</c>.
     /// </summary>
     Drift,
+    /// <summary>
+    /// A Quality Studio analysis pass. Analysis steps are first-class pipeline
+    /// work, distinct from generic tools and from the four LLM aspect reviews.
+    /// They consume the in-process Quality Studio analysis core and emit
+    /// structured findings with stable rule ids.
+    /// </summary>
+    Analysis,
 }
 
 public enum StepRunMode

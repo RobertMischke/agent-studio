@@ -34,6 +34,7 @@ const HAIKU = 'claude-haiku-4-5';
 // condition the runtime evaluates, so it is the only row exposing the
 // condition control.
 const ABORT_STEP = 'post-abort-review';
+const ANALYSIS_STEP = 'analysis-qs-static-rules';
 
 const SCREENSHOT_DIR = (() => {
   const fromEnv = process.env.JOB_RESULTS_DIR || process.env.PROJECT_SHELL_RESULTS_DIR;
@@ -232,6 +233,25 @@ test('pipeline: pipeline-step section renders and a per-step model change persis
 
   await section.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-step-model-haiku.png'), fullPage: true });
+});
+
+test('pipeline: Quality Studio analysis is first-class and repository-managed', async ({ page }) => {
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  const group = page.getByTestId('pipeline-group-analysis');
+  await expect(group).toBeVisible();
+  const row = page.getByTestId(`pipeline-step-row-${ANALYSIS_STEP}`);
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute('data-kind', 'analysis');
+  await expect(row).toContainText('repository policy');
+  await expect(row.getByTestId(`pipeline-step-row-enabled-${ANALYSIS_STEP}`)).toHaveCount(0);
+
+  await group.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOT_DIR, '04-quality-studio-analysis--real.png'),
+    fullPage: true,
+  });
 });
 
 test('pipeline: a closed-row toggle disables a step without expanding it', async ({ page }) => {

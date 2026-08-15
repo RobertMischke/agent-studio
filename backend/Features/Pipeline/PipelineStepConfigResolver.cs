@@ -110,10 +110,11 @@ public static class PipelineStepConfigResolver
     /// Whether an operator may disable this catalogue step. The core agent run
     /// and Dossier contract are mandatory, and the pre-loop guard mirrors an
     /// always-on safety circuit breaker, so none may expose an enable/disable
-    /// control.
+    /// control. Quality Studio steps are configured only by the versioned file
+    /// in the analyzed repository, never by central project settings.
     /// </summary>
     public static bool CanDisable(PipelineStep step)
-        => step.Kind != StepKind.Core
+        => step.Kind is not (StepKind.Core or StepKind.Analysis)
            && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.DossierMaintenanceStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiIterationArtifactStepId, StringComparison.Ordinal)

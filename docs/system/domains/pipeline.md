@@ -50,6 +50,14 @@ pipeline view.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
   concept, and UI pipeline definitions, step ids, default ordering, step run
   modes, and display names.
+- `backend/Features/Pipeline/QualityStudioAnalysisPolicy.cs`,
+  `QualityStudioAnalysisStepRunner.cs`, and
+  `QualityStudioAnalysisEvidence.cs`: the repository-owned Quality Studio
+  analysis policy, first-class analysis axes, in-process package consumer port,
+  named-rule evidence projection, and non-security steered-retry disposition.
+  The production adapter activation gate and verified QS dependency shape are
+  defined in
+  [the Quality Studio analysis pipeline contract](../contracts/quality-studio-analysis-pipeline.md).
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly
