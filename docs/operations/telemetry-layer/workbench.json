@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "telemetry-layer",
+  "title": "Organization Telemetry Layer",
+  "summary": "Decision dossier for a local-first telemetry layer across organization applications. It recommends a hybrid file-first buffer plus local push, reuses Product Runtime Events as product-owned source facts and the Agent Message Bus as the Agent Studio management projection, specifies privacy and log-level policy, maps repeated usage friction and error clusters to bounded Watcher cases and Task API cards, positions Agent Studio as the portfolio operations hub, and selects Quality Studio review failures as the first end-to-end pilot.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-15T08:44:20Z",
+  "sourceTaskKeys": [
+    "AGT-2661"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2557",
+    "AGT-2654"
+  ]
+}
