@@ -595,6 +595,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(1200, tokenSummary.GetProperty("InputTokens").GetInt64());
         Assert.Equal(300, tokenSummary.GetProperty("OutputTokens").GetInt64());
         Assert.Equal(800, tokenSummary.GetProperty("CacheReadTokens").GetInt64());
+        var tokenEntry = Assert.Single(tokenSummary.GetProperty("Entries").EnumerateArray());
+        Assert.Equal(lease.Lease.AttemptId, tokenEntry.GetProperty("RunId").GetString());
+        Assert.Equal("remote-task-token-receipt", tokenEntry.GetProperty("Topic").GetString());
+        Assert.Equal(TokenUsageTypes.Coding, tokenEntry.GetProperty("UsageType").GetString());
 
         var evidence = factory.Services
             .GetRequiredService<TestRunService>()

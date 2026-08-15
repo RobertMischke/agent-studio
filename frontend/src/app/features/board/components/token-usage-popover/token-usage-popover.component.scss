@@ -1,0 +1,175 @@
+:host {
+  display: contents;
+}
+
+.token-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  z-index: var(--studio-z-overlay-panel);
+  width: min(34rem, calc(100vw - (2 * var(--studio-spacing-4))));
+  max-height: 72vh;
+  overflow: auto;
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  border-radius: var(--studio-card-radius);
+  background: var(--studio-tooltip-bg);
+  border: 1px solid var(--studio-tooltip-border);
+  box-shadow: var(--elevation-tooltip);
+  color: var(--studio-tooltip-fg);
+  text-align: left;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.token-popover__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+  padding-bottom: var(--studio-spacing-2);
+  border-bottom: 1px solid var(--studio-tooltip-border);
+}
+
+.token-popover__title {
+  display: block;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--studio-tooltip-fg-strong);
+}
+
+.token-popover__total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-3);
+  color: var(--studio-tooltip-fg-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.token-popover__total strong {
+  font-size: 0.875rem;
+}
+
+.token-popover__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-popover__table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--studio-tooltip-fg-dim);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2) var(--studio-spacing-1) 0;
+}
+
+.token-popover__table td {
+  text-align: right;
+  color: var(--studio-tooltip-fg-strong);
+  padding: var(--studio-spacing-1) 0;
+}
+
+.token-popover__table > tbody > tr:first-child > th,
+.token-popover__table > tbody > tr:first-child > td {
+  padding-top: var(--studio-spacing-2);
+}
+
+.token-popover__meta {
+  display: block;
+  border-top: 1px solid var(--studio-tooltip-border);
+  padding-top: var(--studio-spacing-2);
+  color: var(--studio-tooltip-fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.token-popover__breakdowns {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: var(--studio-spacing-4);
+  margin-top: var(--studio-spacing-3);
+  padding-top: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-tooltip-border);
+}
+
+.token-popover__section,
+.token-popover__section-title,
+.token-popover__run-date,
+.token-popover__run-context {
+  display: block;
+}
+
+.token-popover__section-title {
+  margin-bottom: var(--studio-spacing-1);
+  font-weight: 600;
+  color: var(--studio-tooltip-fg-dim);
+}
+
+.token-popover__table--breakdown th:not(:first-child),
+.token-popover__table--breakdown td:not(:first-child),
+.token-popover__table--runs th:not(:first-child),
+.token-popover__table--runs td:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.token-popover__table--breakdown td:first-child {
+  text-align: left;
+}
+
+.token-popover__table--runs th,
+.token-popover__table--runs td {
+  vertical-align: top;
+}
+
+.token-popover__table--runs td:first-child {
+  text-align: left;
+  padding-right: var(--studio-spacing-2);
+}
+
+.token-popover__run-date,
+.token-popover__run-context {
+  white-space: nowrap;
+}
+
+.token-popover__run-context {
+  color: var(--studio-tooltip-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 13rem;
+}
+
+.token-popover__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+  margin-top: var(--studio-spacing-3);
+  padding-top: var(--studio-spacing-2);
+  border-top: 1px solid var(--studio-tooltip-border);
+}
+
+.token-popover__footnote {
+  min-width: 0;
+  color: var(--studio-tooltip-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-popover__link {
+  flex: 0 0 auto;
+  color: var(--studio-tooltip-link);
+  text-decoration: none;
+}
+
+.token-popover__link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 42rem) {
+  .token-popover__breakdowns {
+    grid-template-columns: 1fr;
+  }
+}

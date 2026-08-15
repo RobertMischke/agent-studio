@@ -131,6 +131,12 @@ public record OrchestratorLogEntry
     public string? JobId { get; init; }
 
     /// <summary>
+    /// Durable run identity when this row was projected from the agent message
+    /// bus. Legacy orchestrator-log rows leave it null.
+    /// </summary>
+    public string? RunId { get; init; }
+
+    /// <summary>
     /// Agent-message-bus participant that produced this token event, when the
     /// entry was projected from the bus. Legacy orchestrator.jsonl entries
     /// leave this null and keep their historical job-title categorisation.

@@ -435,6 +435,9 @@ public class TaskMutationService
                 .Concat((attemptSummary.Entries ?? []).Select(entry => entry with
                 {
                     ParticipantId = participant,
+                    RunId = string.IsNullOrWhiteSpace(entry.RunId) ? runAttemptId : entry.RunId,
+                    Topic = string.IsNullOrWhiteSpace(entry.Topic) ? "remote-task-token-receipt" : entry.Topic,
+                    UsageType = TokenUsageTypes.Coding,
                 }))
                 .OrderBy(entry => entry.Ts)
                 .ToList();

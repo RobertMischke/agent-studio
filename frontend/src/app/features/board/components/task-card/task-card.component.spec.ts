@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('[data-testid="token-row-cost"]')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Dated list-price estimates');
 
     fixture.destroy();
   });
@@ -1555,19 +1555,28 @@ describe('buildTokenBubble', () => {
           ts: '2026-06-09T08:00:00Z',
           model: 'GPT-5 Codex',
           participantId: 'agent:codex',
+          runId: 'run-coding',
+          topic: 'codex-turn',
+          usageType: 'coding',
           inputTokens: 2000,
           outputTokens: 200,
           cacheReadTokens: 1000,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.06,
+          modelPriced: true,
         },
         {
           ts: '2026-06-09T08:05:00Z',
           model: 'Claude Haiku 4.5',
           participantId: 'orchestrator:Test',
+          topic: 'code-review-grade',
+          usageType: 'review',
           inputTokens: 1000,
           outputTokens: 100,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.03,
+          modelPriced: true,
         },
       ],
     });
@@ -1578,6 +1587,43 @@ describe('buildTokenBubble', () => {
       'GPT-5 Codex',
       'Claude Haiku 4.5',
     ]);
+    expect(bubble?.entries.map((entry) => entry.costLabel)).toEqual(['$0.06', '$0.03']);
+    expect(bubble?.entries[0].contextTooltip).toContain('run-coding');
+    expect(bubble?.byType.map((row) => [row.label, row.total, row.costLabel])).toEqual([
+      ['Coding run', 3200, '$0.06'],
+      ['Review run', 1100, '$0.03'],
+    ]);
+  });
+
+  it('marks a priced subtotal as partial when any dated row is unpriced', () => {
+    const bubble = buildTokenBubble({
+      calls: 2,
+      inputTokens: 2000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 2000,
+      estimatedApiCostUsd: 0.05,
+      allModelsPriced: false,
+      lastModel: 'Known model',
+      lastUpdate: '2026-06-09T08:05:00Z',
+      entries: [
+        {
+          ts: '2026-06-09T08:00:00Z', model: 'Known model', usageType: 'coding',
+          inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.05, modelPriced: true,
+        },
+        {
+          ts: '2026-06-09T08:05:00Z', model: 'Unknown model', usageType: 'review',
+          inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0, modelPriced: false,
+        },
+      ],
+    });
+
+    expect(bubble?.costLabel).toBe('$0.05 partial');
+    expect(bubble?.entries[1].costLabel).toBe('- no price data');
+    expect(bubble?.costTooltip).toContain('Incomplete: 1 run without price.');
   });
 });
 

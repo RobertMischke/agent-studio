@@ -152,6 +152,8 @@ public sealed class ProjectTokenReceiptReader
                 Ts = residualAt.Value,
                 Model = summary.LastModel,
                 ParticipantId = "agent:task-receipt",
+                Topic = "task-token-receipt",
+                UsageType = TokenUsageTypes.Coding,
                 InputTokens = residualInput,
                 OutputTokens = residualOutput,
                 CacheReadTokens = residualCacheRead,
@@ -174,9 +176,10 @@ public sealed class ProjectTokenReceiptReader
             {
                 Ts = call.Ts,
                 Kind = OrchestratorLogKinds.Observation,
-                Topic = "task-token-receipt",
+                Topic = string.IsNullOrWhiteSpace(call.Topic) ? "task-token-receipt" : call.Topic,
                 Summary = "Token usage recovered from the durable task receipt.",
                 JobId = jobId,
+                RunId = call.RunId,
                 ParticipantId = string.IsNullOrWhiteSpace(call.ParticipantId)
                     ? "agent:task-receipt"
                     : call.ParticipantId,

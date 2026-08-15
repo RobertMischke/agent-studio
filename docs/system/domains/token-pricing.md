@@ -1,6 +1,6 @@
 # Token pricing
 
-> **Status (2026-08-10):** Live on exactly pinned `TokenEconomy` 0.3.1,
+> **Status (2026-08-15):** Live on exactly pinned `TokenEconomy` 0.3.1,
 > including historical prices for the GPT-5.6 family. Studio contains no model
 > rates.
 
@@ -73,6 +73,14 @@ These surfaces may aggregate resolved costs, but an aggregate containing an
 unpriced call remains explicitly marked unavailable or incomplete according to
 its wire contract. A per-model row with a missing price always renders
 `no price data`.
+
+The board task-card popover prices each event at its recorded timestamp and
+shows that date beside the event cost. Its payload preserves the bus `runId`
+and step `topic`, then groups usage into stable coding, review, gate,
+enrichment, orchestrator, supporting, and fallback types. Per-type token and
+cost subtotals sum the visible event rows. The persistent caveat is one quiet
+line; the complete historical-list-price wording remains available in its
+tooltip.
 
 Prompt-registry cost is a narrower estimate than a completed model call. It
 prices only the rendered prompt input, uses the existing four characters per

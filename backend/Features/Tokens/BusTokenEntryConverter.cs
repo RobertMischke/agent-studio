@@ -40,6 +40,7 @@ internal static class BusTokenEntryConverter
             Topic = m.Topic ?? OrchestratorLogTopics.General,
             Summary = m.Summary ?? string.Empty,
             JobId = m.JobId,
+            RunId = m.RunId,
             ParticipantId = includeParticipant ? m.ParticipantId : null,
             TokenUsage = usage,
         };
