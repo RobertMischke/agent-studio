@@ -45,6 +45,14 @@ state.
   identity. The connectivity capability's three-minute freshness deadline is
   the remote alarm because a broken route cannot deliver its own failure
   telemetry.
+- `deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh` and its Scheduled
+  Task registration: Windows-side one-minute supervision of the interim reverse
+  tunnel. Two failed runner-side functional probes trigger targeted remote
+  listener cleanup, a TunnelKeeper task restart, bounded verification, and an
+  operator alarm after two failed heals. TunnelKeeper preserves OpenSSH output
+  and eventual exit codes under its local state directory for incident root
+  cause analysis. It has no automatic Scheduled Task retry, so it cannot race
+  the watchdog recovery policy.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `cli-hosting/TaskCleanContextStore.cs`,
