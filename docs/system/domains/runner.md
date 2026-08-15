@@ -146,6 +146,14 @@ state.
   never stores the value. Provider probes inspect only the process environment
   and CLI status. Provider-specific files, including `claude.env`, are outside
   the contract.
+- Provider-auth status commands run at lower CPU priority with a 30-second
+  budget. A confirmed active session becomes `ready` immediately. Two
+  consecutive explicit logout responses are required before the capability
+  becomes `unavailable`. Timeout, empty output, launch failure, and unrelated
+  nonzero exits are indeterminate: the runner retains the last confirmed state,
+  emits `provider-auth-probe-degraded`, and retries without requiring a service
+  restart. A later confirmed success clears the negative streak and restores
+  `ready` in the next periodic capability advertisement.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task

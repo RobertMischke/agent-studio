@@ -17,10 +17,17 @@ Open **Workspace Settings > Execution Hosts** and inspect **Provider
 authentication** on the affected host. The badge exposes three states:
 
 - **OK**: a fresh capability snapshot reports usable provider authentication.
-- **Unavailable**: a fresh probe failed. Hover the badge for the runner's probe
-  detail, such as `Not logged in`.
+- **Unavailable**: two consecutive probes explicitly reported a logout, or the
+  provider binary is missing. Hover the badge for the runner's probe detail,
+  such as `Not logged in`.
 - **Unknown**: no current provider-auth advertisement exists, the advertisement
   is stale, or the runner is unreachable.
+
+A timeout, empty response, launch failure, or unrelated CLI error is
+indeterminate, not evidence of logout. The runner retains its last confirmed
+state, writes a `provider-auth-probe-degraded` journal line, and retries. Status
+commands have a 30-second budget and run at lower CPU priority so full review
+load is not mistaken for a missing login.
 
 Provider transitions are retained in the capability recovery history. An
 `OK -> Unavailable` transition creates an operator notification. A run that
@@ -54,8 +61,8 @@ preserving entries for future providers in the shared file.
 
 ## 3. Verify recovery
 
-The next provider probe normally arrives within 60 seconds. Recovery is
-complete when all of these statements are true:
+The runner retries automatically and advertises a later successful probe
+without a restart. Recovery is complete when all of these statements are true:
 
 1. The host badge is **OK** and its timestamp is fresh.
 2. The newest recovery-history entry records `unavailable -> ready`.

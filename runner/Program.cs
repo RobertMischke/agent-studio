@@ -26,12 +26,6 @@ if (args is ["--detached-review-worker", var detachedReviewSpec])
 
 var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 
-// Capability advertisements distinguish binary presence from provider login.
-// Keep the process boundary in the composition root and let the cached probe
-// decide when each bounded status command needs to run.
-ProviderAuthProbe.Shared.UseLauncher((fileName, arguments, ct) =>
-    ProcessRunner.RunAsync(fileName, arguments, ct: ct));
-
 if (help)
 {
     PrintUsage();
@@ -39,6 +33,21 @@ if (help)
 }
 
 void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [agent-host] {message}");
+
+// Capability advertisements distinguish binary presence from provider login.
+// Keep the process boundary in the composition root and let the cached probe
+// decide when each bounded, low-priority status command needs to run.
+ProviderAuthProbe.Shared.UseLauncher(
+    (fileName, arguments, ct) =>
+    {
+        var command = ProviderAuthProcessLauncher.BuildCommand(
+            fileName,
+            arguments,
+            OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
+            ProviderAuthProbe.ExecutableExists);
+        return ProcessRunner.RunAsync(command.FileName, command.Arguments, ct: ct);
+    },
+    Log);
 
 var daemonMode = taskKey is null || !once;
 Log($"agent-host starting: server={options.ServerUrl} role={options.Role} engine={options.ExecEngine} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
