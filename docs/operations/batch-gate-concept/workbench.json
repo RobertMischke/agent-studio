@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "batch-gate-concept",
   "title": "Batch Gate: one full suite for a delivery wave",
-  "summary": "Decision-ready concept for mechanically assembling every eligible pending delivery into a closed, fenced temporary candidate, running one full suite, publishing an exact green tip with per-member evidence, and isolating red members through honestly bounded halving. Reconciles the 25 July per-task economics with the 11 August 12-core host saturation evidence and defines authority alongside integrate-before-review, auto-main advancement, and candidate-SHA promotion.",
+  "summary": "Decision-ready concept for mechanically assembling every eligible pending delivery into a closed, fenced temporary candidate, running one full suite, publishing an exact green tip with per-member evidence, and isolating red members through honestly bounded halving. Reconciles the 25 July per-task economics with the 11 August 12-core host saturation evidence and defines authority alongside integrate-before-review, auto-main advancement, and candidate-SHA promotion. [Curation 2026-08-17: stays decision-pending; no operator decision is recorded yet. The durable mechanics are now also written up as architecture documentation in docs/concepts/platform-architecture/batch-gate.md. This Dossier held the duplicate key AGT-W36 alongside the Escalation view Dossier, which made both render as invalid; the key is reassigned to AGT-W39 because the Escalation view descriptor claimed AGT-W36 first.]",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
@@ -17,5 +17,5 @@
     "AGT-2603",
     "AGT-2594"
   ],
-  "key": "AGT-W36"
+  "key": "AGT-W39"
 }

@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "demo-instanz",
   "title": "Public demo instance with no execution authority",
-  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.]",
+  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.] [Curation 2026-08-17: stays current. All five delivery slices AGT-2666, AGT-2667, AGT-2668, AGT-2669 and AGT-2670 are still in lane 3-progress, so nothing is closable yet. The former status \"accepted\" and phase \"in-progress\" are not part of the descriptor vocabulary and made this Dossier render as \"Descriptor needs repair\"; they are corrected to decided/testing, which the platform maps to the same decided lifecycle state.]",
   "entrypoint": "index.html",
-  "status": "accepted",
-  "phase": "in-progress",
-  "updatedAt": "2026-08-11T12:00:00Z",
+  "status": "decided",
+  "phase": "testing",
+  "updatedAt": "2026-08-17T00:00:00Z",
   "sourceTaskKeys": [
     "AGT-2582"
   ],
@@ -14,6 +14,11 @@
   "relatedTaskKeys": [
     "AGT-2530",
     "AGT-2558",
+    "AGT-2666",
+    "AGT-2667",
+    "AGT-2668",
+    "AGT-2669",
+    "AGT-2670",
     "WEB-17"
   ],
   "key": "AGT-W34"
