@@ -269,22 +269,23 @@
 <body>
 <main>
   <header class="page">
-    <p class="kicker">Decision dossier · Agent Studio · AGT-2583</p>
+    <p class="kicker">Living standard · Agent Studio · AGT-W1</p>
     <h1>Admin Surface Design Guideline</h1>
     <p class="lede">A binding visual and copy standard for dense operator surfaces. Admin pages stay flat, use the available width, expose detail on demand, and present one calm statement for each fact.</p>
     <div class="meta">
-      <span><b>Status:</b> decision pending</span>
-      <span><b>Phase:</b> decision ready</span>
+      <span><b>Status:</b> living standard</span>
+      <span><b>Phase:</b> accepted</span>
       <span><b>Evidence:</b> operator captures from 9 and 10 August 2026</span>
-      <span><b>Scope:</b> guideline and reference, no broad restyling</span>
+      <span><b>Scope:</b> guideline and reference, incremental adoption per revamp card</span>
     </div>
     <div class="decision-strip">
-      <strong>Recommendation</strong>
-      <p>Approve this dossier as the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them.</p>
+      <strong>Accepted</strong>
+      <p>This dossier is the default contract for every new or touched admin surface. Existing pages migrate only when their owning card touches them. The standard grows append-only via refresh and revamp cards.</p>
     </div>
     <nav class="dossier-pages" aria-label="Dossier pages">
       <a href="index.html" aria-current="page">Standard</a>
       <a href="pages/dos-and-donts.html">Visual dos and don'ts</a>
+      <a href="pages/applied-surfaces.html">Applied surfaces</a>
     </nav>
     <nav aria-label="Dossier contents">
       <ul class="toc">
@@ -294,7 +295,7 @@
         <li><a href="#audit">04 · Violation audit</a></li>
         <li><a href="#adoption">05 · Adoption contract</a></li>
         <li><a href="#open-decisions">06 · Open decision</a></li>
-        <li><a href="#applied-surfaces">09 · Applied surfaces</a></li>
+        <li><a href="pages/applied-surfaces.html">09 · Applied surfaces</a></li>
         <li><a href="#lane-header-dos-donts">10 · Lane header Dos &amp; Don&apos;ts</a></li>
         <li><a href="#panel-keyboard-containment">11 · Panel keyboard</a></li>
         <li><a href="#dossier-list-addendum">12 · Dossier lists</a></li>
@@ -896,21 +897,8 @@
 
   <section id="applied-surfaces" data-concept-section="evidence">
     <h2><span class="section-no">09</span>Applied surfaces</h2>
-    <p>This register records scoped adoption of the flat admin grammar. Each row names the implemented surface and the review evidence that proves the relevant contract.</p>
-    <div class="audit-wrap">
-      <table>
-        <thead><tr><th>Date</th><th>Surface</th><th>Applied contract</th><th>Evidence</th><th>State</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>11 August 2026</td>
-            <td><code>#/workspace/settings/execution-hosts</code></td>
-            <td>One sortable host table with Name, Status, Slots, Load, Last activity, Release, and Actions. A persisted row disclosure contains identity, capabilities and authentication, connection, capacity and lease internals, and system telemetry. Only current host, authentication, connection, or delivery failures use warning semantics.</td>
-            <td><code>execution-hosts-before-light--mocked.png</code>, dark variant, <code>execution-hosts-after-light--mocked.png</code>, and dark variant.</td>
-            <td><span class="status owned">Applied</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <p>The applied-surfaces register is now a dedicated subpage. It records every surface that has adopted the flat admin grammar, with before/after schematics, the driving card key, and the review date. The register is append-only; each revamp card in the AGT-2606 / AGT-2608 / AGT-2610 / AGT-2613 line adds one row after its review is merged.</p>
+    <p><a href="pages/applied-surfaces.html">View the Applied surfaces register &rarr;</a></p>
   </section>
 
   <section id="lane-header-dos-donts" data-concept-section="decision-log">
@@ -974,7 +962,7 @@
     <p class="muted">Evidence: deterministic mocked before and after captures for light and dark themes at wide and narrow widths in the AGT-2606 results.</p>
   </section>
 
-  <footer>Prepared 10 August 2026; flat outcome-summary, panel keyboard containment, lane-header, and Dossier-list guidance extended 12 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2606, AGT-2638, AGT-2642, AGT-2643, and AGT-2644. Multi-page reference introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
+  <footer>Prepared 10 August 2026; flat outcome-summary, panel keyboard containment, lane-header, and Dossier-list guidance extended 12 August 2026; promoted to living standard with visual dos-and-donts and applied-surfaces subpages by AGT-2617 on 16 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2606, AGT-2638, AGT-2642, AGT-2643, and AGT-2644. Multi-page format (index.html + pages/) introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
 </main>
 </body>
 </html>
